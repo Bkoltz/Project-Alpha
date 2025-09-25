@@ -3,17 +3,28 @@ services:
   web:
     build: .
     ports:
-      - "8080:80"
+      - "3000:80"
     volumes:
       - ./public:/var/www/html
+      - ./src:/var/www/src
+    env_file:
+      - ./environment.env
     depends_on:
       - db
+    # optional: run a short wait-for-db at container start (see Dockerfile/CMD notes)
+
   db:
     image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: project_alpha
+    env_file:
+      - ./environment.env
     volumes:
       - db_data:/var/lib/mysql
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   db_data:
