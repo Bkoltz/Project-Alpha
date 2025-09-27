@@ -1,19 +1,30 @@
-version: '3.8'
 services:
   web:
     build: .
     ports:
-      - "8080:80"
+      - "3000:80"
     volumes:
-      - ./public:/var/www/html
+      - ./public:/var/www/html:cached
+      - ./src:/var/www/src:cached
+    env_file:
+      - ./environment.env
     depends_on:
       - db
+    restart: unless-stopped
+
   db:
     image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: project_alpha
+    env_file:
+      - ./environment.env
     volumes:
       - db_data:/var/lib/mysql
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   db_data:
