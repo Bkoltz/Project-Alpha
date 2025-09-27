@@ -14,17 +14,23 @@ services:
 
   db:
     image: mysql:8
-    env_file:
-      - ./environment.env
+    restart: unless-stopped
+
+    # Define root password + user + database explicitly
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+
     volumes:
       - db_data:/var/lib/mysql
       - ./database/migrations:/docker-entrypoint-initdb.d:ro
+
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      test: ["CMD", "mysqladmin", "--skip-ssl", "ping", "-h", "127.0.0.1"]
       interval: 10s
       timeout: 5s
       retries: 10
-    restart: unless-stopped
-
 volumes:
   db_data:
