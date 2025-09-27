@@ -16,9 +16,12 @@ RUN chown -R www-data:www-data /var/www/html \
 
 RUN apt-get update && apt-get install -y default-mysql-client --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-EXPOSE 80
-# CMD ["apache2-foreground"]
+RUN apt-get update && apt-get install -y default-mysql-client --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 COPY ./docker/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
+
+
+EXPOSE 80
+# CMD ["apache2-foreground"]
 CMD ["start.sh"]

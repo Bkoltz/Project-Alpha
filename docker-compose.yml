@@ -1,17 +1,16 @@
-version: '3.8'
 services:
   web:
     build: .
     ports:
       - "3000:80"
     volumes:
-      - ./public:/var/www/html
-      - ./src:/var/www/src
+      - ./public:/var/www/html:cached
+      - ./src:/var/www/src:cached
     env_file:
       - ./environment.env
     depends_on:
       - db
-    # optional: run a short wait-for-db at container start (see Dockerfile/CMD notes)
+    restart: unless-stopped
 
   db:
     image: mysql:8
@@ -25,6 +24,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
 volumes:
   db_data:
