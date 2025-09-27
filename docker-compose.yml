@@ -2,7 +2,7 @@ services:
   web:
     build: .
     ports:
-      - "3000:80"
+      - "8080:80"
     volumes:
       - ./public:/var/www/html:cached
       - ./src:/var/www/src:cached
