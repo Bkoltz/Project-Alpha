@@ -10,7 +10,7 @@ $where = [];$params = [];
 if ($client_id > 0) { $where[] = 'i.client_id=?'; $params[] = $client_id; }
 if ($min !== null) { $where[] = 'i.total>=?'; $params[] = $min; }
 if ($max !== null) { $where[] = 'i.total<=?'; $params[] = $max; }
-$sql = 'SELECT i.id,i.total,i.status,i.created_at,c.name client FROM invoices i JOIN clients c ON c.id=i.client_id';
+$sql = 'SELECT i.id,i.total,i.status,i.created_at,i.due_date,c.name client FROM invoices i JOIN clients c ON c.id=i.client_id';
 if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
 $sql .= ' ORDER BY i.created_at DESC LIMIT 100';
 
@@ -48,16 +48,29 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
           <th style="padding:10px">Total</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Created</th>
+          <th style="padding:10px">Due</th>
           <th style="padding:10px">Actions</th>
+          <th style="padding:10px">Edit</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
           <?php
             $rowStyle = '';
-            // color coding: paid (green), unpaid but within 30 days (yellow), unpaid older than 30 days (red)
             $status = $r['status'];
-            if ($status === 'paid') $rowStyle = 'background:#ecfdf5;';
+            if ($status === 'paid') {
+              $rowStyle = 'background:#ecfdf5;';
+            } else {
+              $due = isset($r['due_date']) ? strtotime($r['due_date']) : null;
+              if ($due) {
+                $today = strtotime('today');
+                if ($due < $today) {
+                  $rowStyle = 'background:#fef2f2;'; // red overdue
+                } else {
+                  $rowStyle = 'background:#fffbeb;'; // yellow within net
+                }
+              }
+            }
           ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
@@ -65,7 +78,9 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['created_at']); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['due_date'] ?? ''); ?></td>
             <td style="padding:10px">
+              <a href="/?page=invoice-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px">PDF</a>
               <?php if ($r['status'] !== 'paid'): ?>
               <form method="post" action="/?page=invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
@@ -73,6 +88,7 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
               </form>
               <?php endif; ?>
             </td>
+            <td style="padding:10px"><a href="/?page=invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

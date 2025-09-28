@@ -27,11 +27,11 @@
       <legend style="padding:0 6px;color:var(--muted)">Address</legend>
       <label><div>Address line 1</div><input name="address_line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
       <label><div>Address line 2</div><input name="address_line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr 1fr">
+      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
         <label><div>City</div><input name="city" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
         <label><div>State</div><input name="state" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-        <label><div>Postal</div><input name="postal" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-        <label><div>Country</div><input name="country" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+        <label><div>Postal (zip)</div><input name="postal" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+        <!-- <label><div>Country</div><input name="country" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label> -->
       </div>
     </fieldset>
     <label>

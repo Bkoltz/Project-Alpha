@@ -1,37 +1,48 @@
 <?php
-// src/views/pages/invoices-create.php
+// src/views/pages/invoices-edit.php
 require_once __DIR__ . '/../../config/db.php';
+$id = (int)($_GET['id'] ?? 0);
+$iv = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
+$iv->execute([$id]);
+$inv = $iv->fetch(PDO::FETCH_ASSOC);
+if(!$inv){ echo '<p>Invoice not found</p>'; return; }
+$items = $pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id=?');
+$items->execute([$id]);
+$items = $items->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+$clientName = '';
+foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clientName = $c['name']; break; } }
 ?>
 <section>
-  <h2>Create Invoice</h2>
-  <form id="invoiceForm" method="post" action="/?page=invoices-create" style="display:grid;gap:16px;max-width:900px">
+  <h2>Edit Invoice #<?php echo (int)$inv['id']; ?></h2>
+  <form id="invEditForm" method="post" action="/?page=invoices-update" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label style="position:relative">
         <div>Client</div>
-        <input id="clientInputInv" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <input id="clientIdInv" type="hidden" name="client_id">
+        <input id="clientInputInv" type="text" value="<?php echo htmlspecialchars($clientName); ?>" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientIdInv" type="hidden" name="client_id" value="<?php echo (int)$inv['client_id']; ?>">
         <div id="clientSuggestInv" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
       <label>
         <div>Due Date</div>
-        <input type="date" name="due_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="date" name="due_date" value="<?php echo htmlspecialchars($inv['due_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
         <div>Tax (%)</div>
-        <input id="taxPercentInv" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="taxPercentInv" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($inv['tax_percent']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
         <div>Discount Type</div>
         <select id="discountTypeInv" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <option value="none">None</option>
-          <option value="percent">Percent</option>
-          <option value="fixed">Fixed $</option>
+          <option value="none" <?php echo $inv['discount_type']==='none'?'selected':''; ?>>None</option>
+          <option value="percent" <?php echo $inv['discount_type']==='percent'?'selected':''; ?>>Percent</option>
+          <option value="fixed" <?php echo $inv['discount_type']==='fixed'?'selected':''; ?>>Fixed $</option>
         </select>
       </label>
       <label>
         <div>Discount Value</div>
-        <input id="discountValueInv" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="discountValueInv" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($inv['discount_value']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
 
@@ -49,7 +60,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     </div>
 
     <div>
-      <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Invoice</button>
+      <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Invoice</button>
     </div>
   </form>
 </section>
@@ -84,9 +95,11 @@ function recalcInv(){
   document.getElementById('totalValInv').textContent = money(total);
 }
 ['discountTypeInv','discountValueInv','taxPercentInv'].forEach(id=>document.getElementById(id).addEventListener('input', recalcInv));
-addItemInv();
+<?php foreach ($items as $it): ?>
+addItemInv(<?php echo json_encode($it['description']); ?>, <?php echo json_encode((float)$it['quantity']); ?>, <?php echo json_encode((float)$it['unit_price']); ?>);
+<?php endforeach; ?>
 
-// Client typeahead for invoice
+// Client typeahead
 var ciI = document.getElementById('clientInputInv');
 var cidI = document.getElementById('clientIdInv');
 var sugI = document.getElementById('clientSuggestInv');
@@ -108,5 +121,5 @@ ciI.addEventListener('input', function(){
     }).catch(()=>{sugI.style.display='none'});
 });
 document.addEventListener('click', function(e){ if(!sugI.contains(e.target) && e.target!==ciI){ sugI.style.display='none'; } });
-document.getElementById('invoiceForm').addEventListener('submit', function(e){ if(!cidI.value){ e.preventDefault(); alert('Please select a client from suggestions.'); } });
+document.getElementById('invEditForm').addEventListener('submit', function(e){ if(!cidI.value){ e.preventDefault(); alert('Please select a client from suggestions.'); } });
 </script>

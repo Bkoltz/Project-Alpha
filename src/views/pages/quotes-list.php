@@ -40,11 +40,13 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
           <th style="padding:10px">Total</th>
           <th style="padding:10px">Created</th>
           <th style="padding:10px">Actions</th>
+          <th style="padding:10px">Edit</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
-          <tr style="border-top:1px solid #f3f4f6">
+          <?php $rowStyle = $r['status']==='approved' ? 'background:#ecfdf5;' : ($r['status']==='pending' ? 'background:#fffbeb;' : ($r['status']==='rejected' ? 'background:#fef2f2;' : '')); ?>
+          <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['client_name']); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
@@ -59,6 +61,7 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
                 </form>
               <?php endif; ?>
             </td>
+            <td style="padding:10px"><a href="/?page=quotes-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>
