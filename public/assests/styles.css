@@ -1,0 +1,113 @@
+:root{
+  --bg:#f7f6f4;
+  --nav-bg:#0f1720;       /* dark slate */
+  --nav-accent:#2ea3d6;   /* accent blue */
+  --muted:#6b7280;
+  --text:#0b1220;
+  --max-width:1200px;
+  --nav-width:260px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+ul{margin:0;padding:0;list-style:none}
+
+/* layout */
+.site-shell{display:flex;min-height:100vh}
+.side-nav{
+  width:var(--nav-width);
+  min-width:var(--nav-width);
+  background:linear-gradient(180deg,var(--nav-bg),#07111a);
+  color:#fff;
+  position:fixed;
+  top:0;left:0;bottom:0;
+  overflow:hidden;
+  box-shadow:2px 0 8px rgba(0,0,0,0.08);
+  z-index:50;
+  display:flex;
+  flex-direction:column;
+}
+
+/* inner scrolling region */
+.side-nav .nav-inner{
+  display:flex;
+  flex-direction:column;
+  height:100%;
+  padding:20px;
+  gap:20px;
+  overflow:auto; /* this makes nav scrollable independently */
+}
+
+/* brand */
+.brand{display:flex;align-items:center;gap:12px}
+.brand-logo{width:44px;height:44px;object-fit:contain;border-radius:6px}
+.brand-text{font-weight:700;font-size:18px;letter-spacing:0.2px}
+
+/* nav links */
+.primary-nav ul{display:flex;flex-direction:column;gap:8px}
+.primary-nav a{
+  display:block;
+  padding:10px 12px;
+  border-radius:8px;
+  color:rgba(255,255,255,0.95);
+  transition:background .12s, transform .08s;
+  font-weight:600;
+}
+.primary-nav a:hover{background:rgba(255,255,255,0.04);transform:translateX(4px)}
+.primary-nav a:active{transform:translateX(2px)}
+
+/* sections */
+.nav-section{margin-top:6px}
+.section-label{
+  padding:8px 12px;
+  color:rgba(255,255,255,0.6);
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.nav-section > ul{margin-left:8px;padding-left:8px;border-left:1px solid rgba(255,255,255,0.08)}
+
+/* small active indicator */
+.primary-nav a.active{
+  background:rgba(255,255,255,0.06);
+  box-shadow:inset 4px 0 0 var(--nav-accent);
+}
+
+/* status highlights */
+.row-green{background:#ecfdf5}
+.row-yellow{background:#fffbeb}
+.row-red{background:#fef2f2}
+
+/* nav footer (contact) */
+.nav-footer{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.nav-footer a{color:rgba(255,255,255,0.9);font-size:14px}
+.nav-footer .settings{margin-top:6px;background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:8px}
+
+/* main content area pushes aside the fixed nav */
+.main-content{
+  margin-left:var(--nav-width);
+  padding:40px;
+  width:100%;
+  max-width:calc(var(--max-width) + var(--nav-width));
+  margin-right:auto;
+}
+
+/* responsive */
+@media (max-width:900px){
+  .side-nav{position:relative;width:100%;min-width:0;height:auto}
+  .main-content{margin-left:0;padding:18px}
+}
+
+/* helpers for hero and cards to match site feel */
+.hero{
+  display:flex;
+  gap:28px;
+  align-items:center;
+  padding:28px;
+  background:linear-gradient(180deg,rgba(255,255,255,0.9),transparent);
+  border-radius:10px;
+  box-shadow:0 6px 18px rgba(11,18,32,0.06);
+}
+.lead{font-size:20px;color:var(--muted);line-height:1.5}
+.h1{font-size:34px;margin:0 0 8px}

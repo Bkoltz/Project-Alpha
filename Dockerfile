@@ -1,5 +1,8 @@
 FROM php:8.2-apache
 
+# Tell Apache what hostname to use. NOTE: this is not needed to run, only to avoid warnings
+RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+
 # Optional: set working dir
 WORKDIR /var/www/html
 
