@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/clients-list.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/format.php';
 $clients = $pdo->query("SELECT id, name, email, phone, organization, created_at FROM clients ORDER BY created_at DESC LIMIT 50")->fetchAll();
 ?>
 <section>
@@ -24,7 +25,7 @@ $clients = $pdo->query("SELECT id, name, email, phone, organization, created_at 
           <tr style="border-top:1px solid #f3f4f6">
             <td style="padding:10px"><?php echo htmlspecialchars($c['name']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['email'] ?? ''); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($c['phone'] ?? ''); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td>
           </tr>

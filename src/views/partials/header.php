@@ -1,4 +1,5 @@
 <?php require_once __DIR__ . '/../../config/app.php'; ?>
+<?php require_once __DIR__ . '/../../utils/format.php'; ?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -74,12 +75,17 @@
             <ul>
               <li><a href="/?page=payments-list" data-page="payments-list">List Payments</a></li>
               <li><a href="/?page=payments-create" data-page="payments-create">Record Payment</a></li>
+              <!-- <li><a href="/?page=settings&tab=terms" data-page="settings">Terms & Conditions</a></li> -->
             </ul>
           </li>
         </ul>
       </nav>
 
       <div class="nav-footer">
+<?php $fromPhone = $appConfig['from_phone'] ?? null; ?>
+        <?php if ($fromPhone): ?>
+          <a class="phone" href="tel:<?php echo htmlspecialchars($fromPhone); ?>"><?php echo htmlspecialchars(format_phone($fromPhone)); ?></a>
+        <?php endif; ?>
         <a class="settings" href="/?page=settings" data-page="settings">Settings</a>
       </div>
     </div>

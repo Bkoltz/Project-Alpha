@@ -40,11 +40,12 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Created</th>
           <th style="padding:10px">Actions</th>
+          <th style="padding:10px">Edit</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
-          <?php $rowStyle = $r['status']==='active' ? 'background:#ecfdf5;' : ($r['status']==='cancelled' ? 'background:#fef2f2;' : ''); ?>
+          <?php $rowStyle = $r['status']==='active' ? 'background:#ecfdf5;' : ($r['status']==='cancelled' ? 'background:#fef2f2;' : ($r['status']==='draft' ? 'background:#fffbeb;' : '')); ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['client']); ?></td>
@@ -63,18 +64,11 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
                 </form>
               <?php endif; ?>
             </td>
+            <td style="padding:10px"><a href="/?page=contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>
     </table>
   </div>
 </section>
-?>
-<section>
-  <h2>Contracts</h2>
-  <p class="lead">List of contracts will appear here.</p>
-  <ul>
-    <li>Example Contract A</li>
-    <li>Example Contract B</li>
-  </ul>
-</section>
+

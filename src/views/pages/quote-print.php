@@ -13,7 +13,10 @@ $items = $items->fetchAll();
 <section>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <h2 style="margin:0">Quote #<?php echo (int)$quote['id']; ?></h2>
-    <button onclick="window.print()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Print / Save PDF</button>
+    <div>
+      <a href="/?page=quotes-edit&id=<?php echo (int)$quote['id']; ?>" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px">Edit</a>
+      <button onclick="window.print()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Print / Save PDF</button>
+    </div>
   </div>
   <div style="margin-bottom:8px;color:var(--muted)">Client: <?php echo htmlspecialchars($quote['client_name']); ?> · <?php echo htmlspecialchars($quote['client_email'] ?? ''); ?> · <?php echo htmlspecialchars($quote['client_phone'] ?? ''); ?></div>
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
