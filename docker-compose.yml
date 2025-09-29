@@ -1,5 +1,6 @@
 services:
   web:
+    image: bkoltz/project_alpha:latest
     build: .
     ports:
       - "8080:80"
