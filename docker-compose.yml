@@ -3,9 +3,6 @@ services:
     image: "bkoltz/project-alpha:latest"
     ports:
       - "8080:80"
-    volumes:
-      - ./public:/var/www/html:cached
-      - ./src:/var/www/src:cached
     env_file:
       - ./environment.env
     environment:
