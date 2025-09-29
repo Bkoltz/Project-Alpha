@@ -1,7 +1,6 @@
 services:
   web:
-    image: bkoltz/project-alpha:latest
-    build: .
+    image: "bkoltz/project-alpha:latest"
     ports:
       - "8080:80"
     volumes:
@@ -9,12 +8,18 @@ services:
       - ./src:/var/www/src:cached
     env_file:
       - ./environment.env
+    environment:
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+      # start.sh uses MYSQL_ROOT_PASSWORD to ping MySQL as root for readiness
+      MYSQL_ROOT_PASSWORD: rootpass
     depends_on:
       - db
     restart: unless-stopped
 
   db:
-    image: mysql:8
+    image: "mysql:8"
     restart: unless-stopped
 
     # Define root password + user + database explicitly
@@ -34,4 +39,5 @@ services:
       timeout: 5s
       retries: 10
 volumes:
-  db_data:
+  db_data: {}
+  web_data: {}

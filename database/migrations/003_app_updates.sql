@@ -1,2 +1,0 @@
--- database/migrations/003_app_updates.sql
--- Consolidated into 000_all.sql. This file is intentionally left as a no-op to avoid duplicate initialization.
