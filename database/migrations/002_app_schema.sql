@@ -1,2 +1,0 @@
--- database/migrations/002_app_schema.sql
--- Consolidated into 000_all.sql. This file is intentionally left as a no-op to avoid duplicate initialization.
