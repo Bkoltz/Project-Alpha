@@ -40,7 +40,7 @@ fi
 DB_NAME="${MYSQL_DATABASE:-project_alpha}"
 echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
 if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
-  if mysql -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
+if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
     "/usr/local/share/app-migrations/runtime.sql" > /dev/null 2>&1; then
     echo "✅ Runtime migrations applied (or already up-to-date)."
   else

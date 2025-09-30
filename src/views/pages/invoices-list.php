@@ -6,15 +6,29 @@ $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $min = isset($_GET['min']) ? (float)$_GET['min'] : null;
 $max = isset($_GET['max']) ? (float)$_GET['max'] : null;
 
-$where = [];$params = [];
-if ($client_id > 0) { $where[] = 'i.client_id=?'; $params[] = $client_id; }
-if ($min !== null) { $where[] = 'i.total>=?'; $params[] = $min; }
-if ($max !== null) { $where[] = 'i.total<=?'; $params[] = $max; }
+$where = [];
+$params = [];
+if ($client_id > 0) {
+  $where[] = 'i.client_id=?';
+  $params[] = $client_id;
+}
+if ($min !== null) {
+  $where[] = 'i.total>=?';
+  $params[] = $min;
+}
+if ($max !== null) {
+  $where[] = 'i.total<=?';
+  $params[] = $max;
+}
 $sql = 'SELECT i.id,i.total,i.status,i.created_at,i.due_date,c.name client FROM invoices i JOIN clients c ON c.id=i.client_id';
-if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
+if ($where) {
+  $sql .= ' WHERE ' . implode(' AND ', $where);
+}
 $sql .= ' ORDER BY i.created_at DESC LIMIT 100';
 
-$rows = $pdo->prepare($sql); $rows->execute($params); $rows = $rows->fetchAll();
+$rows = $pdo->prepare($sql);
+$rows->execute($params);
+$rows = $rows->fetchAll();
 $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
 ?>
 <section>
@@ -22,21 +36,25 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
 
   <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin:12px 0">
     <input type="hidden" name="page" value="invoices-list">
-    <label><div>Client</div>
+    <label>
+      <div>Client</div>
       <select name="client_id" style="padding:8px;border-radius:8px;border:1px solid #ddd">
         <option value="0">All</option>
         <?php foreach ($clients as $c): ?>
-          <option value="<?php echo (int)$c['id']; ?>" <?php echo $client_id==(int)$c['id']?'selected':''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
+          <option value="<?php echo (int)$c['id']; ?>" <?php echo $client_id == (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
         <?php endforeach; ?>
       </select>
     </label>
-    <label><div>Min Total ($)</div>
+    <label>
+      <div>Min Total ($)</div>
       <input type="number" step="0.01" name="min" value="<?php echo htmlspecialchars($_GET['min'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
     </label>
-    <label><div>Max Total ($)</div>
+    <label>
+      <div>Max Total ($)</div>
       <input type="number" step="0.01" name="max" value="<?php echo htmlspecialchars($_GET['max'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
     </label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff">Filter</button>
+    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
+    <a href="/?page=invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
   </form>
 
   <div style="overflow:auto">
@@ -56,21 +74,21 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
       <tbody>
         <?php foreach ($rows as $r): ?>
           <?php
-            $rowStyle = '';
-            $status = $r['status'];
-            if ($status === 'paid') {
-              $rowStyle = 'background:#ecfdf5;';
-            } else {
-              $due = isset($r['due_date']) ? strtotime($r['due_date']) : null;
-              if ($due) {
-                $today = strtotime('today');
-                if ($due < $today) {
-                  $rowStyle = 'background:#fef2f2;'; // red overdue
-                } else {
-                  $rowStyle = 'background:#fffbeb;'; // yellow within net
-                }
+          $rowStyle = '';
+          $status = $r['status'];
+          if ($status === 'paid') {
+            $rowStyle = 'background:#ecfdf5;';
+          } else {
+            $due = isset($r['due_date']) ? strtotime($r['due_date']) : null;
+            if ($due) {
+              $today = strtotime('today');
+              if ($due < $today) {
+                $rowStyle = 'background:#fef2f2;'; // red overdue
+              } else {
+                $rowStyle = 'background:#fffbeb;'; // yellow within net
               }
             }
+          }
           ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
@@ -82,10 +100,10 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
             <td style="padding:10px">
               <a href="/?page=invoice-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px">PDF</a>
               <?php if ($r['status'] !== 'paid'): ?>
-              <form method="post" action="/?page=invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
-                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46">Paid</button>
-              </form>
+                <form method="post" action="/?page=invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
+                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46">Paid</button>
+                </form>
               <?php endif; ?>
             </td>
             <td style="padding:10px"><a href="/?page=invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Edit</a></td>
