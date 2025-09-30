@@ -36,5 +36,19 @@ if [ $counter -ge $retries ]; then
   exit 1
 fi
 
+# Optional runtime schema migration (safe to run repeatedly)
+DB_NAME="${MYSQL_DATABASE:-project_alpha}"
+echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
+if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
+  if mysql -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
+    "/usr/local/share/app-migrations/runtime.sql" > /dev/null 2>&1; then
+    echo "✅ Runtime migrations applied (or already up-to-date)."
+  else
+    echo "⚠️  Runtime migrations encountered errors (continuing). Check logs if issues persist."
+  fi
+else
+  echo "ℹ️  No runtime migration file present. Skipping."
+fi
+
 echo "🚀 Starting Apache..."
 exec apache2-foreground
