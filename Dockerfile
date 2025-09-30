@@ -13,6 +13,7 @@ RUN docker-php-ext-install mysqli pdo pdo_mysql \
 # Copy files (during local development we'll mount volumes; copying is still useful for built images)
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/
+COPY ./database/runtime.sql /usr/local/share/app-migrations/runtime.sql
 
 # Set recommended permissions (adjust as needed)
 RUN chown -R www-data:www-data /var/www/html /var/www/src \
