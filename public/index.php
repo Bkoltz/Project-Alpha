@@ -46,6 +46,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/quotes_update.php';
         exit;
     }
+    if ($page === 'clients-update') {
+        require_once __DIR__ . '/../src/controllers/clients_update.php';
+        exit;
+    }
     if ($page === 'contracts-create') {
         require_once __DIR__ . '/../src/controllers/contracts_create.php';
         exit;

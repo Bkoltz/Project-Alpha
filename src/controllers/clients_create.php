@@ -11,6 +11,7 @@ $address_line1 = trim($_POST['address_line1'] ?? '');
 $address_line2 = trim($_POST['address_line2'] ?? '');
 $city = trim($_POST['city'] ?? '');
 $state = trim($_POST['state'] ?? '');
+if ($state === '') { $state = 'WI'; }
 $postal = trim($_POST['postal'] ?? '');
 $country = trim($_POST['country'] ?? '');
 
