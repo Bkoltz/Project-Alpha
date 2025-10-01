@@ -36,12 +36,33 @@ if [ $counter -ge $retries ]; then
   exit 1
 fi
 
-# Optional runtime schema migration (safe to run repeatedly)
+# Apply base schema if missing, then runtime migrations (both idempotent)
 DB_NAME="${MYSQL_DATABASE:-project_alpha}"
-echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
+
+# 1) Base schema: if key table (quotes) is missing, load 000_all.sql
+if [ -f "/usr/local/share/app-migrations/000_all.sql" ]; then
+  echo "Checking if base schema needs to be applied to '${DB_NAME}'..."
+  if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
+       "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
+    echo "Applying base schema (000_all.sql) to '${DB_NAME}'..."
+    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
+         "/usr/local/share/app-migrations/000_all.sql" > /dev/null 2>&1; then
+      echo "✅ Base schema applied."
+    else
+      echo "⚠️  Failed to apply base schema (000_all.sql). The application may not work until this succeeds."
+    fi
+  else
+    echo "Base schema already present (quotes table exists)."
+  fi
+else
+  echo "ℹ️  No base schema file (000_all.sql) found in image; skipping."
+fi
+
+# 2) Runtime, always safe to re-run
 if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
-if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
-    "/usr/local/share/app-migrations/runtime.sql" > /dev/null 2>&1; then
+  echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
+  if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
+       "/usr/local/share/app-migrations/runtime.sql" > /dev/null 2>&1; then
     echo "✅ Runtime migrations applied (or already up-to-date)."
   else
     echo "⚠️  Runtime migrations encountered errors (continuing). Check logs if issues persist."
