@@ -8,8 +8,15 @@ $where=[];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
+$per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
+$pageN = max(1, (int)($_GET['p'] ?? 1));
+$offset = ($pageN - 1) * $per;
+
+$sqlCount = 'SELECT COUNT(*) FROM quotes q'.($where? ' WHERE '.implode(' AND ', $where):'');
+$stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
+
 $sql="SELECT q.id, q.status, q.total, q.created_at, c.name AS client_name FROM quotes q JOIN clients c ON c.id=q.client_id";
-if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=' ORDER BY q.created_at DESC LIMIT 100';
+if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY q.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
 ?>
@@ -66,5 +73,29 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
         <?php endforeach; ?>
       </tbody>
     </table>
+  </div>
+  <?php
+    $last=(int)ceil(max(1,$total)/$per);
+    $qs=$_GET; unset($qs['p']); $base='/?'.http_build_query($qs+['page'=>'quotes-list','per_page'=>$per]);
+  ?>
+  <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <form method="get" action="/">
+        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
+        ?>
+        <input type="hidden" name="page" value="quotes-list">
+        <label>Per page
+          <select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
+            <option value="50" <?php echo $per===50?'selected':''; ?>>50</option>
+            <option value="100" <?php echo $per===100?'selected':''; ?>>100</option>
+          </select>
+        </label>
+      </form>
+    </div>
+    <div style="display:flex;gap:8px">
+      <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
+      <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
+      <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
+    </div>
   </div>
 </section>
