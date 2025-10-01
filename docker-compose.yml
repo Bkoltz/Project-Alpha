@@ -1,5 +1,6 @@
 services:
   web:
+    build: .
     image: "bkoltz/project-alpha:latest"
     ports:
       - "8080:80"
@@ -38,7 +39,6 @@ services:
 
     volumes:
       - db_data:/var/lib/mysql
-      - ./database/migrations:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
       test: >

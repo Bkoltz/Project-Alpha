@@ -1,4 +1,4 @@
--- database/runtime.sql
+-- database/migrations/runtime.sql
 -- Idempotent runtime migrations to ensure schema matches application needs.
 -- These run at container startup (web) and are safe to re-run.
 
