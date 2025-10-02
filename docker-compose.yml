@@ -41,10 +41,14 @@ services:
       - db_data:/var/lib/mysql
 
     healthcheck:
-      test: >
-        CMD-SHELL
-        mysqladmin --silent --skip-ssl ping -h 127.0.0.1 -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" 
-        || mysqladmin --silent --skip-ssl ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD"
+      test: 
+        - CMD
+        - mysqladmin
+        - ping
+        - '-h'
+        - 127.0.0.1
+        - '-uroot'
+        - '-p$MYSQL_ROOT_PASSWORD'
       interval: 10s
       timeout: 5s
       start_period: 40s
