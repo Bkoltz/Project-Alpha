@@ -1,6 +1,7 @@
 <?php
 // src/controllers/quotes_create.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/project_id.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
@@ -46,6 +47,9 @@ try {
     $stmt = $pdo->prepare('INSERT INTO quotes (client_id, status, discount_type, discount_value, tax_percent, subtotal, total) VALUES (?,?,?,?,?,?,?)');
     $stmt->execute([$client_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total]);
     $quote_id = (int)$pdo->lastInsertId();
+    // Assign a new Project ID for this quote
+    $projectCode = project_next_code($pdo, $client_id);
+    $pdo->prepare('UPDATE quotes SET project_code=? WHERE id=?')->execute([$projectCode, $quote_id]);
     // Assign a new doc_number
     $docMax = (int)$pdo->query('SELECT GREATEST(
       COALESCE((SELECT MAX(doc_number) FROM quotes),0),

@@ -1,6 +1,7 @@
 <?php
 // src/controllers/invoices_create.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/project_id.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
@@ -47,7 +48,9 @@ try {
     $stmt = $pdo->prepare('INSERT INTO invoices (client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?)');
     $stmt->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null]);
     $invoice_id = (int)$pdo->lastInsertId();
-    // Assign a new doc_number
+    // Assign a new Project ID and doc_number
+    $projectCode = project_next_code($pdo, $client_id);
+    $pdo->prepare('UPDATE invoices SET project_code=? WHERE id=?')->execute([$projectCode, $invoice_id]);
     $docMax = (int)$pdo->query('SELECT GREATEST(
       COALESCE((SELECT MAX(doc_number) FROM quotes),0),
       COALESCE((SELECT MAX(doc_number) FROM contracts),0),

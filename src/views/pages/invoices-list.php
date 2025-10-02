@@ -9,6 +9,8 @@ $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $min = isset($_GET['min']) ? (float)$_GET['min'] : null;
 $max = isset($_GET['max']) ? (float)$_GET['max'] : null;
 $statusFilter = $_GET['status'] ?? 'all'; // all|paid|unpaid|overdue
+$project_code = trim($_GET['project_code'] ?? '');
+$doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 
 $where = [];
 $params = [];
@@ -36,6 +38,14 @@ if ($statusFilter === 'paid') {
   )";
   $params[] = date('Y-m-d', strtotime('-'.$netDays.' days'));
 }
+if ($project_code !== '') {
+  $where[] = 'i.project_code LIKE ?';
+  $params[] = $project_code.'%';
+}
+if ($doc_no > 0) {
+  $where[] = 'i.doc_number=?';
+  $params[] = $doc_no;
+}
 
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
@@ -46,7 +56,7 @@ $stc = $pdo->prepare($sqlCount);
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = 'SELECT i.id,i.total,i.status,i.created_at,i.due_date,c.name client FROM invoices i JOIN clients c ON c.id=i.client_id';
+$sql = 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
 if ($where) {
   $sql .= ' WHERE ' . implode(' AND ', $where);
 }
@@ -61,7 +71,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
 <section>
   <h2>Invoices</h2>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
     <input type="hidden" name="page" value="invoices-list">
     <label>
       <div>Client</div>
@@ -90,6 +100,14 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
       <div>Max Total ($)</div>
       <input type="number" step="0.01" name="max" value="<?php echo htmlspecialchars($_GET['max'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
     </label>
+    <label>
+      <div>Project</div>
+      <input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+    </label>
+    <label>
+      <div>Doc #</div>
+      <input type="number" name="doc_number" value="<?php echo htmlspecialchars($_GET['doc_number'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+    </label>
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
     <a href="/?page=invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
   </form>
@@ -98,7 +116,8 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
       <thead>
         <tr style="text-align:left;border-bottom:1px solid #eee">
-          <th style="padding:10px">ID</th>
+          <th style="padding:10px">No.</th>
+          <th style="padding:10px">Project</th>
           <th style="padding:10px">Client</th>
           <th style="padding:10px">Total</th>
           <th style="padding:10px">Status</th>
@@ -130,8 +149,9 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
           }
           ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['client']); ?></td>
+            <td style="padding:10px">I-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
+            <td style="padding:10px"><a href="/?page=clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['created_at']); ?></td>

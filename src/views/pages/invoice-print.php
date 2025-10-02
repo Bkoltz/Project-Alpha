@@ -18,12 +18,14 @@ $fromEmail = $appConfig['from_email'] ?? '';
 // Prefer contract schedule if available
 $sched_est = $inv['estimated_completion'] ?? null;
 $sched_wp = (int)($inv['weather_pending'] ?? 0);
+$sched_date = $inv['scheduled_date'] ?? null;
 if (!empty($inv['contract_id'])) {
-  $co = $pdo->prepare('SELECT estimated_completion, weather_pending FROM contracts WHERE id=?');
+  $co = $pdo->prepare('SELECT estimated_completion, weather_pending, scheduled_date FROM contracts WHERE id=?');
   $co->execute([(int)$inv['contract_id']]);
   if ($row = $co->fetch(PDO::FETCH_ASSOC)) {
     if (!empty($row['estimated_completion'])) $sched_est = $row['estimated_completion'];
     if ($row['weather_pending'] !== null) $sched_wp = (int)$row['weather_pending'];
+    if (!empty($row['scheduled_date'])) $sched_date = $row['scheduled_date'];
   }
 }
 ?>
@@ -34,7 +36,7 @@ if (!empty($inv['contract_id'])) {
       <?php if ($logo): ?>
         <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:36px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
       <?php endif; ?>
-      <h2 style="margin:0">Invoice #<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?></h2>
+      <h2 style="margin:0">Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?><?php if (!empty($inv['project_code'])) echo ' (Project '.htmlspecialchars($inv['project_code']).')'; ?></h2>
       <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
     </div>
     <div>
@@ -56,8 +58,11 @@ if (!empty($inv['contract_id'])) {
     </div>
 </div>
 
-  <?php if (!empty($sched_est) || (int)$sched_wp===1): ?>
+  <?php if (!empty($sched_est) || !empty($sched_date) || (int)$sched_wp===1): ?>
   <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
+    <?php if (!empty($sched_date)): ?>
+      <div><strong>Scheduled date:</strong> <?php echo htmlspecialchars($sched_date); ?></div>
+    <?php endif; ?>
     <?php if (!empty($sched_est)): ?>
       <div><strong>Estimated completion:</strong> <?php echo htmlspecialchars($sched_est); ?></div>
     <?php endif; ?>
