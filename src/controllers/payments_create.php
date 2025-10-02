@@ -27,6 +27,15 @@ try {
   $status = 'partial';
   if ($paid >= $total) $status = 'paid';
   $pdo->prepare('UPDATE invoices SET status=? WHERE id=?')->execute([$status, $invoice_id]);
+  // If invoice paid and linked to contract, mark contract completed
+  if ($status === 'paid') {
+    $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id=?');
+    $co->execute([$invoice_id]);
+    $contract_id = (int)$co->fetchColumn();
+    if ($contract_id > 0) {
+      $pdo->prepare('UPDATE contracts SET status=? WHERE id=?')->execute(['completed', $contract_id]);
+    }
+  }
 
   $pdo->commit();
 } catch (Throwable $e) {

@@ -47,6 +47,14 @@ try {
     $stmt = $pdo->prepare('INSERT INTO invoices (client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?)');
     $stmt->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null]);
     $invoice_id = (int)$pdo->lastInsertId();
+    // Assign a new doc_number
+    $docMax = (int)$pdo->query('SELECT GREATEST(
+      COALESCE((SELECT MAX(doc_number) FROM quotes),0),
+      COALESCE((SELECT MAX(doc_number) FROM contracts),0),
+      COALESCE((SELECT MAX(doc_number) FROM invoices),0)
+    )')->fetchColumn();
+    $docNum = $docMax + 1;
+    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNum, $invoice_id]);
 
     $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
     foreach ($items as $it) {

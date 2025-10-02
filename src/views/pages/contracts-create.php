@@ -93,7 +93,7 @@ ci.addEventListener('input', function(){
     .then(r=>r.json())
     .then(list=>{
       if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-      sug.innerHTML = list.map(x=>`<div data-id=\"${'${'}x.id}\" data-name=\"${'${'}x.name}\" style=\"padding:8px 10px;cursor:pointer\">${'${'}x.name}</div>`).join('');
+sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
       Array.from(sug.children).forEach(el=>{
         el.addEventListener('click', function(){
           ci.value = this.dataset.name; cid.value = this.dataset.id; sug.style.display='none';

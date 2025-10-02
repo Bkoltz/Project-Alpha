@@ -15,13 +15,31 @@ $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Pro
 $fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
 $fromPhone = $appConfig['from_phone'] ?? '';
 $fromEmail = $appConfig['from_email'] ?? '';
+// Prefer contract schedule if available
+$sched_est = $inv['estimated_completion'] ?? null;
+$sched_wp = (int)($inv['weather_pending'] ?? 0);
+if (!empty($inv['contract_id'])) {
+  $co = $pdo->prepare('SELECT estimated_completion, weather_pending FROM contracts WHERE id=?');
+  $co->execute([(int)$inv['contract_id']]);
+  if ($row = $co->fetch(PDO::FETCH_ASSOC)) {
+    if (!empty($row['estimated_completion'])) $sched_est = $row['estimated_completion'];
+    if ($row['weather_pending'] !== null) $sched_wp = (int)$row['weather_pending'];
+  }
+}
 ?>
 <section>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <h2 style="margin:0">Invoice #<?php echo (int)$inv['id']; ?></h2>
+    <div style="display:flex;align-items:center;gap:10px">
+      <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null; ?>
+      <?php if ($logo): ?>
+        <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:36px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
+      <?php endif; ?>
+      <h2 style="margin:0">Invoice #<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?></h2>
+      <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
+    </div>
     <div>
-      <a href="/?page=invoices-edit&id=<?php echo (int)$inv['id']; ?>" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px">Edit</a>
-      <button onclick="window.print()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Print / Save PDF</button>
+      <a href="/?page=invoices-edit&id=<?php echo (int)$inv['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px; font-size: small;">Edit</a>
+      <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Print / Save PDF</button>
     </div>
   </div>
 
@@ -36,7 +54,18 @@ $fromEmail = $appConfig['from_email'] ?? '';
       <div><?php echo htmlspecialchars($inv['client_name']); ?></div>
       <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars(trim(($inv['address_line1'] ?? '')."\n".($inv['address_line2'] ?? '')."\n".($inv['city'] ?? '').' '.($inv['state'] ?? '').' '.($inv['postal'] ?? '')."\n".($inv['country'] ?? ''))); ?></pre>
     </div>
+</div>
+
+  <?php if (!empty($sched_est) || (int)$sched_wp===1): ?>
+  <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
+    <?php if (!empty($sched_est)): ?>
+      <div><strong>Estimated completion:</strong> <?php echo htmlspecialchars($sched_est); ?></div>
+    <?php endif; ?>
+    <?php if ((int)$sched_wp===1): ?>
+      <div><em>Weather permitting</em></div>
+    <?php endif; ?>
   </div>
+  <?php endif; ?>
 
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>

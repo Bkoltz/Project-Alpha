@@ -20,6 +20,13 @@ try{
         ->execute([$id, $outstanding, 'manual', 'succeeded']);
   }
   $pdo->prepare('UPDATE invoices SET status=? WHERE id=?')->execute(['paid',$id]);
+  // Mark linked contract completed
+  $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id=?');
+  $co->execute([$id]);
+  $contract_id = (int)$co->fetchColumn();
+  if ($contract_id > 0) {
+    $pdo->prepare('UPDATE contracts SET status=? WHERE id=?')->execute(['completed', $contract_id]);
+  }
   $pdo->commit();
 }catch(Throwable $e){
   $pdo->rollBack();

@@ -51,3 +51,48 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='total');
 SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN total DECIMAL(12,2) NOT NULL DEFAULT 0', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Archive tables (idempotent creates)
+CREATE TABLE IF NOT EXISTS archived_clients (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  client_id INT NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  email VARCHAR(150) NULL,
+  phone VARCHAR(50) NULL,
+  organization VARCHAR(150) NULL,
+  notes TEXT NULL,
+  address_line1 VARCHAR(200) NULL,
+  address_line2 VARCHAR(200) NULL,
+  city VARCHAR(100) NULL,
+  state VARCHAR(100) NULL,
+  postal VARCHAR(20) NULL,
+  country VARCHAR(100) NULL,
+  created_at TIMESTAMP NULL,
+  archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS archived_entities (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  client_id INT NOT NULL,
+  entity_type VARCHAR(32) NOT NULL,
+  entity_id INT NOT NULL,
+  payload JSON NOT NULL,
+  archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_arch_entities_client (client_id),
+  INDEX idx_arch_entities_type (entity_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Error with logic. Need to make sure that related documents have the same ID.
+-- -- Shared document number across quotes/contracts/invoices
+-- ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+-- ALTER TABLE contracts ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+-- ALTER TABLE invoices ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+
+-- -- Invoices: schedule fields
+-- SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='estimated_completion');
+-- SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN estimated_completion VARCHAR(200) NULL', 'SELECT 1');
+-- PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='weather_pending');
+-- SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN weather_pending TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+-- PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

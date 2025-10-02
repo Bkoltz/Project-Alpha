@@ -47,6 +47,10 @@ if (!$client) { echo '<p>Client not found.</p>'; return; }
     <div style="display:flex;gap:8px">
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save</button>
       <a href="/?page=clients-list" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff">Cancel</a>
+      <form method="post" action="/?page=clients-delete" onsubmit="return confirm('Archive this client and all associated documents? This will remove them from active lists.');" style="display:inline-block;margin-left:auto">
+        <input type="hidden" name="id" value="<?php echo (int)$client['id']; ?>">
+        <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:#fee2e2;color:#991b1b">Archive Client</button>
+      </form>
     </div>
   </form>
 </section>

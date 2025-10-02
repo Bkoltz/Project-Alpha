@@ -8,6 +8,23 @@ if ($id <= 0) {
   exit;
 }
 
+// If schedule not provided yet, show a minimal prompt form
+if (!isset($_POST['estimated_completion']) && !isset($_POST['weather_pending'])) {
+  header('Content-Type: text/html; charset=utf-8');
+  echo '<section style="max-width:560px;margin:24px auto">';
+  echo '<h2>Approve Quote</h2>';
+  echo '<form method="post" action="/?page=quote-approve" style="display:grid;gap:12px">';
+  echo '<input type="hidden" name="id" value="'.(int)$id.'">';
+  echo '<label><div>Estimated completion (optional)</div><input name="estimated_completion" placeholder="e.g., 2–3 weeks" style="padding:10px;border-radius:8px;border:1px solid #ddd;width:100%"></label>';
+  echo '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="weather_pending" value="1" checked> <span>Weather permitting</span></label>';
+  echo '<div><button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Approve</button></div>';
+  echo '</form>';
+  echo '</section>';
+  exit;
+}
+$estimated = trim((string)($_POST['estimated_completion'] ?? '')) ?: null;
+$weather = isset($_POST['weather_pending']) ? 1 : 0;
+
 $pdo->beginTransaction();
 try {
   // Load quote + items
@@ -24,22 +41,33 @@ try {
   $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$id]);
 
   // Create contract
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total) VALUES (?,?,?,?,?,?,?,?)')
-      ->execute([$id, (int)$quote['client_id'], 'active', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total']]);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, terms, estimated_completion, weather_pending) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$id, (int)$quote['client_id'], 'active', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], null, $estimated, $weather]);
   $contract_id = (int)$pdo->lastInsertId();
   $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach ($qitems as $it) {
     $ci->execute([$contract_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
   }
 
-  // Also create invoice from the approved quote
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$contract_id, $id, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null]);
+  // Also create invoice from the approved quote (include schedule)
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, estimated_completion, weather_pending) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$contract_id, $id, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $estimated, $weather]);
   $invoice_id = (int)$pdo->lastInsertId();
   $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach ($qitems as $it) {
     $ii->execute([$invoice_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
   }
+
+  // Assign a shared doc_number across quote, contract, and invoice
+  $docMax = (int)$pdo->query('SELECT GREATEST(
+      COALESCE((SELECT MAX(doc_number) FROM quotes),0),
+      COALESCE((SELECT MAX(doc_number) FROM contracts),0),
+      COALESCE((SELECT MAX(doc_number) FROM invoices),0)
+    )')->fetchColumn();
+  $docNum = $docMax + 1;
+  $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?')->execute([$docNum, $id]);
+  $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$docNum, $contract_id]);
+  $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNum, $invoice_id]);
 
   $pdo->commit();
 } catch (Throwable $e) {
