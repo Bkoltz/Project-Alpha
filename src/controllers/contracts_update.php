@@ -22,6 +22,14 @@ $weather = isset($_POST['weather_pending']) ? 1 : 0;
 $pdo->beginTransaction();
 try{
   $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$id]);
+  $row = $pdo->prepare('SELECT project_code FROM contracts WHERE id=?');
+  $row->execute([$id]);
+  $pc = (string)$row->fetchColumn();
+  $pn = trim((string)($_POST['project_notes'] ?? ''));
+  if ($pc !== '' && $pn !== '') {
+    $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
+    $up->execute([$pc, $client_id, $pn]);
+  }
   $pdo->prepare('DELETE FROM contract_items WHERE contract_id=?')->execute([$id]);
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['d'],$it['q'],$it['p'],$it['t']]); }

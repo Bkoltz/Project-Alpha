@@ -158,6 +158,11 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
             <td style="padding:10px"><?php echo htmlspecialchars($r['due_date'] ?? ''); ?></td>
             <td style="padding:10px">
               <a href="/?page=invoice-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px">PDF</a>
+              <form method="post" action="/?page=email-send" style="display:inline;margin-right:6px">
+                <input type="hidden" name="type" value="invoice">
+                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Email</button>
+              </form>
               <?php if ($r['status'] !== 'paid'): ?>
                 <form method="post" action="/?page=invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

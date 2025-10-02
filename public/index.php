@@ -7,6 +7,10 @@ if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/clients_search.php';
     exit;
 }
+if ($page === 'project-notes') {
+    require_once __DIR__ . '/../src/controllers/project_notes.php';
+    exit;
+}
 
 // Handle POST actions (PRG pattern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -72,6 +76,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'invoices-update') {
         require_once __DIR__ . '/../src/controllers/invoices_update.php';
+        exit;
+    }
+    if ($page === 'quote-reject') {
+        require_once __DIR__ . '/../src/controllers/quote_reject.php';
+        exit;
+    }
+    if ($page === 'email-send') {
+        require_once __DIR__ . '/../src/controllers/email_send.php';
         exit;
     }
 }

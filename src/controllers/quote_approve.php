@@ -17,8 +17,9 @@ if (!isset($_POST['scheduled_date'])) {
   echo '<form method="post" action="/?page=quote-approve" style="display:grid;gap:12px">';
   echo '<input type="hidden" name="id" value="'.(int)$id.'">';
   echo '<label><div>Scheduled date</div><input type="date" name="scheduled_date" style="padding:10px;border-radius:8px;border:1px solid #ddd;width:100%" required></label>';
+  echo '<label><div>Project Notes</div><textarea name="project_notes" rows="3" style="padding:10px;border-radius:8px;border:1px solid #ddd;width:100%" placeholder="Shared across related docs"></textarea></label>';
   echo '<div style="display:flex;gap:8px">';
-  echo '<button type="submit" name="approve" value="1" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Approve</button>';
+  echo '<button type="submit" name="approve" value="1" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#111;text-decoration:none;display:inline-block">Approve</button>';
   echo '<a href="/?page=quotes-list" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#111;text-decoration:none;display:inline-block">Cancel</a>';
   echo '</div>';
   echo '</form>';
@@ -28,6 +29,7 @@ if (!isset($_POST['scheduled_date'])) {
 $estimated = null;
 $scheduled_date = isset($_POST['scheduled_date']) && $_POST['scheduled_date'] !== '' ? $_POST['scheduled_date'] : null;
 $weather = 0;
+$projNotes = trim((string)($_POST['project_notes'] ?? ''));
 
 $pdo->beginTransaction();
 try {
@@ -47,6 +49,10 @@ try {
     $projectCode = project_next_code($pdo, (int)$quote['client_id']);
     $pdo->prepare('UPDATE quotes SET project_code=? WHERE id=?')->execute([$projectCode, $id]);
   }
+  if ($projNotes !== '') {
+    $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
+    $up->execute([$projectCode, (int)$quote['client_id'], $projNotes]);
+  }
 
   // Mark quote approved
   $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$id]);
@@ -61,7 +67,7 @@ try {
   }
 
   // Also create invoice from the approved quote (include schedule)
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, estimated_completion, weather_pending, scheduled_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, estimated_completion, weather_pending, scheduled_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       ->execute([$contract_id, $id, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $estimated, $weather, $scheduled_date, $projectCode]);
   $invoice_id = (int)$pdo->lastInsertId();
   $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
@@ -82,7 +88,8 @@ try {
 
   $pdo->commit();
 } catch (Throwable $e) {
-  $pdo->rollBack();
+  if ($pdo->inTransaction()) { $pdo->rollBack(); }
+  error_log('[quote_approve] Failed: ' . $e->getMessage());
   header('Location: /?page=quotes-list&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
   exit;
 }

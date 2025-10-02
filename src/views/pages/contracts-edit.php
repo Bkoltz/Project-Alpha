@@ -12,7 +12,7 @@ $items = $items->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 ?>
 <section>
-  <h2>Edit Contract #<?php echo (int)$contract['id']; ?></h2>
+  <h2>Edit Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Project '.htmlspecialchars($contract['project_code']).')'; ?></h2>
   <form id="coEditForm" method="post" action="/?page=contracts-update" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="id" value="<?php echo (int)$contract['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
@@ -47,6 +47,12 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div id="itemsCo" style="display:grid;gap:8px"></div>
       <button type="button" onclick="addItemCo()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
+
+    <?php $pn=null; if (!empty($contract['project_code'])) { $pm=$pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?'); $pm->execute([$contract['project_code']]); $pn=(string)$pm->fetchColumn(); } ?>
+    <label>
+      <div>Project Notes</div>
+      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
+    </label>
 
     <div id="totalsCo" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
       <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div><div id="subtotalValCo" style="min-width:120px;text-align:right">$0.00</div></div>

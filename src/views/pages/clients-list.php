@@ -2,9 +2,9 @@
 // src/views/pages/clients-list.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/format.php';
-$per = (int)($_GET['per_page'] ?? 50); if(!in_array($per, [50,100], true)) $per = 50;
-$pageN = max(1, (int)($_GET['p'] ?? 1));
-$offset = ($pageN - 1) * $per;
+$per = null; // show all clients
+$pageN = 1;
+$offset = 0;
 $q = trim($_GET['q'] ?? '');
 $where = '';
 $params = [];
@@ -14,11 +14,8 @@ if ($q !== '') { $where = 'WHERE name LIKE ?'; $params[] = '%'.$q.'%'; }
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
 $activeFilter = $hasArchived ? 'archived=0' : '1=1';
 
-$stc = $pdo->prepare('SELECT COUNT(*) FROM clients '.($where? $where.' AND '.$activeFilter : 'WHERE '.$activeFilter));
-$stc->execute($params);
-$total = (int)$stc->fetchColumn();
-
-$sql = "SELECT id, name, email, phone, organization, created_at FROM clients ".($where? $where.' AND '.$activeFilter : 'WHERE '.$activeFilter)." ORDER BY created_at DESC LIMIT $per OFFSET $offset";
+// fetch all clients without pagination
+$sql = "SELECT id, name, email, phone, organization, created_at FROM clients ".($where? $where.' AND '.$activeFilter : 'WHERE '.$activeFilter)." ORDER BY name ASC";
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $clients = $st->fetchAll();
@@ -28,15 +25,39 @@ $clients = $st->fetchAll();
   <?php $selected = isset($_GET['selected_client_id']) ? (int)$_GET['selected_client_id'] : 0; ?>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
   <div>
-  <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0;position:relative">
     <input type="hidden" name="page" value="clients-list">
-    <label>
+    <label style="flex:1;position:relative">
       <div>Search by name</div>
-      <input type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="e.g., Acme" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+      <input id="clientSearchBox" type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Type to search..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+      <div id="clientSearchSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
     </label>
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
     <a href="/?page=clients-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Reset</a>
   </form>
+  <script>
+    (function(){
+      var box = document.getElementById('clientSearchBox');
+      var sug = document.getElementById('clientSearchSuggest');
+      box.addEventListener('input', function(){
+        var t = this.value.trim();
+        if(!t){sug.style.display='none';sug.innerHTML='';return;}
+        fetch('/?page=clients-search&term='+encodeURIComponent(t))
+          .then(r=>r.json())
+          .then(list=>{
+            if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
+            sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
+            Array.from(sug.children).forEach(el=>{
+              el.addEventListener('click', function(){
+                window.location = '/?page=clients-list&selected_client_id='+this.dataset.id;
+              });
+            });
+            sug.style.display='block';
+          }).catch(()=>{sug.style.display='none'});
+      });
+      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==box){ sug.style.display='none'; } });
+    })();
+  </script>
   <?php if (!empty($_GET['created'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Client created.</div>
   <?php endif; ?>
@@ -48,7 +69,7 @@ $clients = $st->fetchAll();
           <th style="padding:10px">Email</th>
           <th style="padding:10px">Phone</th>
           <th style="padding:10px">Organization</th>
-          <th style="padding:10px">Created</th>
+          <!-- <th style="padding:10px">Created</th> -->
           <th style="padding:10px">Edit</th>
         </tr>
       </thead>
@@ -59,37 +80,14 @@ $clients = $st->fetchAll();
             <td style="padding:10px"><?php echo htmlspecialchars($c['email'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization'] ?? ''); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td>
+            <!-- <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td> -->
             <td style="padding:10px"><a href="/?page=clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>
     </table>
   </div>
-  <?php
-    $last = (int)ceil(max(1,$total)/$per);
-    $qs = $_GET; unset($qs['p']); $base='/?'.http_build_query($qs+['page'=>'clients-list','per_page'=>$per]);
-  ?>
-  <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
-    <div>
-      <form method="get" action="/">
-        <?php foreach ($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
-        ?>
-        <input type="hidden" name="page" value="clients-list">
-        <label>Per page
-          <select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
-            <option value="50" <?php echo $per===50?'selected':''; ?>>50</option>
-            <option value="100" <?php echo $per===100?'selected':''; ?>>100</option>
-          </select>
-        </label>
-      </form>
-    </div>
-    <div style="display:flex;gap:8px">
-      <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
-      <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
-      <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
-    </div>
-  </div>
+  <!-- Pagination removed: showing all clients -->
   </div>
   <div>
     <h3 style="margin:0 0 8px">Related Projects</h3>
