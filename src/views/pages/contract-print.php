@@ -15,17 +15,24 @@ $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Pro
 $fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
 $fromPhone = $appConfig['from_phone'] ?? '';
 $fromEmail = $appConfig['from_email'] ?? '';
-$termsText = trim($appConfig['terms'] ?? '');
+$termsText = trim($contract['terms'] ?? ($appConfig['terms'] ?? ''));
 ?>
 <section>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div>
-      <div style="font-size:12px;color:#999">Page 1 of 2</div>
-      <h2 style="margin:0">Contract #<?php echo (int)$contract['id']; ?></h2>
+    <div style="display:flex;align-items:center;gap:10px">
+      <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null; ?>
+      <?php if ($logo): ?>
+        <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:36px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
+      <?php endif; ?>
+      <div>
+        <div style="font-size:12px;color:#999">Page 1 of 2</div>
+        <h2 style="margin:0">Contract #<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?></h2>
+      </div>
+      <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
     </div>
     <div>
-      <a href="/?page=contracts-edit&id=<?php echo (int)$contract['id']; ?>" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px">Edit</a>
-      <button onclick="window.print()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Print / Save PDF</button>
+      <a href="/?page=contracts-edit&id=<?php echo (int)$contract['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px">Edit</a>
+      <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Print / Save PDF</button>
     </div>
   </div>
 
@@ -41,6 +48,17 @@ $termsText = trim($appConfig['terms'] ?? '');
       <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars(trim(($contract['address_line1'] ?? '')."\n".($contract['address_line2'] ?? '')."\n".($contract['city'] ?? '').' '.($contract['state'] ?? '').' '.($contract['postal'] ?? '')."\n".($contract['country'] ?? ''))); ?></pre>
     </div>
   </div>
+
+  <?php if (!empty($contract['estimated_completion']) || (int)($contract['weather_pending'] ?? 0)===1): ?>
+  <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
+    <?php if (!empty($contract['estimated_completion'])): ?>
+      <div><strong>Estimated completion:</strong> <?php echo htmlspecialchars($contract['estimated_completion']); ?></div>
+    <?php endif; ?>
+    <?php if ((int)($contract['weather_pending'] ?? 0)===1): ?>
+      <div><em>Weather permitting</em></div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
 
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>

@@ -46,6 +46,14 @@ try {
     $stmt = $pdo->prepare('INSERT INTO quotes (client_id, status, discount_type, discount_value, tax_percent, subtotal, total) VALUES (?,?,?,?,?,?,?)');
     $stmt->execute([$client_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total]);
     $quote_id = (int)$pdo->lastInsertId();
+    // Assign a new doc_number
+    $docMax = (int)$pdo->query('SELECT GREATEST(
+      COALESCE((SELECT MAX(doc_number) FROM quotes),0),
+      COALESCE((SELECT MAX(doc_number) FROM contracts),0),
+      COALESCE((SELECT MAX(doc_number) FROM invoices),0)
+    )')->fetchColumn();
+    $docNum = $docMax + 1;
+    $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?')->execute([$docNum, $quote_id]);
 
     $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
     foreach ($items as $it) {

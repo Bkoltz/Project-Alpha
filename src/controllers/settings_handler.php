@@ -12,6 +12,7 @@ $settingsFile = $configDir . '/settings.json';
 $settings = [
     'brand_name' => 'Project Alpha',
     'logo_path'  => null,
+    'from_name' => null,
     'from_address_line1' => null,
     'from_address_line2' => null,
     'from_city' => null,
@@ -20,6 +21,8 @@ $settings = [
     'from_country' => null,
     'from_email' => null,
     'from_phone' => null,
+'terms' => null,
+    'net_terms_days' => 30,
 ];
 if (is_readable($settingsFile)) {
     $data = json_decode(@file_get_contents($settingsFile), true);
@@ -36,12 +39,23 @@ if (isset($_POST['brand_name'])) {
     }
 }
 
-// From address fields
-foreach (['from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
+// From and contact fields
+foreach (['from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
     if (isset($_POST[$k])) {
         $val = trim((string)$_POST[$k]);
         $settings[$k] = $val !== '' ? mb_substr($val, 0, 200) : null;
     }
+}
+// Terms
+if (isset($_POST['terms'])) {
+    $t = trim((string)$_POST['terms']);
+    $settings['terms'] = $t !== '' ? mb_substr($t, 0, 20000) : null;
+}
+// Billing defaults
+if (isset($_POST['net_terms_days'])) {
+    $n = (int)$_POST['net_terms_days'];
+    if ($n < 0) $n = 0;
+    $settings['net_terms_days'] = $n;
 }
 
 if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {

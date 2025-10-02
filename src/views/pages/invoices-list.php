@@ -1,10 +1,14 @@
 <?php
 // src/views/pages/invoices-list.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+$netDays = (int)($appConfig['net_terms_days'] ?? 30);
+if ($netDays < 0) $netDays = 0;
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $min = isset($_GET['min']) ? (float)$_GET['min'] : null;
 $max = isset($_GET['max']) ? (float)$_GET['max'] : null;
+$statusFilter = $_GET['status'] ?? 'all'; // all|paid|unpaid|overdue
 
 $where = [];
 $params = [];
@@ -20,6 +24,19 @@ if ($max !== null) {
   $where[] = 'i.total<=?';
   $params[] = $max;
 }
+if ($statusFilter === 'paid') {
+  $where[] = "i.status='paid'";
+} elseif ($statusFilter === 'unpaid') {
+  $where[] = "i.status IN ('unpaid','partial')";
+} elseif ($statusFilter === 'overdue') {
+  // overdue = not paid AND (due_date < today OR (due_date IS NULL AND created_at < (today - netDays)))
+  $where[] = "i.status IN ('unpaid','partial') AND (
+    (i.due_date IS NOT NULL AND i.due_date < CURDATE()) OR
+    (i.due_date IS NULL AND i.created_at < ?)
+  )";
+  $params[] = date('Y-m-d', strtotime('-'.$netDays.' days'));
+}
+
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
@@ -38,12 +55,13 @@ $sql .= " ORDER BY i.created_at DESC LIMIT $per OFFSET $offset";
 $rows = $pdo->prepare($sql);
 $rows->execute($params);
 $rows = $rows->fetchAll();
-$clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
+$hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
+$clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>Invoices</h2>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
     <input type="hidden" name="page" value="invoices-list">
     <label>
       <div>Client</div>
@@ -52,6 +70,16 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
         <?php foreach ($clients as $c): ?>
           <option value="<?php echo (int)$c['id']; ?>" <?php echo $client_id == (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
         <?php endforeach; ?>
+      </select>
+    </label>
+    <label>
+      <div>Status</div>
+      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+        <?php $sf = htmlspecialchars($statusFilter); ?>
+        <option value="all" <?php echo $sf==='all'?'selected':''; ?>>All</option>
+        <option value="paid" <?php echo $sf==='paid'?'selected':''; ?>>Paid</option>
+        <option value="unpaid" <?php echo $sf==='unpaid'?'selected':''; ?>>Unpaid/Partial</option>
+        <option value="overdue" <?php echo $sf==='overdue'?'selected':''; ?>>Overdue</option>
       </select>
     </label>
     <label>
@@ -88,14 +116,16 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
           if ($status === 'paid') {
             $rowStyle = 'background:#ecfdf5;';
           } else {
-            $due = isset($r['due_date']) ? strtotime($r['due_date']) : null;
-            if ($due) {
-              $today = strtotime('today');
-              if ($due < $today) {
-                $rowStyle = 'background:#fef2f2;'; // red overdue
-              } else {
-                $rowStyle = 'background:#fffbeb;'; // yellow within net
-              }
+            $today = strtotime('today');
+            $due = isset($r['due_date']) && $r['due_date'] ? strtotime($r['due_date']) : null;
+            if ($due === null) {
+              // NET terms from settings
+              $due = strtotime('+'.$netDays.' days', strtotime($r['created_at']));
+            }
+            if ($due < $today) {
+              $rowStyle = 'background:#fef2f2;'; // red overdue
+            } else {
+              $rowStyle = 'background:#fffbeb;'; // yellow within net
             }
           }
           ?>

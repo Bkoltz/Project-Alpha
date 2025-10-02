@@ -4,8 +4,9 @@ $settingsFile = __DIR__ . '/../../public/assests/settings.json';
 
 $appConfig = [
     'brand_name' => 'Project Alpha',
-    'logo_path'  => null,
+'logo_path'  => null,
     // User info for documents
+    'from_name' => null,
     'from_address_line1' => null,
     'from_address_line2' => null,
     'from_city' => null,
@@ -14,6 +15,9 @@ $appConfig = [
     'from_country' => null,
     'from_email' => null,
     'from_phone' => null,
+    // Terms for contracts
+'terms' => null,
+    'net_terms_days' => 30,
 ];
 
 if (is_readable($settingsFile)) {

@@ -4,10 +4,12 @@ require_once __DIR__ . '/../../config/db.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';
+$status = $_GET['status'] ?? 'all'; // all|approved|rejected|pending
 $where=[];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
+if(in_array($status,['approved','rejected','pending'],true)){ $where[]='q.status=?'; $p[]=$status; }
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
@@ -18,11 +20,12 @@ $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 $sql="SELECT q.id, q.status, q.total, q.created_at, c.name AS client_name FROM quotes q JOIN clients c ON c.id=q.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY q.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
-$clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
+$hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
+$clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>Quotes</h2>
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
     <input type="hidden" name="page" value="quotes-list">
     <label><div>Client</div>
       <select name="client_id" style="padding:8px;border-radius:8px;border:1px solid #ddd">
@@ -30,6 +33,15 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
         <?php foreach ($clients as $c): ?>
           <option value="<?php echo (int)$c['id']; ?>" <?php echo $client_id==(int)$c['id']?'selected':''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
         <?php endforeach; ?>
+      </select>
+    </label>
+    <label><div>Status</div>
+      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+        <?php $sf=htmlspecialchars($status); ?>
+        <option value="all" <?php echo $sf==='all'?'selected':''; ?>>All</option>
+        <option value="approved" <?php echo $sf==='approved'?'selected':''; ?>>Approved</option>
+        <option value="rejected" <?php echo $sf==='rejected'?'selected':''; ?>>Denied</option>
+        <option value="pending" <?php echo $sf==='pending'?'selected':''; ?>>Pending</option>
       </select>
     </label>
     <label><div>Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>

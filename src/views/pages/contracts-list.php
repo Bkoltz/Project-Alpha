@@ -18,7 +18,8 @@ $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 $sql="SELECT co.id, co.status, co.created_at, c.name client FROM contracts co JOIN clients c ON c.id=co.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY co.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
-$clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
+$hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
+$clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>Contracts</h2>
@@ -52,7 +53,10 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
-          <?php $rowStyle = $r['status']==='active' ? 'background:#ecfdf5;' : ($r['status']==='cancelled' ? 'background:#fef2f2;' : ($r['status']==='draft' ? 'background:#fffbeb;' : '')); ?>
+<?php 
+  // active = yellow, completed = green, cancelled = red, draft = light yellow
+  $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : (($r['status']==='cancelled') ? 'background:#fef2f2;' : (($r['status']==='draft') ? 'background:#fdfdea;' : '')));
+?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['client']); ?></td>

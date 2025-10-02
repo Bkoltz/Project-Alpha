@@ -1,5 +1,6 @@
 <?php
 // src/views/pages/settings.php
+require_once __DIR__ . '/../../config/app.php';
 $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : 'customize';
 ?>
 <section>
@@ -12,7 +13,8 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
     <aside style="border:1px solid #eee;border-radius:8px;overflow:hidden;background:#fff">
       <a href="/?page=settings&tab=customize" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='customize'?'background:#f8fafc;font-weight:600':''; ?>">Customize App</a>
       <a href="/?page=settings&tab=user" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='user'?'background:#f8fafc;font-weight:600':''; ?>">User Info</a>
-      <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;<?php echo $tab==='terms'?'background:#f8fafc;font-weight:600':''; ?>">Terms & Conditions</a>
+      <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='terms'?'background:#f8fafc;font-weight:600':''; ?>">Terms & Conditions</a>
+      <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;<?php echo $tab==='billing'?'background:#f8fafc;font-weight:600':''; ?>">Billing</a>
     </aside>
 
     <div>
@@ -58,8 +60,17 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
 
         <?php if ($tab==='terms'): ?>
           <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-            <legend style="padding:0 6px;color:var(--muted)">Terms & Conditions (used in Contracts)</legend>
+            <legend style="padding:0 6px;color:var(--muted)">Terms & Conditions (used in Quotes and Contracts)</legend>
             <textarea name="terms" rows="12" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Enter your terms..."><?php echo htmlspecialchars($appConfig['terms'] ?? ''); ?></textarea>
+          </fieldset>
+        <?php endif; ?>
+
+        <?php if ($tab==='billing'): ?>
+          <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+            <legend style="padding:0 6px;color:var(--muted)">Billing Defaults</legend>
+            <label><div>Net Terms (days)</div>
+              <input type="number" min="0" name="net_terms_days" value="<?php echo htmlspecialchars((string)($appConfig['net_terms_days'] ?? 30)); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            </label>
           </fieldset>
         <?php endif; ?>
 
