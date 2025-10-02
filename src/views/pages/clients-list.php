@@ -25,6 +25,9 @@ $clients = $st->fetchAll();
 ?>
 <section>
   <h2>Clients</h2>
+  <?php $selected = isset($_GET['selected_client_id']) ? (int)$_GET['selected_client_id'] : 0; ?>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+  <div>
   <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0">
     <input type="hidden" name="page" value="clients-list">
     <label>
@@ -52,7 +55,7 @@ $clients = $st->fetchAll();
       <tbody>
         <?php foreach ($clients as $c): ?>
           <tr style="border-top:1px solid #f3f4f6">
-            <td style="padding:10px"><?php echo htmlspecialchars($c['name']); ?></td>
+            <td style="padding:10px"><a href="/?page=clients-list&selected_client_id=<?php echo (int)$c['id']; ?>" style="text-decoration:none;color:inherit;"><?php echo htmlspecialchars($c['name']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['email'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization'] ?? ''); ?></td>
@@ -86,5 +89,80 @@ $clients = $st->fetchAll();
       <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
       <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
     </div>
+  </div>
+  </div>
+  <div>
+    <h3 style="margin:0 0 8px">Related Projects</h3>
+    <?php if ($selected>0): ?>
+      <?php
+      // Gather distinct project codes for this client
+      $proj = $pdo->prepare("SELECT project_code FROM (
+        SELECT project_code FROM quotes WHERE client_id=? AND project_code IS NOT NULL
+        UNION DISTINCT SELECT project_code FROM contracts WHERE client_id=? AND project_code IS NOT NULL
+        UNION DISTINCT SELECT project_code FROM invoices WHERE client_id=? AND project_code IS NOT NULL
+      ) t ORDER BY project_code DESC");
+      $proj->execute([$selected,$selected,$selected]);
+      $projects = $proj->fetchAll(PDO::FETCH_COLUMN);
+      ?>
+      <?php if ($projects): ?>
+        <div style="display:grid;gap:12px">
+          <?php foreach ($projects as $pc): ?>
+            <div style="border:1px solid #eee;border-radius:8px;background:#fff;overflow:hidden">
+              <div style="padding:10px 12px;border-bottom:1px solid #eee;font-weight:600">Project <?php echo htmlspecialchars($pc); ?></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:12px">
+                <?php
+                  $q = $pdo->prepare('SELECT id, doc_number, total, status, created_at FROM quotes WHERE client_id=? AND project_code=? ORDER BY created_at DESC');
+                  $q->execute([$selected, $pc]); $quotes = $q->fetchAll();
+                  $co = $pdo->prepare('SELECT id, doc_number, status, created_at FROM contracts WHERE client_id=? AND project_code=? ORDER BY created_at DESC');
+                  $co->execute([$selected, $pc]); $contracts = $co->fetchAll();
+                  $i = $pdo->prepare('SELECT id, doc_number, total, status, created_at FROM invoices WHERE client_id=? AND project_code=? ORDER BY created_at DESC');
+                  $i->execute([$selected, $pc]); $invoices = $i->fetchAll();
+                ?>
+                <div>
+                  <div style="font-weight:600;margin-bottom:6px">Quotes</div>
+                  <?php if ($quotes): ?>
+                    <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
+                      <?php foreach ($quotes as $row): ?>
+                        <li><a href="/?page=quote-print&id=<?php echo (int)$row['id']; ?>">Q-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                      <?php endforeach; ?>
+                    </ul>
+                  <?php else: ?>
+                    <div style="color:var(--muted)">None</div>
+                  <?php endif; ?>
+                </div>
+                <div>
+                  <div style="font-weight:600;margin-bottom:6px">Contracts</div>
+                  <?php if ($contracts): ?>
+                    <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
+                      <?php foreach ($contracts as $row): ?>
+                        <li><a href="/?page=contract-print&id=<?php echo (int)$row['id']; ?>">C-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · <?php echo htmlspecialchars($row['status']); ?></li>
+                      <?php endforeach; ?>
+                    </ul>
+                  <?php else: ?>
+                    <div style="color:var(--muted)">None</div>
+                  <?php endif; ?>
+                </div>
+                <div>
+                  <div style="font-weight:600;margin-bottom:6px">Invoices</div>
+                  <?php if ($invoices): ?>
+                    <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
+                      <?php foreach ($invoices as $row): ?>
+                        <li><a href="/?page=invoice-print&id=<?php echo (int)$row['id']; ?>">I-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                      <?php endforeach; ?>
+                    </ul>
+                  <?php else: ?>
+                    <div style="color:var(--muted)">None</div>
+                  <?php endif; ?>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php else: ?>
+        <div style="color:var(--muted)">No projects for this client yet.</div>
+      <?php endif; ?>
+    <?php else: ?>
+      <div style="color:var(--muted)">Select a client on the left to view related projects and documents.</div>
+    <?php endif; ?>
   </div>
 </section>

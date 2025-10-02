@@ -25,7 +25,7 @@ $termsText = trim($appConfig['terms'] ?? '');
       <?php if ($logo): ?>
         <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:36px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
       <?php endif; ?>
-      <h2 style="margin:0">Quote #<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?></h2>
+      <h2 style="margin:0">Quote Q-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?><?php if (!empty($quote['project_code'])) echo ' (Project '.htmlspecialchars($quote['project_code']).')'; ?></h2>
       <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
     </div>
     <div>

@@ -26,7 +26,7 @@ $termsText = trim($contract['terms'] ?? ($appConfig['terms'] ?? ''));
       <?php endif; ?>
       <div>
         <div style="font-size:12px;color:#999">Page 1 of 2</div>
-        <h2 style="margin:0">Contract #<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?></h2>
+        <h2 style="margin:0">Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Project '.htmlspecialchars($contract['project_code']).')'; ?></h2>
       </div>
       <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
     </div>
@@ -49,8 +49,11 @@ $termsText = trim($contract['terms'] ?? ($appConfig['terms'] ?? ''));
     </div>
   </div>
 
-  <?php if (!empty($contract['estimated_completion']) || (int)($contract['weather_pending'] ?? 0)===1): ?>
+  <?php if (!empty($contract['estimated_completion']) || !empty($contract['scheduled_date']) || (int)($contract['weather_pending'] ?? 0)===1): ?>
   <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
+    <?php if (!empty($contract['scheduled_date'])): ?>
+      <div><strong>Scheduled date:</strong> <?php echo htmlspecialchars($contract['scheduled_date']); ?></div>
+    <?php endif; ?>
     <?php if (!empty($contract['estimated_completion'])): ?>
       <div><strong>Estimated completion:</strong> <?php echo htmlspecialchars($contract['estimated_completion']); ?></div>
     <?php endif; ?>

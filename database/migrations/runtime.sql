@@ -82,17 +82,85 @@ CREATE TABLE IF NOT EXISTS archived_entities (
   INDEX idx_arch_entities_type (entity_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Error with logic. Need to make sure that related documents have the same ID.
--- -- Shared document number across quotes/contracts/invoices
--- ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;
--- ALTER TABLE contracts ADD COLUMN IF NOT EXISTS doc_number INT NULL;
--- ALTER TABLE invoices ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+-- Document cross-linking: project_code on quotes/contracts/invoices
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='quotes' AND COLUMN_NAME='project_code');
+SET @sql := IF(@exists=0, 'ALTER TABLE quotes ADD COLUMN project_code VARCHAR(32) NULL, ADD INDEX idx_quotes_project_code (project_code)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- -- Invoices: schedule fields
--- SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='estimated_completion');
--- SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN estimated_completion VARCHAR(200) NULL', 'SELECT 1');
--- PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='project_code');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN project_code VARCHAR(32) NULL, ADD INDEX idx_contracts_project_code (project_code)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='weather_pending');
--- SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN weather_pending TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
--- PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='project_code');
+SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN project_code VARCHAR(32) NULL, ADD INDEX idx_invoices_project_code (project_code)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Scheduled date fields for calendar views
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='scheduled_date');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN scheduled_date DATE NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='scheduled_date');
+SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN scheduled_date DATE NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Shared document number across quotes/contracts/invoices
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+
+-- Contracts: schedule/terms fields (idempotent)
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='terms');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN terms TEXT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='estimated_completion');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN estimated_completion VARCHAR(200) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='weather_pending');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN weather_pending TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Invoices: schedule fields
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='estimated_completion');
+SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN estimated_completion VARCHAR(200) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='weather_pending');
+SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN weather_pending TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Project counters table (for generating project_code sequences)
+CREATE TABLE IF NOT EXISTS project_counters (
+  prefix VARCHAR(16) NOT NULL PRIMARY KEY,
+  next_seq INT NOT NULL DEFAULT 1,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Shared document number across quotes/contracts/invoices
+-- Use IF NOT EXISTS where supported; otherwise fall back to INFORMATION_SCHEMA checks above.
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+
+-- Contracts: schedule/terms fields (idempotent)
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='terms');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN terms TEXT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='estimated_completion');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN estimated_completion VARCHAR(200) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='weather_pending');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN weather_pending TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Invoices: schedule fields
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='estimated_completion');
+SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN estimated_completion VARCHAR(200) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='weather_pending');
+SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN weather_pending TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

@@ -1,6 +1,7 @@
 <?php
 // src/controllers/contracts_create.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/project_id.php';
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
@@ -22,6 +23,15 @@ try{
   $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)')
       ->execute([$client_id, 'draft', $discount_type, $discount_value, $tax_percent, $subtotal, $total]);
   $co_id = (int)$pdo->lastInsertId();
+  // Assign Project ID and doc number
+  $projectCode = project_next_code($pdo, $client_id);
+  $pdo->prepare('UPDATE contracts SET project_code=? WHERE id=?')->execute([$projectCode, $co_id]);
+  $docMax = (int)$pdo->query('SELECT GREATEST(
+      COALESCE((SELECT MAX(doc_number) FROM quotes),0),
+      COALESCE((SELECT MAX(doc_number) FROM contracts),0),
+      COALESCE((SELECT MAX(doc_number) FROM invoices),0)
+    )')->fetchColumn();
+  $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$docMax+1, $co_id]);
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$co_id,$it['d'],$it['q'],$it['p'],$it['t']]); }
   $pdo->commit();

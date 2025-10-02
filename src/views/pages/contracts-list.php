@@ -4,10 +4,14 @@ require_once __DIR__ . '/../../config/db.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';
+$project_code = trim($_GET['project_code'] ?? '');
+$doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $where=[];$p=[];
 if($client_id>0){$where[]='co.client_id=?';$p[]=$client_id;}
 if($start!==''){$where[]='co.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='co.created_at<=?';$p[]=$end.' 23:59:59';}
+if($project_code!==''){ $where[]='co.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($doc_no>0){ $where[]='co.doc_number=?'; $p[] = $doc_no; }
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
@@ -15,7 +19,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts co'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT co.id, co.status, co.created_at, c.name client FROM contracts co JOIN clients c ON c.id=co.client_id";
+$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.created_at, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY co.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
@@ -23,7 +27,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
 ?>
 <section>
   <h2>Contracts</h2>
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
     <input type="hidden" name="page" value="contracts-list">
     <label><div>Client</div>
       <select name="client_id" style="padding:8px;border-radius:8px;border:1px solid #ddd">
@@ -35,6 +39,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     </label>
     <label><div>Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
     <label><div>End</div><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Project ID</div><input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Doc #</div><input type="number" name="doc_number" value="<?php echo htmlspecialchars($_GET['doc_number'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
     <a href="/?page=contracts-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
   </form>
@@ -43,7 +49,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
       <thead>
         <tr style="text-align:left;border-bottom:1px solid #eee">
-          <th style="padding:10px">ID</th>
+          <th style="padding:10px">No.</th>
+          <th style="padding:10px">Project</th>
           <th style="padding:10px">Client</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Created</th>
@@ -58,8 +65,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : (($r['status']==='cancelled') ? 'background:#fef2f2;' : (($r['status']==='draft') ? 'background:#fdfdea;' : '')));
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['client']); ?></td>
+            <td style="padding:10px">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
+            <td style="padding:10px"><a href="/?page=clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['created_at']); ?></td>
             <td style="padding:10px;display:flex;gap:8px">
