@@ -21,6 +21,14 @@ $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(
 $pdo->beginTransaction();
 try{
   $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$due_date?:null,$id]);
+  $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');
+  $row->execute([$id]);
+  $pc = (string)$row->fetchColumn();
+  $pn = trim((string)($_POST['project_notes'] ?? ''));
+  if ($pc !== '' && $pn !== '') {
+    $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
+    $up->execute([$pc, $client_id, $pn]);
+  }
   $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$id]);
   $ins=$pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['d'],$it['q'],$it['p'],$it['t']]); }

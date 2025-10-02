@@ -137,6 +137,15 @@ CREATE TABLE IF NOT EXISTS project_counters (
   next_seq INT NOT NULL DEFAULT 1,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Project metadata (shared notes per project_code)
+CREATE TABLE IF NOT EXISTS project_meta (
+  project_code VARCHAR(32) NOT NULL PRIMARY KEY,
+  client_id INT NOT NULL,
+  notes TEXT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_project_meta_client (client_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- Shared document number across quotes/contracts/invoices
 -- Use IF NOT EXISTS where supported; otherwise fall back to INFORMATION_SCHEMA checks above.
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;

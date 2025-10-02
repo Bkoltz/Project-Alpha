@@ -72,6 +72,11 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px"><?php echo htmlspecialchars($r['created_at']); ?></td>
             <td style="padding:10px;display:flex;gap:8px">
               <a href="/?page=contract-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">PDF</a>
+              <form method="post" action="/?page=email-send" style="display:inline">
+                <input type="hidden" name="type" value="contract">
+                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Email</button>
+              </form>
               <?php if ($r['status']!=='active' && $r['status']!=='cancelled'): ?>
                 <form method="post" action="/?page=contract-sign" onsubmit="return confirm('Mark as signed and create invoice?')">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

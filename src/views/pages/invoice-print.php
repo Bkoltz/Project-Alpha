@@ -15,6 +15,13 @@ $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Pro
 $fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
 $fromPhone = $appConfig['from_phone'] ?? '';
 $fromEmail = $appConfig['from_email'] ?? '';
+// Load project notes if available
+$projectNotes = null;
+if (!empty($inv['project_code'])) {
+  $pm = $pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?');
+  $pm->execute([$inv['project_code']]);
+  $projectNotes = $pm->fetchColumn();
+}
 // Prefer contract schedule if available
 $sched_est = $inv['estimated_completion'] ?? null;
 $sched_wp = (int)($inv['weather_pending'] ?? 0);
@@ -41,6 +48,11 @@ if (!empty($inv['contract_id'])) {
     </div>
     <div>
       <a href="/?page=invoices-edit&id=<?php echo (int)$inv['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px; font-size: small;">Edit</a>
+      <form method="post" action="/?page=email-send" style="display:inline-block;margin-right:6px">
+        <input type="hidden" name="type" value="invoice">
+        <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
+        <button type="submit" style="min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Email</button>
+      </form>
       <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Print / Save PDF</button>
     </div>
   </div>
@@ -57,6 +69,13 @@ if (!empty($inv['contract_id'])) {
       <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars(trim(($inv['address_line1'] ?? '')."\n".($inv['address_line2'] ?? '')."\n".($inv['city'] ?? '').' '.($inv['state'] ?? '').' '.($inv['postal'] ?? '')."\n".($inv['country'] ?? ''))); ?></pre>
     </div>
 </div>
+
+  <?php if (!empty($projectNotes)): ?>
+  <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
+    <div style="font-weight:600;margin-bottom:6px">Project Notes</div>
+    <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars($projectNotes); ?></pre>
+  </div>
+  <?php endif; ?>
 
   <?php if (!empty($sched_est) || !empty($sched_date) || (int)$sched_wp===1): ?>
   <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">

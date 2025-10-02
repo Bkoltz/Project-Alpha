@@ -51,6 +51,11 @@ try {
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);
     $pdo->prepare('UPDATE invoices SET project_code=? WHERE id=?')->execute([$projectCode, $invoice_id]);
+    $notes = trim((string)($_POST['project_notes'] ?? ''));
+    if ($notes !== '') {
+      $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
+      $up->execute([$projectCode, $client_id, $notes]);
+    }
     $docMax = (int)$pdo->query('SELECT GREATEST(
       COALESCE((SELECT MAX(doc_number) FROM quotes),0),
       COALESCE((SELECT MAX(doc_number) FROM contracts),0),

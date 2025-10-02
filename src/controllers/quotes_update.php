@@ -19,6 +19,15 @@ $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(
 $pdo->beginTransaction();
 try{
   $pdo->prepare('UPDATE quotes SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$id]);
+  // Upsert project notes if provided and project_code is known
+  $row = $pdo->prepare('SELECT project_code FROM quotes WHERE id=?');
+  $row->execute([$id]);
+  $pc = (string)$row->fetchColumn();
+  $pn = trim((string)($_POST['project_notes'] ?? ''));
+  if ($pc !== '' && $pn !== '') {
+    $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
+    $up->execute([$pc, $client_id, $pn]);
+  }
   $pdo->prepare('DELETE FROM quote_items WHERE quote_id=?')->execute([$id]);
   $ins=$pdo->prepare('INSERT INTO quote_items (quote_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['d'],$it['q'],$it['p'],$it['t']]); }
