@@ -79,8 +79,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       <tbody>
         <?php foreach ($rows as $r): ?>
 <?php 
-  // active = yellow, completed = green, cancelled = red, draft = light yellow
-  $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : (($r['status']==='cancelled') ? 'background:#fef2f2;' : (($r['status']==='draft') ? 'background:#fdfdea;' : '')));
+  // active = yellow, completed = green, denied/cancelled = red, draft = light yellow
+  $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : ((in_array($r['status'], ['cancelled','denied'], true)) ? 'background:#fef2f2;' : (($r['status']==='draft') ? 'background:#fdfdea;' : '')));
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>
@@ -95,6 +95,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
               </form>
+              <?php if (!in_array($r['status'], ['denied','completed'], true)): ?>
+              <form method="post" action="/?page=contract-deny" onsubmit="return confirm('Deny this contract and void linked invoices?')" style="display:inline">
+                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff">Deny</button>
+              </form>
+              <?php endif; ?>
             </td>
             <td style="padding:10px"><a href="/?page=contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
           </tr>

@@ -2,6 +2,7 @@
 // src/controllers/quote_approve.php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/project_id.php';
+require_once __DIR__ . '/../config/app.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -43,8 +44,10 @@ try {
   }
 
   // Create invoice (no schedule fields)
+  $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
+  $dueDate = date('Y-m-d', strtotime('+' . $netDays . ' days'));
   $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$contract_id, $id, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode]);
+      ->execute([$contract_id, $id, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', $dueDate, $projectCode]);
   $invoice_id = (int)$pdo->lastInsertId();
 
   $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
