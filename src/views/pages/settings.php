@@ -71,6 +71,10 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
             <label><div>Net Terms (days)</div>
               <input type="number" min="0" name="net_terms_days" value="<?php echo htmlspecialchars((string)($appConfig['net_terms_days'] ?? 30)); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             </label>
+            <div style="margin-top:12px"></div>
+            <label><div>Payment Methods (one per line)</div>
+              <textarea name="payment_methods" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="card&#10;cash&#10;bank_transfer"><?php echo htmlspecialchars(implode("\n", (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']))); ?></textarea>
+            </label>
           </fieldset>
         <?php endif; ?>
 

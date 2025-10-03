@@ -2,6 +2,7 @@
 // src/views/pages/quotes-list.php
 require_once __DIR__ . '/../../config/db.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
+$client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';
 $status = $_GET['status'] ?? 'all'; // all|approved|rejected|pending
@@ -12,6 +13,7 @@ $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $where=[];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
+elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
 if(in_array($status,['approved','rejected','pending'],true)){ $where[]='q.status=?'; $p[]=$status; }
@@ -35,15 +37,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
 ?>
 <section>
   <h2>Quotes</h2>
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
     <input type="hidden" name="page" value="quotes-list">
-    <label><div>Client</div>
-      <select name="client_id" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="0">All</option>
-        <?php foreach ($clients as $c): ?>
-          <option value="<?php echo (int)$c['id']; ?>" <?php echo $client_id==(int)$c['id']?'selected':''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
-        <?php endforeach; ?>
-      </select>
+    <input type="hidden" name="client_id" id="clientIdQL" value="<?php echo (int)$client_id; ?>">
+    <label style="position:relative"><div>Client</div>
+      <input type="text" name="client" id="clientInputQL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
+      <div id="clientSuggestQL" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
     </label>
     <label><div>Status</div>
       <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
@@ -61,6 +60,24 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
     <a href="/?page=quotes-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
   </form>
+  <script>
+    (function(){
+      var input = document.getElementById('clientInputQL');
+      var hid = document.getElementById('clientIdQL');
+      var sug = document.getElementById('clientSuggestQL');
+      input.addEventListener('input', function(){
+        hid.value='';
+        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
+        fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
+          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
+          sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
+          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
+          sug.style.display='block';
+        }).catch(()=>{sug.style.display='none'});
+      });
+      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
+    })();
+  </script>
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
       <thead>

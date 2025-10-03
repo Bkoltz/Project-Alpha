@@ -1,7 +1,7 @@
 <?php
 // src/views/pages/payments-create.php
 require_once __DIR__ . '/../../config/db.php';
-$invoices = $pdo->query("SELECT i.id, i.total, i.status, c.name client FROM invoices i JOIN clients c ON c.id=i.client_id ORDER BY i.created_at DESC LIMIT 100")->fetchAll();
+$invoices = $pdo->query("SELECT i.id, i.total, i.status, c.name client FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.status IN ('unpaid','partial') ORDER BY i.created_at DESC LIMIT 200")->fetchAll();
 $pref = (int)($_GET['invoice_id'] ?? 0);
 $prefAmount = '';
 if ($pref > 0) {
@@ -34,7 +34,12 @@ if ($pref > 0) {
     </label>
     <label>
       <div>Method</div>
-      <input type="text" name="method" placeholder="card / cash / bank_transfer" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <?php require_once __DIR__ . '/../../config/app.php'; $methods = (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']); ?>
+      <select name="method" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <?php foreach ($methods as $m): ?>
+          <option value="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></option>
+        <?php endforeach; ?>
+      </select>
     </label>
     <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Payment</button>
   </form>
