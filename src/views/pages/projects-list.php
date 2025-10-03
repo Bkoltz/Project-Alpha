@@ -58,7 +58,21 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
             <strong>Project <?php echo htmlspecialchars($p['project_code']); ?></strong>
             <span style="color:var(--muted)"> · <?php echo htmlspecialchars($p['client_name']); ?></span>
           </div>
-          <div style="color:var(--muted)">Q: <?php echo (int)$p['quotes_count']; ?> · C: <?php echo (int)$p['contracts_count']; ?> · I: <?php echo (int)$p['invoices_count']; ?></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <form method="post" action="/?page=project-notes-update" style="display:flex;gap:6px;align-items:center">
+              <?php
+                $pn = $pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?');
+                $pn->execute([$p['project_code']]);
+                $notes = (string)$pn->fetchColumn();
+              ?>
+              <input type="hidden" name="project_code" value="<?php echo htmlspecialchars($p['project_code']); ?>">
+              <input type="hidden" name="client_id" value="<?php echo (int)$p['client_id']; ?>">
+              <input type="hidden" name="redirect" value="/?page=projects-list">
+              <textarea name="notes" rows="1" placeholder="Project notes" style="padding:6px;border:1px solid #ddd;border-radius:6px;min-width:280px"><?php echo htmlspecialchars($notes ?? ''); ?></textarea>
+              <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff">Save</button>
+            </form>
+            <div style="color:var(--muted)">Q: <?php echo (int)$p['quotes_count']; ?> · C: <?php echo (int)$p['contracts_count']; ?> · I: <?php echo (int)$p['invoices_count']; ?></div>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:12px">
           <?php

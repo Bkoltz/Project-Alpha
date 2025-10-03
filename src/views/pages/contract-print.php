@@ -54,19 +54,6 @@ $termsText = trim($contract['terms'] ?? ($appConfig['terms'] ?? ''));
     </div>
   </div>
 
-  <?php if (!empty($contract['estimated_completion']) || !empty($contract['scheduled_date']) || (int)($contract['weather_pending'] ?? 0)===1): ?>
-  <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
-    <?php if (!empty($contract['scheduled_date'])): ?>
-      <div><strong>Scheduled date:</strong> <?php echo htmlspecialchars($contract['scheduled_date']); ?></div>
-    <?php endif; ?>
-    <?php if (!empty($contract['estimated_completion'])): ?>
-      <div><strong>Estimated completion:</strong> <?php echo htmlspecialchars($contract['estimated_completion']); ?></div>
-    <?php endif; ?>
-    <?php if ((int)($contract['weather_pending'] ?? 0)===1): ?>
-      <div><em>Weather permitting</em></div>
-    <?php endif; ?>
-  </div>
-  <?php endif; ?>
 
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>

@@ -81,7 +81,7 @@ $clients = $st->fetchAll();
             <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization'] ?? ''); ?></td>
             <!-- <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td> -->
-            <td style="padding:10px"><a href="/?page=clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Edit</a></td>
+            <td style="padding:10px"><a href="/?page=clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

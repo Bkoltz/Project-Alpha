@@ -86,12 +86,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/email_send.php';
         exit;
     }
+    if ($page === 'project-notes-update') {
+        require_once __DIR__ . '/../src/controllers/project_notes_update.php';
+        exit;
+    }
 }
 
 require_once __DIR__ . '/../src/views/partials/header.php';
 
 $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
 if (!is_file($view)) {
+    $view = __DIR__ . '/../src/views/pages/home.php';
+}
+if (basename($view) === 'calendar.php') {
     $view = __DIR__ . '/../src/views/pages/home.php';
 }
 require $view;

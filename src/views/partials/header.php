@@ -85,7 +85,6 @@
               <div class="section-label">Projects</div>
               <ul>
                 <li><a href="/?page=projects-list" data-page="projects-list">Projects</a></li>
-                <li><a href="/?page=calendar" data-page="calendar">Calendar</a></li>
               </ul>
             </li>
           </ul>

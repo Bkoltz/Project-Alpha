@@ -104,10 +104,18 @@ SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHE
 SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN scheduled_date DATE NULL', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Shared document number across quotes/contracts/invoices
-ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;
-ALTER TABLE contracts ADD COLUMN IF NOT EXISTS doc_number INT NULL;
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS doc_number INT NULL;
+-- Shared document number across quotes/contracts/invoices (idempotent)
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='quotes' AND COLUMN_NAME='doc_number');
+SET @sql := IF(@exists=0, 'ALTER TABLE quotes ADD COLUMN doc_number INT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='doc_number');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN doc_number INT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='doc_number');
+SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN doc_number INT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- Contracts: schedule/terms fields (idempotent)
 SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='terms');

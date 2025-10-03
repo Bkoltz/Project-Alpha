@@ -56,13 +56,9 @@ try {
       $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
       $up->execute([$projectCode, $client_id, $notes]);
     }
-    $docMax = (int)$pdo->query('SELECT GREATEST(
-      COALESCE((SELECT MAX(doc_number) FROM quotes),0),
-      COALESCE((SELECT MAX(doc_number) FROM contracts),0),
-      COALESCE((SELECT MAX(doc_number) FROM invoices),0)
-    )')->fetchColumn();
-    $docNum = $docMax + 1;
-    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNum, $invoice_id]);
+    // Assign per-type doc_number for invoices
+    $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
     $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
     foreach ($items as $it) {
