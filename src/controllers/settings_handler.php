@@ -81,6 +81,23 @@ if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
     }
 }
 
+// Billing defaults
+if (isset($_POST['net_terms_days'])) {
+    $nd = (int)$_POST['net_terms_days'];
+    if ($nd < 0) $nd = 0;
+    $settings['net_terms_days'] = $nd;
+}
+// Payment methods (textarea lines)
+if (isset($_POST['payment_methods'])) {
+    $lines = preg_split('/\r?\n/', (string)$_POST['payment_methods']);
+    $methods = [];
+    foreach ($lines as $ln) {
+        $m = trim($ln);
+        if ($m !== '') { $methods[] = $m; }
+    }
+    $settings['payment_methods'] = array_values(array_unique($methods));
+}
+
 @file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
 header('Location: /?page=settings&saved=1');

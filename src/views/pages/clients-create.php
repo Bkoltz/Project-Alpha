@@ -9,7 +9,7 @@
   <form method="post" action="/?page=clients-create" style="display:grid;gap:12px;max-width:520px">
     <label>
       <div>Name</div>
-      <input required type="text" name="name" placeholder="Acme Co." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <input required type="text" name="name" placeholder="First Last" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
     <label>
       <div>Email</div>

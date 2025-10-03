@@ -33,7 +33,7 @@ function project_client_initials(string $name): string {
     }
     if ($initials === '') {
         $flat = preg_replace('/\s+/', '', $norm);
-        $initials = $toUpper($sub($flat, 0, 2)) ?: 'XX';
+        $initials = $toUpper($sub($flat, 0, 3)) ?: 'XX';
     } elseif ($len($initials) === 1) {
         $flat = preg_replace('/\s+/', '', $norm);
         $next = $sub($flat, 1, 1);

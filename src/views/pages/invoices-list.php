@@ -6,6 +6,7 @@ $netDays = (int)($appConfig['net_terms_days'] ?? 30);
 if ($netDays < 0) $netDays = 0;
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
+$client_name = trim($_GET['client'] ?? '');
 $min = isset($_GET['min']) ? (float)$_GET['min'] : null;
 $max = isset($_GET['max']) ? (float)$_GET['max'] : null;
 $statusFilter = $_GET['status'] ?? 'all'; // all|paid|unpaid|overdue
@@ -17,6 +18,9 @@ $params = [];
 if ($client_id > 0) {
   $where[] = 'i.client_id=?';
   $params[] = $client_id;
+} elseif ($client_name !== '') {
+  $where[] = 'c.name LIKE ?';
+  $params[] = '%'.$client_name.'%';
 }
 if ($min !== null) {
   $where[] = 'i.total>=?';
@@ -71,16 +75,13 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
 <section>
   <h2>Invoices</h2>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
     <input type="hidden" name="page" value="invoices-list">
-    <label>
+    <input type="hidden" name="client_id" id="clientIdIL" value="<?php echo (int)$client_id; ?>">
+    <label style="position:relative">
       <div>Client</div>
-      <select name="client_id" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="0">All</option>
-        <?php foreach ($clients as $c): ?>
-          <option value="<?php echo (int)$c['id']; ?>" <?php echo $client_id == (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
-        <?php endforeach; ?>
-      </select>
+      <input type="text" name="client" id="clientInputIL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
+      <div id="clientSuggestIL" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
     </label>
     <label>
       <div>Status</div>
@@ -111,6 +112,25 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
     <a href="/?page=invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
   </form>
+
+  <script>
+    (function(){
+      var input = document.getElementById('clientInputIL');
+      var hid = document.getElementById('clientIdIL');
+      var sug = document.getElementById('clientSuggestIL');
+      input.addEventListener('input', function(){
+        hid.value='';
+        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
+        fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
+          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
+          sug.innerHTML = list.map(x=>`<div data-id=\"${'${'}x.id}\" data-name=\"${'${'}x.name}\" style=\"padding:8px 10px;cursor:pointer\">${'${'}x.name}</div>`).join('');
+          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
+          sug.style.display='block';
+        }).catch(()=>{sug.style.display='none'});
+      });
+      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
+    })();
+  </script>
 
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">

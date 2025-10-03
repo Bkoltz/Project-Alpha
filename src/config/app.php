@@ -18,6 +18,7 @@ $appConfig = [
     // Terms for contracts
 'terms' => null,
     'net_terms_days' => 30,
+    'payment_methods' => ['card','cash','bank_transfer'],
 ];
 
 if (is_readable($settingsFile)) {

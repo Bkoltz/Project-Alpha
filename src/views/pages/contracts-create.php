@@ -8,7 +8,7 @@ require_once __DIR__ . '/../../config/db.php';
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label style="position:relative">
         <div>Client</div>
-        <input id="clientInputCo" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+<input id="clientInputCo" name="client" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <input id="clientIdCo" type="hidden" name="client_id">
         <div id="clientSuggestCo" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
