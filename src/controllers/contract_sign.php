@@ -1,6 +1,7 @@
 <?php
 // src/controllers/contract_sign.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/app.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
 if ($contract_id <= 0) { header('Location: /?page=contracts-list&error=Invalid%20contract'); exit; }
@@ -32,8 +33,10 @@ try {
   $pdo->prepare('UPDATE contracts SET status=? WHERE id=?')->execute(['active',$contract_id]);
 
   // Create invoice
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?,?, DATE_ADD(CURDATE(), INTERVAL 30 DAY))')
-      ->execute([$contract_id, $contract['quote_id'] ?? null, (int)$contract['client_id'], $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid']);
+  $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
+  $dueDate = date('Y-m-d', strtotime('+' . $netDays . ' days'));
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$contract_id, $contract['quote_id'] ?? null, (int)$contract['client_id'], $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $dueDate]);
   $invoice_id = (int)$pdo->lastInsertId();
 
   $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');

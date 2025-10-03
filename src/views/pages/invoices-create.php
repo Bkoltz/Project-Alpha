@@ -1,7 +1,10 @@
 <?php
 // src/views/pages/invoices-create.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+$netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
+$defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
 ?>
 <section>
   <h2>Create Invoice</h2>
@@ -15,7 +18,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </label>
       <label>
         <div>Due Date</div>
-        <input type="date" name="due_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type=\"date\" name=\"due_date\" value=\"<?php echo htmlspecialchars($defaultDue); ?>\" style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\">
       </label>
       <label>
         <div>Tax (%)</div>

@@ -2,12 +2,17 @@
 // src/controllers/invoices_create.php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/project_id.php';
+require_once __DIR__ . '/../config/app.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $due_date = $_POST['due_date'] ?? null;
+if (!$due_date || trim($due_date) === '') {
+    $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
+    $due_date = date('Y-m-d', strtotime('+' . $netDays . ' days'));
+}
 
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
