@@ -71,11 +71,11 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['created_at']); ?></td>
             <td style="padding:10px;display:flex;gap:8px">
-              <a href="/?page=contract-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">PDF</a>
+              <a href="/?page=contract-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">PDF</a>
               <form method="post" action="/?page=email-send" style="display:inline">
                 <input type="hidden" name="type" value="contract">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Email</button>
+                <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
               </form>
               <?php if ($r['status']!=='active' && $r['status']!=='cancelled'): ?>
                 <form method="post" action="/?page=contract-sign" onsubmit="return confirm('Mark as signed and create invoice?')">
@@ -88,7 +88,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 </form>
               <?php endif; ?>
             </td>
-            <td style="padding:10px"><a href="/?page=contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Edit</a></td>
+            <td style="padding:10px"><a href="/?page=contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

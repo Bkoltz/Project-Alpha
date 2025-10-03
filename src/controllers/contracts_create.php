@@ -31,12 +31,9 @@ try{
     $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
     $up->execute([$projectCode, $client_id, $notes]);
   }
-  $docMax = (int)$pdo->query('SELECT GREATEST(
-      COALESCE((SELECT MAX(doc_number) FROM quotes),0),
-      COALESCE((SELECT MAX(doc_number) FROM contracts),0),
-      COALESCE((SELECT MAX(doc_number) FROM invoices),0)
-    )')->fetchColumn();
-  $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$docMax+1, $co_id]);
+  // Assign per-type doc_number for contracts
+  $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts')->fetchColumn();
+  $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $co_id]);
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$co_id,$it['d'],$it['q'],$it['p'],$it['t']]); }
   $pdo->commit();

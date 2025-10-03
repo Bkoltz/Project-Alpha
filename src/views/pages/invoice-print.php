@@ -22,19 +22,6 @@ if (!empty($inv['project_code'])) {
   $pm->execute([$inv['project_code']]);
   $projectNotes = $pm->fetchColumn();
 }
-// Prefer contract schedule if available
-$sched_est = $inv['estimated_completion'] ?? null;
-$sched_wp = (int)($inv['weather_pending'] ?? 0);
-$sched_date = $inv['scheduled_date'] ?? null;
-if (!empty($inv['contract_id'])) {
-  $co = $pdo->prepare('SELECT estimated_completion, weather_pending, scheduled_date FROM contracts WHERE id=?');
-  $co->execute([(int)$inv['contract_id']]);
-  if ($row = $co->fetch(PDO::FETCH_ASSOC)) {
-    if (!empty($row['estimated_completion'])) $sched_est = $row['estimated_completion'];
-    if ($row['weather_pending'] !== null) $sched_wp = (int)$row['weather_pending'];
-    if (!empty($row['scheduled_date'])) $sched_date = $row['scheduled_date'];
-  }
-}
 ?>
 <section>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -77,19 +64,6 @@ if (!empty($inv['contract_id'])) {
   </div>
   <?php endif; ?>
 
-  <?php if (!empty($sched_est) || !empty($sched_date) || (int)$sched_wp===1): ?>
-  <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
-    <?php if (!empty($sched_date)): ?>
-      <div><strong>Scheduled date:</strong> <?php echo htmlspecialchars($sched_date); ?></div>
-    <?php endif; ?>
-    <?php if (!empty($sched_est)): ?>
-      <div><strong>Estimated completion:</strong> <?php echo htmlspecialchars($sched_est); ?></div>
-    <?php endif; ?>
-    <?php if ((int)$sched_wp===1): ?>
-      <div><em>Weather permitting</em></div>
-    <?php endif; ?>
-  </div>
-  <?php endif; ?>
 
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
