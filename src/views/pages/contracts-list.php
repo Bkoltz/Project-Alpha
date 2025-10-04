@@ -21,7 +21,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts co'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
+$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, co.signed_pdf_path, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY co.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
@@ -83,24 +83,27 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : ((in_array($r['status'], ['cancelled','denied'], true)) ? 'background:#fef2f2;' : (($r['status']==='draft') ? 'background:#fdfdea;' : '')));
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>
+            <td style="padding:10px"><a href="/?page=contract-print&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)($r['total'] ?? 0),2); ?></td>
-            <td style="padding:10px;display:flex;gap:8px">
-              <a href="/?page=contract-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
-              <form method="post" action="/?page=email-send" style="display:inline">
-                <input type="hidden" name="type" value="contract">
+            <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+              <form method="post" action="/?page=contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
+                <input id="upload-<?php echo (int)$r['id']; ?>" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+                <button type="button" onclick="document.getElementById('upload-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">New Upload</button>
               </form>
-              <?php if (!in_array($r['status'], ['denied','completed'], true)): ?>
-              <form method="post" action="/?page=contract-deny" onsubmit="return confirm('Deny this contract and void linked invoices?')" style="display:inline">
-                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
-              </form>
+              <?php if ($r['status']==='active'): ?>
+                <form method="post" action="/?page=contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?')">
+                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Complete</button>
+                </form>
               <?php endif; ?>
+              <form method="post" action="/?page=contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
+                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#6b7280;color:#fff; font-size: small;">Void</button>
+              </form>
             </td>
             <td style="padding:10px"><a href="/?page=contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
           </tr>

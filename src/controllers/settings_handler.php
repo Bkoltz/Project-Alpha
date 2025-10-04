@@ -2,13 +2,16 @@
 // src/controllers/settings_handler.php
 // Save settings and handle logo upload, then redirect (PRG)
 
-$configDir = __DIR__ . '/../../public/assests';
+// Prefer dedicated config mount if present
+$configMount = '/var/www/config';
+$configDir = is_dir($configMount) ? $configMount : (__DIR__ . '/../../public/assets');
 $uploadsDir = $configDir . '/uploads';
 if (!is_dir($uploadsDir)) {
     @mkdir($uploadsDir, 0775, true);
 }
 $settingsFile = $configDir . '/settings.json';
 
+// default settings
 $settings = [
     'brand_name' => 'Project Alpha',
     'logo_path'  => null,
@@ -23,8 +26,23 @@ $settings = [
     'from_phone' => null,
 'terms' => null,
     'net_terms_days' => 30,
+    'payment_methods' => ['card','cash','bank_transfer'],
 ];
-if (is_readable($settingsFile)) {
+
+// Read current settings. If public file is writable prefer it; if public exists but is not writable prefer internal fallback
+$fallbackRead = __DIR__ . '/../config/settings.json';
+if (is_readable($settingsFile) && is_writable(dirname($settingsFile))) {
+    $data = json_decode(@file_get_contents($settingsFile), true);
+    if (is_array($data)) {
+        $settings = array_merge($settings, $data);
+    }
+} elseif (is_readable($fallbackRead)) {
+    $data = json_decode(@file_get_contents($fallbackRead), true);
+    if (is_array($data)) {
+        $settings = array_merge($settings, $data);
+    }
+} elseif (is_readable($settingsFile)) {
+    // last resort: public is readable but not writable and fallback doesn't exist; use public to avoid losing data
     $data = json_decode(@file_get_contents($settingsFile), true);
     if (is_array($data)) {
         $settings = array_merge($settings, $data);
@@ -73,7 +91,20 @@ if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
             $name = 'logo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . $ext;
             $dest = $uploadsDir . '/' . $name;
             if (@move_uploaded_file($f['tmp_name'], $dest)) {
-                $settings['logo_path'] = '/assests/uploads/' . $name;
+                $settings['logo_path'] = '/assets/uploads/' . $name;
+            } else {
+                // fallback: try to save to internal src/uploads and serve via controller
+                $internal = __DIR__ . '/../uploads';
+                if (!is_dir($internal)) {
+                    @mkdir($internal, 0775, true);
+                }
+                $internalDest = $internal . '/' . $name;
+                // try move, then rename, then copy as a last resort
+                if (@move_uploaded_file($f['tmp_name'], $internalDest) || @rename($f['tmp_name'], $internalDest) || @copy($f['tmp_name'], $internalDest)) {
+                    @unlink($f['tmp_name']);
+                    // serve through internal controller
+                    $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
+                }
             }
         } catch (Throwable $e) {
             // ignore upload errors; keep prior settings
@@ -87,6 +118,8 @@ if (isset($_POST['net_terms_days'])) {
     if ($nd < 0) $nd = 0;
     $settings['net_terms_days'] = $nd;
 }
+// Suppress assets warning checkbox
+$settings['suppress_assets_warning'] = !empty($_POST['suppress_assets_warning']) ? 1 : 0;
 // Payment methods (textarea lines)
 if (isset($_POST['payment_methods'])) {
     $lines = preg_split('/\r?\n/', (string)$_POST['payment_methods']);
@@ -98,7 +131,39 @@ if (isset($_POST['payment_methods'])) {
     $settings['payment_methods'] = array_values(array_unique($methods));
 }
 
-@file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+// Merge with existing file on target before writing to avoid overwriting unrelated fields
+$target = $settingsFile;
+$existing = [];
+if (is_readable($target)) {
+    $existing = json_decode(@file_get_contents($target), true) ?: [];
+}
+$merged = array_merge($existing, $settings);
+$payload = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+$ok = @file_put_contents($target, $payload);
+if ($ok === false) {
+    // attempt permission fix (best-effort)
+    if (is_dir(dirname($settingsFile))) {
+        @chmod(dirname($settingsFile), 0775);
+    }
+    // Try fallback to repo config (src/config/settings.json) and merge similarly
+    $fallback = __DIR__ . '/../config/settings.json';
+    $existingFb = [];
+    if (is_readable($fallback)) {
+        $existingFb = json_decode(@file_get_contents($fallback), true) ?: [];
+    }
+    $mergedFb = array_merge($existingFb, $settings);
+    $fbPayload = json_encode($mergedFb, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    $fbOk = @file_put_contents($fallback, $fbPayload);
+    if ($fbOk !== false) {
+        header('Location: /?page=settings&saved=1&fallback=1');
+        exit;
+    }
+
+    // Redirect back with error flag
+    $err = rawurlencode('failed-to-write-settings');
+    header('Location: /?page=settings&saved=0&error=' . $err);
+    exit;
+}
 
 header('Location: /?page=settings&saved=1');
 exit;

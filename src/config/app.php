@@ -1,6 +1,9 @@
 <?php
 // src/config/app.php
-$settingsFile = __DIR__ . '/../../public/assests/settings.json';
+// Preferred settings path: config volume mounted at /var/www/config
+$settingsPrimary = '/var/www/config/settings.json';
+$settingsPublic  = __DIR__ . '/../../public/assets/settings.json';
+$settingsFallback = __DIR__ . '/settings.json';
 
 $appConfig = [
     'brand_name' => 'Project Alpha',
@@ -21,12 +24,16 @@ $appConfig = [
     'payment_methods' => ['card','cash','bank_transfer'],
 ];
 
-if (is_readable($settingsFile)) {
-    $json = @file_get_contents($settingsFile);
-    if ($json !== false) {
-        $data = json_decode($json, true);
-        if (is_array($data)) {
-            $appConfig = array_merge($appConfig, array_intersect_key($data, $appConfig));
+$paths = [$settingsPrimary, $settingsPublic, $settingsFallback];
+foreach ($paths as $path) {
+    if (is_readable($path)) {
+        $json = @file_get_contents($path);
+        if ($json !== false) {
+            $data = json_decode($json, true);
+            if (is_array($data)) {
+                $appConfig = array_merge($appConfig, $data);
+                break;
+            }
         }
     }
 }

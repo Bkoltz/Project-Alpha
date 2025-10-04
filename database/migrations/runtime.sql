@@ -36,6 +36,25 @@ SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHE
 SET @sql := IF(@exists=0, "ALTER TABLE contracts ADD COLUMN discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none'", 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- Contracts: ensure status enum includes pending, active, completed, cancelled, denied, void
+SET @coltype := (SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='status');
+SET @needs_alter := IF(@coltype IS NULL, 0, IF(LOCATE("'pending'", @coltype)=0 OR LOCATE("'void'", @coltype)=0, 1, 0));
+SET @sql := IF(@needs_alter=1, "ALTER TABLE contracts MODIFY COLUMN status ENUM('pending','active','completed','cancelled','denied','void','draft') NOT NULL DEFAULT 'pending'", 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Contracts: add signed_pdf_path, completed_at, voided_at if missing
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='signed_pdf_path');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN signed_pdf_path VARCHAR(255) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='completed_at');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN completed_at TIMESTAMP NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='voided_at');
+SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN voided_at TIMESTAMP NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='discount_value');
 SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN discount_value DECIMAL(10,2) NOT NULL DEFAULT 0', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
@@ -115,6 +134,11 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='invoices' AND COLUMN_NAME='doc_number');
 SET @sql := IF(@exists=0, 'ALTER TABLE invoices ADD COLUMN doc_number INT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Allow contracts.quote_id to be NULL (support standalone contracts)
+SET @is_nullable := (SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='quote_id');
+SET @sql := IF(@is_nullable='NO', 'ALTER TABLE contracts MODIFY COLUMN quote_id INT NULL', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- Contracts: schedule/terms fields (idempotent)

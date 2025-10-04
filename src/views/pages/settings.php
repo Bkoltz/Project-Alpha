@@ -5,8 +5,13 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
 ?>
 <section>
   <h2>Settings</h2>
-  <?php if (!empty($_GET['saved'])): ?>
+  <?php if (isset($_GET['saved']) && $_GET['saved'] === '1'): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Saved.</div>
+  <?php elseif (isset($_GET['saved']) && $_GET['saved'] === '0'): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Failed to save settings. <?php if (!empty($_GET['error'])) { echo htmlspecialchars($_GET['error']); } ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['fallback']) && $_GET['fallback']==='1' && empty($appConfig['suppress_assets_warning'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff7ed;color:#78350f;border:1px solid #ffd8a8">Settings saved to internal config (fallback) because public/assets wasn't writable.</div>
   <?php endif; ?>
 
   <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;margin-top:12px">
@@ -75,6 +80,9 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
             <label><div>Payment Methods (one per line)</div>
               <textarea name="payment_methods" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="card&#10;cash&#10;bank_transfer"><?php echo htmlspecialchars(implode("\n", (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']))); ?></textarea>
             </label>
+            <div style="margin-top:10px">
+              <label><input type="checkbox" name="suppress_assets_warning" value="1" <?php echo !empty($appConfig['suppress_assets_warning']) ? 'checked' : ''; ?>> Don't show warning about public/assets not being writable</label>
+            </div>
           </fieldset>
         <?php endif; ?>
 
