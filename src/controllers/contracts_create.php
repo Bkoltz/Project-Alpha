@@ -54,7 +54,7 @@ $tax = max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$
 $pdo->beginTransaction();
 try{
   $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, 'active', $discount_type, $discount_value, $tax_percent, $subtotal, $total]);
+      ->execute([$client_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
@@ -80,15 +80,16 @@ try{
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$co_id,$it['d'],$it['q'],$it['p'],$it['t']]); }
 
-  // Auto-create an invoice for this contract
-  require_once __DIR__ . '/../config/app.php';
-  $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
-  $dueDate = date('Y-m-d', strtotime('+' . $netDays . ' days'));
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $dueDate]);
+  // Auto-create an invoice for this contract (no due date until completion)
+  $dueDate = null;
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$co_id, null, $client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $dueDate, $projectCode]);
   $invoice_id = (int)$pdo->lastInsertId();
   $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ii->execute([$invoice_id,$it['d'],$it['q'],$it['p'],$it['t']]); }
+  // Assign per-type doc_number for invoices
+  $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+  $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
   $pdo->commit();
 }catch(Throwable $e){

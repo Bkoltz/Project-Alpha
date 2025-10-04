@@ -18,7 +18,7 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
       </label>
       <label>
         <div>Due Date</div>
-        <input type=\"date\" name=\"due_date\" value=\"<?php echo htmlspecialchars($defaultDue); ?>\" style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\">
+        <input type="date" name="due_date" value="<?php echo htmlspecialchars($defaultDue); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
         <div>Tax (%)</div>

@@ -154,6 +154,8 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
           $status = $r['status'];
           if ($status === 'paid') {
             $rowStyle = 'background:#ecfdf5;';
+          } elseif ($status === 'void') {
+            $rowStyle = 'background:#f3f4f6;'; // gray for void
           } else {
             $today = strtotime('today');
             $due = isset($r['due_date']) && $r['due_date'] ? strtotime($r['due_date']) : null;

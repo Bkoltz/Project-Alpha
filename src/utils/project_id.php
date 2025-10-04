@@ -75,5 +75,5 @@ function project_next_code(PDO $pdo, int $client_id): string {
         $seq = 1;
     }
 
-    return sprintf('%s-%03d', $prefix, $seq); // e.g., PA-2025-001
+    return sprintf('%s-%04d', $prefix, $seq); // e.g., PA-2025-0001
 }

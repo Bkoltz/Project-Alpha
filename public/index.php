@@ -11,6 +11,10 @@ if ($page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
     exit;
 }
+if ($page === 'serveupload' || $page === 'serve-upload') {
+    require_once __DIR__ . '/../src/controllers/serve_upload.php';
+    exit;
+}
 
 // Handle POST actions (PRG pattern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -34,7 +38,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract_sign.php';
         exit;
     }
-    if ($page === 'contract-deny') {
+    if ($page === 'contract-complete') {
+        require_once __DIR__ . '/../src/controllers/contract_complete.php';
+        exit;
+    }
+    if ($page === 'contract-void') {
+        require_once __DIR__ . '/../src/controllers/contract_void.php';
+        exit;
+    }
+    if ($page === 'contract-deny') { // legacy
         require_once __DIR__ . '/../src/controllers/contract_deny.php';
         exit;
     }

@@ -32,9 +32,9 @@ try {
   // Mark quote approved
   $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$id]);
 
-  // Create contract (no schedule fields)
+  // Create contract in pending state
   $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code) VALUES (?,?,?,?,?,?,?,?,?)')
-      ->execute([$id, (int)$quote['client_id'], 'active', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode]);
+      ->execute([$id, (int)$quote['client_id'], 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode]);
   $contract_id = (int)$pdo->lastInsertId();
 
   // Contract items from quote items
@@ -43,11 +43,9 @@ try {
     $ci->execute([$contract_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
   }
 
-  // Create invoice (no schedule fields)
-  $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
-  $dueDate = date('Y-m-d', strtotime('+' . $netDays . ' days'));
+  // Create invoice with no due date (set on completion)
   $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$contract_id, $id, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', $dueDate, $projectCode]);
+      ->execute([$contract_id, $id, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode]);
   $invoice_id = (int)$pdo->lastInsertId();
 
   $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
