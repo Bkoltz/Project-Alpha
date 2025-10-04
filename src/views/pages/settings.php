@@ -19,7 +19,8 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
       <a href="/?page=settings&tab=customize" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='customize'?'background:#f8fafc;font-weight:600':''; ?>">Customize App</a>
       <a href="/?page=settings&tab=user" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='user'?'background:#f8fafc;font-weight:600':''; ?>">User Info</a>
       <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='terms'?'background:#f8fafc;font-weight:600':''; ?>">Terms & Conditions</a>
-      <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;<?php echo $tab==='billing'?'background:#f8fafc;font-weight:600':''; ?>">Billing</a>
+      <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='billing'?'background:#f8fafc;font-weight:600':''; ?>">Billing</a>
+      <a href="/?page=settings&tab=email" style="display:block;padding:10px 12px;<?php echo $tab==='email'?'background:#f8fafc;font-weight:600':''; ?>">Email</a>
     </aside>
 
     <div>
@@ -83,6 +84,30 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
             <div style="margin-top:10px">
               <label><input type="checkbox" name="suppress_assets_warning" value="1" <?php echo !empty($appConfig['suppress_assets_warning']) ? 'checked' : ''; ?>> Don't show warning about public/assets not being writable</label>
             </div>
+          </fieldset>
+        <?php endif; ?>
+
+        <?php if ($tab==='email'): ?>
+          <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+            <legend style="padding:0 6px;color:var(--muted)">Outgoing Email (SMTP)</legend>
+            <p style="margin:0 0 8px;color:var(--muted)">Configure SMTP to send emails from your own account. For Gmail, enable 2-Step Verification and create an App Password.</p>
+            <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
+              <label><div>SMTP Host</div><input name="smtp_host" value="<?php echo htmlspecialchars($appConfig['smtp_host'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="smtp.gmail.com"></label>
+              <label><div>Port</div><input type="number" name="smtp_port" value="<?php echo htmlspecialchars((string)($appConfig['smtp_port'] ?? 587)); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+              <label><div>Security</div>
+                <select name="smtp_secure" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                  <?php $sec = strtolower((string)($appConfig['smtp_secure'] ?? 'tls')); ?>
+                  <option value="tls" <?php echo $sec==='tls'?'selected':''; ?>>TLS</option>
+                  <option value="ssl" <?php echo $sec==='ssl'?'selected':''; ?>>SSL</option>
+                  <option value="none" <?php echo $sec==='none'?'selected':''; ?>>None</option>
+                </select>
+              </label>
+            </div>
+            <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+              <label><div>Username (email)</div><input name="smtp_username" value="<?php echo htmlspecialchars($appConfig['smtp_username'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="you@gmail.com"></label>
+              <label><div>App Password</div><input type="password" name="smtp_password" value="" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Enter to update (leave blank to keep)"></label>
+            </div>
+            <p style="margin:6px 0 0;color:var(--muted);font-size:12px">For Gmail: host smtp.gmail.com, port 587 (TLS) or 465 (SSL); use an App Password (not your normal password).</p>
           </fieldset>
         <?php endif; ?>
 

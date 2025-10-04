@@ -1,6 +1,9 @@
 <?php
 // src/controllers/email_send.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/crypto.php';
+require_once __DIR__ . '/../utils/smtp.php';
 
 // PDF generation temporarily disabled (dompdf)
 $dompdfAvailable = false;
@@ -40,15 +43,41 @@ try {
 
   $to = $row['email'];
 
-  // Fallback HTML-only email (PDF disabled)
-  $headers = "MIME-Version: 1.0\r\n".
-             "Content-type: text/html; charset=UTF-8\r\n".
-             "From: no-reply@localhost\r\n";
+  // Compose body
   $body = '<p>Hello '.htmlspecialchars($row['name']).',</p>'.
           '<p>Please find your document at the link below:</p>'.
           '<p><a href="'.htmlspecialchars($printUrl).'">View Document</a></p>'.
           '<p>Thank you.</p>';
-  @mail($to, $subject, $body, $headers);
+
+  // Try SMTP if configured
+  $smtpHost = $appConfig['smtp_host'] ?? null;
+  $fromEmail = $appConfig['from_email'] ?? 'no-reply@localhost';
+  $fromName = $appConfig['from_name'] ?? 'Project Alpha';
+  $sent = false; $err = '';
+  if ($smtpHost) {
+    $pass = null;
+    if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
+      $pt = crypto_decrypt($appConfig['smtp_password_enc']);
+      if (is_string($pt)) { $pass = $pt; }
+    }
+    $cfg = [
+      'host' => $smtpHost,
+      'port' => (int)($appConfig['smtp_port'] ?? 587),
+      'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
+      'username' => (string)($appConfig['smtp_username'] ?? ''),
+      'password' => (string)($pass ?? ''),
+    ];
+    [$ok, $msg] = smtp_send($cfg, $to, $subject, $body, $fromEmail, $fromName);
+    $sent = $ok; $err = $msg;
+  }
+
+  if (!$sent) {
+    // Fallback HTML-only email via mail()
+    $headers = "MIME-Version: 1.0\r\n".
+               "Content-type: text/html; charset=UTF-8\r\n".
+               "From: ".($fromName?($fromName.' <'.$fromEmail.'>'):$fromEmail)."\r\n";
+    @mail($to, $subject, $body, $headers);
+  }
 
   header('Location: '.$printUrl.'&emailed=1');
   exit;
