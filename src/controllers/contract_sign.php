@@ -13,6 +13,11 @@ if (empty($_FILES['signed_pdf']) || !is_uploaded_file($_FILES['signed_pdf']['tmp
   exit;
 }
 $f = $_FILES['signed_pdf'];
+// Max 25 MB
+if (!empty($f['size']) && $f['size'] > 25 * 1024 * 1024) {
+  header('Location: /?page=contracts-list&error=' . urlencode('File too large (max 25 MB)'));
+  exit;
+}
 $mime = @mime_content_type($f['tmp_name']);
 $origName = (string)($f['name'] ?? '');
 $extOk = preg_match('/\.pdf$/i', $origName) === 1;

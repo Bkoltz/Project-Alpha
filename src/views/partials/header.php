@@ -1,5 +1,6 @@
 <?php require_once __DIR__ . '/../../config/app.php'; ?>
 <?php require_once __DIR__ . '/../../utils/format.php'; ?>
+<?php if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); } ?>
 <!doctype html>
 <html lang="en">
 
@@ -7,6 +8,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?php echo htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha'); ?></title>
+  <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf'] ?? ''); ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -85,6 +87,12 @@
               <div class="section-label">Projects</div>
               <ul>
                 <li><a href="/?page=projects-list" data-page="projects-list">Projects</a></li>
+              </ul>
+            </li>
+            <li class="nav-section">
+              <div class="section-label">Integrations</div>
+              <ul>
+                <li><a href="/?page=api-keys" data-page="api-keys">API Keys</a></li>
               </ul>
             </li>
           </ul>

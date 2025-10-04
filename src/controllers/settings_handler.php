@@ -27,6 +27,12 @@ $settings = [
 'terms' => null,
     'net_terms_days' => 30,
     'payment_methods' => ['card','cash','bank_transfer'],
+    // SMTP configuration (optional)
+    'smtp_host' => null,
+    'smtp_port' => 587,
+    'smtp_secure' => 'tls', // tls|ssl|none
+    'smtp_username' => null,
+    'smtp_password_enc' => null,
 ];
 
 // Read current settings. If public file is writable prefer it; if public exists but is not writable prefer internal fallback
@@ -78,36 +84,40 @@ if (isset($_POST['net_terms_days'])) {
 
 if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
     $f = $_FILES['logo'];
-    $allowed = [
-        'image/png'       => '.png',
-        'image/jpeg'      => '.jpg',
-        'image/svg+xml'   => '.svg',
-        'image/webp'      => '.webp',
-    ];
-    $mime = @mime_content_type($f['tmp_name']);
-    if (isset($allowed[$mime])) {
-        try {
-            $ext = $allowed[$mime];
-            $name = 'logo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . $ext;
-            $dest = $uploadsDir . '/' . $name;
-            if (@move_uploaded_file($f['tmp_name'], $dest)) {
-                $settings['logo_path'] = '/assets/uploads/' . $name;
-            } else {
-                // fallback: try to save to internal src/uploads and serve via controller
-                $internal = __DIR__ . '/../uploads';
-                if (!is_dir($internal)) {
-                    @mkdir($internal, 0775, true);
+    // Max 5 MB
+    if (!empty($f['size']) && $f['size'] > 5 * 1024 * 1024) {
+        // too large; ignore upload
+    } else {
+        $allowed = [
+            'image/png'       => '.png',
+            'image/jpeg'      => '.jpg',
+            'image/webp'      => '.webp',
+        ];
+        $mime = @mime_content_type($f['tmp_name']);
+        if (isset($allowed[$mime])) {
+            try {
+                $ext = $allowed[$mime];
+                $name = 'logo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . $ext;
+                $dest = $uploadsDir . '/' . $name;
+                if (@move_uploaded_file($f['tmp_name'], $dest)) {
+                    $settings['logo_path'] = '/assets/uploads/' . $name;
+                } else {
+                    // fallback: try to save to internal src/uploads and serve via controller
+                    $internal = __DIR__ . '/../uploads';
+                    if (!is_dir($internal)) {
+                        @mkdir($internal, 0775, true);
+                    }
+                    $internalDest = $internal . '/' . $name;
+                    // try move, then rename, then copy as a last resort
+                    if (@move_uploaded_file($f['tmp_name'], $internalDest) || @rename($f['tmp_name'], $internalDest) || @copy($f['tmp_name'], $internalDest)) {
+                        @unlink($f['tmp_name']);
+                        // serve through internal controller
+                        $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
+                    }
                 }
-                $internalDest = $internal . '/' . $name;
-                // try move, then rename, then copy as a last resort
-                if (@move_uploaded_file($f['tmp_name'], $internalDest) || @rename($f['tmp_name'], $internalDest) || @copy($f['tmp_name'], $internalDest)) {
-                    @unlink($f['tmp_name']);
-                    // serve through internal controller
-                    $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
-                }
+            } catch (Throwable $e) {
+                // ignore upload errors; keep prior settings
             }
-        } catch (Throwable $e) {
-            // ignore upload errors; keep prior settings
         }
     }
 }
@@ -129,6 +139,27 @@ if (isset($_POST['payment_methods'])) {
         if ($m !== '') { $methods[] = $m; }
     }
     $settings['payment_methods'] = array_values(array_unique($methods));
+}
+
+// SMTP settings
+if (isset($_POST['smtp_host'])) {
+    $settings['smtp_host'] = trim((string)$_POST['smtp_host']) ?: null;
+}
+if (isset($_POST['smtp_port'])) {
+    $settings['smtp_port'] = (int)$_POST['smtp_port'] ?: 587;
+}
+if (isset($_POST['smtp_secure'])) {
+    $sec = strtolower((string)$_POST['smtp_secure']);
+    if (!in_array($sec, ['tls','ssl','none'], true)) $sec = 'tls';
+    $settings['smtp_secure'] = $sec;
+}
+if (isset($_POST['smtp_username'])) {
+    $settings['smtp_username'] = trim((string)$_POST['smtp_username']) ?: null;
+}
+if (!empty($_POST['smtp_password'])) {
+    require_once __DIR__ . '/../utils/crypto.php';
+    $enc = crypto_encrypt((string)$_POST['smtp_password']);
+    if ($enc) { $settings['smtp_password_enc'] = $enc; }
 }
 
 // Merge with existing file on target before writing to avoid overwriting unrelated fields

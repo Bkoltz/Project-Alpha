@@ -1,8 +1,85 @@
 <?php
-// Simple router
+// Secure session cookies and start session
+$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '',
+    'secure' => $secure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+// Basic security headers (safe defaults for current app)
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: no-referrer-when-downgrade');
+header("Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'");
+
+// Resolve requested page
 $page = isset($_GET['page']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['page']) : 'home';
 
-// API/GET endpoints that should bypass layout
+// CSRF setup
+require_once __DIR__ . '/../src/utils/csrf.php';
+csrf_init();
+
+// First, bootstrap database structures required for auth
+require_once __DIR__ . '/../src/config/bootstrap.php';
+
+// API routing (stateless, header auth)
+$apiEnabled = filter_var(getenv('APP_API_ENABLED') !== false ? getenv('APP_API_ENABLED') : 'true', FILTER_VALIDATE_BOOLEAN);
+if ($apiEnabled && substr($page, 0, 4) === 'api-') {
+    require_once __DIR__ . '/../src/utils/api_auth.php';
+    // Require API key (default scope: full)
+    $apiKey = api_require_key(['full']);
+
+    // Map API endpoints
+    if ($page === 'api-clients-search') {
+        require_once __DIR__ . '/../src/controllers/clients_search.php';
+        exit;
+    }
+
+    // Unknown API endpoint
+    header('Content-Type: application/json');
+    http_response_code(404);
+    echo json_encode(['error' => 'Not found']);
+    exit;
+}
+
+// Handle logout early
+if ($page === 'logout') {
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', $params['secure'] ?? false, $params['httponly'] ?? true);
+    }
+    session_destroy();
+    header('Location: /?page=login');
+    exit;
+}
+
+// Allow unauthenticated access only to explicit public pages
+$publicPages = ['login', 'serve-upload'];
+
+// Toggle to disable auth checks in development/testing
+$authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
+
+// Allow POST to auth handler without prior login
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $page === 'auth') {
+    require_once __DIR__ . '/../src/controllers/auth_handler.php';
+    exit;
+}
+
+// Enforce authentication for everything else (unless disabled)
+if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    header('Location: /?page=login');
+    exit;
+}
+
+// API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/clients_search.php';
     exit;
@@ -18,8 +95,19 @@ if ($page === 'serveupload' || $page === 'serve-upload') {
 
 // Handle POST actions (PRG pattern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Enforce CSRF on all POST endpoints except the dedicated auth handler
+    if ($page !== 'auth') { csrf_verify_post_or_redirect($page); }
+
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
+        exit;
+    }
+    if ($page === 'api-keys-create') {
+        require_once __DIR__ . '/../src/controllers/api_keys_create.php';
+        exit;
+    }
+    if ($page === 'api-keys-revoke') {
+        require_once __DIR__ . '/../src/controllers/api_keys_revoke.php';
         exit;
     }
     if ($page === 'clients-create') {
@@ -104,6 +192,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// Standalone login page uses a minimal top header
+if ($page === 'login') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/login.php';
+    exit;
+}
+
+// Default layout
 require_once __DIR__ . '/../src/views/partials/header.php';
 
 $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
