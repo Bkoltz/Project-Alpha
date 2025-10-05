@@ -22,6 +22,9 @@ $clients = $st->fetchAll();
 ?>
 <section>
   <h2>Clients</h2>
+  <div style="margin:8px 0">
+    <a href="/?page=archived-clients" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">View Archived</a>
+  </div>
   <?php $selected = isset($_GET['selected_client_id']) ? (int)$_GET['selected_client_id'] : 0; ?>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
   <div>
@@ -71,6 +74,7 @@ $clients = $st->fetchAll();
           <th style="padding:10px">Organization</th>
           <!-- <th style="padding:10px">Created</th> -->
           <th style="padding:10px">Edit</th>
+          <th style="padding:10px">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -82,6 +86,13 @@ $clients = $st->fetchAll();
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization'] ?? ''); ?></td>
             <!-- <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td> -->
             <td style="padding:10px"><a href="/?page=clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
+            <td style="padding:10px">
+              <form method="post" action="/?page=clients-delete" onsubmit="return confirm('Archive client <?php echo addslashes($c['name']); ?>? This moves the client to Archived Clients.');" style="display:inline">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                <input type="hidden" name="id" value="<?php echo (int)$c['id']; ?>">
+                <button type="submit" style="padding:6px 10px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#b91c1c">Archive</button>
+              </form>
+            </td>
           </tr>
         <?php endforeach; ?>
       </tbody>

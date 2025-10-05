@@ -31,7 +31,7 @@ require_once __DIR__ . '/../src/config/bootstrap.php';
 
 // API routing (stateless, header auth)
 $apiEnabled = filter_var(getenv('APP_API_ENABLED') !== false ? getenv('APP_API_ENABLED') : 'true', FILTER_VALIDATE_BOOLEAN);
-if ($apiEnabled && substr($page, 0, 4) === 'api-') {
+if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // exclude UI page 'api-keys'
     require_once __DIR__ . '/../src/utils/api_auth.php';
     // Require API key (default scope: full)
     $apiKey = api_require_key(['full']);

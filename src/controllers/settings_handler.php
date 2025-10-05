@@ -3,6 +3,40 @@
 // Save settings and handle logo upload, then redirect (PRG)
 
 // Prefer dedicated config mount if present
+
+// Optional: account password change for logged-in user
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+$uid = isset($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : 0;
+if (!empty($_POST['change_password']) && $uid > 0) {
+    require_once __DIR__ . '/../config/db.php';
+    $current = (string)($_POST['current_password'] ?? '');
+    $new = (string)($_POST['new_password'] ?? '');
+    $confirm = (string)($_POST['confirm_password'] ?? '');
+    if (strlen($new) < 8) {
+        header('Location: /?page=settings&tab=account&pwd_error=' . urlencode('Password must be at least 8 characters'));
+        exit;
+    }
+    if ($new !== $confirm) {
+        header('Location: /?page=settings&tab=account&pwd_error=' . urlencode('Passwords do not match'));
+        exit;
+    }
+    try {
+        $st = $pdo->prepare('SELECT password_hash FROM users WHERE id=?');
+        $st->execute([$uid]);
+        $hash = (string)$st->fetchColumn();
+        if (!$hash || !password_verify($current, $hash)) {
+            header('Location: /?page=settings&tab=account&pwd_error=' . urlencode('Current password is incorrect'));
+            exit;
+        }
+        $newHash = password_hash($new, PASSWORD_DEFAULT);
+        $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([$newHash, $uid]);
+        header('Location: /?page=settings&tab=account&pwd=1');
+        exit;
+    } catch (Throwable $e) {
+        header('Location: /?page=settings&tab=account&pwd_error=' . urlencode('Failed to update password'));
+        exit;
+    }
+}
 $configMount = '/var/www/config';
 $configDir = is_dir($configMount) ? $configMount : (__DIR__ . '/../../public/assets');
 $uploadsDir = $configDir . '/uploads';

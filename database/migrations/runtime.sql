@@ -7,6 +7,23 @@ USE project_alpha;
 
 -- Clients: add address fields if missing (works on MySQL without IF NOT EXISTS)
 SET @db := DATABASE();
+
+-- Users table: ensure role column exists for admin/user roles
+SET @users_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=@db AND TABLE_NAME='users');
+SET @role_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='users' AND COLUMN_NAME='role');
+SET @sql := IF(@users_exists>0 AND @role_exists=0, "ALTER TABLE users ADD COLUMN role ENUM('admin','user') NOT NULL DEFAULT 'user' AFTER password_hash", 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Optional: ensure updated_at column exists (used by newer auth tables)
+SET @upd_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='users' AND COLUMN_NAME='updated_at');
+SET @sql := IF(@users_exists>0 AND @upd_exists=0, "ALTER TABLE users ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at", 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Older schema compatibility: username was NOT NULL; relax to NULL so inserts without username succeed
+SET @username_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='users' AND COLUMN_NAME='username');
+SET @username_nullable := (SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='users' AND COLUMN_NAME='username');
+SET @sql := IF(@users_exists>0 AND @username_exists=1 AND @username_nullable='NO', "ALTER TABLE users MODIFY COLUMN username VARCHAR(50) NULL", 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='clients' AND COLUMN_NAME='address_line1');
 SET @sql := IF(@exists=0, 'ALTER TABLE clients ADD COLUMN address_line1 VARCHAR(200) NULL', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

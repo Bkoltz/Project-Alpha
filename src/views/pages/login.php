@@ -20,8 +20,11 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
 <main>
   <div class="auth-wrap">
     <h1 style="margin:0 0 12px"><?php echo $noUsers ? 'Set up admin user' : 'Sign in'; ?></h1>
-    <?php if ($error): ?>
+<?php if ($error): ?>
       <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($error); ?></div>
+    <?php endif; ?>
+    <?php if (!$noUsers && !empty($_GET['created'])): ?>
+      <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Account created. Please sign in.</div>
     <?php endif; ?>
 
     <form method="post" action="/?page=auth" style="display:grid;gap:12px">
@@ -33,9 +36,13 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       </label>
       <label>
         <div>Password</div>
-        <input required minlength="8" type="password" name="password" autocomplete="current-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input required minlength="8" type="password" name="password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <?php if ($noUsers): ?>
+        <label>
+          <div>Confirm Password</div>
+          <input required minlength="8" type="password" name="password2" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
         <div style="color:var(--muted);font-size:12px">The first account will be created as an admin.</div>
       <?php endif; ?>
       <div style="display:flex;gap:8px;align-items:center">

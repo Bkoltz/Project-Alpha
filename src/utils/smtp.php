@@ -26,12 +26,15 @@ function smtp_send(array $cfg, string $to, string $subject, string $html, string
     $transport = ($secure === 'ssl') ? 'ssl://' : '';
     $context = stream_context_create([
         'ssl' => [
+            'peer_name' => $host,
             'verify_peer' => true,
             'verify_peer_name' => true,
             'allow_self_signed' => false,
+            'SNI_enabled' => true,
+            'SNI_server_name' => $host,
         ]
     ]);
-    $fp = @stream_socket_client($transport.$host.':'.$port, $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $context);
+    $fp = @stream_socket_client($transport.$host.':'.$port, $errno, $errstr, 20, STREAM_CLIENT_CONNECT, $context);
     if (!$fp) return [false, 'SMTP connect failed: '.$errstr];
     stream_set_timeout($fp, 15);
 
