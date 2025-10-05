@@ -4,14 +4,14 @@ services:
     image: "bkoltz/project-alpha:latest"
     ports:
       - "8080:80"
-    env_file:
-      - ./config/environment.env
     environment:
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
       # start.sh uses MYSQL_ROOT_PASSWORD to ping MySQL as root for readiness
       MYSQL_ROOT_PASSWORD: rootpass
+      # APP_AUTH_DISABLED: true
+      APP_VERBOSE_ERRORS: true
     depends_on:
       - db
     healthcheck:
@@ -25,6 +25,7 @@ services:
     volumes:
       - ./public:/var/www/html
       - ./src:/var/www/src
+      # Top two are not for production.
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
 

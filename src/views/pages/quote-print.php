@@ -29,13 +29,14 @@ $termsText = trim($appConfig['terms'] ?? '');
       <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
     </div>
     <div>
-      <a href="/?page=quotes-edit&id=<?php echo (int)$quote['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px">Edit</a>
+      <a href="/?page=quotes-edit&id=<?php echo (int)$quote['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px; font-size: small;">Edit</a>
       <form method="post" action="/?page=email-send" style="display:inline-block;margin-right:6px">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="type" value="quote">
         <input type="hidden" name="id" value="<?php echo (int)$quote['id']; ?>">
-        <button type="submit" style="min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Email</button>
+        <button type="submit" style="min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Email</button>
       </form>
-      <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Print / Save PDF</button>
+      <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Print / Save PDF</button>
     </div>
   </div>
 

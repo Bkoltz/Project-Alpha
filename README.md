@@ -1,4 +1,3 @@
-- NOTE: There currently isn't a login page for the app. 
 - Known Bugs:
     - Sometimes documents do not create via the creation page.
     - Email button does not work. Working on integrating mailing services.

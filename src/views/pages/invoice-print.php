@@ -36,6 +36,7 @@ if (!empty($inv['project_code'])) {
     <div>
       <a href="/?page=invoices-edit&id=<?php echo (int)$inv['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px; font-size: small;">Edit</a>
       <form method="post" action="/?page=email-send" style="display:inline-block;margin-right:6px">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="type" value="invoice">
         <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
         <button type="submit" style="min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Email</button>

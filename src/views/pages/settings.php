@@ -18,6 +18,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
     <aside style="border:1px solid #eee;border-radius:8px;overflow:hidden;background:#fff">
       <a href="/?page=settings&tab=customize" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='customize'?'background:#f8fafc;font-weight:600':''; ?>">Customize App</a>
       <a href="/?page=settings&tab=user" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='user'?'background:#f8fafc;font-weight:600':''; ?>">User Info</a>
+      <a href="/?page=settings&tab=account" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='account'?'background:#f8fafc;font-weight:600':''; ?>">Account</a>
       <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='terms'?'background:#f8fafc;font-weight:600':''; ?>">Terms & Conditions</a>
       <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='billing'?'background:#f8fafc;font-weight:600':''; ?>">Billing</a>
       <a href="/?page=settings&tab=email" style="display:block;padding:10px 12px;<?php echo $tab==='email'?'background:#f8fafc;font-weight:600':''; ?>">Email</a>
@@ -81,9 +82,9 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
             <label><div>Payment Methods (one per line)</div>
               <textarea name="payment_methods" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="card&#10;cash&#10;bank_transfer"><?php echo htmlspecialchars(implode("\n", (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']))); ?></textarea>
             </label>
-            <div style="margin-top:10px">
+            <!-- <div style="margin-top:10px">
               <label><input type="checkbox" name="suppress_assets_warning" value="1" <?php echo !empty($appConfig['suppress_assets_warning']) ? 'checked' : ''; ?>> Don't show warning about public/assets not being writable</label>
-            </div>
+            </div> -->
           </fieldset>
         <?php endif; ?>
 
@@ -108,6 +109,33 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
               <label><div>App Password</div><input type="password" name="smtp_password" value="" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Enter to update (leave blank to keep)"></label>
             </div>
             <p style="margin:6px 0 0;color:var(--muted);font-size:12px">For Gmail: host smtp.gmail.com, port 587 (TLS) or 465 (SSL); use an App Password (not your normal password).</p>
+          </fieldset>
+        <?php endif; ?>
+
+        <?php if ($tab==='account'): ?>
+          <?php if (!empty($_GET['pwd']) && $_GET['pwd']==='1'): ?>
+            <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Password updated.</div>
+          <?php elseif (!empty($_GET['pwd_error'])): ?>
+            <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($_GET['pwd_error']); ?></div>
+          <?php endif; ?>
+          <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+            <legend style="padding:0 6px;color:var(--muted)">Change Password</legend>
+            <p style="margin:0 0 8px;color:var(--muted);font-size:12px">Update your password. You must enter your current password.</p>
+            <input type="hidden" name="change_password" value="1">
+            <label>
+              <div>Current Password</div>
+              <input required type="password" name="current_password" autocomplete="current-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            </label>
+            <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+              <label>
+                <div>New Password</div>
+                <input required minlength="8" type="password" name="new_password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              </label>
+              <label>
+                <div>Confirm New Password</div>
+                <input required minlength="8" type="password" name="confirm_password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              </label>
+            </div>
           </fieldset>
         <?php endif; ?>
 

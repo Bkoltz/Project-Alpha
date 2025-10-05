@@ -7,6 +7,9 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 require_once __DIR__ . '/../config/db.php';
 
+// Verbose error toggle: set APP_VERBOSE_ERRORS=true or AUTH_VERBOSE_ERRORS=true (or APP_DEBUG=true)
+$VERBOSE_AUTH = filter_var(getenv('APP_VERBOSE_ERRORS') ?: getenv('AUTH_VERBOSE_ERRORS') ?: getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN);
+
 // CSRF check
 $csrf = $_POST['csrf'] ?? '';
 if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $csrf)) {
@@ -54,17 +57,23 @@ if ($action === 'register_first') {
         header('Location: /?page=login&error=' . urlencode('Password must be at least 8 characters'));
         exit;
     }
+    $password2 = (string)($_POST['password2'] ?? '');
+    if ($password !== $password2) {
+        header('Location: /?page=login&error=' . urlencode('Passwords do not match'));
+        exit;
+    }
     try {
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $st = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?,?,?)');
         $st->execute([$email, $hash, 'admin']);
-        $uid = (int)$pdo->lastInsertId();
-        session_regenerate_id(true);
-        $_SESSION['user'] = ['id'=>$uid, 'email'=>$email, 'role'=>'admin'];
-        header('Location: /');
+        // Do not auto-login the new admin; require explicit sign-in
+        // This ensures session/cookies are established via the normal login flow.
+        header('Location: /?page=login&created=1');
         exit;
     } catch (Throwable $e) {
-        header('Location: /?page=login&error=' . urlencode('Failed to create admin'));
+        $msg = 'Failed to create admin';
+        if ($VERBOSE_AUTH) { $msg .= ': ' . $e->getMessage(); }
+        header('Location: /?page=login&error=' . urlencode($msg));
         exit;
     }
 }

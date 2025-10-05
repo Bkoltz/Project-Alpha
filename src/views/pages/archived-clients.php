@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/archived-clients.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
@@ -54,6 +55,7 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         <tr>
           <td colspan="6" style="padding:10px">
             <form method="post" action="/?page=clients-restore" onsubmit="return confirm('Restore client <?php echo addslashes($r['name']); ?> to active list?');" style="display:inline-block">
+              <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
               <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
               <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Restore</button>
             </form>

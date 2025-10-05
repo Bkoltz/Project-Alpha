@@ -15,7 +15,12 @@
     "payment_methods": [
         "card",
         "cash",
-        "bank_transfer"
+        "bank transfer"
     ],
-    "suppress_assets_warning": 0
+    "suppress_assets_warning": 0,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 465,
+    "smtp_secure": "ssl",
+    "smtp_username": "beaukoltz@ledgetopdroneservices.com",
+    "smtp_password_enc": null
 }

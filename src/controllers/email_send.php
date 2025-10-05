@@ -51,7 +51,7 @@ try {
 
   // Try SMTP if configured
   $smtpHost = $appConfig['smtp_host'] ?? null;
-  $fromEmail = $appConfig['from_email'] ?? 'no-reply@localhost';
+  $fromEmail = $appConfig['from_email'] ?? '';
   $fromName = $appConfig['from_name'] ?? 'Project Alpha';
   $sent = false; $err = '';
   if ($smtpHost) {
@@ -60,11 +60,14 @@ try {
       $pt = crypto_decrypt($appConfig['smtp_password_enc']);
       if (is_string($pt)) { $pass = $pt; }
     }
+    $username = (string)($appConfig['smtp_username'] ?? '');
+    if ($fromEmail === '' && $username !== '') { $fromEmail = $username; }
+    if ($fromEmail === '') { $fromEmail = 'no-reply@localhost'; }
     $cfg = [
       'host' => $smtpHost,
       'port' => (int)($appConfig['smtp_port'] ?? 587),
       'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-      'username' => (string)($appConfig['smtp_username'] ?? ''),
+      'username' => $username,
       'password' => (string)($pass ?? ''),
     ];
     [$ok, $msg] = smtp_send($cfg, $to, $subject, $body, $fromEmail, $fromName);
@@ -79,7 +82,14 @@ try {
     @mail($to, $subject, $body, $headers);
   }
 
-  header('Location: '.$printUrl.'&emailed=1');
+  // Redirect back to caller if provided, otherwise to print view
+  $redir = isset($_POST['redirect_to']) ? (string)$_POST['redirect_to'] : '';
+  if ($redir !== '' && strpos($redir, '/?') === 0) {
+    $sep = (strpos($redir, '?') !== false && strpos($redir, 'emailed=') === false) ? '&' : '&';
+    header('Location: ' . $redir . $sep . 'emailed=1');
+  } else {
+    header('Location: '.$printUrl.'&emailed=1');
+  }
   exit;
 } catch (Throwable $e) {
   header('Location: /?page=home&error=Email%20failed');

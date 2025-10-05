@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/contracts-list.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
@@ -29,6 +30,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
 ?>
 <section>
   <h2>Contracts</h2>
+  <?php if (!empty($_GET['error'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['signed'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Signed PDF uploaded.</div>
+  <?php endif; ?>
   <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
     <input type="hidden" name="page" value="contracts-list">
     <input type="hidden" name="client_id" id="clientIdCL" value="<?php echo (int)$client_id; ?>">
@@ -90,17 +97,24 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px">$<?php echo number_format((float)($r['total'] ?? 0),2); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <form method="post" action="/?page=contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <input id="upload-<?php echo (int)$r['id']; ?>" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
-                <button type="button" onclick="document.getElementById('upload-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">New Upload</button>
+                <?php $uplLabel = empty($r['signed_pdf_path']) ? 'Upload' : 'New Upload'; ?>
+                <button type="button" onclick="document.getElementById('upload-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;"><?php echo $uplLabel; ?></button>
               </form>
+              <?php if (!empty($r['signed_pdf_path'])): ?>
+                <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+              <?php endif; ?>
               <?php if ($r['status']==='active'): ?>
                 <form method="post" action="/?page=contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?')">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Complete</button>
                 </form>
               <?php endif; ?>
               <form method="post" action="/?page=contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#6b7280;color:#fff; font-size: small;">Void</button>
               </form>
