@@ -1,5 +1,5 @@
 # Ignore specific vendor library that appears untracked
-/vendor/phenx/php-font-lib/
+# /vendor/phenx/php-font-lib/
 /vendor/*/.git
 /vendor/*/.github
 /vendor/*/.gitignore
