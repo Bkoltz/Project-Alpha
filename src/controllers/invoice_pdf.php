@@ -1,6 +1,6 @@
 <?php
-// src/controllers/contract_pdf.php
-// Generate a server-side PDF with accurate page numbers using Dompdf
+// src/controllers/invoice_pdf.php
+// Generate a server-side PDF for an Invoice using Dompdf
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/app.php';
@@ -16,9 +16,7 @@ for ($i = 0; $i < 8; $i++) {
         break;
     }
     $parent = dirname($dir);
-    if ($parent === $dir) { // reached filesystem root
-        break;
-    }
+    if ($parent === $dir) { break; }
     $dir = $parent;
 }
 if ($autoload === '') {
@@ -34,38 +32,27 @@ use Dompdf\Options;
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
-// Build HTML by invoking the existing view in PDF mode (hides toolbar)
+// Build HTML by invoking the existing invoice print view in PDF mode (hides toolbar)
 ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
-require __DIR__ . '/../views/pages/contract-print.php';
+require __DIR__ . '/../views/pages/invoice-print.php';
 $content = ob_get_clean();
 
 $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');
-$html = "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Contract - {$brand}</title>
-<style>
-  @page { margin: 72px 54px 72px 54px; }
-  body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 12px; color: #111; }
-</style>
-</head><body>" . $content . "</body></html>";
+$html = "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Invoice - {$brand}</title>\n<style>\n  @page { margin: 72px 54px 72px 54px; }\n  body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 12px; color: #111; }\n</style>\n</head><body>" . $content . "</body></html>";
 
 $options = new Options();
 $options->set('isRemoteEnabled', true);
 $options->set('isHtml5ParserEnabled', true);
 // Allow Dompdf to access local files under the project directory (for logos, etc.)
 $projectRoot = realpath(__DIR__ . '/..' . '/..');
-if ($projectRoot) {
-    $options->set('chroot', $projectRoot);
-}
+if ($projectRoot) { $options->set('chroot', $projectRoot); }
 $dompdf = new Dompdf($options);
-// Set base path and protocol so relative/local file URLs resolve
+// Set base path so relative/local file URLs resolve
 if ($projectRoot) {
     $publicDir = realpath($projectRoot . DIRECTORY_SEPARATOR . 'public');
-    if ($publicDir) {
-        $dompdf->setBasePath($publicDir);
-    } else {
-        $dompdf->setBasePath($projectRoot);
-    }
+    if ($publicDir) { $dompdf->setBasePath($publicDir); } else { $dompdf->setBasePath($projectRoot); }
 }
 $dompdf->setProtocol('file://');
 
@@ -77,12 +64,11 @@ $dompdf->render();
 $canvas = $dompdf->getCanvas();
 $font = $dompdf->getFontMetrics()->getFont('Helvetica', 'normal');
 $w = $canvas->get_width();
-// Header: date at top-left, page X of Y at top-right
 $dateStr = date('m/d/Y');
 $canvas->page_text(54, 22, $dateStr, $font, 10, [0,0,0]);
 $pageText = 'Page {PAGE_NUM} of {PAGE_COUNT}';
 $canvas->page_text($w - 140, 22, $pageText, $font, 10, [0,0,0]);
 
-$filename = 'contract_C-' . ($id) . '.pdf';
+$filename = 'invoice_I-' . ($id) . '.pdf';
 $dompdf->stream($filename, ['Attachment' => false]);
 exit;
