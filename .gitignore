@@ -5,6 +5,7 @@
 /vendor/*/.gitignore
 /vendor/*/.gitattributes
 /vendor/*/.gitmodules
+/vendor/*/*/.github
 
 # OS artifacts (Windows/macOS)
 Thumbs.db
