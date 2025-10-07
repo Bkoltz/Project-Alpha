@@ -34,7 +34,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <?php if (!defined('PDF_MODE')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download PDF</a>
+    <a href="/?page=contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
     <form method="post" action="/?page=email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="contract">
@@ -44,74 +44,174 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </form>
   </div>
   <?php endif; ?>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null; ?>
-    <div>
-      <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
-      <?php if (!empty($contract['project_code'])): ?>
-        <div style="color:#374151;font-size:13px;margin-top:2px">Project: <?php echo htmlspecialchars($contract['project_code']); ?></div>
-      <?php endif; ?>
-    </div>
-    <div><?php if ($logo): ?><img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px"><?php endif; ?></div>
-  </div>
-  <div style="display:flex;gap:24px;margin:12px 0 16px">
-    <div style="flex:1">
-      <div style="font-weight:600">From</div>
-      <?php 
-        $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-        $fromNameLine = trim((string)($fromName ?? ''));
-        $fromLines = [];
-        if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-        $fromLines[] = $fromCompany;
-        $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-        $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-        if ($addr1 !== '') { $fromLines[] = $addr1; }
-        if ($addr2 !== '') { $fromLines[] = $addr2; }
-        $city = trim((string)($appConfig['from_city'] ?? ''));
-        $state = trim((string)($appConfig['from_state'] ?? ''));
-        $postal = trim((string)($appConfig['from_postal'] ?? ''));
-        $parts = [];
-        if ($city !== '') { $parts[] = $city; }
-        if ($state !== '') { $parts[] = $state; }
-        if ($postal !== '') { $parts[] = $postal; }
-        $cityLine = implode(', ', $parts);
-        if ($cityLine !== '') { $fromLines[] = $cityLine; }
-      ?>
-      <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
-      <?php if ($fromPhone || $fromEmail): ?>
-        <div style="margin-top:6px;color:#4b5563;font-size:13px">
-          <?php if ($fromPhone): ?><div><?php echo format_phone($fromPhone); ?></div><?php endif; ?>
-          <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
-        </div>
-      <?php endif; ?>
-    </div>
-    <div style="flex:1">
-      <div style="font-weight:600">To</div>
-      <?php 
-        $toLines = [];
-        if (!empty($contract['client_name'])) { $toLines[] = (string)$contract['client_name']; }
-        if (!empty($contract['client_org'])) { $toLines[] = (string)$contract['client_org']; }
-        if (!empty($contract['address_line1'])) { $toLines[] = (string)$contract['address_line1']; }
-        if (!empty($contract['address_line2'])) { $toLines[] = (string)$contract['address_line2']; }
-        $c = trim((string)($contract['city'] ?? ''));
-        $s = trim((string)($contract['state'] ?? ''));
-        $p = trim((string)($contract['postal'] ?? ''));
-        $parts2 = [];
-        if ($c !== '') { $parts2[] = $c; }
-        if ($s !== '') { $parts2[] = $s; }
-        if ($p !== '') { $parts2[] = $p; }
-        $cityStatePostal = implode(', ', $parts2);
-        if ($cityStatePostal !== '') { $toLines[] = $cityStatePostal; }
-      ?>
-      <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
-      <?php if (!empty($contract['client_phone']) || !empty($contract['client_email'])): ?>
-        <div style="margin-top:6px;color:#4b5563;font-size:13px">
-          <?php if (!empty($contract['client_phone'])): ?><div><?php echo format_phone($contract['client_phone']); ?></div><?php endif; ?>
-          <?php if (!empty($contract['client_email'])): ?><div><?php echo htmlspecialchars($contract['client_email']); ?></div><?php endif; ?>
-        </div>
-      <?php endif; ?>
-    </div>
-  </div>
+  <?php
+  $brand = $appConfig['brand_name'] ?? 'Project Alpha';
+  $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
+  // Resolve default logo under project root public/assets
+  $projectRoot = realpath(__DIR__ . '/../../../');
+  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+  $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
+  $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
+  // If the configured logo is an internal routed URL like "/?page=serve-upload&file=...",
+  // resolve it to the actual uploaded file so we can embed it for Dompdf.
+  if (preg_match('/page=serve-upload/i', $logoPath)) {
+    $parsed = parse_url($logoPath);
+    if (!empty($parsed['query'])) {
+      parse_str($parsed['query'], $q);
+      if (!empty($q['file'])) {
+        $fname = basename($q['file']);
+        $bases = [];
+        // Prefer project-root config/uploads
+        $projectRoot = realpath(__DIR__ . '/../../../');
+        if ($projectRoot) {
+          $cfg = realpath($projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads');
+          if ($cfg) { $bases[] = $cfg; } else { $bases[] = $projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads'; }
+          $internal = realpath(__DIR__ . '/../uploads');
+          $bases[] = $internal ? $internal : (__DIR__ . '/../uploads');
+        }
+        // Container path
+        $bases[] = '/var/www/config/uploads';
+        foreach ($bases as $b) {
+          $candidate = @realpath(rtrim($b, '/\\') . DIRECTORY_SEPARATOR . $fname);
+          if ($candidate !== false && is_file($candidate)) { $logoPath = $candidate; $isUrl = false; break; }
+        }
+      }
+    }
+  }
+  if (!$isUrl) {
+    // Map leading-slash paths like /public/... and /config/uploads/... to the project root
+    $root = $projectRoot ?: realpath(__DIR__ . '/../../../');
+    if ($logoPath !== '' && ($logoPath[0] === '/' || $logoPath[0] === '\\')) {
+      if ($root) {
+        $candidate = @realpath($root . $logoPath);
+        if ($candidate) { $logoPath = $candidate; }
+      }
+    } else {
+      // For relative paths (e.g., public/assets/logo.png or config/uploads/logo.png)
+      if ($root) {
+        $candidate = @realpath($root . DIRECTORY_SEPARATOR . $logoPath);
+        if ($candidate) { $logoPath = $candidate; }
+      }
+    }
+  }
+  $canShowLogo = $isUrl || @is_file($logoPath);
+  // Prefer embedding local images as data URIs so Dompdf can render them reliably
+  $logoSrc = $logoPath;
+  if ($canShowLogo && !$isUrl) {
+    // Try to read the file and build a data URI (base64). This avoids file:// or remote restrictions
+    $imgContents = @file_get_contents($logoPath);
+    if ($imgContents !== false) {
+      $mime = null;
+      // Prefer explicit SVG mime type when extension indicates SVG
+      if (preg_match('/\.svg$/i', $logoPath)) {
+        $mime = 'image/svg+xml';
+      } else {
+        if (function_exists('finfo_open')) {
+          $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+          if ($finfo) {
+            $det = @finfo_buffer($finfo, $imgContents);
+            if ($det) { $mime = $det; }
+            @finfo_close($finfo);
+          }
+        }
+        if ($mime === null) { $mime = 'image/png'; }
+      }
+      $logoSrc = 'data:' . $mime . ';base64,' . base64_encode($imgContents);
+    } else {
+      // If embedding failed, fall back to a file:/// URL which Dompdf can sometimes read
+      $normalized = str_replace('\\', '/', $logoPath);
+      if (preg_match('/^[A-Za-z]:\//', $normalized) === 1 || strpos($normalized, '/') === 0) {
+        $logoSrc = 'file:///' . ltrim($normalized, '/');
+      }
+    }
+  }
+  ?>
+  <table style="width:100%;table-layout:fixed;margin-bottom:8px;border-collapse:collapse">
+    <tr>
+      <td style="vertical-align:middle;width:70%">
+        <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
+        <?php if (!empty($contract['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project: <?php echo htmlspecialchars($contract['project_code']); ?></div><?php endif; ?>
+      </td>
+      <td style="vertical-align:middle;width:30%;text-align:right">
+        <?php if ($canShowLogo): ?>
+          <?php if (!$isUrl && preg_match('/\.svg$/i', $logoPath) && is_file($logoPath)): ?>
+            <?php if (defined('PDF_MODE')): ?>
+              <?php echo @file_get_contents($logoPath); ?>
+            <?php else: ?>
+              <?php $svgContents = @file_get_contents($logoPath); if ($svgContents !== false) { $svgData = 'data:image/svg+xml;base64,'.base64_encode($svgContents); ?>
+                <img src="<?php echo htmlspecialchars($svgData); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
+              <?php } else { ?>
+                <img src="<?php echo htmlspecialchars($logoSrc); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
+              <?php } ?>
+            <?php endif; ?>
+          <?php else: ?>
+            <img src="<?php echo htmlspecialchars($logoSrc); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
+          <?php endif; ?>
+        <?php endif; ?>
+      </td>
+    </tr>
+  </table>
+
+  <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
+    <tr>
+      <td style="vertical-align:top;width:50%;padding-right:12px">
+        <div style="font-weight:600">From</div>
+        <?php 
+          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
+          $fromNameLine = trim((string)($fromName ?? ''));
+          $fromLines = [];
+          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
+          $fromLines[] = $fromCompany;
+          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
+          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
+          if ($addr1 !== '') { $fromLines[] = $addr1; }
+          if ($addr2 !== '') { $fromLines[] = $addr2; }
+          $city = trim((string)($appConfig['from_city'] ?? ''));
+          $state = trim((string)($appConfig['from_state'] ?? ''));
+          $postal = trim((string)($appConfig['from_postal'] ?? ''));
+          $parts = [];
+          if ($city !== '') { $parts[] = $city; }
+          if ($state !== '') { $parts[] = $state; }
+          if ($postal !== '') { $parts[] = $postal; }
+          $cityLine = implode(', ', $parts);
+          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+        ?>
+        <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
+        <?php if ($fromPhone || $fromEmail): ?>
+          <div style="margin-top:6px;color:#4b5563;font-size:13px">
+            <?php if ($fromPhone): ?><div><?php echo format_phone($fromPhone); ?></div><?php endif; ?>
+            <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
+          </div>
+        <?php endif; ?>
+      </td>
+      <td style="vertical-align:top;width:50%;padding-left:12px">
+        <div style="font-weight:600">To</div>
+        <?php 
+          $toLines = [];
+          if (!empty($contract['client_name'])) { $toLines[] = (string)$contract['client_name']; }
+          if (!empty($contract['client_org'])) { $toLines[] = (string)$contract['client_org']; }
+          if (!empty($contract['address_line1'])) { $toLines[] = (string)$contract['address_line1']; }
+          if (!empty($contract['address_line2'])) { $toLines[] = (string)$contract['address_line2']; }
+          $c = trim((string)($contract['city'] ?? ''));
+          $s = trim((string)($contract['state'] ?? ''));
+          $p = trim((string)($contract['postal'] ?? ''));
+          $parts2 = [];
+          if ($c !== '') { $parts2[] = $c; }
+          if ($s !== '') { $parts2[] = $s; }
+          if ($p !== '') { $parts2[] = $p; }
+          $cityStatePostal = implode(', ', $parts2);
+          if ($cityStatePostal !== '') { $toLines[] = $cityStatePostal; }
+        ?>
+        <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
+        <?php if (!empty($contract['client_phone']) || !empty($contract['client_email'])): ?>
+          <div style="margin-top:6px;color:#4b5563;font-size:13px">
+            <?php if (!empty($contract['client_phone'])): ?><div><?php echo format_phone($contract['client_phone']); ?></div><?php endif; ?>
+            <?php if (!empty($contract['client_email'])): ?><div><?php echo htmlspecialchars($contract['client_email']); ?></div><?php endif; ?>
+          </div>
+        <?php endif; ?>
+      </td>
+    </tr>
+  </table>
 
 
 

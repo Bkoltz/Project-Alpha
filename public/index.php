@@ -132,6 +132,14 @@ if ($page === 'contract-pdf') {
     require_once __DIR__ . '/../src/controllers/contract_pdf.php';
     exit;
 }
+if ($page === 'quote-pdf') {
+    require_once __DIR__ . '/../src/controllers/quote_pdf.php';
+    exit;
+}
+if ($page === 'invoice-pdf') {
+    require_once __DIR__ . '/../src/controllers/invoice_pdf.php';
+    exit;
+}
 
 // Handle POST actions (PRG pattern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
