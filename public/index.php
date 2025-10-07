@@ -56,6 +56,8 @@ if ($page === 'logout') {
         $params = session_get_cookie_params();
         setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', $params['secure'] ?? false, $params['httponly'] ?? true);
     }
+    // Clear remember-me cookie
+    setcookie('remember', '', time() - 3600, '/', '', $secure, true);
     session_destroy();
     header('Location: /?page=login');
     exit;
@@ -73,6 +75,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $page === 'auth') {
     exit;
 }
 
+// Attempt remember-me auto login before enforcing auth (temporarily disabled)
+if (false && empty($_SESSION['user']) && isset($_COOKIE['remember'])) {
+    require_once __DIR__ . '/../src/utils/crypto.php';
+    require_once __DIR__ . '/../src/config/db.php';
+    $raw = (string)$_COOKIE['remember'];
+    $parts = explode('|', $raw);
+    if (count($parts) === 3) {
+        [$uidStr, $expStr, $hmacB64] = $parts;
+        $uid = (int)$uidStr; $exp = (int)$expStr;
+        $key = crypto_get_key();
+        if ($uid > 0 && $exp > time() && $key !== '') {
+            $data = $uid . '|' . $exp;
+            $calc = base64_encode(hash_hmac('sha256', $data, $key, true));
+            if (hash_equals($calc, $hmacB64)) {
+                try {
+                    $st = $pdo->prepare('SELECT id, email, role FROM users WHERE id=?');
+                    $st->execute([$uid]);
+                    $u = $st->fetch(PDO::FETCH_ASSOC);
+                    if ($u) {
+                        $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
+                    }
+                } catch (Throwable $e) { /* ignore */ }
+            }
+        }
+    }
+}
+
 // Enforce authentication for everything else (unless disabled)
 if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     header('Location: /?page=login');
@@ -88,8 +117,19 @@ if ($page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
     exit;
 }
+// If someone lands on email-test via GET (e.g., CSRF redirect), send them back to Settings -> Email
+if ($page === 'email-test' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $suffix = '';
+    if (!empty($_GET['error'])) { $suffix = '&email_err=' . rawurlencode((string)$_GET['error']); }
+    header('Location: /?page=settings&tab=email' . $suffix);
+    exit;
+}
 if ($page === 'serveupload' || $page === 'serve-upload') {
     require_once __DIR__ . '/../src/controllers/serve_upload.php';
+    exit;
+}
+if ($page === 'contract-pdf') {
+    require_once __DIR__ . '/../src/controllers/contract_pdf.php';
     exit;
 }
 
@@ -162,6 +202,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/clients_restore.php';
         exit;
     }
+    if ($page === 'clients-purge') {
+        require_once __DIR__ . '/../src/controllers/clients_purge.php';
+        exit;
+    }
     if ($page === 'contracts-create') {
         require_once __DIR__ . '/../src/controllers/contracts_create.php';
         exit;
@@ -186,8 +230,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/email_send.php';
         exit;
     }
+    if ($page === 'email-test') {
+        require_once __DIR__ . '/../src/controllers/email_test.php';
+        exit;
+    }
     if ($page === 'project-notes-update') {
         require_once __DIR__ . '/../src/controllers/project_notes_update.php';
+        exit;
+    }
+    if ($page === 'account-update') {
+        require_once __DIR__ . '/../src/controllers/account_update.php';
         exit;
     }
 }
