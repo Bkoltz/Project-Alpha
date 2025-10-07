@@ -36,7 +36,7 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       </label>
       <label>
         <div>Password</div>
-        <input required minlength="8" type="password" name="password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input required minlength="8" type="password" name="password" autocomplete="<?php echo $noUsers ? 'new-password' : 'current-password'; ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <?php if ($noUsers): ?>
         <label>
@@ -44,6 +44,8 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
           <input required minlength="8" type="password" name="password2" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <div style="color:var(--muted);font-size:12px">The first account will be created as an admin.</div>
+      <?php else: ?>
+        <!-- Remember me temporarily disabled -->
       <?php endif; ?>
       <div style="display:flex;gap:8px;align-items:center">
         <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">

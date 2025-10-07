@@ -37,6 +37,11 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
 ?>
 <section>
   <h2>Quotes</h2>
+  <?php if (!empty($_GET['emailed'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
+  <?php elseif (!empty($_GET['email_err'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
   <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
     <input type="hidden" name="page" value="quotes-list">
     <input type="hidden" name="client_id" id="clientIdQL" value="<?php echo (int)$client_id; ?>">

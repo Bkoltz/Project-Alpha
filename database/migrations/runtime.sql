@@ -192,9 +192,15 @@ CREATE TABLE IF NOT EXISTS project_meta (
   project_code VARCHAR(32) NOT NULL PRIMARY KEY,
   client_id INT NOT NULL,
   notes TEXT NULL,
+  terms TEXT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_project_meta_client (client_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Ensure terms column exists on project_meta
+SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='project_meta' AND COLUMN_NAME='terms');
+SET @sql := IF(@exists=0, 'ALTER TABLE project_meta ADD COLUMN terms TEXT NULL AFTER notes', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 -- Shared document number across quotes/contracts/invoices
 -- Use IF NOT EXISTS where supported; otherwise fall back to INFORMATION_SCHEMA checks above.
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;

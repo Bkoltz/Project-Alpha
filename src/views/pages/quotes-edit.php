@@ -48,10 +48,22 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <button type="button" onclick="addItem()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
-    <?php $pn=null; if (!empty($quote['project_code'])) { $pm=$pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?'); $pm->execute([$quote['project_code']]); $pn=(string)$pm->fetchColumn(); } ?>
+    <?php 
+      $pn=null; $pt=null; 
+      if (!empty($quote['project_code'])) { 
+        $pm=$pdo->prepare('SELECT notes, terms FROM project_meta WHERE project_code=?'); 
+        $pm->execute([$quote['project_code']]); 
+        $row=$pm->fetch(PDO::FETCH_ASSOC); 
+        if ($row) { $pn=(string)($row['notes'] ?? ''); $pt=(string)($row['terms'] ?? ''); }
+      } 
+    ?>
     <label>
       <div>Project Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
+    </label>
+    <label>
+      <div>Project Terms (override default terms for this project)</div>
+      <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
     </label>
 
     <div id="totals" style="margin-top:8px;display:grid;gap:6px;justify-content:end">

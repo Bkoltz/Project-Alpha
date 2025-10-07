@@ -99,10 +99,10 @@
         </nav>
 
         <div class="nav-footer">
-          <?php $fromPhone = $appConfig['from_phone'] ?? null; ?>
+          <!-- <?php $fromPhone = $appConfig['from_phone'] ?? null; ?>
           <?php if ($fromPhone): ?>
             <a class="phone" href="tel:<?php echo htmlspecialchars($fromPhone); ?>"><?php echo htmlspecialchars(format_phone($fromPhone)); ?></a>
-          <?php endif; ?>
+          <?php endif; ?> -->
           <a class="settings" href="/?page=settings" data-page="settings">Settings</a>
           <a class="settings" href="/?page=logout" style="margin-top:8px;display:block">Logout</a>
         </div>

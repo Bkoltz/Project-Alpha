@@ -26,9 +26,10 @@ try{
   $row->execute([$id]);
   $pc = (string)$row->fetchColumn();
   $pn = trim((string)($_POST['project_notes'] ?? ''));
-  if ($pc !== '' && $pn !== '') {
-    $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
-    $up->execute([$pc, $client_id, $pn]);
+  $pt = trim((string)($_POST['project_terms'] ?? ''));
+  if ($pc !== '') {
+    $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes, terms) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes), terms=VALUES(terms)');
+    $up->execute([$pc, $client_id, $pn !== '' ? $pn : null, $pt !== '' ? $pt : null]);
   }
   $pdo->prepare('DELETE FROM contract_items WHERE contract_id=?')->execute([$id]);
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');

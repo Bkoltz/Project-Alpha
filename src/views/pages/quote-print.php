@@ -3,8 +3,9 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/format.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
+$stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.organization client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Quote not found</p>'; return; }
@@ -17,27 +18,37 @@ $fromPhone = $appConfig['from_phone'] ?? '';
 $fromEmail = $appConfig['from_email'] ?? '';
 $brand = $appConfig['brand_name'] ?? 'Project Alpha';
 $logo = $appConfig['logo_path'] ?? null;
-$termsText = trim($appConfig['terms'] ?? '');
+// Resolve terms: project-level terms override global settings
+$termsText = '';
+if (!empty($quote['project_code'])) {
+  try {
+    $pm = $pdo->prepare('SELECT terms FROM project_meta WHERE project_code=?');
+    $pm->execute([$quote['project_code']]);
+    $pt = (string)$pm->fetchColumn();
+    if (trim($pt) !== '') { $termsText = trim($pt); }
+  } catch (Throwable $e) { /* ignore */ }
+}
+if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
 <section>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <?php if ($logo): ?>
-        <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:36px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
-      <?php endif; ?>
-      <h2 style="margin:0">Quote Q-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?><?php if (!empty($quote['project_code'])) echo ' (Project '.htmlspecialchars($quote['project_code']).')'; ?></h2>
-      <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
-    </div>
-    <div>
-      <a href="/?page=quotes-edit&id=<?php echo (int)$quote['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px; font-size: small;">Edit</a>
-      <form method="post" action="/?page=email-send" style="display:inline-block;margin-right:6px">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="type" value="quote">
-        <input type="hidden" name="id" value="<?php echo (int)$quote['id']; ?>">
-        <button type="submit" style="min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Email</button>
-      </form>
-      <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Print / Save PDF</button>
-    </div>
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Back</a>
+    <button onclick="window.print()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Print</button>
+    <form method="post" action="/?page=email-send" style="display:inline">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="quote">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Email</button>
+    </form>
+  </div>
+  <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:8px\">
+    <div style="font-weight:700;font-size:18px"><?php echo htmlspecialchars($brand); ?></div>
+    <div><?php if ($logo): ?><img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:40px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px"><?php endif; ?></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 12px">
+    <div style="font-weight:700">Quote Q-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?></div>
+    <div><?php if (!empty($quote['project_code'])): ?>Project <?php echo htmlspecialchars($quote['project_code']); ?><?php endif; ?></div>
   </div>
 
   <div style="display:flex;gap:24px;margin-bottom:16px">
@@ -47,9 +58,10 @@ $termsText = trim($appConfig['terms'] ?? '');
       <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars($fromAddress); ?><?php echo $fromPhone?"\n".format_phone($fromPhone):''; ?><?php echo $fromEmail?"\n".$fromEmail:''; ?></pre>
     </div>
     <div style="flex:1">
-      <div style="font-weight:600">To</div>
+      <div style=\"font-weight:600\">To</div>
       <div><?php echo htmlspecialchars($quote['client_name']); ?></div>
-      <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars(trim(($quote['address_line1'] ?? '')."\n".($quote['address_line2'] ?? '')."\n".($quote['city'] ?? '').' '.($quote['state'] ?? '').' '.($quote['postal'] ?? '')."\n".($quote['country'] ?? ''))); ?></pre>
+      <?php if (!empty($quote['client_org'])): ?><div style=\"color:#374151; font-size: 14px; margin-top:2px\"><?php echo htmlspecialchars($quote['client_org']); ?></div><?php endif; ?>
+      <pre style=\"white-space:pre-wrap;margin:0\"><?php echo htmlspecialchars(trim(($quote['address_line1'] ?? '') . (empty($quote['address_line2'])?'':'\\n'.$quote['address_line2']) . (empty($quote['city'])&&empty($quote['state'])&&empty($quote['postal'])?'':'\\n'.trim(($quote['city'] ?? '').' '.($quote['state'] ?? '').' '.($quote['postal'] ?? ''))) . (empty($quote['country'])?'':'\\n'.$quote['country']))); ?><?php echo !empty($quote['client_phone'])?"\\n".format_phone($quote['client_phone']):''; ?><?php echo !empty($quote['client_email'])?"\\n".$quote['client_email']:''; ?></pre>
     </div>
   </div>
 
@@ -111,4 +123,4 @@ $termsText = trim($appConfig['terms'] ?? '');
 <?php endif; ?>
 
 </section>
-<style>@media print {.side-nav,.nav-footer{display:none} .main-content{margin-left:0} body{background:#fff}}</style>
+<style>.no-print{display:flex} @media print {.no-print{display:none} .side-nav,.nav-footer{display:none} .main-content{margin-left:0} body{background:#fff}}</style>

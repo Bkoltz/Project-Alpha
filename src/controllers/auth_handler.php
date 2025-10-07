@@ -6,6 +6,8 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/logger.php';
+require_once __DIR__ . '/../utils/crypto.php';
 
 // Verbose error toggle: set APP_VERBOSE_ERRORS=true or AUTH_VERBOSE_ERRORS=true (or APP_DEBUG=true)
 $VERBOSE_AUTH = filter_var(getenv('APP_VERBOSE_ERRORS') ?: getenv('AUTH_VERBOSE_ERRORS') ?: getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN);
@@ -91,6 +93,7 @@ if ($action === 'login') {
         $u = $st->fetch(PDO::FETCH_ASSOC);
         if (!$u || !password_verify($password, $u['password_hash'])) {
             try { $pdo->prepare('INSERT INTO login_attempts (ip, email) VALUES (?,?)')->execute([$ip, $email ?: null]); } catch (Throwable $e) {}
+            app_log('auth', 'login failed', ['ip'=>$ip, 'email'=>$email]);
             header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
             exit;
         }
@@ -98,6 +101,27 @@ if ($action === 'login') {
         session_regenerate_id(true);
         $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
         try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}
+        // Remember Me cookie temporarily disabled
+        if (false && !empty($_POST['remember'])) {
+            $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
+            $uid = (int)$u['id'];
+            $exp = time() + 60*60*24*30;
+            $key = crypto_get_key();
+            if ($key !== '') {
+                $data = $uid . '|' . $exp;
+                $hmac = base64_encode(hash_hmac('sha256', $data, $key, true));
+                $val = $data . '|' . $hmac;
+                setcookie('remember', $val, [
+                    'expires' => $exp,
+                    'path' => '/',
+                    'domain' => '',
+                    'secure' => $secure,
+                    'httponly' => true,
+                    'samesite' => 'Lax',
+                ]);
+            }
+        }
+        app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
         header('Location: /');
         exit;
     } catch (Throwable $e) {

@@ -1,15 +1,22 @@
 <?php
 // src/controllers/serve_upload.php
-// Securely serve files stored in src/uploads (fallback storage)
+// Securely serve files stored in config/uploads (preferred) or src/uploads (fallback)
 
-$base = __DIR__ . '/../uploads';
 $fname = isset($_GET['file']) ? basename($_GET['file']) : '';
 if ($fname === '') { http_response_code(404); exit; }
-$path = realpath($base . '/' . $fname);
-if ($path === false || strpos($path, realpath($base)) !== 0 || !is_file($path)) {
-  http_response_code(404);
-  exit;
+
+$bases = [
+  '/var/www/config/uploads',
+  __DIR__ . '/../config/../../config/uploads', // project config/uploads
+  __DIR__ . '/../uploads', // legacy fallback
+];
+$path = false;
+foreach ($bases as $b) {
+  $candidate = realpath($b . '/' . $fname);
+  if ($candidate !== false && is_file($candidate)) { $path = $candidate; $base = realpath($b); break; }
 }
+if ($path === false) { http_response_code(404); exit; }
+if (strpos($path, $base) !== 0) { http_response_code(404); exit; }
 
 $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 $mime = 'application/octet-stream';

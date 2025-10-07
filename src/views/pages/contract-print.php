@@ -2,8 +2,9 @@
 // src/views/pages/contract-print.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$c = $pdo->prepare('SELECT co.*, cl.name client_name, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id WHERE co.id=?');
+$c = $pdo->prepare('SELECT co.*, cl.name client_name, cl.organization client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id WHERE co.id=?');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if(!$contract){ echo '<p>Contract not found</p>'; return; }
@@ -15,45 +16,104 @@ $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Pro
 $fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
 $fromPhone = $appConfig['from_phone'] ?? '';
 $fromEmail = $appConfig['from_email'] ?? '';
-$termsText = trim($contract['terms'] ?? ($appConfig['terms'] ?? ''));
+// Resolve terms: project-level terms override contract terms override app settings
+$termsText = '';
+if (!empty($contract['project_code'])) {
+  try {
+    $pm = $pdo->prepare('SELECT terms FROM project_meta WHERE project_code=?');
+    $pm->execute([$contract['project_code']]);
+    $pt = (string)$pm->fetchColumn();
+    if (trim($pt) !== '') { $termsText = trim($pt); }
+  } catch (Throwable $e) { /* ignore */ }
+}
+if ($termsText === '') { $termsText = trim((string)($contract['terms'] ?? '')); }
+if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
 <section>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null; ?>
-      <?php if ($logo): ?>
-        <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:36px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
-      <?php endif; ?>
-      <div>
-        <div style="font-size:12px;color:#999">Page 1 of 2</div>
-        <h2 style="margin:0">Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Project '.htmlspecialchars($contract['project_code']).')'; ?></h2>
-      </div>
-      <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
-    </div>
-    <div>
-      <a href="/?page=contracts-edit&id=<?php echo (int)$contract['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px; font-size: small;">Edit</a>
-      <form method="post" action="/?page=email-send" style="display:inline-block;margin-right:6px">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="type" value="contract">
-        <input type="hidden" name="id" value="<?php echo (int)$contract['id']; ?>">
-        <button type="submit" style="min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Email</button>
-      </form>
-      <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Print / Save PDF</button>
-    </div>
+  <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Contract</div>
+  <?php if (!defined('PDF_MODE')): ?>
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
+    <a href="/?page=contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download PDF</a>
+    <form method="post" action="/?page=email-send" style="display:inline">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="contract">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+    </form>
   </div>
-
-  <div style="display:flex;gap:24px;margin-bottom:16px">
+  <?php endif; ?>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null; ?>
+    <div>
+      <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
+      <?php if (!empty($contract['project_code'])): ?>
+        <div style="color:#374151;font-size:13px;margin-top:2px">Project: <?php echo htmlspecialchars($contract['project_code']); ?></div>
+      <?php endif; ?>
+    </div>
+    <div><?php if ($logo): ?><img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px"><?php endif; ?></div>
+  </div>
+  <div style="display:flex;gap:24px;margin:12px 0 16px">
     <div style="flex:1">
       <div style="font-weight:600">From</div>
-      <div><?php echo htmlspecialchars($fromName); ?></div>
-      <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars($fromAddress); ?><?php echo $fromPhone?"\n".format_phone($fromPhone):''; ?><?php echo $fromEmail?"\n".$fromEmail:''; ?></pre>
+      <?php 
+        $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
+        $fromNameLine = trim((string)($fromName ?? ''));
+        $fromLines = [];
+        if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
+        $fromLines[] = $fromCompany;
+        $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
+        $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
+        if ($addr1 !== '') { $fromLines[] = $addr1; }
+        if ($addr2 !== '') { $fromLines[] = $addr2; }
+        $city = trim((string)($appConfig['from_city'] ?? ''));
+        $state = trim((string)($appConfig['from_state'] ?? ''));
+        $postal = trim((string)($appConfig['from_postal'] ?? ''));
+        $parts = [];
+        if ($city !== '') { $parts[] = $city; }
+        if ($state !== '') { $parts[] = $state; }
+        if ($postal !== '') { $parts[] = $postal; }
+        $cityLine = implode(', ', $parts);
+        if ($cityLine !== '') { $fromLines[] = $cityLine; }
+      ?>
+      <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
+      <?php if ($fromPhone || $fromEmail): ?>
+        <div style="margin-top:6px;color:#4b5563;font-size:13px">
+          <?php if ($fromPhone): ?><div><?php echo format_phone($fromPhone); ?></div><?php endif; ?>
+          <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
+        </div>
+      <?php endif; ?>
     </div>
     <div style="flex:1">
       <div style="font-weight:600">To</div>
-      <div><?php echo htmlspecialchars($contract['client_name']); ?></div>
-      <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars(trim(($contract['address_line1'] ?? '')."\n".($contract['address_line2'] ?? '')."\n".($contract['city'] ?? '').' '.($contract['state'] ?? '').' '.($contract['postal'] ?? '')."\n".($contract['country'] ?? ''))); ?></pre>
+      <?php 
+        $toLines = [];
+        if (!empty($contract['client_name'])) { $toLines[] = (string)$contract['client_name']; }
+        if (!empty($contract['client_org'])) { $toLines[] = (string)$contract['client_org']; }
+        if (!empty($contract['address_line1'])) { $toLines[] = (string)$contract['address_line1']; }
+        if (!empty($contract['address_line2'])) { $toLines[] = (string)$contract['address_line2']; }
+        $c = trim((string)($contract['city'] ?? ''));
+        $s = trim((string)($contract['state'] ?? ''));
+        $p = trim((string)($contract['postal'] ?? ''));
+        $parts2 = [];
+        if ($c !== '') { $parts2[] = $c; }
+        if ($s !== '') { $parts2[] = $s; }
+        if ($p !== '') { $parts2[] = $p; }
+        $cityStatePostal = implode(', ', $parts2);
+        if ($cityStatePostal !== '') { $toLines[] = $cityStatePostal; }
+      ?>
+      <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
+      <?php if (!empty($contract['client_phone']) || !empty($contract['client_email'])): ?>
+        <div style="margin-top:6px;color:#4b5563;font-size:13px">
+          <?php if (!empty($contract['client_phone'])): ?><div><?php echo format_phone($contract['client_phone']); ?></div><?php endif; ?>
+          <?php if (!empty($contract['client_email'])): ?><div><?php echo htmlspecialchars($contract['client_email']); ?></div><?php endif; ?>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
+
+
 
 
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
@@ -107,7 +167,6 @@ $termsText = trim($contract['terms'] ?? ($appConfig['terms'] ?? ''));
   </table>
 
   <div style="page-break-after:always"></div>
-  <div style="font-size:12px;color:#999">Page 2 of 2</div>
   <h3>Terms and Conditions</h3>
   <?php if ($termsText !== ''): ?>
     <pre style="white-space:pre-wrap;background:#fff;padding:12px;border:1px solid #eee;border-radius:8px"><?php echo htmlspecialchars($termsText); ?></pre>
@@ -125,4 +184,15 @@ $termsText = trim($contract['terms'] ?? ($appConfig['terms'] ?? ''));
     <div style="color:#666">Signature (Client)</div>
   </div>
 </section>
-<style>@media print {.side-nav,.nav-footer{display:none} .main-content{margin-left:0} body{background:#fff}}</style>
+<style>
+  .no-print{display:flex}
+  .print-footer{display:none}
+  @media print {
+    .no-print{display:none !important}
+    .side-nav,.nav-footer{display:none}
+    .main-content{margin-left:0}
+    body{background:#fff}
+    .print-footer{display:block; position:fixed; bottom:6px; left:12px; color:#374151; font-size:12px}
+  }
+</style>
+<div class="print-footer">Powered by Project Alpha</div>

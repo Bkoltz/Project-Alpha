@@ -25,6 +25,13 @@ $clients = $st->fetchAll();
   <div style="margin:8px 0">
     <a href="/?page=archived-clients" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">View Archived</a>
   </div>
+  <?php if (!empty($_GET['archived'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Client archived.</div>
+  <?php elseif (!empty($_GET['restored'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Client restored.</div>
+  <?php elseif (!empty($_GET['deleted'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Client permanently deleted.</div>
+  <?php endif; ?>
   <?php $selected = isset($_GET['selected_client_id']) ? (int)$_GET['selected_client_id'] : 0; ?>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
   <div>

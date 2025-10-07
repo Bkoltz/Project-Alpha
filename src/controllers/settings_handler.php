@@ -38,7 +38,8 @@ if (!empty($_POST['change_password']) && $uid > 0) {
     }
 }
 $configMount = '/var/www/config';
-$configDir = is_dir($configMount) ? $configMount : (__DIR__ . '/../../public/assets');
+$projectConfig = __DIR__ . '/../../config';
+$configDir = is_dir($configMount) ? $configMount : $projectConfig;
 $uploadsDir = $configDir . '/uploads';
 if (!is_dir($uploadsDir)) {
     @mkdir($uploadsDir, 0775, true);
@@ -58,9 +59,10 @@ $settings = [
     'from_country' => null,
     'from_email' => null,
     'from_phone' => null,
-'terms' => null,
+    'terms' => null,
     'net_terms_days' => 30,
     'payment_methods' => ['card','cash','bank_transfer'],
+    'timezone' => 'UTC',
     // SMTP configuration (optional)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -123,9 +125,10 @@ if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
         // too large; ignore upload
     } else {
         $allowed = [
-            'image/png'       => '.png',
+'image/png'       => '.png',
             'image/jpeg'      => '.jpg',
             'image/webp'      => '.webp',
+            'image/svg+xml'   => '.svg',
         ];
         $mime = @mime_content_type($f['tmp_name']);
         if (isset($allowed[$mime])) {
@@ -133,8 +136,9 @@ if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
                 $ext = $allowed[$mime];
                 $name = 'logo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . $ext;
                 $dest = $uploadsDir . '/' . $name;
-                if (@move_uploaded_file($f['tmp_name'], $dest)) {
-                    $settings['logo_path'] = '/assets/uploads/' . $name;
+if (@move_uploaded_file($f['tmp_name'], $dest)) {
+                    // Serve via controller since this is stored in config/uploads
+                    $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
                 } else {
                     // fallback: try to save to internal src/uploads and serve via controller
                     $internal = __DIR__ . '/../uploads';
@@ -175,6 +179,15 @@ if (isset($_POST['payment_methods'])) {
     $settings['payment_methods'] = array_values(array_unique($methods));
 }
 
+// Time zone
+if (isset($_POST['timezone'])) {
+    $tz = trim((string)$_POST['timezone']);
+    // basic validation: must be a known timezone ID
+    if (in_array($tz, \DateTimeZone::listIdentifiers(), true)) {
+        $settings['timezone'] = $tz;
+    }
+}
+
 // SMTP settings
 if (isset($_POST['smtp_host'])) {
     $settings['smtp_host'] = trim((string)$_POST['smtp_host']) ?: null;
@@ -202,6 +215,17 @@ $existing = [];
 if (is_readable($target)) {
     $existing = json_decode(@file_get_contents($target), true) ?: [];
 }
+// Ensure we have a persistent encryption key for secrets
+if (empty($settings['encryption_key'])) {
+    // Reuse existing if present; else generate new
+    $existingKey = $existing['encryption_key'] ?? null;
+    if (is_string($existingKey) && base64_decode($existingKey, true) !== false) {
+        $settings['encryption_key'] = $existingKey;
+    } else {
+        $settings['encryption_key'] = base64_encode(random_bytes(32));
+    }
+}
+
 $merged = array_merge($existing, $settings);
 $payload = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 $ok = @file_put_contents($target, $payload);

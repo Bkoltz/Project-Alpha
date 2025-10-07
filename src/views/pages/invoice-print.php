@@ -3,8 +3,9 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/format.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$st = $pdo->prepare('SELECT i.*, c.name client_name, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
+$st = $pdo->prepare('SELECT i.*, c.name client_name, c.organization client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
@@ -24,25 +25,25 @@ if (!empty($inv['project_code'])) {
 }
 ?>
 <section>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null; ?>
-      <?php if ($logo): ?>
-        <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:36px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
-      <?php endif; ?>
-      <h2 style="margin:0">Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?><?php if (!empty($inv['project_code'])) echo ' (Project '.htmlspecialchars($inv['project_code']).')'; ?></h2>
-      <span style="color:#64748b;font-weight:600;margin-left:8px"><?php echo htmlspecialchars($brand); ?></span>
-    </div>
-    <div>
-      <a href="/?page=invoices-edit&id=<?php echo (int)$inv['id']; ?>" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-right:6px; font-size: small;">Edit</a>
-      <form method="post" action="/?page=email-send" style="display:inline-block;margin-right:6px">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="type" value="invoice">
-        <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
-        <button type="submit" style="min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Email</button>
-      </form>
-      <button onclick="window.print()" style="display:inline-block;min-width:140px;text-align:center;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff; font-size: small;">Print / Save PDF</button>
-    </div>
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Back</a>
+    <button onclick="window.print()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Print</button>
+    <form method="post" action="/?page=email-send" style="display:inline">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="invoice">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Email</button>
+    </form>
+  </div>
+  <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:8px\">
+    <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null; ?>
+    <div style="font-weight:700;font-size:18px"><?php echo htmlspecialchars($brand); ?></div>
+    <div><?php if ($logo): ?><img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" style="height:40px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px"><?php endif; ?></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 12px">
+    <div style="font-weight:700">Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?></div>
+    <div><?php if (!empty($inv['project_code'])): ?>Project <?php echo htmlspecialchars($inv['project_code']); ?><?php endif; ?></div>
   </div>
 
   <div style="display:flex;gap:24px;margin-bottom:16px">
@@ -52,9 +53,10 @@ if (!empty($inv['project_code'])) {
       <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars($fromAddress); ?><?php echo $fromPhone?"\n".format_phone($fromPhone):''; ?><?php echo $fromEmail?"\n".$fromEmail:''; ?></pre>
     </div>
     <div style="flex:1">
-      <div style="font-weight:600">To</div>
+      <div style=\"font-weight:600\">To</div>
       <div><?php echo htmlspecialchars($inv['client_name']); ?></div>
-      <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars(trim(($inv['address_line1'] ?? '')."\n".($inv['address_line2'] ?? '')."\n".($inv['city'] ?? '').' '.($inv['state'] ?? '').' '.($inv['postal'] ?? '')."\n".($inv['country'] ?? ''))); ?></pre>
+      <?php if (!empty($inv['client_org'])): ?><div style=\"color:#374151; font-size: 14px; margin-top:2px\"><?php echo htmlspecialchars($inv['client_org']); ?></div><?php endif; ?>
+      <pre style=\"white-space:pre-wrap;margin:0\"><?php echo htmlspecialchars(trim(($inv['address_line1'] ?? '') . (empty($inv['address_line2'])?'':'\\n'.$inv['address_line2']) . (empty($inv['city'])&&empty($inv['state'])&&empty($inv['postal'])?'':'\\n'.trim(($inv['city'] ?? '').' '.($inv['state'] ?? '').' '.($inv['postal'] ?? ''))) . (empty($inv['country'])?'':'\\n'.$inv['country']))); ?><?php echo !empty($inv['client_phone'])?"\\n".format_phone($inv['client_phone']):''; ?><?php echo !empty($inv['client_email'])?"\\n".$inv['client_email']:''; ?></pre>
     </div>
 </div>
 
@@ -116,4 +118,4 @@ if (!empty($inv['project_code'])) {
     </tbody>
   </table>
 </section>
-<style>@media print {.side-nav,.nav-footer{display:none} .main-content{margin-left:0} body{background:#fff}}</style>
+<style>.no-print{display:flex} @media print {.no-print{display:none} .side-nav,.nav-footer{display:none} .main-content{margin-left:0} body{background:#fff}}</style>

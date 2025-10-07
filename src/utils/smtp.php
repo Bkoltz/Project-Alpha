@@ -14,7 +14,7 @@ function smtp_cmd($fp, string $cmd, bool $log=false) {
     return $resp;
 }
 
-function smtp_send(array $cfg, string $to, string $subject, string $html, string $fromEmail, string $fromName='') : array {
+function smtp_send(array $cfg, string $to, string $subject, string $html, string $fromEmail, string $fromName='', ?string $envelopeFrom=null) : array {
     $host = $cfg['host'] ?? '';
     $port = (int)($cfg['port'] ?? 587);
     $secure = strtolower((string)($cfg['secure'] ?? 'tls')); // tls|ssl|none
@@ -62,6 +62,7 @@ function smtp_send(array $cfg, string $to, string $subject, string $html, string
     }
 
     $fromHeader = $fromName ? sprintf('%s <%s>', $fromName, $fromEmail) : $fromEmail;
+    $envelope = $envelopeFrom ?: $fromEmail;
     $date = date('r');
     $headers = [];
     $headers[] = 'Date: ' . $date;
@@ -73,7 +74,7 @@ function smtp_send(array $cfg, string $to, string $subject, string $html, string
 
     $msg = implode("\r\n", $headers) . "\r\n\r\n" . $html . "\r\n";
 
-    if (strpos(smtp_cmd($fp, 'MAIL FROM:<'.$fromEmail.'>'), '250') !== 0) { fclose($fp); return [false, 'MAIL FROM failed']; }
+    if (strpos(smtp_cmd($fp, 'MAIL FROM:<'.$envelope.'>'), '250') !== 0) { fclose($fp); return [false, 'MAIL FROM failed']; }
     if (strpos(smtp_cmd($fp, 'RCPT TO:<'.$to.'>'), '250') !== 0) { fclose($fp); return [false, 'RCPT TO failed']; }
     if (strpos(smtp_cmd($fp, 'DATA'), '354') !== 0) { fclose($fp); return [false, 'DATA not accepted']; }
 
