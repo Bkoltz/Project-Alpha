@@ -94,38 +94,12 @@ try {
 
   // Email admin only if status changed via public link
   if ($changed) {
-    $adminEmail = '';
-    try { $adminEmail = (string)($pdo->query("SELECT email FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1")->fetchColumn() ?: ''); } catch (Throwable $e) {}
-    if ($adminEmail === '') { $adminEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost'); }
-
-    if ($adminEmail !== '') {
-      $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
-      $subject = sprintf('[%s] Client %s %s quote Q-%s', $brand, (string)$quote['client_name'], $action === 'approve' ? 'approved' : 'denied', (string)($quote['doc_number'] ?? $quote['id']));
-      $project = (string)($quote['project_code'] ?? '');
-      $html = sprintf('<p>Client <strong>%s</strong> has %s quote <strong>Q-%s</strong>%s via the public link.</p><p>See changes in the app.</p>',
-        htmlspecialchars((string)$quote['client_name']),
-        $action === 'approve' ? 'approved' : 'denied',
-        htmlspecialchars((string)($quote['doc_number'] ?? $quote['id'])),
-        $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : ''
-      );
-
-      $cfg = [
-        'host' => (string)($appConfig['smtp_host'] ?? ''),
-        'port' => (int)($appConfig['smtp_port'] ?? 587),
-        'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-        'username' => (string)($appConfig['smtp_username'] ?? ''),
-        'password' => (string)(isset($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc']) ? (crypto_decrypt($appConfig['smtp_password_enc']) ?: '') : ''),
-      ];
-      $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-      $fromName = (string)($appConfig['from_name'] ?? $brand);
-      $envFrom = $fromEmail;
-      if (strtolower($cfg['host'] ?? '') === 'smtp.gmail.com' && !empty($cfg['username'])) { $envFrom = $cfg['username']; }
-      if (!empty($cfg['host'])) {
-        try { [$ok, $err] = mailer_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, $envFrom); if (!$ok) { smtp_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, $envFrom); } } catch (Throwable $e) { /* ignore email errors */ }
-      } else {
-        $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: ".$fromName.' <'.$fromEmail.'>'."\r\n";
-        @mail($adminEmail, $subject, $html, $headers);
-      }
+    // Send a notification to the first admin
+    try {
+      require_once __DIR__ . '/../utils/notifications.php';
+      notify_admin_quote_change($pdo, $appConfig, $quote, $action === 'approve' ? 'approve' : 'deny');
+    } catch (Throwable $e) {
+      // Ignore notification failures but keep normal flow
     }
   }
 

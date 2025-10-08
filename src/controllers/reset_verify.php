@@ -40,14 +40,30 @@ try {
     $hasAttempts = ((int)$chk->fetchColumn()) === 1;
   } catch (Throwable $e) { $hasAttempts = false; }
 
-  // Fetch most recent unused token for this user
-  if ($hasAttempts) {
-    $st2 = $pdo->prepare('SELECT id, token, expires_at, used, attempts FROM password_resets WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1');
-  } else {
-    $st2 = $pdo->prepare('SELECT id, token, expires_at, used FROM password_resets WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1');
+  // Prefer an exact match on the submitted token (most reliable), then fall back to latest unused
+  $row = null;
+  try {
+    $st2a = $pdo->prepare('SELECT id, token, expires_at, used, attempts FROM password_resets WHERE user_id=? AND used=0 AND token=? ORDER BY id DESC LIMIT 1');
+    $st2a->execute([$uid, $token]);
+    $row = $st2a->fetch(PDO::FETCH_ASSOC) ?: null;
+    if (!$row && ctype_digit($token)) {
+      // If DB stored token with formatting, try matching non-digit stripped version
+      $st2b = $pdo->prepare("SELECT id, token, expires_at, used, attempts FROM password_resets WHERE user_id=? AND used=0 AND REPLACE(REPLACE(token,'-',''),' ','')=? ORDER BY id DESC LIMIT 1");
+      $st2b->execute([$uid, $token]);
+      $row = $st2b->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+  } catch (Throwable $e) { /* ignore and fall back */ }
+
+  if (!$row) {
+    if ($hasAttempts) {
+      $st2 = $pdo->prepare('SELECT id, token, expires_at, used, attempts FROM password_resets WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1');
+    } else {
+      $st2 = $pdo->prepare('SELECT id, token, expires_at, used FROM password_resets WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1');
+    }
+    $st2->execute([$uid]);
+    $row = $st2->fetch(PDO::FETCH_ASSOC);
   }
-  $st2->execute([$uid]);
-  $row = $st2->fetch(PDO::FETCH_ASSOC);
+
   if (!$row) { throw new Exception('badtoken'); }
   $rid = (int)$row['id'];
   $stored = (string)($row['token'] ?? '');
