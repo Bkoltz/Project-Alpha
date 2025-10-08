@@ -10,7 +10,7 @@ services:
       MYSQL_PASSWORD: apppassword
       # start.sh uses MYSQL_ROOT_PASSWORD to ping MySQL as root for readiness
       MYSQL_ROOT_PASSWORD: rootpass
-      APP_AUTH_DISABLED: true
+      # APP_AUTH_DISABLED: true
       # APP_VERBOSE_ERRORS: true
     depends_on:
       - db
