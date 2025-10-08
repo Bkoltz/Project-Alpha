@@ -7,6 +7,10 @@ require_once __DIR__ . '/../utils/smtp.php';
 require_once __DIR__ . '/../utils/mailer.php';
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
+$isAjax = ((string)($_POST['ajax'] ?? '') === '1')
+  || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)$_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+  || (stripos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false);
+
 // Prefer posted values to test current inputs, without requiring a prior Save
 $postHost = trim((string)($_POST['smtp_host'] ?? ''));
 $postPort = isset($_POST['smtp_port']) ? (int)$_POST['smtp_port'] : null;
@@ -20,7 +24,12 @@ $to = $postFrom !== '' ? $postFrom : ($postUser !== '' ? $postUser : ((string)($
 if ($to === '') { $to = (string)($appConfig['from_email'] ?? ''); }
 if ($to === '') { $to = (string)($appConfig['smtp_username'] ?? ''); }
 if ($to === '') {
-  header('Location: /?page=settings&tab=email&email_err=' . urlencode('No recipient email available'));
+  if ($isAjax) {
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => false, 'error' => 'No recipient email available']);
+    exit;
+  }
+  header('Location: /?page=settings&tab=system&email_err=' . urlencode('No recipient email available'));
   exit;
 }
 
@@ -77,9 +86,15 @@ if (!$sent) {
   if (!$sent && $err === '') { $err = 'Email send failed'; }
 }
 
+if ($isAjax) {
+  header('Content-Type: application/json');
+  echo json_encode(['ok' => (bool)$sent, 'error' => $sent ? '' : (string)$err]);
+  exit;
+}
+
 if ($sent) {
-  header('Location: /?page=settings&tab=email&email_test=1');
+  header('Location: /?page=settings&tab=system&email_test=1');
 } else {
-  header('Location: /?page=settings&tab=email&email_err=' . urlencode($err));
+  header('Location: /?page=settings&tab=system&email_err=' . urlencode($err));
 }
 exit;

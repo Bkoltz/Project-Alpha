@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/app.php';
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><?php echo htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha'); ?> · Login</title>
+  <title><?php echo htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha'); ?> · Auth</title>
   <?php if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); } ?>
   <?php if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); } ?>
   <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf']); ?>">
