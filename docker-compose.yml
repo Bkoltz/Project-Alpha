@@ -10,8 +10,8 @@ services:
       MYSQL_PASSWORD: apppassword
       # start.sh uses MYSQL_ROOT_PASSWORD to ping MySQL as root for readiness
       MYSQL_ROOT_PASSWORD: rootpass
-      APP_AUTH_DISABLED: true
-      APP_VERBOSE_ERRORS: true
+      # APP_AUTH_DISABLED: true
+      # APP_VERBOSE_ERRORS: true
     depends_on:
       - db
     healthcheck:
@@ -21,11 +21,7 @@ services:
       start_period: 20s
       retries: 5
     restart: unless-stopped
-    # make the web update changes on refresh NOTE: not for production!
     volumes:
-      - ./public:/var/www/html
-      - ./src:/var/www/src
-      # Top two are not for production.
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
 

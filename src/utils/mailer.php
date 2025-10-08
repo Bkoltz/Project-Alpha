@@ -29,7 +29,16 @@ use PHPMailer\PHPMailer\Exception as PHPMailerException;
  * @param string|null $envelopeFrom Optional envelope sender override
  * @return array [bool ok, string error]
  */
-function mailer_send(array $cfg, string $to, string $subject, string $html, string $fromEmail, string $fromName = '', ?string $envelopeFrom = null): array
+function mailer_send(
+    array $cfg,
+    string $to,
+    string $subject,
+    string $html,
+    string $fromEmail,
+    string $fromName = '',
+    ?string $envelopeFrom = null,
+    array $attachments = [] // each: ['filename'=>string,'content'=>string,'mime'=>string]
+): array
 {
     if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
         return [false, 'PHPMailer not installed'];
@@ -71,6 +80,16 @@ function mailer_send(array $cfg, string $to, string $subject, string $html, stri
         $mail->Subject = $subject;
         $mail->Body = $html;
         $mail->AltBody = strip_tags(str_replace(['<br>','<br/>','<br />'], "\n", $html));
+
+        // Attachments
+        foreach ($attachments as $att) {
+            if (!is_array($att)) continue;
+            $filename = (string)($att['filename'] ?? 'attachment');
+            $content = (string)($att['content'] ?? '');
+            if ($content === '') continue;
+            $mime = (string)($att['mime'] ?? 'application/octet-stream');
+            $mail->addStringAttachment($content, $filename, 'base64', $mime);
+        }
 
         $mail->send();
         return [true, ''];

@@ -5,9 +5,10 @@ require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/smtp.php';
 require_once __DIR__ . '/../utils/logger.php';
+require_once __DIR__ . '/../utils/mailer.php';
 
-// PDF generation temporarily disabled (dompdf)
-$dompdfAvailable = false;
+// Determine if Dompdf is available
+$dompdfAvailable = is_file(__DIR__ . '/../../vendor/autoload.php');
 
 $type = $_POST['type'] ?? '';
 $id = (int)($_POST['id'] ?? 0);
@@ -54,13 +55,75 @@ try {
 
   $to = $row['email'];
 
+  // First name from client name
+  $clientName = trim((string)($row['name'] ?? ''));
+  $firstName = $clientName !== '' ? preg_split('/\s+/', $clientName)[0] : 'there';
+
+  // Build absolute URL
+  $host = $_SERVER['HTTP_HOST'] ?? '';
+  if ($host === '' && !empty($appConfig['app_host'])) { $host = (string)$appConfig['app_host']; }
+  if ($host === '') { $host = 'localhost'; }
+  $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+  $absoluteUrl = $scheme . '://' . $host . $printUrl;
+
   // Compose body
-  $body = '<p>Hello '.htmlspecialchars($row['name']).',</p>' .
-          '<p>Please find your document at the link below:</p>' .
-          '<p><a href="'.htmlspecialchars($printUrl).'">View Document</a></p>' .
+  $body = '<p>Hello '.htmlspecialchars($firstName).',</p>' .
+          '<p>Please find your document attached and available at the link below:</p>' .
+          '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>' .
           '<p>Thank you.</p>';
 
-  // Try SMTP if configured
+  // Optionally render PDF attachment using Dompdf
+  $attachments = [];
+  if ($dompdfAvailable) {
+    $autoload = __DIR__ . '/../../vendor/autoload.php';
+    if (is_file($autoload)) {
+      require_once $autoload;
+      if (!class_exists('Dompdf\\Cpdf')) {
+        $cpdf = __DIR__ . '/../../vendor/dompdf/dompdf/lib/Cpdf.php';
+        if (is_file($cpdf)) { require_once $cpdf; }
+      }
+      try {
+        $viewFile = null;
+        if ($type === 'quote') { $viewFile = __DIR__ . '/../views/pages/quote-print.php'; }
+        elseif ($type === 'contract') { $viewFile = __DIR__ . '/../views/pages/contract-print.php'; }
+        else { $viewFile = __DIR__ . '/../views/pages/invoice-print.php'; }
+        if (is_file($viewFile)) {
+          ob_start();
+          if (!defined('PDF_MODE')) define('PDF_MODE', true);
+          $_GET['id'] = (string)$id;
+          require $viewFile;
+          $content = ob_get_clean();
+
+          $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');
+          $html = "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Document - {$brand}</title>\n<style>\n  @page { margin: 72px 54px 72px 54px; }\n  body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 12px; color: #111; }\n</style>\n</head><body>" . $content . "</body></html>";
+
+          $options = new Dompdf\Options();
+          $options->set('isRemoteEnabled', true);
+          $options->set('isHtml5ParserEnabled', true);
+          $projectRoot = realpath(__DIR__ . '/..' . '/..');
+          if ($projectRoot) { $options->set('chroot', $projectRoot); }
+          $dompdf = new Dompdf\Dompdf($options);
+          if ($projectRoot) {
+            $publicDir = realpath($projectRoot . DIRECTORY_SEPARATOR . 'public');
+            if ($publicDir) { $dompdf->setBasePath($publicDir); } else { $dompdf->setBasePath($projectRoot); }
+          }
+          $dompdf->setProtocol('file://');
+          $dompdf->loadHtml($html, 'UTF-8');
+          $dompdf->setPaper('letter', 'portrait');
+          $dompdf->render();
+          $pdfBinary = $dompdf->output();
+          $prefix = $type === 'quote' ? 'quote_Q-' : ($type === 'contract' ? 'contract_C-' : 'invoice_I-');
+          $filename = $prefix . ($docnum ?: $id) . '.pdf';
+          $attachments[] = ['filename'=>$filename, 'content'=>$pdfBinary, 'mime'=>'application/pdf'];
+        }
+      } catch (Throwable $e) {
+        // If PDF fails, continue sending without attachment
+        app_log('email', 'pdf attach failed', ['type'=>$type, 'id'=>$id, 'ex'=>$e->getMessage()]);
+      }
+    }
+  }
+
+  // Try PHPMailer first (supports attachments), else fallback to SMTP client, else mail()
   $smtpHost = $appConfig['smtp_host'] ?? null;
   $fromEmail = $appConfig['from_email'] ?? '';
   $fromName = $appConfig['from_name'] ?? 'Project Alpha';
@@ -86,12 +149,19 @@ try {
       'username' => $username,
       'password' => $pass,
     ];
-    [$ok, $msg] = smtp_send($cfg, $to, $subject, $body, $fromEmail, $fromName);
+
+    // Prefer PHPMailer if available
+    [$ok, $msg] = mailer_send($cfg, $to, $subject, $body, $fromEmail, $fromName, ($username ?: $fromEmail), $attachments);
+    if (!$ok) {
+      // Fallback minimal SMTP without attachments
+      [$ok2, $msg2] = smtp_send($cfg, $to, $subject, $body, $fromEmail, $fromName, ($username ?: $fromEmail));
+      $ok = $ok2; $msg = $ok2 ? '' : ($msg2 ?: $msg);
+    }
     $sent = $ok; $err = $ok ? '' : ($msg ?: 'SMTP send failed');
   }
 
   if (!$sent) {
-    // Fallback: PHP mail()
+    // Fallback: PHP mail() without attachment
     $headers = "MIME-Version: 1.0\r\n" .
                "Content-type: text/html; charset=UTF-8\r\n" .
                "From: ".($fromName?($fromName.' <'.$fromEmail.'>'):$fromEmail)."\r\n";
