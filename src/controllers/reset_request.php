@@ -61,8 +61,9 @@ if ($uid > 0) {
     $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
     $fromName = (string)($appConfig['from_name'] ?? $brand);
 
+    $scheme = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')) ? 'https' : 'http';
     $link = sprintf('%s://%s/?page=reset-verify&email=%s&token=%s',
-      (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http',
+      $scheme,
       $_SERVER['HTTP_HOST'] ?? 'localhost',
       rawurlencode($email), rawurlencode($token)
     );
