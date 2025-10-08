@@ -28,7 +28,6 @@ services:
       # Top two are not for production.
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
-      - ./vendor:/var/www/vendor
 
   db:
     image: "mysql:8"

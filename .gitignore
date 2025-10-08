@@ -1,11 +1,12 @@
 # Ignore specific vendor library that appears untracked
 # /vendor/phenx/php-font-lib/
-/vendor/*/.git
-/vendor/*/.github
-/vendor/*/.gitignore
-/vendor/*/.gitattributes
-/vendor/*/.gitmodules
-/vendor/*/*/.github
+# /vendor/*/.git
+# /vendor/*/.github
+# /vendor/*/.gitignore
+# /vendor/*/.gitattributes
+# /vendor/*/.gitmodules
+# /vendor/*/*/.github
+/vendor/
 
 # OS artifacts (Windows/macOS)
 Thumbs.db
