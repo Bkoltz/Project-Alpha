@@ -36,20 +36,24 @@ if ($uid > 0) {
       user_id INT NOT NULL,
       token VARCHAR(64) NOT NULL,
       expires_at DATETIME NOT NULL,
+      attempts TINYINT(1) NOT NULL DEFAULT 0,
       used TINYINT(1) NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_resets_user (user_id),
       INDEX idx_resets_token (token),
       CONSTRAINT fk_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+    // Ensure attempts column exists in case of older installs
+    try { $pdo->exec("ALTER TABLE password_resets ADD COLUMN attempts TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $e) { /* ignore exists */ }
   } catch (Throwable $e) { /* ignore */ }
 
   try {
     // Invalidate any old tokens for this user
     $pdo->prepare('UPDATE password_resets SET used=1 WHERE user_id=? AND used=0')->execute([$uid]);
 
-    $token = bin2hex(random_bytes(16));
-    $exp = date('Y-m-d H:i:s', time() + 5*60); // 5 minutes
+    // Generate 6-digit numeric code
+    $token = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $exp = date('Y-m-d H:i:s', time() + 10*60); // 10 minutes
     $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?,?)')->execute([$uid, $token, $exp]);
 
     // Compose email
@@ -64,9 +68,9 @@ if ($uid > 0) {
     );
 
     $subject = $brand . ' password reset';
-    $html = '<p>Here is your one-time reset code (valid for 5 minutes):</p>'
-          . '<p style="font-size:18px;font-weight:700">' . htmlspecialchars($token) . '</p>'
-          . '<p>You can paste it on the reset page, or click the link below:</p>'
+    $html = '<p>Here is your one-time reset code (valid for 10 minutes):</p>'
+          . '<p style="font-size:22px;font-weight:800;letter-spacing:3px">' . htmlspecialchars($token) . '</p>'
+          . '<p>Go to the code entry page below and enter the 6-digit code:</p>'
           . '<p><a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';
 
     $cfg = [
@@ -99,5 +103,5 @@ if ($uid > 0) {
   }
 }
 
-header('Location: /?page=reset-password&sent=1');
+header('Location: /?page=reset-verify&email=' . urlencode($email) . '&sent=1');
 exit;
