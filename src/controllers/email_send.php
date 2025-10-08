@@ -102,6 +102,7 @@ try {
   $body = '<p>Hello '.htmlspecialchars($firstName).',</p>' .
           '<p>Please find your document attached and available at the link below:</p>' .
           '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>' .
+          '<p>This link will expire in 14 days. Do not share this link with untrusted parties!</p>' .
           '<p>Thank you.</p>';
 
   // Optionally render PDF attachment using Dompdf
@@ -143,6 +144,15 @@ try {
           $dompdf->loadHtml($html, 'UTF-8');
           $dompdf->setPaper('letter', 'portrait');
           $dompdf->render();
+          // Add footer: powered-by text bottom-left on every page
+          try {
+            $canvas = $dompdf->getCanvas();
+            $font = $dompdf->getFontMetrics()->getFont('Helvetica', 'normal');
+            $h = $canvas->get_height();
+            $canvas->page_text(54, $h - 30, 'Powered by Project Alpha', $font, 10, [0,0,0]);
+          } catch (Throwable $bt) {
+            // ignore footer failures and continue
+          }
           $pdfBinary = $dompdf->output();
           $prefix = $type === 'quote' ? 'quote_Q-' : ($type === 'contract' ? 'contract_C-' : 'invoice_I-');
           $filename = $prefix . ($docnum ?: $id) . '.pdf';
