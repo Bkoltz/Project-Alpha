@@ -17,6 +17,10 @@ try {
 $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
 ?>
 
+<style>
+  body { background: #0b1220 url('/assets/IMG_0342.JPG') no-repeat right bottom fixed; background-size: cover; }
+  .photo-credit { position: fixed; right: 10px; bottom: 10px; color: rgba(255,255,255,0.9); font-size: 12px; background: rgba(0,0,0,0.35); padding: 4px 8px; border-radius: 6px; }
+</style>
 <main>
   <div class="auth-wrap">
     <h1 style="margin:0 0 12px"><?php echo $noUsers ? 'Set up admin user' : 'Sign in'; ?></h1>
@@ -60,6 +64,7 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       </div>
     </form>
   </div>
+  <div class="photo-credit">Photo: Ledge Top Drone Services</div>
 </main>
 
 </body>
