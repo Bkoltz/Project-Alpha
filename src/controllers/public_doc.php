@@ -4,6 +4,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/csrf.php';
 
 $token = isset($_GET['token']) ? (string)$_GET['token'] : '';
 if ($token === '') {
@@ -26,6 +27,15 @@ try {
   $_GET['id'] = (string)$rid;
 
   // Render the appropriate print view in-place
+  // Optional notice banners
+  $notice = isset($_GET['ok']) && $_GET['ok'] === '1';
+  $err = isset($_GET['error']) ? (string)$_GET['error'] : '';
+
+  echo '<style>.public-doc-wrap{max-width:816px;margin:24px auto;padding:0 16px}.notice{margin:10px 0;padding:10px 12px;border-radius:8px}.n-ok{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}.n-err{background:#fff1f2;color:#881337;border:1px solid #fca5a5}</style>';
+  echo '<div class="public-doc-wrap">';
+  if ($notice) { echo '<div class="notice n-ok">Thank you! Your response has been recorded.</div>'; }
+  if ($err) { echo '<div class="notice n-err">'.htmlspecialchars($err).'</div>'; }
+
   if ($type === 'quote') {
     require __DIR__ . '/../views/pages/quote-print.php';
   } elseif ($type === 'contract') {
@@ -35,6 +45,27 @@ try {
   } else {
     throw new Exception('badtype');
   }
+
+  // For quotes only, render Approve / Deny actions
+  if ($type === 'quote') {
+    $csrf = csrf_token();
+    echo '<div style="margin-top:16px;display:flex;gap:8px">';
+    echo '<form method="post" action="/?page=public-quote-action">'
+       . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'
+       . '<input type="hidden" name="token" value="'.htmlspecialchars($token).'">'
+       . '<input type="hidden" name="action" value="approve">'
+       . '<button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#16a34a;color:#fff">Approve</button>'
+       . '</form>';
+    echo '<form method="post" action="/?page=public-quote-action">'
+       . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'
+       . '<input type="hidden" name="token" value="'.htmlspecialchars($token).'">'
+       . '<input type="hidden" name="action" value="deny">'
+       . '<button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#ef4444;color:#fff">Deny</button>'
+       . '</form>';
+    echo '</div>';
+  }
+
+  echo '</div>';
 } catch (Throwable $e) {
   http_response_code(404);
   echo '<main><div class="auth-wrap"><h1>Link expired</h1><p>This link has expired or is no longer valid. Please contact us for a new link.</p></div></main>';

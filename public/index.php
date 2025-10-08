@@ -65,7 +65,7 @@ if ($page === 'logout') {
 }
 
 // Allow unauthenticated access only to explicit public pages
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'public-doc'];
+$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -144,8 +144,9 @@ if ($page === 'invoice-pdf') {
 
 // Handle POST actions (PRG pattern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Enforce CSRF on all POST endpoints except the dedicated auth handler
-    if ($page !== 'auth') { csrf_verify_post_or_redirect($page); }
+    // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
+    $skipCsrfFor = ['auth','reset-request','reset-verify','reset-update','public-quote-action'];
+    if (!in_array($page, $skipCsrfFor, true)) { csrf_verify_post_or_redirect($page); }
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
@@ -161,6 +162,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'reset-update') {
         require_once __DIR__ . '/../src/controllers/reset_update.php';
+        exit;
+    }
+    if ($page === 'public-quote-action') {
+        require_once __DIR__ . '/../src/controllers/public_quote_action.php';
         exit;
     }
     if ($page === 'api-keys-create') {
