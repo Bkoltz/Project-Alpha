@@ -201,6 +201,20 @@ CREATE TABLE IF NOT EXISTS project_meta (
 SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='project_meta' AND COLUMN_NAME='terms');
 SET @sql := IF(@exists=0, 'ALTER TABLE project_meta ADD COLUMN terms TEXT NULL AFTER notes', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Password reset tokens (idempotent create)
+CREATE TABLE IF NOT EXISTS password_resets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token VARCHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_resets_user (user_id),
+  INDEX idx_resets_token (token),
+  CONSTRAINT fk_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Shared document number across quotes/contracts/invoices
 -- Use IF NOT EXISTS where supported; otherwise fall back to INFORMATION_SCHEMA checks above.
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS doc_number INT NULL;

@@ -21,7 +21,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
       <a href="/?page=settings&tab=system" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='system'?'background:#f8fafc;font-weight:600':''; ?>">System</a>
       <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='terms'?'background:#f8fafc;font-weight:600':''; ?>">Terms & Conditions</a>
       <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab==='billing'?'background:#f8fafc;font-weight:600':''; ?>">Billing</a>
-      <a href="/?page=account" style="display:block;padding:10px 12px;">Account</a>
+      <a href="/?page=settings&tab=account" style="display:block;padding:10px 12px;<?php echo $tab==='account'?'background:#f8fafc;font-weight:600':''; ?>">Account</a>
     </aside>
 
     <div>
@@ -43,18 +43,6 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
                 <div style="margin:8px 0"><img alt="Current logo" src="<?php echo htmlspecialchars($appConfig['logo_path']); ?>" style="max-width:240px;max-height:120px;object-fit:contain;border-radius:6px;background:#fff;padding:8px"></div>
               <?php endif; ?>
               <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp">
-            </div>
-
-            <div style="margin-top:12px">
-              <label>
-                <div>Time Zone</div>
-                <?php $tz = (string)($appConfig['timezone'] ?? 'UTC'); $zones = \DateTimeZone::listIdentifiers(); ?>
-                <select name="timezone" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-                  <?php foreach ($zones as $z): ?>
-                    <option value="<?php echo htmlspecialchars($z); ?>" <?php echo $z===$tz?'selected':''; ?>><?php echo htmlspecialchars($z); ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </label>
             </div>
           </fieldset>
         <?php endif; ?>
@@ -90,6 +78,35 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
                 <?php endforeach; ?>
               </select>
             </label>
+          </fieldset>
+        <?php endif; ?>
+
+<?php if ($tab==='account'): ?>
+          <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;max-width:600px">
+            <legend style="padding:0 6px;color:var(--muted)">Account</legend>
+            <?php if (!empty($_GET['pwd']) && $_GET['pwd']==='1'): ?>
+              <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Password updated.</div>
+            <?php elseif (!empty($_GET['pwd_error'])): ?>
+              <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($_GET['pwd_error']); ?></div>
+            <?php endif; ?>
+            <input type="hidden" name="change_password" value="1">
+            <div style="display:grid;gap:12px">
+              <label>
+                <div>Current Password</div>
+                <input required type="password" name="current_password" autocomplete="current-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              </label>
+              <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+                <label>
+                  <div>New Password</div>
+                  <input required minlength="8" type="password" name="new_password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                </label>
+                <label>
+                  <div>Confirm New Password</div>
+                  <input required minlength="8" type="password" name="confirm_password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                </label>
+              </div>
+              <div style="color:var(--muted);font-size:12px">Click Save below to update your password.</div>
+            </div>
           </fieldset>
         <?php endif; ?>
 
@@ -143,7 +160,8 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
             </div>
             <p style="margin:6px 0 0;color:var(--muted);font-size:12px">For Gmail: host smtp.gmail.com, port 587 (TLS) or 465 (SSL); use an App Password (not your normal password).</p>
             <div style="margin-top:12px">
-              <button type="submit" formaction="/?page=email-test" formmethod="post" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Send Test Email</button>
+              <button type="button" id="btnEmailTest" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Send Test Email</button>
+              <div id="emailTestResult" style="margin-top:8px;font-size:13px"></div>
             </div>
           </fieldset>
         <?php endif; ?>
@@ -155,4 +173,31 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
       </form>
     </div>
   </div>
+<?php if ($tab==='system'): ?>
+<script>
+(function(){
+  var btn = document.getElementById('btnEmailTest');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    var form = btn.closest('form');
+    var out = document.getElementById('emailTestResult');
+    if(out){ out.textContent = 'Sending test email...'; out.style.color = '#334155'; }
+    var fd = new FormData();
+    function val(name){ var el = form.querySelector('[name="'+name+'"]'); return el ? el.value : ''; }
+    fd.append('ajax', '1');
+    fd.append('csrf', (document.querySelector('meta[name="csrf-token"]')||{}).content||'');
+    ['smtp_host','smtp_port','smtp_secure','smtp_username','smtp_password','from_email'].forEach(function(k){ fd.append(k, val(k)); });
+    fetch('/?page=email-test', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if(out){
+          if(j && j.ok){ out.textContent = 'Test email sent.'; out.style.color = '#065f46'; }
+          else { out.textContent = 'Test email failed' + (j && j.error ? (': ' + j.error) : ''); out.style.color = '#b91c1c'; }
+        }
+      })
+      .catch(function(err){ if(out){ out.textContent = 'Test email failed'; out.style.color = '#b91c1c'; } });
+  });
+})();
+</script>
+<?php endif; ?>
 </section>

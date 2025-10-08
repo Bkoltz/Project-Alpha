@@ -26,6 +26,9 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
     <?php if (!$noUsers && !empty($_GET['created'])): ?>
       <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Account created. Please sign in.</div>
     <?php endif; ?>
+    <?php if (!$noUsers && !empty($_GET['pwd_reset'])): ?>
+      <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Password updated. Please sign in.</div>
+    <?php endif; ?>
 
     <form method="post" action="/?page=auth" style="display:grid;gap:12px">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
@@ -47,10 +50,13 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       <?php else: ?>
         <!-- Remember me temporarily disabled -->
       <?php endif; ?>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
         <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">
           <?php echo $noUsers ? 'Create Admin' : 'Sign In'; ?>
         </button>
+        <?php if (!$noUsers): ?>
+          <a href="/?page=reset-password" style="font-size:13px;color:#0369a1;text-decoration:underline">Forgot your password?</a>
+        <?php endif; ?>
       </div>
     </form>
   </div>

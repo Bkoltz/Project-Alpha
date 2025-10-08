@@ -65,7 +65,7 @@ if ($page === 'logout') {
 }
 
 // Allow unauthenticated access only to explicit public pages
-$publicPages = ['login', 'serve-upload'];
+$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -118,11 +118,11 @@ if ($page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
     exit;
 }
-// If someone lands on email-test via GET (e.g., CSRF redirect), send them back to Settings -> Email
+// If someone lands on email-test via GET (e.g., CSRF redirect), send them back to Settings -> System (email section)
 if ($page === 'email-test' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     $suffix = '';
     if (!empty($_GET['error'])) { $suffix = '&email_err=' . rawurlencode((string)$_GET['error']); }
-    header('Location: /?page=settings&tab=email' . $suffix);
+    header('Location: /?page=settings&tab=system' . $suffix);
     exit;
 }
 if ($page === 'serveupload' || $page === 'serve-upload') {
@@ -149,6 +149,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
+        exit;
+    }
+    if ($page === 'reset-request') {
+        require_once __DIR__ . '/../src/controllers/reset_request.php';
+        exit;
+    }
+    if ($page === 'reset-verify') {
+        require_once __DIR__ . '/../src/controllers/reset_verify.php';
         exit;
     }
     if ($page === 'api-keys-create') {
@@ -253,10 +261,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Standalone login page uses a minimal top header
+// Standalone login and reset pages use a minimal top header
 if ($page === 'login') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/views/pages/login.php';
+    exit;
+}
+if ($page === 'reset-password') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/reset-password.php';
+    exit;
+}
+if ($page === 'reset-verify' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/reset-verify.php';
     exit;
 }
 

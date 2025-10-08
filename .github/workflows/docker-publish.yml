@@ -105,3 +105,15 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: bkoltz/project-alpha:latest
+          format: table
+          output: trivy-report.txt
+          exit-code: '0'          # don’t fail the build, just report
+          ignore-unfixed: true    # ignore issues without upstream fixes
+          vuln-type: 'os,library' # scan both OS packages and PHP libs
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
