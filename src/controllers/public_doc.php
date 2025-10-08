@@ -46,23 +46,33 @@ echo '<style>.public-doc-wrap{max-width:816px;margin:24px auto;padding:0 16px 96
     throw new Exception('badtype');
   }
 
-  // For quotes only, render Approve / Deny actions
+  // For quotes only, render Approve / Deny actions when status is pending
   if ($type === 'quote') {
-    $csrf = csrf_token();
-    echo '<div style=\"margin:16px 0 64px;display:flex;gap:8px\">';
-    echo '<form method="post" action="/?page=public-quote-action">'
-       . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'
-       . '<input type="hidden" name="token" value="'.htmlspecialchars($token).'">'
-       . '<input type="hidden" name="action" value="approve">'
-       . '<button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#16a34a;color:#fff">Approve</button>'
-       . '</form>';
-    echo '<form method="post" action="/?page=public-quote-action">'
-       . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'
-       . '<input type="hidden" name="token" value="'.htmlspecialchars($token).'">'
-       . '<input type="hidden" name="action" value="deny">'
-       . '<button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#ef4444;color:#fff">Deny</button>'
-       . '</form>';
-    echo '</div>';
+    $showActions = false;
+    try {
+      $qs = $pdo->prepare('SELECT status FROM quotes WHERE id=? LIMIT 1');
+      $qs->execute([$rid]);
+      $status = (string)($qs->fetchColumn() ?: '');
+      if ($status === 'pending') { $showActions = true; }
+    } catch (Throwable $e) { /* ignore */ }
+
+    if ($showActions) {
+      $csrf = csrf_token();
+      echo '<div style="margin:16px 0 64px; display:flex; gap:8px">';
+      echo '<form method="post" action="/?page=public-quote-action">'
+         . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'
+         . '<input type="hidden" name="token" value="'.htmlspecialchars($token).'">'
+         . '<input type="hidden" name="action" value="approve">'
+         . '<button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#16a34a;color:#fff">Approve</button>'
+         . '</form>';
+      echo '<form method="post" action="/?page=public-quote-action">'
+         . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'
+         . '<input type="hidden" name="token" value="'.htmlspecialchars($token).'">'
+         . '<input type="hidden" name="action" value="deny">'
+         . '<button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#ef4444;color:#fff">Deny</button>'
+         . '</form>';
+      echo '</div>';
+    }
   }
 
   echo '</div>';
