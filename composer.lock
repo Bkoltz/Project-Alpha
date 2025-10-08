@@ -45,6 +45,7 @@
             "autoload": {
                 "psr-4": {
                     "Dompdf\\": "src/"
+                }
             },
             "notification-url": "https://packagist.org/downloads/",
             "license": [
