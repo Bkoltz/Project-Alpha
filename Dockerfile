@@ -54,6 +54,9 @@ COPY --from=vendor /app/vendor /var/www/vendor
 RUN chown -R www-data:www-data /var/www/html /var/www/src /var/www/vendor \
     && chmod -R 755 /var/www/html /var/www/src /var/www/vendor
 
+# RUN chown -R www-data:www-data /var/www/config && chmod -R 755 /var/www/config
+
+
 # Entry script
 WORKDIR /var/www
 COPY ./docker/start.sh /usr/local/bin/start.sh
