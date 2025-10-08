@@ -112,7 +112,8 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['tab']) : '
 
         <?php if ($tab==='terms'): ?>
           <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-            <legend style="padding:0 6px;color:var(--muted)">Terms & Conditions (used in Quotes and Contracts)</legend>
+            <legend style="padding:0 6px;color:var(--muted)">Terms & Conditions</legend>
+            <label style="display:block;margin-bottom:8px"><input type="checkbox" name="quotes_show_terms" value="1" <?php echo (!isset($appConfig['quotes_show_terms']) || (int)($appConfig['quotes_show_terms'])===1) ? 'checked' : ''; ?>> Show terms on Quotes</label>
             <textarea name="terms" rows="12" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Enter your terms..."><?php echo htmlspecialchars($appConfig['terms'] ?? ''); ?></textarea>
           </fieldset>
         <?php endif; ?>

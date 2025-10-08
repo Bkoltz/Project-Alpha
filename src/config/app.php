@@ -22,7 +22,8 @@ $appConfig = [
     // Terms for contracts
     'terms' => null,
     'net_terms_days' => 30,
-    'payment_methods' => ['card','cash','bank_transfer'],
+'payment_methods' => ['card','cash','bank_transfer'],
+    'quotes_show_terms' => 1,
     // App preferences
     'timezone' => 'UTC',
     // SMTP (may be present from settings)

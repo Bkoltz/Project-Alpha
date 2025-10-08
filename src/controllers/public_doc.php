@@ -49,7 +49,7 @@ try {
   // For quotes only, render Approve / Deny actions
   if ($type === 'quote') {
     $csrf = csrf_token();
-    echo '<div style="margin-top:16px;display:flex;gap:8px">';
+    echo '<div style=\"margin:16px 0 64px;display:flex;gap:8px\">';
     echo '<form method="post" action="/?page=public-quote-action">'
        . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'
        . '<input type="hidden" name="token" value="'.htmlspecialchars($token).'">'
