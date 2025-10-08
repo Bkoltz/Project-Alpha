@@ -34,98 +34,102 @@ try {
   $quote = $q->fetch(PDO::FETCH_ASSOC);
   if (!$quote) { throw new Exception('nofile'); }
 
+  $changed = false;
   if ($action === 'deny') {
-    // Deny quote
-    $pdo->prepare('UPDATE quotes SET status="rejected" WHERE id=?')->execute([$qid]);
+    if ((string)$quote['status'] === 'pending') {
+      $pdo->prepare('UPDATE quotes SET status="rejected" WHERE id=?')->execute([$qid]);
+      $changed = true;
+    }
   } else {
-    // Approve quote by reusing core logic from quote_approve
-    // We copy the minimal sequence to avoid auth requirements
-    $pdo->beginTransaction();
-    try {
-      if ($quote['status'] !== 'pending') { throw new Exception('notpending'); }
+    if ((string)$quote['status'] === 'pending') {
+      // Approve quote by reusing minimal sequence
+      $pdo->beginTransaction();
+      try {
+        // Load items
+        $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
+        $items->execute([$qid]);
+        $qitems = $items->fetchAll(PDO::FETCH_ASSOC);
 
-      // Load items
-      $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
-      $items->execute([$qid]);
-      $qitems = $items->fetchAll(PDO::FETCH_ASSOC);
+        // Ensure project_code
+        $projectCode = $quote['project_code'] ?? null;
+        if (!$projectCode) {
+          $projectCode = 'PA-' . date('Y') . '-' . str_pad((string)$qid, 4, '0', STR_PAD_LEFT);
+          $pdo->prepare('UPDATE quotes SET project_code=? WHERE id=?')->execute([$projectCode, $qid]);
+        }
 
-      // Ensure project_code
-      $projectCode = $quote['project_code'] ?? null;
-      if (!$projectCode) {
-        // Fallback simple project code if helper not available here
-        $projectCode = 'PA-' . date('Y') . '-' . str_pad((string)$qid, 4, '0', STR_PAD_LEFT);
-        $pdo->prepare('UPDATE quotes SET project_code=? WHERE id=?')->execute([$projectCode, $qid]);
+        // Mark approved
+        $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$qid]);
+
+        // Create contract (pending)
+        $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code) VALUES (?,?,?,?,?,?,?,?,?)')
+           ->execute([$qid, (int)$quote['client_id'], 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode]);
+        $contract_id = (int)$pdo->lastInsertId();
+
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
+        foreach ($qitems as $it) { $ci->execute([$contract_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
+
+        // Create invoice (unpaid)
+        $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+           ->execute([$contract_id, $qid, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode]);
+        $invoice_id = (int)$pdo->lastInsertId();
+
+        $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
+        foreach ($qitems as $it) { $ii->execute([$invoice_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
+
+        // Assign doc_numbers
+        $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts')->fetchColumn();
+        $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+        $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+        $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
+
+        $pdo->commit();
+        $changed = true;
+      } catch (Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        // Do not treat as fatal for the public UX; we'll still redirect with error below
+        throw $e;
       }
-
-      // Mark approved
-      $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$qid]);
-
-      // Create contract (pending)
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code) VALUES (?,?,?,?,?,?,?,?,?)')
-         ->execute([$qid, (int)$quote['client_id'], 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode]);
-      $contract_id = (int)$pdo->lastInsertId();
-
-      $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
-      foreach ($qitems as $it) { $ci->execute([$contract_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
-
-      // Create invoice (unpaid)
-      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-         ->execute([$contract_id, $qid, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode]);
-      $invoice_id = (int)$pdo->lastInsertId();
-
-      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
-      foreach ($qitems as $it) { $ii->execute([$invoice_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
-
-      // Assign doc_numbers
-      $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts')->fetchColumn();
-      $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
-      $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
-      $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
-
-      $pdo->commit();
-    } catch (Throwable $e) {
-      if ($pdo->inTransaction()) { $pdo->rollBack(); }
-      throw $e;
     }
   }
 
-  // Email admin
-  $adminEmail = '';
-  try { $adminEmail = (string)($pdo->query("SELECT email FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1")->fetchColumn() ?: ''); } catch (Throwable $e) {}
-  if ($adminEmail === '') { $adminEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost'); }
+  // Email admin only if status changed via public link
+  if ($changed) {
+    $adminEmail = '';
+    try { $adminEmail = (string)($pdo->query("SELECT email FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1")->fetchColumn() ?: ''); } catch (Throwable $e) {}
+    if ($adminEmail === '') { $adminEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost'); }
 
-  if ($adminEmail !== '') {
-    $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
-    $subject = sprintf('[%s] Client %s %s quote Q-%s', $brand, (string)$quote['client_name'], $action === 'approve' ? 'approved' : 'denied', (string)($quote['doc_number'] ?? $quote['id']));
-    $project = (string)($quote['project_code'] ?? '');
-    $html = sprintf('<p>Client <strong>%s</strong> has %s quote <strong>Q-%s</strong>%s.</p><p>See changes in the app.</p>',
-      htmlspecialchars((string)$quote['client_name']),
-      $action === 'approve' ? 'approved' : 'denied',
-      htmlspecialchars((string)($quote['doc_number'] ?? $quote['id'])),
-      $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : ''
-    );
+    if ($adminEmail !== '') {
+      $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
+      $subject = sprintf('[%s] Client %s %s quote Q-%s', $brand, (string)$quote['client_name'], $action === 'approve' ? 'approved' : 'denied', (string)($quote['doc_number'] ?? $quote['id']));
+      $project = (string)($quote['project_code'] ?? '');
+      $html = sprintf('<p>Client <strong>%s</strong> has %s quote <strong>Q-%s</strong>%s via the public link.</p><p>See changes in the app.</p>',
+        htmlspecialchars((string)$quote['client_name']),
+        $action === 'approve' ? 'approved' : 'denied',
+        htmlspecialchars((string)($quote['doc_number'] ?? $quote['id'])),
+        $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : ''
+      );
 
-    $cfg = [
-      'host' => (string)($appConfig['smtp_host'] ?? ''),
-      'port' => (int)($appConfig['smtp_port'] ?? 587),
-      'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-      'username' => (string)($appConfig['smtp_username'] ?? ''),
-      'password' => (string)(isset($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc']) ? (crypto_decrypt($appConfig['smtp_password_enc']) ?: '') : ''),
-    ];
-    $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-    $fromName = (string)($appConfig['from_name'] ?? $brand);
-    $envFrom = $fromEmail;
-    if (strtolower($cfg['host'] ?? '') === 'smtp.gmail.com' && !empty($cfg['username'])) { $envFrom = $cfg['username']; }
-    if (!empty($cfg['host'])) {
-      [$ok, $err] = mailer_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, $envFrom);
-      if (!$ok) { smtp_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, $envFrom); }
-    } else {
-      $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: ".$fromName.' <'.$fromEmail.'>'."\r\n";
-      @mail($adminEmail, $subject, $html, $headers);
+      $cfg = [
+        'host' => (string)($appConfig['smtp_host'] ?? ''),
+        'port' => (int)($appConfig['smtp_port'] ?? 587),
+        'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
+        'username' => (string)($appConfig['smtp_username'] ?? ''),
+        'password' => (string)(isset($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc']) ? (crypto_decrypt($appConfig['smtp_password_enc']) ?: '') : ''),
+      ];
+      $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
+      $fromName = (string)($appConfig['from_name'] ?? $brand);
+      $envFrom = $fromEmail;
+      if (strtolower($cfg['host'] ?? '') === 'smtp.gmail.com' && !empty($cfg['username'])) { $envFrom = $cfg['username']; }
+      if (!empty($cfg['host'])) {
+        try { [$ok, $err] = mailer_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, $envFrom); if (!$ok) { smtp_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, $envFrom); } } catch (Throwable $e) { /* ignore email errors */ }
+      } else {
+        $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: ".$fromName.' <'.$fromEmail.'>'."\r\n";
+        @mail($adminEmail, $subject, $html, $headers);
+      }
     }
   }
 
-  // Redirect back to public view with success notice
+  // Redirect back to public view with success notice always (even if no change due to non-pending)
   header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&ok=1');
   exit;
 } catch (Throwable $e) {

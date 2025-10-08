@@ -12,6 +12,11 @@ if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $csrf)) {
 
 $email = trim((string)($_POST['email'] ?? ''));
 $token = trim((string)($_POST['token'] ?? ''));
+// Normalize token: allow users to enter with spaces/dashes; prefer 6-digit numeric if applicable
+$numeric = preg_replace('/\D+/', '', $token);
+if (is_string($numeric) && strlen($numeric) === 6) {
+  $token = $numeric;
+}
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $token === '') {
   header('Location: /?page=reset-verify&email=' . urlencode($email) . '&error=' . urlencode('Enter your email and code'));
