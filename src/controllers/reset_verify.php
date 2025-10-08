@@ -2,6 +2,7 @@
 // src/controllers/reset_verify.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/logger.php';
 
 // CSRF check
 $csrf = (string)($_POST['csrf'] ?? '');
@@ -50,12 +51,20 @@ try {
   if (!$row) { throw new Exception('badtoken'); }
   $rid = (int)$row['id'];
   $stored = (string)($row['token'] ?? '');
+  // Normalize stored token similarly to user input: remove non-digits
   $storedNorm = preg_replace('/\D+/', '', $stored);
+  // Also accept tokens that may have been stored with spaces/dashes
+  $storedAlt = preg_replace('/\s+|-/', '', $stored);
   $attempts = $hasAttempts ? (int)($row['attempts'] ?? 0) : 0;
   if ((int)$row['used'] === 1) { throw new Exception('used'); }
   if (strtotime((string)$row['expires_at']) < time()) { throw new Exception('expired'); }
   if ($hasAttempts && $attempts >= 3) { throw new Exception('locked'); }
-  if (!hash_equals((string)$token, (string)$stored) && !($storedNorm && hash_equals((string)$token, (string)$storedNorm))) {
+  $okMatch = false;
+  if (hash_equals((string)$token, (string)$stored)) { $okMatch = true; }
+  if (!$okMatch && $storedNorm && hash_equals((string)$token, (string)$storedNorm)) { $okMatch = true; }
+  if (!$okMatch && $storedAlt && hash_equals((string)$token, (string)$storedAlt)) { $okMatch = true; }
+  if (!$okMatch) {
+    app_log('auth', 'reset token mismatch', ['email'=>$email, 'submitted'=>$token, 'stored'=>$stored, 'storedNorm'=>$storedNorm]);
     throw new Exception('badtoken');
   }
 

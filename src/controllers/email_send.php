@@ -144,14 +144,21 @@ try {
           $dompdf->loadHtml($html, 'UTF-8');
           $dompdf->setPaper('letter', 'portrait');
           $dompdf->render();
-          // Add footer: powered-by text bottom-left on every page
+          // Add header (date + page X of Y) and footer: powered-by text on every page
           try {
             $canvas = $dompdf->getCanvas();
             $font = $dompdf->getFontMetrics()->getFont('Helvetica', 'normal');
+            // Header: date at top-left, page X of Y at top-right
+            $w = $canvas->get_width();
+            $dateStr = date('m/d/Y');
+            $canvas->page_text(54, 22, $dateStr, $font, 10, [0,0,0]);
+            $pageText = 'Page {PAGE_NUM} of {PAGE_COUNT}';
+            $canvas->page_text($w - 140, 22, $pageText, $font, 10, [0,0,0]);
+            // Footer
             $h = $canvas->get_height();
             $canvas->page_text(54, $h - 30, 'Powered by Project Alpha', $font, 10, [0,0,0]);
           } catch (Throwable $bt) {
-            // ignore footer failures and continue
+            // ignore canvas failures and continue sending without header/footer
           }
           $pdfBinary = $dompdf->output();
           $prefix = $type === 'quote' ? 'quote_Q-' : ($type === 'contract' ? 'contract_C-' : 'invoice_I-');

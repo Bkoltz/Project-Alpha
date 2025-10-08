@@ -133,7 +133,23 @@ try {
   header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&ok=1');
   exit;
 } catch (Throwable $e) {
+  // If an exception occurred after we updated the quote status (e.g. while creating contract/invoice),
+  // prefer to show the user success if the quote actually changed. This avoids confusing the client
+  // when backend follow-up tasks fail but the primary action succeeded.
   $t = isset($_POST['token']) ? (string)$_POST['token'] : '';
+  try {
+    if (isset($qid) && $qid > 0) {
+      $chk = $pdo->prepare('SELECT status FROM quotes WHERE id=? LIMIT 1');
+      $chk->execute([$qid]);
+      $s = (string)($chk->fetchColumn() ?: '');
+      if ($s === 'approved' || $s === 'rejected') {
+        header('Location: /?page=public-doc&token=' . rawurlencode($t) . '&ok=1');
+        exit;
+      }
+    }
+  } catch (Throwable $_e) {
+    // ignore and fallthrough to generic error
+  }
   header('Location: /?page=public-doc&token=' . rawurlencode($t) . '&error=' . urlencode('Unable to record response'));
   exit;
 }
