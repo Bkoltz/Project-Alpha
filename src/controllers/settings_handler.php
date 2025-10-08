@@ -111,6 +111,8 @@ if (isset($_POST['terms'])) {
     $t = trim((string)$_POST['terms']);
     $settings['terms'] = $t !== '' ? mb_substr($t, 0, 20000) : null;
 }
+// Toggle terms on quotes
+$settings['quotes_show_terms'] = !empty($_POST['quotes_show_terms']) ? 1 : 0;
 // Billing defaults
 if (isset($_POST['net_terms_days'])) {
     $n = (int)$_POST['net_terms_days'];

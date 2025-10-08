@@ -269,17 +269,14 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </tbody>
 </table>
     <div style="page-break-after:always"></div>
+    <?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>
     <h3>Terms and Conditions</h3>
     <?php if ($termsText !== ''): ?>
       <pre style="white-space:pre-wrap;background:#fff;padding:12px;border:1px solid #eee;border-radius:8px"><?php echo htmlspecialchars($termsText); ?></pre>
     <?php else: ?>
       <p class="lead">By accepting this quote, the client agrees to the scope and payment terms. Additional terms can be customized in Settings.</p>
     <?php endif; ?>
-
-    <div style="margin-top:48px">
-      <div style="height:80px;border-bottom:1px solid #ccc;width:360px"></div>
-      <div style="color:#666">Signature (Client)</div>
-    </div>
+    <?php endif; ?>
   </section>
   <style>
     .no-print{display:flex}
