@@ -30,16 +30,33 @@ try {
   $uid = (int)($st->fetchColumn() ?: 0);
   if ($uid <= 0) { throw new Exception('notfound'); }
 
-  // Validate token: match user, not used, not expired (<= now), attempts < 3
-  $st2 = $pdo->prepare('SELECT id, expires_at, used, attempts FROM password_resets WHERE user_id=? AND token=? ORDER BY id DESC LIMIT 1');
-  $st2->execute([$uid, $token]);
+  // Check if attempts column exists
+  $hasAttempts = false;
+  try {
+    $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='password_resets' AND COLUMN_NAME='attempts'");
+    $chk->execute();
+    $hasAttempts = ((int)$chk->fetchColumn()) === 1;
+  } catch (Throwable $e) { $hasAttempts = false; }
+
+  // Fetch most recent unused token for this user
+  if ($hasAttempts) {
+    $st2 = $pdo->prepare('SELECT id, token, expires_at, used, attempts FROM password_resets WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1');
+  } else {
+    $st2 = $pdo->prepare('SELECT id, token, expires_at, used FROM password_resets WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1');
+  }
+  $st2->execute([$uid]);
   $row = $st2->fetch(PDO::FETCH_ASSOC);
   if (!$row) { throw new Exception('badtoken'); }
   $rid = (int)$row['id'];
-  $attempts = (int)($row['attempts'] ?? 0);
+  $stored = (string)($row['token'] ?? '');
+  $storedNorm = preg_replace('/\D+/', '', $stored);
+  $attempts = $hasAttempts ? (int)($row['attempts'] ?? 0) : 0;
   if ((int)$row['used'] === 1) { throw new Exception('used'); }
   if (strtotime((string)$row['expires_at']) < time()) { throw new Exception('expired'); }
-  if ($attempts >= 3) { throw new Exception('locked'); }
+  if ($hasAttempts && $attempts >= 3) { throw new Exception('locked'); }
+  if (!hash_equals((string)$token, (string)$stored) && !($storedNorm && hash_equals((string)$token, (string)$storedNorm))) {
+    throw new Exception('badtoken');
+  }
 
   // Mark token used and allow setting password in next step
   $pdo->prepare('UPDATE password_resets SET used=1 WHERE id=?')->execute([$rid]);
@@ -47,13 +64,18 @@ try {
   header('Location: /?page=reset-new&email=' . urlencode($email));
   exit;
 } catch (Throwable $e) {
-  // Increment attempts if a token row exists for this email+token and not used
+  // Increment attempts if supported and a token row exists
   try {
-    $st3 = $pdo->prepare('UPDATE password_resets SET attempts = attempts + 1 WHERE user_id = (SELECT id FROM users WHERE email=? LIMIT 1) AND token=? AND used=0 ORDER BY id DESC LIMIT 1');
-    $st3->execute([$email, $token]);
-    // Lock if attempts >= 3
-    $st4 = $pdo->prepare('UPDATE password_resets SET used=1 WHERE user_id = (SELECT id FROM users WHERE email=? LIMIT 1) AND token=? AND attempts >= 3');
-    $st4->execute([$email, $token]);
+    $chk = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='password_resets' AND COLUMN_NAME='attempts'");
+    $chk->execute();
+    $hasAttempts = ((int)$chk->fetchColumn()) === 1;
+    if ($hasAttempts) {
+      $st3 = $pdo->prepare('UPDATE password_resets SET attempts = attempts + 1 WHERE user_id = (SELECT id FROM users WHERE email=? LIMIT 1) AND used=0 ORDER BY id DESC LIMIT 1');
+      $st3->execute([$email]);
+      // Lock if attempts >= 3
+      $st4 = $pdo->prepare('UPDATE password_resets SET used=1 WHERE user_id = (SELECT id FROM users WHERE email=? LIMIT 1) AND attempts >= 3');
+      $st4->execute([$email]);
+    }
   } catch (Throwable $e2) { /* ignore */ }
   header('Location: /?page=reset-verify&email=' . urlencode($email) . '&error=' . urlencode('Invalid or expired code'));
   exit;
