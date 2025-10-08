@@ -12,10 +12,11 @@ if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $csrf)) {
 
 $email = trim((string)($_POST['email'] ?? ''));
 $token = trim((string)($_POST['token'] ?? ''));
-// Normalize token: allow users to enter with spaces/dashes; prefer 6-digit numeric if applicable
+// Normalize token: allow users to enter with spaces/dashes; accept 4-6 digit numeric, pad to 6
 $numeric = preg_replace('/\D+/', '', $token);
-if (is_string($numeric) && strlen($numeric) === 6) {
-  $token = $numeric;
+if (is_string($numeric) && strlen($numeric) > 0) {
+  // Use last 6 digits in case of long paste, and left-pad to preserve leading zeros
+  $token = str_pad(substr($numeric, -6), 6, '0', STR_PAD_LEFT);
 }
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $token === '') {
