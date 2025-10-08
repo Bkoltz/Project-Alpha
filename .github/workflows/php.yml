@@ -36,6 +36,5 @@ jobs:
             ${{ runner.os }}-composer-
 
       - name: Install dependencies
-        run: |
-          composer install --prefer-dist --no-progress --no-interaction
-          composer dump-autoload -o
+        run: composer install --prefer-dist --no-progress --no-interaction --optimize-autoloader
+

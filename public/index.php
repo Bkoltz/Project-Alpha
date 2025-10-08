@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../vendor/autoload.php';
 // Secure session cookies and start session
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
 session_set_cookie_params([
