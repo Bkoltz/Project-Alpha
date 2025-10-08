@@ -65,7 +65,7 @@ if ($page === 'logout') {
 }
 
 // Allow unauthenticated access only to explicit public pages
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify'];
+$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'public-doc'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -157,6 +157,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'reset-verify') {
         require_once __DIR__ . '/../src/controllers/reset_verify.php';
+        exit;
+    }
+    if ($page === 'reset-update') {
+        require_once __DIR__ . '/../src/controllers/reset_update.php';
         exit;
     }
     if ($page === 'api-keys-create') {
@@ -275,6 +279,16 @@ if ($page === 'reset-password') {
 if ($page === 'reset-verify' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/views/pages/reset-verify.php';
+    exit;
+}
+if ($page === 'reset-new') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/reset-new.php';
+    exit;
+}
+if ($page === 'public-doc') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/controllers/public_doc.php';
     exit;
 }
 

@@ -102,6 +102,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px">$<?php echo number_format((float)($r['total'] ?? 0),2); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=contract-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
+              <?php $cst = strtolower((string)$r['status']); if (!in_array($cst, ['denied','cancelled','void'], true)): ?>
               <form method="post" action="/?page=email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="contract">
@@ -109,6 +110,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
               </form>
+              <?php endif; ?>
               <form method="post" action="/?page=contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

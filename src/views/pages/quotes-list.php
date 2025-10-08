@@ -109,6 +109,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
             <td style="padding:10px;display:flex;gap:8px">
               <a href="/?page=quote-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
+              <?php if (strtolower((string)$r['status']) !== 'rejected'): ?>
               <form method="post" action="/?page=email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="quote">
@@ -116,6 +117,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
               </form>
+              <?php endif; ?>
               <?php if ($r['status'] === 'pending'): ?>
                 <form method="post" action="/?page=quote-approve" onsubmit="return confirm('Approve this quote and generate contract + invoice?')">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

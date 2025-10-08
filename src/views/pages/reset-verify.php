@@ -12,6 +12,9 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
 <main>
   <div class="auth-wrap">
     <h1 style="margin:0 0 12px">Enter reset code</h1>
+    <?php if (!empty($_GET['sent'])): ?>
+      <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">We sent a 6-digit code to your email.</div>
+    <?php endif; ?>
     <?php if ($error): ?>
       <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($error); ?></div>
     <?php endif; ?>
@@ -24,20 +27,10 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       </label>
       <label>
         <div>Reset code</div>
-        <input required type="text" name="token" value="<?php echo htmlspecialchars($prefillToken); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Paste the code you received">
+        <input required type="text" name="token" value="<?php echo htmlspecialchars($prefillToken); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Paste the 6-digit code">
       </label>
-      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
-        <label>
-          <div>New Password</div>
-          <input required minlength="8" type="password" name="new_password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        </label>
-        <label>
-          <div>Confirm New Password</div>
-          <input required minlength="8" type="password" name="confirm_password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        </label>
-      </div>
       <div>
-        <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Password</button>
+        <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Verify Code</button>
       </div>
     </form>
   </div>

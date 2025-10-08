@@ -21,35 +21,43 @@ if (!in_array($type, ['quote','contract','invoice'], true) || $id <= 0) {
 
 try {
   if ($type === 'quote') {
-    $st = $pdo->prepare('SELECT q.id, q.doc_number, q.project_code, c.email, c.name FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
+    $st = $pdo->prepare('SELECT q.id, q.doc_number, q.project_code, q.status, c.email, c.name FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
     $clientName = (string)($row['name'] ?? 'client');
     $subject = 'Quote Q-' . $docnum . ' for ' . $clientName;
-    $printUrl = '/?page=quote-print&id='.$id;
+    $baseView = '/?page=quote-print&id='.$id;
   } elseif ($type === 'contract') {
-    $st = $pdo->prepare('SELECT co.id, co.doc_number, co.project_code, c.email, c.name FROM contracts co JOIN clients c ON c.id=co.client_id WHERE co.id=?');
+    $st = $pdo->prepare('SELECT co.id, co.doc_number, co.project_code, co.status, c.email, c.name FROM contracts co JOIN clients c ON c.id=co.client_id WHERE co.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
     $clientName = (string)($row['name'] ?? 'client');
     $subject = 'Contract C-' . $docnum . ' for ' . $clientName;
-    $printUrl = '/?page=contract-print&id='.$id;
+    $baseView = '/?page=contract-print&id='.$id;
   } else { // invoice
-    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.project_code, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
+    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.project_code, i.status, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
     $clientName = (string)($row['name'] ?? 'client');
     $subject = 'Invoice I-' . $docnum . ' for ' . $clientName;
-    $printUrl = '/?page=invoice-print&id='.$id;
+    $baseView = '/?page=invoice-print&id='.$id;
   }
 
   if (!$row || empty($row['email'])) {
-    $toUrl = $redirectTo ?: $printUrl;
+    $toUrl = $redirectTo ?: $baseView;
     app_log('email', 'missing client email', ['type'=>$type, 'id'=>$id]);
     header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('No client email on file'));
+    exit;
+  }
+
+  // Block emailing for non-emailable statuses
+  $st = strtolower((string)($row['status'] ?? ''));
+  if (($type==='quote' && $st==='rejected') || ($type==='invoice' && $st==='void') || ($type==='contract' && in_array($st, ['denied','cancelled','void'], true))) {
+    $toUrl = $redirectTo ?: $baseView;
+    header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('Document status does not allow emailing'));
     exit;
   }
 
@@ -59,12 +67,36 @@ try {
   $clientName = trim((string)($row['name'] ?? ''));
   $firstName = $clientName !== '' ? preg_split('/\s+/', $clientName)[0] : 'there';
 
-  // Build absolute URL
+  // Create/ensure public link table exists
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS public_links (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      type VARCHAR(16) NOT NULL,
+      record_id INT NOT NULL,
+      token VARCHAR(64) NOT NULL,
+      expires_at DATETIME NOT NULL,
+      revoked TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_public_token (token),
+      INDEX idx_public_type_record (type, record_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+  } catch (Throwable $e) { /* ignore */ }
+
+  // Insert a fresh token for this share (do not reuse old links)
+  $token = bin2hex(random_bytes(16));
+  $exp = date('Y-m-d H:i:s', time() + 14*24*60*60);
+  try {
+    $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, expires_at) VALUES (?,?,?,?)');
+    $ins->execute([$type, $id, $token, $exp]);
+  } catch (Throwable $e) { /* ignore */ }
+
+  // Build absolute URL to public view
   $host = $_SERVER['HTTP_HOST'] ?? '';
   if ($host === '' && !empty($appConfig['app_host'])) { $host = (string)$appConfig['app_host']; }
   if ($host === '') { $host = 'localhost'; }
   $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-  $absoluteUrl = $scheme . '://' . $host . $printUrl;
+  $publicUrl = '/?page=public-doc&token=' . rawurlencode($token);
+  $absoluteUrl = $scheme . '://' . $host . $publicUrl;
 
   // Compose body
   $body = '<p>Hello '.htmlspecialchars($firstName).',</p>' .
@@ -170,7 +202,7 @@ try {
     if (!$sent && $err === '') { $err = 'Email send failed'; }
   }
 
-  $toUrl = $redirectTo ?: $printUrl;
+  $toUrl = $redirectTo ?: $baseView;
   $join = (strpos($toUrl,'?')!==false)?'&':'?';
   if ($sent) {
     app_log('email', 'email sent', ['type'=>$type, 'id'=>$id, 'to'=>$to]);
