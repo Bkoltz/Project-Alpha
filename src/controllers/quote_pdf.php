@@ -25,6 +25,12 @@ if ($autoload === '') {
     exit;
 }
 require_once $autoload;
+// Some Composer builds may not autoload Dompdf's legacy Cpdf class. Fallback-load it if needed.
+if (!class_exists('Dompdf\\Cpdf')) {
+    $vendorDir = dirname($autoload);
+    $cpdf = $vendorDir . '/dompdf/dompdf/lib/Cpdf.php';
+    if (is_file($cpdf)) { require_once $cpdf; }
+}
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
