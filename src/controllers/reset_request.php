@@ -61,6 +61,18 @@ if ($uid > 0) {
       $masked = substr($token, 0, 2) . '****' . substr($token, -2);
       app_log('auth', 'reset token created', ['user_id'=>$uid, 'token_mask'=>$masked]);
     }
+    // Temporary verbose debug log (enabled when APP_DEBUG env var is truthy).
+    // Writes to config/uploads/reset_debug.log (project config volume) and is intended for short-term debugging only.
+    try {
+      $dbg = getenv('APP_DEBUG') ?: getenv('DEBUG') ?: '';
+      if ($dbg) {
+        $dbgDir = __DIR__ . '/../../config/uploads';
+        if (!is_dir($dbgDir)) { @mkdir($dbgDir, 0775, true); }
+        $dbgFile = realpath($dbgDir) ? realpath($dbgDir) . DIRECTORY_SEPARATOR . 'reset_debug.log' : $dbgDir . DIRECTORY_SEPARATOR . 'reset_debug.log';
+        $line = sprintf("[%s] create uid=%s token=%s expires=%s\n", date('c'), $uid, $token, $exp);
+        @file_put_contents($dbgFile, $line, FILE_APPEND | LOCK_EX);
+      }
+    } catch (Throwable $e) { /* ignore debug logging failures */ }
 
     // Compose email
     $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');

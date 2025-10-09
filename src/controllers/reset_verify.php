@@ -3,6 +3,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/logger.php';
+require_once __DIR__ . '/../config/app.php';
 
 // CSRF check (Symfony-backed)
 require_once __DIR__ . '/../utils/csrf_sf.php';
@@ -85,6 +86,20 @@ try {
     $subMask = substr((string)$token, 0, 2) . '****' . substr((string)$token, -2);
     $storedMask = substr((string)$stored, 0, 2) . '****' . substr((string)$stored, -2);
     app_log('auth', 'reset token mismatch', ['email'=>$email, 'submitted_mask'=>$subMask, 'stored_mask'=>$storedMask, 'storedNorm'=>$storedNorm]);
+
+    // Temporary verbose debug file output when APP_DEBUG is enabled to assist local debugging
+    try {
+      $dbg = getenv('APP_DEBUG') ?: getenv('DEBUG') ?: '';
+      if ($dbg) {
+        $dbgDir = __DIR__ . '/../../config/uploads';
+        if (!is_dir($dbgDir)) { @mkdir($dbgDir, 0775, true); }
+        $dbgFile = realpath($dbgDir) ? realpath($dbgDir) . DIRECTORY_SEPARATOR . 'reset_debug.log' : $dbgDir . DIRECTORY_SEPARATOR . 'reset_debug.log';
+        $line = sprintf("[%s] verify email=%s submitted=%s stored=%s storedNorm=%s storedAlt=%s expires=%s attempts=%s rowid=%s\n",
+          date('c'), $email, $token, $stored, $storedNorm, $storedAlt, $row['expires_at'] ?? '-', $row['attempts'] ?? '-', $row['id'] ?? '-');
+        @file_put_contents($dbgFile, $line, FILE_APPEND | LOCK_EX);
+      }
+    } catch (Throwable $e) { /* ignore */ }
+
     throw new Exception('badtoken');
   }
 
