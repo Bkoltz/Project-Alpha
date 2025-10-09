@@ -55,6 +55,11 @@ if ($uid > 0) {
     $token = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     $exp = date('Y-m-d H:i:s', time() + 10*60); // 10 minutes
     $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?,?)')->execute([$uid, $token, $exp]);
+    // Log masked token creation for debugging (do not log full token in production)
+    if (function_exists('app_log')) {
+      $masked = substr($token, 0, 2) . '****' . substr($token, -2);
+      app_log('auth', 'reset token created', ['user_id'=>$uid, 'token_mask'=>$masked]);
+    }
 
     // Compose email
     $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');

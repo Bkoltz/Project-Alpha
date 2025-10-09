@@ -80,7 +80,10 @@ try {
   if (!$okMatch && $storedNorm && hash_equals((string)$token, (string)$storedNorm)) { $okMatch = true; }
   if (!$okMatch && $storedAlt && hash_equals((string)$token, (string)$storedAlt)) { $okMatch = true; }
   if (!$okMatch) {
-    app_log('auth', 'reset token mismatch', ['email'=>$email, 'submitted'=>$token, 'stored'=>$stored, 'storedNorm'=>$storedNorm]);
+    // Mask tokens in logs to avoid exposing full code
+    $subMask = substr((string)$token, 0, 2) . '****' . substr((string)$token, -2);
+    $storedMask = substr((string)$stored, 0, 2) . '****' . substr((string)$stored, -2);
+    app_log('auth', 'reset token mismatch', ['email'=>$email, 'submitted_mask'=>$subMask, 'stored_mask'=>$storedMask, 'storedNorm'=>$storedNorm]);
     throw new Exception('badtoken');
   }
 

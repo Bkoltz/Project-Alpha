@@ -14,8 +14,14 @@ require_once __DIR__ . '/smtp.php';
 function notify_admin_quote_change(PDO $pdo, array $appConfig, array $quote, string $action): void {
     try {
         $adminEmail = '';
-        try { $adminEmail = (string)($pdo->query("SELECT email FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1")->fetchColumn() ?: ''); } catch (Throwable $e) {}
-        if ($adminEmail === '') { $adminEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost'); }
+        $adminId = 0;
+        try {
+            // Prefer user id 1 if present
+            $r1 = $pdo->prepare('SELECT id, email FROM users WHERE id=1 LIMIT 1'); $r1->execute(); $u1 = $r1->fetch(PDO::FETCH_ASSOC);
+            if ($u1 && !empty($u1['email'])) { $adminId = (int)$u1['id']; $adminEmail = (string)$u1['email']; }
+            if ($adminEmail === '') { $adminEmail = (string)($pdo->query("SELECT email FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1")->fetchColumn() ?: ''); }
+        } catch (Throwable $e) { /* ignore */ }
+        if ($adminEmail === '') { $adminEmail = (string)($appConfig['from_email'] ?? ''); }
         if ($adminEmail === '') { return; }
 
         $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
