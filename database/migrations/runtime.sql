@@ -1,4 +1,13 @@
 -- database/migrations/runtime.sql
+-- Idempotent adjustments applied at container start
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS role ENUM('admin','user') NOT NULL DEFAULT 'user';
+
+ALTER TABLE password_resets
+  ADD COLUMN IF NOT EXISTS attempts TINYINT(1) NOT NULL DEFAULT 0;
+
+-- database/migrations/runtime.sql
 -- Idempotent runtime migrations to ensure schema matches application needs.
 -- These run at container startup (web) and are safe to re-run.
 

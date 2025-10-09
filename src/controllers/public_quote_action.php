@@ -8,8 +8,9 @@ require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/smtp.php';
 
 // Verify CSRF (we skipped global preflight intentionally)
-$csrf = (string)($_POST['csrf'] ?? '');
-if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $csrf)) {
+require_once __DIR__ . '/../utils/csrf_sf.php';
+$submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
+if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
   header('Location: /?page=public-doc&error=' . urlencode('Invalid request'));
   exit;
 }

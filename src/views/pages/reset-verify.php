@@ -2,9 +2,9 @@
 // src/views/pages/reset-verify.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 
-if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
-$csrf = $_SESSION['csrf'];
+$csrf = csrf_sf_token('reset_verify');
 $email = isset($_GET['email']) ? (string)$_GET['email'] : '';
 $prefillToken = isset($_GET['token']) ? (string)$_GET['token'] : '';
 $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
@@ -20,7 +20,7 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
     <?php endif; ?>
 
     <form method="post" action="/?page=reset-verify" style="display:grid;gap:12px">
-      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
       <label>
         <div>Email</div>
         <input required type="email" name="email" value="<?php echo htmlspecialchars($email); ?>" autocomplete="username" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">

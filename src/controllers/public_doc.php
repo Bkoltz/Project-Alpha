@@ -57,7 +57,8 @@ echo '<style>.public-doc-wrap{max-width:816px;margin:24px auto;padding:0 16px 96
     } catch (Throwable $e) { /* ignore */ }
 
     if ($showActions) {
-      $csrf = csrf_token();
+    require_once __DIR__ . '/../utils/csrf_sf.php';
+    $csrf = csrf_sf_token('public_quote_action');
       echo '<div style="margin:16px 0 64px; display:flex; gap:8px">';
       echo '<form method="post" action="/?page=public-quote-action">'
          . '<input type="hidden" name="csrf" value="'.htmlspecialchars($csrf).'">'

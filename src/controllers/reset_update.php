@@ -3,8 +3,9 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
 
-$csrf = (string)($_POST['csrf'] ?? '');
-if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $csrf)) {
+require_once __DIR__ . '/../utils/csrf_sf.php';
+$submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
+if (!csrf_sf_is_valid('reset_update', $submitted)) {
   header('Location: /?page=reset-new&error=' . urlencode('Invalid request'));
   exit;
 }

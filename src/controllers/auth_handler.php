@@ -12,9 +12,10 @@ require_once __DIR__ . '/../utils/crypto.php';
 // Verbose error toggle: set APP_VERBOSE_ERRORS=true or AUTH_VERBOSE_ERRORS=true (or APP_DEBUG=true)
 $VERBOSE_AUTH = filter_var(getenv('APP_VERBOSE_ERRORS') ?: getenv('AUTH_VERBOSE_ERRORS') ?: getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN);
 
-// CSRF check
-$csrf = $_POST['csrf'] ?? '';
-if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $csrf)) {
+// CSRF check (prefer Symfony token, fallback to legacy)
+require_once __DIR__ . '/../utils/csrf_sf.php';
+$submitted = $_POST['_token'] ?? ($_POST['csrf'] ?? '');
+if (!csrf_sf_is_valid('auth', is_string($submitted) ? $submitted : '')) {
     header('Location: /?page=login&error=' . urlencode('Invalid request (CSRF)'));
     exit;
 }
