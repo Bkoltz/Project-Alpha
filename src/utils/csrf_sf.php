@@ -26,7 +26,12 @@ function csrf_sf_token(string $formId): string {
   $mgr = csrf_sf_manager();
   if ($mgr === null) { return csrf_token(); } // legacy fallback
   $token = $mgr->getToken($formId);
-  return (string)$token->getValue();
+  $val = (string)$token->getValue();
+  // Mirror into legacy session slot so existing JS/footer injectors and legacy fallbacks work
+  if (empty($_SESSION['csrf']) || !is_string($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = $val;
+  }
+  return $val;
 }
 
 function csrf_sf_is_valid(string $formId, ?string $submitted): bool {
