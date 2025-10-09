@@ -1,11 +1,11 @@
 <?php
 // src/views/pages/login.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 
-// CSRF token
-if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
+// CSRF token (Symfony-backed)
+$csrf = csrf_sf_token('auth');
 $csrf = $_SESSION['csrf'];
 
 // Determine if first-run (no users)
@@ -35,7 +35,7 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
     <?php endif; ?>
 
     <form method="post" action="/?page=auth" style="display:grid;gap:12px">
-      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
       <input type="hidden" name="action" value="<?php echo $noUsers ? 'register_first' : 'login'; ?>">
       <label>
         <div>Email</div>

@@ -2,16 +2,16 @@
 // src/views/pages/reset-new.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 
-if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
-$csrf = $_SESSION['csrf'];
+$csrf = csrf_sf_token('reset_update');
 $email = isset($_GET['email']) ? (string)$_GET['email'] : '';
 ?>
 <main>
   <div class="auth-wrap">
     <h1 style="margin:0 0 12px">Set a new password</h1>
 <form method="post" action="/?page=reset-update" style="display:grid;gap:12px">
-      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
       <input type="hidden" name="email" value="<?php echo htmlspecialchars($email); ?>">
       <label>
         <div>Reset code</div>
