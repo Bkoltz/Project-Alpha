@@ -6,7 +6,6 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 
 // CSRF token (Symfony-backed)
 $csrf = csrf_sf_token('auth');
-$csrf = $_SESSION['csrf'];
 
 // Determine if first-run (no users)
 $noUsers = false;
