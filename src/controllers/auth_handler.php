@@ -74,6 +74,8 @@ if ($action === 'register_first') {
         header('Location: /?page=login&created=1');
         exit;
     } catch (Throwable $e) {
+        // Log exception for debugging (do not reveal to user)
+        try { app_log('auth', 'register_first failed', ['ex' => $e->getMessage()]); } catch (Throwable $_e) { /* ignore logging failure */ }
         $msg = 'Failed to create admin';
         if ($VERBOSE_AUTH) { $msg .= ': ' . $e->getMessage(); }
         header('Location: /?page=login&error=' . urlencode($msg));
@@ -102,8 +104,10 @@ if ($action === 'login') {
         session_regenerate_id(true);
         $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
         try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}
-        // Remember Me cookie temporarily disabled
-        if (false && !empty($_POST['remember'])) {
+        // Remember-me flow is intentionally disabled. Below is the implementation
+        // kept as a comment for future use.
+        /*
+        if (!empty($_POST['remember'])) {
             $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
             $uid = (int)$u['id'];
             $exp = time() + 60*60*24*30;
@@ -122,6 +126,7 @@ if ($action === 'login') {
                 ]);
             }
         }
+        */
         app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
         header('Location: /');
         exit;
