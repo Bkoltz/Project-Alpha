@@ -2,6 +2,7 @@
 // src/controllers/reset_update.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/app.php';
 
 require_once __DIR__ . '/../utils/csrf_sf.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
