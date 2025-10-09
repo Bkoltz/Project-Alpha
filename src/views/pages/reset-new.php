@@ -10,9 +10,14 @@ $email = isset($_GET['email']) ? (string)$_GET['email'] : '';
 <main>
   <div class="auth-wrap">
     <h1 style="margin:0 0 12px">Set a new password</h1>
-    <form method="post" action="/?page=reset-update" style="display:grid;gap:12px">
+<form method="post" action="/?page=reset-update" style="display:grid;gap:12px">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
       <input type="hidden" name="email" value="<?php echo htmlspecialchars($email); ?>">
+      <label>
+        <div>Reset code</div>
+        <input type="text" name="token" placeholder="6-digit code" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div style="color:#6b7280;font-size:12px;margin-top:4px">Paste the code from your email (optional if you already verified)</div>
+      </label>
       <label>
         <div>New Password</div>
         <input required minlength="8" type="password" name="new_password" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
