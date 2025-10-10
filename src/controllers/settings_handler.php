@@ -94,6 +94,25 @@ if (is_readable($settingsFile) && is_writable(dirname($settingsFile))) {
     }
 }
 
+// Prepare target and existing file contents early so we can ensure an encryption key
+$target = $settingsFile;
+$existing = [];
+if (is_readable($target)) {
+    $existing = json_decode(@file_get_contents($target), true) ?: [];
+}
+
+// Ensure we have a persistent encryption key for secrets before attempting encryption
+if (empty($existing['encryption_key'])) {
+    // generate a new base64-encoded 32 byte key and attempt to persist it so crypto helpers can use it immediately
+    $newKey = base64_encode(random_bytes(32));
+    $existing['encryption_key'] = $newKey;
+    // best-effort: write the existing file back with the new encryption key so crypto_get_key/crypto_load_persistent_key
+    // can find it during this request. We'll write the file if the directory is writable.
+    if (is_dir(dirname($target)) && is_writable(dirname($target))) {
+        @file_put_contents($target, json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    }
+}
+
 if (isset($_POST['brand_name'])) {
     $brand = trim((string)$_POST['brand_name']);
     if ($brand !== '') {
@@ -229,16 +248,6 @@ $target = $settingsFile;
 $existing = [];
 if (is_readable($target)) {
     $existing = json_decode(@file_get_contents($target), true) ?: [];
-}
-// Ensure we have a persistent encryption key for secrets
-if (empty($settings['encryption_key'])) {
-    // Reuse existing if present; else generate new
-    $existingKey = $existing['encryption_key'] ?? null;
-    if (is_string($existingKey) && base64_decode($existingKey, true) !== false) {
-        $settings['encryption_key'] = $existingKey;
-    } else {
-        $settings['encryption_key'] = base64_encode(random_bytes(32));
-    }
 }
 
 $merged = array_merge($existing, $settings);
