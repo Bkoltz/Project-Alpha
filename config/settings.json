@@ -25,5 +25,7 @@
     "smtp_password_enc": null,
     "suppress_assets_warning": 0,
     "encryption_key": "E0gAUtIyc/2dKxZT7J+5s8F6F1U/V90TlJ2tkCBaaz8=",
-    "quotes_show_terms": 0
+    "quotes_show_terms": 1,
+    "primary_state": null,
+    "documents_valid_days": 14
 }
