@@ -1,0 +1,169 @@
+name: Nightly build
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 3:00 AM UTC nightly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write # for Scorecard SARIF uploads
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner egress
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+          coverage: none
+
+      - name: Composer cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ runner.os }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies (strict, no dev in prod job)
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist
+          composer dump-autoload --optimize
+
+  static-analysis:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Harden runner egress
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+
+      - name: Install deps (use cache)
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Composer audit
+        run: composer audit --no-dev --format=json || true
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse src --level=max
+
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Harden runner egress
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+
+      - name: Install deps with dev
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit --colors=always
+
+  scorecard:
+    name: OpenSSF Scorecard
+    runs-on: ubuntu-latest
+    needs: [static-analysis, tests]
+    steps:
+      - name: Harden runner egress
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@v2.3.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+  docker:
+    name: Docker build (nightly)
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'Bkoltz' }} # avoid forks pushing
+    needs: [static-analysis, tests]
+    steps:
+      - name: Harden runner egress
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push nightly image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_TOKEN }}/project-alpha:nightly
+          provenance: true
+          sbom: true
+          build-args: |
+            COMPOSER_FLAGS=--no-dev --no-interaction --prefer-dist
+
+  notify:
+    name: Notify on failure
+    runs-on: ubuntu-latest
+    needs: [static-analysis, tests, scorecard, docker]
+    if: ${{ failure() }}
+    steps:
+      - name: Send failure notice
+        run: |
+          echo "Nightly failed for $GITHUB_REPOSITORY at $GITHUB_RUN_ID"
