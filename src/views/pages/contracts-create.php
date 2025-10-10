@@ -1,10 +1,14 @@
 <?php
 // src/views/pages/contracts-create.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
+$csrf = csrf_sf_token('contracts-create');
 ?>
 <section>
   <h2>Create Contract</h2>
   <form id="coCreateForm" method="post" action="/?page=contracts-create" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
+    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label style="position:relative">
         <div>Client</div>

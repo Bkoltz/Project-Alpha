@@ -116,4 +116,9 @@ jobs:
           ignore-unfixed: true    # ignore issues without upstream fixes
           vuln-type: 'os,library' # scan both OS packages and PHP libs
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt
 

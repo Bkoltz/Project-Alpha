@@ -93,7 +93,13 @@ if ($selected !== '') {
               $pc = $p['project_code']; $cid = (int)$p['client_id'];
               $q = $pdo->prepare('SELECT id, doc_number, total, status, created_at FROM quotes WHERE client_id=? AND project_code=? ORDER BY created_at DESC LIMIT 5');
               $q->execute([$cid, $pc]); $quotes = $q->fetchAll();
-            $co = $pdo->prepare('SELECT id, doc_number, status, created_at, signed_pdf_path FROM contracts WHERE client_id=? AND project_code=? ORDER BY created_at DESC LIMIT 5');
+            // signed_pdf_path column may be absent on older databases; select it conditionally
+            $has_signed = (bool)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='contracts' AND COLUMN_NAME='signed_pdf_path'")->fetchColumn();
+            if ($has_signed) {
+              $co = $pdo->prepare('SELECT id, doc_number, status, created_at, signed_pdf_path FROM contracts WHERE client_id=? AND project_code=? ORDER BY created_at DESC LIMIT 5');
+            } else {
+              $co = $pdo->prepare('SELECT id, doc_number, status, created_at, NULL AS signed_pdf_path FROM contracts WHERE client_id=? AND project_code=? ORDER BY created_at DESC LIMIT 5');
+            }
               $co->execute([$cid, $pc]); $contracts = $co->fetchAll();
               $i = $pdo->prepare('SELECT id, doc_number, total, status, created_at FROM invoices WHERE client_id=? AND project_code=? ORDER BY created_at DESC LIMIT 5');
               $i->execute([$cid, $pc]); $invoices = $i->fetchAll();
@@ -153,9 +159,13 @@ if ($selected !== '') {
           $pn2 = $pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?');
           $pn2->execute([$selected]);
           $selNotes = (string)$pn2->fetchColumn();
-          $signed = $pdo->prepare("SELECT id, doc_number, signed_pdf_path, status FROM contracts WHERE project_code=? AND signed_pdf_path IS NOT NULL ORDER BY created_at DESC");
-          $signed->execute([$selected]);
-          $signedContracts = $signed->fetchAll();
+          $signedContracts = [];
+          $has_signed = (bool)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='contracts' AND COLUMN_NAME='signed_pdf_path'")->fetchColumn();
+          if ($has_signed) {
+            $signed = $pdo->prepare("SELECT id, doc_number, signed_pdf_path, status FROM contracts WHERE project_code=? AND signed_pdf_path IS NOT NULL ORDER BY created_at DESC");
+            $signed->execute([$selected]);
+            $signedContracts = $signed->fetchAll();
+          }
         ?>
         <div style="position:sticky;top:12px;border:1px solid #eee;border-radius:8px;background:#fff;padding:12px;display:grid;gap:12px">
           <div style="font-weight:700">Project <?php echo htmlspecialchars($selected); ?> · <?php echo htmlspecialchars($selectedRow['client_name']); ?></div>

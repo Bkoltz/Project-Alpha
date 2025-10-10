@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS clients (
   phone VARCHAR(50) NULL,
   organization VARCHAR(150) NULL,
   notes TEXT NULL,
+  address_line1 VARCHAR(200) NULL,
+  address_line2 VARCHAR(200) NULL,
+  city VARCHAR(100) NULL,
+  state VARCHAR(100) NOT NULL,
+  postal VARCHAR(20) NULL,
+  country VARCHAR(100) NOT NULL DEFAULT 'USA',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_clients_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -64,7 +70,7 @@ CREATE TABLE IF NOT EXISTS quote_items (
 -- Contracts (generated from approved quotes)
 CREATE TABLE IF NOT EXISTS contracts (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  quote_id INT NOT NULL,
+  quote_id INT NULL,
   client_id INT NOT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
@@ -74,6 +80,13 @@ CREATE TABLE IF NOT EXISTS contracts (
   tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
   subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
   total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  signed_pdf_path VARCHAR(255) NULL,
+  completed_at TIMESTAMP NULL,
+  voided_at TIMESTAMP NULL,
+  scheduled_date DATE NULL,
+  terms TEXT NULL,
+  estimated_completion VARCHAR(200) NULL,
+  weather_pending TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_contracts_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
   CONSTRAINT fk_contracts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
@@ -109,6 +122,9 @@ CREATE TABLE IF NOT EXISTS invoices (
   total DECIMAL(12,2) NOT NULL DEFAULT 0,
   status ENUM('unpaid','partial','paid','void') NOT NULL DEFAULT 'unpaid',
   due_date DATE NULL,
+  scheduled_date DATE NULL,
+  estimated_completion VARCHAR(200) NULL,
+  weather_pending TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_invoices_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
   CONSTRAINT fk_invoices_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
@@ -223,17 +239,6 @@ CREATE TABLE IF NOT EXISTS api_usage (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 003_app_updates.sql
-ALTER TABLE clients
-  ADD COLUMN IF NOT EXISTS address_line1 VARCHAR(200) NULL,
-  ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(200) NULL,
-  ADD COLUMN IF NOT EXISTS city VARCHAR(100) NULL,
-  ADD COLUMN IF NOT EXISTS state VARCHAR(100) NOT NULL DEFAULT 'Wi',
-  ADD COLUMN IF NOT EXISTS postal VARCHAR(20) NULL,
-  ADD COLUMN IF NOT EXISTS country VARCHAR(100) NOT NULL DEFAULT 'USA';
-
-ALTER TABLE contracts
-  ADD COLUMN IF NOT EXISTS discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
-  ADD COLUMN IF NOT EXISTS discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total DECIMAL(12,2) NOT NULL DEFAULT 0;
+-- (No-op in fresh installs; retained for compatibility in existing DBs)
+-- Clients address columns now defined in base schema
+-- Contracts summary/tax columns now defined in base schema

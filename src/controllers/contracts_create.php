@@ -95,7 +95,8 @@ try{
 }catch(Throwable $e){
   if ($pdo->inTransaction()) $pdo->rollBack();
   @error_log('[contracts_create] exception: '.$e->getMessage(), 0);
-  header('Location: /?page=contracts-create&error=Failed%20to%20create%20contract');
+  $msg = substr($e->getMessage(), 0, 200);
+  header('Location: /?page=contracts-create&error=' . urlencode($msg));
   exit;
 }
 header('Location: /?page=contracts-list&created=1');

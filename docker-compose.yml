@@ -3,16 +3,12 @@ services:
     build: .
     image: "bkoltz/project-alpha:latest"
     ports:
-      - "8080:80"
+      - "1627:80"
     environment:
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
-      # start.sh uses MYSQL_ROOT_PASSWORD to ping MySQL as root for readiness
       MYSQL_ROOT_PASSWORD: rootpass
-      # APP_AUTH_DISABLED: true
-      APP_VERBOSE_ERRORS: true
-      APP_DEBUG: true
     depends_on:
       - db
     healthcheck:
@@ -25,21 +21,16 @@ services:
     volumes:
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
-
   db:
     image: "mysql:8"
     restart: unless-stopped
-
-    # Define root password + user + database explicitly
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
-
     volumes:
       - db_data:/var/lib/mysql
-
     healthcheck:
       test:
         - CMD-SHELL

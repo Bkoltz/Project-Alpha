@@ -22,7 +22,9 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts co'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, co.signed_pdf_path, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
+$has_signed = (bool)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='contracts' AND COLUMN_NAME='signed_pdf_path'")->fetchColumn();
+$select_signed = $has_signed ? 'co.signed_pdf_path' : 'NULL AS signed_pdf_path';
+$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, {$select_signed}, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY co.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
@@ -119,7 +121,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <button type="button" onclick="document.getElementById('upload-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;"><?php echo $uplLabel; ?></button>
               </form>
               <?php if (!empty($r['signed_pdf_path'])): ?>
-                <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+                <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Signed PDF</a>
               <?php endif; ?>
               <?php if ($r['status']==='active'): ?>
                 <form method="post" action="/?page=contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?')">

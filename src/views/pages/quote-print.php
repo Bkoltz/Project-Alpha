@@ -29,16 +29,19 @@ if (!empty($quote['project_code'])) {
 }
 if ($termsText === '') { $termsText = trim((string)($quote['terms'] ?? '')); }
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
+// Detect PDF mode for conditional page breaks
+$isPdf = defined('PDF_MODE');
 ?>
 <section>
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Quote</div>
+  <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
     <a href="/?page=quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
-<input type=\"hidden\" name=\"_token\" value=\"<?php echo htmlspecialchars(csrf_sf_token('public_quote_action')); ?>\">
+<input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
@@ -212,9 +215,16 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
             <?php if (!empty($quote['client_phone'])): ?><div><?php echo format_phone($quote['client_phone']); ?></div><?php endif; ?>
             <?php if (!empty($quote['client_email'])): ?><div><?php echo htmlspecialchars($quote['client_email']); ?></div><?php endif; ?>
           </div>
-        <?php endif; ?>
-      </td>
-    </tr>
+<?php endif; ?>
+  </table>
+
+  <?php // Only add a terms section if non-empty to avoid blank extra pages in PDFs
+  if ($termsText !== ''): ?>
+    <div style="page-break-inside:avoid; margin-top:16px;">
+      <div style="font-weight:600;margin-bottom:6px">Terms</div>
+      <div style="white-space:pre-wrap;line-height:1.4;color:#374151"><?php echo nl2br(htmlspecialchars($termsText)); ?></div>
+    </div>
+  <?php endif; ?>
   </table>
 
 
@@ -268,8 +278,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       </tr>
     </tbody>
 </table>
+<?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>
     <div style="page-break-after:always"></div>
-    <?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>
     <h3>Terms and Conditions</h3>
     <?php if ($termsText !== ''): ?>
       <pre style="white-space:pre-wrap;background:#fff;padding:12px;border:1px solid #eee;border-radius:8px"><?php echo htmlspecialchars($termsText); ?></pre>
