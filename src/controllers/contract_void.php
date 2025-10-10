@@ -12,10 +12,10 @@ try {
   $co = $st->fetch(PDO::FETCH_ASSOC);
   if (!$co) throw new Exception('Contract not found');
 
-  // Void contract
-  $pdo->prepare("UPDATE contracts SET status='void', voided_at=CURRENT_TIMESTAMP WHERE id=?")->execute([$id]);
+  // Contracts enum historically doesn't include 'void' in older schemas; set to 'cancelled' to avoid enum truncation
+  $pdo->prepare("UPDATE contracts SET status='cancelled', voided_at=CURRENT_TIMESTAMP WHERE id=?")->execute([$id]);
 
-  // Void related invoices
+  // Void related invoices (invoices.status ENUM does include 'void')
   $pdo->prepare("UPDATE invoices SET status='void' WHERE contract_id=?")->execute([$id]);
 
   $pdo->commit();
