@@ -3,7 +3,7 @@
         'name' => 'ledgetopdroneservices/project-alpha',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '8766c0fe39a19d80d8ba12e7245e977e8e98376c',
+        'reference' => 'efdcb5eb48173d46cea2f1be6126ceab2a8c9ba1',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -22,7 +22,7 @@
         'ledgetopdroneservices/project-alpha' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '8766c0fe39a19d80d8ba12e7245e977e8e98376c',
+            'reference' => 'efdcb5eb48173d46cea2f1be6126ceab2a8c9ba1',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
