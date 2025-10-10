@@ -23,7 +23,7 @@ $appConfig = [
     'terms' => null,
     'net_terms_days' => 30,
 'payment_methods' => ['card','cash','bank_transfer'],
-    'quotes_show_terms' => 0,
+    'quotes_show_terms' => 1,
     // App preferences
     'timezone' => 'UTC',
     'primary_state' => null,
