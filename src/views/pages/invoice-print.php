@@ -28,7 +28,15 @@ if (!empty($inv['project_code'])) {
       if (!empty($row['notes'])) { $projectNotes = $row['notes']; }
       if (!empty($row['terms'])) { $termsText = trim((string)$row['terms']); }
     }
-  } catch (Throwable $e) { /* ignore */ }
+  } catch (Throwable $e) {
+    // Fallback for older schemas without 'terms'
+    try {
+      $pm = $pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?');
+      $pm->execute([$inv['project_code']]);
+      $row = $pm->fetch(PDO::FETCH_ASSOC);
+      if ($row && !empty($row['notes'])) { $projectNotes = $row['notes']; }
+    } catch (Throwable $e2) { /* ignore */ }
+  }
 }
 if ($termsText === '') { $termsText = trim((string)($inv['terms'] ?? '')); }
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }

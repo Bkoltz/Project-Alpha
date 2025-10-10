@@ -218,13 +218,6 @@ $isPdf = defined('PDF_MODE');
 <?php endif; ?>
   </table>
 
-  <?php // Only add a terms section if non-empty to avoid blank extra pages in PDFs
-  if ($termsText !== ''): ?>
-    <div style="page-break-inside:avoid; margin-top:16px;">
-      <div style="font-weight:600;margin-bottom:6px">Terms</div>
-      <div style="white-space:pre-wrap;line-height:1.4;color:#374151"><?php echo nl2br(htmlspecialchars($termsText)); ?></div>
-    </div>
-  <?php endif; ?>
   </table>
 
 
