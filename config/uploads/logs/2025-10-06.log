@@ -1,5 +1,0 @@
-[2025-10-06 17:53:17] [auth] [uid:1] [ip:172.18.0.1] login success | {"uid":1,"ip":"172.18.0.1"}
-[2025-10-06 17:53:53] [auth] [uid:1] [ip:172.18.0.1] login success | {"uid":1,"ip":"172.18.0.1"}
-[2025-10-06 18:15:07] [auth] [uid:1] [ip:172.18.0.1] login success | {"uid":1,"ip":"172.18.0.1"}
-[2025-10-06 18:18:37] [auth] [uid:-] [ip:172.18.0.1] login failed | {"ip":"172.18.0.1","email":"fstorm2080@gmail.com"}
-[2025-10-06 19:49:41] [email] [uid:-] [ip:172.18.0.1] email sent | {"type":"contract","id":1,"to":"fstorm2080@gmail.com"}

@@ -263,18 +263,6 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       </tr>
     </tbody>
   </table>
-  <div style="page-break-after:always"></div>
-  <h3>Terms and Conditions</h3>
-  <?php if ($termsText !== ''): ?>
-    <pre style="white-space:pre-wrap;background:#fff;padding:12px;border:1px solid #eee;border-radius:8px"><?php echo htmlspecialchars($termsText); ?></pre>
-  <?php else: ?>
-    <p class="lead">This invoice reflects the amounts due for goods and services provided. Payment terms and other conditions are as specified in Settings.</p>
-  <?php endif; ?>
-
-  <div style="margin-top:48px">
-    <div style="height:80px;border-bottom:1px solid #ccc;width:360px"></div>
-    <div style="color:#666">Signature (Client)</div>
-  </div>
 </section>
 <style>
   .no-print{display:flex}

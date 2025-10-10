@@ -31,6 +31,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 ?>
 <section>
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Contract</div>
+  <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
@@ -236,8 +237,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <td style="padding:10px">$<?php echo number_format($it['line_total'],2); ?></td>
       </tr>
       <?php endforeach; ?>
-      <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
-      <tr>
+      
         <td></td><td></td>
         <td style="padding:10px;font-weight:600">Subtotal</td>
         <td style="padding:10px">$<?php echo number_format($contract['subtotal'] ?? 0,2); ?></td>
@@ -265,6 +265,19 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <td style="padding:10px;font-weight:700">Total</td>
         <td style="padding:10px;font-weight:700">$<?php echo number_format($contract['total'] ?? 0,2); ?></td>
       </tr>
+      <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
+      <tr>
+        <td colspan="4" style="padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
+          <strong>By signing below</strong>, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.
+        </td>
+      </tr>
+      <tr>
+        <td colspan="4" style="padding:20px 10px 40px">
+          <div style="border-top:2px solid #111;width:50%;margin-top:40px"></div>
+          <div style="margin-top:4px;color:#4b5563">Client Signature</div>
+        </td>
+      </tr>
+      <tr></tr>
     </tbody>
   </table>
 
@@ -273,7 +286,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <?php if ($termsText !== ''): ?>
     <pre style="white-space:pre-wrap;background:#fff;padding:12px;border:1px solid #eee;border-radius:8px"><?php echo htmlspecialchars($termsText); ?></pre>
   <?php else: ?>
-    <p class="lead">By signing, the client agrees to the scope, timeline, and payment schedule indicated in this contract. Additional terms can be customized later.</p>
+    <!-- <p class="lead">By signing, the client agrees to the scope, timeline, and payment schedule indicated in this contract. Additional terms can be customized later.</p> -->
     <ul>
       <li>Payment due NET 30 unless otherwise specified.</li>
       <li>Cancellation requires written notice.</li>
@@ -281,10 +294,10 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </ul>
   <?php endif; ?>
 
-  <div style="margin-top:48px">
+  <!-- <div style="margin-top:48px">
     <div style="height:80px;border-bottom:1px solid #ccc;width:360px"></div>
     <div style="color:#666">Signature (Client)</div>
-  </div>
+  </div> -->
 </section>
 <style>
   .no-print{display:flex}

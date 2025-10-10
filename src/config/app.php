@@ -23,9 +23,11 @@ $appConfig = [
     'terms' => null,
     'net_terms_days' => 30,
 'payment_methods' => ['card','cash','bank_transfer'],
-    'quotes_show_terms' => 1,
+    'quotes_show_terms' => 0,
     // App preferences
     'timezone' => 'UTC',
+    'primary_state' => null,
+    'documents_valid_days' => 14,
     // SMTP (may be present from settings)
     'smtp_host' => null,
     'smtp_port' => 587,

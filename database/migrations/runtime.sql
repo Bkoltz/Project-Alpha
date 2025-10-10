@@ -81,6 +81,12 @@ SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHE
 SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN voided_at TIMESTAMP NULL', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- Also add explicit ALTER statements (IF NOT EXISTS) so that on MySQL 8+ the columns are created
+-- even if the prepared-statement path is skipped for any reason. These are safe/no-op on modern servers.
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_pdf_path VARCHAR(255) NULL;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP NULL;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS voided_at TIMESTAMP NULL;
+
 SET @exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='contracts' AND COLUMN_NAME='discount_value');
 SET @sql := IF(@exists=0, 'ALTER TABLE contracts ADD COLUMN discount_value DECIMAL(10,2) NOT NULL DEFAULT 0', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

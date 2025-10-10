@@ -63,6 +63,9 @@ $settings = [
     'net_terms_days' => 30,
     'payment_methods' => ['card','cash','bank_transfer'],
     'timezone' => 'UTC',
+    // App extras
+    'primary_state' => null,
+    'documents_valid_days' => 14,
     // SMTP configuration (optional)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -106,10 +109,20 @@ foreach (['from_name','from_address_line1','from_address_line2','from_city','fro
         $settings[$k] = $val !== '' ? mb_substr($val, 0, 200) : null;
     }
 }
+// Primary state default
+if (isset($_POST['primary_state'])) {
+    $settings['primary_state'] = trim((string)$_POST['primary_state']) ?: null;
+}
 // Terms
 if (isset($_POST['terms'])) {
     $t = trim((string)$_POST['terms']);
     $settings['terms'] = $t !== '' ? mb_substr($t, 0, 20000) : null;
+}
+// Documents valid days (terms tab)
+if (isset($_POST['documents_valid_days'])) {
+    $dv = (int)$_POST['documents_valid_days'];
+    if ($dv < 0) $dv = 0;
+    $settings['documents_valid_days'] = $dv;
 }
 // Toggle terms on quotes
 $settings['quotes_show_terms'] = !empty($_POST['quotes_show_terms']) ? 1 : 0;

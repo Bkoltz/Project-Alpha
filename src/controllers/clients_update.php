@@ -14,6 +14,7 @@ $city = trim($_POST['city'] ?? '');
 $state = trim($_POST['state'] ?? '');
 $postal = trim($_POST['postal'] ?? '');
 $country = trim($_POST['country'] ?? '');
+if ($country === '') { $country = 'USA'; }
 
 if ($id <= 0 || $name === '') {
   header('Location: /?page=clients-edit&id='.(int)$id.'&error=Invalid%20input');
@@ -32,7 +33,7 @@ $st->execute([
   $city ?: null,
   ($state ?: 'WI'),
   $postal ?: null,
-  $country ?: null,
+  $country,
   $id
 ]);
 
