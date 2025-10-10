@@ -15,11 +15,14 @@
   "require-dev": {
     "phpunit/phpunit": "^10.0"
   },
-  "autoload": {
-    "psr-4": {
-      "App\\": "src/"
-    }
+"autoload": {
+  "psr-4": {
+    "App\\": "src/"
   },
+  "exclude-from-classmap": [
+    "vendor/dompdf/dompdf/lib/"
+  ]
+},
   "scripts": {
     "test": "phpunit --colors=always",
     "start": "php -S 0.0.0.0:8080 -t public"
