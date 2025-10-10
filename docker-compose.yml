@@ -9,7 +9,6 @@ services:
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
       MYSQL_ROOT_PASSWORD: rootpass
-      APP_AUTH_DISABLED: true
     depends_on:
       - db
     healthcheck:
