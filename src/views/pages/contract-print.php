@@ -284,7 +284,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
   <?php if ($termsText !== ''): ?>
-    <pre style="white-space:pre-wrap;background:#fff;padding:12px;border:1px solid #eee;border-radius:8px"><?php echo htmlspecialchars($termsText); ?></pre>
+    <div style="white-space:pre-wrap;padding:6px 0;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#222;"><?php echo nl2br(htmlspecialchars($termsText)); ?></div>
   <?php else: ?>
     <!-- <p class="lead">By signing, the client agrees to the scope, timeline, and payment schedule indicated in this contract. Additional terms can be customized later.</p> -->
     <ul>
