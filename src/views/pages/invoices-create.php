@@ -9,6 +9,7 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
 <section>
   <h2>Create Invoice</h2>
   <form id="invoiceForm" method="post" action="/?page=invoices-create" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label style="position:relative">
         <div>Client</div>

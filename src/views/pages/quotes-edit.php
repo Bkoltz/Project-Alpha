@@ -14,6 +14,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 <section>
   <h2>Edit Quote Q-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?><?php if (!empty($quote['project_code'])) echo ' (Project '.htmlspecialchars($quote['project_code']).')'; ?></h2>
   <form id="quoteEditForm" method="post" action="/?page=quotes-update" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$quote['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label>

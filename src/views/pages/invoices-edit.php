@@ -16,6 +16,7 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
 <section>
   <h2>Edit Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?><?php if (!empty($inv['project_code'])) echo ' (Project '.htmlspecialchars($inv['project_code']).')'; ?></h2>
   <form id="invEditForm" method="post" action="/?page=invoices-update" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label style="position:relative">

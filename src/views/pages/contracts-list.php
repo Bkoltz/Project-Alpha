@@ -113,6 +113,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
               </form>
               <?php endif; ?>
+              <?php if ($r['status'] !== 'cancelled'): ?>
               <form method="post" action="/?page=contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
@@ -120,6 +121,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <?php $uplLabel = empty($r['signed_pdf_path']) ? 'Upload' : 'New Upload'; ?>
                 <button type="button" onclick="document.getElementById('upload-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;"><?php echo $uplLabel; ?></button>
               </form>
+              <?php endif; ?>
               <?php if (!empty($r['signed_pdf_path'])): ?>
                 <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Signed PDF</a>
               <?php endif; ?>
@@ -130,11 +132,13 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Complete</button>
                 </form>
               <?php endif; ?>
+              <?php if ($r['status'] !== 'cancelled'): ?>
               <form method="post" action="/?page=contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#6b7280;color:#fff; font-size: small;">Void</button>
               </form>
+              <?php endif; ?>
             </td>
             <td style="padding:10px"><a href="/?page=contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
           </tr>

@@ -194,7 +194,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
               </form>
               <?php endif; ?>
-              <?php if ($r['status'] !== 'paid'): ?>
+              <?php if ($r['status'] !== 'paid' && $r['status'] !== 'void'): ?>
                 <form method="post" action="/?page=invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Paid</button>
