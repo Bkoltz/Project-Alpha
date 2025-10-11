@@ -14,6 +14,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 <section>
   <h2>Edit Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Project '.htmlspecialchars($contract['project_code']).')'; ?></h2>
   <form id="coEditForm" method="post" action="/?page=contracts-update" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$contract['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label>

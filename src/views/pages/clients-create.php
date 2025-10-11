@@ -7,6 +7,7 @@
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
   <form method="post" action="/?page=clients-create" style="display:grid;gap:12px;max-width:520px">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <label>
       <div>Name</div>
       <input required type="text" name="name" placeholder="First Last" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">

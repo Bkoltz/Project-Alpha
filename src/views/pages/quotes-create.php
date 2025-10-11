@@ -6,6 +6,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 <section>
   <h2>Create Quote</h2>
   <form id="quoteForm" method="post" action="/?page=quotes-create" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label style="grid-column:1/2;position:relative">
         <div>Client</div>
