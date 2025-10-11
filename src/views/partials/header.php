@@ -99,6 +99,14 @@
               </ul>
             </li>
             <li class="nav-section">
+              <div class="section-label">Financial</div>
+              <ul>
+                <li><a href="/?page=financial/financial-dashboard" data-page="#">Financial Dashboard</a></li>
+                <li><a href="#" data-page="#">Audit</a></li>
+              </ul>
+              </ul>
+            </li>
+            <li class="nav-section">
               <div class="section-label">Integrations</div>
               <ul>
                 <li><a href="/?page=api-keys" data-page="api-keys">API Keys</a></li>
