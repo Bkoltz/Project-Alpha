@@ -12,7 +12,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <?php 
+  // Preload logo for better caching and performance
+  $logo = $appConfig['logo_path'] ?? null;
+  if ($logo): ?>
+  <link rel="preload" href="<?php echo htmlspecialchars($logo); ?>" as="image">
+  <?php endif; ?>
+  
   <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/navigation.js" defer></script>
 </head>
 
 <body>
@@ -23,7 +32,7 @@
           <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha';
           $logo = $appConfig['logo_path'] ?? null; ?>
           <?php if ($logo): ?>
-            <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" class="brand-logo" />
+            <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" class="brand-logo" loading="eager" fetchpriority="high" />
           <?php else: ?>
             <svg class="brand-logo" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <defs>

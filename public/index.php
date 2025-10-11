@@ -298,16 +298,35 @@ if ($page === 'public-doc') {
     exit;
 }
 
-// Default layout
-require_once __DIR__ . '/../src/views/partials/header.php';
+// Check if this is an AJAX request for client-side navigation
+$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-$view = __DIR__ . '/../src/views/pages/' . $page . '.php';
-if (!is_file($view)) {
-    $view = __DIR__ . '/../src/views/pages/home.php';
+if ($isAjax) {
+    // For AJAX requests, return only the main content
+    echo '<main class="main-content" role="main">';
+    
+    $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
+    if (!is_file($view)) {
+        $view = __DIR__ . '/../src/views/pages/home.php';
+    }
+    if (basename($view) === 'calendar.php') {
+        $view = __DIR__ . '/../src/views/pages/home.php';
+    }
+    require $view;
+    
+    echo '</main>';
+} else {
+    // Default layout for full page loads
+    require_once __DIR__ . '/../src/views/partials/header.php';
+    
+    $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
+    if (!is_file($view)) {
+        $view = __DIR__ . '/../src/views/pages/home.php';
+    }
+    if (basename($view) === 'calendar.php') {
+        $view = __DIR__ . '/../src/views/pages/home.php';
+    }
+    require $view;
+    
+    require_once __DIR__ . '/../src/views/partials/footer.php';
 }
-if (basename($view) === 'calendar.php') {
-    $view = __DIR__ . '/../src/views/pages/home.php';
-}
-require $view;
-
-require_once __DIR__ . '/../src/views/partials/footer.php';
