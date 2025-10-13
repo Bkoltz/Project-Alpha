@@ -162,19 +162,19 @@ CREATE TABLE IF NOT EXISTS payments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Project support tables
-CREATE TABLE IF NOT EXISTS project_counters (
-  prefix VARCHAR(32) PRIMARY KEY,
-  next_seq INT NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- CREATE TABLE IF NOT EXISTS project_counters (
+--   prefix VARCHAR(32) PRIMARY KEY,
+--   next_seq INT NOT NULL
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS project_meta (
-  project_code VARCHAR(64) PRIMARY KEY,
-  client_id INT NOT NULL,
-  notes TEXT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_project_meta_client (client_id),
-  CONSTRAINT fk_project_meta_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- CREATE TABLE IF NOT EXISTS project_meta (
+--   project_code VARCHAR(64) PRIMARY KEY,
+--   client_id INT NOT NULL,
+--   notes TEXT NULL,
+--   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--   INDEX idx_project_meta_client (client_id),
+--   CONSTRAINT fk_project_meta_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Public links for tokenized access
 CREATE TABLE IF NOT EXISTS public_links (
