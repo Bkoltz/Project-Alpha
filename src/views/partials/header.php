@@ -106,12 +106,6 @@
               </ul>
               </ul>
             </li>
-            <li class="nav-section">
-              <div class="section-label">Integrations</div>
-              <ul>
-                <li><a href="/?page=api-keys" data-page="api-keys">API Keys</a></li>
-              </ul>
-            </li>
           </ul>
         </nav>
 
