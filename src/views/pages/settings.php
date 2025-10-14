@@ -26,7 +26,9 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
       <a href="/?page=settings&tab=account" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Account</a>
       <a href="/?page=settings&tab=quotes" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Quotes</a>
       <a href="/?page=settings&tab=contracts" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Contracts</a>
-      <a href="/?page=settings&tab=invoices" style="display:block;padding:10px 12px;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Invoices</a>
+      <a href="/?page=settings&tab=invoices" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Invoices</a>
+      <a href="/?page=api-keys" style="display:block;padding:10px 12px;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">API Keys</a>
+      
     </aside>
 
     <div>
