@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 // Secure session cookies and start session
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-          || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
@@ -22,7 +22,23 @@ header('Referrer-Policy: no-referrer-when-downgrade');
 header("Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'");
 
 // Resolve requested page
-$page = isset($_GET['page']) ? preg_replace('/[^a-z0-9\-]/i','', $_GET['page']) : 'home';
+// $page = isset($_GET['page']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['page']) : 'home'; old
+// Resolve requested page (allow letters, numbers, dashes, and slashes)
+$page = isset($_GET['page']) ? preg_replace('#[^a-z0-9/\-]#i','', $_GET['page']) : 'home';
+// Whitelist of allowed pages
+// $allowedPages = [
+//     'home',
+//     'projects-list',
+//     'settings',
+//     'financial/financial-dashboard',
+//     'financial/audit',
+    
+// ];
+
+// // If not in whitelist, force to home (or show error)
+// if (!in_array($page, $allowedPages, true)) {
+//     $page = 'home';
+// }
 
 // CSRF setup
 require_once __DIR__ . '/../src/utils/csrf.php';
@@ -85,7 +101,8 @@ if (false && empty($_SESSION['user']) && isset($_COOKIE['remember'])) {
     $parts = explode('|', $raw);
     if (count($parts) === 3) {
         [$uidStr, $expStr, $hmacB64] = $parts;
-        $uid = (int)$uidStr; $exp = (int)$expStr;
+        $uid = (int)$uidStr;
+        $exp = (int)$expStr;
         $key = crypto_get_key();
         if ($uid > 0 && $exp > time() && $key !== '') {
             $data = $uid . '|' . $exp;
@@ -96,9 +113,10 @@ if (false && empty($_SESSION['user']) && isset($_COOKIE['remember'])) {
                     $st->execute([$uid]);
                     $u = $st->fetch(PDO::FETCH_ASSOC);
                     if ($u) {
-                        $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
+                        $_SESSION['user'] = ['id' => (int)$u['id'], 'email' => $u['email'], 'role' => $u['role']];
                     }
-                } catch (Throwable $e) { /* ignore */ }
+                } catch (Throwable $e) { /* ignore */
+                }
             }
         }
     }
@@ -122,7 +140,9 @@ if ($page === 'project-notes') {
 // If someone lands on email-test via GET (e.g., CSRF redirect), send them back to Settings -> System (email section)
 if ($page === 'email-test' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     $suffix = '';
-    if (!empty($_GET['error'])) { $suffix = '&email_err=' . rawurlencode((string)$_GET['error']); }
+    if (!empty($_GET['error'])) {
+        $suffix = '&email_err=' . rawurlencode((string)$_GET['error']);
+    }
     header('Location: /?page=settings&tab=system' . $suffix);
     exit;
 }
@@ -146,8 +166,10 @@ if ($page === 'invoice-pdf') {
 // Handle POST actions (PRG pattern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth','reset-request','reset-verify','reset-update','public-quote-action'];
-    if (!in_array($page, $skipCsrfFor, true)) { csrf_verify_post_or_redirect($page); }
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action'];
+    if (!in_array($page, $skipCsrfFor, true)) {
+        csrf_verify_post_or_redirect($page);
+    }
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
@@ -304,7 +326,7 @@ $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP
 if ($isAjax) {
     // For AJAX requests, return only the main content
     echo '<main class="main-content" role="main">';
-    
+
     $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
     if (!is_file($view)) {
         $view = __DIR__ . '/../src/views/pages/home.php';
@@ -313,12 +335,12 @@ if ($isAjax) {
         $view = __DIR__ . '/../src/views/pages/home.php';
     }
     require $view;
-    
+
     echo '</main>';
 } else {
     // Default layout for full page loads
     require_once __DIR__ . '/../src/views/partials/header.php';
-    
+
     $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
     if (!is_file($view)) {
         $view = __DIR__ . '/../src/views/pages/home.php';
@@ -327,6 +349,6 @@ if ($isAjax) {
         $view = __DIR__ . '/../src/views/pages/home.php';
     }
     require $view;
-    
+
     require_once __DIR__ . '/../src/views/partials/footer.php';
 }

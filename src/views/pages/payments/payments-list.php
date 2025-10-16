@@ -74,7 +74,7 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
             <td style="padding:10px"><?php echo htmlspecialchars($r['client']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['amount'], 2); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
-            <td style=\"padding:10px\"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
+            <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

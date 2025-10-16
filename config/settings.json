@@ -13,9 +13,9 @@
     "terms": null,
     "net_terms_days": 30,
     "payment_methods": [
-        "card",
-        "cash",
-        "bank_transfer"
+        "Card",
+        "Cash",
+        "Bank Transfer"
     ],
     "timezone": "UTC",
     "smtp_host": null,
@@ -25,7 +25,10 @@
     "smtp_password_enc": null,
     "suppress_assets_warning": 0,
     "encryption_key": "E0gAUtIyc/2dKxZT7J+5s8F6F1U/V90TlJ2tkCBaaz8=",
-    "quotes_show_terms": 1,
+    "quotes_show_terms": 0,
     "primary_state": null,
-    "documents_valid_days": 14
+    "documents_valid_days": 14,
+    "dashboard": {
+        "months_to_show": 6
+    }
 }

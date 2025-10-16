@@ -1,8 +1,8 @@
 <?php
 // src/views/pages/contract-print.php
-require_once __DIR__ . '/../../config/db.php';
-require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 $c = $pdo->prepare('SELECT co.*, cl.name client_name, cl.organization client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id WHERE co.id=?');
 $c->execute([$id]);
@@ -11,7 +11,7 @@ if(!$contract){ echo '<p>Contract not found</p>'; return; }
 $items = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
-require_once __DIR__ . '/../../utils/format.php';
+require_once __DIR__ . '/../../../utils/format.php';
 $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
 $fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
 $fromPhone = $appConfig['from_phone'] ?? '';
@@ -51,7 +51,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   $brand = $appConfig['brand_name'] ?? 'Project Alpha';
   $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   // Resolve default logo under project root public/assets
-  $projectRoot = realpath(__DIR__ . '/../../../');
+  $projectRoot = realpath(__DIR__ . '/../../../../');
   $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
   $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
   $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
@@ -69,8 +69,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         if ($projectRoot) {
           $cfg = realpath($projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads');
           if ($cfg) { $bases[] = $cfg; } else { $bases[] = $projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads'; }
-          $internal = realpath(__DIR__ . '/../uploads');
-          $bases[] = $internal ? $internal : (__DIR__ . '/../uploads');
+          $internal = realpath(__DIR__ . '/../../../uploads');
+          $bases[] = $internal ? $internal : (__DIR__ . '/../../../uploads');
         }
         // Container path
         $bases[] = '/var/www/config/uploads';
@@ -83,7 +83,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   }
   if (!$isUrl) {
     // Map leading-slash paths like /public/... and /config/uploads/... to the project root
-    $root = $projectRoot ?: realpath(__DIR__ . '/../../../');
+    $root = $projectRoot ?: realpath(__DIR__ . '/../../../../');
     if ($logoPath !== '' && ($logoPath[0] === '/' || $logoPath[0] === '\\')) {
       if ($root) {
         $candidate = @realpath($root . $logoPath);
