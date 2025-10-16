@@ -58,8 +58,8 @@
             <li class="nav-section">
               <div class="section-label">Clients</div>
               <ul>
-                <li><a href="/?page=clients-list" data-page="clients-list">List Clients</a></li>
-                <li><a href="/?page=clients-create" data-page="clients-create">Create Client</a></li>
+                <li><a href="/?page=client/clients-list" data-page="client/clients-list">List Clients</a></li>
+                <li><a href="/?page=client/clients-create" data-page="client/clients-create">Create Client</a></li>
               </ul>
             </li>
 
@@ -73,8 +73,8 @@
             <li class="nav-section">
               <div class="section-label">Contracts</div>
               <ul>
-                <li><a href="/?page=contracts-list" data-page="contracts-list">List Contracts</a></li>
-                <li><a href="/?page=contracts-create" data-page="contracts-create">Create Contract</a></li>
+                <li><a href="/?page=contract/contracts-list" data-page="contract/contracts-list">List Contracts</a></li>
+                <li><a href="/?page=contract/contracts-create" data-page="contract/contracts-create">Create Contract</a></li>
               </ul>
             </li>
             <li class="nav-section">
@@ -101,8 +101,8 @@
             <li class="nav-section">
               <div class="section-label">Financial</div>
               <ul>
-                <li><a href="/?page=financial/financial-dashboard" data-page="#">Financial Dashboard</a></li>
-                <li><a href="#" data-page="#">Audit</a></li>
+                <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Financial Dashboard</a></li>
+                <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
               </ul>
               </ul>
             </li>

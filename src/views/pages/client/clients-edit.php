@@ -1,6 +1,6 @@
 <?php
 // src/views/pages/clients-edit.php
-require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../../config/db.php';
 $id = (int)($_GET['id'] ?? 0);
 $st = $pdo->prepare('SELECT * FROM clients WHERE id=?');
 $st->execute([$id]);

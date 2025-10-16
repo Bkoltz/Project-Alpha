@@ -1,7 +1,7 @@
 <?php
 // src/views/pages/contracts-list.php
-require_once __DIR__ . '/../../config/db.php';
-require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';

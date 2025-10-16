@@ -1,45 +1,36 @@
 <?php
-// src/views/pages/contracts-edit.php
-require_once __DIR__ . '/../../config/db.php';
-$id = (int)($_GET['id'] ?? 0);
-$co = $pdo->prepare('SELECT * FROM contracts WHERE id=?');
-$co->execute([$id]);
-$contract = $co->fetch(PDO::FETCH_ASSOC);
-if(!$contract){ echo '<p>Contract not found</p>'; return; }
-$items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
-$items->execute([$id]);
-$items = $items->fetchAll(PDO::FETCH_ASSOC);
-$clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+// src/views/pages/contracts-create.php
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
+$csrf = csrf_sf_token('contracts-create');
 ?>
 <section>
-  <h2>Edit Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Project '.htmlspecialchars($contract['project_code']).')'; ?></h2>
-  <form id="coEditForm" method="post" action="/?page=contracts-update" style="display:grid;gap:16px;max-width:900px">
-    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-    <input type="hidden" name="id" value="<?php echo (int)$contract['id']; ?>">
+  <h2>Create Contract</h2>
+  <form id="coCreateForm" method="post" action="/?page=contracts-create" style="display:grid;gap:16px;max-width:900px">
+    <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
+    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-      <label>
+      <label style="position:relative">
         <div>Client</div>
-        <select required name="client_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <?php foreach ($clients as $c): ?>
-            <option value="<?php echo (int)$c['id']; ?>" <?php echo (int)$contract['client_id']===(int)$c['id']?'selected':''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
-          <?php endforeach; ?>
-        </select>
+<input id="clientInputCo" name="client" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientIdCo" type="hidden" name="client_id">
+        <div id="clientSuggestCo" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
       <label>
         <div>Tax (%)</div>
-        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($contract['tax_percent'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
         <div>Discount Type</div>
         <select id="discountTypeCo" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <option value="none" <?php echo ($contract['discount_type'] ?? 'none')==='none'?'selected':''; ?>>None</option>
-          <option value="percent" <?php echo ($contract['discount_type'] ?? '')==='percent'?'selected':''; ?>>Percent</option>
-          <option value="fixed" <?php echo ($contract['discount_type'] ?? '')==='fixed'?'selected':''; ?>>Fixed $</option>
+          <option value="none">None</option>
+          <option value="percent">Percent</option>
+          <option value="fixed">Fixed $</option>
         </select>
       </label>
       <label>
         <div>Discount Value</div>
-        <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($contract['discount_value'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
 
@@ -49,32 +40,9 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <button type="button" onclick="addItemCo()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
-    <?php 
-      $pn=null; $pt=null;
-      if (!empty($contract['project_code'])) {
-        try {
-          $pm=$pdo->prepare('SELECT notes, terms FROM project_meta WHERE project_code=?');
-          $pm->execute([$contract['project_code']]);
-          $row=$pm->fetch(PDO::FETCH_ASSOC);
-          if ($row) { $pn=(string)($row['notes'] ?? ''); $pt=(string)($row['terms'] ?? ''); }
-        } catch (Throwable $e) {
-          // Older schema may lack 'terms' column; fallback to reading notes only
-          try {
-            $pm=$pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?');
-            $pm->execute([$contract['project_code']]);
-            $row=$pm->fetch(PDO::FETCH_ASSOC);
-            if ($row) { $pn=(string)($row['notes'] ?? ''); }
-          } catch (Throwable $e2) { /* ignore */ }
-        }
-      }
-    ?>
     <label>
-      <div>Project Notes</div>
-      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
-    </label>
-    <label>
-      <div>Project Terms (override default terms for this project)</div>
-      <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
+      <div>Project Notes (shared across related docs)</div>
+      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"></textarea>
     </label>
 
     <div id="totalsCo" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
@@ -85,7 +53,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     </div>
 
     <div>
-      <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Contract</button>
+      <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Contract</button>
     </div>
   </form>
 </section>
@@ -120,7 +88,29 @@ function recalcCo(){
   document.getElementById('totalValCo').textContent = money(total);
 }
 ['discountTypeCo','discountValueCo','taxPercentCo'].forEach(id=>document.getElementById(id).addEventListener('input', recalcCo));
-<?php foreach ($items as $it): ?>
-addItemCo(<?php echo json_encode($it['description']); ?>, <?php echo json_encode((float)$it['quantity']); ?>, <?php echo json_encode((float)$it['unit_price']); ?>);
-<?php endforeach; ?>
+addItemCo();
+
+// Client typeahead
+var ci = document.getElementById('clientInputCo');
+var cid = document.getElementById('clientIdCo');
+var sug = document.getElementById('clientSuggestCo');
+ci.addEventListener('input', function(){
+  cid.value='';
+  var t = this.value.trim();
+  if(!t){sug.style.display='none';sug.innerHTML='';return;}
+  fetch('/?page=clients-search&term='+encodeURIComponent(t))
+    .then(r=>r.json())
+    .then(list=>{
+      if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
+sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+      Array.from(sug.children).forEach(el=>{
+        el.addEventListener('click', function(){
+          ci.value = this.dataset.name; cid.value = this.dataset.id; sug.style.display='none';
+        });
+      });
+      sug.style.display='block';
+    }).catch(()=>{sug.style.display='none'});
+  });
+document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==ci){ sug.style.display='none'; } });
+document.getElementById('coCreateForm').addEventListener('submit', function(e){ if(!cid.value){ e.preventDefault(); alert('Please select a client from suggestions.'); } });
 </script>

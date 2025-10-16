@@ -22,8 +22,8 @@ $appConfig = [
     // Terms for contracts
     'terms' => null,
     'net_terms_days' => 30,
-'payment_methods' => ['card','cash','bank_transfer'],
-    'quotes_show_terms' => 1,
+'payment_methods' => ['Card','Cash','Bank Transfer'],
+    'quotes_show_terms' => 0,
     // App preferences
     'timezone' => 'UTC',
     'primary_state' => null,
@@ -34,6 +34,9 @@ $appConfig = [
     'smtp_secure' => 'tls',
     'smtp_username' => null,
     'smtp_password_enc' => null,
+    // qoute defaults
+    // contract defaults
+    //invoice defaults
 ];
 
 $paths = [$settingsPrimary, $settingsProject, $settingsPublic, $settingsFallback];

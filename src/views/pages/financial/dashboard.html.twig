@@ -1,0 +1,32 @@
+<section style="margin-top:24px;">
+  <h3>Income (Past {{ months_to_show }} Months)</h3>
+  <canvas id="incomeChart"></canvas>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  fetch('{{ api_url }}')
+    .then(res => res.json())
+    .then(data => {
+      const labels = data.map(d => d.month);
+      const values = data.map(d => parseFloat(d.income));
+
+      new Chart(document.getElementById('incomeChart'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Income',
+            data: values,
+            backgroundColor: 'rgba(54, 162, 235, 0.6)'
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    });
+</script>
