@@ -23,27 +23,27 @@ $clients = $st->fetchAll();
 <section>
   <h2>Clients</h2>
   <div style="margin:8px 0">
-    <a href="/?page=archived-clients" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">View Archived</a>
+    <a href="/?page=client/archived-clients" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">View Archived</a>
   </div>
   <?php if (!empty($_GET['archived'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Client archived.</div>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:small;">Client archived.</div>
   <?php elseif (!empty($_GET['restored'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Client restored.</div>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:small;">Client restored.</div>
   <?php elseif (!empty($_GET['deleted'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Client permanently deleted.</div>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5;font-size:small;">Client permanently deleted.</div>
   <?php endif; ?>
   <?php $selected = isset($_GET['selected_client_id']) ? (int)$_GET['selected_client_id'] : 0; ?>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
   <div>
   <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="clients-list">
+    <input type="hidden" name="page" value="client/clients-list">
     <label style="flex:1;position:relative">
       <div>Search by name</div>
       <input id="clientSearchBox" type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Type to search..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
       <div id="clientSearchSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
     </label>
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=clients-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Reset</a>
+    <a href="/?page=client/clients-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Reset</a>
   </form>
   <script>
     (function(){
@@ -52,14 +52,14 @@ $clients = $st->fetchAll();
       box.addEventListener('input', function(){
         var t = this.value.trim();
         if(!t){sug.style.display='none';sug.innerHTML='';return;}
-        fetch('/?page=clients-search&term='+encodeURIComponent(t))
+  fetch('/?page=clients-search&term='+encodeURIComponent(t))
           .then(r=>r.json())
           .then(list=>{
             if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
             sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
             Array.from(sug.children).forEach(el=>{
               el.addEventListener('click', function(){
-                window.location = '/?page=clients-list&selected_client_id='+this.dataset.id;
+                window.location = '/?page=client/clients-list&selected_client_id='+this.dataset.id;
               });
             });
             sug.style.display='block';
@@ -87,12 +87,12 @@ $clients = $st->fetchAll();
       <tbody>
         <?php foreach ($clients as $c): ?>
           <tr style="border-top:1px solid #f3f4f6">
-            <td style="padding:10px"><a href="/?page=clients-list&selected_client_id=<?php echo (int)$c['id']; ?>" style="text-decoration:none;color:inherit;"><?php echo htmlspecialchars($c['name']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$c['id']; ?>" style="text-decoration:none;color:inherit;"><?php echo htmlspecialchars($c['name']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['email'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization'] ?? ''); ?></td>
             <!-- <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td> -->
-            <td style="padding:10px"><a href="/?page=clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
+            <td style="padding:10px"><a href="/?page=client/clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
             <td style="padding:10px">
               <form method="post" action="/?page=clients-delete" onsubmit="return confirm('Archive client <?php echo addslashes($c['name']); ?>? This moves the client to Archived Clients.');" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">

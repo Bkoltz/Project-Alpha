@@ -1,7 +1,7 @@
 <?php
 // src/controllers/clients_create.php
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 
 $name = trim($_POST['name'] ?? '');
 $email = trim($_POST['email'] ?? '');
@@ -18,7 +18,7 @@ $country = trim($_POST['country'] ?? '');
 if ($country === '') { $country = 'USA'; }
 
 if ($name === '') {
-    header('Location: /?page=clients-create&error=Name%20is%20required');
+    header('Location: /?page=client/clients-create&error=Name%20is%20required');
     exit;
 }
 
@@ -37,5 +37,5 @@ $stmt->execute([
   $country
 ]);
 
-header('Location: /?page=clients-list&created=1');
+header('Location: /?page=client/clients-list&created=1');
 exit;

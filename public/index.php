@@ -56,7 +56,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // 
 
     // Map API endpoints
     if ($page === 'api-clients-search') {
-        require_once __DIR__ . '/../src/controllers/clients_search.php';
+        require_once __DIR__ . '/../src/controllers/client/clients_search.php';
         exit;
     }
 
@@ -130,7 +130,7 @@ if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages,
 
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
-    require_once __DIR__ . '/../src/controllers/clients_search.php';
+    require_once __DIR__ . '/../src/controllers/client/clients_search.php';
     exit;
 }
 if ($page === 'project-notes') {
@@ -151,15 +151,15 @@ if ($page === 'serveupload' || $page === 'serve-upload') {
     exit;
 }
 if ($page === 'contract-pdf') {
-    require_once __DIR__ . '/../src/controllers/contract_pdf.php';
+    require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
     exit;
 }
 if ($page === 'quote-pdf') {
-    require_once __DIR__ . '/../src/controllers/quote_pdf.php';
+    require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
     exit;
 }
 if ($page === 'invoice-pdf') {
-    require_once __DIR__ . '/../src/controllers/invoice_pdf.php';
+    require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
     exit;
 }
 
@@ -188,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($page === 'public-quote-action') {
-        require_once __DIR__ . '/../src/controllers/public_quote_action.php';
+        require_once __DIR__ . '/../src/controllers/public_view/public_quote_action.php';
         exit;
     }
     if ($page === 'api-keys-create') {
@@ -200,35 +200,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($page === 'clients-create') {
-        require_once __DIR__ . '/../src/controllers/clients_create.php';
+        require_once __DIR__ . '/../src/controllers/client/clients_create.php';
         exit;
     }
     if ($page === 'quotes-create') {
-        require_once __DIR__ . '/../src/controllers/quotes_create.php';
+        require_once __DIR__ . '/../src/controllers/quote/quotes_create.php';
         exit;
     }
     if ($page === 'quote-approve') {
-        require_once __DIR__ . '/../src/controllers/quote_approve.php';
+        require_once __DIR__ . '/../src/controllers/quote/quote_approve.php';
         exit;
     }
     if ($page === 'contract-sign') {
-        require_once __DIR__ . '/../src/controllers/contract_sign.php';
+        require_once __DIR__ . '/../src/controllers/contract/contract_sign.php';
         exit;
     }
     if ($page === 'contract-complete') {
-        require_once __DIR__ . '/../src/controllers/contract_complete.php';
+        require_once __DIR__ . '/../src/controllers/contract/contract_complete.php';
         exit;
     }
     if ($page === 'contract-void') {
-        require_once __DIR__ . '/../src/controllers/contract_void.php';
+        require_once __DIR__ . '/../src/controllers/contract/contract_void.php';
         exit;
     }
     if ($page === 'contract-deny') { // legacy
-        require_once __DIR__ . '/../src/controllers/contract_deny.php';
+        require_once __DIR__ . '/../src/controllers/contract/contract_deny.php';
         exit;
     }
     if ($page === 'invoices-mark-paid') {
-        require_once __DIR__ . '/../src/controllers/invoices_mark_paid.php';
+        require_once __DIR__ . '/../src/controllers/invoice/invoices_mark_paid.php';
         exit;
     }
     if ($page === 'payments-create') {
@@ -236,43 +236,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($page === 'quotes-update') {
-        require_once __DIR__ . '/../src/controllers/quotes_update.php';
+        require_once __DIR__ . '/../src/controllers/quote/quotes_update.php';
         exit;
     }
     if ($page === 'clients-update') {
-        require_once __DIR__ . '/../src/controllers/clients_update.php';
+        require_once __DIR__ . '/../src/controllers/client/clients_update.php';
         exit;
     }
     if ($page === 'clients-delete') {
-        require_once __DIR__ . '/../src/controllers/clients_delete.php';
+        require_once __DIR__ . '/../src/controllers/client/clients_delete.php';
         exit;
     }
     if ($page === 'clients-restore') {
-        require_once __DIR__ . '/../src/controllers/clients_restore.php';
+        require_once __DIR__ . '/../src/controllers/client/clients_restore.php';
         exit;
     }
     if ($page === 'clients-purge') {
-        require_once __DIR__ . '/../src/controllers/clients_purge.php';
+        require_once __DIR__ . '/../src/controllers/client/clients_purge.php';
         exit;
     }
     if ($page === 'contracts-create') {
-        require_once __DIR__ . '/../src/controllers/contracts_create.php';
+        require_once __DIR__ . '/../src/controllers/contract/contracts_create.php';
         exit;
     }
     if ($page === 'contracts-update') {
-        require_once __DIR__ . '/../src/controllers/contracts_update.php';
+        require_once __DIR__ . '/../src/controllers/contract/contracts_update.php';
         exit;
     }
     if ($page === 'invoices-create') {
-        require_once __DIR__ . '/../src/controllers/invoices_create.php';
+        require_once __DIR__ . '/../src/controllers/invoice/invoices_create.php';
         exit;
     }
     if ($page === 'invoices-update') {
-        require_once __DIR__ . '/../src/controllers/invoices_update.php';
+        require_once __DIR__ . '/../src/controllers/invoice/invoices_update.php';
         exit;
     }
     if ($page === 'quote-reject') {
-        require_once __DIR__ . '/../src/controllers/quote_reject.php';
+        require_once __DIR__ . '/../src/controllers/quote/quote_reject.php';
         exit;
     }
     if ($page === 'email-send') {
@@ -316,7 +316,7 @@ if ($page === 'reset-new') {
 }
 if ($page === 'public-doc') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/controllers/public_doc.php';
+    require_once __DIR__ . '/../src/controllers/public_view/public_doc.php';
     exit;
 }
 
@@ -327,13 +327,25 @@ if ($isAjax) {
     // For AJAX requests, return only the main content
     echo '<main class="main-content" role="main">';
 
+    // First try subfolder path (for organized views)
     $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
+    
+    // If file doesn't exist in subfolder path, strip the subfolder and try root pages directory
     if (!is_file($view)) {
-        $view = __DIR__ . '/../src/views/pages/home.php';
+        $basePage = basename($page);
+        $rootView = __DIR__ . '/../src/views/pages/' . $basePage . '.php';
+        if (is_file($rootView)) {
+            $view = $rootView;
+        } else {
+            $view = __DIR__ . '/../src/views/pages/home.php';
+        }
     }
+    
+    // Special case for calendar
     if (basename($view) === 'calendar.php') {
         $view = __DIR__ . '/../src/views/pages/home.php';
     }
+    
     require $view;
 
     echo '</main>';
@@ -341,13 +353,25 @@ if ($isAjax) {
     // Default layout for full page loads
     require_once __DIR__ . '/../src/views/partials/header.php';
 
+    // First try subfolder path (for organized views)
     $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
+    
+    // If file doesn't exist in subfolder path, strip the subfolder and try root pages directory
     if (!is_file($view)) {
-        $view = __DIR__ . '/../src/views/pages/home.php';
+        $basePage = basename($page);
+        $rootView = __DIR__ . '/../src/views/pages/' . $basePage . '.php';
+        if (is_file($rootView)) {
+            $view = $rootView;
+        } else {
+            $view = __DIR__ . '/../src/views/pages/home.php';
+        }
     }
+    
+    // Special case for calendar
     if (basename($view) === 'calendar.php') {
         $view = __DIR__ . '/../src/views/pages/home.php';
     }
+    
     require $view;
 
     require_once __DIR__ . '/../src/views/partials/footer.php';

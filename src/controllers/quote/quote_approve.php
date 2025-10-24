@@ -1,12 +1,12 @@
 <?php
 // src/controllers/quote_approve.php
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../utils/project_id.php';
-require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/project_id.php';
+require_once __DIR__ . '/../../config/app.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
-  header('Location: /?page=quotes-list&error=Invalid%20quote');
+  header('Location: /?page=quote/quotes-list&error=Invalid%20quote');
   exit;
 }
 
@@ -63,9 +63,9 @@ try {
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) { $pdo->rollBack(); }
   error_log('[quote_approve] Failed: ' . $e->getMessage());
-  header('Location: /?page=quotes-list&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
+  header('Location: /?page=quote/quotes-list&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
   exit;
 }
 
-header('Location: /?page=quotes-list&approved=1');
+header('Location: /?page=quote/quotes-list&approved=1');
 exit;

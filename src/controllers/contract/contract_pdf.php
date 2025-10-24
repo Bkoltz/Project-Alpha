@@ -3,8 +3,8 @@
 // Generate a server-side PDF with accurate page numbers using Dompdf
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
 
 // Locate Composer autoload by walking up to the project root
 $autoload = '';
@@ -44,7 +44,8 @@ if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
-require __DIR__ . '/../views/pages/contract-print.php';
+$requirePath = __DIR__ . '/../../views/pages/contract/contract-print.php';
+require $requirePath;
 $content = ob_get_clean();
 
 $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');
@@ -59,7 +60,7 @@ $options = new Options();
 $options->set('isRemoteEnabled', true);
 $options->set('isHtml5ParserEnabled', true);
 // Allow Dompdf to access local files under the project directory (for logos, etc.)
-$projectRoot = realpath(__DIR__ . '/..' . '/..');
+$projectRoot = realpath(__DIR__ . '/..' . '/..' . '/..');
 if ($projectRoot) {
     $options->set('chroot', $projectRoot);
 }

@@ -1,6 +1,6 @@
 <?php
 // src/controllers/clients_update.php
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../../config/db.php';
 
 $id = (int)($_POST['id'] ?? 0);
 $name = trim($_POST['name'] ?? '');
@@ -17,7 +17,7 @@ $country = trim($_POST['country'] ?? '');
 if ($country === '') { $country = 'USA'; }
 
 if ($id <= 0 || $name === '') {
-  header('Location: /?page=clients-edit&id='.(int)$id.'&error=Invalid%20input');
+  header('Location: /?page=client/clients-edit&id='.(int)$id.'&error=Invalid%20input');
   exit;
 }
 
@@ -37,5 +37,5 @@ $st->execute([
   $id
 ]);
 
-header('Location: /?page=clients-list&updated=1');
+header('Location: /?page=client/clients-list&updated=1');
 exit;

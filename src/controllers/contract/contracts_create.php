@@ -1,7 +1,7 @@
 <?php
 // src/controllers/contracts_create.php
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../utils/project_id.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/project_id.php';
 
 // Simple debug log to help diagnose if this endpoint is being hit
 @error_log('[contracts_create] POST received', 0);
