@@ -2,9 +2,9 @@
 // src/controllers/public_doc.php
 // Render a public, tokenized view of a document without requiring auth
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../utils/csrf.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 
 $token = isset($_GET['token']) ? (string)$_GET['token'] : '';
 if ($token === '') {
@@ -37,11 +37,11 @@ echo '<style>.public-doc-wrap{max-width:816px;margin:24px auto;padding:0 16px 96
   if ($err) { echo '<div class="notice n-err">'.htmlspecialchars($err).'</div>'; }
 
   if ($type === 'quote') {
-    require __DIR__ . '/../views/pages/quote-print.php';
+    require __DIR__ . '/../../views/pages/quote/quote-print.php';
   } elseif ($type === 'contract') {
-    require __DIR__ . '/../views/pages/contract-print.php';
+    require __DIR__ . '/../../views/pages/contract/contract-print.php';
   } elseif ($type === 'invoice') {
-    require __DIR__ . '/../views/pages/invoice-print.php';
+    require __DIR__ . '/../../views/pages/invoice/invoice-print.php';
   } else {
     throw new Exception('badtype');
   }
@@ -57,7 +57,7 @@ echo '<style>.public-doc-wrap{max-width:816px;margin:24px auto;padding:0 16px 96
     } catch (Throwable $e) { /* ignore */ }
 
     if ($showActions) {
-    require_once __DIR__ . '/../utils/csrf_sf.php';
+  require_once __DIR__ . '/../../utils/csrf_sf.php';
     $csrf = csrf_sf_token('public_quote_action');
       echo '<div style="margin:16px 0 64px; display:flex; gap:8px">';
       echo '<form method="post" action="/?page=public-quote-action">'

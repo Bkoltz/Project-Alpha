@@ -1,6 +1,6 @@
 <?php
 // src/views/pages/invoices-edit.php
-require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../../config/db.php';
 $id = (int)($_GET['id'] ?? 0);
 $iv = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
 $iv->execute([$id]);

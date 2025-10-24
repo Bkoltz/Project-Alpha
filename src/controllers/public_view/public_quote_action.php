@@ -1,14 +1,13 @@
 <?php
 // src/controllers/public_quote_action.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../utils/csrf.php';
-require_once __DIR__ . '/../utils/mailer.php';
-require_once __DIR__ . '/../utils/smtp.php';
 
 // Verify CSRF (we skipped global preflight intentionally)
-require_once __DIR__ . '/../utils/csrf_sf.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/mailer.php';
+require_once __DIR__ . '/../../utils/smtp.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
   header('Location: /?page=public-doc&error=' . urlencode('Invalid request'));
@@ -97,7 +96,7 @@ try {
   if ($changed) {
     // Send a notification to the first admin
     try {
-      require_once __DIR__ . '/../utils/notifications.php';
+  require_once __DIR__ . '/../../utils/notifications.php';
       notify_admin_quote_change($pdo, $appConfig, $quote, $action === 'approve' ? 'approve' : 'deny');
     } catch (Throwable $e) {
       // Ignore notification failures but keep normal flow

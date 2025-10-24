@@ -66,8 +66,8 @@
             <li class="nav-section">
               <div class="section-label">Quotes</div>
               <ul>
-                <li><a href="/?page=quotes-list" data-page="quotes-list">List Quotes</a></li>
-                <li><a href="/?page=quotes-create" data-page="quotes-create">Create Quote</a></li>
+                <li><a href="/?page=quote/quotes-list" data-page="quote/quotes-list">List Quotes</a></li>
+                <li><a href="/?page=quote/quotes-create" data-page="quote/quotes-create">Create Quote</a></li>
               </ul>
             </li>
             <li class="nav-section">
@@ -80,15 +80,15 @@
             <li class="nav-section">
               <div class="section-label">Invoices</div>
               <ul>
-                <li><a href="/?page=invoices-list" data-page="invoices-list">List Invoices</a></li>
-                <li><a href="/?page=invoices-create" data-page="invoices-create">Create Invoice</a></li>
+                <li><a href="/?page=invoice/invoices-list" data-page="invoice/invoices-list">List Invoices</a></li>
+                <li><a href="/?page=invoice/invoices-create" data-page="invoice/invoices-create">Create Invoice</a></li>
               </ul>
             </li>
             <li class="nav-section">
               <div class="section-label">Payments</div>
               <ul>
-                <li><a href="/?page=payments-list" data-page="payments-list">List Payments</a></li>
-                <li><a href="/?page=payments-create" data-page="payments-create">Record Payment</a></li>
+                <li><a href="/?page=payments/payments-list" data-page="payments/payments-list">List Payments</a></li>
+                <li><a href="/?page=payments/payments-create" data-page="payments/payments-create">Record Payment</a></li>
                 <!-- <li><a href="/?page=settings&tab=terms" data-page="settings">Terms & Conditions</a></li> -->
               </ul>
             </li>

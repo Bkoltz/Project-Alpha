@@ -1,9 +1,9 @@
 <?php
 // src/views/pages/invoice-print.php
-require_once __DIR__ . '/../../config/db.php';
-require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/format.php';
-require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/format.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 $st = $pdo->prepare('SELECT i.*, c.name client_name, c.organization client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
 $st->execute([$id]);

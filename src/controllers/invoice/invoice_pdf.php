@@ -3,8 +3,8 @@
 // Generate a server-side PDF for an Invoice using Dompdf
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
 
 // Locate Composer autoload by walking up to the project root
 $autoload = '';
@@ -42,7 +42,8 @@ if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
-require __DIR__ . '/../views/pages/invoice-print.php';
+$projectRoot = realpath(__DIR__ . '/..' . '/..' . '/..');
+require __DIR__ . '/../../views/pages/invoice/invoice-print.php';
 $content = ob_get_clean();
 
 $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');

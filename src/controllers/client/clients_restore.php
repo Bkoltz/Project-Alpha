@@ -1,10 +1,10 @@
 <?php
 // src/controllers/clients_restore.php
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../../config/db.php';
 
 $id = (int)($_POST['id'] ?? 0); // archived_clients.id
 if ($id <= 0) {
-  header('Location: /?page=archived-clients&error=Invalid%20request');
+  header('Location: /?page=client/archived-clients&error=Invalid%20request');
   exit;
 }
 
@@ -12,7 +12,7 @@ $ac = $pdo->prepare('SELECT * FROM archived_clients WHERE id=?');
 $ac->execute([$id]);
 $row = $ac->fetch(PDO::FETCH_ASSOC);
 if (!$row) {
-  header('Location: /?page=archived-clients&error=Not%20found');
+  header('Location: /?page=client/archived-clients&error=Not%20found');
   exit;
 }
 
@@ -36,10 +36,10 @@ try {
   $pdo->prepare('DELETE FROM archived_clients WHERE id=?')->execute([$id]);
 
   $pdo->commit();
-  header('Location: /?page=clients-list&restored=1');
+  header('Location: /?page=client/clients-list&restored=1');
   exit;
 } catch (Throwable $e) {
   $pdo->rollBack();
-  header('Location: /?page=archived-clients&error=Restore%20failed');
+  header('Location: /?page=client/archived-clients&error=Restore%20failed');
   exit;
 }

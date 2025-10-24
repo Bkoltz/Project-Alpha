@@ -1,7 +1,7 @@
 <?php
 // src/views/pages/payments-create.php
-require_once __DIR__ . '/../../config/db.php';
-require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 $invoices = $pdo->query("SELECT i.id, i.total, COALESCE(p.paid,0) AS paid, i.status, c.name client FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN (SELECT invoice_id, SUM(amount) AS paid FROM payments WHERE status='succeeded' GROUP BY invoice_id) p ON p.invoice_id=i.id WHERE i.status IN ('unpaid','partial') ORDER BY i.created_at DESC LIMIT 200")->fetchAll();
 $pref = (int)($_GET['invoice_id'] ?? 0);
 $prefAmount = '';
@@ -36,12 +36,14 @@ if ($pref > 0) {
     </label>
     <label>
       <div>Method</div>
-      <?php require_once __DIR__ . '/../../config/app.php'; $methods = (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']); ?>
+    <?php require_once __DIR__ . '/../../../config/app.php'; $methods = (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']); ?>
       <select name="method" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <?php foreach ($methods as $m): ?>
           <option value="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></option>
         <?php endforeach; ?>
       </select>
+      <!-- if the user selects check, we add a textbox for the user to enter the check number that was used to pay the invoice. -->
+      <?php if(1): ?>Enter check number<?php endif; ?>
     </label>
     <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Payment</button>
   </form>

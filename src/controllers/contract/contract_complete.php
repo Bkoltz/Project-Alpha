@@ -1,10 +1,10 @@
 <?php
 // src/controllers/contract_complete.php
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 
 $id = (int)($_POST['id'] ?? 0);
-if ($id <= 0) { header('Location: /?page=contracts-list&error=Invalid%20contract'); exit; }
+if ($id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
 
 $pdo->beginTransaction();
 try {

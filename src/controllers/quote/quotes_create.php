@@ -1,7 +1,7 @@
 <?php
 // src/controllers/quotes_create.php
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../utils/project_id.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/project_id.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
@@ -13,7 +13,7 @@ $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 
 if ($client_id <= 0 || empty($desc)) {
-    header('Location: /?page=quotes-create&error=Invalid%20input');
+    header('Location: /?page=quote/quotes-create&error=Invalid%20input');
     exit;
 }
 
@@ -29,7 +29,7 @@ for ($i=0; $i<count($desc); $i++) {
     $items[] = ['description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
 }
 if (!$items) {
-    header('Location: /?page=quotes-create&error=Add%20at%20least%20one%20item');
+    header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
     exit;
 }
 
@@ -67,9 +67,9 @@ try {
     $pdo->commit();
 } catch (Throwable $e) {
     $pdo->rollBack();
-    header('Location: /?page=quotes-create&error=Failed%20to%20create%20quote');
+    header('Location: /?page=quote/quotes-create&error=Failed%20to%20create%20quote');
     exit;
 }
 
-header('Location: /?page=quotes-list&created=1');
+header('Location: /?page=quote/quotes-list&created=1');
 exit;

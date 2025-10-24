@@ -1,8 +1,8 @@
 <?php
 // src/controllers/contract_sign.php
 // Handles uploading a signed PDF and activating the contract (no invoice creation here)
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
 if ($contract_id <= 0) { header('Location: /?page=contracts-list&error=Invalid%20contract'); exit; }

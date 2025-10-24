@@ -1,7 +1,7 @@
 <?php
 // src/controllers/invoices_update.php
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 $id = (int)($_POST['id'] ?? 0);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';

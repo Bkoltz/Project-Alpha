@@ -1,6 +1,6 @@
 <?php
 // src/views/pages/payments-list.php
-require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../../config/db.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
@@ -44,7 +44,7 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
       input.addEventListener('input', function(){
         hid.value='';
         var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-        fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
+  fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
           if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
           sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
           Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });

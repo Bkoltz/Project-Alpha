@@ -1,10 +1,10 @@
 <?php
 // src/controllers/clients_delete.php
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../../config/db.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
-  header('Location: /?page=clients-list&error=Invalid%20client');
+  header('Location: /?page=client/clients-list&error=Invalid%20client');
   exit;
 }
 
@@ -13,7 +13,7 @@ $st = $pdo->prepare('SELECT * FROM clients WHERE id=?');
 $st->execute([$id]);
 $client = $st->fetch(PDO::FETCH_ASSOC);
 if (!$client) {
-  header('Location: /?page=clients-list&error=Client%20not%20found');
+  header('Location: /?page=client/clients-list&error=Client%20not%20found');
   exit;
 }
 
@@ -80,10 +80,10 @@ try {
   $pdo->prepare('DELETE FROM clients WHERE id=?')->execute([$id]);
 
   $pdo->commit();
-  header('Location: /?page=clients-list&archived=1');
+  header('Location: /?page=client/clients-list&archived=1');
   exit;
 } catch (Throwable $e) {
   $pdo->rollBack();
-  header('Location: /?page=clients-edit&id='.$id.'&error=Archive%20failed');
+  header('Location: /?page=client/clients-edit&id='.$id.'&error=Archive%20failed&details='.urlencode($e->getMessage()));
   exit;
 }

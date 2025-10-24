@@ -1,6 +1,6 @@
 <?php
-// src/controllers/clients_search.php
-require_once __DIR__ . '/../config/db.php';
+// src/controllers/client/clients_search.php
+require_once __DIR__ . '/../../config/db.php';
 header('Content-Type: application/json');
 $term = trim((string)($_GET['term'] ?? ''));
 if ($term === '') { echo json_encode([]); exit; }

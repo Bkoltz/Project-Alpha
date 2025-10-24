@@ -1,6 +1,6 @@
 <?php
 // src/controllers/quotes_update.php
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../../config/db.php';
 $id = (int)($_POST['id'] ?? 0);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
@@ -9,7 +9,7 @@ $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
-if ($id<=0 || $client_id<=0) { header('Location: /?page=quotes-list&error=Invalid'); exit; }
+if ($id<=0 || $client_id<=0) { header('Location: /?page=quote/quotes-list&error=Invalid'); exit; }
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($desc);$i++){
   $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
@@ -33,6 +33,6 @@ try{
   $ins=$pdo->prepare('INSERT INTO quote_items (quote_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['d'],$it['q'],$it['p'],$it['t']]); }
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=quotes-list&error=Update%20failed'); exit; }
-header('Location: /?page=quotes-list&updated=1');
+}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=quote/quotes-list&error=Update%20failed'); exit; }
+header('Location: /?page=quote/quotes-list&updated=1');
 exit;
