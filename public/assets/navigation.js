@@ -393,48 +393,46 @@
     }
     
     function handleNavigation(event) {
-    const link = event.target.closest('a[href^="/?page="]');
+        const link = event.target.closest('a[href^="/?page="]');
         if (!link) return;
-        
+
         // Don't interfere with external links or links with special attributes
-        if (link.hostname !== window.location.hostname || 
-            link.hasAttribute('target') || 
+        if (link.hostname !== window.location.hostname ||
+            link.hasAttribute('target') ||
             event.metaKey || event.ctrlKey) {
             return;
         }
-        
-        // Don't intercept PDF/print pages - they need to load normally
-        const url = new URL(link.href);
-        const page = url.searchParams.get('page');
-        if (page && (page.includes('-print') || page.includes('-pdf') || page.includes('serve-upload'))) {
-            return; // Let browser handle normally
+
+        // Parse the link URL and page param
+        let linkUrl;
+        try {
+            linkUrl = new URL(link.href);
+        } catch (err) {
+            return; // invalid URL, let browser handle
         }
-        
-        event.preventDefault();
+
         const pageName = linkUrl.searchParams.get('page');
-        
-        // Skip client-side navigation for PDF views and downloads
-        if (pageName && (
-            pageName.endsWith('-pdf') || 
-            pageName.includes('serve-upload') || 
+        if (!pageName) return; // nothing for client-side router to do
+
+        // Allow normal navigation for PDF/print/download/serve-upload links
+        if (pageName.includes('-print') ||
+            pageName.includes('-pdf') ||
+            pageName.includes('serve-upload') ||
             link.hasAttribute('data-skip-nav') ||
-            link.hasAttribute('download')
-        )) {
+            link.hasAttribute('download')) {
             return;
         }
-        
+
+        // Intercept and navigate via client-side router
         event.preventDefault();
-        
-        if (pageName) {
-            // Build the full page string with all parameters
-            const additionalParams = Array.from(linkUrl.searchParams)
-                .filter(([key]) => key !== 'page')
-                .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-                .join('&');
-            
-            const fullPage = additionalParams ? `${pageName}&${additionalParams}` : pageName;
-            navigateToPage(fullPage);
-        }
+
+        const additionalParams = Array.from(linkUrl.searchParams)
+            .filter(([key]) => key !== 'page')
+            .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+            .join('&');
+
+        const fullPage = additionalParams ? `${pageName}&${additionalParams}` : pageName;
+        navigateToPage(fullPage);
     }
     
     // Handle browser back/forward buttons

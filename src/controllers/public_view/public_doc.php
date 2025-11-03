@@ -1,6 +1,7 @@
 <?php
 // src/controllers/public_doc.php
 // Render a public, tokenized view of a document without requiring auth
+// TODO: We need to add more public views. One for contract, so a client can upload a signed contract via link/portal on public_contract_action.
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';

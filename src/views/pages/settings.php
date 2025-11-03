@@ -53,6 +53,83 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
             </div>
           </fieldset>
         <?php endif; ?>
+        <?php if ($tab === 'billing'): ?>
+          <script>
+            (function(){
+              var pmList = document.getElementById('pmList');
+              var pmAdd = document.getElementById('pmAdd');
+              var pmSelect = document.getElementById('pmSelect');
+              var pmCustom = document.getElementById('pmCustom');
+              var pmRequireRef = document.getElementById('pmRequireRef');
+              var hiddenJson = document.getElementById('paymentMethodsJson');
+
+              function sync() {
+                var items = [];
+                Array.from(pmList.querySelectorAll('.pm-item')).forEach(function(el){
+                  var name = el.querySelector('input[type="hidden"]').value || el.querySelector('span').textContent.trim();
+                  var requiresRef = !!el.querySelector('.pm-requires-ref') && el.querySelector('.pm-requires-ref').checked;
+                  items.push({name: name, requires_reference: requiresRef});
+                });
+                hiddenJson.value = JSON.stringify(items);
+                var fallback = document.querySelector('textarea[name="payment_methods"]');
+                if (fallback) {
+                  fallback.value = items.map(function(i){ return i.name; }).join('\n');
+                }
+              }
+
+              function removeHandler(e){
+                var btn = e.currentTarget;
+                var row = btn.closest('.pm-item');
+                if (row) { row.remove(); sync(); }
+              }
+
+              function addMethod(name, requiresRef){
+                if (!name) return;
+                // prevent duplicates (case-insensitive)
+                var existing = Array.from(pmList.querySelectorAll('input[type="hidden"]')).some(function(h){ return h.value.toLowerCase() === name.toLowerCase(); });
+                if (existing) return;
+
+                var div = document.createElement('div');
+                div.className = 'pm-item';
+                div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+                div.innerHTML = '<input type="hidden" name="payment_methods_backup[]" value="'+htmlEscape(name)+'">'
+                  + '<span style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;background:#fafafa">'+escapeHtml(name)+'</span>'
+                  + '<label style="font-size:12px;color:var(--muted)"><input type="checkbox" class="pm-requires-ref" '+(requiresRef? 'checked' : '')+'> Requires reference</label>'
+                  + '<button type="button" class="pm-remove" style="margin-left:auto;padding:6px 8px;border-radius:6px;border:1px solid #ddd;background:#fff">Remove</button>';
+
+                pmList.appendChild(div);
+                var btn = div.querySelector('.pm-remove');
+                btn.addEventListener('click', removeHandler);
+                sync();
+              }
+
+              function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+              function htmlEscape(s){ return s.replace(/"/g,'&quot;'); }
+
+              // wire existing remove buttons
+              Array.from(document.querySelectorAll('.pm-remove')).forEach(function(b){ b.addEventListener('click', removeHandler); });
+
+              pmSelect.addEventListener('change', function(){
+                if (pmSelect.value === 'other') { pmCustom.style.display = ''; pmCustom.focus(); } else { pmCustom.style.display = 'none'; }
+              });
+
+              pmAdd.addEventListener('click', function(){
+                var name = pmSelect.value === 'other' ? pmCustom.value.trim() : pmSelect.value;
+                if (!name) return;
+                addMethod(name, pmRequireRef.checked);
+                pmCustom.value = '';
+                pmSelect.value = 'card';
+                pmRequireRef.checked = false;
+              });
+
+              // helper to safely set innerText for display
+              function escapeHtmlForDisplay(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+              // ensure initial sync
+              sync();
+            })();
+          </script>
+        <?php endif; ?>
 
         <?php if ($tab === 'system'): ?>
           <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
@@ -152,24 +229,46 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
           </fieldset>
         <?php endif; ?>
 
+        <!--TODO: change the payment methods so that it isn't a text input, maybe a dropdown of available payment methods. We need to have credit, bank transfer, cash, check (we need to record the check number), etc. -->
         <?php if ($tab === 'billing'): ?>
           <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
             <legend style="padding:0 6px;color:var(--muted)">Billing Defaults</legend>
             <label>
               <div>Net Terms (days)</div>
-              
+              <input type="number" min="0" name="net_terms" value="<?php echo htmlspecialchars((string)($appConfig['net_terms'] ?? 30)); ?>" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
             </label>
             <div style="margin-top:12px"></div>
-            <label>
-              <!-- TODO: change the payment methods so that it isn't a text input, and a dropdown of available payment methods. We need to have credit, bank transfer, cash, check (we need to record the check number), etc. -->
-              <div>Payment Methods (one per line)</div>
-              <textarea name="payment_methods" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="card&#10;cash&#10;bank_transfer"><?php echo htmlspecialchars(implode("\n", (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']))); ?></textarea>
-              <!-- we need to make this something other than a textbox. What if we made this into list or dropdown? We also then need a way for the user to remove a payment method. -->
-            </label>
-            <label>
-              <div>Add Payment Method</div>
-              <!-- add more payment methods here -->
-            </label>
+            <?php $paymentMethods = (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']); ?>
+            <div style="margin-bottom:8px">
+              <div style="margin-bottom:6px">Payment Methods</div>
+              <div id="pmList" style="display:flex;flex-direction:column;gap:6px">
+                <?php foreach ($paymentMethods as $pm): ?>
+                  <div class="pm-item" style="display:flex;align-items:center;gap:8px">
+                    <input type="hidden" name="payment_methods_backup[]" value="<?php echo htmlspecialchars($pm); ?>">
+                    <span style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;background:#fafafa"><?php echo htmlspecialchars($pm); ?></span>
+                    <label style="font-size:12px;color:var(--muted)"><input type="checkbox" class="pm-requires-ref"> Requires reference</label>
+                    <button type="button" class="pm-remove" style="margin-left:auto;padding:6px 8px;border-radius:6px;border:1px solid #ddd;background:#fff">Remove</button>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <select id="pmSelect" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cash">Cash</option>
+                  <option value="check">Check</option>
+                  <option value="other">Other...</option>
+                </select>
+                <input id="pmCustom" placeholder="Custom method" style="padding:8px;border-radius:8px;border:1px solid #ddd;flex:1;display:none">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="pmRequireRef"> Requires reference</label>
+                <button type="button" id="pmAdd" style="padding:8px 10px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff">Add</button>
+              </div>
+
+              <!-- Hidden JSON payload for server processing; fallback backup textarea kept for backward compatibility -->
+              <input type="hidden" name="payment_methods_json" id="paymentMethodsJson" value="<?php echo htmlspecialchars(json_encode($paymentMethods)); ?>">
+              <textarea name="payment_methods" rows="3" style="width:100%;padding:8px;border-radius:6px;border:1px solid #eee;margin-top:8px;display:none"><?php echo htmlspecialchars(implode("\n", $paymentMethods)); ?></textarea>
+            </div>
             <!-- <div style="margin-top:10px">
               <label><input type="checkbox" name="suppress_assets_warning" value="1" <?php echo !empty($appConfig['suppress_assets_warning']) ? 'checked' : ''; ?>> Don't show warning about public/assets not being writable</label>
             </div> -->
