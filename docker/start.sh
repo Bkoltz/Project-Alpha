@@ -61,11 +61,22 @@ fi
 # 2) Runtime, always safe to re-run
 if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
   echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
-  if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
-       "/usr/local/share/app-migrations/runtime.sql" > /dev/null 2>&1; then
+  echo "Debug: Executing runtime.sql from $(ls -l /usr/local/share/app-migrations/runtime.sql)"
+  
+  # Execute with verbose error reporting
+  set +e  # Temporarily disable exit on error
+  mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
+       "/usr/local/share/app-migrations/runtime.sql" 2>&1 | tee /tmp/migration.log
+  MIGRATION_EXIT=${PIPESTATUS[0]}
+  set -e  # Re-enable exit on error
+  
+  if [ $MIGRATION_EXIT -eq 0 ]; then
     echo "✅ Runtime migrations applied (or already up-to-date)."
   else
-    echo "⚠️  Runtime migrations encountered errors (continuing). Check logs if issues persist."
+    echo "⚠️  Runtime migrations encountered errors (exit code $MIGRATION_EXIT):"
+    cat /tmp/migration.log
+    echo "Error details saved in /tmp/migration.log"
+    echo "Continuing anyway, but the application may not work correctly."
   fi
 else
   echo "ℹ️  No runtime migration file present. Skipping."

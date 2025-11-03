@@ -35,7 +35,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
     <?php $st = strtolower((string)($contract['status'] ?? '')); if (!in_array($st, ['denied','cancelled','void'], true)): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -265,6 +265,18 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <td style="padding:10px;font-weight:700">Total</td>
         <td style="padding:10px;font-weight:700">$<?php echo number_format($contract['total'] ?? 0,2); ?></td>
       </tr>
+      <?php if (($contract['deposit_amount'] ?? 0) > 0): ?>
+      <tr style="background:#f9fafb">
+        <td></td><td></td>
+        <td style="padding:10px;font-weight:600;color:#059669">Deposit/Down Payment</td>
+        <td style="padding:10px;color:#059669">-$<?php echo number_format($contract['deposit_amount'] ?? 0,2); ?></td>
+      </tr>
+      <tr style="background:#f9fafb">
+        <td></td><td></td>
+        <td style="padding:10px;font-weight:700;font-size:15px">Balance Due</td>
+        <td style="padding:10px;font-weight:700;font-size:15px">$<?php echo number_format(max(0, ($contract['total'] ?? 0) - ($contract['deposit_amount'] ?? 0)),2); ?></td>
+      </tr>
+      <?php endif; ?>
       <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
       <tr>
         <td colspan="4" style="padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">

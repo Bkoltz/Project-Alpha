@@ -81,7 +81,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
   <?php endif; ?>
 
   <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="invoices-list">
+    <input type="hidden" name="page" value="invoice/invoices-list">
     <input type="hidden" name="client_id" id="clientIdIL" value="<?php echo (int)$client_id; ?>">
     <label style="position:relative">
       <div>Client</div>
@@ -115,7 +115,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
       <input type="number" name="doc_number" value="<?php echo htmlspecialchars($_GET['doc_number'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
     </label>
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
+    <a href="/?page=invoice/invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
   </form>
 
   <script>
@@ -178,13 +178,13 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">I-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
-            <td style="padding:10px"><a href="/?page=clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
             <td style="padding:10px"><?php echo (!empty($r['due_date'])) ? date('m/d/Y', strtotime($r['due_date'])) : ''; ?></td>
             <td style="padding:10px">
-              <a href="/?page=invoice-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px; font-size: small;">PDF</a>
+              <a href="/?page=invoice/invoice-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px; font-size: small;">PDF</a>
               <?php if (strtolower((string)$r['status']) !== 'void'): ?>
               <form method="post" action="/?page=email-send" style="display:inline;margin-right:6px">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -195,13 +195,13 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
               </form>
               <?php endif; ?>
               <?php if ($r['status'] !== 'paid' && $r['status'] !== 'void'): ?>
-                <form method="post" action="/?page=invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
+                <form method="post" action="/?page=invoice/invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Paid</button>
                 </form>
               <?php endif; ?>
             </td>
-            <td style="padding:10px"><a href="/?page=invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
+            <td style="padding:10px"><a href="/?page=invoice/invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>
@@ -209,14 +209,14 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
   </div>
   <?php
     $last = (int)ceil(max(1,$total)/$per);
-    $qs = $_GET; unset($qs['p']); $base='/?'.http_build_query($qs+['page'=>'invoices-list','per_page'=>$per]);
+    $qs = $_GET; unset($qs['p']); $base='/?'.http_build_query($qs+['page'=>'invoice/invoices-list','per_page'=>$per]);
   ?>
   <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <form method="get" action="/">
         <?php foreach ($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
         ?>
-        <input type="hidden" name="page" value="invoices-list">
+        <input type="hidden" name="page" value="invoice/invoices-list">
         <label>Per page
           <select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
             <option value="50" <?php echo $per===50?'selected':''; ?>>50</option>

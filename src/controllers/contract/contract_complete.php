@@ -29,9 +29,9 @@ try {
   $pdo->commit();
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
-  header('Location: /?page=contracts-list&error=' . urlencode($e->getMessage()));
+  header('Location: /?page=contract/contracts-list&error=' . urlencode($e->getMessage()));
   exit;
 }
 
-header('Location: /?page=contracts-list&completed=1');
+header('Location: /?page=contract/contracts-list&completed=1');
 exit;

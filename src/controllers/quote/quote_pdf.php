@@ -52,7 +52,7 @@ $options = new Options();
 $options->set('isRemoteEnabled', true);
 $options->set('isHtml5ParserEnabled', true);
 // Allow Dompdf to access local files under the project directory (for logos, etc.)
-$projectRoot = realpath(__DIR__ . '/..' . '/..');
+$projectRoot = realpath(__DIR__ . '/..' . '/..' . '/..');
 if ($projectRoot) { $options->set('chroot', $projectRoot); }
 $dompdf = new Dompdf($options);
 // Set base path so relative/local file URLs resolve
@@ -79,5 +79,7 @@ $h = $canvas->get_height();
 $canvas->page_text(54, $h - 30, 'Powered by Project Alpha', $font, 10, [0,0,0]);
 
 $filename = 'quote_Q-' . ($id) . '.pdf';
+header('Content-Type: application/pdf');
+header('Content-Disposition: inline; filename="' . $filename . '"');
 $dompdf->stream($filename, ['Attachment' => false]);
 exit;

@@ -32,6 +32,10 @@ $csrf = csrf_sf_token('contracts-create');
         <div>Discount Value</div>
         <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+      <label>
+        <div>Deposit/Down Payment ($)</div>
+        <input id="depositAmountCo" type="number" step="0.01" name="deposit_amount" value="0" min="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional deposit amount">
+      </label>
     </div>
 
     <div>

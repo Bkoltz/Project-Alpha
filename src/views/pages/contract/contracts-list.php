@@ -99,7 +99,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px"><a href="/?page=contract/contract-print&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
-            <td style="padding:10px"><a href="/?page=clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)($r['total'] ?? 0),2); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -155,7 +155,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       <form method="get" action="/">
         <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
         ?>
-        <input type="hidden" name="page" value="contracts-list">
+        <input type="hidden" name="page" value="contract/contracts-list">
         <label>Per page
           <select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
             <option value="50" <?php echo $per===50?'selected':''; ?>>50</option>

@@ -10,6 +10,7 @@ $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$deposit_amount = max(0, (float)($_POST['deposit_amount'] ?? 0));
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
@@ -34,7 +35,7 @@ if ($client_id <= 0) {
 }
 if ($client_id <= 0) {
     @error_log('[contracts_create] invalid client_id', 0);
-    header('Location: /?page=contracts-create&error=Please%20select%20a%20client%20from%20suggestions');
+    header('Location: /?page=contract/contracts-create&error=Please%20select%20a%20client%20from%20suggestions');
     exit;
 }
 
@@ -45,7 +46,7 @@ for($i=0;$i<count($desc);$i++){
 }
 if(!$items){
     @error_log('[contracts_create] no valid items', 0);
-    header('Location: /?page=contracts-create&error=Add%20at%20least%20one%20item');
+    header('Location: /?page=contract/contracts-create&error=Add%20at%20least%20one%20item');
     exit;
 }
 $discount_amount=0.0; if($discount_type==='percent'){ $discount_amount = max(0,min(100,$discount_value))*$subtotal/100; } elseif($discount_type==='fixed'){ $discount_amount = max(0,$discount_value); }
@@ -53,8 +54,8 @@ $tax = max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total]);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_amount, deposit_paid) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      ->execute([$client_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_amount, 0]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
@@ -96,8 +97,8 @@ try{
   if ($pdo->inTransaction()) $pdo->rollBack();
   @error_log('[contracts_create] exception: '.$e->getMessage(), 0);
   $msg = substr($e->getMessage(), 0, 200);
-  header('Location: /?page=contracts-create&error=' . urlencode($msg));
+  header('Location: /?page=contract/contracts-create&error=' . urlencode($msg));
   exit;
 }
-header('Location: /?page=contracts-list&created=1');
+header('Location: /?page=contract/contracts-list&created=1');
 exit;

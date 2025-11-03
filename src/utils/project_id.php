@@ -52,27 +52,45 @@ function project_next_code(PDO $pdo, int $client_id): string {
     $year = date('Y');
     $prefix = $initials . '-' . $year; // e.g., PA-2025
 
+    // Always work within a transaction (either existing or new)
     $ownTx = !$pdo->inTransaction();
     if ($ownTx) $pdo->beginTransaction();
+    
     try {
-        // Lock row for this prefix (requires a transaction)
+        // Try to lock and update the counter
         $sel = $pdo->prepare('SELECT next_seq FROM project_counters WHERE prefix=? FOR UPDATE');
         $sel->execute([$prefix]);
         $row = $sel->fetch(PDO::FETCH_ASSOC);
+        
         if ($row) {
+            // Counter exists, increment it
             $seq = (int)$row['next_seq'];
-            $upd = $pdo->prepare('UPDATE project_counters SET next_seq=? WHERE prefix=?');
-            $upd->execute([$seq + 1, $prefix]);
+            $upd = $pdo->prepare('UPDATE project_counters SET next_seq=next_seq+1 WHERE prefix=?');
+            $upd->execute([$prefix]);
         } else {
+            // Counter doesn't exist, create it
             $seq = 1;
-            $ins = $pdo->prepare('INSERT INTO project_counters (prefix, next_seq) VALUES (?, ?)');
-            $ins->execute([$prefix, 2]); // reserve 1, next will be 2
+            try {
+                $ins = $pdo->prepare('INSERT INTO project_counters (prefix, next_seq) VALUES (?, 2) ON DUPLICATE KEY UPDATE next_seq=next_seq');
+                $ins->execute([$prefix]);
+            } catch (Throwable $insertErr) {
+                // Handle race condition where another request inserted first
+                $sel->execute([$prefix]);
+                $row = $sel->fetch(PDO::FETCH_ASSOC);
+                if ($row) {
+                    $seq = (int)$row['next_seq'];
+                    $upd = $pdo->prepare('UPDATE project_counters SET next_seq=next_seq+1 WHERE prefix=?');
+                    $upd->execute([$prefix]);
+                }
+            }
         }
+        
         if ($ownTx) $pdo->commit();
     } catch (Throwable $e) {
         if ($ownTx && $pdo->inTransaction()) $pdo->rollBack();
-        // Fallback without counter (unlikely) — still generate but non-atomic
-        $seq = 1;
+        error_log('[project_next_code] Error: ' . $e->getMessage());
+        // Fallback: use timestamp-based sequence
+        $seq = (int)substr(microtime(true) * 1000, -4);
     }
 
     return sprintf('%s-%04d', $prefix, $seq); // e.g., PA-2025-0001

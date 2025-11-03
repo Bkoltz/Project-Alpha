@@ -19,7 +19,7 @@ $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 
 if ($client_id <= 0 || empty($desc)) {
-    header('Location: /?page=invoices-create&error=Invalid%20input');
+    header('Location: /?page=invoice/invoices-create&error=Invalid%20input');
     exit;
 }
 
@@ -35,7 +35,7 @@ for ($i=0; $i<count($desc); $i++) {
     $items[] = ['description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
 }
 if (!$items) {
-    header('Location: /?page=invoices-create&error=Add%20at%20least%20one%20item');
+    header('Location: /?page=invoice/invoices-create&error=Add%20at%20least%20one%20item');
     exit;
 }
 
@@ -72,9 +72,9 @@ try {
     $pdo->commit();
 } catch (Throwable $e) {
     $pdo->rollBack();
-    header('Location: /?page=invoices-create&error=Failed%20to%20create%20invoice');
+    header('Location: /?page=invoice/invoices-create&error=Failed%20to%20create%20invoice');
     exit;
 }
 
-header('Location: /?page=invoices-list&created=1');
+header('Location: /?page=invoice/invoices-list&created=1');
 exit;

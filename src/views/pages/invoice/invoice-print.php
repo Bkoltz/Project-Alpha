@@ -46,7 +46,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) !== 'void'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">

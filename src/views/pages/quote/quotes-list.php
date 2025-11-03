@@ -108,9 +108,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
             <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
             <td style="padding:10px;display:flex;gap:8px">
-              <a href="/?page=quote-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
+              <a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
               <?php if (strtolower((string)$r['status']) !== 'rejected'): ?>
-              <form method="post" action="/?page=email-send" style="display:inline">
+              <form method="post" action="/?page=quote/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="quote">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
@@ -119,17 +119,17 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               </form>
               <?php endif; ?>
               <?php if ($r['status'] === 'pending'): ?>
-                <form method="post" action="/?page=quote-approve" onsubmit="return confirm('Approve this quote and generate contract + invoice?')">
+                <form method="post" action="/?page=quote/quote-approve" onsubmit="return confirm('Approve this quote and generate contract + invoice?')">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: small;">Approve</button>
                 </form>
-                <form method="post" action="/?page=quote-reject" onsubmit="return confirm('Deny this quote?')">
+                <form method="post" action="/?page=quote/quote-reject" onsubmit="return confirm('Deny this quote?')">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
-                </form>
+              </form>
               <?php endif; ?>
             </td>
-            <td style="padding:10px"><a href="/?page=quotes-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
+            <td style="padding:10px"><a href="/?page=quote/quotes-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

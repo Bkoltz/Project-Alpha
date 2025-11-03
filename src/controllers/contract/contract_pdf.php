@@ -94,5 +94,7 @@ $h = $canvas->get_height();
 $canvas->page_text(54, $h - 30, 'Powered by Project Alpha', $font, 10, [0,0,0]);
 
 $filename = 'contract_C-' . ($id) . '.pdf';
+header('Content-Type: application/pdf');
+header('Content-Disposition: inline; filename="' . $filename . '"');
 $dompdf->stream($filename, ['Attachment' => false]);
 exit;

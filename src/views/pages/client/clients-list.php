@@ -94,7 +94,7 @@ $clients = $st->fetchAll();
             <!-- <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td> -->
             <td style="padding:10px"><a href="/?page=client/clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
             <td style="padding:10px">
-              <form method="post" action="/?page=clients-delete" onsubmit="return confirm('Archive client <?php echo addslashes($c['name']); ?>? This moves the client to Archived Clients.');" style="display:inline">
+              <form method="post" action="/?page=client/clients-delete" onsubmit="return confirm('Archive client <?php echo addslashes($c['name']); ?>? This moves the client to Archived Clients.');" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$c['id']; ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#b91c1c">Archive</button>
