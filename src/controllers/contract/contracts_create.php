@@ -10,7 +10,9 @@ $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
-$deposit_amount = max(0, (float)($_POST['deposit_amount'] ?? 0));
+$deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
+$deposit_value = (float)($_POST['deposit_value'] ?? 0);
+$fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
@@ -52,10 +54,18 @@ if(!$items){
 $discount_amount=0.0; if($discount_type==='percent'){ $discount_amount = max(0,min(100,$discount_value))*$subtotal/100; } elseif($discount_type==='fixed'){ $discount_amount = max(0,$discount_value); }
 $tax = max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
 
+// Calculate deposit amount based on type
+$deposit_amount = 0.0;
+if($deposit_type === 'percent') { $deposit_amount = max(0, min(100, $deposit_value)) * $total / 100; }
+elseif($deposit_type === 'fixed') { $deposit_amount = max(0, $deposit_value); }
+
+// Invoice total should be balance after deposit
+$invoice_total = max(0, $total - $deposit_amount);
+
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_amount, deposit_paid) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_amount, 0]);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      ->execute([$client_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
@@ -81,10 +91,10 @@ try{
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$co_id,$it['d'],$it['q'],$it['p'],$it['t']]); }
 
-  // Auto-create an invoice for this contract (no due date until completion)
+  // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $dueDate, $projectCode]);
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$co_id, null, $client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date]);
   $invoice_id = (int)$pdo->lastInsertId();
   $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ii->execute([$invoice_id,$it['d'],$it['q'],$it['p'],$it['t']]); }

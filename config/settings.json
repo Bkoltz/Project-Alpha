@@ -15,7 +15,8 @@
     "payment_methods": [
         "Card",
         "Cash",
-        "Bank Transfer"
+        "Bank Transfer",
+        "check"
     ],
     "timezone": "UTC",
     "smtp_host": null,

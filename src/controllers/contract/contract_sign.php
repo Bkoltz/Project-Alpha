@@ -34,6 +34,23 @@ try {
   $c->execute([$contract_id]);
   $contract = $c->fetch(PDO::FETCH_ASSOC);
   if (!$contract) throw new Exception('Not found');
+  
+  // Check if deposit is required and if it has been received
+  $depositType = $contract['deposit_type'] ?? 'none';
+  $depositValue = (float)($contract['deposit_amount'] ?? 0);
+  $depositPaid = (float)($contract['deposit_paid'] ?? 0);
+  $total = (float)($contract['total'] ?? 0);
+  $depositCalc = 0;
+  
+  if ($depositType === 'percent') {
+    $depositCalc = max(0, min(100, $depositValue)) * $total / 100;
+  } elseif ($depositType === 'fixed') {
+    $depositCalc = $depositValue;
+  }
+  
+  if ($depositCalc > 0 && $depositPaid < $depositCalc) {
+    throw new Exception('Cannot activate contract: deposit must be received first');
+  }
 
   // Store signed PDF in src/uploads directory for Docker volume mounting
   $internal = __DIR__ . '/../../uploads';

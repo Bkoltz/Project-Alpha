@@ -37,13 +37,21 @@ if ($pref > 0) {
     <label>
       <div>Method</div>
     <?php require_once __DIR__ . '/../../../config/app.php'; $methods = (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']); ?>
-      <select name="method" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <select name="method" id="paymentMethod" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <?php foreach ($methods as $m): ?>
           <option value="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></option>
         <?php endforeach; ?>
       </select>
-      <!-- if the user selects check, we add a textbox for the user to enter the check number that was used to pay the invoice. -->
-      <?php if(1): ?>Enter check number<?php endif; ?>
+    </label>
+    <div id="checkNumberField" style="display:none">
+      <label>
+        <div>Check Number</div>
+        <input type="text" name="check_number" id="checkNumberInput" placeholder="Enter check number" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" name="paid_in_advance" value="1" style="width:auto">
+      <div>Paid in Advance (don't mark contract as completed)</div>
     </label>
     <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Payment</button>
   </form>
@@ -60,5 +68,24 @@ if ($pref > 0) {
     }
     sel.addEventListener('change', update);
     if (!amt.value) { update(); }
+    
+    // Toggle check number field based on payment method
+    var methodSelect = document.getElementById('paymentMethod');
+    var checkField = document.getElementById('checkNumberField');
+    var checkInput = document.getElementById('checkNumberInput');
+    
+    function toggleCheckField() {
+      var method = methodSelect.value.toLowerCase();
+      if (method === 'check') {
+        checkField.style.display = 'block';
+        checkInput.required = true;
+      } else {
+        checkField.style.display = 'none';
+        checkInput.required = false;
+      }
+    }
+    
+    methodSelect.addEventListener('change', toggleCheckField);
+    toggleCheckField(); // Run on page load
   })();
 </script>

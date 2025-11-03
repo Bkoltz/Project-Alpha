@@ -24,7 +24,7 @@ $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
 $has_signed = (bool)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='contracts' AND COLUMN_NAME='signed_pdf_path'")->fetchColumn();
 $select_signed = $has_signed ? 'co.signed_pdf_path' : 'NULL AS signed_pdf_path';
-$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, {$select_signed}, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
+$sql="SELECT co.id, co.doc_number, co.project_code, co.status, co.total, co.deposit_type, co.deposit_amount, co.deposit_paid, {$select_signed}, c.name client, c.id AS client_id FROM contracts co JOIN clients c ON c.id=co.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY co.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
@@ -42,6 +42,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php endif; ?>
   <?php if (!empty($_GET['signed'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Signed PDF uploaded.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['deposit_received'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Deposit marked as received.</div>
   <?php endif; ?>
   <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
     <input type="hidden" name="page" value="contract/contracts-list">
@@ -125,6 +128,27 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               <?php if (!empty($r['signed_pdf_path'])): ?>
                 <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Signed PDF</a>
               <?php endif; ?>
+              <?php 
+                // Calculate if deposit is required and not yet received
+                $depositType = $r['deposit_type'] ?? 'none';
+                $depositValue = (float)($r['deposit_amount'] ?? 0);
+                $depositPaid = (float)($r['deposit_paid'] ?? 0);
+                $total = (float)($r['total'] ?? 0);
+                $depositCalc = 0;
+                if ($depositType === 'percent') {
+                  $depositCalc = max(0, min(100, $depositValue)) * $total / 100;
+                } elseif ($depositType === 'fixed') {
+                  $depositCalc = $depositValue;
+                }
+                $needsDeposit = $depositCalc > 0 && $depositPaid < $depositCalc;
+              ?>
+              <?php if ($needsDeposit && $r['status'] === 'pending'): ?>
+                <form method="post" action="/?page=contract/contract-deposit-received" style="display:inline" onsubmit="return confirm('Mark deposit as received ($<?php echo number_format($depositCalc, 2); ?>)?')">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Deposit Received</button>
+                </form>
+              <?php endif; ?>
               <?php if ($r['status']==='active'): ?>
                 <form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?')">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -140,7 +164,13 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               </form>
               <?php endif; ?>
             </td>
-            <td style="padding:10px"><a href="/?page=contract/contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
+            <td style="padding:10px">
+              <?php if ($r['status'] === 'pending'): ?>
+                <a href="/?page=contract/contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
+              <?php else: ?>
+                <span style="color:#9ca3af;font-size:small">—</span>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
       </tbody>

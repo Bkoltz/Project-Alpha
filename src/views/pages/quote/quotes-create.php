@@ -32,6 +32,25 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </label>
     </div>
 
+    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
+      <label>
+        <div>Deposit Required</div>
+        <select id="depositType" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <option value="none">None</option>
+          <option value="percent">Percent</option>
+          <option value="fixed">Fixed $</option>
+        </select>
+      </label>
+      <label>
+        <div>Deposit Value</div>
+        <input id="depositValue" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div>Fulfillment Date (Estimated)</div>
+        <input type="date" name="fulfillment_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+    </div>
+
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
       <div id="items" style="display:grid;gap:8px"></div>
@@ -49,6 +68,9 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div><div id="discountVal" style="min-width:120px;text-align:right">$0.00</div></div>
       <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div><div id="taxVal" style="min-width:120px;text-align:right">$0.00</div></div>
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalVal" style="min-width:120px;text-align:right">$0.00</div></div>
+      <div id="depositRow" style="display:none;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:6px">
+        <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:#059669;font-weight:700;font-size:15px">Deposit Due</div><div id="depositVal" style="min-width:120px;text-align:right;color:#059669;font-weight:700;font-size:15px">$0.00</div></div>
+      </div>
     </div>
 
     <div>
@@ -81,12 +103,28 @@ function recalc(){
   var taxable = Math.max(0, subtotal - discount);
   var tax = Math.max(0, taxp)*taxable/100;
   var total = Math.max(0, taxable + tax);
+  
+  // Calculate deposit
+  var depType = document.getElementById('depositType').value;
+  var depVal = parseFloat(document.getElementById('depositValue').value)||0;
+  var deposit = 0;
+  if (depType==='percent'){ deposit = Math.max(0, Math.min(100,depVal))*total/100; } 
+  else if (depType==='fixed'){ deposit = Math.max(0,depVal); }
+  
   document.getElementById('subtotalVal').textContent = money(subtotal);
   document.getElementById('discountVal').textContent = money(discount);
   document.getElementById('taxVal').textContent = money(tax);
   document.getElementById('totalVal').textContent = money(total);
+  
+  // Show/hide deposit row
+  if (depType !== 'none' && deposit > 0) {
+    document.getElementById('depositRow').style.display = 'block';
+    document.getElementById('depositVal').textContent = money(deposit);
+  } else {
+    document.getElementById('depositRow').style.display = 'none';
+  }
 }
-['discountType','discountValue','taxPercent'].forEach(id=>document.getElementById(id).addEventListener('input', recalc));
+['discountType','discountValue','taxPercent','depositType','depositValue'].forEach(id=>document.getElementById(id).addEventListener('input', recalc));
 addItem();
 
 // Client typeahead
