@@ -13,7 +13,7 @@ $paidStmt->execute([$id]);
 $paid = (float)$paidStmt->fetchColumn();
 $outstanding = max(0.0, $total - $paid);
 
-$url = '/?page=payments-create&invoice_id=' . $id;
+$url = '/?page=payments/payments-create&invoice_id=' . $id;
 if ($outstanding > 0) {
   $url .= '&amount=' . urlencode(number_format($outstanding, 2, '.', ''));
 }

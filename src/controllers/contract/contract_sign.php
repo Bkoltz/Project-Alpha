@@ -5,42 +5,65 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
-if ($contract_id <= 0) { header('Location: /?page=contracts-list&error=Invalid%20contract'); exit; }
+if ($contract_id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
 
 // Validate upload
 if (empty($_FILES['signed_pdf']) || !is_uploaded_file($_FILES['signed_pdf']['tmp_name'])) {
-  header('Location: /?page=contracts-list&error=' . urlencode('Please upload a signed PDF'));
+  header('Location: /?page=contract/contracts-list&error=' . urlencode('Please upload a signed PDF'));
   exit;
 }
 $f = $_FILES['signed_pdf'];
 // Max 25 MB
 if (!empty($f['size']) && $f['size'] > 25 * 1024 * 1024) {
-  header('Location: /?page=contracts-list&error=' . urlencode('File too large (max 25 MB)'));
+  header('Location: /?page=contract/contracts-list&error=' . urlencode('File too large (max 25 MB)'));
   exit;
 }
 $mime = @mime_content_type($f['tmp_name']);
 $origName = (string)($f['name'] ?? '');
 $extOk = preg_match('/\.pdf$/i', $origName) === 1;
 if ($mime !== 'application/pdf' && !$extOk) {
-  header('Location: /?page=contracts-list&error=' . urlencode('Only PDF files are accepted (must be .pdf)'));
+  header('Location: /?page=contract/contracts-list&error=' . urlencode('Only PDF files are accepted (must be .pdf)'));
   exit;
 }
 
+// Diagnostic logging to help debug upload/save failures
 $pdo->beginTransaction();
+error_log('UPLOAD: contract_sign start; contract_id=' . $contract_id . ' POST_keys=' . json_encode(array_keys($_POST)) . ' FILE_keys=' . json_encode(array_keys($_FILES)));
 try {
   $c = $pdo->prepare('SELECT * FROM contracts WHERE id=? FOR UPDATE');
   $c->execute([$contract_id]);
   $contract = $c->fetch(PDO::FETCH_ASSOC);
   if (!$contract) throw new Exception('Not found');
 
-  // Store signed PDF in internal uploads and serve via controller
-  $internal = __DIR__ . '/../uploads';
+  // Store signed PDF in src/uploads directory for Docker volume mounting
+  $internal = __DIR__ . '/../../uploads';
   if (!is_dir($internal)) { @mkdir($internal, 0775, true); }
+  // Log file upload metadata
+  error_log('UPLOAD: tmp_name=' . ($f['tmp_name'] ?? '') . ' size=' . ($f['size'] ?? 0) . ' error=' . ($f['error'] ?? ''));
+  error_log('UPLOAD: using src/uploads dir ' . $internal);
   $name = 'contract_' . $contract_id . '_signed_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.pdf';
   $internalDest = $internal . '/' . $name;
-  if (@move_uploaded_file($f['tmp_name'], $internalDest) || @rename($f['tmp_name'], $internalDest) || @copy($f['tmp_name'], $internalDest)) {
+  $moved = false;
+  // Try move_uploaded_file first (preferred)
+  if (!empty($f['tmp_name']) && is_uploaded_file($f['tmp_name'])) {
+    $moved = @move_uploaded_file($f['tmp_name'], $internalDest);
+    error_log('UPLOAD: move_uploaded_file result=' . ($moved ? '1' : '0') . ' dest=' . $internalDest);
+  }
+  // Fall back to rename/copy if needed
+  if (!$moved && !empty($f['tmp_name'])) {
+    $moved = @rename($f['tmp_name'], $internalDest);
+    error_log('UPLOAD: rename result=' . ($moved ? '1' : '0'));
+  }
+  if (!$moved && !empty($f['tmp_name'])) {
+    $moved = @copy($f['tmp_name'], $internalDest);
+    error_log('UPLOAD: copy result=' . ($moved ? '1' : '0'));
+  }
+  if ($moved) {
     @unlink($f['tmp_name']);
+    error_log('UPLOAD: saved to ' . $internalDest);
   } else {
+    // Log diagnostics about permissions and paths
+    error_log('UPLOAD: FAILED to store uploaded file. tmp_exists=' . (is_file($f['tmp_name']) ? '1' : '0') . ' internal_exists=' . (is_dir($internal)?'1':'0') . ' internal_writable=' . (is_writable($internal)?'1':'0') . ' cwd=' . getcwd());
     throw new Exception('Failed to store uploaded file');
   }
   $publicUrl = '/?page=serve-upload&file=' . rawurlencode($name);
@@ -51,9 +74,9 @@ try {
   $pdo->commit();
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
-  header('Location: /?page=contracts-list&error=' . urlencode($e->getMessage()));
+  header('Location: /?page=contract/contracts-list&error=' . urlencode($e->getMessage()));
   exit;
 }
 
-header('Location: /?page=contracts-list&signed=1');
+header('Location: /?page=contract/contracts-list&signed=1');
 exit;

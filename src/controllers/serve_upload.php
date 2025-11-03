@@ -6,9 +6,8 @@ $fname = isset($_GET['file']) ? basename($_GET['file']) : '';
 if ($fname === '') { http_response_code(404); exit; }
 
 $bases = [
-  '/var/www/config/uploads',
-  __DIR__ . '/../config/../../config/uploads', // project config/uploads
-  __DIR__ . '/../uploads', // legacy fallback
+  __DIR__ . '/../uploads', // src/uploads for contract files
+  '/var/www/config/uploads', // fallback for Docker environments
 ];
 $path = false;
 foreach ($bases as $b) {

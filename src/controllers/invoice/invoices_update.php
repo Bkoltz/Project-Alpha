@@ -11,7 +11,7 @@ $due_date = $_POST['due_date'] ?? null;
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
-if ($id<=0 || $client_id<=0) { header('Location: /?page=invoices-list&error=Invalid'); exit; }
+if ($id<=0 || $client_id<=0) { header('Location: /?page=invoice/invoices-list&error=Invalid'); exit; }
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($desc);$i++){
   $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
@@ -33,6 +33,6 @@ try{
   $ins=$pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['d'],$it['q'],$it['p'],$it['t']]); }
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=invoices-list&error=Update%20failed'); exit; }
-header('Location: /?page=invoices-list&updated=1');
+}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=invoice/invoices-list&error=Update%20failed'); exit; }
+header('Location: /?page=invoice/invoices-list&updated=1');
 exit;

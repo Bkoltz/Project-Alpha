@@ -19,7 +19,7 @@ if ($pref > 0) {
 ?>
 <section>
   <h2>Record Payment</h2>
-  <form method="post" action="/?page=payments-create" style="display:grid;gap:12px;max-width:520px">
+  <form method="post" action="/?page=payments/payments-create" style="display:grid;gap:12px;max-width:520px">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <label>
       <div>Invoice</div>

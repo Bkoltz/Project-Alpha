@@ -44,13 +44,39 @@
             mainContent.style.pointerEvents = 'auto';
         }
     }
+
+    // Build a canonical URL from a "page" string which may include additional
+    // query parameters (e.g. "contract/contracts-edit&id=3"). This ensures we
+    // never put encoded ampersands/equals inside the `page` GET param.
+    function buildUrlFromPageString(page) {
+        const u = new URL(window.location.origin + '/');
+        if (!page) {
+            u.searchParams.set('page', 'home');
+            return u.href;
+        }
+
+        const [pagePart, rest] = page.split('&', 2);
+        u.searchParams.set('page', pagePart);
+        if (rest) {
+            const tmp = new URLSearchParams(rest);
+            for (const [k, v] of tmp) {
+                // Only set missing params so we don't overwrite intentional GETs
+                if (!u.searchParams.has(k)) {
+                    u.searchParams.set(k, v);
+                }
+            }
+        }
+        return u.href;
+    }
     
     async function loadPageContent(page) {
         // Clear cache when loading a new page
         contentCache.clear();
 
         try {
-            const response = await fetch(`/?page=${encodeURIComponent(page)}`, {
+            // Build proper URL using URLSearchParams to avoid double-encoding
+            const url = buildUrlFromPageString(page);
+            const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
@@ -103,8 +129,8 @@
             const content = await loadPageContent(page);
 
             if (content === null) {
-                // Fallback to full page reload
-                window.location.href = `/?page=${encodeURIComponent(page)}`;
+                // Fallback to full page reload using canonical builder
+                window.location.href = buildUrlFromPageString(page);
                 return;
             }
             
@@ -142,8 +168,10 @@
             
             // Update browser history
             if (updateHistory) {
-                const url = page === 'home' ? '/' : `/?page=${encodeURIComponent(page)}`;
-                history.pushState({page}, '', url);
+                // Use same URL builder so history uses the canonical query string
+                const absolute = buildUrlFromPageString(page);
+                const rel = absolute.replace(window.location.origin, '');
+                history.pushState({page}, '', rel);
             }
             
             // Update navigation state
@@ -156,7 +184,7 @@
         } catch (error) {
             console.error('Navigation error:', error);
             // Fallback to full page reload
-            window.location.href = `/?page=${encodeURIComponent(page)}`;
+            window.location.href = buildUrlFromPageString(page);
         } finally {
             hideLoadingState();
         }
@@ -165,19 +193,26 @@
     function updatePageTitle(page) {
         const pageTitles = {
             'home': 'Dashboard',
-            'clients-list': 'List Clients',
-            'clients-create': 'Create Client',
-            'quotes-list': 'List Quotes',
-            'quotes-create': 'Create Quote',
-            'contracts-list': 'List Contracts',
-            'contracts-create': 'Create Contract',
-            'invoices-list': 'List Invoices',
-            'invoices-create': 'Create Invoice',
-            'payments-list': 'List Payments',
-            'payments-create': 'Record Payment',
+            'client/clients-list': 'List Clients',
+            'client/clients-create': 'Create Client',
+            'client/clients-edit': 'Edit Client',
+            'client/archived-clients': 'Archived Clients',
+            'quote/quotes-list': 'List Quotes',
+            'quote/quotes-create': 'Create Quote',
+            'quote/quotes-edit': 'Edit Quote',
+            'contract/contracts-list': 'List Contracts',
+            'contract/contracts-create': 'Create Contract',
+            'contract/contracts-edit': 'Edit Contract',
+            'invoice/invoices-list': 'List Invoices',
+            'invoice/invoices-create': 'Create Invoice',
+            'invoice/invoices-edit': 'Edit Invoice',
+            'payments/payments-list': 'List Payments',
+            'payments/payments-create': 'Record Payment',
             'projects-list': 'Projects',
             'api-keys': 'API Keys',
-            'settings': 'Settings'
+            'settings': 'Settings',
+            'financial/financial-dashboard': 'Financial Dashboard',
+            'financial/audit': 'Audit'
         };
         
         const pageTitle = pageTitles[page] || 'Project Alpha';
@@ -368,17 +403,38 @@
             return;
         }
         
+        // Don't intercept PDF/print pages - they need to load normally
+        const url = new URL(link.href);
+        const page = url.searchParams.get('page');
+        if (page && (page.includes('-print') || page.includes('-pdf') || page.includes('serve-upload'))) {
+            return; // Let browser handle normally
+        }
+        
+        event.preventDefault();
+        const pageName = linkUrl.searchParams.get('page');
+        
+        // Skip client-side navigation for PDF views and downloads
+        if (pageName && (
+            pageName.endsWith('-pdf') || 
+            pageName.includes('serve-upload') || 
+            link.hasAttribute('data-skip-nav') ||
+            link.hasAttribute('download')
+        )) {
+            return;
+        }
+        
         event.preventDefault();
         
-            const url = new URL(link.href);
-            const page = url.searchParams.get('page');
-            if (page) {
-                // Include any additional parameters from the URL
-                const fullPage = Array.from(url.searchParams)
-                    .filter(([key]) => key !== 'page')
-                    .reduce((acc, [key, value]) => `${acc}&${key}=${value}`, page);
-                navigateToPage(fullPage);
-            }
+        if (pageName) {
+            // Build the full page string with all parameters
+            const additionalParams = Array.from(linkUrl.searchParams)
+                .filter(([key]) => key !== 'page')
+                .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+                .join('&');
+            
+            const fullPage = additionalParams ? `${pageName}&${additionalParams}` : pageName;
+            navigateToPage(fullPage);
+        }
     }
     
     // Handle browser back/forward buttons

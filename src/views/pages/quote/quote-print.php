@@ -54,7 +54,7 @@ $isPdf = defined('PDF_MODE');
   $brand = $appConfig['brand_name'] ?? 'Project Alpha';
   $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   // Resolve default logo under project root public/assets
-  $projectRoot = realpath(__DIR__ . '/../../../');
+  $projectRoot = realpath(__DIR__ . '/../../../../');
   $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
   $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
   $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
@@ -68,7 +68,7 @@ $isPdf = defined('PDF_MODE');
         $fname = basename($q['file']);
         $bases = [];
         // Prefer project-root config/uploads
-        $projectRoot = realpath(__DIR__ . '/../../../');
+        $projectRoot = realpath(__DIR__ . '/../../../../');
         if ($projectRoot) {
           $cfg = realpath($projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads');
           if ($cfg) { $bases[] = $cfg; } else { $bases[] = $projectRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'uploads'; }
@@ -86,7 +86,7 @@ $isPdf = defined('PDF_MODE');
   }
   if (!$isUrl) {
     // Map leading-slash paths like /public/... and /config/uploads/... to the project root
-    $root = $projectRoot ?: realpath(__DIR__ . '/../../../');
+    $root = $projectRoot ?: realpath(__DIR__ . '/../../../../');
     if ($logoPath !== '' && ($logoPath[0] === '/' || $logoPath[0] === '\\')) {
       if ($root) {
         $candidate = @realpath($root . $logoPath);

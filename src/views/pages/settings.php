@@ -161,6 +161,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
             </label>
             <div style="margin-top:12px"></div>
             <label>
+              <!-- TODO: change the payment methods so that it isn't a text input, and a dropdown of available payment methods. We need to have credit, bank transfer, cash, check (we need to record the check number), etc. -->
               <div>Payment Methods (one per line)</div>
               <textarea name="payment_methods" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="card&#10;cash&#10;bank_transfer"><?php echo htmlspecialchars(implode("\n", (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']))); ?></textarea>
               <!-- we need to make this something other than a textbox. What if we made this into list or dropdown? We also then need a way for the user to remove a payment method. -->
@@ -279,13 +280,13 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
       })();
     </script>
   <?php endif; ?>
-
+  <!-- TODO: add settings for quotes so we can -->
   <?php if ($tab === 'quotes'): ?>
   <?php endif; ?>
-
+  <!-- TODO: add settings for contracts so we can -->
   <?php if ($tab === 'contracts'): ?>
   <?php endif; ?>
-
+  <!-- TODO: add settings for invoices so we can -->
   <?php if ($tab === 'invoices'): ?>
   <?php endif; ?>
 </section>

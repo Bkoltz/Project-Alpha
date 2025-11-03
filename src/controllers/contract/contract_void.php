@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 
 $id = (int)($_POST['id'] ?? 0);
-if ($id <= 0) { header('Location: /?page=contracts-list&error=Invalid%20contract'); exit; }
+if ($id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
 
 $pdo->beginTransaction();
 try {
@@ -21,9 +21,9 @@ try {
   $pdo->commit();
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
-  header('Location: /?page=contracts-list&error=' . urlencode($e->getMessage()));
+  header('Location: /?page=contract/contracts-list&error=' . urlencode($e->getMessage()));
   exit;
 }
 
-header('Location: /?page=contracts-list&voided=1');
+header('Location: /?page=contract/contracts-list&voided=1');
 exit;

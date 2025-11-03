@@ -21,10 +21,28 @@ header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: no-referrer-when-downgrade');
 header("Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'");
 
-// Resolve requested page
-// $page = isset($_GET['page']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['page']) : 'home'; old
 // Resolve requested page (allow letters, numbers, dashes, and slashes)
-$page = isset($_GET['page']) ? preg_replace('#[^a-z0-9/\-]#i','', $_GET['page']) : 'home';
+// Be defensive: some clients may accidentally URL-encode the entire query
+// into the `page` parameter (e.g. page=contract%2Fcontracts-edit%26id%3D3).
+// Split on any stray '&' and recover additional params into $_GET so
+// the router sees the intended `page` and other GET values like `id`.
+$pageRaw = isset($_GET['page']) ? (string)$_GET['page'] : 'home';
+if (strpos($pageRaw, '&') !== false) {
+    [$pagePart, $rest] = explode('&', $pageRaw, 2);
+    // Merge any parsed params into $_GET if they're not already present
+    parse_str($rest, $parsedExtra);
+    foreach ($parsedExtra as $k => $v) {
+        if (!isset($_GET[$k])) {
+            $_GET[$k] = $v;
+        }
+    }
+    $page = preg_replace('#[^a-z0-9/\-]#i', '', $pagePart);
+} else {
+    $page = preg_replace('#[^a-z0-9/\-]#i', '', $pageRaw);
+}
+// Temporary debug logging: record incoming page parsing to server error log
+// (remove or narrow this later once the issue is fixed)
+error_log('DEBUG incoming pageRaw=' . $pageRaw . ' parsed_page=' . $page . ' GET=' . json_encode($_GET));
 // Whitelist of allowed pages
 // $allowedPages = [
 //     'home',
@@ -133,8 +151,28 @@ if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
     exit;
 }
+if ($page === 'financial/financial-api') {
+    require_once __DIR__ . '/../src/controllers/financial/financial_api.php';
+    exit;
+}
 if ($page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
+    exit;
+}
+if ($page === 'client/clients-edit' || $page === 'clients-edit') {
+    require_once __DIR__ . '/../src/views/pages/client/clients-edit.php';
+    exit;
+}
+if ($page === 'quote/quotes-edit' || $page === 'quotes-edit') {
+    require_once __DIR__ . '/../src/views/pages/quote/quotes-edit.php';
+    exit;
+}
+if ($page === 'contract/contracts-edit' || $page === 'contracts-edit') {
+    require_once __DIR__ . '/../src/views/pages/contract/contracts-edit.php';
+    exit;
+}
+if ($page === 'invoice/invoices-edit' || $page === 'invoices-edit') {
+    require_once __DIR__ . '/../src/views/pages/invoice/invoices-edit.php';
     exit;
 }
 // If someone lands on email-test via GET (e.g., CSRF redirect), send them back to Settings -> System (email section)
@@ -150,20 +188,19 @@ if ($page === 'serveupload' || $page === 'serve-upload') {
     require_once __DIR__ . '/../src/controllers/serve_upload.php';
     exit;
 }
-if ($page === 'contract-pdf') {
-    require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
-    exit;
-}
-if ($page === 'quote-pdf') {
-    require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
-    exit;
-}
-if ($page === 'invoice-pdf') {
-    require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
-    exit;
-}
-
-// Handle POST actions (PRG pattern)
+    // Handle PDF generation routes - only -pdf pages, not -print pages
+    if (in_array($page, ['contract/contract-pdf', 'contract-pdf'])) {
+        require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
+        exit;
+    }
+    if (in_array($page, ['quote/quote-pdf', 'quote-pdf'])) {
+        require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
+        exit;
+    }
+    if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
+        exit;
+    }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
     $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action'];
@@ -199,83 +236,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/api_keys_revoke.php';
         exit;
     }
-    if ($page === 'clients-create') {
+    if ($page === 'client/clients-create' || $page === 'clients-create') {
         require_once __DIR__ . '/../src/controllers/client/clients_create.php';
         exit;
     }
-    if ($page === 'quotes-create') {
+    if ($page === 'quote/quotes-create' || $page === 'quotes-create') {
         require_once __DIR__ . '/../src/controllers/quote/quotes_create.php';
         exit;
     }
-    if ($page === 'quote-approve') {
+    if ($page === 'quote/quote-approve') {
         require_once __DIR__ . '/../src/controllers/quote/quote_approve.php';
         exit;
     }
-    if ($page === 'contract-sign') {
+    if ($page === 'contract/contract-sign') {
         require_once __DIR__ . '/../src/controllers/contract/contract_sign.php';
         exit;
     }
-    if ($page === 'contract-complete') {
+    if ($page === 'contract/contract-complete') {
         require_once __DIR__ . '/../src/controllers/contract/contract_complete.php';
         exit;
     }
-    if ($page === 'contract-void') {
+    if ($page === 'contract/contract-void') {
         require_once __DIR__ . '/../src/controllers/contract/contract_void.php';
         exit;
     }
-    if ($page === 'contract-deny') { // legacy
+    if ($page === 'contract/contract-deny') { // legacy
         require_once __DIR__ . '/../src/controllers/contract/contract_deny.php';
         exit;
     }
-    if ($page === 'invoices-mark-paid') {
+    if ($page === 'invoice/invoices-mark-paid') {
         require_once __DIR__ . '/../src/controllers/invoice/invoices_mark_paid.php';
         exit;
     }
-    if ($page === 'payments-create') {
+    if ($page === 'payments/payments-create') {
         require_once __DIR__ . '/../src/controllers/payments_create.php';
         exit;
     }
-    if ($page === 'quotes-update') {
+    if ($page === 'quote/quotes-update' || $page === 'quotes-update') {
         require_once __DIR__ . '/../src/controllers/quote/quotes_update.php';
         exit;
     }
-    if ($page === 'clients-update') {
+    if ($page === 'client/clients-update' || $page === 'clients-update') {
         require_once __DIR__ . '/../src/controllers/client/clients_update.php';
         exit;
     }
-    if ($page === 'clients-delete') {
+    if ($page === 'client/clients-delete' || $page === 'clients-delete') {
         require_once __DIR__ . '/../src/controllers/client/clients_delete.php';
         exit;
     }
-    if ($page === 'clients-restore') {
+    if ($page === 'client/clients-restore' || $page === 'clients-restore') {
         require_once __DIR__ . '/../src/controllers/client/clients_restore.php';
         exit;
     }
-    if ($page === 'clients-purge') {
+    if ($page === 'client/clients-purge' || $page === 'clients-purge') {
         require_once __DIR__ . '/../src/controllers/client/clients_purge.php';
         exit;
     }
-    if ($page === 'contracts-create') {
+    if ($page === 'contract/contracts-create' || $page === 'contracts-create') {
         require_once __DIR__ . '/../src/controllers/contract/contracts_create.php';
         exit;
     }
-    if ($page === 'contracts-update') {
+    if ($page === 'contract/contracts-update' || $page === 'contracts-update') {
         require_once __DIR__ . '/../src/controllers/contract/contracts_update.php';
         exit;
     }
-    if ($page === 'invoices-create') {
+    if ($page === 'invoice/invoices-create' || $page === 'invoices-create') {
         require_once __DIR__ . '/../src/controllers/invoice/invoices_create.php';
         exit;
     }
-    if ($page === 'invoices-update') {
+    if ($page === 'invoice/invoices-update' || $page === 'invoices-update') {
         require_once __DIR__ . '/../src/controllers/invoice/invoices_update.php';
         exit;
     }
-    if ($page === 'quote-reject') {
+    if ($page === 'quote/quote-reject' || $page === 'quote-reject') {
         require_once __DIR__ . '/../src/controllers/quote/quote_reject.php';
         exit;
     }
-    if ($page === 'email-send') {
+    if ($page === 'quote/email-send' || $page === 'contract/email-send' || $page === 'invoice/email-send' || $page === 'email-send') {
         require_once __DIR__ . '/../src/controllers/email_send.php';
         exit;
     }
