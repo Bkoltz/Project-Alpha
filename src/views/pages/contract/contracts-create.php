@@ -32,9 +32,24 @@ $csrf = csrf_sf_token('contracts-create');
         <div>Discount Value</div>
         <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+    </div>
+
+    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label>
-        <div>Deposit/Down Payment ($)</div>
-        <input id="depositAmountCo" type="number" step="0.01" name="deposit_amount" value="0" min="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional deposit amount">
+        <div>Deposit Required</div>
+        <select id="depositTypeCo" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <option value="none">None</option>
+          <option value="percent">Percent</option>
+          <option value="fixed">Fixed $</option>
+        </select>
+      </label>
+      <label>
+        <div>Deposit Value</div>
+        <input id="depositValueCo" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div>Fulfillment Date</div>
+        <input type="date" name="fulfillment_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
 
@@ -54,6 +69,9 @@ $csrf = csrf_sf_token('contracts-create');
       <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div><div id="discountValCo" style="min-width:120px;text-align:right">$0.00</div></div>
       <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div><div id="taxValCo" style="min-width:120px;text-align:right">$0.00</div></div>
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalValCo" style="min-width:120px;text-align:right">$0.00</div></div>
+      <div id="depositRowCo" style="display:none;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:6px">
+        <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:#059669;font-weight:700;font-size:15px">Deposit Due</div><div id="depositValCo" style="min-width:120px;text-align:right;color:#059669;font-weight:700;font-size:15px">$0.00</div></div>
+      </div>
     </div>
 
     <div>
@@ -86,12 +104,29 @@ function recalcCo(){
   var taxable = Math.max(0, subtotal - discount);
   var tax = Math.max(0, taxp)*taxable/100;
   var total = Math.max(0, taxable + tax);
+  
+  // Calculate deposit
+  var depType = document.getElementById('depositTypeCo').value;
+  var depVal = parseFloat(document.getElementById('depositValueCo').value)||0;
+  var deposit = 0;
+  if (depType==='percent'){ deposit = Math.max(0, Math.min(100,depVal))*total/100; } 
+  else if (depType==='fixed'){ deposit = Math.max(0,depVal); }
+  var balance = Math.max(0, total - deposit);
+  
   document.getElementById('subtotalValCo').textContent = money(subtotal);
   document.getElementById('discountValCo').textContent = money(discount);
   document.getElementById('taxValCo').textContent = money(tax);
   document.getElementById('totalValCo').textContent = money(total);
+  
+  // Show/hide deposit row
+  if (depType !== 'none' && deposit > 0) {
+    document.getElementById('depositRowCo').style.display = 'block';
+    document.getElementById('depositValCo').textContent = money(deposit);
+  } else {
+    document.getElementById('depositRowCo').style.display = 'none';
+  }
 }
-['discountTypeCo','discountValueCo','taxPercentCo'].forEach(id=>document.getElementById(id).addEventListener('input', recalcCo));
+['discountTypeCo','discountValueCo','taxPercentCo','depositTypeCo','depositValueCo'].forEach(id=>document.getElementById(id).addEventListener('input', recalcCo));
 addItemCo();
 
 // Client typeahead

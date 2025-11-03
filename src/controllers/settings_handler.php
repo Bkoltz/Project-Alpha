@@ -202,8 +202,22 @@ if (isset($_POST['net_terms_days'])) {
 }
 // Suppress assets warning checkbox
 $settings['suppress_assets_warning'] = !empty($_POST['suppress_assets_warning']) ? 1 : 0;
-// Payment methods (textarea lines)
-if (isset($_POST['payment_methods'])) {
+// Payment methods (JSON from modernized UI)
+if (isset($_POST['payment_methods_json'])) {
+    $jsonData = json_decode((string)$_POST['payment_methods_json'], true);
+    if (is_array($jsonData)) {
+        $methods = [];
+        foreach ($jsonData as $item) {
+            if (is_array($item) && !empty($item['name'])) {
+                $methods[] = trim($item['name']);
+            } elseif (is_string($item) && trim($item) !== '') {
+                $methods[] = trim($item);
+            }
+        }
+        $settings['payment_methods'] = array_values(array_unique($methods));
+    }
+} elseif (isset($_POST['payment_methods'])) {
+    // Fallback: textarea lines for backward compatibility
     $lines = preg_split('/\r?\n/', (string)$_POST['payment_methods']);
     $methods = [];
     foreach ($lines as $ln) {

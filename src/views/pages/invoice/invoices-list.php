@@ -201,7 +201,13 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                 </form>
               <?php endif; ?>
             </td>
-            <td style="padding:10px"><a href="/?page=invoice/invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a></td>
+            <td style="padding:10px">
+              <?php if ($r['status'] !== 'paid'): ?>
+                <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
+              <?php else: ?>
+                <span style="color:#9ca3af;font-size:small">—</span>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
       </tbody>

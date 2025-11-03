@@ -31,7 +31,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 ?>
 <section>
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Contract</div>
-  <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
+  <div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
@@ -155,6 +155,33 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </tr>
   </table>
 
+  <?php 
+    $depositType = $contract['deposit_type'] ?? 'none';
+    $depositValue = (float)($contract['deposit_amount'] ?? 0);
+    $contractTotal = (float)($contract['total'] ?? 0);
+    $depositCalc = 0;
+    if ($depositType === 'percent') {
+      $depositCalc = max(0, min(100, $depositValue)) * $contractTotal / 100;
+    } elseif ($depositType === 'fixed') {
+      $depositCalc = $depositValue;
+    }
+    $fulfillmentDate = $contract['fulfillment_date'] ?? null;
+    $showDepositInfo = $depositType !== 'none' && $depositCalc > 0;
+    $showFulfillmentDate = !empty($fulfillmentDate);
+  ?>
+  <?php if ($showDepositInfo || $showFulfillmentDate): ?>
+  <table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb">
+    <tr>
+      <td style="width:50%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+        <div style="font-size:11px;color:#6b7280">Deposit Due: <span style="font-weight:600;color:#059669">$<?php echo number_format($depositCalc, 2); ?></span></div>
+      </td>
+      <td style="width:50%;padding:8px;vertical-align:top">
+        <div style="font-size:11px;color:#6b7280">Fulfillment Date: <span style="font-weight:600;color:#2563eb"><?php echo $showFulfillmentDate ? date('M j, Y', strtotime($fulfillmentDate)) : 'Not specified'; ?></span></div>
+      </td>
+    </tr>
+  </table>
+  <?php endif; ?>
+
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
@@ -265,16 +292,23 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <td style="padding:10px;font-weight:700">Total</td>
         <td style="padding:10px;font-weight:700">$<?php echo number_format($contract['total'] ?? 0,2); ?></td>
       </tr>
-      <?php if (($contract['deposit_amount'] ?? 0) > 0): ?>
+      <?php 
+        $depType = $contract['deposit_type'] ?? 'none';
+        $depValue = (float)($contract['deposit_amount'] ?? 0);
+        $contractTotal = (float)($contract['total'] ?? 0);
+        $depositCalc = 0;
+        if ($depType === 'percent') {
+          $depositCalc = max(0, min(100, $depValue)) * $contractTotal / 100;
+        } elseif ($depType === 'fixed') {
+          $depositCalc = $depValue;
+        }
+        $showDeposit = $depType !== 'none' && $depositCalc > 0;
+      ?>
+      <?php if ($showDeposit): ?>
       <tr style="background:#f9fafb">
         <td></td><td></td>
-        <td style="padding:10px;font-weight:600;color:#059669">Deposit/Down Payment</td>
-        <td style="padding:10px;color:#059669">-$<?php echo number_format($contract['deposit_amount'] ?? 0,2); ?></td>
-      </tr>
-      <tr style="background:#f9fafb">
-        <td></td><td></td>
-        <td style="padding:10px;font-weight:700;font-size:15px">Balance Due</td>
-        <td style="padding:10px;font-weight:700;font-size:15px">$<?php echo number_format(max(0, ($contract['total'] ?? 0) - ($contract['deposit_amount'] ?? 0)),2); ?></td>
+        <td style="padding:10px;font-weight:700;font-size:15px;color:#059669">Deposit Due</td>
+        <td style="padding:10px;font-weight:700;font-size:15px;color:#059669">$<?php echo number_format($depositCalc,2); ?></td>
       </tr>
       <?php endif; ?>
       <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>

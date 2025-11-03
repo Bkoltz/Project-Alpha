@@ -24,10 +24,10 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
       <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'terms' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Terms & Conditions</a>
       <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'billing' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Billing</a>
       <a href="/?page=settings&tab=account" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Account</a>
-      <a href="/?page=settings&tab=quotes" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Quotes</a>
-      <a href="/?page=settings&tab=contracts" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Contracts</a>
-      <a href="/?page=settings&tab=invoices" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Invoices</a>
-      <a href="/?page=api-keys" style="display:block;padding:10px 12px;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">API Keys</a>
+      <a href="/?page=settings&tab=quotes" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'Quotes' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Quotes</a>
+      <a href="/?page=settings&tab=contracts" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'Contracts' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Contracts</a>
+      <a href="/?page=settings&tab=invoices" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'Invoices' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Invoices</a>
+      <a href="/?page=api-keys" style="display:block;padding:10px 12px;<?php echo $tab === 'API Keys' ? 'background:#f8fafc;font-weight:600' : ''; ?>">API Keys</a>
       
     </aside>
 
@@ -60,15 +60,13 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
               var pmAdd = document.getElementById('pmAdd');
               var pmSelect = document.getElementById('pmSelect');
               var pmCustom = document.getElementById('pmCustom');
-              var pmRequireRef = document.getElementById('pmRequireRef');
               var hiddenJson = document.getElementById('paymentMethodsJson');
 
               function sync() {
                 var items = [];
                 Array.from(pmList.querySelectorAll('.pm-item')).forEach(function(el){
                   var name = el.querySelector('input[type="hidden"]').value || el.querySelector('span').textContent.trim();
-                  var requiresRef = !!el.querySelector('.pm-requires-ref') && el.querySelector('.pm-requires-ref').checked;
-                  items.push({name: name, requires_reference: requiresRef});
+                  items.push({name: name});
                 });
                 hiddenJson.value = JSON.stringify(items);
                 var fallback = document.querySelector('textarea[name="payment_methods"]');
@@ -83,7 +81,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
                 if (row) { row.remove(); sync(); }
               }
 
-              function addMethod(name, requiresRef){
+              function addMethod(name){
                 if (!name) return;
                 // prevent duplicates (case-insensitive)
                 var existing = Array.from(pmList.querySelectorAll('input[type="hidden"]')).some(function(h){ return h.value.toLowerCase() === name.toLowerCase(); });
@@ -94,7 +92,6 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
                 div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
                 div.innerHTML = '<input type="hidden" name="payment_methods_backup[]" value="'+htmlEscape(name)+'">'
                   + '<span style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;background:#fafafa">'+escapeHtml(name)+'</span>'
-                  + '<label style="font-size:12px;color:var(--muted)"><input type="checkbox" class="pm-requires-ref" '+(requiresRef? 'checked' : '')+'> Requires reference</label>'
                   + '<button type="button" class="pm-remove" style="margin-left:auto;padding:6px 8px;border-radius:6px;border:1px solid #ddd;background:#fff">Remove</button>';
 
                 pmList.appendChild(div);
@@ -116,10 +113,9 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
               pmAdd.addEventListener('click', function(){
                 var name = pmSelect.value === 'other' ? pmCustom.value.trim() : pmSelect.value;
                 if (!name) return;
-                addMethod(name, pmRequireRef.checked);
+                addMethod(name);
                 pmCustom.value = '';
                 pmSelect.value = 'card';
-                pmRequireRef.checked = false;
               });
 
               // helper to safely set innerText for display
@@ -246,7 +242,6 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
                   <div class="pm-item" style="display:flex;align-items:center;gap:8px">
                     <input type="hidden" name="payment_methods_backup[]" value="<?php echo htmlspecialchars($pm); ?>">
                     <span style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;background:#fafafa"><?php echo htmlspecialchars($pm); ?></span>
-                    <label style="font-size:12px;color:var(--muted)"><input type="checkbox" class="pm-requires-ref"> Requires reference</label>
                     <button type="button" class="pm-remove" style="margin-left:auto;padding:6px 8px;border-radius:6px;border:1px solid #ddd;background:#fff">Remove</button>
                   </div>
                 <?php endforeach; ?>
@@ -257,11 +252,10 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
                   <option value="card">Card</option>
                   <option value="bank_transfer">Bank Transfer</option>
                   <option value="cash">Cash</option>
-                  <option value="check">Check</option>
+                  <option value="Check">Check</option>
                   <option value="other">Other...</option>
                 </select>
                 <input id="pmCustom" placeholder="Custom method" style="padding:8px;border-radius:8px;border:1px solid #ddd;flex:1;display:none">
-                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="pmRequireRef"> Requires reference</label>
                 <button type="button" id="pmAdd" style="padding:8px 10px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff">Add</button>
               </div>
 

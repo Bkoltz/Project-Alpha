@@ -260,6 +260,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract/contract_void.php';
         exit;
     }
+    if ($page === 'contract/contract-deposit-received') {
+        require_once __DIR__ . '/../src/controllers/contract/contract_deposit_received.php';
+        exit;
+    }
     if ($page === 'contract/contract-deny') { // legacy
         require_once __DIR__ . '/../src/controllers/contract/contract_deny.php';
         exit;

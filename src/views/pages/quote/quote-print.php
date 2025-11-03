@@ -159,6 +159,33 @@ $isPdf = defined('PDF_MODE');
     </tr>
   </table>
 
+  <?php 
+    $depositType = $quote['deposit_type'] ?? 'none';
+    $depositValue = (float)($quote['deposit_amount'] ?? 0);
+    $quoteTotal = (float)($quote['total'] ?? 0);
+    $depositCalc = 0;
+    if ($depositType === 'percent') {
+      $depositCalc = max(0, min(100, $depositValue)) * $quoteTotal / 100;
+    } elseif ($depositType === 'fixed') {
+      $depositCalc = $depositValue;
+    }
+    $fulfillmentDate = $quote['fulfillment_date'] ?? null;
+    $showDepositInfo = $depositType !== 'none' && $depositCalc > 0;
+    $showFulfillmentDate = !empty($fulfillmentDate);
+  ?>
+  <?php if ($showDepositInfo || $showFulfillmentDate): ?>
+  <table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb">
+    <tr>
+      <td style="width:50%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+        <div style="font-size:11px;color:#6b7280">Deposit Due: <span style="font-weight:600;color:#059669">$<?php echo number_format($depositCalc, 2); ?></span></div>
+      </td>
+      <td style="width:50%;padding:8px;vertical-align:top">
+        <div style="font-size:11px;color:#6b7280">Fulfillment Date: <span style="font-weight:600;color:#2563eb"><?php echo $showFulfillmentDate ? date('M j, Y', strtotime($fulfillmentDate)) : 'Not specified'; ?></span></div>
+      </td>
+    </tr>
+  </table>
+  <?php endif; ?>
+
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
