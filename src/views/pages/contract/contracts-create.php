@@ -3,6 +3,13 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 $csrf = csrf_sf_token('contracts-create');
+// TODO: We need to update the logic for the long-term contracts as follows:
+  //When selecting the start and end date, we should only be able to select the days that are relative to the billing period. For example:
+    //If the billing period is every week, and the start date is a friday, the user should only be able to select the end date which is a friday. Same goes for billing every month, and year.
+  // Start date should auto fill to todays date.
+  // If end date is specified, and the billing is Recurring Amount, then we should be able to calculate the total based on the price per invoice and the duration of the contract with billing frequency.
+  // If long-term contract is selected, the deposit option should only be available if there is a specific end date, AND the billing is a Fixed Total. The invoices should be evenly divided price of total-deposit. So invoices + deposit = total.
+  // Fulfillment should not be available on Non-Long-Term contracts.
 ?>
 <section>
   <h2>Create Contract</h2>

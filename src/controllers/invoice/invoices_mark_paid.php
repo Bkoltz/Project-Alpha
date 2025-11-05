@@ -1,7 +1,4 @@
 <?php
-/* TODO: We need to make it posible for the user to be able to mark a invoice as paid in advance. 
-Currently when a invoice is marked paid it auto completes the contract, but we need to change that.
-We need to show partial payments or deposit on the invoice list, and when a invoice is paid in advanced, it doesn't change the status of the contract.*/
 // src/controllers/invoices_mark_paid.php
 // Redirect to payment form with invoice preselected and outstanding prefilled
 require_once __DIR__ . '/../../config/db.php';
