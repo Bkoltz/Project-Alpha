@@ -1,7 +1,7 @@
 <?php
 // src/views/pages/projects-list.php
 require_once __DIR__ . '/../../config/db.php';
-
+// TODo: Change the Details Button in the project list view to "Preview" and then add button called "Details" That will open up a new page with all the details of the project.
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $prefix = trim($_GET['project_prefix'] ?? '');
 $selected = trim($_GET['selected_project_code'] ?? '');

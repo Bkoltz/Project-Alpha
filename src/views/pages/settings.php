@@ -213,6 +213,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
           </fieldset>
         <?php endif; ?>
 
+        <!-- TODO: Add a section for long-term Terms & Conditions for the long-term contracts. -->
         <?php if ($tab === 'terms'): ?>
           <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
             <legend style="padding:0 6px;color:var(--muted)">Terms & Conditions</legend>
@@ -225,7 +226,6 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
           </fieldset>
         <?php endif; ?>
 
-        <!--TODO: change the payment methods so that it isn't a text input, maybe a dropdown of available payment methods. We need to have credit, bank transfer, cash, check (we need to record the check number), etc. -->
         <?php if ($tab === 'billing'): ?>
           <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
             <legend style="padding:0 6px;color:var(--muted)">Billing Defaults</legend>
@@ -373,12 +373,19 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
       })();
     </script>
   <?php endif; ?>
-  <!-- TODO: add settings for quotes so we can -->
+
+  <!-- TODO: add settings for quotes so the user can add a page for "Scope of project" so
+    they can have a scope of project show in the quote create and in the edit page. IF nothing is entered into the "Scope of project" 
+    textbox, it will be excluded from the PDF generation.-->
   <?php if ($tab === 'quotes'): ?>
   <?php endif; ?>
-  <!-- TODO: add settings for contracts so we can -->
+  
+  <!-- TODO: Contracts are difficult because they are never the same. We need to add options so the user can specify a memo and
+    "Scope of contract" for both regular and long-term contracts, and other things that can be useful in helping them customize the contract.-->
+  <!-- TODO: right now, we have scope of contract, and terms and conditions for contracts, we need settings to allow the user to add more sections for the contract, and also change the order in which they show on the contract. This will be the base template for all contracts. If any section is left blank it will be excluded from the final PDF. -->
   <?php if ($tab === 'contracts'): ?>
   <?php endif; ?>
+  
   <!-- TODO: add settings for invoices so we can -->
   <?php if ($tab === 'invoices'): ?>
   <?php endif; ?>
