@@ -28,7 +28,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
       <a href="/?page=settings&tab=contracts" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'Contracts' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Contracts</a>
       <a href="/?page=settings&tab=invoices" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'Invoices' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Invoices</a>
       <a href="/?page=api-keys" style="display:block;padding:10px 12px;<?php echo $tab === 'API Keys' ? 'background:#f8fafc;font-weight:600' : ''; ?>">API Keys</a>
-      
+
     </aside>
 
     <div>
@@ -55,7 +55,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
         <?php endif; ?>
         <?php if ($tab === 'billing'): ?>
           <script>
-            (function(){
+            (function() {
               var pmList = document.getElementById('pmList');
               var pmAdd = document.getElementById('pmAdd');
               var pmSelect = document.getElementById('pmSelect');
@@ -64,35 +64,46 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
 
               function sync() {
                 var items = [];
-                Array.from(pmList.querySelectorAll('.pm-item')).forEach(function(el){
+                Array.from(pmList.querySelectorAll('.pm-item')).forEach(function(el) {
                   var name = el.querySelector('input[type="hidden"]').value || el.querySelector('span').textContent.trim();
-                  items.push({name: name});
+                  items.push({
+                    name: name
+                  });
                 });
                 hiddenJson.value = JSON.stringify(items);
                 var fallback = document.querySelector('textarea[name="payment_methods"]');
                 if (fallback) {
-                  fallback.value = items.map(function(i){ return i.name; }).join('\n');
+                  fallback.value = items.map(function(i) {
+                    return i.name;
+                  }).join('\n');
                 }
               }
 
-              function removeHandler(e){
+              function removeHandler(e) {
                 var btn = e.currentTarget;
                 var row = btn.closest('.pm-item');
-                if (row) { row.remove(); sync(); }
+                if (row) {
+                  row.remove();
+                  sync();
+                }
               }
 
-              function addMethod(name){
+              function addMethod(name) {
                 if (!name) return;
                 // prevent duplicates (case-insensitive)
-                var existing = Array.from(pmList.querySelectorAll('input[type="hidden"]')).some(function(h){ return h.value.toLowerCase() === name.toLowerCase(); });
+                var existing = Array.from(pmList.querySelectorAll('input[type="hidden"]')).some(function(h) {
+                  return h.value.toLowerCase() === name.toLowerCase();
+                });
                 if (existing) return;
 
                 var div = document.createElement('div');
                 div.className = 'pm-item';
-                div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
-                div.innerHTML = '<input type="hidden" name="payment_methods_backup[]" value="'+htmlEscape(name)+'">'
-                  + '<span style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;background:#fafafa">'+escapeHtml(name)+'</span>'
-                  + '<button type="button" class="pm-remove" style="margin-left:auto;padding:6px 8px;border-radius:6px;border:1px solid #ddd;background:#fff">Remove</button>';
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.gap = '8px';
+                div.innerHTML = '<input type="hidden" name="payment_methods_backup[]" value="' + htmlEscape(name) + '">' +
+                  '<span style="padding:8px 10px;border:1px solid #ddd;border-radius:6px;background:#fafafa">' + escapeHtml(name) + '</span>' +
+                  '<button type="button" class="pm-remove" style="margin-left:auto;padding:6px 8px;border-radius:6px;border:1px solid #ddd;background:#fff">Remove</button>';
 
                 pmList.appendChild(div);
                 var btn = div.querySelector('.pm-remove');
@@ -100,17 +111,29 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
                 sync();
               }
 
-              function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-              function htmlEscape(s){ return s.replace(/"/g,'&quot;'); }
+              function escapeHtml(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              }
+
+              function htmlEscape(s) {
+                return s.replace(/"/g, '&quot;');
+              }
 
               // wire existing remove buttons
-              Array.from(document.querySelectorAll('.pm-remove')).forEach(function(b){ b.addEventListener('click', removeHandler); });
-
-              pmSelect.addEventListener('change', function(){
-                if (pmSelect.value === 'other') { pmCustom.style.display = ''; pmCustom.focus(); } else { pmCustom.style.display = 'none'; }
+              Array.from(document.querySelectorAll('.pm-remove')).forEach(function(b) {
+                b.addEventListener('click', removeHandler);
               });
 
-              pmAdd.addEventListener('click', function(){
+              pmSelect.addEventListener('change', function() {
+                if (pmSelect.value === 'other') {
+                  pmCustom.style.display = '';
+                  pmCustom.focus();
+                } else {
+                  pmCustom.style.display = 'none';
+                }
+              });
+
+              pmAdd.addEventListener('click', function() {
                 var name = pmSelect.value === 'other' ? pmCustom.value.trim() : pmSelect.value;
                 if (!name) return;
                 addMethod(name);
@@ -119,7 +142,9 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
               });
 
               // helper to safely set innerText for display
-              function escapeHtmlForDisplay(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+              function escapeHtmlForDisplay(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+              }
 
               // ensure initial sync
               sync();
@@ -378,15 +403,17 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
     they can have a scope of project show in the quote create and in the edit page. IF nothing is entered into the "Scope of project" 
     textbox, it will be excluded from the PDF generation.-->
   <?php if ($tab === 'quotes'): ?>
+    <!-- TODO: have options to turn on and off auto create contracts and invoice on approval. use checkbox so the user can have one, both, or none selected. -->
   <?php endif; ?>
-  
+
   <!-- TODO: Contracts are difficult because they are never the same. We need to add options so the user can specify a memo and
     "Scope of contract" for both regular and long-term contracts, and other things that can be useful in helping them customize the contract.-->
-  <!-- TODO: right now, we have scope of contract, and terms and conditions for contracts, we need settings to allow the user to add more sections for the contract, and also change the order in which they show on the contract. This will be the base template for all contracts. If any section is left blank it will be excluded from the final PDF. -->
+  <!-- TODO: right now, we have scope of contract, and terms and conditions for contracts, we need settings to allow the user to add more sections for the contract, and also change the order in which they show on the contract a drag and drop method would be perfered for this. This will be the base template for all contracts. If any section is left blank it will be excluded from the final PDF. -->
   <?php if ($tab === 'contracts'): ?>
+    <!-- TODO: add signature agreement line, with default value as "By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions." -->
   <?php endif; ?>
-  
-  <!-- TODO: add settings for invoices so we can -->
+
+  <!-- TODO: add settings for invoices, for better customization.  -->
   <?php if ($tab === 'invoices'): ?>
   <?php endif; ?>
 </section>
