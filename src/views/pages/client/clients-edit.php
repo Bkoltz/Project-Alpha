@@ -56,7 +56,6 @@ if (!$client) { echo '<p>Client not found.</p>'; return; }
       <form method="post" action="/?page=clients-purge" onsubmit="return confirm('PERMANENTLY delete this client and ALL related quotes, contracts, invoices, and payments? This cannot be undone.');" style="display:inline-block;margin-left:8px">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$client['id']; ?>">
-        <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:#ef4444;color:#fff;font-size:small">Delete Permanently</button>
       </form>
     </div>
   </form>
