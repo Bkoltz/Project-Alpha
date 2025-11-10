@@ -31,5 +31,13 @@
     "documents_valid_days": 14,
     "dashboard": {
         "months_to_show": 6
-    }
+    },
+    "quote_scope_enabled": 0,
+    "quote_auto_create_contract": 0,
+    "quote_auto_create_invoice": 0,
+    "contract_scope_enabled": 0,
+    "contract_memo_enabled": 0,
+    "cron_enabled": 1,
+    "cron_schedule": "daily_2am",
+    "cron_custom": "0 2 * * *"
 }

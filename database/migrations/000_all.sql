@@ -161,6 +161,14 @@ CREATE TABLE IF NOT EXISTS quotes (
   deposit_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
   deposit_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   fulfillment_date DATE NULL,
+  is_long_term TINYINT(1) NOT NULL DEFAULT 0,
+  start_date DATE NULL,
+  end_date DATE NULL,
+  billing_interval_count INT NULL DEFAULT 1,
+  billing_interval_unit ENUM('day','week','month','year') NULL DEFAULT 'month',
+  pricing_type ENUM('per_invoice','fixed_total') NULL,
+  price_per_invoice DECIMAL(12,2) NULL,
+  scope TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_quotes_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   INDEX idx_quotes_client (client_id),
@@ -310,19 +318,9 @@ CREATE TABLE IF NOT EXISTS public_links (
 -- LONG-TERM CONTRACTS (FUTURE USE)
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS long_term_contract_items (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  long_term_contract_id INT NOT NULL,
-  description VARCHAR(255) NOT NULL,
-  quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
-  unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
-  line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
-  CONSTRAINT fk_ltc_items_contract FOREIGN KEY (long_term_contract_id) REFERENCES long_term_contracts(id) ON DELETE CASCADE,
-  INDEX idx_ltc_items_contract (long_term_contract_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS long_term_contracts (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  quote_id INT NULL,
   base_contract_id INT NULL,
   client_id INT NOT NULL,
   doc_number INT NULL,
@@ -356,7 +354,19 @@ CREATE TABLE IF NOT EXISTS long_term_contracts (
   INDEX idx_ltc_project (project_code),
   INDEX idx_ltc_next_invoice (next_invoice_date),
   CONSTRAINT fk_ltc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ltc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
   CONSTRAINT fk_ltc_base_contract FOREIGN KEY (base_contract_id) REFERENCES contracts(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS long_term_contract_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  long_term_contract_id INT NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
+  unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  CONSTRAINT fk_ltc_items_contract FOREIGN KEY (long_term_contract_id) REFERENCES long_term_contracts(id) ON DELETE CASCADE,
+  INDEX idx_ltc_items_contract (long_term_contract_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================

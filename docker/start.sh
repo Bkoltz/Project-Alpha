@@ -118,5 +118,27 @@ JSON
   fi
 fi
 
+# 4) Set up cron job for recurring invoices
+echo "Setting up cron job for recurring invoices..."
+
+# Create cron job file
+cat > /etc/cron.d/recurring-invoices <<'CRONFILE'
+# Run recurring invoice generation daily at 2 AM
+0 2 * * * www-data php /var/www/src/cron/generate_recurring_invoices.php >> /var/log/recurring-invoices.log 2>&1
+CRONFILE
+
+# Set proper permissions
+chmod 0644 /etc/cron.d/recurring-invoices
+
+# Create log file
+touch /var/log/recurring-invoices.log
+chown www-data:www-data /var/log/recurring-invoices.log
+chmod 644 /var/log/recurring-invoices.log
+
+# Start cron daemon in background
+echo "Starting cron daemon..."
+cron
+
+echo "✅ Cron job configured and started."
 echo "🚀 Starting Apache..."
 exec apache2-foreground

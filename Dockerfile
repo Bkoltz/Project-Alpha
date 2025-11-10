@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     libonig-dev \
     libxml2-dev \
+    cron \
   --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions (pdo_mysql, mysqli already required; add mbstring, gd, zip, dom)

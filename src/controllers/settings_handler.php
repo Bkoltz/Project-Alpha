@@ -137,6 +137,10 @@ if (isset($_POST['terms'])) {
     $t = trim((string)$_POST['terms']);
     $settings['terms'] = $t !== '' ? mb_substr($t, 0, 20000) : null;
 }
+if (isset($_POST['long_term_terms'])) {
+    $lt = trim((string)$_POST['long_term_terms']);
+    $settings['long_term_terms'] = $lt !== '' ? mb_substr($lt, 0, 20000) : null;
+}
 // Documents valid days (terms tab)
 if (isset($_POST['documents_valid_days'])) {
     $dv = (int)$_POST['documents_valid_days'];
@@ -255,6 +259,34 @@ if (!empty($_POST['smtp_password'])) {
     require_once __DIR__ . '/../utils/crypto.php';
     $enc = crypto_encrypt((string)$_POST['smtp_password']);
     if ($enc) { $settings['smtp_password_enc'] = $enc; }
+}
+
+// Cron/recurring invoice settings
+if (isset($_POST['cron_enabled'])) {
+    $settings['cron_enabled'] = !empty($_POST['cron_enabled']) ? 1 : 0;
+}
+if (isset($_POST['cron_schedule'])) {
+    $sched = trim((string)$_POST['cron_schedule']);
+    $allowed = ['hourly','every_6hours','daily_midnight','daily_2am','daily_6am','daily_noon','custom'];
+    if (in_array($sched, $allowed, true)) {
+        $settings['cron_schedule'] = $sched;
+    }
+}
+if (isset($_POST['cron_custom'])) {
+    $settings['cron_custom'] = trim((string)$_POST['cron_custom']) ?: '0 2 * * *';
+}
+
+// Quote settings
+$settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
+$settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
+$settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
+
+// Contract settings
+$settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;
+$settings['contract_memo_enabled'] = !empty($_POST['contract_memo_enabled']) ? 1 : 0;
+if (isset($_POST['signature_agreement'])) {
+    $sig = trim((string)$_POST['signature_agreement']);
+    $settings['signature_agreement'] = $sig !== '' ? mb_substr($sig, 0, 500) : 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.';
 }
 
 // Merge with existing file on target before writing to avoid overwriting unrelated fields

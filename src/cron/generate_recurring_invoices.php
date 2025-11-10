@@ -4,9 +4,15 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
-// TODO: The Corn shouldn't have to be set up by the creator of the container. The Corn should be setup and ready to go by default and made editable in the settings page.
-// TODO: If there is a end date specified on the long term contract, we can create the invoices for the entire contract as we know the end date. 
+
 $logPrefix = '[generate_recurring_invoices]';
+
+// Check if cron is enabled in settings
+if (empty($appConfig['cron_enabled'])) {
+    @error_log("$logPrefix Cron is disabled in settings. Skipping invoice generation.");
+    exit(0);
+}
+
 @error_log("$logPrefix Starting invoice generation run at " . date('Y-m-d H:i:s'));
 
 try {
@@ -188,6 +194,18 @@ try {
     }
     
     @error_log("$logPrefix Completed: $invoicesGenerated invoices generated, $errors errors");
+    
+    // Update last run timestamp in settings
+    $configMount = '/var/www/config';
+    $projectConfig = __DIR__ . '/../../config';
+    $configDir = is_dir($configMount) ? $configMount : $projectConfig;
+    $settingsFile = $configDir . '/settings.json';
+    
+    if (is_readable($settingsFile) && is_writable($settingsFile)) {
+        $settings = json_decode(file_get_contents($settingsFile), true) ?: [];
+        $settings['cron_last_run'] = date('Y-m-d H:i:s');
+        @file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    }
     
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
