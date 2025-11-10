@@ -45,12 +45,41 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
         <div>Discount Value</div>
         <input id="discountValueInv" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($inv['discount_value']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+      <label>
+        <div>Fulfillment Date</div>
+        <input type="date" name="fulfillment_date" value="<?php echo htmlspecialchars($inv['fulfillment_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
     </div>
 
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items</div>
-      <div id="itemsInv" style="display:grid;gap:8px"></div>
-      <button type="button" onclick="addItemInv()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
+      <div style="font-weight:600;margin-bottom:8px">Items (from contract - read only)</div>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px">
+        <?php if (empty($items)): ?>
+          <p style="color:#6b7280;margin:0">No items</p>
+        <?php else: ?>
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:2px solid #e5e7eb">
+                <th style="text-align:left;padding:8px;color:#6b7280;font-weight:600">Description</th>
+                <th style="text-align:right;padding:8px;color:#6b7280;font-weight:600;width:100px">Quantity</th>
+                <th style="text-align:right;padding:8px;color:#6b7280;font-weight:600;width:120px">Unit Price</th>
+                <th style="text-align:right;padding:8px;color:#6b7280;font-weight:600;width:120px">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($items as $it): ?>
+                <tr style="border-bottom:1px solid #e5e7eb">
+                  <td style="padding:8px"><?php echo htmlspecialchars($it['description']); ?></td>
+                  <td style="padding:8px;text-align:right"><?php echo htmlspecialchars(number_format((float)$it['quantity'], 2)); ?></td>
+                  <td style="padding:8px;text-align:right">$<?php echo htmlspecialchars(number_format((float)$it['unit_price'], 2)); ?></td>
+                  <td style="padding:8px;text-align:right">$<?php echo htmlspecialchars(number_format((float)$it['quantity'] * (float)$it['unit_price'], 2)); ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        <?php endif; ?>
+      </div>
+      <p style="color:#6b7280;font-size:0.875rem;margin-top:8px">To change items, modify the contract and apply a discount if needed.</p>
     </div>
 
     <?php $pn=null; if (!empty($inv['project_code'])) { $pm=$pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?'); $pm->execute([$inv['project_code']]); $pn=(string)$pm->fetchColumn(); } ?>
@@ -59,11 +88,30 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
     </label>
 
+    <?php
+      // Calculate totals from database items
+      $subtotal = 0;
+      foreach ($items as $it) {
+        $subtotal += (float)$it['quantity'] * (float)$it['unit_price'];
+      }
+      $dtype = $inv['discount_type'] ?? 'none';
+      $dval = (float)($inv['discount_value'] ?? 0);
+      $discount = 0;
+      if ($dtype === 'percent') {
+        $discount = max(0, min(100, $dval)) * $subtotal / 100;
+      } elseif ($dtype === 'fixed') {
+        $discount = max(0, $dval);
+      }
+      $taxable = max(0, $subtotal - $discount);
+      $taxpct = (float)($inv['tax_percent'] ?? 0);
+      $tax = max(0, $taxpct) * $taxable / 100;
+      $total = max(0, $taxable + $tax);
+    ?>
     <div id="totalsInv" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div><div id="subtotalValInv" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div><div id="discountValInv" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div><div id="taxValInv" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalValInv" style="min-width:120px;text-align:right">$0.00</div></div>
+      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div><div id="subtotalValInv" style="min-width:120px;text-align:right">$<?php echo number_format($subtotal, 2); ?></div></div>
+      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div><div id="discountValInv" style="min-width:120px;text-align:right">$<?php echo number_format($discount, 2); ?></div></div>
+      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div><div id="taxValInv" style="min-width:120px;text-align:right">$<?php echo number_format($tax, 2); ?></div></div>
+      <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalValInv" style="min-width:120px;text-align:right">$<?php echo number_format($total, 2); ?></div></div>
     </div>
 
     <div>
@@ -72,39 +120,6 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
   </form>
 </section>
 <script>
-function money(n){return '$'+(Number(n)||0).toFixed(2)}
-function addItemInv(desc='', qty=1, price=0){
-  var wrap = document.createElement('div');
-  wrap.style.display='grid';wrap.style.gridTemplateColumns='2fr 1fr 1fr auto';wrap.style.gap='8px';
-  wrap.innerHTML = `
-    <input required placeholder="Description" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${desc}" oninput="recalcInv()">
-    <input required type="number" step="0.01" min="0" name="item_qty[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcInv()">
-    <input required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalcInv()">
-    <button type="button" onclick="this.parentElement.remove();recalcInv()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
-  `;
-  document.getElementById('itemsInv').appendChild(wrap);
-  recalcInv();
-}
-function recalcInv(){
-  var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
-  var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
-  var subtotal = 0; for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
-  var dtype = document.getElementById('discountTypeInv').value;
-  var dval = parseFloat(document.getElementById('discountValueInv').value)||0;
-  var taxp = parseFloat(document.getElementById('taxPercentInv').value)||0;
-  var discount = 0; if (dtype==='percent'){ discount = Math.max(0, Math.min(100,dval))*subtotal/100; } else if (dtype==='fixed'){ discount = Math.max(0,dval); }
-  var taxable = Math.max(0, subtotal - discount);
-  var tax = Math.max(0, taxp)*taxable/100;
-  var total = Math.max(0, taxable + tax);
-  document.getElementById('subtotalValInv').textContent = money(subtotal);
-  document.getElementById('discountValInv').textContent = money(discount);
-  document.getElementById('taxValInv').textContent = money(tax);
-  document.getElementById('totalValInv').textContent = money(total);
-}
-['discountTypeInv','discountValueInv','taxPercentInv'].forEach(id=>document.getElementById(id).addEventListener('input', recalcInv));
-<?php foreach ($items as $it): ?>
-addItemInv(<?php echo json_encode($it['description']); ?>, <?php echo json_encode((float)$it['quantity']); ?>, <?php echo json_encode((float)$it['unit_price']); ?>);
-<?php endforeach; ?>
 
 // Client typeahead
 var ciI = document.getElementById('clientInputInv');

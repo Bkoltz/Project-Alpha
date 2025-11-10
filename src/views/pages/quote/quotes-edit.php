@@ -11,6 +11,7 @@ $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 ?>
+<main class="main-content" role="main">
 <section>
   <h2>Edit Quote Q-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?><?php if (!empty($quote['project_code'])) echo ' (Project '.htmlspecialchars($quote['project_code']).')'; ?></h2>
   <form id="quoteEditForm" method="post" action="/?page=quote/quotes-update" style="display:grid;gap:16px;max-width:900px">
@@ -40,6 +41,22 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <label>
         <div>Discount Value</div>
         <input id="discountValue" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($quote['discount_value']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div>Deposit Type</div>
+        <select id="depositType" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <option value="none" <?php echo ($quote['deposit_type'] ?? 'none')==='none'?'selected':''; ?>>None</option>
+          <option value="percent" <?php echo ($quote['deposit_type'] ?? '')==='percent'?'selected':''; ?>>Percent</option>
+          <option value="fixed" <?php echo ($quote['deposit_type'] ?? '')==='fixed'?'selected':''; ?>>Fixed $</option>
+        </select>
+      </label>
+      <label>
+        <div>Deposit Value</div>
+        <input id="depositValue" type="number" step="0.01" name="deposit_value" value="<?php echo htmlspecialchars($quote['deposit_amount'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div>Fulfillment Date</div>
+        <input type="date" name="fulfillment_date" value="<?php echo htmlspecialchars($quote['fulfillment_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
 
@@ -93,12 +110,45 @@ function money(n){return '$'+(Number(n)||0).toFixed(2)}
 function addItem(desc='', qty=1, price=0){
   var wrap = document.createElement('div');
   wrap.style.display='grid';wrap.style.gridTemplateColumns='2fr 1fr 1fr auto';wrap.style.gap='8px';
-  wrap.innerHTML = `
-    <input required placeholder="Description" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${desc}" oninput="recalc()">
-    <input required type="number" step="0.01" min="0" name="item_qty[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalc()">
-    <input required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalc()">
-    <button type="button" onclick="this.parentElement.remove();recalc()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
-  `;
+  
+  var descInput = document.createElement('input');
+  descInput.required = true;
+  descInput.placeholder = 'Description';
+  descInput.name = 'item_desc[]';
+  descInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
+  descInput.value = desc;
+  descInput.oninput = recalc;
+  
+  var qtyInput = document.createElement('input');
+  qtyInput.required = true;
+  qtyInput.type = 'number';
+  qtyInput.step = '0.01';
+  qtyInput.min = '0';
+  qtyInput.name = 'item_qty[]';
+  qtyInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
+  qtyInput.value = qty;
+  qtyInput.oninput = recalc;
+  
+  var priceInput = document.createElement('input');
+  priceInput.required = true;
+  priceInput.type = 'number';
+  priceInput.step = '0.01';
+  priceInput.min = '0';
+  priceInput.name = 'item_price[]';
+  priceInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
+  priceInput.value = price;
+  priceInput.oninput = recalc;
+  
+  var removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.textContent = 'Remove';
+  removeBtn.style.cssText = 'border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px';
+  removeBtn.onclick = function(){ wrap.remove(); recalc(); };
+  
+  wrap.appendChild(descInput);
+  wrap.appendChild(qtyInput);
+  wrap.appendChild(priceInput);
+  wrap.appendChild(removeBtn);
   document.getElementById('items').appendChild(wrap);
   recalc();
 }
@@ -119,7 +169,10 @@ function recalc(){
   document.getElementById('totalVal').textContent = money(total);
 }
 ['discountType','discountValue','taxPercent'].forEach(id=>document.getElementById(id).addEventListener('input', recalc));
+// Debug: Check if items exist
+console.log('Items from PHP:', <?php echo json_encode($items); ?>);
 <?php foreach ($items as $it): ?>
 addItem(<?php echo json_encode($it['description']); ?>, <?php echo json_encode((float)$it['quantity']); ?>, <?php echo json_encode((float)$it['unit_price']); ?>);
 <?php endforeach; ?>
 </script>
+</main>

@@ -45,10 +45,104 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         <div>Deposit Value</div>
         <input id="depositValue" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
-      <label>
+      <label id="fulfillmentDateLabel">
         <div>Fulfillment Date (Estimated)</div>
-        <input type="date" name="fulfillment_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="date" name="fulfillment_date" id="fulfillmentDateInput" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;margin:12px 0">
+      <input type="checkbox" id="isLongTerm" name="is_long_term" value="1" onchange="toggleLongTermFields()">
+      <label for="isLongTerm" style="margin:0;font-weight:600">Long-term Service Quote (Recurring Billing)</label>
+    </div>
+
+    <div id="longTermFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+      <h3 style="margin:0 0 12px 0;color:#374151">Recurring Billing Settings</h3>
+      
+      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+        <label>
+          <div>Start Date *</div>
+          <input id="startDateField" type="date" name="start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>Contract Duration *</div>
+          <select id="endDateType" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
+            <option value="on_termination">Ongoing (Until Terminated)</option>
+            <option value="specific_date">Fixed End Date</option>
+          </select>
+        </label>
+      </div>
+      
+      <div id="endDateField" style="display:none;margin-top:12px">
+        <label>
+          <div>End Date *</div>
+          <input type="date" name="end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+      </div>
+
+      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:12px">
+        <label>
+          <div>Bill Every *</div>
+          <select id="billingIntervalCount" name="billing_interval_count" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="6">6</option>
+            <option value="12">12</option>
+          </select>
+        </label>
+        <label>
+          <div>Period *</div>
+          <select id="billingIntervalUnit" name="billing_interval_unit" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <option value="day">Day(s)</option>
+            <option value="week">Week(s)</option>
+            <option value="month" selected>Month(s)</option>
+            <option value="year">Year(s)</option>
+          </select>
+        </label>
+      </div>
+
+      <div style="margin-top:16px;padding:12px;background:#fef3c7;border-radius:8px;border:1px solid #fbbf24">
+        <div style="font-weight:600;margin-bottom:8px;color:#92400e">How should the client be billed?</div>
+        <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="radio" id="recurringPerInvoice" name="pricing_type" value="per_invoice" checked onchange="togglePricingFields()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Recurring Amount</div>
+            <div style="font-size:13px;color:#6b7280">Client pays the same amount on each invoice (e.g., $20/month)</div>
+          </div>
+        </label>
+        <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;cursor:pointer">
+          <input type="radio" id="recurringFixedTotal" name="pricing_type" value="fixed_total" onchange="togglePricingFields()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Fixed Total (Billed Over Time)</div>
+            <div style="font-size:13px;color:#6b7280">Total quote amount is divided across invoices until paid in full</div>
+          </div>
+        </label>
+      </div>
+
+      <div id="perInvoiceField" style="margin-top:12px">
+        <label>
+          <div>Amount Per Invoice * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
+          <input id="pricePerInvoiceInput" type="number" step="0.01" name="price_per_invoice" placeholder="20.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+        </label>
+      </div>
+
+      <div id="fixedTotalFields" style="display:none;margin-top:12px">
+        <label>
+          <div>Number of Invoices * <span style="font-size:13px;color:#6b7280;font-weight:normal">(how many invoices to divide the total across)</span></div>
+          <input id="invoiceCountInput" type="number" step="1" min="1" name="invoice_count" placeholder="12" value="12" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+        </label>
+        <div id="calculatedPricePerInvoice" style="margin-top:8px;padding:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:600;color:#065f46">Price Per Invoice:</div>
+            <div id="calcPriceVal" style="font-size:16px;font-weight:700;color:#065f46">$0.00</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="discountWarning" style="display:none;margin-top:12px;padding:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;font-size:13px">
+        <strong>Note:</strong> For ongoing quotes, discounts apply to each invoice, not the total contract value.
+      </div>
     </div>
 
     <div>
@@ -58,10 +152,22 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     </div>
 
     <label>
+      <div>Scope of Work</div>
+      <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
+    </label>
+
+    <label>
       <div>Project Notes (shared across related docs)</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"
       ></textarea>
     </label>
+
+    <div id="invoiceAmountRow" style="display:none;margin-top:8px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:600;color:#065f46">Amount Per Invoice:</div>
+        <div id="invoiceAmountVal" style="font-size:18px;font-weight:700;color:#065f46">$0.00</div>
+      </div>
+    </div>
 
     <div id="totals" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
       <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div><div id="subtotalVal" style="min-width:120px;text-align:right">$0.00</div></div>
@@ -93,13 +199,36 @@ function addItem(desc='', qty=1, price=0){
   recalc();
 }
 function recalc(){
-  var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
-  var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
-  var subtotal = 0; for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
+  var isLongTerm = document.getElementById('isLongTerm').checked;
+  var pricingType = isLongTerm ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
+  var isOngoing = isLongTerm && document.getElementById('endDateType').value === 'on_termination';
+  
+  var subtotal = 0;
+  
+  // Calculate subtotal based on pricing type
+  if (isLongTerm && pricingType === 'per_invoice') {
+    subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
+  } else {
+    var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
+    var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
+    for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
+  }
+  
+  // For fixed_total pricing, calculate price per invoice
+  if (isLongTerm && pricingType === 'fixed_total') {
+    var invoiceCount = parseInt(document.getElementById('invoiceCountInput').value) || 1;
+    var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
+    var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
+    subtotal = 0;
+    for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
+  }
+  
   var dtype = document.getElementById('discountType').value;
   var dval = parseFloat(document.getElementById('discountValue').value)||0;
   var taxp = parseFloat(document.getElementById('taxPercent').value)||0;
-  var discount = 0; if (dtype==='percent'){ discount = Math.max(0, Math.min(100,dval))*subtotal/100; } else if (dtype==='fixed'){ discount = Math.max(0,dval); }
+  var discount = 0; 
+  if (dtype==='percent'){ discount = Math.max(0, Math.min(100,dval))*subtotal/100; } 
+  else if (dtype==='fixed'){ discount = Math.max(0,dval); }
   var taxable = Math.max(0, subtotal - discount);
   var tax = Math.max(0, taxp)*taxable/100;
   var total = Math.max(0, taxable + tax);
@@ -114,7 +243,27 @@ function recalc(){
   document.getElementById('subtotalVal').textContent = money(subtotal);
   document.getElementById('discountVal').textContent = money(discount);
   document.getElementById('taxVal').textContent = money(tax);
-  document.getElementById('totalVal').textContent = money(total);
+  
+  // For ongoing quotes, don't show total (unknown)
+  if (isOngoing) {
+    document.getElementById('totalVal').parentElement.style.display = 'none';
+  } else {
+    document.getElementById('totalVal').parentElement.style.display = 'flex';
+    document.getElementById('totalVal').textContent = money(total);
+  }
+  
+  // Show calculated price per invoice for fixed_total
+  if (isLongTerm && pricingType === 'fixed_total') {
+    var invoiceCount = parseInt(document.getElementById('invoiceCountInput').value) || 1;
+    var pricePerInv = total / invoiceCount;
+    document.getElementById('calcPriceVal').textContent = money(pricePerInv);
+    document.getElementById('invoiceAmountRow').style.display = 'none';
+  } else if (isLongTerm) {
+    document.getElementById('invoiceAmountRow').style.display = 'block';
+    document.getElementById('invoiceAmountVal').textContent = money(total);
+  } else {
+    document.getElementById('invoiceAmountRow').style.display = 'none';
+  }
   
   // Show/hide deposit row
   if (depType !== 'none' && deposit > 0) {
@@ -123,8 +272,89 @@ function recalc(){
   } else {
     document.getElementById('depositRow').style.display = 'none';
   }
+  
+  updateDiscountWarning();
 }
+
 ['discountType','discountValue','taxPercent','depositType','depositValue'].forEach(id=>document.getElementById(id).addEventListener('input', recalc));
+document.getElementById('discountType').addEventListener('change', updateDiscountWarning);
+
+// Set start date to today
+window.addEventListener('DOMContentLoaded', function() {
+  var today = new Date().toISOString().split('T')[0];
+  document.getElementById('startDateField').value = today;
+});
+
+function toggleLongTermFields() {
+  var isChecked = document.getElementById('isLongTerm').checked;
+  document.getElementById('longTermFields').style.display = isChecked ? 'block' : 'none';
+  
+  if (isChecked) {
+    togglePricingFields();
+    updateDiscountWarning();
+  } else {
+    document.getElementById('items').parentElement.style.display = 'block';
+    document.getElementById('invoiceAmountRow').style.display = 'none';
+  }
+  recalc();
+}
+
+function toggleEndDate() {
+  var type = document.getElementById('endDateType').value;
+  var isOngoing = (type === 'on_termination');
+  
+  document.getElementById('endDateField').style.display = isOngoing ? 'none' : 'block';
+  
+  // Hide fulfillment date when ongoing
+  var fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
+  if (document.getElementById('isLongTerm').checked) {
+    fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
+  }
+  
+  var fixedTotalOption = document.getElementById('fixedTotalOption');
+  if (isOngoing) {
+    fixedTotalOption.style.display = 'none';
+    document.getElementById('recurringPerInvoice').checked = true;
+  } else {
+    fixedTotalOption.style.display = 'flex';
+  }
+  
+  togglePricingFields();
+  updateDiscountWarning();
+  recalc();
+}
+
+function togglePricingFields() {
+  var isLongTerm = document.getElementById('isLongTerm').checked;
+  if (!isLongTerm) return;
+  
+  var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
+  
+  if (pricingType === 'per_invoice') {
+    document.getElementById('perInvoiceField').style.display = 'block';
+    document.getElementById('fixedTotalFields').style.display = 'none';
+    document.getElementById('items').parentElement.style.display = 'none';
+  } else {
+    document.getElementById('perInvoiceField').style.display = 'none';
+    document.getElementById('fixedTotalFields').style.display = 'block';
+    document.getElementById('items').parentElement.style.display = 'block';
+  }
+  recalc();
+}
+
+function updateDiscountWarning() {
+  var isLongTerm = document.getElementById('isLongTerm').checked;
+  var isOngoing = document.getElementById('endDateType').value === 'on_termination';
+  var discountType = document.getElementById('discountType').value;
+  
+  var warning = document.getElementById('discountWarning');
+  if (isLongTerm && isOngoing && discountType !== 'none') {
+    warning.style.display = 'block';
+  } else {
+    warning.style.display = 'none';
+  }
+}
+
 addItem();
 
 // Client typeahead

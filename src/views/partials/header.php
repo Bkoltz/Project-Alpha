@@ -73,21 +73,24 @@
             <li class="nav-section">
               <div class="section-label">Quotes</div>
               <ul>
-                <li><a href="/?page=quote/quotes-list" data-page="quote/quotes-list">List Quotes</a></li>
+                <li><a href="/?page=quote/quotes-list" data-page="quote/quotes-list">Quotes</a></li>
+                <li><a href="/?page=quote/long-term-quotes-list" data-page="quote/long-term-quotes-list">Long-term Quotes</a></li>
                 <li><a href="/?page=quote/quotes-create" data-page="quote/quotes-create">Create Quote</a></li>
               </ul>
             </li>
             <li class="nav-section">
               <div class="section-label">Contracts</div>
               <ul>
-                <li><a href="/?page=contract/contracts-list" data-page="contract/contracts-list">List Contracts</a></li>
+                <li><a href="/?page=contract/contracts-list" data-page="contract/contracts-list">Contracts</a></li>
+                <li><a href="/?page=contract/long-term-contracts-list" data-page="contract/long-term-contracts-list">Long-term Contracts</a></li>
                 <li><a href="/?page=contract/contracts-create" data-page="contract/contracts-create">Create Contract</a></li>
               </ul>
             </li>
             <li class="nav-section">
               <div class="section-label">Invoices</div>
               <ul>
-                <li><a href="/?page=invoice/invoices-list" data-page="invoice/invoices-list">List Invoices</a></li>
+                <li><a href="/?page=invoice/invoices-list" data-page="invoice/invoices-list">Invoices</a></li>
+                <li><a href="/?page=invoice/recurring-invoices-list" data-page="invoice/recurring-invoices-list">Recurring Invoices</a></li>
                 <li><a href="/?page=invoice/invoices-create" data-page="invoice/invoices-create">Create Invoice</a></li>
               </ul>
             </li>
