@@ -39,5 +39,6 @@
     "contract_memo_enabled": 0,
     "cron_enabled": 1,
     "cron_schedule": "daily_2am",
-    "cron_custom": "0 2 * * *"
+    "cron_custom": "0 2 * * *",
+    "signature_agreement": "By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions."
 }

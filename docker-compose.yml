@@ -1,3 +1,4 @@
+# TODO: Add a admin username and password that can be used to login. First user setup is admin, but we need a system admin user.
 services:
   web:
     build: .
