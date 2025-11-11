@@ -49,10 +49,12 @@ if ($pref > 0) {
         <input type="text" name="check_number" id="checkNumberInput" placeholder="Enter check number" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
+    <?php if($r['status'] !== 'completed'): ?>
     <label style="display:flex;align-items:center;gap:8px">
       <input type="checkbox" name="paid_in_advance" value="1" style="width:auto">
       <div>Paid in Advance (don't mark contract as completed)</div>
     </label>
+    <?php endif; ?>
     <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Payment</button>
   </form>
 </section>

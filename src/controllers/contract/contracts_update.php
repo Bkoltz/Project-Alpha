@@ -23,9 +23,22 @@ $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(
 $terms = trim((string)($_POST['terms'] ?? '')) ?: null;
 $estimated = trim((string)($_POST['estimated_completion'] ?? '')) ?: null;
 $weather = isset($_POST['weather_pending']) ? 1 : 0;
+$scope = trim((string)($_POST['scope'] ?? '')) ?: null;
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$id]);
+  $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$id]);
+  
+  // Sync changes to linked invoices
+  $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
+  
+  // Sync items to linked invoices
+  $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
+  $invoiceIds->execute([$id]);
+  foreach($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invId) {
+    $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invId]);
+    $insInv=$pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
+    foreach($items as $it){ $insInv->execute([$invId,$it['d'],$it['q'],$it['p'],$it['t']]); }
+  }
   $row = $pdo->prepare('SELECT project_code FROM contracts WHERE id=?');
   $row->execute([$id]);
   $pc = (string)$row->fetchColumn();

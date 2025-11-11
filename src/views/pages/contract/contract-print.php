@@ -243,8 +243,17 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </tr>
   </table>
 
-
-
+  <?php 
+    $scopeText = trim((string)($contract['scope'] ?? ''));
+    $scopeEnabled = !isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled']);
+    if ($scopeEnabled && $scopeText !== ''): 
+  ?>
+  <div style="page-break-before:auto;margin-top:20px">
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
+    <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
+  </div>
+  <div style="page-break-after:always"></div>
+  <?php endif; ?>
 
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>

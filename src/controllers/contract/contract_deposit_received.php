@@ -39,6 +39,10 @@ try {
     $pdo->prepare('UPDATE contracts SET deposit_paid=? WHERE id=?')
         ->execute([$depositCalc, $id]);
     
+    // Update linked invoices: reduce total by deposit amount and mark as partial
+    $pdo->prepare('UPDATE invoices SET total = total - ?, status = "partial" WHERE contract_id = ? AND status = "unpaid"')
+        ->execute([$depositCalc, $id]);
+    
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoices-edit.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 $id = (int)($_GET['id'] ?? 0);
 $iv = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
 $iv->execute([$id]);
@@ -87,6 +88,14 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
       <div>Project Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
     </label>
+
+    <?php if ((!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])) && !empty($inv['scope'])): ?>
+    <div>
+      <div style="font-weight:600;margin-bottom:8px">Scope of Project (from contract - read only)</div>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;white-space:pre-wrap;color:#374151"><?php echo htmlspecialchars($inv['scope'] ?? ''); ?></div>
+      <p style="color:#6b7280;font-size:0.875rem;margin-top:8px">To change scope, modify the contract.</p>
+    </div>
+    <?php endif; ?>
 
     <?php
       // Calculate totals from database items
