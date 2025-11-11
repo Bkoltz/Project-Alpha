@@ -28,6 +28,11 @@ exit;
     $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, status) VALUES (?,?,?,?)')
         ->execute([$id, $outstanding, 'manual', 'succeeded']);
   $pdo->prepare('UPDATE invoices SET status=? WHERE id=?')->execute(['paid',$id]);
+  // Revoke any public links for this invoice and set redirect to a friendly page
+  try {
+    $redir = '/?page=public-redirect&type=invoice&reason=paid';
+    $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE type="invoice" AND record_id=? AND revoked=0')->execute([$redir, $id]);
+  } catch (Throwable $_e) { /* ignore */ }
   // mark related contract completed if exists
   $sel = $pdo->prepare('SELECT contract_id FROM invoices WHERE id=?');
   $sel->execute([$id]);

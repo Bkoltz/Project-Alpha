@@ -34,6 +34,14 @@ try {
   $status = 'partial';
   if ($paid >= $total) $status = 'paid';
   $pdo->prepare('UPDATE invoices SET status=? WHERE id=?')->execute([$status, $invoice_id]);
+  // If invoice status moved out of public-viewable states, revoke public links
+  if (!in_array($status, ['unpaid','partial'], true)) {
+    try {
+      $redir = '/?page=public-redirect&type=invoice&reason=' . rawurlencode($status);
+      $rv = $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE type="invoice" AND record_id=? AND revoked=0');
+      $rv->execute([$redir, $invoice_id]);
+    } catch (Throwable $_e) { /* ignore revocation failures */ }
+  }
   // If invoice paid and linked to contract, mark contract completed (unless paid in advance)
   if ($status === 'paid' && !$paid_in_advance) {
     $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id=?');

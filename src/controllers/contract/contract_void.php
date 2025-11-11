@@ -17,6 +17,11 @@ try {
 
   // Void related invoices (invoices.status ENUM does include 'void')
   $pdo->prepare("UPDATE invoices SET status='void' WHERE contract_id=?")->execute([$id]);
+  // Revoke public links for those invoices
+  try {
+    $redir = '/?page=public-redirect&type=invoice&reason=void';
+    $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE type="invoice" AND record_id IN (SELECT id FROM invoices WHERE contract_id=? ) AND revoked=0')->execute([$redir, $id]);
+  } catch (Throwable $_e) { /* ignore */ }
 
   $pdo->commit();
 } catch (Throwable $e) {
