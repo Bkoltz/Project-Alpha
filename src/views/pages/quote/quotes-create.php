@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/quotes-create.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 ?>
 <section>
@@ -32,8 +33,8 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </label>
     </div>
 
-    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
-      <label>
+    <div id="depositFulfillmentRow" style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
+      <label id="depositTypeLabel">
         <div>Deposit Required</div>
         <select id="depositType" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="none">None</option>
@@ -41,7 +42,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
           <option value="fixed">Fixed $</option>
         </select>
       </label>
-      <label>
+      <label id="depositValueLabel">
         <div>Deposit Value</div>
         <input id="depositValue" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
@@ -62,13 +63,13 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
         <label>
           <div>Start Date *</div>
-          <input id="startDateField" type="date" name="start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <input id="startDateField" type="date" name="lt_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
           <div>Contract Duration *</div>
-          <select id="endDateType" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
-            <option value="on_termination">Ongoing (Until Terminated)</option>
-            <option value="specific_date">Fixed End Date</option>
+          <select id="endDateType" name="lt_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
+            <option value="ongoing">Ongoing (Until Terminated)</option>
+            <option value="fixed">Fixed End Date</option>
           </select>
         </label>
       </div>
@@ -76,14 +77,14 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div id="endDateField" style="display:none;margin-top:12px">
         <label>
           <div>End Date *</div>
-          <input type="date" name="end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <input type="date" name="lt_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
       </div>
 
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:12px">
         <label>
           <div>Bill Every *</div>
-          <select id="billingIntervalCount" name="billing_interval_count" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <select id="billingIntervalCount" name="lt_billing_interval_count" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -93,7 +94,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         </label>
         <label>
           <div>Period *</div>
-          <select id="billingIntervalUnit" name="billing_interval_unit" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <select id="billingIntervalUnit" name="lt_billing_interval_unit" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="day">Day(s)</option>
             <option value="week">Week(s)</option>
             <option value="month" selected>Month(s)</option>
@@ -105,14 +106,14 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div style="margin-top:16px;padding:12px;background:#fef3c7;border-radius:8px;border:1px solid #fbbf24">
         <div style="font-weight:600;margin-bottom:8px;color:#92400e">How should the client be billed?</div>
         <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
-          <input type="radio" id="recurringPerInvoice" name="pricing_type" value="per_invoice" checked onchange="togglePricingFields()" style="margin-top:3px">
+          <input type="radio" id="recurringPerInvoice" name="lt_pricing_type" value="per_invoice" checked onchange="togglePricingFields()" style="margin-top:3px">
           <div>
             <div style="font-weight:600;color:#374151">Recurring Amount</div>
             <div style="font-size:13px;color:#6b7280">Client pays the same amount on each invoice (e.g., $20/month)</div>
           </div>
         </label>
         <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;cursor:pointer">
-          <input type="radio" id="recurringFixedTotal" name="pricing_type" value="fixed_total" onchange="togglePricingFields()" style="margin-top:3px">
+          <input type="radio" id="recurringFixedTotal" name="lt_pricing_type" value="fixed_total" onchange="togglePricingFields()" style="margin-top:3px">
           <div>
             <div style="font-weight:600;color:#374151">Fixed Total (Billed Over Time)</div>
             <div style="font-size:13px;color:#6b7280">Total quote amount is divided across invoices until paid in full</div>
@@ -123,14 +124,14 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div id="perInvoiceField" style="margin-top:12px">
         <label>
           <div>Amount Per Invoice * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
-          <input id="pricePerInvoiceInput" type="number" step="0.01" name="price_per_invoice" placeholder="20.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+          <input id="pricePerInvoiceInput" type="number" step="0.01" name="lt_price_per_invoice" placeholder="20.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
         </label>
       </div>
 
       <div id="fixedTotalFields" style="display:none;margin-top:12px">
         <label>
           <div>Number of Invoices * <span style="font-size:13px;color:#6b7280;font-weight:normal">(how many invoices to divide the total across)</span></div>
-          <input id="invoiceCountInput" type="number" step="1" min="1" name="invoice_count" placeholder="12" value="12" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+          <input id="invoiceCountInput" type="number" step="1" min="1" name="invoice_count" placeholder="4" value="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
         </label>
         <div id="calculatedPricePerInvoice" style="margin-top:8px;padding:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
           <div style="display:flex;justify-content:space-between;align-items:center">
@@ -151,10 +152,12 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <button type="button" onclick="addItem()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
+    <?php if (!isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled'])): ?>
     <label>
       <div>Scope of Work</div>
       <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
     </label>
+    <?php endif; ?>
 
     <label>
       <div>Project Notes (shared across related docs)</div>
@@ -200,8 +203,8 @@ function addItem(desc='', qty=1, price=0){
 }
 function recalc(){
   var isLongTerm = document.getElementById('isLongTerm').checked;
-  var pricingType = isLongTerm ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
-  var isOngoing = isLongTerm && document.getElementById('endDateType').value === 'on_termination';
+  var pricingType = isLongTerm ? document.querySelector('input[name="lt_pricing_type"]:checked')?.value : null;
+  var isOngoing = isLongTerm && document.getElementById('endDateType').value === 'ongoing';
   
   var subtotal = 0;
   
@@ -279,29 +282,36 @@ function recalc(){
 ['discountType','discountValue','taxPercent','depositType','depositValue'].forEach(id=>document.getElementById(id).addEventListener('input', recalc));
 document.getElementById('discountType').addEventListener('change', updateDiscountWarning);
 
-// Set start date to today
-window.addEventListener('DOMContentLoaded', function() {
-  var today = new Date().toISOString().split('T')[0];
-  document.getElementById('startDateField').value = today;
-});
+// No need for DOMContentLoaded start date setting - now handled in toggleLongTermFields
 
 function toggleLongTermFields() {
   var isChecked = document.getElementById('isLongTerm').checked;
   document.getElementById('longTermFields').style.display = isChecked ? 'block' : 'none';
   
   if (isChecked) {
+    // Set start date to today when first enabling LT
+    var startField = document.getElementById('startDateField');
+    if (!startField.value) {
+      startField.value = new Date().toISOString().split('T')[0];
+    }
+    // Trigger toggleEndDate to set initial state correctly
+    toggleEndDate();
     togglePricingFields();
     updateDiscountWarning();
   } else {
     document.getElementById('items').parentElement.style.display = 'block';
     document.getElementById('invoiceAmountRow').style.display = 'none';
+    // Show deposit and fulfillment for regular quotes
+    document.getElementById('depositTypeLabel').style.display = 'block';
+    document.getElementById('depositValueLabel').style.display = 'block';
+    document.getElementById('fulfillmentDateLabel').style.display = 'block';
   }
   recalc();
 }
 
 function toggleEndDate() {
   var type = document.getElementById('endDateType').value;
-  var isOngoing = (type === 'on_termination');
+  var isOngoing = (type === 'ongoing');
   
   document.getElementById('endDateField').style.display = isOngoing ? 'none' : 'block';
   
@@ -326,15 +336,30 @@ function toggleEndDate() {
 
 function togglePricingFields() {
   var isLongTerm = document.getElementById('isLongTerm').checked;
-  if (!isLongTerm) return;
+  if (!isLongTerm) {
+    // Regular quote - show deposit and fulfillment
+    document.getElementById('depositTypeLabel').style.display = 'block';
+    document.getElementById('depositValueLabel').style.display = 'block';
+    document.getElementById('fulfillmentDateLabel').style.display = 'block';
+    return;
+  }
   
-  var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
+  var pricingType = document.querySelector('input[name="lt_pricing_type"]:checked').value;
   
   if (pricingType === 'per_invoice') {
+    // Recurring amount - hide deposit and fulfillment
+    document.getElementById('depositTypeLabel').style.display = 'none';
+    document.getElementById('depositValueLabel').style.display = 'none';
+    document.getElementById('fulfillmentDateLabel').style.display = 'none';
     document.getElementById('perInvoiceField').style.display = 'block';
     document.getElementById('fixedTotalFields').style.display = 'none';
     document.getElementById('items').parentElement.style.display = 'none';
   } else {
+    // Fixed total - show deposit and fulfillment
+    document.getElementById('depositTypeLabel').style.display = 'block';
+    document.getElementById('depositValueLabel').style.display = 'block';
+    var isOngoing = document.getElementById('endDateType').value === 'ongoing';
+    document.getElementById('fulfillmentDateLabel').style.display = isOngoing ? 'none' : 'block';
     document.getElementById('perInvoiceField').style.display = 'none';
     document.getElementById('fixedTotalFields').style.display = 'block';
     document.getElementById('items').parentElement.style.display = 'block';
@@ -344,7 +369,7 @@ function togglePricingFields() {
 
 function updateDiscountWarning() {
   var isLongTerm = document.getElementById('isLongTerm').checked;
-  var isOngoing = document.getElementById('endDateType').value === 'on_termination';
+  var isOngoing = document.getElementById('endDateType').value === 'ongoing';
   var discountType = document.getElementById('discountType').value;
   
   var warning = document.getElementById('discountWarning');

@@ -300,6 +300,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract/contracts_create.php';
         exit;
     }
+    if ($page === 'long-term-contracts-create' || $page === 'contract/long-term-contracts-create') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contracts_create.php';
+        exit;
+    }
     if ($page === 'contract/contracts-update' || $page === 'contracts-update') {
         require_once __DIR__ . '/../src/controllers/contract/contracts_update.php';
         exit;

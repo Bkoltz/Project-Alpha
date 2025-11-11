@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/contracts-edit.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 $id = (int)($_GET['id'] ?? 0);
 $co = $pdo->prepare('SELECT * FROM contracts WHERE id=?');
 $co->execute([$id]);
@@ -89,6 +90,12 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         }
       }
     ?>
+    <?php if (!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])): ?>
+    <label>
+      <div>Scope of Work</div>
+      <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables for this contract..."><?php echo htmlspecialchars($contract['scope'] ?? ''); ?></textarea>
+    </label>
+    <?php endif; ?>
     <label>
       <div>Project Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>

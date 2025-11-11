@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/contracts-create.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 $csrf = csrf_sf_token('contracts-create');
 // TODO: We need to update the logic for the long-term contracts as follows:
@@ -13,7 +14,7 @@ $csrf = csrf_sf_token('contracts-create');
 ?>
 <section>
   <h2>Create Contract</h2>
-  <form id="coCreateForm" method="post" style="display:grid;gap:16px;max-width:900px">
+  <form id="coCreateForm" method="post" action="/?page=contract/contracts-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
@@ -42,7 +43,7 @@ $csrf = csrf_sf_token('contracts-create');
     </div>
 
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
-      <label>
+      <label id="depositTypeLabelCo">
         <div>Deposit Required</div>
         <select id="depositTypeCo" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="none">None</option>
@@ -50,13 +51,13 @@ $csrf = csrf_sf_token('contracts-create');
           <option value="fixed">Fixed $</option>
         </select>
       </label>
-      <label>
+      <label id="depositValueLabelCo">
         <div>Deposit Value</div>
         <input id="depositValueCo" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
-      <label>
+      <label id="fulfillmentDateLabelCo">
         <div>Fulfillment Date</div>
-        <input type="date" name="fulfillment_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="date" name="fulfillment_date" id="fulfillmentDateInputCo" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
 
@@ -71,18 +72,18 @@ $csrf = csrf_sf_token('contracts-create');
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
         <label>
           <div>Start Date *</div>
-          <input id="startDateField" type="date" name="start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <input id="startDateFieldCo" type="date" name="start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
           <div>Contract Duration *</div>
-          <select id="endDateType" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
-            <option value="on_termination">Ongoing (Until Terminated)</option>
-            <option value="specific_date">Fixed End Date</option>
+          <select id="endDateTypeCo" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
+            <option value="ongoing">Ongoing (Until Terminated)</option>
+            <option value="fixed">Fixed End Date</option>
           </select>
         </label>
       </div>
       
-      <div id="endDateField" style="display:none;margin-top:12px">
+      <div id="endDateFieldCo" style="display:none;margin-top:12px">
         <label>
           <div>End Date *</div>
           <input type="date" name="end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -136,6 +137,19 @@ $csrf = csrf_sf_token('contracts-create');
         </label>
       </div>
 
+      <div id="fixedTotalFieldsCo" style="display:none;margin-top:12px">
+        <label>
+          <div>Number of Invoices * <span style="font-size:13px;color:#6b7280;font-weight:normal">(how many invoices to divide the total across)</span></div>
+          <input id="invoiceCountInputCo" type="number" step="1" min="1" name="invoice_count" placeholder="4" value="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalcCo()">
+        </label>
+        <div id="calculatedPricePerInvoiceCo" style="margin-top:8px;padding:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:600;color:#065f46">Price Per Invoice:</div>
+            <div id="calcPriceValCo" style="font-size:16px;font-weight:700;color:#065f46">$0.00</div>
+          </div>
+        </div>
+      </div>
+
       <div id="discountWarning" style="display:none;margin-top:12px;padding:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;font-size:13px">
         <strong>Note:</strong> For ongoing contracts, discounts apply to each invoice, not the total contract value.
       </div>
@@ -147,10 +161,12 @@ $csrf = csrf_sf_token('contracts-create');
       <button type="button" onclick="addItemCo()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
+    <?php if (!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])): ?>
     <label>
       <div>Scope of Work</div>
       <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables for this contract..."></textarea>
     </label>
+    <?php endif; ?>
 
     <label>
       <div>Project Notes (shared across related docs)</div>
@@ -196,7 +212,7 @@ function addItemCo(desc='', qty=1, price=0){
 function recalcCo(){
   var isLongTerm = document.getElementById('isLongTermCo').checked;
   var pricingType = isLongTerm ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
-  var isOngoing = isLongTerm && document.getElementById('endDateType').value === 'on_termination';
+  var isOngoing = isLongTerm && document.getElementById('endDateTypeCo').value === 'ongoing';
   
   var subtotal = 0;
   
@@ -208,6 +224,14 @@ function recalcCo(){
     // Use line items
     var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
     var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
+    for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
+  }
+  
+  // For fixed_total pricing, recalculate based on items
+  if (isLongTerm && pricingType === 'fixed_total') {
+    var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
+    var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
+    subtotal = 0;
     for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
   }
   
@@ -240,8 +264,13 @@ function recalcCo(){
     document.getElementById('totalValCo').textContent = money(total);
   }
   
-  // Show invoice amount for long-term contracts
-  if (isLongTerm) {
+  // Show calculated price per invoice for fixed_total
+  if (isLongTerm && pricingType === 'fixed_total') {
+    var invoiceCount = parseInt(document.getElementById('invoiceCountInputCo').value) || 1;
+    var pricePerInv = total / invoiceCount;
+    document.getElementById('calcPriceValCo').textContent = money(pricePerInv);
+    document.getElementById('invoiceAmountRow').style.display = 'none';
+  } else if (isLongTerm) {
     document.getElementById('invoiceAmountRow').style.display = 'block';
     document.getElementById('invoiceAmountVal').textContent = money(total);
   } else {
@@ -262,34 +291,45 @@ function recalcCo(){
 ['discountTypeCo','discountValueCo','taxPercentCo','depositTypeCo','depositValueCo'].forEach(id=>document.getElementById(id).addEventListener('input', recalcCo));
 document.getElementById('discountTypeCo').addEventListener('change', updateDiscountWarning);
 
-// Set start date to today when page loads
-window.addEventListener('DOMContentLoaded', function() {
-  var today = new Date().toISOString().split('T')[0];
-  document.getElementById('startDateField').value = today;
-});
+// No need for DOMContentLoaded start date setting - now handled in toggleLongTermFields
 
 function toggleLongTermFields() {
   var isChecked = document.getElementById('isLongTermCo').checked;
   document.getElementById('longTermFields').style.display = isChecked ? 'block' : 'none';
   
   if (isChecked) {
-    // Show/hide based on pricing type
+    // Set start date to today when first enabling LT
+    var startField = document.getElementById('startDateFieldCo');
+    if (!startField.value) {
+      startField.value = new Date().toISOString().split('T')[0];
+    }
+    // Trigger toggleEndDate to set initial state correctly
+    toggleEndDate();
     togglePricingFields();
-    // Show discount warning if ongoing contract
     updateDiscountWarning();
   } else {
     // Regular contract - always show items
     document.getElementById('itemsCo').parentElement.style.display = 'block';
     document.getElementById('invoiceAmountRow').style.display = 'none';
+    // Show deposit and fulfillment for regular contracts
+    document.getElementById('depositTypeLabelCo').style.display = 'block';
+    document.getElementById('depositValueLabelCo').style.display = 'block';
+    document.getElementById('fulfillmentDateLabelCo').style.display = 'block';
   }
   recalcCo();
 }
 
 function toggleEndDate() {
-  var type = document.getElementById('endDateType').value;
-  var isOngoing = (type === 'on_termination');
+  var type = document.getElementById('endDateTypeCo').value;
+  var isOngoing = (type === 'ongoing');
   
-  document.getElementById('endDateField').style.display = isOngoing ? 'none' : 'block';
+  document.getElementById('endDateFieldCo').style.display = isOngoing ? 'none' : 'block';
+  
+  // Hide fulfillment date when ongoing
+  var fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
+  if (document.getElementById('isLongTermCo').checked) {
+    fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
+  }
   
   // Show/hide fixed total option based on contract duration
   var fixedTotalOption = document.getElementById('fixedTotalOption');
@@ -303,19 +343,37 @@ function toggleEndDate() {
   
   togglePricingFields();
   updateDiscountWarning();
+  recalcCo();
 }
 
 function togglePricingFields() {
   var isLongTerm = document.getElementById('isLongTermCo').checked;
-  if (!isLongTerm) return;
+  if (!isLongTerm) {
+    // Regular contract - show deposit and fulfillment
+    document.getElementById('depositTypeLabelCo').style.display = 'block';
+    document.getElementById('depositValueLabelCo').style.display = 'block';
+    document.getElementById('fulfillmentDateLabelCo').style.display = 'block';
+    return;
+  }
   
   var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
   
   if (pricingType === 'per_invoice') {
+    // Recurring amount - hide deposit and fulfillment
+    document.getElementById('depositTypeLabelCo').style.display = 'none';
+    document.getElementById('depositValueLabelCo').style.display = 'none';
+    document.getElementById('fulfillmentDateLabelCo').style.display = 'none';
     document.getElementById('perInvoiceField').style.display = 'block';
+    document.getElementById('fixedTotalFieldsCo').style.display = 'none';
     document.getElementById('itemsCo').parentElement.style.display = 'none';
   } else {
+    // Fixed total - show deposit and fulfillment
+    document.getElementById('depositTypeLabelCo').style.display = 'block';
+    document.getElementById('depositValueLabelCo').style.display = 'block';
+    var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
+    document.getElementById('fulfillmentDateLabelCo').style.display = isOngoing ? 'none' : 'block';
     document.getElementById('perInvoiceField').style.display = 'none';
+    document.getElementById('fixedTotalFieldsCo').style.display = 'block';
     document.getElementById('itemsCo').parentElement.style.display = 'block';
   }
   recalcCo();
@@ -323,7 +381,7 @@ function togglePricingFields() {
 
 function updateDiscountWarning() {
   var isLongTerm = document.getElementById('isLongTermCo').checked;
-  var isOngoing = document.getElementById('endDateType').value === 'on_termination';
+  var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
   var discountType = document.getElementById('discountTypeCo').value;
   
   var warning = document.getElementById('discountWarning');
