@@ -1,0 +1,50 @@
+{# src/views/public/doc-template.twig #}
+<style>.public-doc-wrap{max-width:816px;margin:24px auto;padding:0 16px 96px}.notice{margin:10px 0;padding:10px 12px;border-radius:8px}.n-ok{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}.n-err{background:#fff1f2;color:#881337;border:1px solid #fca5a5}</style>
+<div class="public-doc-wrap">
+  {% if notice %}
+    <div class="notice n-ok">Thank you! Your response has been recorded.</div>
+  {% endif %}
+  {% if error %}
+    <div class="notice n-err">{{ error|e }}</div>
+  {% endif %}
+
+  {# Include the appropriate print template. These are plain PHP files; Twig can't include them directly without additional setup. #}
+  {% if type == 'quote' %}
+    {{ include('../pages/quote/quote-print.php') }}
+  {% elseif type == 'contract' %}
+    {{ include('../pages/contract/contract-print.php') }}
+  {% elseif type == 'invoice' %}
+    {{ include('../pages/invoice/invoice-print.php') }}
+  {% endif %}
+
+  {# Actions & upload forms handled by controller flags #}
+  {% if showActions %}
+    <div style="margin:16px 0 64px; display:flex; gap:8px">
+      <form method="post" action="/?page=public-quote-action">
+        <input type="hidden" name="csrf" value="{{ csrf|default('') }}">
+        <input type="hidden" name="token" value="{{ token|e }}">
+        <input type="hidden" name="action" value="approve">
+        <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#16a34a;color:#fff">Approve</button>
+      </form>
+      <form method="post" action="/?page=public-quote-action">
+        <input type="hidden" name="csrf" value="{{ csrf|default('') }}">
+        <input type="hidden" name="token" value="{{ token|e }}">
+        <input type="hidden" name="action" value="deny">
+        <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#ef4444;color:#fff">Deny</button>
+      </form>
+    </div>
+  {% endif %}
+
+  {% if showUpload %}
+    <div style="margin:16px 0 64px">
+      <form method="post" action="/?page=public-contract-action" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center">
+        <input type="hidden" name="csrf" value="{{ csrf|default('') }}">
+        <input type="hidden" name="token" value="{{ token|e }}">
+        <input type="file" name="signed_pdf" accept="application/pdf" required style="padding:6px">
+        <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#0ea5a4;color:#fff">Upload Signed Contract</button>
+      </form>
+      <div style="margin-top:8px;color:var(--muted);font-size:13px">Upload a signed PDF to mark this contract active. Maximum 25 MB. PDF only.</div>
+    </div>
+  {% endif %}
+
+</div>

@@ -74,6 +74,7 @@ try {
       type VARCHAR(16) NOT NULL,
       record_id INT NOT NULL,
       token VARCHAR(64) NOT NULL,
+      redirect VARCHAR(255) NULL,
       expires_at DATETIME NOT NULL,
       revoked TINYINT(1) NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -84,10 +85,14 @@ try {
 
   // Insert a fresh token for this share (do not reuse old links)
   $token = bin2hex(random_bytes(16));
-  $exp = date('Y-m-d H:i:s', time() + 14*24*60*60);
+  // Use configured documents_valid_days from settings (fallback to 14)
+  $days = isset($appConfig['documents_valid_days']) ? (int)$appConfig['documents_valid_days'] : 14;
+  if ($days <= 0) { $days = 14; }
+  $exp = date('Y-m-d H:i:s', time() + ($days * 24 * 60 * 60));
   try {
-    $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, expires_at) VALUES (?,?,?,?)');
-    $ins->execute([$type, $id, $token, $exp]);
+  $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, redirect, expires_at) VALUES (?,?,?,?,?)');
+  // No redirect by default; callers may update this row later if desired
+  $ins->execute([$type, $id, $token, null, $exp]);
   } catch (Throwable $e) { /* ignore */ }
 
   // Build absolute URL to public view
@@ -100,10 +105,10 @@ try {
 
   // Compose body
   $body = '<p>Hello '.htmlspecialchars($firstName).',</p>' .
-          '<p>Please find your document attached and available at the link below:</p>' .
-          '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>' .
-          '<p>This link will expire in 14 days. Do not share this link with untrusted parties!</p>' .
-          '<p>Thank you.</p>';
+    '<p>Please find your document attached and available at the link below:</p>' .
+    '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>' .
+    '<p>This link will expire in '.htmlspecialchars((string)$days).' day'.($days===1?'':'s').'. Do not share this link with untrusted parties!</p>' .
+    '<p>Thank you.</p>';
 
   // Optionally render PDF attachment using Dompdf
   $attachments = [];

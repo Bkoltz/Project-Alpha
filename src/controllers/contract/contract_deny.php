@@ -11,6 +11,11 @@ try {
   $pdo->prepare('UPDATE contracts SET status="denied" WHERE id=?')->execute([$id]);
   // Mark linked invoices denied (do not alter paid ones)
   $pdo->prepare("UPDATE invoices SET status='denied' WHERE contract_id=? AND status<>'paid'")->execute([$id]);
+  // Revoke public links for affected invoices
+  try {
+    $redir = '/?page=public-redirect&type=invoice&reason=denied';
+    $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE type="invoice" AND record_id IN (SELECT id FROM invoices WHERE contract_id=? ) AND revoked=0')->execute([$redir, $id]);
+  } catch (Throwable $_e) { /* ignore */ }
   $pdo->commit();
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
