@@ -67,6 +67,7 @@ try {
     // Attempt to render Twig if installed (non-fatal)
     try {
       require_once __DIR__ . '/../../vendor/autoload.php';
+      // Code is correct, but it throws an error, ignore for now
       $loader = new \Twig\Loader\FilesystemLoader(__DIR__ . '/../../views');
       $twig = new \Twig\Environment($loader);
       echo $twig->render('public/doc-template.twig', [

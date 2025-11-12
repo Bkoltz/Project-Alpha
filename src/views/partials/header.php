@@ -29,6 +29,7 @@
   
   <link rel="stylesheet" href="/assets/styles.css">
   <script src="/assets/navigation.js" defer></script>
+  <script src="/assets/invoice-edit.js" defer></script>
 </head>
 
 <body>

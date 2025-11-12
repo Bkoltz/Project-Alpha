@@ -66,6 +66,9 @@ $settings = [
     // App extras
     'primary_state' => null,
     'documents_valid_days' => 14,
+    // Automatic invoice email settings
+    'invoice_auto_send_due_7days' => 0,
+    'invoice_auto_send_overdue_weekly' => 0,
     // SMTP configuration (optional)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -275,6 +278,10 @@ if (isset($_POST['cron_schedule'])) {
 if (isset($_POST['cron_custom'])) {
     $settings['cron_custom'] = trim((string)$_POST['cron_custom']) ?: '0 2 * * *';
 }
+
+// Automatic invoice email settings
+$settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
+$settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
 
 // Quote settings
 $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;

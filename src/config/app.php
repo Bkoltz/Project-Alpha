@@ -28,6 +28,9 @@ $appConfig = [
     'timezone' => 'UTC',
     'primary_state' => null,
     'documents_valid_days' => 14,
+    // Automatic invoice email settings
+    'invoice_auto_send_due_7days' => 0,
+    'invoice_auto_send_overdue_weekly' => 0,
     // SMTP (may be present from settings)
     'smtp_host' => null,
     'smtp_port' => 587,

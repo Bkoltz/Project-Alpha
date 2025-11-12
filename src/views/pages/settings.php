@@ -518,6 +518,26 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
         }
       })();
           </script>
+          <fieldset style="margin-top:18px;padding:12px;border-radius:8px;border:1px solid #eee">
+          <legend style="padding:0 6px;color:var(--muted)">Automatic Invoice Emails</legend>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" name="invoice_auto_send_due_7days" value="1" <?php echo !empty($appConfig['invoice_auto_send_due_7days']) ? 'checked' : ''; ?>>
+              <div>
+                <div style="font-weight:600">Send reminder 7 days before due</div>
+                <div style="font-size:13px;color:var(--muted)">When enabled, the system will email clients one week before an invoice is due.</div>
+              </div>
+            </label>
+
+            <label style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" name="invoice_auto_send_overdue_weekly" value="1" <?php echo !empty($appConfig['invoice_auto_send_overdue_weekly']) ? 'checked' : ''; ?>>
+              <div>
+                <div style="font-weight:600">Send weekly reminders for overdue invoices</div>
+                <div style="font-size:13px;color:var(--muted)">When enabled, the system will email clients for overdue invoices at most once every 7 days.</div>
+              </div>
+            </label>
+          </div>
+        </fieldset>
         <?php endif; ?>
 
         <div>
