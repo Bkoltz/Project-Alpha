@@ -277,8 +277,10 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
   unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  is_extra_charge TINYINT(1) NOT NULL DEFAULT 0,
   CONSTRAINT fk_invoice_items_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
-  INDEX idx_invoice_items_invoice (invoice_id)
+  INDEX idx_invoice_items_invoice (invoice_id),
+  INDEX idx_invoice_items_extra (is_extra_charge)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -315,6 +317,17 @@ CREATE TABLE IF NOT EXISTS public_links (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_public_token (token),
   INDEX idx_public_type_record (type, record_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Notifications for automated invoice emails (track per-invoice sends)
+CREATE TABLE IF NOT EXISTS invoice_notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  invoice_id INT NOT NULL,
+  type VARCHAR(32) NOT NULL, -- e.g. 'due_7', 'overdue_weekly'
+  sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_invnot_invoice (invoice_id),
+  INDEX idx_invnot_type (type),
+  CONSTRAINT fk_invnot_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================

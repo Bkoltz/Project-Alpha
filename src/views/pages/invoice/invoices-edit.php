@@ -55,7 +55,18 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items (from contract - read only)</div>
       <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px">
-        <?php if (empty($items)): ?>
+        <?php 
+          $contractItems = [];
+          $extraCharges = [];
+          foreach ($items as $it) {
+            if ((int)($it['is_extra_charge'] ?? 0) === 1) {
+              $extraCharges[] = $it;
+            } else {
+              $contractItems[] = $it;
+            }
+          }
+        ?>
+        <?php if (empty($contractItems)): ?>
           <p style="color:#6b7280;margin:0">No items</p>
         <?php else: ?>
           <table style="width:100%;border-collapse:collapse">
@@ -68,7 +79,7 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
               </tr>
             </thead>
             <tbody>
-              <?php foreach ($items as $it): ?>
+              <?php foreach ($contractItems as $it): ?>
                 <tr style="border-bottom:1px solid #e5e7eb">
                   <td style="padding:8px"><?php echo htmlspecialchars($it['description']); ?></td>
                   <td style="padding:8px;text-align:right"><?php echo htmlspecialchars(number_format((float)$it['quantity'], 2)); ?></td>
@@ -81,6 +92,29 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
         <?php endif; ?>
       </div>
       <p style="color:#6b7280;font-size:0.875rem;margin-top:8px">To change items, modify the contract and apply a discount if needed.</p>
+    </div>
+
+    <!-- Extra Charges Section -->
+    <div>
+      <div style="font-weight:600;margin-bottom:8px">Extra Charges (editable)</div>
+      <div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:12px;margin-bottom:8px">
+        <?php if (empty($extraCharges)): ?>
+          <p style="color:#92400e;margin:0">No extra charges added yet. Use the form below to add additional line items.</p>
+        <?php else: ?>
+          <div id="extraChargesContainer" style="display:grid;gap:8px">
+            <?php foreach ($extraCharges as $idx => $it): ?>
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;padding:8px;background:#fff;border-radius:4px;border:1px solid #fcd34d">
+                <input type="text" name="extra_desc[]" value="<?php echo htmlspecialchars($it['description']); ?>" placeholder="Description" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+                <input type="number" step="0.01" min="0" name="extra_qty[]" value="<?php echo htmlspecialchars($it['quantity']); ?>" placeholder="Qty" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+                <input type="number" step="0.01" min="0" name="extra_price[]" value="<?php echo htmlspecialchars($it['unit_price']); ?>" placeholder="Price" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+                <input type="hidden" name="extra_id[]" value="<?php echo htmlspecialchars($it['id']); ?>">
+                <button type="button" onclick="if(confirm('Remove this extra charge?')){this.parentElement.remove();recalcInv()}" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
+      <button id="addExtraChargeBtn" type="button" onclick="addExtraCharge()" style="margin-bottom:12px;padding:8px 12px;border-radius:8px;border:1px solid #fbbf24;background:#fffbeb;color:#92400e;cursor:pointer;font-weight:600">+ Add Extra Charge</button>
     </div>
 
     <?php $pn=null; if (!empty($inv['project_code'])) { $pm=$pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?'); $pm->execute([$inv['project_code']]); $pn=(string)$pm->fetchColumn(); } ?>
@@ -98,7 +132,7 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
     <?php endif; ?>
 
     <?php
-      // Calculate totals from database items
+      // Calculate totals from database items (contract + extra charges)
       $subtotal = 0;
       foreach ($items as $it) {
         $subtotal += (float)$it['quantity'] * (float)$it['unit_price'];
@@ -128,29 +162,3 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
     </div>
   </form>
 </section>
-<script>
-
-// Client typeahead
-var ciI = document.getElementById('clientInputInv');
-var cidI = document.getElementById('clientIdInv');
-var sugI = document.getElementById('clientSuggestInv');
-ciI.addEventListener('input', function(){
-  cidI.value='';
-  var t = this.value.trim();
-  if(!t){sugI.style.display='none';sugI.innerHTML='';return;}
-  fetch('/?page=clients-search&term='+encodeURIComponent(t))
-    .then(r=>r.json())
-    .then(list=>{
-      if(!Array.isArray(list)||list.length===0){sugI.style.display='none';sugI.innerHTML='';return;}
-      sugI.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-      Array.from(sugI.children).forEach(el=>{
-        el.addEventListener('click', function(){
-          ciI.value = this.dataset.name; cidI.value = this.dataset.id; sugI.style.display='none';
-        });
-      });
-      sugI.style.display='block';
-    }).catch(()=>{sugI.style.display='none'});
-});
-document.addEventListener('click', function(e){ if(!sugI.contains(e.target) && e.target!==ciI){ sugI.style.display='none'; } });
-document.getElementById('invEditForm').addEventListener('submit', function(e){ if(!cidI.value){ e.preventDefault(); alert('Please select a client from suggestions.'); } });
-</script>

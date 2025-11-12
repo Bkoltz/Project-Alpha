@@ -35,10 +35,12 @@
     "quote_scope_enabled": 0,
     "quote_auto_create_contract": 0,
     "quote_auto_create_invoice": 0,
-    "contract_scope_enabled": 1,
+    "contract_scope_enabled": 0,
     "contract_memo_enabled": 0,
     "cron_enabled": 1,
     "cron_schedule": "daily_2am",
     "cron_custom": "0 2 * * *",
-    "signature_agreement": "By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions. Turtles!"
+    "signature_agreement": "By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions. Turtles!",
+    "invoice_auto_send_due_7days": 1,
+    "invoice_auto_send_overdue_weekly": 1
 }

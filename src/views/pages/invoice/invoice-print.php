@@ -9,7 +9,7 @@ $st = $pdo->prepare('SELECT i.*, c.name client_name, c.organization client_org, 
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
-$items = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM invoice_items WHERE invoice_id=?');
+$items = $pdo->prepare('SELECT description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
 $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
@@ -233,8 +233,13 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </thead>
     <tbody>
       <?php foreach ($items as $it): ?>
-      <tr style="border-top:1px solid #f3f4f6">
-        <td style="padding:10px"><?php echo htmlspecialchars($it['description']); ?></td>
+      <tr style="border-top:1px solid #f3f4f6<?php echo (int)($it['is_extra_charge'] ?? 0) ? ';background:#fffbeb' : ''; ?>">
+        <td style="padding:10px">
+          <?php echo htmlspecialchars($it['description']); ?>
+          <?php if ((int)($it['is_extra_charge'] ?? 0) === 1): ?>
+            <span style="display:inline-block;margin-left:8px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:11px;font-weight:600">Extra Charge</span>
+          <?php endif; ?>
+        </td>
         <td style="padding:10px"><?php echo number_format($it['quantity'],2); ?></td>
         <td style="padding:10px">$<?php echo number_format($it['unit_price'],2); ?></td>
         <td style="padding:10px">$<?php echo number_format($it['line_total'],2); ?></td>
