@@ -336,6 +336,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/account_update.php';
         exit;
     }
+    if ($page === 'financial/audit-export') {
+        require_once __DIR__ . '/../src/controllers/financial/audit_export.php';
+        exit;
+    }
 }
 
 // Standalone login and reset pages use a minimal top header
