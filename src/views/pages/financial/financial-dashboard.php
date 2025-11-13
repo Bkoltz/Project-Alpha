@@ -69,6 +69,9 @@ $defaultEndDate = date('Y') . '-12-31';
   <div style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
     <h3 style="margin: 0 0 20px 0; color: #333;">Income Over Time</h3>
     <canvas id="incomeChart" style="max-height: 400px;"></canvas>
+    <div id="noDataMessage" style="display: none; padding: 20px; text-align: center; color: #6b7280;">
+      <p style="margin: 0;">No payment data available for the selected date range.</p>
+    </div>
   </div>
 </section>
 
@@ -101,11 +104,26 @@ $defaultEndDate = date('Y') . '-12-31';
       .then(res => res.json())
       .then(response => {
         if (!response.success) {
-          console.error('Failed to load data');
+          console.error('Failed to load data:', response.error);
+          document.getElementById('noDataMessage').style.display = 'block';
+          document.getElementById('incomeChart').style.display = 'none';
           return;
         }
 
         const data = response.data;
+        
+        // Handle empty data
+        if (!data || data.length === 0) {
+          document.getElementById('noDataMessage').style.display = 'block';
+          document.getElementById('incomeChart').style.display = 'none';
+          document.getElementById('totalIncome').textContent = '$0.00';
+          document.getElementById('invoiceCount').textContent = '0';
+          document.getElementById('avgPayment').textContent = '$0.00';
+          return;
+        }
+
+        document.getElementById('noDataMessage').style.display = 'none';
+        document.getElementById('incomeChart').style.display = 'block';
         
         // Update summary cards
         const totalIncome = data.reduce((sum, d) => sum + d.income, 0);
@@ -168,6 +186,8 @@ $defaultEndDate = date('Y') . '-12-31';
       })
       .catch(err => {
         console.error('Error loading financial data:', err);
+        document.getElementById('noDataMessage').style.display = 'block';
+        document.getElementById('noDataMessage').innerHTML = '<p style="color: #dc2626; margin: 0;">Error loading data. Please check the console.</p>';
       });
   }
 
