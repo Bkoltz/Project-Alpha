@@ -84,6 +84,7 @@
               <ul>
                 <li><a href="/?page=contract/contracts-list" data-page="contract/contracts-list">Contracts</a></li>
                 <li><a href="/?page=contract/long-term-contracts-list" data-page="contract/long-term-contracts-list">Long-term Contracts</a></li>
+                <li><a href="/?page=contract/on-demand-contracts-list" data-page="contract/on-demand-contracts-list">On-Demand Contracts</a></li>
                 <li><a href="/?page=contract/contracts-create" data-page="contract/contracts-create">Create Contract</a></li>
               </ul>
             </li>
