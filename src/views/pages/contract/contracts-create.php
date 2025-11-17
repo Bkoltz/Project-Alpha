@@ -121,11 +121,18 @@ $csrf = csrf_sf_token('contracts-create');
             <div style="font-size:13px;color:#6b7280">Client pays the same amount on each invoice (e.g., $20/month)</div>
           </div>
         </label>
-        <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
           <input type="radio" id="recurringFixedTotal" name="pricing_type" value="fixed_total" onchange="togglePricingFields()" style="margin-top:3px">
           <div>
             <div style="font-weight:600;color:#374151">Fixed Total (Billed Over Time)</div>
             <div style="font-size:13px;color:#6b7280">Total contract amount is divided across invoices until paid in full</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+          <input type="radio" id="onDemandOption" name="pricing_type" value="on_demand" onchange="togglePricingFields()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">On Demand</div>
+            <div style="font-size:13px;color:#6b7280">Invoices generated manually on-demand without deposits</div>
           </div>
         </label>
       </div>
@@ -217,7 +224,7 @@ function recalcCo(){
   var subtotal = 0;
   
   // Calculate subtotal based on pricing type
-  if (isLongTerm && pricingType === 'per_invoice') {
+  if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
     // Use price per invoice
     subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
   } else {
@@ -366,6 +373,14 @@ function togglePricingFields() {
     document.getElementById('perInvoiceField').style.display = 'block';
     document.getElementById('fixedTotalFieldsCo').style.display = 'none';
     document.getElementById('itemsCo').parentElement.style.display = 'none';
+  } else if (pricingType === 'on_demand') {
+    // On-demand - hide deposit and fulfillment, show price per invoice
+    document.getElementById('depositTypeLabelCo').style.display = 'none';
+    document.getElementById('depositValueLabelCo').style.display = 'none';
+    document.getElementById('fulfillmentDateLabelCo').style.display = 'none';
+    document.getElementById('perInvoiceField').style.display = 'block';
+    document.getElementById('fixedTotalFieldsCo').style.display = 'none';
+    document.getElementById('itemsCo').parentElement.style.display = 'none';
   } else {
     // Fixed total - show deposit and fulfillment
     document.getElementById('depositTypeLabelCo').style.display = 'block';
@@ -424,6 +439,15 @@ document.getElementById('coCreateForm').addEventListener('submit', function(e){
   }
   // Set form action based on contract type
   var isLongTerm = document.getElementById('isLongTermCo').checked;
-  this.action = isLongTerm ? '/?page=long-term-contracts-create' : '/?page=contracts-create';
+  if (isLongTerm) {
+    var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
+    if (pricingType === 'on_demand') {
+      this.action = '/?page=on-demand-contracts-create';
+    } else {
+      this.action = '/?page=long-term-contracts-create';
+    }
+  } else {
+    this.action = '/?page=contracts-create';
+  }
 });
 </script>

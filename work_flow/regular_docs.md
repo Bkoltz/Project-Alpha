@@ -3,7 +3,7 @@
 ## Overview
 When a quote is approved, Project-Alpha automatically generates:
 - A new **Contract** (status: `pending`)
-- A new **Invoice** (status: `draft`)
+- A new **Invoice** (status: `unpaid`)
 
 ## States and Transitions
 

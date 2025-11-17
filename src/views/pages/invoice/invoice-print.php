@@ -237,7 +237,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <td style="padding:10px">
           <?php echo htmlspecialchars($it['description']); ?>
           <?php if ((int)($it['is_extra_charge'] ?? 0) === 1): ?>
-            <span style="display:inline-block;margin-left:8px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:11px;font-weight:600">Extra Charge</span>
+            <span style="display:inline-block;margin-left:8px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:10px;font-weight:600">Extra Charge</span>
           <?php endif; ?>
         </td>
         <td style="padding:10px"><?php echo number_format($it['quantity'],2); ?></td>

@@ -244,6 +244,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   id INT AUTO_INCREMENT PRIMARY KEY,
   contract_id INT NULL,
   quote_id INT NULL,
+  long_term_contract_id INT NULL,
+  on_demand_contract_id INT NULL,
   client_id INT NOT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
@@ -267,7 +269,9 @@ CREATE TABLE IF NOT EXISTS invoices (
   INDEX idx_invoices_status (status),
   INDEX idx_invoices_total (total),
   INDEX idx_invoices_doc_number (doc_number),
-  INDEX idx_invoices_project_code (project_code)
+  INDEX idx_invoices_project_code (project_code),
+  INDEX idx_invoices_ltc (long_term_contract_id),
+  INDEX idx_invoices_odc (on_demand_contract_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS invoice_items (
@@ -372,6 +376,54 @@ CREATE TABLE IF NOT EXISTS long_term_contracts (
   CONSTRAINT fk_ltc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   CONSTRAINT fk_ltc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
   CONSTRAINT fk_ltc_base_contract FOREIGN KEY (base_contract_id) REFERENCES contracts(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS long_term_contract_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  long_term_contract_id INT NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
+  unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  CONSTRAINT fk_ltc_items_contract FOREIGN KEY (long_term_contract_id) REFERENCES long_term_contracts(id) ON DELETE CASCADE,
+  INDEX idx_ltc_items_contract (long_term_contract_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- ON-DEMAND CONTRACTS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS on_demand_contracts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  quote_id INT NULL,
+  client_id INT NOT NULL,
+  doc_number INT NULL,
+  project_code VARCHAR(64) NULL,
+  status ENUM('draft','pending','active','paused','cancelled','completed') NOT NULL DEFAULT 'pending',
+  start_date DATE NOT NULL,
+  end_date DATE NULL,
+  billing_interval_count INT NOT NULL DEFAULT 1,
+  billing_interval_unit ENUM('day','week','month','year') NOT NULL DEFAULT 'month',
+  discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
+  discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+  tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+  subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
+  price_per_invoice DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total_invoiced DECIMAL(12,2) NOT NULL DEFAULT 0,
+  invoice_count INT NOT NULL DEFAULT 0,
+  last_invoice_date DATE NULL,
+  signed_pdf_path VARCHAR(255) NULL,
+  scope TEXT NULL,
+  terms TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_odc_client (client_id),
+  INDEX idx_odc_status (status),
+  INDEX idx_odc_doc (doc_number),
+  INDEX idx_odc_project (project_code),
+  INDEX idx_odc_end_date (end_date),
+  CONSTRAINT fk_odc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  CONSTRAINT fk_odc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS long_term_contract_items (
