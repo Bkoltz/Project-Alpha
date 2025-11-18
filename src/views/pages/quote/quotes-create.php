@@ -81,7 +81,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         </label>
       </div>
 
-      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:12px">
+      <div id="billingIntervalFields" style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:12px">
         <label>
           <div>Bill Every *</div>
           <select id="billingIntervalCount" name="lt_billing_interval_count" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -112,11 +112,18 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
             <div style="font-size:13px;color:#6b7280">Client pays the same amount on each invoice (e.g., $20/month)</div>
           </div>
         </label>
-        <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
           <input type="radio" id="recurringFixedTotal" name="lt_pricing_type" value="fixed_total" onchange="togglePricingFields()" style="margin-top:3px">
           <div>
             <div style="font-weight:600;color:#374151">Fixed Total (Billed Over Time)</div>
             <div style="font-size:13px;color:#6b7280">Total quote amount is divided across invoices until paid in full</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+          <input type="radio" id="onDemandQuote" name="lt_pricing_type" value="on_demand" onchange="togglePricingFields()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">On Demand</div>
+            <div style="font-size:13px;color:#6b7280">Invoices generated manually on-demand without deposits</div>
           </div>
         </label>
       </div>
@@ -209,7 +216,7 @@ function recalc(){
   var subtotal = 0;
   
   // Calculate subtotal based on pricing type
-  if (isLongTerm && pricingType === 'per_invoice') {
+  if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
     subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
   } else {
     var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
@@ -341,6 +348,7 @@ function togglePricingFields() {
     document.getElementById('depositTypeLabel').style.display = 'block';
     document.getElementById('depositValueLabel').style.display = 'block';
     document.getElementById('fulfillmentDateLabel').style.display = 'block';
+    document.getElementById('billingIntervalFields').style.display = 'grid';
     return;
   }
   
@@ -354,6 +362,16 @@ function togglePricingFields() {
     document.getElementById('perInvoiceField').style.display = 'block';
     document.getElementById('fixedTotalFields').style.display = 'none';
     document.getElementById('items').parentElement.style.display = 'none';
+    document.getElementById('billingIntervalFields').style.display = 'grid';
+  } else if (pricingType === 'on_demand') {
+    // On-demand - show deposits, hide fulfillment and billing interval
+    document.getElementById('depositTypeLabel').style.display = 'block';
+    document.getElementById('depositValueLabel').style.display = 'block';
+    document.getElementById('fulfillmentDateLabel').style.display = 'none';
+    document.getElementById('perInvoiceField').style.display = 'block';
+    document.getElementById('fixedTotalFields').style.display = 'none';
+    document.getElementById('items').parentElement.style.display = 'none';
+    document.getElementById('billingIntervalFields').style.display = 'none';
   } else {
     // Fixed total - show deposit and fulfillment
     document.getElementById('depositTypeLabel').style.display = 'block';
@@ -363,6 +381,7 @@ function togglePricingFields() {
     document.getElementById('perInvoiceField').style.display = 'none';
     document.getElementById('fixedTotalFields').style.display = 'block';
     document.getElementById('items').parentElement.style.display = 'block';
+    document.getElementById('billingIntervalFields').style.display = 'grid';
   }
   recalc();
 }

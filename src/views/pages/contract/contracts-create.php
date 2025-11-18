@@ -374,9 +374,9 @@ function togglePricingFields() {
     document.getElementById('fixedTotalFieldsCo').style.display = 'none';
     document.getElementById('itemsCo').parentElement.style.display = 'none';
   } else if (pricingType === 'on_demand') {
-    // On-demand - hide deposit and fulfillment, show price per invoice
-    document.getElementById('depositTypeLabelCo').style.display = 'none';
-    document.getElementById('depositValueLabelCo').style.display = 'none';
+    // On-demand - show deposits, hide fulfillment, show price per invoice
+    document.getElementById('depositTypeLabelCo').style.display = 'block';
+    document.getElementById('depositValueLabelCo').style.display = 'block';
     document.getElementById('fulfillmentDateLabelCo').style.display = 'none';
     document.getElementById('perInvoiceField').style.display = 'block';
     document.getElementById('fixedTotalFieldsCo').style.display = 'none';

@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/app.php';
 $name = trim($_POST['name'] ?? '');
 $email = trim($_POST['email'] ?? '');
 $phone = trim($_POST['phone'] ?? '');
-$organization = trim($_POST['organization'] ?? '');
+$organization_id = (int)($_POST['organization_id'] ?? 0);
 $notes = trim($_POST['notes'] ?? '');
 $address_line1 = trim($_POST['address_line1'] ?? '');
 $address_line2 = trim($_POST['address_line2'] ?? '');
@@ -22,12 +22,12 @@ if ($name === '') {
     exit;
 }
 
-$stmt = $pdo->prepare('INSERT INTO clients (name, email, phone, organization, notes, address_line1, address_line2, city, state, postal, country) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+$stmt = $pdo->prepare('INSERT INTO clients (name, email, phone, organization_id, notes, address_line1, address_line2, city, state, postal, country) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
 $stmt->execute([
   $name,
   $email ?: null,
   $phone ?: null,
-  $organization ?: null,
+  $organization_id > 0 ? $organization_id : null,
   $notes ?: null,
   $address_line1 ?: null,
   $address_line2 ?: null,

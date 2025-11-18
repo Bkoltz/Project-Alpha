@@ -6,7 +6,7 @@ $id = (int)($_POST['id'] ?? 0);
 $name = trim($_POST['name'] ?? '');
 $email = trim($_POST['email'] ?? '');
 $phone = trim($_POST['phone'] ?? '');
-$organization = trim($_POST['organization'] ?? '');
+$organization_id = (int)($_POST['organization_id'] ?? 0);
 $notes = trim($_POST['notes'] ?? '');
 $address_line1 = trim($_POST['address_line1'] ?? '');
 $address_line2 = trim($_POST['address_line2'] ?? '');
@@ -21,12 +21,12 @@ if ($id <= 0 || $name === '') {
   exit;
 }
 
-$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal=?, country=? WHERE id=?');
+$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization_id=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal=?, country=? WHERE id=?');
 $st->execute([
   $name,
   $email ?: null,
   $phone ?: null,
-  $organization ?: null,
+  $organization_id > 0 ? $organization_id : null,
   $notes ?: null,
   $address_line1 ?: null,
   $address_line2 ?: null,

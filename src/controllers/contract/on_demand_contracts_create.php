@@ -9,6 +9,8 @@ $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
+$deposit_value = (float)($_POST['deposit_value'] ?? 0);
 
 // On-demand contract specific fields
 $start_date = !empty($_POST['start_date']) ? $_POST['start_date'] : null;
@@ -63,6 +65,16 @@ if($discount_type === 'percent'){
 }
 
 $tax = max(0, $tax_percent) * max(0, $subtotal - $discount_amount) / 100;
+$total = max(0, $subtotal - $discount_amount + $tax);
+
+// Calculate deposit amount
+$deposit_amount = 0.0;
+if($deposit_type === 'percent') { 
+    $deposit_amount = max(0, min(100, $deposit_value)) * $total / 100; 
+}
+elseif($deposit_type === 'fixed') { 
+    $deposit_amount = max(0, $deposit_value); 
+}
 
 $pdo->beginTransaction();
 try{
@@ -79,13 +91,15 @@ try{
         client_id, project_code, status, start_date, end_date, 
         billing_interval_count, billing_interval_unit, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal,
+        deposit_type, deposit_amount, deposit_paid,
         total_invoiced, invoice_count, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
         $client_id, $projectCode, 'pending', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal,
+        $deposit_type, $deposit_amount, 0,
         0, 0, $scope
     ]);
     

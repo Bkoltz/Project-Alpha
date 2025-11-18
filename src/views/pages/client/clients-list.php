@@ -15,7 +15,11 @@ $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE
 $activeFilter = $hasArchived ? 'archived=0' : '1=1';
 
 // fetch all clients without pagination
-$sql = "SELECT id, name, email, phone, organization, created_at FROM clients ".($where? $where.' AND '.$activeFilter : 'WHERE '.$activeFilter)." ORDER BY name ASC";
+$sql = "SELECT c.id, c.name, c.email, c.phone, c.created_at, o.name as organization_name 
+        FROM clients c 
+        LEFT JOIN organizations o ON c.organization_id = o.id 
+        ".($where? 'WHERE c.name LIKE ? AND '.$activeFilter : 'WHERE '.$activeFilter)." 
+        ORDER BY c.name ASC";
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $clients = $st->fetchAll();
@@ -90,7 +94,7 @@ $clients = $st->fetchAll();
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$c['id']; ?>" style="text-decoration:none;color:inherit;"><?php echo htmlspecialchars($c['name']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['email'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($c['organization'] ?? ''); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($c['organization_name'] ?? ''); ?></td>
             <!-- <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td> -->
             <td style="padding:10px"><a href="/?page=client/clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
             <td style="padding:10px">

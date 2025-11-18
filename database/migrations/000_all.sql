@@ -71,6 +71,19 @@ CREATE TABLE IF NOT EXISTS api_usage (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
+-- ORGANIZATIONS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS organizations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(150) NOT NULL,
+  notes TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_organizations_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
 -- CLIENTS
 -- ============================================================================
 
@@ -79,7 +92,7 @@ CREATE TABLE IF NOT EXISTS clients (
   name VARCHAR(150) NOT NULL,
   email VARCHAR(150) NULL,
   phone VARCHAR(50) NULL,
-  organization VARCHAR(150) NULL,
+  organization_id INT NULL,
   notes TEXT NULL,
   address_line1 VARCHAR(200) NULL,
   address_line2 VARCHAR(200) NULL,
@@ -90,7 +103,9 @@ CREATE TABLE IF NOT EXISTS clients (
   archived TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_clients_name (name),
-  INDEX idx_clients_archived (archived)
+  INDEX idx_clients_archived (archived),
+  INDEX idx_clients_organization (organization_id),
+  CONSTRAINT fk_clients_organization FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS archived_clients (
@@ -99,7 +114,7 @@ CREATE TABLE IF NOT EXISTS archived_clients (
   name VARCHAR(150) NOT NULL,
   email VARCHAR(150) NULL,
   phone VARCHAR(50) NULL,
-  organization VARCHAR(150) NULL,
+  organization_id INT NULL,
   notes TEXT NULL,
   address_line1 VARCHAR(200) NULL,
   address_line2 VARCHAR(200) NULL,
@@ -162,11 +177,12 @@ CREATE TABLE IF NOT EXISTS quotes (
   deposit_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   fulfillment_date DATE NULL,
   is_long_term TINYINT(1) NOT NULL DEFAULT 0,
+  is_on_demand TINYINT(1) NOT NULL DEFAULT 0,
   start_date DATE NULL,
   end_date DATE NULL,
   billing_interval_count INT NULL DEFAULT 1,
   billing_interval_unit ENUM('day','week','month','year') NULL DEFAULT 'month',
-  pricing_type ENUM('per_invoice','fixed_total') NULL,
+  pricing_type ENUM('per_invoice','fixed_total','on_demand') NULL,
   price_per_invoice DECIMAL(12,2) NULL,
   scope TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -409,6 +425,9 @@ CREATE TABLE IF NOT EXISTS on_demand_contracts (
   tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
   subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
   price_per_invoice DECIMAL(12,2) NOT NULL DEFAULT 0,
+  deposit_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
+  deposit_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  deposit_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
   total_invoiced DECIMAL(12,2) NOT NULL DEFAULT 0,
   invoice_count INT NOT NULL DEFAULT 0,
   last_invoice_date DATE NULL,
