@@ -6,6 +6,10 @@ $st = $pdo->prepare('SELECT * FROM clients WHERE id=?');
 $st->execute([$id]);
 $client = $st->fetch(PDO::FETCH_ASSOC);
 if (!$client) { echo '<p>Client not found.</p>'; return; }
+
+// Fetch all organizations for dropdown
+$orgStmt = $pdo->query('SELECT id, name FROM organizations ORDER BY name ASC');
+$organizations = $orgStmt->fetchAll();
 ?>
 <section>
   <h2>Edit Client</h2>
@@ -29,7 +33,15 @@ if (!$client) { echo '<p>Client not found.</p>'; return; }
     </label>
     <label>
       <div>Organization</div>
-      <input type="text" name="organization" value="<?php echo htmlspecialchars($client['organization'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <select name="organization_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <option value="">-- None --</option>
+        <?php foreach ($organizations as $org): ?>
+          <option value="<?php echo (int)$org['id']; ?>" <?php echo (int)($client['organization_id'] ?? 0) === (int)$org['id'] ? 'selected' : ''; ?>>
+            <?php echo htmlspecialchars($org['name']); ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+      <div style="font-size:small;color:var(--muted);margin-top:4px">You can <a href="/?page=organization/organizations-create" target="_blank">create a new organization</a> if needed.</div>
     </label>
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
       <legend style="padding:0 6px;color:var(--muted)">Address</legend>

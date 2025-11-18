@@ -151,6 +151,11 @@ if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
     exit;
 }
+// Organization search for client creation (AJAX)
+if ($page === 'org-search' || $page === 'organization/org-search') {
+    require_once __DIR__ . '/../src/controllers/organization/org_search.php';
+    exit;
+}
 if ($page === 'financial/financial-api') {
     require_once __DIR__ . '/../src/controllers/financial/financial_api.php';
     exit;
@@ -338,6 +343,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/audit-export') {
         require_once __DIR__ . '/../src/controllers/financial/audit_export.php';
+        exit;
+    }
+    if ($page === 'organization/org-create') {
+        require_once __DIR__ . '/../src/controllers/organization/org_create.php';
+        exit;
+    }
+    if ($page === 'organization/organizations-create') {
+        require_once __DIR__ . '/../src/controllers/organization/organizations_create.php';
+        exit;
+    }
+    if ($page === 'organization/organizations-update') {
+        require_once __DIR__ . '/../src/controllers/organization/organizations_update.php';
+        exit;
+    }
+    if ($page === 'organization/organizations-delete') {
+        require_once __DIR__ . '/../src/controllers/organization/organizations_delete.php';
+        exit;
+    }
+    if ($page === 'organization/organization-add-client') {
+        require_once __DIR__ . '/../src/controllers/organization/organization_add_client.php';
+        exit;
+    }
+    if ($page === 'organization/organization-remove-client') {
+        require_once __DIR__ . '/../src/controllers/organization/organization_remove_client.php';
         exit;
     }
 }

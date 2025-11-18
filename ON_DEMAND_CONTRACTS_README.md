@@ -1,18 +1,24 @@
-# On-Demand Contracts Feature
+# On-Demand Contracts & Quotes Feature
 
 ## Overview
-This feature adds a new contract type called "On Demand" which allows for flexible invoicing without deposit requirements. Invoices are generated manually on-demand rather than automatically.
+This feature adds a new contract type called "On Demand" which allows for flexible invoicing without deposit requirements. Invoices are generated manually on-demand rather than automatically. The feature includes support for on-demand quotes that convert to on-demand contracts upon approval.
 
 ## Features
 
 ### 1. **On-Demand Contract Type**
 - New contract type alongside Regular and Long-term contracts
-- No deposit function required
+- **Deposits are supported** (optional, like other contract types)
+- **No billing interval fields** (Bill Every/Period not applicable)
 - Manual invoice generation via button trigger
 - Supports both ongoing and fixed end date contracts
 - Auto-termination for contracts past their end date
 
-### 2. **Database Changes**
+### 2. **Document Prefixes**
+- **ODQ-XXX**: On-Demand Quotes
+- **ODC-XXX**: On-Demand Contracts
+- **ODI-XXX**: On-Demand Invoices (displayed in on-demand invoices list)
+
+### 3. **Database Changes**
 The following database tables were added/modified:
 
 #### New Table: `on_demand_contracts`
@@ -49,7 +55,12 @@ Added columns:
 - `long_term_contract_id` - Links to long-term contracts
 - `on_demand_contract_id` - Links to on-demand contracts
 
-### 3. **Controllers Created**
+#### Modified Table: `quotes`
+Added columns:
+- `is_on_demand` - Flag for on-demand quotes (TINYINT)
+- Updated `pricing_type` ENUM to include 'on_demand'
+
+### 4. **Controllers Created**
 
 #### Contract Management
 - `on_demand_contracts_create.php` - Creates new on-demand contracts
@@ -61,7 +72,7 @@ Added columns:
 #### Invoice Generation
 - `on_demand_invoice_generate.php` - Manually generates invoices for active contracts
 
-### 4. **Views Created**
+### 5. **Views Created**
 
 #### Contract Views
 - `on-demand-contracts-list.php` - Lists all on-demand contracts with:
@@ -76,14 +87,39 @@ Added columns:
   - Links back to parent contract
   - Standard invoice actions (View, Email)
 
-### 5. **Form Integration**
+#### Quote Views
+- `on-demand-quotes-list.php` - Lists on-demand quotes with ODQ prefix
+- Updated `quotes-create.php` - Includes on-demand option in quote creation
+
+#### Invoice Views  
+- `invoice/on-demand-invoices-list.php` - Dedicated view showing ALL on-demand invoices with ODI prefix
+- `contract/on-demand-invoices-list.php` - View showing invoices for a specific on-demand contract
+
+### 6. **Form Integration**
+
+#### Contracts Form
 Updated `contracts-create.php` to include:
 - New "On Demand" radio option under "How should the client be billed?"
 - Available for both ongoing and fixed end date selections
 - Automatically hides deposit fields when selected
 - Routes to appropriate controller based on selection
 
-### 6. **Auto-Termination Cron**
+#### Quotes Form
+Updated `quotes-create.php` to include:
+- New "On Demand" radio option under "How should the client be billed?"
+- **Automatically hides billing interval fields** (Bill Every/Period) when On Demand is selected
+- **Deposits remain available** (shown when on-demand is selected)
+- Hides fulfillment date field
+- Creates on-demand quote that converts to on-demand contract upon approval
+
+### 7. **Quote Approval Integration**
+Updated `quote_approve.php` controller:
+- When an on-demand quote is approved, it creates an on-demand contract (not a regular contract)
+- On-demand contracts are created in 'pending' status
+- No invoice is auto-generated (unlike regular quotes)
+- Contract must be activated before invoices can be manually generated
+
+### 8. **Auto-Termination Cron**
 Created `auto_terminate_contracts.php` cron job that:
 - Runs on schedule to check for expired contracts
 - Auto-terminates both long-term and on-demand contracts past their end date
@@ -92,7 +128,18 @@ Created `auto_terminate_contracts.php` cron job that:
 
 ## Usage
 
-### Creating an On-Demand Contract
+### Creating an On-Demand Quote
+1. Navigate to Quotes → Create Quote
+2. Check "Long-term Service Quote (Recurring Billing)"
+3. Fill in start date and select contract duration (Ongoing or Fixed End Date)
+4. Under "How should the client be billed?" select **On Demand**
+5. **Note**: Bill Every and Period fields are automatically hidden for on-demand
+6. Enter the price per invoice
+7. Fill in other details (client, tax, discount, scope)
+8. Submit to create the on-demand quote
+9. When approved, it automatically creates an on-demand contract
+
+### Creating an On-Demand Contract Directly
 1. Navigate to Contracts → Create Contract
 2. Check "Long-term Contract (Recurring Billing)"
 3. Fill in start date and select contract duration (Ongoing or Fixed End Date)
@@ -152,12 +199,20 @@ Add the auto-termination cron to your crontab:
 
 Make sure `cron_enabled` is set to `true` in your settings.json file.
 
-## Key Differences from Other Contract Types
+## Navigation
+- **Quotes → On-Demand Quotes**: View all on-demand quotes (ODQ prefix)
+- **Contracts → On-Demand Contracts**: View all on-demand contracts (ODC prefix)
+- **Invoices → On-Demand Invoices**: View ALL on-demand invoices (ODI prefix)
+- **On-Demand Contracts → Invoices button**: View invoices for a specific contract
+- **On-Demand Contracts List**: Contains "Generate Invoice" button for manual generation
+
+## Key Differences from Other Types
 
 | Feature | Regular | Long-term | On-Demand |
 |---------|---------|-----------|-----------|
-| Deposit | Yes | Optional | No |
+| Deposit | Yes | Optional | Yes (Optional) |
 | Invoice Generation | Auto (on contract creation) | Auto (scheduled) | Manual |
+| Billing Interval | N/A | Required | Not Applicable |
 | Recurring Billing | No | Yes | Yes |
 | Fixed End Date | Yes | Optional | Optional |
 | Use Case | One-time projects | Subscription services | As-needed services |

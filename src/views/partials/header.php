@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="/assets/styles.css">
   <script src="/assets/navigation.js" defer></script>
   <script src="/assets/invoice-edit.js" defer></script>
+  <script src="/assets/client-create.js" defer></script>
 </head>
 
 <body>
@@ -67,6 +68,7 @@
               <div class="section-label">Clients</div>
               <ul>
                 <li><a href="/?page=client/clients-list" data-page="client/clients-list">List Clients</a></li>
+                <li><a href="/?page=organization/organizations-list" data-page="organization/organizations-list">Organizations</a></li>
                 <li><a href="/?page=client/clients-create" data-page="client/clients-create">Create Client</a></li>
               </ul>
             </li>
@@ -76,6 +78,7 @@
               <ul>
                 <li><a href="/?page=quote/quotes-list" data-page="quote/quotes-list">Quotes</a></li>
                 <li><a href="/?page=quote/long-term-quotes-list" data-page="quote/long-term-quotes-list">Long-term Quotes</a></li>
+                <li><a href="/?page=quote/on-demand-quotes-list" data-page="quote/on-demand-quotes-list">On-Demand Quotes</a></li>
                 <li><a href="/?page=quote/quotes-create" data-page="quote/quotes-create">Create Quote</a></li>
               </ul>
             </li>
@@ -93,6 +96,7 @@
               <ul>
                 <li><a href="/?page=invoice/invoices-list" data-page="invoice/invoices-list">Invoices</a></li>
                 <li><a href="/?page=invoice/recurring-invoices-list" data-page="invoice/recurring-invoices-list">Recurring Invoices</a></li>
+                <li><a href="/?page=invoice/on-demand-invoices-list" data-page="invoice/on-demand-invoices-list">On-Demand Invoices</a></li>
                 <li><a href="/?page=invoice/invoices-create" data-page="invoice/invoices-create">Create Invoice</a></li>
               </ul>
             </li>

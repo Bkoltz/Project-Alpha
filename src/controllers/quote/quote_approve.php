@@ -32,8 +32,35 @@ try {
   // Mark quote approved
   $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$id]);
 
-  // Check if this is a long-term quote
-  if (!empty($quote['is_long_term'])) {
+  // Check if this is an on-demand quote
+  if (!empty($quote['is_on_demand'])) {
+    // Create on-demand contract
+    $pdo->prepare('INSERT INTO on_demand_contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_amount, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([
+          $id, 
+          (int)$quote['client_id'], 
+          'pending', 
+          $quote['discount_type'], 
+          $quote['discount_value'], 
+          $quote['tax_percent'], 
+          $quote['subtotal'], 
+          $quote['price_per_invoice'],
+          $quote['deposit_type'] ?? 'none',
+          $quote['deposit_amount'] ?? 0,
+          0,
+          $projectCode, 
+          $quote['start_date'],
+          $quote['end_date'],
+          $quote['billing_interval_count'],
+          $quote['billing_interval_unit'],
+          $quote['scope']
+        ]);
+    $contract_id = (int)$pdo->lastInsertId();
+
+    // Assign doc_number to on-demand contract
+    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM on_demand_contracts')->fetchColumn();
+    $pdo->prepare('UPDATE on_demand_contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+  } elseif (!empty($quote['is_long_term'])) {
     // Create long-term contract instead
     $pdo->prepare('INSERT INTO long_term_contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         ->execute([

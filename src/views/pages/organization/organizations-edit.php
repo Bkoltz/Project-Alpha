@@ -1,0 +1,41 @@
+<?php
+// src/views/pages/organization/organizations-edit.php
+require_once __DIR__ . '/../../../config/db.php';
+
+$id = (int)($_GET['id'] ?? 0);
+$stmt = $pdo->prepare('SELECT * FROM organizations WHERE id = ?');
+$stmt->execute([$id]);
+$org = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$org) {
+    echo '<p>Organization not found.</p>';
+    return;
+}
+?>
+<section>
+  <h2>Edit Organization</h2>
+  <?php if (!empty($_GET['error'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
+  <?php endif; ?>
+  <form method="post" action="/?page=organization/organizations-update" style="display:grid;gap:12px;max-width:520px">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+    <input type="hidden" name="id" value="<?php echo $id; ?>">
+    <label>
+      <div>Organization Name</div>
+      <input required type="text" name="name" value="<?php echo htmlspecialchars($org['name']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    </label>
+    <label>
+      <div>Notes</div>
+      <textarea name="notes" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>
+    </label>
+    <div style="display:flex;gap:8px">
+      <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Changes</button>
+      <a href="/?page=organization/organization-view&id=<?php echo $id; ?>" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;text-decoration:none">Cancel</a>
+      <form method="post" action="/?page=organization/organizations-delete" onsubmit="return confirm('Delete this organization? Clients will not be deleted, but will no longer be associated with this organization.');" style="display:inline-block;margin-left:auto">
+        <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+        <input type="hidden" name="id" value="<?php echo $id; ?>">
+        <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:#fee2e2;color:#991b1b">Delete Organization</button>
+      </form>
+    </div>
+  </form>
+</section>
