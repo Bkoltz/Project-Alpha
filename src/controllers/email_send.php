@@ -122,7 +122,7 @@ try {
       }
       try {
         $viewFile = null;
-  if ($type === 'quote') { $viewFile = __DIR__ . '/../views/pages/quote/quote-print.php'; }
+  if ($type === 'quote') { $viewFile = __DIR__ . '/../views/pages/quote/quote-print-wrapper.php'; }
   elseif ($type === 'contract') { $viewFile = __DIR__ . '/../views/pages/contract/contract-print.php'; }
   else { $viewFile = __DIR__ . '/../views/pages/invoice/invoice-print.php'; }
         if (is_file($viewFile)) {

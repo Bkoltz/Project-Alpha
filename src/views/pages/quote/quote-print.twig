@@ -1,0 +1,172 @@
+{# src/views/pages/quote/quote-print.twig #}
+<section>
+  <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Quote</div>
+  <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for {{ (appConfig.documents_valid_days|default(14))|int }} days</div>
+  {% if not (defined('PDF_MODE') is defined) and not (defined('PUBLIC_VIEW') is defined) %}
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
+    <a href="/?page=quote/quote-pdf&id={{ quote.id|e }}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+  </div>
+  {% endif %}
+
+  <table style="width:100%;table-layout:fixed;margin-bottom:8px;border-collapse:collapse">
+    <tr>
+      <td style="vertical-align:middle;width:70%">
+        <div style="font-weight:700;font-size:20px">{{ appConfig.brand_name|default('Project Alpha')|e }}</div>
+        <div style="color:#374151;font-size:13px;margin-top:2px">Quote Q-{{ (quote.doc_number is defined and quote.doc_number) ? quote.doc_number|e : quote.id|e }}</div>
+        {% if quote.project_code is defined and quote.project_code %}
+          <div style="color:#374151;font-size:13px;margin-top:2px">Project: {{ quote.project_code|e }}</div>
+        {% endif %}
+      </td>
+      <td style="vertical-align:middle;width:30%;text-align:right">
+        {% if logoPath %}
+          <img src="{{ logoPath|e }}" alt="{{ appConfig.brand_name|default('Project Alpha')|e }}" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {% set depositCalc = depositCalc|default(0) %}
+  {% set fulfillmentDate = fulfillmentDate|default(null) %}
+  {% set showDepositInfo = showDepositInfo|default(false) %}
+  {% set showFulfillmentDate = showFulfillmentDate|default(false) %}
+  {% if showDepositInfo or showFulfillmentDate %}
+  <table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb">
+    <tr>
+      <td style="width:50%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+        <div style="font-size:11px;color:#6b7280">Deposit Due: <span style="font-weight:600;color:#059669">${{ depositCalc|number_format(2, '.', ',') }}</span></div>
+      </td>
+      <td style="width:50%;padding:8px;vertical-align:top">
+        <div style="font-size:11px;color:#6b7280">Fulfillment Date: <span style="font-weight:600;color:#2563eb">{{ showFulfillmentDate ? (fulfillmentDate|date('M j, Y')) : 'Not specified' }}</span></div>
+      </td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
+    <tr>
+      <td style="vertical-align:top;width:50%;padding-right:12px">
+        <div style="font-weight:600">From</div>
+        <div>
+          {% if fromName %}<div>{{ fromName|e }}</div>{% endif %}
+          <div>{{ appConfig.brand_name|default('Project Alpha')|e }}</div>
+          {% if appConfig.from_address_line1 %}<div>{{ appConfig.from_address_line1|e }}</div>{% endif %}
+          {% if appConfig.from_address_line2 %}<div>{{ appConfig.from_address_line2|e }}</div>{% endif %}
+          {% set cityParts = [] %}
+          {% if appConfig.from_city %}{% set cityParts = cityParts|merge([appConfig.from_city]) %}{% endif %}
+          {% if appConfig.from_state %}{% set cityParts = cityParts|merge([appConfig.from_state]) %}{% endif %}
+          {% if appConfig.from_postal %}{% set cityParts = cityParts|merge([appConfig.from_postal]) %}{% endif %}
+          {% if cityParts is not empty %}
+            <div>{{ cityParts|join(', ')|e }}</div>
+          {% endif %}
+        </div>
+        {% if fromPhone or fromEmail %}
+          <div style="margin-top:6px;color:#4b5563;font-size:13px">
+            {% if fromPhone %}<div>{{ fromPhone|e }}</div>{% endif %}
+            {% if fromEmail %}<div>{{ fromEmail|e }}</div>{% endif %}
+          </div>
+        {% endif %}
+      </td>
+      <td style="vertical-align:top;width:50%;padding-left:12px">
+        <div style="font-weight:600">To</div>
+        <div>
+          {% if quote.client_name %}<div>{{ quote.client_name|e }}</div>{% endif %}
+          {% if quote.client_org %}<div>{{ quote.client_org|e }}</div>{% endif %}
+          {% if quote.address_line1 %}<div>{{ quote.address_line1|e }}</div>{% endif %}
+          {% if quote.address_line2 %}<div>{{ quote.address_line2|e }}</div>{% endif %}
+          {% set addrParts = [] %}
+          {% if quote.city %}{% set addrParts = addrParts|merge([quote.city]) %}{% endif %}
+          {% if quote.state %}{% set addrParts = addrParts|merge([quote.state]) %}{% endif %}
+          {% if quote.postal %}{% set addrParts = addrParts|merge([quote.postal]) %}{% endif %}
+          {% if addrParts is not empty %}<div>{{ addrParts|join(', ')|e }}</div>{% endif %}
+        </div>
+        {% if quote.client_phone or quote.client_email %}
+          <div style="margin-top:6px;color:#4b5563;font-size:13px">
+            {% if quote.client_phone %}<div>{{ quote.client_phone|e }}</div>{% endif %}
+            {% if quote.client_email %}<div>{{ quote.client_email|e }}</div>{% endif %}
+          </div>
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {% if scopeEnabled and scopeText %}
+  <div style="page-break-before:auto;margin-top:20px">
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
+    <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px">{{ scopeText|e|nl2br }}</div>
+  </div>
+  <div style="page-break-after:always"></div>
+  {% endif %}
+
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+    <thead>
+      <tr style="text-align:left;border-bottom:1px solid #eee">
+        <th style="padding:10px">Description</th>
+        <th style="padding:10px">Qty</th>
+        <th style="padding:10px">Unit</th>
+        <th style="padding:10px">Line Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr style="border-top:1px solid #f3f4f6">
+        <td style="padding:10px">{{ it.description|e }}</td>
+        <td style="padding:10px">{{ it.quantity|number_format(2, '.', ',') }}</td>
+        <td style="padding:10px">${{ it.unit_price|number_format(2, '.', ',') }}</td>
+        <td style="padding:10px">${{ it.line_total|number_format(2, '.', ',') }}</td>
+      </tr>
+      {% endfor %}
+      <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
+      <tr>
+        <td></td><td></td>
+        <td style="padding:10px;font-weight:600">Subtotal</td>
+        <td style="padding:10px">${{ quote.subtotal|number_format(2, '.', ',') }}</td>
+      </tr>
+      <tr>
+        <td></td><td></td>
+        <td style="padding:10px;font-weight:600">Discount</td>
+        <td style="padding:10px">
+          {% if quote.discount_type == 'percent' %}
+            {{ quote.discount_value|number_format(2, '.', ',') }}%
+          {% elseif quote.discount_type == 'fixed' %}
+            ${{ quote.discount_value|number_format(2, '.', ',') }}
+          {% else %}
+            $0.00
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td></td><td></td>
+        <td style="padding:10px;font-weight:600">Tax</td>
+        <td style="padding:10px">{{ quote.tax_percent|number_format(2, '.', ',') }}%</td>
+      </tr>
+      <tr>
+        <td></td><td></td>
+        <td style="padding:10px;font-weight:700">Total</td>
+        <td style="padding:10px;font-weight:700">${{ quote.total|number_format(2, '.', ',') }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if (appConfig.quotes_show_terms is not defined) or (appConfig.quotes_show_terms|int == 1) %}
+    <div style="page-break-after:always"></div>
+    <h3>Terms and Conditions</h3>
+    {% if termsText %}
+      <div style="white-space:pre-wrap;padding:6px 0;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#222">{{ termsText|e|nl2br }}</div>
+    {% else %}
+      <p class="lead">By accepting this quote, the client agrees to the scope and payment terms. Additional terms can be customized in Settings.</p>
+    {% endif %}
+  {% endif %}
+</section>
+<style>
+  .no-print{display:flex}
+  .print-footer{display:none}
+  @media print {
+    .no-print{display:none !important}
+    .side-nav,.nav-footer{display:none}
+    .main-content{margin-left:0}
+    body{background:#fff}
+    .print-footer{display:block; position:fixed; bottom:6px; left:12px; color:#374151; font-size:12px}
+  }
+</style>
+<div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
