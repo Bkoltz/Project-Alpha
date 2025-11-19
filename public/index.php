@@ -107,7 +107,7 @@ $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED'
 
 // Allow POST to auth handler without prior login
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $page === 'auth') {
-    require_once __DIR__ . '/../src/controllers/auth_handler.php';
+    require_once __DIR__ . '/../src/controllers/auth/auth_handler.php';
     exit;
 }
 
@@ -218,15 +218,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($page === 'reset-request') {
-        require_once __DIR__ . '/../src/controllers/reset_request.php';
+        require_once __DIR__ . '/../src/controllers/auth/reset_request.php';
         exit;
     }
     if ($page === 'reset-verify') {
-        require_once __DIR__ . '/../src/controllers/reset_verify.php';
+        require_once __DIR__ . '/../src/controllers/auth/reset_verify.php';
         exit;
     }
     if ($page === 'reset-update') {
-        require_once __DIR__ . '/../src/controllers/reset_update.php';
+        require_once __DIR__ . '/../src/controllers/auth/reset_update.php';
         exit;
     }
     if ($page === 'public-quote-action') {
@@ -338,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($page === 'account-update') {
-        require_once __DIR__ . '/../src/controllers/account_update.php';
+        require_once __DIR__ . '/../src/controllers/auth/account_update.php';
         exit;
     }
     if ($page === 'financial/audit-export') {
@@ -374,22 +374,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Standalone login and reset pages use a minimal top header
 if ($page === 'login') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/views/pages/login.php';
+    require_once __DIR__ . '/../src/views/pages/auth/login.php';
     exit;
 }
 if ($page === 'reset-password') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/views/pages/reset-password.php';
+    require_once __DIR__ . '/../src/views/pages/auth/reset-password.php';
     exit;
 }
 if ($page === 'reset-verify' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/views/pages/reset-verify.php';
+    require_once __DIR__ . '/../src/views/pages/auth/reset-verify.php';
     exit;
 }
 if ($page === 'reset-new') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/views/pages/reset-new.php';
+    require_once __DIR__ . '/../src/views/pages/auth/reset-new.php';
     exit;
 }
 if ($page === 'public-doc') {

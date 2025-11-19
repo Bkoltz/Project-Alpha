@@ -1,19 +1,19 @@
 <?php
-// src/controllers/auth_handler.php
+// src/controllers/auth/auth_handler.php
 // Handles login and first-admin registration with CSRF verification
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../utils/logger.php';
-require_once __DIR__ . '/../utils/crypto.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/logger.php';
+require_once __DIR__ . '/../../utils/crypto.php';
 
 // Verbose error toggle: set APP_VERBOSE_ERRORS=true or AUTH_VERBOSE_ERRORS=true (or APP_DEBUG=true)
 $VERBOSE_AUTH = filter_var(getenv('APP_VERBOSE_ERRORS') ?: getenv('AUTH_VERBOSE_ERRORS') ?: getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN);
 
 // CSRF check (prefer Symfony token, fallback to legacy)
-require_once __DIR__ . '/../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 $submitted = $_POST['_token'] ?? ($_POST['csrf'] ?? '');
 if (!csrf_sf_is_valid('auth', is_string($submitted) ? $submitted : '')) {
     header('Location: /?page=login&error=' . urlencode('Invalid request (CSRF)'));
@@ -100,7 +100,27 @@ if ($action === 'login') {
             header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
             exit;
         }
-        // on success, regenerate session and optionally clear attempts
+        // Check if user has 2FA enabled
+        $twofa_enabled = false;
+        try {
+            $st2fa = $pdo->prepare('SELECT enabled FROM user_2fa WHERE user_id = ? AND enabled = 1');
+            $st2fa->execute([(int)$u['id']]);
+            $twofa_enabled = (bool)$st2fa->fetchColumn();
+        } catch (Throwable $e) {}
+        
+        if ($twofa_enabled) {
+            // User has 2FA enabled, redirect to 2FA verification
+            session_regenerate_id(true);
+            $_SESSION['2fa_pending'] = [
+                'user_id' => (int)$u['id'],
+                'user_data' => ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']]
+            ];
+            app_log('auth', 'login requires 2FA', ['user_id'=>(int)$u['id'], 'ip'=>$ip]);
+            header('Location: /?page=2fa-verify');
+            exit;
+        }
+        
+        // on success (no 2FA), regenerate session and optionally clear attempts
         session_regenerate_id(true);
         $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
         try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}

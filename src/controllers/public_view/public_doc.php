@@ -70,10 +70,78 @@ try {
       // Code is correct, but it throws an error, ignore for now
       $loader = new \Twig\Loader\FilesystemLoader(__DIR__ . '/../../views');
       $twig = new \Twig\Environment($loader);
-      echo $twig->render('public/doc-template.twig', [
-        'type'=>$type, 'id'=>$rid, 'token'=>$token, 'notice'=>$notice, 'error'=>$err,
+      // If rendering a public quote, prepare the quote data and pass it into Twig
+      $templateVars = ['type'=>$type, 'id'=>$rid, 'token'=>$token, 'notice'=>$notice, 'error'=>$err,
         'showActions'=>$showActions, 'showUpload'=>$showUpload, 'appConfig'=>$appConfig
-      ]);
+      ];
+      if ($type === 'quote') {
+        try {
+          $idParam = (int)$rid;
+          $stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.organization client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
+          $stmt->execute([$idParam]);
+          $quote = $stmt->fetch(PDO::FETCH_ASSOC);
+          if ($quote) {
+            $itemsSt = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+            $itemsSt->execute([$idParam]);
+            $items = $itemsSt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Prepare sender info
+            $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
+            $fromPhone = $appConfig['from_phone'] ?? '';
+            $fromEmail = $appConfig['from_email'] ?? '';
+
+            // Resolve terms: project-level -> quote -> app
+            $termsText = '';
+            if (!empty($quote['project_code'])) {
+              try {
+                $pm = $pdo->prepare('SELECT terms FROM project_meta WHERE project_code=?');
+                $pm->execute([$quote['project_code']]);
+                $pt = (string)$pm->fetchColumn();
+                if (trim($pt) !== '') { $termsText = trim($pt); }
+              } catch (Throwable $_e) { /* ignore */ }
+            }
+            if ($termsText === '') { $termsText = trim((string)($quote['terms'] ?? '')); }
+            if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
+
+            // Deposit calculation
+            $depositType = $quote['deposit_type'] ?? 'none';
+            $depositValue = (float)($quote['deposit_amount'] ?? 0);
+            $quoteTotal = (float)($quote['total'] ?? 0);
+            $depositCalc = 0.0;
+            if ($depositType === 'percent') {
+              $depositCalc = max(0, min(100, $depositValue)) * $quoteTotal / 100;
+            } elseif ($depositType === 'fixed') {
+              $depositCalc = $depositValue;
+            }
+
+            $fulfillmentDate = $quote['fulfillment_date'] ?? null;
+            $showDepositInfo = $depositType !== 'none' && $depositCalc > 0;
+            $showFulfillmentDate = !empty($fulfillmentDate);
+
+            $scopeText = trim((string)($quote['scope'] ?? ''));
+            $scopeEnabled = !isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled']);
+
+            // Minimal logo handling: pass configured logo and let template decide how to render
+            $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
+
+            $templateVars['quote'] = $quote;
+            $templateVars['items'] = $items;
+            $templateVars['fromName'] = $fromName;
+            $templateVars['fromPhone'] = $fromPhone;
+            $templateVars['fromEmail'] = $fromEmail;
+            $templateVars['termsText'] = $termsText;
+            $templateVars['depositCalc'] = $depositCalc;
+            $templateVars['showDepositInfo'] = $showDepositInfo;
+            $templateVars['showFulfillmentDate'] = $showFulfillmentDate;
+            $templateVars['fulfillmentDate'] = $fulfillmentDate;
+            $templateVars['scopeText'] = $scopeText;
+            $templateVars['scopeEnabled'] = $scopeEnabled;
+            $templateVars['logoPath'] = $logoConf;
+          }
+        } catch (Throwable $_e) { /* ignore and render wrapper */ }
+      }
+
+      echo $twig->render('public/doc-template.twig', $templateVars);
     } catch (Throwable $_t) {
       require $phpView;
     }

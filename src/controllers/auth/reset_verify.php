@@ -1,12 +1,12 @@
 <?php
-// src/controllers/reset_verify.php
+// src/controllers/auth/reset_verify.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../utils/logger.php';
-require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/logger.php';
+require_once __DIR__ . '/../../config/app.php';
 
 // CSRF check (Symfony-backed)
-require_once __DIR__ . '/../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('reset_verify', $submitted)) {
   header('Location: /?page=reset-verify&error=' . urlencode('Invalid request'));

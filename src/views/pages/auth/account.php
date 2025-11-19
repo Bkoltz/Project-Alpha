@@ -1,5 +1,5 @@
 <?php
-// src/views/pages/account.php
+// src/views/pages/auth/account.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 // Auth is enforced by the main router; avoid duplicate/false Unauthorized here.
 require_once __DIR__ . '/../../config/app.php';
