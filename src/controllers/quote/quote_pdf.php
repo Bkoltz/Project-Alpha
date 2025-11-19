@@ -38,11 +38,11 @@ use Dompdf\Options;
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
-// Build HTML by invoking the existing quote print view in PDF mode (hides toolbar)
+// Build HTML by invoking the quote print wrapper (renders Twig) in PDF mode
 ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
-require __DIR__ . '/../../views/pages/quote/quote-print.php';
+require __DIR__ . '/../../views/pages/quote/quote-print-wrapper.php';
 $content = ob_get_clean();
 
 $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');

@@ -9,7 +9,7 @@
 
   <?php
     if ($type === 'quote') {
-      require __DIR__ . '/../../views/pages/quote/quote-print.php';
+      require __DIR__ . '/../../views/pages/quote/quote-print-wrapper.php';
     } elseif ($type === 'contract') {
       require __DIR__ . '/../../views/pages/contract/contract-print.php';
     } elseif ($type === 'invoice') {
