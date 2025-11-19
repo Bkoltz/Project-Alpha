@@ -23,6 +23,26 @@ services:
     volumes:
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
+  cron:
+    build:
+      context: .
+      dockerfile: ./docker/cron.dockerfile
+    image: "bkoltz/project-alpha-cron:latest"
+    environment:
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+      MYSQL_ROOT_PASSWORD: rootpass
+      DB_HOST: db
+      DB_PORT: 3306
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./src/uploads:/var/www/src/uploads
+      - ./config:/var/www/config
+      - cron_logs:/var/log/cron
   db:
     image: "mysql:8"
     restart: unless-stopped
@@ -44,3 +64,4 @@ services:
       retries: 10
 volumes:
   db_data: {}
+  cron_logs: {}

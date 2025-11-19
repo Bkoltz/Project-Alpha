@@ -1,14 +1,14 @@
 <?php
-// src/controllers/reset_request.php
+// src/controllers/auth/reset_request.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../utils/crypto.php';
-require_once __DIR__ . '/../utils/mailer.php';
-require_once __DIR__ . '/../utils/smtp.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/crypto.php';
+require_once __DIR__ . '/../../utils/mailer.php';
+require_once __DIR__ . '/../../utils/smtp.php';
 
 // CSRF check (Symfony-backed)
-require_once __DIR__ . '/../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('reset_request', $submitted)) {
   header('Location: /?page=reset-password&error=' . urlencode('Invalid request'));

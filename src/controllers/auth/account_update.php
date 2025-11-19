@@ -1,7 +1,7 @@
 <?php
-// src/controllers/account_update.php
+// src/controllers/auth/account_update.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../../config/db.php';
 
 if (empty($_SESSION['user'])) {
   header('Location: /?page=login');
