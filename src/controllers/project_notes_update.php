@@ -1,6 +1,7 @@
 <?php
 // src/controllers/project_notes_update.php
 require_once __DIR__ . '/../config/db.php';
+// add projects to their own sub folder, and change how it creates the project ID, so we can identify if it is regular Long term, or on demand.
 
 $project_code = trim((string)($_POST['project_code'] ?? ''));
 $client_id = isset($_POST['client_id']) ? (int)$_POST['client_id'] : 0;
