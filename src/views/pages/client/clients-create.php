@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/clients-create.php
 require_once __DIR__ . '/../../../config/db.php';
+// TODO: Issues creating a org from the client create page. "Create" button doesn't work.
 ?>
 <section>
   <h2>Create Client</h2>
