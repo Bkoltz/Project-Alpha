@@ -1,7 +1,7 @@
 <?php
 // src/views/pages/organization/organizations-list.php
 require_once __DIR__ . '/../../../config/db.php';
-
+// TODO: We need to add a way for the user to upload a tax exempt form for an org. This will be a file upload, and we will keep up to two files per org. This way if they update theirs, we will also have the old one to reference.
 // Fetch all organizations with client counts
 $sql = "SELECT o.id, o.name, o.notes, o.created_at, COUNT(c.id) as client_count 
         FROM organizations o
