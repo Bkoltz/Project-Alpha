@@ -164,6 +164,8 @@
 
                 // Re-initialize any JavaScript that might be needed for the new content
                 initializePageScripts();
+                // Dispatch an event so per-page assets (e.g., client-create.js) can re-initialize
+                try { document.dispatchEvent(new Event('pageLoaded')); } catch (err) { /* ignore */ }
             }
             
             // Update browser history

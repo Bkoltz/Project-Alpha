@@ -1,9 +1,18 @@
 # ---------- Stage 1: Install PHP dependencies with Composer ----------
-FROM composer:2 AS vendor
+FROM php:8.3-cli AS vendor
 WORKDIR /app
 
 # Copy only Composer manifests first for better layer caching
 COPY composer.json composer.lock ./
+
+# Install system utilities and Composer (use a matching PHP version so lockfile checks pass)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git curl unzip zip zlib1g-dev libzip-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+    && composer --version \
+    # Install ext-zip so Composer can make use of zip archives where available
+    && docker-php-ext-install -j"$(nproc)" zip
 
 # Install production dependencies and optimize autoloader
 RUN composer install \

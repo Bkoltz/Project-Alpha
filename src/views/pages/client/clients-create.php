@@ -30,8 +30,25 @@ require_once __DIR__ . '/../../../config/db.php';
         + Create New Organization
       </button>
     </label>
+    
 
-    <!-- Create Organization Modal -->
+    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+      <legend style="padding:0 6px;color:var(--muted)">Address</legend>
+      <label><div>Address line 1</div><input name="address_line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      <label><div>Address line 2</div><input name="address_line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
+        <label><div>City</div><input name="city" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+        <label><div>State</div><input name="state" value="<?php echo htmlspecialchars($appConfig['primary_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+        <label><div>Postal (zip)</div><input name="postal" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      </div>
+    </fieldset>
+    <label>
+      <div>Notes</div>
+      <textarea name="notes" rows="3" placeholder="Internal notes" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></textarea>
+    </label>
+    <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create</button>
+  </form>
+    <!-- Create Organization Modal (moved outside the main form to avoid nesting) -->
     <div id="createOrgModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;flex-direction:column;-webkit-align-items:center;-webkit-justify-content:center">
       <div style="background:#fff;padding:24px;border-radius:12px;max-width:400px;box-shadow:0 20px 25px rgba(0,0,0,0.15)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -51,28 +68,4 @@ require_once __DIR__ . '/../../../config/db.php';
         </form>
       </div>
     </div>
-
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-      <legend style="padding:0 6px;color:var(--muted)">Address</legend>
-      <label><div>Address line 1</div><input name="address_line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-      <label><div>Address line 2</div><input name="address_line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
-        <label><div>City</div><input name="city" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-        <label><div>State</div><input name="state" value="<?php echo htmlspecialchars($appConfig['primary_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-        <label><div>Postal (zip)</div><input name="postal" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-      </div>
-    </fieldset>
-    <label>
-      <div>Notes</div>
-      <textarea name="notes" rows="3" placeholder="Internal notes" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></textarea>
-    </label>
-    <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create</button>
-  </form>
-</section>
-
-<script>
-// Close modal when Cancel button clicked
-document.getElementById('cancelCreateOrgModal').addEventListener('click', function() {
-  document.getElementById('createOrgModal').style.display = 'none';
-});
-</script>
+  
