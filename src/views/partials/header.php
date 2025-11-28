@@ -109,9 +109,10 @@
               </ul>
             </li>
             <li class="nav-section">
-              <div class="section-label">Projects</div>
+              <div class="section-label">Jobs</div>
               <ul>
-                <li><a href="/?page=projects-list" data-page="projects-list">Projects</a></li>
+                <li><a href="/?page=jobs-list" data-page="jobs-list">Jobs</a></li>
+                <li><a href="/?page=project/projects-list" data-page="project/projects-list">Projects</a></li>
               </ul>
             </li>
             <li class="nav-section">

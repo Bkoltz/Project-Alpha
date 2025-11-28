@@ -164,6 +164,14 @@ if ($page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
     exit;
 }
+if ($page === 'project/projects-list') {
+    require_once __DIR__ . '/../src/views/pages/project/projects-list.php';
+    exit;
+}
+if ($page === 'project/projects-create') {
+    require_once __DIR__ . '/../src/views/pages/project/projects-create.php';
+    exit;
+}
 if ($page === 'client/clients-edit' || $page === 'clients-edit') {
     require_once __DIR__ . '/../src/views/pages/client/clients-edit.php';
     exit;
@@ -243,6 +251,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'client/clients-create' || $page === 'clients-create') {
         require_once __DIR__ . '/../src/controllers/client/clients_create.php';
+        exit;
+    }
+    if ($page === 'project/projects-create') {
+        require_once __DIR__ . '/../src/controllers/project/projects_create.php';
+        exit;
+    }
+    if ($page === 'project/projects-update') {
+        require_once __DIR__ . '/../src/controllers/project/projects_update.php';
+        exit;
+    }
+    if ($page === 'project/projects-delete') {
+        require_once __DIR__ . '/../src/controllers/project/projects_delete.php';
+        exit;
+    }
+    if ($page === 'project/project-add-document') {
+        require_once __DIR__ . '/../src/controllers/project/project_add_document.php';
+        exit;
+    }
+    if ($page === 'project/project-remove-document') {
+        require_once __DIR__ . '/../src/controllers/project/project_remove_document.php';
         exit;
     }
     if ($page === 'quote/quotes-create' || $page === 'quotes-create') {

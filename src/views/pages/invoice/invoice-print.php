@@ -215,7 +215,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 
   <?php if (!empty($projectNotes)): ?>
   <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
-    <div style="font-weight:600;margin-bottom:6px">Project Notes</div>
+          <div style="font-weight:600;margin-bottom:6px">Job Notes</div>
     <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars($projectNotes); ?></pre>
   </div>
   <?php endif; ?>

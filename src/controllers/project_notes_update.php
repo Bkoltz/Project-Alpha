@@ -6,7 +6,7 @@ require_once __DIR__ . '/../config/db.php';
 $project_code = trim((string)($_POST['project_code'] ?? ''));
 $client_id = isset($_POST['client_id']) ? (int)$_POST['client_id'] : 0;
 $notes = trim((string)($_POST['notes'] ?? ''));
-$redirect = $_POST['redirect'] ?? '/?page=projects-list';
+$redirect = $_POST['redirect'] ?? '/?page=jobs-list';
 
 if ($project_code === '' || $client_id <= 0) {
   header('Location: '.$redirect.'&error=Invalid%20project%20data');
