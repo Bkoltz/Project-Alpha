@@ -159,12 +159,42 @@ CREATE TABLE IF NOT EXISTS project_meta (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
+-- PROJECTS (Manual Parent Grouping)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS projects (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  client_id INT NULL,
+  parent_id INT NULL,
+  organization_id INT NULL,
+  estimated_start DATE NULL,
+  estimated_end DATE NULL,
+  notes TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_projects_client (client_id),
+  INDEX idx_projects_parent (parent_id),
+  INDEX idx_projects_organization (organization_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_documents (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  project_id INT NOT NULL,
+  document_type ENUM('quote','contract','invoice','recurring_invoice','long_term_contract','on_demand_contract') NOT NULL,
+  document_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_project_documents_project (project_id),
+  INDEX idx_project_documents_type (document_type, document_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
 -- QUOTES
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS quotes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   client_id INT NOT NULL,
+  project_id INT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
   status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
@@ -191,6 +221,7 @@ CREATE TABLE IF NOT EXISTS quotes (
   INDEX idx_quotes_status (status),
   INDEX idx_quotes_doc_number (doc_number),
   INDEX idx_quotes_project_code (project_code)
+  , INDEX idx_quotes_project_id (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS quote_items (
@@ -212,6 +243,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   quote_id INT NULL,
   client_id INT NOT NULL,
+  project_id INT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
   status ENUM('draft','pending','active','completed','cancelled','denied','void') NOT NULL DEFAULT 'pending',
@@ -239,6 +271,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   INDEX idx_contracts_status (status),
   INDEX idx_contracts_doc_number (doc_number),
   INDEX idx_contracts_project_code (project_code)
+  , INDEX idx_contracts_project_id (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS contract_items (
@@ -263,6 +296,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   long_term_contract_id INT NULL,
   on_demand_contract_id INT NULL,
   client_id INT NOT NULL,
+  project_id INT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
   discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
@@ -286,6 +320,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   INDEX idx_invoices_total (total),
   INDEX idx_invoices_doc_number (doc_number),
   INDEX idx_invoices_project_code (project_code),
+  INDEX idx_invoices_project_id (project_id),
   INDEX idx_invoices_ltc (long_term_contract_id),
   INDEX idx_invoices_odc (on_demand_contract_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -359,6 +394,7 @@ CREATE TABLE IF NOT EXISTS long_term_contracts (
   quote_id INT NULL,
   base_contract_id INT NULL,
   client_id INT NOT NULL,
+  project_id INT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
   status ENUM('draft','pending','active','paused','cancelled','completed') NOT NULL DEFAULT 'pending',
@@ -388,6 +424,7 @@ CREATE TABLE IF NOT EXISTS long_term_contracts (
   INDEX idx_ltc_status (status),
   INDEX idx_ltc_doc (doc_number),
   INDEX idx_ltc_project (project_code),
+  INDEX idx_ltc_project_id (project_id),
   INDEX idx_ltc_next_invoice (next_invoice_date),
   CONSTRAINT fk_ltc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   CONSTRAINT fk_ltc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
@@ -413,6 +450,7 @@ CREATE TABLE IF NOT EXISTS on_demand_contracts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   quote_id INT NULL,
   client_id INT NOT NULL,
+  project_id INT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
   status ENUM('draft','pending','active','paused','cancelled','completed') NOT NULL DEFAULT 'pending',
@@ -440,6 +478,7 @@ CREATE TABLE IF NOT EXISTS on_demand_contracts (
   INDEX idx_odc_status (status),
   INDEX idx_odc_doc (doc_number),
   INDEX idx_odc_project (project_code),
+  INDEX idx_odc_project_id (project_id),
   INDEX idx_odc_end_date (end_date),
   CONSTRAINT fk_odc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   CONSTRAINT fk_odc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL
@@ -463,6 +502,7 @@ CREATE TABLE IF NOT EXISTS long_term_contract_items (
 CREATE TABLE IF NOT EXISTS recurring_invoices (
   id INT AUTO_INCREMENT PRIMARY KEY,
   client_id INT NOT NULL,
+  project_id INT NULL,
   template_invoice_id INT NULL,
   project_code VARCHAR(64) NULL,
   status ENUM('active','paused','cancelled') NOT NULL DEFAULT 'active',
@@ -487,6 +527,7 @@ CREATE TABLE IF NOT EXISTS recurring_invoices (
   INDEX idx_recinv_status (status),
   INDEX idx_recinv_next (next_run_date),
   INDEX idx_recinv_project (project_code),
+  INDEX idx_recinv_project_id (project_id),
   CONSTRAINT fk_recinv_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   CONSTRAINT fk_recinv_template FOREIGN KEY (template_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -210,7 +210,9 @@
             'invoice/invoices-edit': 'Edit Invoice',
             'payments/payments-list': 'List Payments',
             'payments/payments-create': 'Record Payment',
-            'projects-list': 'Projects',
+            'jobs-list': 'Jobs',
+            'project/projects-list': 'Projects',
+            'project/projects-create': 'Create Project',
             'api-keys': 'API Keys',
             'settings': 'Settings',
             'financial/financial-dashboard': 'Financial Dashboard',
@@ -258,7 +260,8 @@
                                 } else {
                                     // For quote/invoice/contract creation pages
                                     newBox.value = this.dataset.name;
-                                    const clientIdInput = document.querySelector('input[name="client_id"]');
+                                    // Find a hidden client_id input within the same form as the search box
+                                    const clientIdInput = (newBox.closest('form') && newBox.closest('form').querySelector('input[name="client_id"]')) || document.querySelector('input[name="client_id"]');
                                     if (clientIdInput) {
                                         clientIdInput.value = this.dataset.id;
                                     }

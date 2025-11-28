@@ -41,7 +41,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
                   if ($candidate) { $logoPath = $candidate; }
                 }
               }
-            }
+            
             $canShowLogo = $isUrl || @is_file($logoPath);
             $logoSrc = $logoPath;
             if ($canShowLogo && !$isUrl) {

@@ -46,7 +46,7 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
     </div>
 
     <label>
-      <div>Project Notes (shared across related docs)</div>
+      <div>Job Notes (shared across related docs)</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"></textarea>
     </label>
 

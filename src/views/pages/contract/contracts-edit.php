@@ -97,11 +97,11 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     </label>
     <?php endif; ?>
     <label>
-      <div>Project Notes</div>
+      <div>Job Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
     </label>
     <label>
-      <div>Project Terms (override default terms for this project)</div>
+      <div>Job Terms (override default terms for this job)</div>
       <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
     </label>
 

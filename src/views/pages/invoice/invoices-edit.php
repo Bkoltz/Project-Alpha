@@ -15,7 +15,7 @@ $clientName = '';
 foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clientName = $c['name']; break; } }
 ?>
 <section>
-  <h2>Edit Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?><?php if (!empty($inv['project_code'])) echo ' (Project '.htmlspecialchars($inv['project_code']).')'; ?></h2>
+  <h2>Edit Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?><?php if (!empty($inv['project_code'])) echo ' (Job '.htmlspecialchars($inv['project_code']).')'; ?></h2>
   <form id="invEditForm" method="post" action="/?page=invoices-update" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
@@ -119,7 +119,7 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
 
     <?php $pn=null; if (!empty($inv['project_code'])) { $pm=$pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?'); $pm->execute([$inv['project_code']]); $pn=(string)$pm->fetchColumn(); } ?>
     <label>
-      <div>Project Notes</div>
+      <div>Job Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
     </label>
 
