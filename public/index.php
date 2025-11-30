@@ -39,6 +39,40 @@ if (strpos($pageRaw, '&') !== false) {
     $page = preg_replace('#[^a-z0-9/\-]#i', '', $pagePart);
 } else {
     $page = preg_replace('#[^a-z0-9/\-]#i', '', $pageRaw);
+
+    // Determine if request is AJAX early so we can selectively return minimal view content
+    $isAjaxEarly = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'])) === 'xmlhttprequest';
+}
+
+// Helper: Resolve view path with case-insensitive subfolder checks
+function resolve_view_path(string $page): string {
+    $base = __DIR__ . '/../src/views/pages/';
+    $candidates = [];
+
+    // As-provided
+    $candidates[] = $base . $page . '.php';
+
+    // Try ucfirst for first segment (e.g., jobs -> Jobs)
+    $parts = explode('/', $page);
+    if (count($parts) >= 2) {
+        $parts_ucfirst = $parts;
+        $parts_ucfirst[0] = ucfirst($parts_ucfirst[0]);
+        $candidates[] = $base . implode('/', $parts_ucfirst) . '.php';
+
+        // Try uppercasing all segments (maybe folders/filenames are TitleCase)
+        $parts_uc = array_map(function($p){ return ucfirst($p); }, $parts);
+        $candidates[] = $base . implode('/', $parts_uc) . '.php';
+    }
+
+    // Try basename only
+    $candidates[] = $base . basename($page) . '.php';
+
+    foreach ($candidates as $c) {
+        if (is_file($c)) {
+            return $c;
+        }
+    }
+    return $base . 'home.php';
 }
 // Temporary debug logging: record incoming page parsing to server error log
 // (remove or narrow this later once the issue is fixed)
@@ -160,33 +194,43 @@ if ($page === 'financial/financial-api') {
     require_once __DIR__ . '/../src/controllers/financial/financial_api.php';
     exit;
 }
-if ($page === 'project-notes') {
+if ($isAjaxEarly && $page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
     exit;
 }
-if ($page === 'project/projects-list') {
-    require_once __DIR__ . '/../src/views/pages/project/projects-list.php';
+if ($isAjaxEarly && $page === 'project/projects-list') {
+    require_once resolve_view_path($page);
     exit;
 }
-if ($page === 'project/projects-create') {
-    require_once __DIR__ . '/../src/views/pages/project/projects-create.php';
+if ($isAjaxEarly && $page === 'project/projects-create') {
+    require_once resolve_view_path($page);
     exit;
 }
-if ($page === 'client/clients-edit' || $page === 'clients-edit') {
-    require_once __DIR__ . '/../src/views/pages/client/clients-edit.php';
+if ($isAjaxEarly && ($page === 'jobs/jobs-list' || $page === 'jobs-list')) {
+    require_once resolve_view_path($page);
     exit;
 }
-if ($page === 'quote/quotes-edit' || $page === 'quotes-edit') {
-    require_once __DIR__ . '/../src/views/pages/quote/quotes-edit.php';
+if ($isAjaxEarly && $page === 'jobs/job-details') {
+    require_once resolve_view_path($page);
     exit;
 }
-if ($page === 'contract/contracts-edit' || $page === 'contracts-edit') {
-    require_once __DIR__ . '/../src/views/pages/contract/contracts-edit.php';
-    exit;
-}
-if ($page === 'invoice/invoices-edit' || $page === 'invoices-edit') {
-    require_once __DIR__ . '/../src/views/pages/invoice/invoices-edit.php';
-    exit;
+if ($isAjaxEarly) {
+    if ($page === 'client/clients-edit' || $page === 'clients-edit') {
+        require_once __DIR__ . '/../src/views/pages/client/clients-edit.php';
+        exit;
+    }
+    if ($page === 'quote/quotes-edit' || $page === 'quotes-edit') {
+        require_once __DIR__ . '/../src/views/pages/quote/quotes-edit.php';
+        exit;
+    }
+    if ($page === 'contract/contracts-edit' || $page === 'contracts-edit') {
+        require_once __DIR__ . '/../src/views/pages/contract/contracts-edit.php';
+        exit;
+    }
+    if ($page === 'invoice/invoices-edit' || $page === 'invoices-edit') {
+        require_once __DIR__ . '/../src/views/pages/invoice/invoices-edit.php';
+        exit;
+    }
 }
 // If someone lands on email-test via GET (e.g., CSRF redirect), send them back to Settings -> System (email section)
 if ($page === 'email-test' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -433,19 +477,8 @@ if ($isAjax) {
     // For AJAX requests, return only the main content
     echo '<main class="main-content" role="main">';
 
-    // First try subfolder path (for organized views)
-    $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
-    
-    // If file doesn't exist in subfolder path, strip the subfolder and try root pages directory
-    if (!is_file($view)) {
-        $basePage = basename($page);
-        $rootView = __DIR__ . '/../src/views/pages/' . $basePage . '.php';
-        if (is_file($rootView)) {
-            $view = $rootView;
-        } else {
-            $view = __DIR__ . '/../src/views/pages/home.php';
-        }
-    }
+    // Resolve view path (supports alternate folder casing like Jobs/ vs jobs/)
+    $view = resolve_view_path($page);
     
     // Special case for calendar
     if (basename($view) === 'calendar.php') {
@@ -459,19 +492,8 @@ if ($isAjax) {
     // Default layout for full page loads
     require_once __DIR__ . '/../src/views/partials/header.php';
 
-    // First try subfolder path (for organized views)
-    $view = __DIR__ . '/../src/views/pages/' . $page . '.php';
-    
-    // If file doesn't exist in subfolder path, strip the subfolder and try root pages directory
-    if (!is_file($view)) {
-        $basePage = basename($page);
-        $rootView = __DIR__ . '/../src/views/pages/' . $basePage . '.php';
-        if (is_file($rootView)) {
-            $view = $rootView;
-        } else {
-            $view = __DIR__ . '/../src/views/pages/home.php';
-        }
-    }
+    // Resolve view path (supports alternate folder casing like Jobs/ vs jobs/)
+    $view = resolve_view_path($page);
     
     // Special case for calendar
     if (basename($view) === 'calendar.php') {

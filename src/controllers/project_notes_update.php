@@ -1,6 +1,8 @@
 <?php
 // src/controllers/project_notes_update.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/csrf.php';
+csrf_verify_post_or_redirect('project-notes-update');
 // add projects to their own sub folder, and change how it creates the project ID, so we can identify if it is regular Long term, or on demand.
 
 $project_code = trim((string)($_POST['project_code'] ?? ''));
