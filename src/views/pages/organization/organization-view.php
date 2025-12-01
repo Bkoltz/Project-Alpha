@@ -26,6 +26,17 @@ $availableClients = $availableStmt->fetchAll();
     <h2><?php echo htmlspecialchars($org['name']); ?></h2>
     <div>
       <a href="/?page=organization/organizations-edit&id=<?php echo $id; ?>" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;font-size:small">Edit Organization</a>
+
+      <!-- Upload tax-exempt form directly from the organization view -->
+      <form method="post" action="/?page=organization/organizations_upload" enctype="multipart/form-data" style="display:inline-block;margin-left:8px">
+        <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+        <input type="hidden" name="id" value="<?php echo $id; ?>">
+        <label style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer">
+          <input type="file" name="tax_exempt_file" accept="application/pdf,image/*" style="display:none" onchange="this.form.submit()">
+          <span style="pointer-events:none">Upload Tax Exempt</span>
+        </label>
+      </form>
+
       <a href="/?page=organization/organizations-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;margin-left:8px;font-size:small">Back to List</a>
     </div>
   </div>
@@ -49,6 +60,14 @@ $availableClients = $availableStmt->fetchAll();
         <div>
           <strong>Notes:</strong><br>
           <div style="margin-top:4px;color:var(--muted)"><?php echo nl2br(htmlspecialchars($org['notes'])); ?></div>
+        </div>
+      <?php endif; ?>
+      <?php if (!empty($org['tax_exempt_file'])): ?>
+        <div>
+          <strong>Tax Exempt Form:</strong>
+          <div style="margin-top:4px"><a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" target="_blank">View / Download</a>
+            <?php if (!empty($org['tax_exempt_uploaded_at'])): ?> &nbsp; <span style="color:var(--muted);font-size:small">(uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['tax_exempt_uploaded_at']))); ?>)</span><?php endif; ?>
+          </div>
         </div>
       <?php endif; ?>
       <div>

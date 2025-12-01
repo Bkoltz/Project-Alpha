@@ -52,12 +52,12 @@ try {
     throw new Exception('Cannot activate contract: deposit must be received first');
   }
 
-  // Store signed PDF in src/uploads directory for Docker volume mounting
-  $internal = __DIR__ . '/../../uploads';
+  // Store signed PDF in src/uploads/signed_contracts for organization and separation
+  $internal = __DIR__ . '/../../uploads/signed_contracts';
   if (!is_dir($internal)) { @mkdir($internal, 0775, true); }
   // Log file upload metadata
   error_log('UPLOAD: tmp_name=' . ($f['tmp_name'] ?? '') . ' size=' . ($f['size'] ?? 0) . ' error=' . ($f['error'] ?? ''));
-  error_log('UPLOAD: using src/uploads dir ' . $internal);
+  error_log('UPLOAD: using src/uploads/signed_contracts dir ' . $internal);
   $name = 'contract_' . $contract_id . '_signed_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.pdf';
   $internalDest = $internal . '/' . $name;
   $moved = false;
@@ -83,7 +83,7 @@ try {
     error_log('UPLOAD: FAILED to store uploaded file. tmp_exists=' . (is_file($f['tmp_name']) ? '1' : '0') . ' internal_exists=' . (is_dir($internal)?'1':'0') . ' internal_writable=' . (is_writable($internal)?'1':'0') . ' cwd=' . getcwd());
     throw new Exception('Failed to store uploaded file');
   }
-  $publicUrl = '/?page=serve-upload&file=' . rawurlencode($name);
+  $publicUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $name);
 
   // Save path and activate
   $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')->execute([$publicUrl, 'active', $contract_id]);

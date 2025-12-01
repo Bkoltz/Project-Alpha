@@ -23,7 +23,7 @@ $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 
       <a href="/?page=settings&tab=system" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'system' ? 'background:#f8fafc;font-weight:600' : ''; ?>">System</a>
       <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'terms' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Terms & Conditions</a>
       <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'billing' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Billing</a>
-      <a href="/?page=settings&tab=account" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Account</a>
+      <a href="/?page=settings&tab=account" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'account' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Accounts</a>
       <a href="/?page=settings&tab=quotes" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'quotes' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Quotes</a>
       <a href="/?page=settings&tab=contracts" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'contracts' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Contracts</a>
       <a href="/?page=settings&tab=invoices" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'invoices' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Invoices</a>

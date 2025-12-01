@@ -2,7 +2,7 @@
 // src/views/pages/clients-edit.php
 require_once __DIR__ . '/../../../config/db.php';
 $id = (int)($_GET['id'] ?? 0);
-$st = $pdo->prepare('SELECT * FROM clients WHERE id=?');
+$st = $pdo->prepare('SELECT c.*, o.name AS organization_name FROM clients c LEFT JOIN organizations o ON o.id = c.organization_id WHERE c.id=?');
 $st->execute([$id]);
 $client = $st->fetch(PDO::FETCH_ASSOC);
 if (!$client) { echo '<p>Client not found.</p>'; return; }
@@ -31,16 +31,11 @@ $organizations = $orgStmt->fetchAll();
       <div>Phone</div>
       <input type="text" name="phone" value="<?php echo htmlspecialchars($client['phone'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
-    <label>
+    <label style="position:relative">
       <div>Organization</div>
-      <select name="organization_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <option value="">-- None --</option>
-        <?php foreach ($organizations as $org): ?>
-          <option value="<?php echo (int)$org['id']; ?>" <?php echo (int)($client['organization_id'] ?? 0) === (int)$org['id'] ? 'selected' : ''; ?>>
-            <?php echo htmlspecialchars($org['name']); ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
+      <input type="text" id="orgInputEdit" placeholder="Type to search organizations (leave blank for none)..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" value="<?php echo htmlspecialchars($client['organization_name'] ?? ''); ?>">
+      <input type="hidden" id="orgIdEdit" name="organization_id" value="<?php echo (int)($client['organization_id'] ?? 0); ?>">
+      <div id="orgSuggestEdit" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
       <div style="font-size:small;color:var(--muted);margin-top:4px">You can <a href="/?page=organization/organizations-create" target="_blank">create a new organization</a> if needed.</div>
     </label>
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
@@ -72,3 +67,42 @@ $organizations = $orgStmt->fetchAll();
     </div>
   </form>
 </section>
+
+<script>
+  (function(){
+    const orgInput = document.getElementById('orgInputEdit');
+    const orgId = document.getElementById('orgIdEdit');
+    const orgSuggest = document.getElementById('orgSuggestEdit');
+    function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+    function clearSuggestions(){ orgSuggest.style.display='none'; orgSuggest.innerHTML=''; }
+    async function fetchOrgs(term){
+      if (!term) { clearSuggestions(); return; }
+      try{
+        const res = await fetch('/?page=org-search&term='+encodeURIComponent(term));
+        if (!res.ok) { clearSuggestions(); return; }
+        const items = await res.json();
+        renderSuggestions(items);
+      }catch(e){ clearSuggestions(); }
+    }
+    function renderSuggestions(items){
+      orgSuggest.innerHTML='';
+      if (!items || items.length === 0) { orgSuggest.style.display='none'; return; }
+      items.forEach(it=>{
+        const div = document.createElement('div');
+        div.textContent = it.name;
+        div.style.padding = '8px 10px';
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', ()=>{
+          orgInput.value = it.name;
+          orgId.value = it.id;
+          clearSuggestions();
+        });
+        orgSuggest.appendChild(div);
+      });
+      orgSuggest.style.display='block';
+    }
+    const debouncedFetch = debounce((e)=>{ orgId.value=''; fetchOrgs(e.target.value); }, 200);
+    orgInput.addEventListener('input', debouncedFetch);
+    document.addEventListener('click', function(ev){ if (!orgSuggest.contains(ev.target) && ev.target !== orgInput) clearSuggestions(); });
+  })();
+</script>

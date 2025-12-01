@@ -2,8 +2,11 @@
 // src/controllers/serve_upload.php
 // Securely serve files stored in config/uploads (preferred) or src/uploads (fallback)
 
-$fname = isset($_GET['file']) ? basename($_GET['file']) : '';
-if ($fname === '') { http_response_code(404); exit; }
+$fnameRaw = isset($_GET['file']) ? (string)$_GET['file'] : '';
+// sanitize and allow a single subdirectory (e.g. "signed_contracts/filename.pdf" or "organizations/filename.pdf")
+$fnameRaw = str_replace(chr(0), '', $fnameRaw);
+$fname = ltrim($fnameRaw, '/\\');
+if ($fname === '' || strpos($fname, '..') !== false) { http_response_code(404); exit; }
 
 $bases = [
   __DIR__ . '/../uploads', // src/uploads for contract files
@@ -27,7 +30,7 @@ elseif (in_array($ext, ['png','jpg','jpeg','webp','gif','svg'])) {
 
 $disposition = (isset($_GET['download']) && $_GET['download']=='1') ? 'attachment' : 'inline';
 header('Content-Type: ' . $mime);
-header('Content-Disposition: ' . $disposition . '; filename="' . rawurldecode($fname) . '"');
+header('Content-Disposition: ' . $disposition . '; filename="' . basename(rawurldecode($fname)) . '"');
 header('Content-Length: ' . filesize($path));
 @readfile($path);
 exit;

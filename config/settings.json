@@ -13,7 +13,6 @@
     "terms": null,
     "net_terms_days": 30,
     "payment_methods": [
-        "Card",
         "Cash",
         "Bank Transfer",
         "check"
@@ -41,6 +40,6 @@
     "cron_schedule": "daily_2am",
     "cron_custom": "0 2 * * *",
     "signature_agreement": "By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions. Turtles!",
-    "invoice_auto_send_due_7days": 1,
-    "invoice_auto_send_overdue_weekly": 1
+    "invoice_auto_send_due_7days": 0,
+    "invoice_auto_send_overdue_weekly": 0
 }
