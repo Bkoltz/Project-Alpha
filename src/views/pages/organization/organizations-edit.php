@@ -17,7 +17,7 @@ if (!$org) {
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
-  <form method="post" action="/?page=organization/organizations-update" style="display:grid;gap:12px;max-width:520px">
+  <form method="post" action="/?page=organization/organizations-update" enctype="multipart/form-data" style="display:grid;gap:12px;max-width:520px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo $id; ?>">
     <label>
@@ -27,6 +27,17 @@ if (!$org) {
     <label>
       <div>Notes</div>
       <textarea name="notes" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>
+    </label>
+    <label>
+      <div>Tax Exempt Form (PDF, JPG, PNG)</div>
+      <?php if (!empty($org['tax_exempt_file'])): ?>
+        <div style="margin-bottom:6px">
+          Current file: <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" target="_blank">View</a>
+          <label style="margin-left:12px;font-size:small"><input type="checkbox" name="remove_tax_file" value="1"> Remove file</label>
+        </div>
+      <?php endif; ?>
+      <input type="file" name="tax_exempt_file" accept="application/pdf,image/jpeg,image/png">
+      <div style="font-size:small;color:var(--muted);margin-top:4px">Upload a PDF, JPG, or PNG to attach a tax-exempt document to this organization.</div>
     </label>
     <div style="display:flex;gap:8px">
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Changes</button>
