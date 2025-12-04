@@ -86,7 +86,23 @@ CREATE TABLE IF NOT EXISTS organizations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
--- CLIENTS
+-- LINKS (for organization/client resources)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS link (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL,
+    client_id INT NULL,
+    title VARCHAR(255) NOT NULL,
+    url VARCHAR(500) NOT NULL,
+    type ENUM('manual','auto_dropbox','auto_gdrive','auto_s3') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (organization_id) REFERENCES organization(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES client(id) ON DELETE CASCADE
+);
+
+-- ============================================================================
+-- CLIENTS 
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS clients (
@@ -360,6 +376,17 @@ CREATE TABLE IF NOT EXISTS payments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
+-- PAYMENT METHODS
+-- ============================================================================
+-- we need something similar to the following:
+PaymentMethod
+- id
+- user_id (or org_id)
+- type (enum: stripe, paypal, venmo)
+- config (json: API keys, account IDs)
+- active (boolean)
+
+-- ============================================================================
 -- PUBLIC LINKS
 -- ============================================================================
 
@@ -388,7 +415,7 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
--- LONG-TERM CONTRACTS (FUTURE USE)
+-- LONG-TERM CONTRACTS
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS long_term_contracts (
