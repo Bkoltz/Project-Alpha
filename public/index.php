@@ -49,6 +49,11 @@ function resolve_view_path(string $page): string {
     $base = __DIR__ . '/../src/views/pages/';
     $candidates = [];
 
+    // Special case: accounts is in auth folder
+    if ($page === 'accounts') {
+        $candidates[] = $base . 'auth/accounts.php';
+    }
+
     // As-provided
     $candidates[] = $base . $page . '.php';
 
@@ -260,13 +265,29 @@ if ($page === 'serveupload' || $page === 'serve-upload') {
     }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'organization/org-create'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
+        exit;
+    }
+    if ($page === 'accounts-create') {
+        require_once __DIR__ . '/../src/controllers/accounts/accounts_create.php';
+        exit;
+    }
+    if ($page === 'accounts-update') {
+        require_once __DIR__ . '/../src/controllers/accounts/accounts_update.php';
+        exit;
+    }
+    if ($page === 'accounts-delete') {
+        require_once __DIR__ . '/../src/controllers/accounts/accounts_delete.php';
+        exit;
+    }
+    if ($page === 'accounts-reset-password') {
+        require_once __DIR__ . '/../src/controllers/accounts/accounts_reset_password.php';
         exit;
     }
     if ($page === 'reset-request') {
@@ -439,6 +460,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'organization/organization-remove-client') {
         require_once __DIR__ . '/../src/controllers/organization/organization_remove_client.php';
+        exit;
+    }
+    if ($page === 'organization/organizations_upload' || $page === 'organization/organizations-upload') {
+        require_once __DIR__ . '/../src/controllers/organization/organizations_upload.php';
         exit;
     }
 }

@@ -1,13 +1,15 @@
 <?php
 // src/views/pages/clients-create.php
 require_once __DIR__ . '/../../../config/db.php';
-// TODO: Issues creating a org from the client create page. "Create" button doesn't work.
 ?>
 <section>
   <h2>Create Client</h2>
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
+  <div id="orgValidationBanner" style="display:none;padding:12px 16px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;margin-bottom:16px;color:#856404">
+    <strong>⚠️ Organization doesn't exist yet.</strong> You can create it using the button below.
+  </div>
   <form method="post" action="/?page=clients-create" style="display:grid;gap:12px;max-width:520px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <label>
@@ -57,7 +59,7 @@ require_once __DIR__ . '/../../../config/db.php';
           <button type="button" id="closeCreateOrgModal" style="background:none;border:none;font-size:24px;cursor:pointer;color:#999">&times;</button>
         </div>
         <form id="createOrgForm" style="display:grid;gap:12px">
-          <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+          <input type="hidden" id="createOrgCsrf" name="csrf" value="">
           <label>
             <div style="font-weight:500;margin-bottom:4px">Organization Name</div>
             <input type="text" id="createOrgNameInput" name="name" required placeholder="Organization name" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -71,7 +73,7 @@ require_once __DIR__ . '/../../../config/db.php';
     </div>
   
     <script>
-    (function(){
+    function initializeOrgCreate() {
       const orgInput = document.getElementById('orgInput');
       const orgId = document.getElementById('orgId');
       const orgSuggest = document.getElementById('orgSuggest');
@@ -80,26 +82,50 @@ require_once __DIR__ . '/../../../config/db.php';
       const closeCreateOrgModal = document.getElementById('closeCreateOrgModal');
       const cancelCreateOrgModal = document.getElementById('cancelCreateOrgModal');
       const createOrgForm = document.getElementById('createOrgForm');
+      const createOrgCsrf = document.getElementById('createOrgCsrf');
       const createOrgNameInput = document.getElementById('createOrgNameInput');
       const clientForm = document.querySelector('form[action="/?page=clients-create"]');
+      const orgValidationBanner = document.getElementById('orgValidationBanner');
+
+      // If elements don't exist yet, retry
+      if (!orgInput || !orgSuggest) {
+        console.warn('Org create elements not found, retrying in 50ms...');
+        setTimeout(initializeOrgCreate, 50);
+        return;
+      }
+
+      console.log('✓ Org create script initialized');
+
+      // Get CSRF token from meta tag
+      function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+      }
 
       function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
       function clearSuggestions(){ orgSuggest.style.display='none'; orgSuggest.innerHTML=''; }
 
       async function fetchOrgs(term){
-        if (!term) { clearSuggestions(); return; }
+        if (!term) { clearSuggestions(); orgValidationBanner.style.display='none'; return; }
         try{
           const res = await fetch('/?page=org-search&term='+encodeURIComponent(term));
           if (!res.ok) { clearSuggestions(); return; }
           const items = await res.json();
-          renderSuggestions(items);
+          renderSuggestions(items, term);
         }catch(e){ clearSuggestions(); }
       }
 
-      function renderSuggestions(items){
+      function renderSuggestions(items, term){
         orgSuggest.innerHTML='';
-        if (!items || items.length === 0) { orgSuggest.style.display='none'; return; }
+        if (!items || items.length === 0) { 
+          orgSuggest.style.display='none';
+          if (term && term.trim().length > 0) {
+            orgValidationBanner.style.display='block';
+          }
+          return; 
+        }
+        orgValidationBanner.style.display='none';
         items.forEach(it=>{
           const div = document.createElement('div');
           div.textContent = it.name;
@@ -109,6 +135,7 @@ require_once __DIR__ . '/../../../config/db.php';
             orgInput.value = it.name;
             orgId.value = it.id;
             clearSuggestions();
+            orgValidationBanner.style.display='none';
           });
           orgSuggest.appendChild(div);
         });
@@ -122,18 +149,15 @@ require_once __DIR__ . '/../../../config/db.php';
 
       orgInput.addEventListener('input', debouncedFetch);
 
-      // click outside to close
       document.addEventListener('click', function(ev){
         if (!orgSuggest.contains(ev.target) && ev.target !== orgInput) clearSuggestions();
       });
 
       // Quick-create modal or full-page redirect when no matches
       createOrgBtn.addEventListener('click', function(){
-        const hasItems = orgSuggest.children.length > 0;
-        // always open modal for quick create (no redirect)
-        createOrgNameInput.value = orgInput.value || '';
-        createOrgModal.style.display = 'flex';
-        createOrgNameInput.focus();
+        // Update CSRF token before showing modal
+        const token = getCsrfToken();
+        createOrgCsrf.value = token;
         createOrgNameInput.value = orgInput.value || '';
         createOrgModal.style.display = 'flex';
         createOrgNameInput.focus();
@@ -144,6 +168,9 @@ require_once __DIR__ . '/../../../config/db.php';
 
       createOrgForm.addEventListener('submit', async function(ev){
         ev.preventDefault();
+        // Update CSRF token from meta tag
+        const token = getCsrfToken();
+        createOrgCsrf.value = token;
         const data = new FormData(createOrgForm);
         try{
           const res = await fetch('/?page=organization/org-create', { method:'POST', body: data });
@@ -153,6 +180,7 @@ require_once __DIR__ . '/../../../config/db.php';
             orgInput.value = j.name || createOrgNameInput.value;
             orgId.value = j.id || '';
             createOrgModal.style.display = 'none';
+            orgValidationBanner.style.display = 'none';
             // clear any saved draft (we haven't redirected)
             localStorage.removeItem('clientCreateDraft');
           } else {
@@ -187,7 +215,7 @@ require_once __DIR__ . '/../../../config/db.php';
       }
 
       // Restore draft on load and handle return from full create
-      document.addEventListener('DOMContentLoaded', function(){
+      function handleDraftRestore(){
         restoreDraft();
         const params = new URLSearchParams(window.location.search);
         if (params.get('org_created') && params.get('org_id')){
@@ -203,7 +231,9 @@ require_once __DIR__ . '/../../../config/db.php';
           const newUrl = window.location.pathname + '?' + params.toString();
           window.history.replaceState({}, document.title, newUrl);
         }
-      });
+      }
+
+      handleDraftRestore();
 
       // before navigating away via the client form submission, clear draft
       if (clientForm) {
@@ -211,7 +241,12 @@ require_once __DIR__ . '/../../../config/db.php';
           localStorage.removeItem('clientCreateDraft');
         });
       }
+    }
 
-    })();
+    // Initialize with small delay to allow DOM to settle
+    setTimeout(initializeOrgCreate, 10);
+    
+    // Also re-initialize when pages are loaded via AJAX
+    document.addEventListener('pageLoaded', ()=>{ setTimeout(initializeOrgCreate, 10); });
     </script>
 

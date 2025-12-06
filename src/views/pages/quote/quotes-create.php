@@ -6,6 +6,9 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 ?>
 <section>
   <h2>Create Quote</h2>
+  <div id="taxExemptBanner" style="display:none;margin:12px 0;padding:12px 16px;border-radius:8px;background:#fef3c7;border:1px solid #fbbf24;color:#78350f">
+    <strong>ℹ️ Tax Exempt Organization:</strong> The selected client's organization has a tax-exempt form on file. You can still choose whether to charge taxes.
+  </div>
   <form id="quoteForm" method="post" action="/?page=quote/quotes-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
@@ -405,18 +408,21 @@ addItem();
 var ci = document.getElementById('clientInput');
 var cid = document.getElementById('clientId');
 var sug = document.getElementById('clientSuggest');
+var taxBanner = document.getElementById('taxExemptBanner');
 ci.addEventListener('input', function(){
   cid.value='';
   var t = this.value.trim();
-  if(!t){sug.style.display='none';sug.innerHTML='';return;}
+  if(!t){sug.style.display='none';sug.innerHTML='';taxBanner.style.display='none';return;}
   fetch('/?page=clients-search&term='+encodeURIComponent(t))
     .then(r=>r.json())
     .then(list=>{
       if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-      sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
+      sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
       Array.from(sug.children).forEach(el=>{
         el.addEventListener('click', function(){
-          ci.value = this.dataset.name; cid.value = this.dataset.id; sug.style.display='none';
+          ci.value = this.dataset.name; cid.value = this.dataset.id; 
+          if(this.dataset.taxexempt){taxBanner.style.display='block';}else{taxBanner.style.display='none';}
+          sug.style.display='none';
         });
       });
       sug.style.display='block';

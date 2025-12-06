@@ -14,6 +14,9 @@ $csrf = csrf_sf_token('contracts-create');
 ?>
 <section>
   <h2>Create Contract</h2>
+  <div id="taxExemptBannerCo" style="display:none;margin:12px 0;padding:12px 16px;border-radius:8px;background:#fef3c7;border:1px solid #fbbf24;color:#78350f">
+    <strong>ℹ️ Tax Exempt Organization:</strong> The selected client's organization has a tax-exempt form on file. You can still choose whether to charge taxes.
+  </div>
   <form id="coCreateForm" method="post" action="/?page=contract/contracts-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -413,18 +416,21 @@ addItemCo();
 var ci = document.getElementById('clientInputCo');
 var cid = document.getElementById('clientIdCo');
 var sug = document.getElementById('clientSuggestCo');
+var taxBanner = document.getElementById('taxExemptBannerCo');
 ci.addEventListener('input', function(){
   cid.value='';
   var t = this.value.trim();
-  if(!t){sug.style.display='none';sug.innerHTML='';return;}
+  if(!t){sug.style.display='none';sug.innerHTML='';taxBanner.style.display='none';return;}
   fetch('/?page=clients-search&term='+encodeURIComponent(t))
     .then(r=>r.json())
     .then(list=>{
       if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
       Array.from(sug.children).forEach(el=>{
         el.addEventListener('click', function(){
-          ci.value = this.dataset.name; cid.value = this.dataset.id; sug.style.display='none';
+          ci.value = this.dataset.name; cid.value = this.dataset.id; 
+          if(this.dataset.taxexempt){taxBanner.style.display='block';}else{taxBanner.style.display='none';}
+          sug.style.display='none';
         });
       });
       sug.style.display='block';

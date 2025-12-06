@@ -131,6 +131,7 @@
             <a class="phone" href="tel:<?php echo htmlspecialchars($fromPhone); ?>"><?php echo htmlspecialchars(format_phone($fromPhone)); ?></a>
           <?php endif; ?> -->
           <a class="settings" href="/?page=settings" data-page="settings">Settings</a>
+          <a class="settings" href="/?page=accounts" data-page="accounts" style="margin-top:8px;display:block">Accounts</a>
           <a class="settings" href="/?page=logout" style="margin-top:8px;display:block">Logout</a>
         </div>
       </div>

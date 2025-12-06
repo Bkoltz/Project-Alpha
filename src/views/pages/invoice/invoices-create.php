@@ -8,6 +8,9 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
 ?>
 <section>
   <h2>Create Invoice</h2>
+  <div id="taxExemptBannerInv" style="display:none;margin:12px 0;padding:12px 16px;border-radius:8px;background:#fef3c7;border:1px solid #fbbf24;color:#78350f">
+    <strong>ℹ️ Tax Exempt Organization:</strong> The selected client's organization has a tax-exempt form on file. You can still choose whether to charge taxes.
+  </div>
   <form id="invoiceForm" method="post" action="/?page=invoices-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
@@ -99,18 +102,21 @@ addItemInv();
 var ciI = document.getElementById('clientInputInv');
 var cidI = document.getElementById('clientIdInv');
 var sugI = document.getElementById('clientSuggestInv');
+var taxBannerInv = document.getElementById('taxExemptBannerInv');
 ciI.addEventListener('input', function(){
   cidI.value='';
   var t = this.value.trim();
-  if(!t){sugI.style.display='none';sugI.innerHTML='';return;}
+  if(!t){sugI.style.display='none';sugI.innerHTML='';taxBannerInv.style.display='none';return;}
   fetch('/?page=clients-search&term='+encodeURIComponent(t))
     .then(r=>r.json())
     .then(list=>{
       if(!Array.isArray(list)||list.length===0){sugI.style.display='none';sugI.innerHTML='';return;}
-      sugI.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
+      sugI.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
       Array.from(sugI.children).forEach(el=>{
         el.addEventListener('click', function(){
-          ciI.value = this.dataset.name; cidI.value = this.dataset.id; sugI.style.display='none';
+          ciI.value = this.dataset.name; cidI.value = this.dataset.id; 
+          if(this.dataset.taxexempt){taxBannerInv.style.display='block';}else{taxBannerInv.style.display='none';}
+          sugI.style.display='none';
         });
       });
       sugI.style.display='block';

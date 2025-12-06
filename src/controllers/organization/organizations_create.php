@@ -20,9 +20,23 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
         'image/png' => 'png'
     ];
     $tmp = $_FILES['tax_exempt_file']['tmp_name'];
-    $mime = mime_content_type($tmp) ?: $_FILES['tax_exempt_file']['type'];
+    
+    // Get MIME type (try multiple methods for better compatibility)
+    $mime = null;
+    if (function_exists('mime_content_type')) {
+        $mime = mime_content_type($tmp);
+    }
+    if (!$mime && function_exists('finfo_file')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $tmp);
+        finfo_close($finfo);
+    }
+    if (!$mime) {
+        $mime = $_FILES['tax_exempt_file']['type'];
+    }
+    
     if (!array_key_exists($mime, $allowed)) {
-        header('Location: /?page=organization/organizations-create&error=Invalid%20file%20type');
+        header('Location: /?page=organization/organizations-create&error=Invalid%20file%20type%20(' . rawurlencode($mime) . ')');
         exit;
     }
     if ($_FILES['tax_exempt_file']['size'] > 8 * 1024 * 1024) {

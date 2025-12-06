@@ -44,7 +44,7 @@ if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
-$requirePath = __DIR__ . '/../../views/pages/contract/contract-print.php';
+$requirePath = __DIR__ . '/../../views/pages/contract/contract-details.php';
 require $requirePath;
 $content = ob_get_clean();
 

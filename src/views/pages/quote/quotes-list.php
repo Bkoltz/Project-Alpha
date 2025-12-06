@@ -93,8 +93,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Total</th>
           <th style="padding:10px">Created</th>
-          <th style="padding:10px">Actions</th>
-          <th style="padding:10px">Edit</th>
+          <th style="padding:10px;text-align:right">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -107,8 +106,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
             <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
-            <td style="padding:10px;display:flex;gap:8px">
-              <a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
+            <td style="padding:10px">
+              <div style="display:flex;gap:6px;justify-content:flex-end">
+              <a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+              <?php if ($r['status'] === 'pending'): ?>
+                <a href="/?page=quote/quotes-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
+              <?php endif; ?>
               <?php if (strtolower((string)$r['status']) !== 'rejected'): ?>
               <form method="post" action="/?page=quote/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -128,13 +131,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
               </form>
               <?php endif; ?>
-            </td>
-            <td style="padding:10px">
-              <?php if ($r['status'] === 'pending'): ?>
-                <a href="/?page=quote/quotes-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
-              <?php else: ?>
-                <span style="color:#9ca3af;font-size:small">—</span>
-              <?php endif; ?>
+              </div>
             </td>
           </tr>
         <?php endforeach; ?>

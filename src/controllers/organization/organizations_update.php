@@ -20,9 +20,26 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
         'image/png' => 'png'
     ];
     $tmp = $_FILES['tax_exempt_file']['tmp_name'];
-    $mime = mime_content_type($tmp) ?: $_FILES['tax_exempt_file']['type'];
+    
+    // Get MIME type (try multiple methods for better compatibility)
+    $mime = null;
+    if (function_exists('mime_content_type')) {
+        $mime = @mime_content_type($tmp);
+    }
+    if (!$mime && function_exists('finfo_file')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $tmp);
+        finfo_close($finfo);
+    }
+    if (!$mime) {
+        $mime = $_FILES['tax_exempt_file']['type'];
+    }
+    
+    error_log('ORG_UPDATE_UPLOAD: MIME detection - detected: ' . ($mime ?: 'NULL') . ' allowed: ' . json_encode($allowed));
+    
     if (!array_key_exists($mime, $allowed)) {
-        header('Location: /?page=organization/organizations-edit&id=' . $id . '&error=Invalid%20file%20type');
+        error_log('ORG_UPDATE_UPLOAD: Invalid MIME type: ' . ($mime ?: 'NULL'));
+        header('Location: /?page=organization/organizations-edit&id=' . $id . '&error=Invalid%20file%20type%20(' . rawurlencode($mime ?: 'unknown') . ')');
         exit;
     }
     // limit to 8MB
@@ -37,10 +54,31 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
     if (!is_dir($targetDir)) @mkdir($targetDir, 0755, true);
     $filename = time() . '_' . bin2hex(random_bytes(6)) . '_' . $safeName;
     $targetPath = $targetDir . '/' . $filename;
-    if (!move_uploaded_file($tmp, $targetPath)) {
+    
+    error_log('ORG_UPDATE_UPLOAD: Attempting to save to: ' . $targetPath);
+    
+    // Try multiple methods for reliability
+    $moved = false;
+    if (!empty($tmp) && is_uploaded_file($tmp)) {
+        $moved = @move_uploaded_file($tmp, $targetPath);
+        error_log('ORG_UPDATE_UPLOAD: move_uploaded_file result=' . ($moved ? '1' : '0'));
+    }
+    if (!$moved && !empty($tmp)) {
+        $moved = @rename($tmp, $targetPath);
+        error_log('ORG_UPDATE_UPLOAD: rename result=' . ($moved ? '1' : '0'));
+    }
+    if (!$moved && !empty($tmp)) {
+        $moved = @copy($tmp, $targetPath);
+        error_log('ORG_UPDATE_UPLOAD: copy result=' . ($moved ? '1' : '0'));
+    }
+    if (!$moved) {
+        error_log('ORG_UPDATE_UPLOAD: FAILED to store uploaded file. tmp_exists=' . (is_file($tmp) ? '1' : '0') . ' dir_exists=' . (is_dir($targetDir)?'1':'0') . ' dir_writable=' . (is_writable($targetDir)?'1':'0') . ' cwd=' . getcwd());
         header('Location: /?page=organization/organizations-edit&id=' . $id . '&error=Failed%20to%20save%20file');
         exit;
     }
+    
+    error_log('ORG_UPDATE_UPLOAD: File saved successfully to: ' . $targetPath);
+    
     // Save filename to DB (relative name) and remove previous file if present
     $prevStmt = $pdo->prepare('SELECT tax_exempt_file FROM organizations WHERE id = ?');
     $prevStmt->execute([$id]);
@@ -53,6 +91,8 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
         $filename,
         $id
     ]);
+    
+    error_log('ORG_UPDATE_UPLOAD: Database updated with filename: ' . $filename);
 
     // Remove previous file to enforce single-version policy
     if (!empty($prev) && $prev !== $filename) {
@@ -60,7 +100,7 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
         if (is_file($prevPath)) @unlink($prevPath);
     }
 
-    header('Location: /?page=organization/organization-view&id=' . $id . '&updated=1');
+    header('Location: /?page=organization/organizations-edit&id=' . $id . '&updated=1');
     exit;
 }
 
@@ -80,7 +120,7 @@ if ($remove_tax) {
         $notes ?: null,
         $id
     ]);
-    header('Location: /?page=organization/organization-view&id=' . $id . '&updated=1');
+    header('Location: /?page=organization/organizations-edit&id=' . $id . '&updated=1');
     exit;
 }
 
@@ -92,5 +132,5 @@ $stmt->execute([
     $id
 ]);
 
-header('Location: /?page=organization/organization-view&id=' . $id . '&updated=1');
+header('Location: /?page=organization/organizations-view&id=' . $id . '&updated=1');
 exit;

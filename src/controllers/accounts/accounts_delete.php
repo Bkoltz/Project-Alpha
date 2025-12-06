@@ -1,0 +1,32 @@
+<?php
+// src/controllers/accounts/accounts_delete.php
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+
+csrf_verify_post_or_redirect('accounts');
+
+$userId = (int)($_POST['user_id'] ?? 0);
+
+// Validation
+if ($userId <= 0) {
+    header('Location: /?page=accounts&error=' . urlencode('Invalid user ID'));
+    exit;
+}
+
+// Prevent deleting yourself
+if ($userId == ($_SESSION['user']['id'] ?? 0)) {
+    header('Location: /?page=accounts&error=' . urlencode('Cannot delete your own account'));
+    exit;
+}
+
+// Delete user
+try {
+    $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    
+    header('Location: /?page=accounts&deleted=1');
+} catch (PDOException $e) {
+    error_log('Failed to delete user: ' . $e->getMessage());
+    header('Location: /?page=accounts&error=' . urlencode('Failed to delete user'));
+}
+exit;
