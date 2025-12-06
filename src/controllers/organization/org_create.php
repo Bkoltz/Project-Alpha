@@ -3,6 +3,8 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 
+header('Content-Type: application/json');
+
 // CSRF will be verified by public/index.php POST handler, but double-check if available
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -10,14 +12,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$csrf = $_POST['csrf'] ?? $_POST['csrf_token'] ?? '';
-if (is_callable('csrf_verify_post_or_redirect')) {
-    // rely on index.php to have called csrf_verify_post_or_redirect; else perform a best-effort verify
-    try {
-        csrf_verify_post_or_redirect('organization/org-create');
-    } catch (Throwable $_e) {
-        // proceed — we will attempt a lightweight check
-    }
+// Verify CSRF token - check session and POST token match
+$token = $_POST['csrf'] ?? '';
+if (empty($_SESSION['csrf']) || empty($token) || !hash_equals($_SESSION['csrf'], $token)) {
+    http_response_code(403);
+    echo json_encode(['success'=>false,'error'=>'Invalid request (CSRF)']);
+    exit;
 }
 
 $name = isset($_POST['name']) ? trim((string)$_POST['name']) : '';

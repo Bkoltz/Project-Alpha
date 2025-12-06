@@ -1,0 +1,146 @@
+{# 
+  Reusable list view component
+  
+  Parameters:
+  - title: Page title (e.g., "Quotes", "Contracts")
+  - items: Array of items to display
+  - columns: Array of column definitions [{key: 'field_name', label: 'Column Name', format: 'money|date|text'}]
+  - actions: Array of action buttons for each row [{label: 'Edit', url_key: 'edit_url', class: 'btn-primary'}]
+  - create_url: URL for create button (optional)
+  - create_label: Label for create button (default: "Create New")
+  - search_placeholder: Placeholder for search (optional)
+  - filters: Array of filter options (optional)
+#}
+
+<section>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h2>{{ title }}</h2>
+        {% if create_url %}
+            <a href="{{ create_url }}" class="btn btn-primary" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;text-decoration:none">
+                {{ create_label|default('Create New') }}
+            </a>
+        {% endif %}
+    </div>
+    
+    {% if search_placeholder or filters %}
+    <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center">
+        {% if search_placeholder %}
+        <input 
+            type="text" 
+            id="listSearch" 
+            placeholder="{{ search_placeholder }}"
+            style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd"
+            onkeyup="filterList()"
+        >
+        {% endif %}
+        
+        {% if filters %}
+            {% for filter in filters %}
+            <select 
+                id="filter{{ loop.index }}"
+                style="padding:10px;border-radius:8px;border:1px solid #ddd"
+                onchange="filterList()"
+            >
+                <option value="">{{ filter.label }}</option>
+                {% for option in filter.options %}
+                    <option value="{{ option.value }}">{{ option.label }}</option>
+                {% endfor %}
+            </select>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    {% if items is empty %}
+        <div style="padding:40px;text-align:center;color:#6b7280;background:#f9fafb;border-radius:8px">
+            <p style="font-size:16px;margin:0">No {{ title|lower }} found</p>
+        </div>
+    {% else %}
+        <div style="overflow-x:auto">
+            <table id="listTable" style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+                <thead>
+                    <tr style="text-align:left;border-bottom:2px solid #eee">
+                        {% for column in columns %}
+                            <th style="padding:12px">{{ column.label }}</th>
+                        {% endfor %}
+                        {% if actions %}
+                            <th style="padding:12px;text-align:right">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                        <tr style="border-top:1px solid #f3f4f6" class="list-row">
+                            {% for column in columns %}
+                                <td style="padding:12px" data-search="{{ attribute(item, column.key) }}">
+                                    {% if column.format == 'money' %}
+                                        {{ attribute(item, column.key)|money }}
+                                    {% elseif column.format == 'date' %}
+                                        {{ attribute(item, column.key)|date_format }}
+                                    {% elseif column.format == 'status' %}
+                                        <span class="status-badge status-{{ attribute(item, column.key)|lower }}">
+                                            {{ attribute(item, column.key) }}
+                                        </span>
+                                    {% else %}
+                                        {{ attribute(item, column.key) }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                            
+                            {% if actions %}
+                                <td style="padding:12px;text-align:right">
+                                    <div style="display:flex;gap:6px;justify-content:flex-end">
+                                        {% for action in actions %}
+                                            <a href="{{ attribute(item, action.url_key) }}" 
+                                               class="{{ action.class|default('btn') }}"
+                                               style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:14px;text-decoration:none;color:inherit">
+                                                {{ action.label }}
+                                            </a>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</section>
+
+<style>
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.status-pending { background: #fef3c7; color: #92400e; }
+.status-approved { background: #d1fae5; color: #065f46; }
+.status-active { background: #dbeafe; color: #1e40af; }
+.status-paid { background: #d1fae5; color: #065f46; }
+.status-unpaid { background: #fee2e2; color: #991b1b; }
+.status-partial { background: #fef3c7; color: #92400e; }
+.status-void { background: #f3f4f6; color: #4b5563; }
+</style>
+
+{% if search_placeholder or filters %}
+<script>
+function filterList() {
+    const searchInput = document.getElementById('listSearch');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const rows = document.querySelectorAll('#listTable .list-row');
+    
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td[data-search]');
+        let textContent = '';
+        cells.forEach(cell => {
+            textContent += (cell.getAttribute('data-search') || cell.textContent) + ' ';
+        });
+        
+        const matchesSearch = textContent.toLowerCase().includes(searchTerm);
+        row.style.display = matchesSearch ? '' : 'none';
+    });
+}
+</script>
+{% endif %}

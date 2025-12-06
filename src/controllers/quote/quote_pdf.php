@@ -42,7 +42,7 @@ if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
-require __DIR__ . '/../../views/pages/quote/quote-print-wrapper.php';
+require __DIR__ . '/../../views/pages/quote/quote-details.php';
 $content = ob_get_clean();
 
 $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');

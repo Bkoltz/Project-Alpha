@@ -16,6 +16,9 @@ $organizations = $orgStmt->fetchAll();
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
+  <div id="orgValidationBannerEdit" style="display:none;padding:12px 16px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;margin-bottom:16px;color:#856404">
+    <strong>⚠️ Organization doesn't exist yet.</strong> You can create it using the button below.
+  </div>
   <form method="post" action="/?page=clients-update" style="display:grid;gap:12px;max-width:520px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$client['id']; ?>">
@@ -36,7 +39,9 @@ $organizations = $orgStmt->fetchAll();
       <input type="text" id="orgInputEdit" placeholder="Type to search organizations (leave blank for none)..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" value="<?php echo htmlspecialchars($client['organization_name'] ?? ''); ?>">
       <input type="hidden" id="orgIdEdit" name="organization_id" value="<?php echo (int)($client['organization_id'] ?? 0); ?>">
       <div id="orgSuggestEdit" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
-      <div style="font-size:small;color:var(--muted);margin-top:4px">You can <a href="/?page=organization/organizations-create" target="_blank">create a new organization</a> if needed.</div>
+      <button type="button" id="createOrgBtnEdit" style="margin-top:8px;padding:8px 12px;background:#f0f0f0;border:1px solid #ddd;border-radius:8px;cursor:pointer;font-size:14px">
+        + Create New Organization
+      </button>
     </label>
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
       <legend style="padding:0 6px;color:var(--muted)">Address</legend>
@@ -66,27 +71,77 @@ $organizations = $orgStmt->fetchAll();
       </form>
     </div>
   </form>
+
+  <!-- Create Organization Modal -->
+  <div id="createOrgModalEdit" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;flex-direction:column">
+    <div style="background:#fff;padding:24px;border-radius:12px;max-width:400px;box-shadow:0 20px 25px rgba(0,0,0,0.15)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="margin:0;font-size:18px">Create New Organization</h3>
+        <button type="button" id="closeCreateOrgModalEdit" style="background:none;border:none;font-size:24px;cursor:pointer;color:#999">&times;</button>
+      </div>
+      <form id="createOrgFormEdit" style="display:grid;gap:12px">
+        <input type="hidden" id="createOrgCsrfEdit" name="csrf" value="">
+        <label>
+          <div style="font-weight:500;margin-bottom:4px">Organization Name</div>
+          <input type="text" id="createOrgNameInputEdit" name="name" required placeholder="Organization name" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button type="button" id="cancelCreateOrgModalEdit" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer">Cancel</button>
+          <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </section>
 
 <script>
-  (function(){
+  // Ensure DOM is ready before initializing
+  function initializeOrgEdit() {
     const orgInput = document.getElementById('orgInputEdit');
     const orgId = document.getElementById('orgIdEdit');
     const orgSuggest = document.getElementById('orgSuggestEdit');
+    const orgValidationBanner = document.getElementById('orgValidationBannerEdit');
+    
+    if (!orgInput || !orgSuggest) {
+      console.warn('Org edit elements not found, retrying in 50ms...');
+      setTimeout(initializeOrgEdit, 50);
+      return;
+    }
+    
+    console.log('✓ Org edit script initialized');
+    
+    // Get CSRF token from meta tag
+    function getCsrfToken() {
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      return meta ? meta.getAttribute('content') : '';
+    }
+    
     function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
     function clearSuggestions(){ orgSuggest.style.display='none'; orgSuggest.innerHTML=''; }
+    
     async function fetchOrgs(term){
-      if (!term) { clearSuggestions(); return; }
+      console.log('fetchOrgs called with term:', term);
+      if (!term) { clearSuggestions(); orgValidationBanner.style.display='none'; return; }
       try{
-        const res = await fetch('/?page=org-search&term='+encodeURIComponent(term));
+        const url = '/?page=org-search&term='+encodeURIComponent(term);
+        const res = await fetch(url);
         if (!res.ok) { clearSuggestions(); return; }
         const items = await res.json();
-        renderSuggestions(items);
-      }catch(e){ clearSuggestions(); }
+        console.log('Items received:', items);
+        renderSuggestions(items, term);
+      }catch(e){ console.error('Fetch error:', e); clearSuggestions(); }
     }
-    function renderSuggestions(items){
+    
+    function renderSuggestions(items, term){
       orgSuggest.innerHTML='';
-      if (!items || items.length === 0) { orgSuggest.style.display='none'; return; }
+      if (!items || items.length === 0) { 
+        orgSuggest.style.display='none';
+        if (term && term.trim().length > 0) {
+          orgValidationBanner.style.display='block';
+        }
+        return; 
+      }
+      orgValidationBanner.style.display='none';
       items.forEach(it=>{
         const div = document.createElement('div');
         div.textContent = it.name;
@@ -96,13 +151,71 @@ $organizations = $orgStmt->fetchAll();
           orgInput.value = it.name;
           orgId.value = it.id;
           clearSuggestions();
+          orgValidationBanner.style.display='none';
         });
         orgSuggest.appendChild(div);
       });
       orgSuggest.style.display='block';
     }
+    
     const debouncedFetch = debounce((e)=>{ orgId.value=''; fetchOrgs(e.target.value); }, 200);
     orgInput.addEventListener('input', debouncedFetch);
     document.addEventListener('click', function(ev){ if (!orgSuggest.contains(ev.target) && ev.target !== orgInput) clearSuggestions(); });
-  })();
+
+    // Create organization modal
+    const createOrgBtn = document.getElementById('createOrgBtnEdit');
+    const createOrgModal = document.getElementById('createOrgModalEdit');
+    const closeCreateOrgModal = document.getElementById('closeCreateOrgModalEdit');
+    const cancelCreateOrgModal = document.getElementById('cancelCreateOrgModalEdit');
+    const createOrgForm = document.getElementById('createOrgFormEdit');
+    const createOrgCsrf = document.getElementById('createOrgCsrfEdit');
+    const createOrgNameInput = document.getElementById('createOrgNameInputEdit');
+
+    if (createOrgBtn) {
+      createOrgBtn.addEventListener('click', function(){
+        console.log('Create org button clicked');
+        const token = getCsrfToken();
+        createOrgCsrf.value = token;
+        createOrgNameInput.value = orgInput.value || '';
+        createOrgModal.style.display = 'flex';
+        createOrgNameInput.focus();
+      });
+    }
+
+    if (closeCreateOrgModal) {
+      closeCreateOrgModal.addEventListener('click', ()=>{ createOrgModal.style.display='none'; });
+    }
+    if (cancelCreateOrgModal) {
+      cancelCreateOrgModal.addEventListener('click', ()=>{ createOrgModal.style.display='none'; });
+    }
+
+    if (createOrgForm) {
+      createOrgForm.addEventListener('submit', async function(ev){
+        ev.preventDefault();
+        const token = getCsrfToken();
+        createOrgCsrf.value = token;
+        console.log('Create org form submitted');
+        const data = new FormData(createOrgForm);
+        try{
+          const url = '/?page=organization/org-create';
+          const res = await fetch(url, { method:'POST', body: data });
+          const j = await res.json();
+          if (j && j.success) {
+            orgInput.value = j.name || createOrgNameInput.value;
+            orgId.value = j.id || '';
+            createOrgModal.style.display = 'none';
+            orgValidationBanner.style.display = 'none';
+          } else {
+            alert(j && j.error ? j.error : 'Failed to create organization');
+          }
+        }catch(e){ console.error('Form submit error:', e); alert('Failed to create organization'); }
+      });
+    }
+  }
+  
+  // Initialize immediately with a small delay to allow DOM to settle
+  setTimeout(initializeOrgEdit, 10);
+  
+  // Also listen for pageLoaded event for AJAX navigation
+  document.addEventListener('pageLoaded', ()=>{ setTimeout(initializeOrgEdit, 10); });
 </script>

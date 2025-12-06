@@ -43,7 +43,7 @@ ob_start();
 define('PDF_MODE', true);
 $_GET['id'] = (string)$id;
 $projectRoot = realpath(__DIR__ . '/..' . '/..' . '/..');
-require __DIR__ . '/../../views/pages/invoice/invoice-print.php';
+require __DIR__ . '/../../views/pages/invoice/invoice-details.php';
 $content = ob_get_clean();
 
 $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');

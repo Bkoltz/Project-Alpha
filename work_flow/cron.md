@@ -1,5 +1,5 @@
-# Corn Overview:
-- Corn is used to automatically run tasks daily at 2:00am.
+# Cron Overview:
+- Cron is used to automatically run tasks daily at 2:00am.
 
 ## Admin weekly brief
 - We will send the admin email a weekly brief for upcoming contracts,

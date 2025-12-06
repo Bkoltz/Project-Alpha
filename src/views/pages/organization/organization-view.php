@@ -17,8 +17,9 @@ $clientStmt = $pdo->prepare('SELECT id, name, email, phone FROM clients WHERE or
 $clientStmt->execute([$id]);
 $clients = $clientStmt->fetchAll();
 
-// Get clients not in any organization for the "Add Client" dropdown
-$availableStmt = $pdo->query('SELECT id, name FROM clients WHERE organization_id IS NULL AND archived = 0 ORDER BY name ASC');
+// Get ALL clients not in this organization (including those with no org assigned)
+$availableStmt = $pdo->prepare('SELECT id, name, email FROM clients WHERE (organization_id IS NULL OR organization_id != ?) AND archived = 0 ORDER BY name ASC');
+$availableStmt->execute([$id]);
 $availableClients = $availableStmt->fetchAll();
 ?>
 <section>
@@ -28,7 +29,7 @@ $availableClients = $availableStmt->fetchAll();
       <a href="/?page=organization/organizations-edit&id=<?php echo $id; ?>" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;font-size:small">Edit Organization</a>
 
       <!-- Upload tax-exempt form directly from the organization view -->
-      <form method="post" action="/?page=organization/organizations_upload" enctype="multipart/form-data" style="display:inline-block;margin-left:8px">
+      <form method="post" action="/?page=organization/organizations-upload" enctype="multipart/form-data" style="display:inline-block;margin-left:8px">
         <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
         <input type="hidden" name="id" value="<?php echo $id; ?>">
         <label style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer">
@@ -45,60 +46,85 @@ $availableClients = $availableStmt->fetchAll();
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Client added to organization.</div>
   <?php elseif (!empty($_GET['client_removed'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Client removed from organization.</div>
+  <?php elseif (!empty($_GET['notes_updated'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Notes updated successfully.</div>
+  <?php elseif (!empty($_GET['uploaded'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Tax exempt form uploaded successfully.</div>
+  <?php elseif (!empty($_GET['error'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
 
   <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 6px 18px rgba(11,18,32,0.06);margin-bottom:24px">
-    <h3 style="margin-top:0">Organization Details</h3>
-    <div style="display:grid;gap:12px">
+    <div style="display:grid;grid-template-columns:<?php echo !empty($org['tax_exempt_file']) ? '1fr 300px' : '1fr'; ?>;gap:20px">
       <div>
-        <strong>Name:</strong> <?php echo htmlspecialchars($org['name']); ?>
-      </div>
-      <div>
-        <strong>Total Clients:</strong> <?php echo count($clients); ?>
-      </div>
-      <?php if (!empty($org['notes'])): ?>
-        <div>
-          <strong>Notes:</strong><br>
-          <div style="margin-top:4px;color:var(--muted)"><?php echo nl2br(htmlspecialchars($org['notes'])); ?></div>
-        </div>
-      <?php endif; ?>
-      <?php if (!empty($org['tax_exempt_file'])): ?>
-        <div>
-          <strong>Tax Exempt Form:</strong>
-          <div style="margin-top:4px"><a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" target="_blank">View / Download</a>
-            <?php if (!empty($org['tax_exempt_uploaded_at'])): ?> &nbsp; <span style="color:var(--muted);font-size:small">(uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['tax_exempt_uploaded_at']))); ?>)</span><?php endif; ?>
+        <h3 style="margin-top:0">Organization Details</h3>
+        <div style="display:grid;gap:12px">
+          <div>
+            <strong>Name:</strong> <?php echo htmlspecialchars($org['name']); ?>
+          </div>
+          <div>
+            <strong>Total Clients:</strong> <?php echo count($clients); ?>
+          </div>
+          <div>
+            <strong>Notes:</strong>
+            <div id="notesDisplay" style="margin-top:4px;color:var(--muted);min-height:40px;padding:8px;border:1px solid transparent;border-radius:4px;cursor:pointer" onclick="toggleNotesEdit()">
+              <?php echo !empty($org['notes']) ? nl2br(htmlspecialchars($org['notes'])) : '<em style="color:#999">Click to add notes...</em>'; ?>
+            </div>
+            <form id="notesForm" method="post" action="/?page=organization/organization-update-notes" style="display:none;margin-top:4px">
+              <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+              <input type="hidden" name="id" value="<?php echo $id; ?>">
+              <textarea name="notes" id="notesTextarea" rows="4" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;font-family:inherit"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button type="submit" style="padding:6px 12px;border:0;border-radius:8px;background:var(--nav-accent);color:#fff;font-size:small;cursor:pointer">Save</button>
+                <button type="button" onclick="toggleNotesEdit()" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div>
+            <strong>Created:</strong> <?php echo htmlspecialchars(date('F j, Y', strtotime($org['created_at']))); ?>
           </div>
         </div>
-      <?php endif; ?>
-      <div>
-        <strong>Created:</strong> <?php echo htmlspecialchars(date('F j, Y', strtotime($org['created_at']))); ?>
       </div>
+      <?php if (!empty($org['tax_exempt_file'])): ?>
+        <div>
+          <h3 style="margin-top:0">Tax Exempt Form</h3>
+          <?php
+          $filePath = __DIR__ . '/../../../../uploads/organizations/' . $org['tax_exempt_file'];
+          $isPdf = strtolower(pathinfo($org['tax_exempt_file'], PATHINFO_EXTENSION)) === 'pdf';
+          ?>
+          <?php if ($isPdf): ?>
+            <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
+              <embed src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" type="application/pdf" width="100%" height="350px" />
+            </div>
+          <?php else: ?>
+            <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
+              <img src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" style="width:100%;height:auto" alt="Tax Exempt Form" />
+            </div>
+          <?php endif; ?>
+          <div style="display:flex;gap:8px;margin-top:8px;font-size:small">
+            <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" target="_blank" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">View Full</a>
+            <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" download style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">Download</a>
+          </div>
+          <?php if (!empty($org['tax_exempt_uploaded_at'])): ?>
+            <div style="font-size:small;color:var(--muted);margin-top:8px">Uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['tax_exempt_uploaded_at']))); ?></div>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 
   <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0">Clients (<?php echo count($clients); ?>)</h3>
-      <?php if (!empty($availableClients)): ?>
-        <div>
-          <form method="post" action="/?page=organization/organization-add-client" style="display:inline-flex;gap:8px;align-items:center">
-            <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-            <input type="hidden" name="organization_id" value="<?php echo $id; ?>">
-            <select name="client_id" required style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;font-size:small">
-              <option value="">Select a client...</option>
-              <?php foreach ($availableClients as $ac): ?>
-                <option value="<?php echo (int)$ac['id']; ?>"><?php echo htmlspecialchars($ac['name']); ?></option>
-              <?php endforeach; ?>
-            </select>
-            <button type="submit" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:var(--nav-accent);color:#fff;font-size:small">Add Client</button>
-          </form>
-        </div>
-      <?php endif; ?>
+      <div style="position:relative">
+        <input type="text" id="clientSearchInput" placeholder="Search clients to add..." autocomplete="off" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;font-size:small;min-width:250px">
+        <div id="clientSearchResults" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1);z-index:50;margin-top:4px"></div>
+      </div>
     </div>
 
     <?php if (empty($clients)): ?>
       <div style="padding:20px;text-align:center;color:var(--muted);border:1px dashed #ddd;border-radius:8px">
-        No clients in this organization yet. <?php echo !empty($availableClients) ? 'Use the form above to add clients.' : 'All clients are already assigned to organizations.'; ?>
+        No clients in this organization yet. Use the search above to add clients.
       </div>
     <?php else: ?>
       <div style="overflow:auto">
@@ -137,3 +163,113 @@ $availableClients = $availableStmt->fetchAll();
     <?php endif; ?>
   </div>
 </section>
+
+<script>
+// Notes editing
+function toggleNotesEdit() {
+  const display = document.getElementById('notesDisplay');
+  const form = document.getElementById('notesForm');
+  if (form.style.display === 'none') {
+    display.style.display = 'none';
+    form.style.display = 'block';
+    document.getElementById('notesTextarea').focus();
+  } else {
+    display.style.display = 'block';
+    form.style.display = 'none';
+  }
+}
+
+// Client search
+(function(){
+  const searchInput = document.getElementById('clientSearchInput');
+  const searchResults = document.getElementById('clientSearchResults');
+  const orgId = <?php echo $id; ?>;
+  const availableClients = <?php echo json_encode($availableClients); ?>;
+
+  function debounce(fn, ms) {
+    let timeout;
+    return function(...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), ms);
+    };
+  }
+
+  function clearResults() {
+    searchResults.style.display = 'none';
+    searchResults.innerHTML = '';
+  }
+
+  function searchClients(query) {
+    if (!query || query.trim().length === 0) {
+      clearResults();
+      return;
+    }
+
+    const q = query.toLowerCase();
+    const matches = availableClients.filter(c => 
+      c.name.toLowerCase().includes(q) || 
+      (c.email && c.email.toLowerCase().includes(q))
+    );
+
+    if (matches.length === 0) {
+      clearResults();
+      return;
+    }
+
+    searchResults.innerHTML = '';
+    matches.forEach(client => {
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:10px;cursor:pointer;border-bottom:1px solid #f0f0f0;transition:background 0.2s';
+      div.innerHTML = `<div style="font-weight:500">${escapeHtml(client.name)}</div>${client.email ? `<div style="font-size:small;color:var(--muted)">${escapeHtml(client.email)}</div>` : ''}`;
+      
+      div.addEventListener('mouseenter', () => { div.style.background = '#f9fafb'; });
+      div.addEventListener('mouseleave', () => { div.style.background = '#fff'; });
+      div.addEventListener('click', () => {
+        addClientToOrg(client.id, client.name);
+      });
+      
+      searchResults.appendChild(div);
+    });
+    searchResults.style.display = 'block';
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  async function addClientToOrg(clientId, clientName) {
+    if (!confirm(`Add ${clientName} to this organization?`)) return;
+
+    const formData = new FormData();
+    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('organization_id', orgId);
+    formData.append('client_id', clientId);
+
+    try {
+      const res = await fetch('/?page=organization/organization-add-client', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (res.ok) {
+        window.location.href = '/?page=organization/organization-view&id=' + orgId + '&client_added=1';
+      } else {
+        alert('Failed to add client to organization');
+      }
+    } catch(e) {
+      alert('Failed to add client to organization');
+    }
+  }
+
+  const debouncedSearch = debounce(searchClients, 200);
+  searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));
+
+  document.addEventListener('click', (e) => {
+    if (!searchResults.contains(e.target) && e.target !== searchInput) {
+      clearResults();
+    }
+  });
+})();
+</script>
