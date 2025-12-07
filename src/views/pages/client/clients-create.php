@@ -73,26 +73,33 @@ require_once __DIR__ . '/../../../config/db.php';
     </div>
   
     <script>
-    function initializeOrgCreate() {
-      const orgInput = document.getElementById('orgInput');
-      const orgId = document.getElementById('orgId');
-      const orgSuggest = document.getElementById('orgSuggest');
-      const createOrgBtn = document.getElementById('createOrgBtn');
-      const createOrgModal = document.getElementById('createOrgModal');
-      const closeCreateOrgModal = document.getElementById('closeCreateOrgModal');
-      const cancelCreateOrgModal = document.getElementById('cancelCreateOrgModal');
-      const createOrgForm = document.getElementById('createOrgForm');
-      const createOrgCsrf = document.getElementById('createOrgCsrf');
-      const createOrgNameInput = document.getElementById('createOrgNameInput');
-      const clientForm = document.querySelector('form[action="/?page=clients-create"]');
-      const orgValidationBanner = document.getElementById('orgValidationBanner');
+    (function() {
+      let retryCount = 0;
+      const maxRetries = 10; // Stop after 10 retries (500ms total)
+      
+      function initializeOrgCreate() {
+        const orgInput = document.getElementById('orgInput');
+        const orgId = document.getElementById('orgId');
+        const orgSuggest = document.getElementById('orgSuggest');
+        const createOrgBtn = document.getElementById('createOrgBtn');
+        const createOrgModal = document.getElementById('createOrgModal');
+        const closeCreateOrgModal = document.getElementById('closeCreateOrgModal');
+        const cancelCreateOrgModal = document.getElementById('cancelCreateOrgModal');
+        const createOrgForm = document.getElementById('createOrgForm');
+        const createOrgCsrf = document.getElementById('createOrgCsrf');
+        const createOrgNameInput = document.getElementById('createOrgNameInput');
+        const clientForm = document.querySelector('form[action="/?page=clients-create"]');
+        const orgValidationBanner = document.getElementById('orgValidationBanner');
 
-      // If elements don't exist yet, retry
-      if (!orgInput || !orgSuggest) {
-        console.warn('Org create elements not found, retrying in 50ms...');
-        setTimeout(initializeOrgCreate, 50);
-        return;
-      }
+        // If elements don't exist yet, retry (with limit)
+        if (!orgInput || !orgSuggest) {
+          if (retryCount < maxRetries) {
+            retryCount++;
+            setTimeout(initializeOrgCreate, 50);
+          }
+          // Silently stop after max retries - we're probably not on the right page
+          return;
+        }
 
       console.log('✓ Org create script initialized');
 
@@ -241,12 +248,16 @@ require_once __DIR__ . '/../../../config/db.php';
           localStorage.removeItem('clientCreateDraft');
         });
       }
-    }
+      }
 
-    // Initialize with small delay to allow DOM to settle
-    setTimeout(initializeOrgCreate, 10);
-    
-    // Also re-initialize when pages are loaded via AJAX
-    document.addEventListener('pageLoaded', ()=>{ setTimeout(initializeOrgCreate, 10); });
+      // Initialize with small delay to allow DOM to settle
+      setTimeout(initializeOrgCreate, 10);
+      
+      // Also re-initialize when pages are loaded via AJAX
+      document.addEventListener('pageLoaded', ()=>{ 
+        retryCount = 0; // Reset retry count for new page load
+        setTimeout(initializeOrgCreate, 10); 
+      });
+    })(); // End IIFE
     </script>
 

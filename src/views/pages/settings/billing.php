@@ -24,6 +24,15 @@
           return i.name;
         }).join('\n');
       }
+      
+      // Show/hide Stripe config based on whether Stripe is in the list
+      var hasStripe = items.some(function(i) {
+        return i.name.toLowerCase() === 'stripe';
+      });
+      var stripeConfig = document.getElementById('stripeConfig');
+      if (stripeConfig) {
+        stripeConfig.style.display = hasStripe ? 'block' : 'none';
+      }
     }
 
     function removeHandler(e) {
@@ -85,7 +94,7 @@
       if (!name) return;
       addMethod(name);
       pmCustom.value = '';
-      pmSelect.value = 'card';
+      pmSelect.value = 'stripe';
     });
 
     // ensure initial sync
@@ -115,7 +124,7 @@
 
     <div style="display:flex;gap:8px;margin-top:8px">
       <select id="pmSelect" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="card">Card</option>
+        <option value="stripe">Stripe</option>
         <option value="bank_transfer">Bank Transfer</option>
         <option value="cash">Cash</option>
         <option value="Check">Check</option>
@@ -129,4 +138,25 @@
     <input type="hidden" name="payment_methods_json" id="paymentMethodsJson" value="<?php echo htmlspecialchars(json_encode($paymentMethods)); ?>">
     <textarea name="payment_methods" rows="3" style="width:100%;padding:8px;border-radius:6px;border:1px solid #eee;margin-top:8px;display:none"><?php echo htmlspecialchars(implode("\n", $paymentMethods)); ?></textarea>
   </div>
+</fieldset>
+
+<fieldset id="stripeConfig" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;display:none">
+  <legend style="padding:0 6px;color:var(--muted)">Stripe Configuration</legend>
+  <div style="color:#666;font-size:0.9em;margin-bottom:12px">Configure your Stripe API keys to enable automatic payment processing. Get your keys from the Stripe dashboard.</div>
+  
+  <label style="display:block;margin-bottom:12px">
+    <div style="margin-bottom:4px;font-weight:500">Publishable Key</div>
+    <input type="text" name="stripe_publishable_key" value="<?php echo htmlspecialchars($appConfig['stripe_publishable_key'] ?? ''); ?>" placeholder="pk_live_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+  </label>
+  
+  <label style="display:block;margin-bottom:12px">
+    <div style="margin-bottom:4px;font-weight:500">Secret Key</div>
+    <input type="password" name="stripe_secret_key" value="<?php echo htmlspecialchars($appConfig['stripe_secret_key'] ?? ''); ?>" placeholder="sk_live_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+  </label>
+  
+  <label style="display:block">
+    <div style="margin-bottom:4px;font-weight:500">Webhook Secret <span style="font-weight:normal;color:#666">(Optional)</span></div>
+    <input type="password" name="stripe_webhook_secret" value="<?php echo htmlspecialchars($appConfig['stripe_webhook_secret'] ?? ''); ?>" placeholder="whsec_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <div style="font-size:0.85em;color:#666;margin-top:4px">Required only if you want to receive webhook events from Stripe</div>
+  </label>
 </fieldset>

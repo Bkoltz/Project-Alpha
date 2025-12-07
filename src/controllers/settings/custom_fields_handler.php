@@ -57,7 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($_SERVER['CONTENT_TYPE'] ?? 
 
 // POST request - Handle form actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $fieldType = $_POST['field_type'] ?? 'quote';
     
     try {
         if ($action === 'create') {
@@ -66,8 +65,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fieldDataType = $_POST['field_data_type'] ?? 'text';
             $isRequired = isset($_POST['is_required']) ? 1 : 0;
             
+            // Build field_type from checkboxes (comma-separated list)
+            $types = [];
+            if (!empty($_POST['include_quote'])) $types[] = 'quote';
+            if (!empty($_POST['include_contract'])) $types[] = 'contract';
+            if (!empty($_POST['include_invoice'])) $types[] = 'invoice';
+            $fieldType = implode(',', $types);
+            
             if (empty($fieldLabel)) {
-                header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&error=' . urlencode('Field label is required'));
+                header('Location: /?page=settings&tab=documents&doc_tab=customization&error=' . urlencode('Field label is required'));
+                exit;
+            }
+            
+            if (empty($fieldType)) {
+                header('Location: /?page=settings&tab=documents&doc_tab=customization&error=' . urlencode('Must select at least one document type'));
                 exit;
             }
             
@@ -81,12 +92,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fieldKey = trim($fieldKey, '_');
             
             // Get max display order
-            $maxOrder = (int)$pdo->query("SELECT COALESCE(MAX(display_order), 0) FROM document_custom_fields WHERE field_type = '$fieldType'")->fetchColumn();
+            $maxOrder = (int)$pdo->query('SELECT COALESCE(MAX(display_order), 0) FROM document_custom_fields')->fetchColumn();
             
             $stmt = $pdo->prepare('INSERT INTO document_custom_fields (field_type, field_key, field_label, field_data_type, is_builtin, is_required, display_order) VALUES (?, ?, ?, ?, 0, ?, ?)');
             $stmt->execute([$fieldType, $fieldKey, $fieldLabel, $fieldDataType, $isRequired, $maxOrder + 1]);
             
-            header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&saved=1');
+            header('Location: /?page=settings&tab=documents&doc_tab=customization&saved=1');
             exit;
             
         } elseif ($action === 'update') {
@@ -96,8 +107,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fieldDataType = $_POST['field_data_type'] ?? 'text';
             $isRequired = isset($_POST['is_required']) ? 1 : 0;
             
+            // Build field_type from checkboxes
+            $types = [];
+            if (!empty($_POST['include_quote'])) $types[] = 'quote';
+            if (!empty($_POST['include_contract'])) $types[] = 'contract';
+            if (!empty($_POST['include_invoice'])) $types[] = 'invoice';
+            $fieldType = implode(',', $types);
+            
             if ($fieldId <= 0 || empty($fieldLabel)) {
-                header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&error=' . urlencode('Invalid input'));
+                header('Location: /?page=settings&tab=documents&doc_tab=customization&error=' . urlencode('Invalid input'));
+                exit;
+            }
+            
+            if (empty($fieldType)) {
+                header('Location: /?page=settings&tab=documents&doc_tab=customization&error=' . urlencode('Must select at least one document type'));
                 exit;
             }
             
@@ -107,10 +130,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // Update field (don't change field_key to preserve data integrity)
-            $stmt = $pdo->prepare('UPDATE document_custom_fields SET field_label = ?, field_data_type = ?, is_required = ? WHERE id = ?');
-            $stmt->execute([$fieldLabel, $fieldDataType, $isRequired, $fieldId]);
+            $stmt = $pdo->prepare('UPDATE document_custom_fields SET field_label = ?, field_data_type = ?, is_required = ?, field_type = ? WHERE id = ?');
+            $stmt->execute([$fieldLabel, $fieldDataType, $isRequired, $fieldType, $fieldId]);
             
-            header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&saved=1');
+            header('Location: /?page=settings&tab=documents&doc_tab=customization&saved=1');
             exit;
             
         } elseif ($action === 'delete') {
@@ -118,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fieldId = (int)($_POST['field_id'] ?? 0);
             
             if ($fieldId <= 0) {
-                header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&error=' . urlencode('Invalid field ID'));
+                echo json_encode(['success' => false, 'message' => 'Invalid field ID']);
                 exit;
             }
             
@@ -128,24 +151,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $field = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($field && $field['is_builtin']) {
-                header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&error=' . urlencode('Cannot delete built-in fields'));
+                echo json_encode(['success' => false, 'message' => 'Cannot delete built-in fields']);
                 exit;
             }
             
             $stmt = $pdo->prepare('DELETE FROM document_custom_fields WHERE id = ? AND is_builtin = 0');
             $stmt->execute([$fieldId]);
             
-            header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&saved=1');
+            echo json_encode(['success' => true]);
             exit;
         }
         
     } catch (Throwable $e) {
         @error_log('[custom_fields_handler] Error: ' . $e->getMessage());
-        header('Location: /?page=settings&tab=customization&field_type=' . $fieldType . '&error=' . urlencode('An error occurred'));
+        if ($action === 'delete') {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        } else {
+            header('Location: /?page=settings&tab=documents&doc_tab=customization&error=' . urlencode('An error occurred'));
+        }
         exit;
     }
 }
 
 // Invalid request
-header('Location: /?page=settings&tab=customization');
+header('Location: /?page=settings&tab=documents&doc_tab=customization');
 exit;

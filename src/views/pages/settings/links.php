@@ -67,22 +67,15 @@ $providers = ['dropbox', 'gdrive', 's3'];
                 <span style="font-weight:600">Enable Link Resolver System</span>
             </label>
 
-            <label>
-                <div style="margin-bottom:4px;font-weight:600">Default Link Expiration</div>
-                <div style="display:flex;align-items:center;gap:8px">
-                    <input type="number" name="default_link_expiration_days" 
-                           value="<?php echo $appConfig['default_link_expiration_days'] ?? 365; ?>" 
-                           min="1" max="3650"
-                           style="width:100px;padding:8px;border-radius:6px;border:1px solid #ddd">
-                    <span style="font-size:14px;color:var(--muted)">days (for auto-generated links)</span>
-                </div>
-            </label>
-
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="org_level_links_only" value="1" <?php echo !empty($appConfig['org_level_links_only']) ? 'checked' : ''; ?>>
                 <span style="font-weight:600">Organization-level links only</span>
                 <span style="font-size:13px;color:var(--muted);margin-left:4px">(If client belongs to organization, manage links at org level)</span>
             </label>
+            
+            <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
+                <strong>ℹ️ Link Expiration:</strong> Set expiration dates per-client or per-organization in their respective storage sections, not globally.
+            </div>
         </div>
     </fieldset>
 
