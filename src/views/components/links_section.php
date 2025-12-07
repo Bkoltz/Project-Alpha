@@ -7,6 +7,29 @@ if (!isset($entityType) || !isset($entityId)) {
     return;
 }
 
+// Check if link resolver is enabled
+$linkResolverEnabled = !empty($appConfig['link_resolver_enabled']);
+if (!$linkResolverEnabled) {
+    return; // Don't show section if disabled
+}
+
+// Check if client belongs to organization (for org-level link management)
+$belongsToOrg = false;
+$isReadOnly = false;
+if ($entityType === 'client') {
+    try {
+        $stmt = $pdo->prepare("SELECT org_id FROM client WHERE client_id = ?");
+        $stmt->execute([$entityId]);
+        $orgId = $stmt->fetchColumn();
+        if ($orgId) {
+            $belongsToOrg = true;
+            $isReadOnly = true;
+        }
+    } catch (Throwable $e) {
+        @error_log('[LinksSection] Error checking org: ' . $e->getMessage());
+    }
+}
+
 // Fetch links for this entity
 try {
     $stmt = $pdo->prepare("
@@ -36,9 +59,14 @@ foreach ($links as $link) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div>
             <h3 style="margin:0 0 4px 0;font-size:18px">File Storage Links</h3>
-            <p style="margin:0;font-size:13px;color:var(--muted)">Auto-generated links to cloud storage folders</p>
+            <p style="margin:0;font-size:13px;color:var(--muted)">Auto-generated and manual links to cloud storage folders</p>
         </div>
+        <?php if (!$isReadOnly): ?>
         <div style="display:flex;gap:8px">
+            <button type="button" onclick="showAddManualLinkModal('<?php echo $entityType; ?>', <?php echo $entityId; ?>)"
+                    style="padding:8px 12px;border-radius:6px;border:1px solid #3b82f6;background:#eff6ff;color:#1e40af;font-size:13px;cursor:pointer;font-weight:600">
+                + Add Manual Link
+            </button>
             <?php if ($isIgnored): ?>
                 <button type="button" onclick="unignoreLinks('<?php echo $entityType; ?>', <?php echo $entityId; ?>)"
                         style="padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
@@ -59,9 +87,16 @@ foreach ($links as $link) {
                 </button>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
 
-    <?php if ($isIgnored): ?>
+    <?php if ($isReadOnly): ?>
+        <div style="padding:12px 16px;background:#e0e7ff;border:1px solid #a5b4fc;border-radius:8px;margin-bottom:16px">
+            <strong>ℹ️ Organization Management</strong> — This client is part of an organization. Please manage links on the organization page.
+        </div>
+    <?php endif; ?>
+
+    <?php if ($isIgnored && !$isReadOnly): ?>
         <div style="padding:12px 16px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;margin-bottom:16px">
             <strong>⚠️ Auto-generation disabled</strong> — This <?php echo $entityType; ?> is marked to ignore automatic link generation.
         </div>
@@ -114,6 +149,44 @@ foreach ($links as $link) {
                 </div>
             <?php endforeach; ?>
         <?php endif; ?>
+    </div>
+</div>
+
+<!-- Manual Link Modal -->
+<div id="manualLinkModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%">
+        <h3 style="margin:0 0 16px 0">Add Manual Link</h3>
+        <form id="manualLinkForm" style="display:grid;gap:16px">
+            <input type="hidden" id="manualLinkEntityType" name="entity_type">
+            <input type="hidden" id="manualLinkEntityId" name="entity_id">
+            <label>
+                <div style="margin-bottom:4px;font-weight:600">Link Title *</div>
+                <input type="text" id="manualLinkTitle" name="title" required 
+                       placeholder="e.g., Project Files, Shared Folder"
+                       style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            </label>
+            <label>
+                <div style="margin-bottom:4px;font-weight:600">URL *</div>
+                <input type="url" id="manualLinkUrl" name="url" required 
+                       placeholder="https://..."
+                       style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            </label>
+            <label>
+                <div style="margin-bottom:4px;font-weight:600">Expiration Date (Optional)</div>
+                <input type="date" id="manualLinkExpiration" name="expiration_date"
+                       style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            </label>
+            <div style="display:flex;gap:12px;margin-top:8px">
+                <button type="submit" 
+                        style="flex:1;padding:10px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">
+                    Add Link
+                </button>
+                <button type="button" onclick="closeManualLinkModal()" 
+                        style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer">
+                    Cancel
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -237,4 +310,55 @@ function unignoreLinks(entityType, entityId) {
         alert('❌ Network error: ' + err.message);
     });
 }
+
+function showAddManualLinkModal(entityType, entityId) {
+    document.getElementById('manualLinkEntityType').value = entityType;
+    document.getElementById('manualLinkEntityId').value = entityId;
+    document.getElementById('manualLinkTitle').value = '';
+    document.getElementById('manualLinkUrl').value = '';
+    document.getElementById('manualLinkExpiration').value = '';
+    document.getElementById('manualLinkModal').style.display = 'flex';
+}
+
+function closeManualLinkModal() {
+    document.getElementById('manualLinkModal').style.display = 'none';
+}
+
+// Handle manual link form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('manualLinkForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Adding...';
+            
+            fetch('/?page=links/manual-link-handler', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Link';
+                
+                if (data.success) {
+                    alert('✅ Manual link added successfully!');
+                    closeManualLinkModal();
+                    location.reload();
+                } else {
+                    alert('❌ Error: ' + (data.message || 'Failed to add link'));
+                }
+            })
+            .catch(err => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Link';
+                alert('❌ Network error: ' + err.message);
+            });
+        });
+    }
+});
 </script>
