@@ -2,6 +2,14 @@
 // src/controllers/settings_handler.php
 // Save settings and handle logo upload, then redirect (PRG)
 
+// Route specific tabs to dedicated handlers
+$tab = $_POST['tab'] ?? $_GET['tab'] ?? '';
+
+if ($tab === 'links') {
+    require_once __DIR__ . '/settings/links_handler.php';
+    exit;
+}
+
 // Prefer dedicated config mount if present
 
 // Optional: account password change for logged-in user

@@ -64,9 +64,31 @@ $csrf = csrf_sf_token('contracts-create');
       </label>
     </div>
 
-    <div style="display:flex;align-items:center;gap:12px;margin:12px 0">
-      <input type="checkbox" id="isLongTermCo" name="is_long_term" value="1" onchange="toggleLongTermFields()">
-      <label for="isLongTermCo" style="margin:0;font-weight:600">Long-term Contract (Recurring Billing)</label>
+    <div style="margin:12px 0">
+      <div style="font-weight:600;margin-bottom:8px">Document Type</div>
+      <div style="display:flex;gap:24px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="doc_type" value="regular" checked onchange="toggleDocTypeFields()">
+          <div>
+            <div style="font-weight:600">Regular</div>
+            <div style="font-size:12px;color:#6b7280">One-time contract</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="doc_type" value="long_term" onchange="toggleDocTypeFields()">
+          <div>
+            <div style="font-weight:600">Long Term</div>
+            <div style="font-size:12px;color:#6b7280">Recurring billing</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="doc_type" value="on_demand" onchange="toggleDocTypeFields()">
+          <div>
+            <div style="font-weight:600">On-Demand</div>
+            <div style="font-size:12px;color:#6b7280">Manual invoicing</div>
+          </div>
+        </label>
+      </div>
     </div>
 
     <div id="longTermFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
@@ -200,6 +222,19 @@ $csrf = csrf_sf_token('contracts-create');
       </div>
     </div>
 
+    <!-- Signatures Section -->
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+      <h3 style="margin:0 0 8px 0;font-size:15px">Contract Signatures</h3>
+      <p style="margin:0 0 12px 0;font-size:13px;color:var(--muted)">Add up to 5 signatures for this contract</p>
+      
+      <div id="signaturesList" style="display:grid;gap:12px"></div>
+      
+      <button type="button" onclick="addSignature()" id="addSigBtn"
+              style="margin-top:12px;padding:8px 14px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px">
+        + Add Signature
+      </button>
+    </div>
+
     <div>
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Contract</button>
     </div>
@@ -220,9 +255,11 @@ function addItemCo(desc='', qty=1, price=0){
   recalcCo();
 }
 function recalcCo(){
-  var isLongTerm = document.getElementById('isLongTermCo').checked;
-  var pricingType = isLongTerm ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
-  var isOngoing = isLongTerm && document.getElementById('endDateTypeCo').value === 'ongoing';
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
+  var isOnDemand = (docType === 'on_demand');
+  var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
+  var isOngoing = (isLongTerm || isOnDemand) && document.getElementById('endDateTypeCo').value === 'ongoing';
   
   var subtotal = 0;
   
@@ -301,18 +338,28 @@ function recalcCo(){
 ['discountTypeCo','discountValueCo','taxPercentCo','depositTypeCo','depositValueCo'].forEach(id=>document.getElementById(id).addEventListener('input', recalcCo));
 document.getElementById('discountTypeCo').addEventListener('change', updateDiscountWarning);
 
-// No need for DOMContentLoaded start date setting - now handled in toggleLongTermFields
+// No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
-function toggleLongTermFields() {
-  var isChecked = document.getElementById('isLongTermCo').checked;
-  document.getElementById('longTermFields').style.display = isChecked ? 'block' : 'none';
+function toggleDocTypeFields() {
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
+  var isOnDemand = (docType === 'on_demand');
   
-  if (isChecked) {
-    // Set start date to today when first enabling LT
+  document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
+  
+  if (isLongTerm || isOnDemand) {
+    // Set start date to today when first enabling LT or On-Demand
     var startField = document.getElementById('startDateFieldCo');
     if (!startField.value) {
       startField.value = new Date().toISOString().split('T')[0];
     }
+    
+    // Hide/show billing intervals based on type
+    var billingFields = document.querySelector('#longTermFields > div:nth-of-type(3)');
+    if (billingFields) {
+      billingFields.style.display = isOnDemand ? 'none' : 'grid';
+    }
+    
     // Trigger toggleEndDate to set initial state correctly
     toggleEndDate();
     togglePricingFields();
@@ -337,7 +384,8 @@ function toggleEndDate() {
   
   // Hide fulfillment date when ongoing
   var fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
-  if (document.getElementById('isLongTermCo').checked) {
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  if (docType === 'long_term') {
     fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
   }
   
@@ -357,8 +405,11 @@ function toggleEndDate() {
 }
 
 function togglePricingFields() {
-  var isLongTerm = document.getElementById('isLongTermCo').checked;
-  if (!isLongTerm) {
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
+  var isOnDemand = (docType === 'on_demand');
+  
+  if (docType === 'regular') {
     // Regular contract - show deposit and fulfillment
     document.getElementById('depositTypeLabelCo').style.display = 'block';
     document.getElementById('depositValueLabelCo').style.display = 'block';
@@ -398,7 +449,8 @@ function togglePricingFields() {
 }
 
 function updateDiscountWarning() {
-  var isLongTerm = document.getElementById('isLongTermCo').checked;
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
   var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
   var discountType = document.getElementById('discountTypeCo').value;
   
@@ -444,16 +496,94 @@ document.getElementById('coCreateForm').addEventListener('submit', function(e){
     return;
   }
   // Set form action based on contract type
-  var isLongTerm = document.getElementById('isLongTermCo').checked;
-  if (isLongTerm) {
-    var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
-    if (pricingType === 'on_demand') {
-      this.action = '/?page=on-demand-contracts-create';
-    } else {
-      this.action = '/?page=long-term-contracts-create';
-    }
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  if (docType === 'long_term') {
+    this.action = '/?page=long-term-contracts-create';
+  } else if (docType === 'on_demand') {
+    this.action = '/?page=on-demand-contracts-create';
   } else {
     this.action = '/?page=contracts-create';
   }
 });
+
+// Signature Management
+let signatureCount = 0;
+const MAX_SIGNATURES = 5;
+
+function addSignature(title = 'Client Signature', isRequired = true) {
+  if (signatureCount >= MAX_SIGNATURES) {
+    alert('Maximum of ' + MAX_SIGNATURES + ' signatures allowed');
+    return;
+  }
+  
+  signatureCount++;
+  const sigId = 'sig_' + Date.now() + '_' + signatureCount;
+  
+  const wrap = document.createElement('div');
+  wrap.className = 'signature-item';
+  wrap.dataset.sigId = sigId;
+  wrap.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff';
+  
+  wrap.innerHTML = `
+    <div style="display:grid;gap:8px">
+      <input type="text" name="signature_titles[]" value="${title}" required placeholder="Signature Title (e.g., Project Manager, Owner)"
+             style="padding:8px;border-radius:6px;border:1px solid #ddd;font-weight:600">
+      <div style="font-size:12px;color:var(--muted)">Order: ${signatureCount}</div>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+      <input type="checkbox" name="signature_required[]" value="${sigId}" ${isRequired ? 'checked' : ''}>
+      Required
+    </label>
+    <button type="button" onclick="removeSignature('${sigId}')" ${signatureCount === 1 ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}
+            style="padding:6px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;font-size:13px">
+      Remove
+    </button>
+    <input type="hidden" name="signature_orders[]" value="${signatureCount}">
+  `;
+  
+  document.getElementById('signaturesList').appendChild(wrap);
+  
+  if (signatureCount >= MAX_SIGNATURES) {
+    document.getElementById('addSigBtn').disabled = true;
+    document.getElementById('addSigBtn').style.opacity = '0.5';
+    document.getElementById('addSigBtn').style.cursor = 'not-allowed';
+  }
+}
+
+function removeSignature(sigId) {
+  const item = document.querySelector(`[data-sig-id="${sigId}"]`);
+  if (item) {
+    item.remove();
+    signatureCount--;
+    
+    // Re-enable add button if under max
+    if (signatureCount < MAX_SIGNATURES) {
+      document.getElementById('addSigBtn').disabled = false;
+      document.getElementById('addSigBtn').style.opacity = '1';
+      document.getElementById('addSigBtn').style.cursor = 'pointer';
+    }
+    
+    // Update order numbers
+    const items = document.querySelectorAll('.signature-item');
+    items.forEach((el, idx) => {
+      const orderDiv = el.querySelector('[style*="Order:"]');
+      if (orderDiv) orderDiv.textContent = 'Order: ' + (idx + 1);
+      const orderInput = el.querySelector('input[name="signature_orders[]"]');
+      if (orderInput) orderInput.value = idx + 1;
+    });
+    
+    // Disable remove button on first signature if it's the only one
+    if (signatureCount === 1) {
+      const firstRemoveBtn = items[0]?.querySelector('button[onclick^="removeSignature"]');
+      if (firstRemoveBtn) {
+        firstRemoveBtn.disabled = true;
+        firstRemoveBtn.style.opacity = '0.5';
+        firstRemoveBtn.style.cursor = 'not-allowed';
+      }
+    }
+  }
+}
+
+// Add default signature on page load
+addSignature();
 </script>

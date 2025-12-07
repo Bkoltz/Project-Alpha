@@ -102,6 +102,24 @@ try{
   $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
   $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
+  // Save contract signatures
+  $signatureTitles = $_POST['signature_titles'] ?? [];
+  $signatureOrders = $_POST['signature_orders'] ?? [];
+  $signatureRequired = $_POST['signature_required'] ?? [];
+  
+  if (!empty($signatureTitles)) {
+      $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+      foreach ($signatureTitles as $idx => $title) {
+          $title = trim($title);
+          if (empty($title)) continue;
+          
+          $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
+          $isRequired = in_array('sig_' . $idx, $signatureRequired) ? 1 : 0;
+          
+          $sigStmt->execute([$co_id, $title, $order, $isRequired]);
+      }
+  }
+
   $pdo->commit();
 }catch(Throwable $e){
   if ($pdo->inTransaction()) $pdo->rollBack();

@@ -1,24 +1,38 @@
 <?php
-namespace App\LinkResolver;
+// src/link_resolvers/manual_resolver/org_resolver.php
+// This resolver handles manually entered organization links from the database
 
-use App\Entity\Client;
-use App\Entity\Organization;
-
-class OrgLinkResolver implements LinkResolverInterface
+class OrgLinkResolver
 {
-    public function resolveForOrganization(Organization $org): ?string
+    private $pdo;
+    
+    public function __construct($pdo)
     {
-        // Return stored manual link from DB
-        return $org->getDefaultLink();
+        $this->pdo = $pdo;
     }
-
-    public function resolveForClient(Client $client): ?string
+    
+    public function resolveForOrganization($orgId)
     {
-        return null;
+        try {
+            // Get manually entered links for this organization
+            $stmt = $this->pdo->prepare("
+                SELECT url FROM link 
+                WHERE entity_type = 'organization' 
+                  AND entity_id = ? 
+                  AND type = 'manual'
+                  AND is_expired = 0
+                LIMIT 1
+            ");
+            $stmt->execute([$orgId]);
+            return $stmt->fetchColumn() ?: null;
+        } catch (\Throwable $e) {
+            @error_log('[OrgLinkResolver] Error: ' . $e->getMessage());
+            return null;
+        }
     }
-
-    public function getType(): string
+    
+    public function getType()
     {
-        return 'manual';
+        return 'manual_org';
     }
 }

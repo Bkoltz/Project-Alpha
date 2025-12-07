@@ -20,6 +20,7 @@ $billing_interval_count = max(1, (int)($_POST['billing_interval_count'] ?? 1));
 $billing_interval_unit = in_array(($_POST['billing_interval_unit'] ?? 'month'), ['day','week','month','year']) ? $_POST['billing_interval_unit'] : 'month';
 $pricing_type = in_array(($_POST['pricing_type'] ?? 'per_invoice'), ['fixed_total','per_invoice']) ? $_POST['pricing_type'] : 'per_invoice';
 $price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['price_per_invoice'] ?? 0) : null;
+$invoice_count = ($pricing_type === 'fixed_total') ? max(1, (int)($_POST['invoice_count'] ?? 1)) : null;
 $scope = trim((string)($_POST['scope'] ?? ''));
 
 if ($client_id <= 0) {
@@ -120,15 +121,15 @@ try{
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid, total_invoiced,
-        next_invoice_date, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        next_invoice_date, invoice_count, invoices_generated, scope
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
         $client_id, $projectCode, 'pending', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0, 0,
-        $next_invoice_date, $scope
+        $next_invoice_date, $invoice_count, 0, $scope
     ]);
     
     $ltc_id = (int)$pdo->lastInsertId();
@@ -153,6 +154,24 @@ try{
             $up->execute([$projectCode, $client_id, $notes]);
         } catch (Throwable $e) {
             @error_log('[long_term_contracts_create] project_meta upsert failed: '.$e->getMessage(), 0);
+        }
+    }
+
+    // Save contract signatures
+    $signatureTitles = $_POST['signature_titles'] ?? [];
+    $signatureOrders = $_POST['signature_orders'] ?? [];
+    $signatureRequired = $_POST['signature_required'] ?? [];
+    
+    if (!empty($signatureTitles)) {
+        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (long_term_contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+        foreach ($signatureTitles as $idx => $title) {
+            $title = trim($title);
+            if (empty($title)) continue;
+            
+            $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
+            $isRequired = in_array('sig_' . $idx, $signatureRequired) ? 1 : 0;
+            
+            $sigStmt->execute([$ltc_id, $title, $order, $isRequired]);
         }
     }
 

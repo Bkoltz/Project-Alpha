@@ -42,11 +42,69 @@ if (!$org) {
     <div style="display:flex;gap:8px">
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Changes</button>
       <a href="/?page=organization/organization-view&id=<?php echo $id; ?>" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;text-decoration:none">Cancel</a>
-      <form method="post" action="/?page=organization/organizations-delete" onsubmit="return confirm('Delete this organization? Clients will not be deleted, but will no longer be associated with this organization.');" style="display:inline-block;margin-left:auto">
-        <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-        <input type="hidden" name="id" value="<?php echo $id; ?>">
-        <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:#fee2e2;color:#991b1b">Delete Organization</button>
-      </form>
+      <button type="button" id="deleteOrgBtn" style="padding:10px 14px;border-radius:8px;border:0;background:#fee2e2;color:#991b1b;cursor:pointer">Delete Organization</button>
     </div>
   </form>
+
+  <?php
+  // Include links section
+  $entityType = 'organization';
+  $entityId = (int)$org['id'];
+  include __DIR__ . '/../../components/links_section.php';
+  ?>
 </section>
+
+<!-- Delete organization form (outside main form to avoid nesting) -->
+<form id="deleteOrgForm" method="post" action="/?page=organization/organizations-delete" style="display:none">
+  <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+  <input type="hidden" name="id" value="<?php echo $id; ?>">
+</form>
+
+<script>
+  (function() {
+    function initDeleteButton() {
+      const btn = document.getElementById('deleteOrgBtn');
+      const form = document.getElementById('deleteOrgForm');
+      
+      if (!btn || !form) {
+        console.warn('Delete button or form not found, retrying...');
+        setTimeout(initDeleteButton, 50);
+        return;
+      }
+      
+      // Check if already initialized
+      if (btn.dataset.deleteInitialized === 'true') {
+        console.log('✓ Delete button already initialized');
+        return;
+      }
+      
+      // Mark as initialized FIRST before attaching listener
+      btn.dataset.deleteInitialized = 'true';
+      
+      // Attach listener without cloning
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (confirm('Delete this organization? Clients will not be deleted, but will no longer be associated with this organization.')) {
+          console.log('Submitting delete form');
+          form.submit();
+        }
+      });
+      
+      console.log('✓ Delete button initialized');
+    }
+    
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initDeleteButton);
+    } else {
+      initDeleteButton();
+    }
+    
+    // Re-initialize on AJAX navigation - just call initDeleteButton without resetting flag
+    // The guard check in initDeleteButton will handle whether we need to re-initialize
+    document.addEventListener('pageLoaded', function() {
+      console.log('pageLoaded: checking delete button');
+      setTimeout(initDeleteButton, 50);
+    });
+  })();
+</script>

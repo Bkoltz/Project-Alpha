@@ -75,11 +75,17 @@
 
         try {
             // Build proper URL using URLSearchParams to avoid double-encoding
-            const url = buildUrlFromPageString(page);
+            let url = buildUrlFromPageString(page);
+            // Add cache-busting parameter
+            const separator = url.includes('?') ? '&' : '?';
+            url = url + separator + '_=' + Date.now();
+            
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache'
                 }
             });
 
@@ -88,14 +94,32 @@
             }
 
             const html = await response.text();
+            console.log(`Loading page: ${page}, Response length: ${html.length}`);
 
             // Extract main content and scripts from the response
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
+            console.log('Parsed document, looking for .main-content');
             const newMainContent = doc.querySelector('.main-content');
+            console.log('.main-content found?', !!newMainContent);
+            
+            if (!newMainContent) {
+                console.error('ERROR: .main-content not found in response!');
+                console.log('Document body:', doc.body ? doc.body.innerHTML.substring(0, 500) : 'No body');
+                console.log('Checking for section tag:', doc.querySelector('section') ? 'Found' : 'Not found');
+            }
 
             if (newMainContent) {
+                console.log('Main content found, HTML length:', newMainContent.innerHTML.length);
+                console.log('Main content preview:', newMainContent.innerHTML.substring(0, 200));
                 const scripts = Array.from(newMainContent.querySelectorAll('script'));
+                console.log(`Found ${scripts.length} script tags in response`);
+                
+                // Debug: check if script exists in raw HTML
+                if (scripts.length === 0 && html.includes('<script>')) {
+                    console.warn('WARNING: Script tags exist in raw HTML but not found in parsed DOM!');
+                    console.log('Script tag count in raw HTML:', (html.match(/<script>/g) || []).length);
+                }
                 const inlineScripts = scripts.map(s => ({
                     src: s.src || null,
                     code: s.src ? null : s.textContent
@@ -144,14 +168,19 @@
                 mainContent.innerHTML = html;
 
                 // Execute extracted scripts (external and inline)
-                scripts.forEach(s => {
+                console.log(`Executing ${scripts.length} scripts`);
+                scripts.forEach((s, idx) => {
                     try {
                         if (s.src) {
+                            console.log(`Executing external script ${idx}: ${s.src}`);
                             const scr = document.createElement('script');
                             scr.src = s.src;
                             scr.async = false;
                             document.body.appendChild(scr);
                         } else if (s.code) {
+                            console.log(`Executing inline script ${idx}, length: ${s.code.length}`);
+                            console.log('Script preview:', s.code.substring(0, 100) + '...');
+                            console.log('Script end:', '...' + s.code.substring(s.code.length - 100));
                             const scr = document.createElement('script');
                             scr.textContent = s.code;
                             document.body.appendChild(scr);
@@ -164,6 +193,7 @@
 
                 // Re-initialize any JavaScript that might be needed for the new content
                 initializePageScripts();
+                
                 // Dispatch an event so per-page assets (e.g., client-create.js) can re-initialize
                 try { document.dispatchEvent(new Event('pageLoaded')); } catch (err) { /* ignore */ }
             }
