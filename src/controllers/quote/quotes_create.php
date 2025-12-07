@@ -11,12 +11,13 @@ $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','
 $deposit_value = (float)($_POST['deposit_value'] ?? 0);
 $fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
 
-// Long-term quote fields
-$is_long_term = isset($_POST['is_long_term']) ? 1 : 0;
-$is_on_demand = 0;
+// Document type from radio buttons
+$doc_type = $_POST['doc_type'] ?? 'regular';
+$is_long_term = ($doc_type === 'long_term') ? 1 : 0;
+$is_on_demand = ($doc_type === 'on_demand') ? 1 : 0;
 
-// Only process long-term fields if this is a long-term quote
-if ($is_long_term) {
+// Only process long-term/on-demand fields if not regular
+if ($is_long_term || $is_on_demand) {
     $start_date = !empty($_POST['lt_start_date']) ? $_POST['lt_start_date'] : null;
     $end_date_type = $_POST['lt_end_date_type'] ?? 'ongoing';
     $end_date = ($end_date_type === 'fixed' && !empty($_POST['lt_end_date'])) ? $_POST['lt_end_date'] : null;

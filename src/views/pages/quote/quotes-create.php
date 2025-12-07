@@ -55,9 +55,31 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </label>
     </div>
 
-    <div style="display:flex;align-items:center;gap:12px;margin:12px 0">
-      <input type="checkbox" id="isLongTerm" name="is_long_term" value="1" onchange="toggleLongTermFields()">
-      <label for="isLongTerm" style="margin:0;font-weight:600">Long-term Service Quote (Recurring Billing)</label>
+    <div style="margin:12px 0">
+      <div style="font-weight:600;margin-bottom:8px">Document Type</div>
+      <div style="display:flex;gap:24px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="doc_type" value="regular" checked onchange="toggleDocTypeFields()">
+          <div>
+            <div style="font-weight:600">Regular</div>
+            <div style="font-size:12px;color:#6b7280">One-time quote</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="doc_type" value="long_term" onchange="toggleDocTypeFields()">
+          <div>
+            <div style="font-weight:600">Long Term</div>
+            <div style="font-size:12px;color:#6b7280">Recurring billing</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="radio" name="doc_type" value="on_demand" onchange="toggleDocTypeFields()">
+          <div>
+            <div style="font-weight:600">On-Demand</div>
+            <div style="font-size:12px;color:#6b7280">Manual invoicing</div>
+          </div>
+        </label>
+      </div>
     </div>
 
     <div id="longTermFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
@@ -212,9 +234,11 @@ function addItem(desc='', qty=1, price=0){
   recalc();
 }
 function recalc(){
-  var isLongTerm = document.getElementById('isLongTerm').checked;
-  var pricingType = isLongTerm ? document.querySelector('input[name="lt_pricing_type"]:checked')?.value : null;
-  var isOngoing = isLongTerm && document.getElementById('endDateType').value === 'ongoing';
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
+  var isOnDemand = (docType === 'on_demand');
+  var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="lt_pricing_type"]:checked')?.value : null;
+  var isOngoing = (isLongTerm || isOnDemand) && document.getElementById('endDateType').value === 'ongoing';
   
   var subtotal = 0;
   
@@ -292,23 +316,31 @@ function recalc(){
 ['discountType','discountValue','taxPercent','depositType','depositValue'].forEach(id=>document.getElementById(id).addEventListener('input', recalc));
 document.getElementById('discountType').addEventListener('change', updateDiscountWarning);
 
-// No need for DOMContentLoaded start date setting - now handled in toggleLongTermFields
+// No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
-function toggleLongTermFields() {
-  var isChecked = document.getElementById('isLongTerm').checked;
-  document.getElementById('longTermFields').style.display = isChecked ? 'block' : 'none';
+function toggleDocTypeFields() {
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
+  var isOnDemand = (docType === 'on_demand');
   
-  if (isChecked) {
-    // Set start date to today when first enabling LT
+  document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
+  
+  if (isLongTerm || isOnDemand) {
+    // Set start date to today when first enabling LT or On-Demand
     var startField = document.getElementById('startDateField');
     if (!startField.value) {
       startField.value = new Date().toISOString().split('T')[0];
     }
+    
+    // Hide/show billing intervals based on type
+    document.getElementById('billingIntervalFields').style.display = isOnDemand ? 'none' : 'grid';
+    
     // Trigger toggleEndDate to set initial state correctly
     toggleEndDate();
     togglePricingFields();
     updateDiscountWarning();
   } else {
+    // Regular quote
     document.getElementById('items').parentElement.style.display = 'block';
     document.getElementById('invoiceAmountRow').style.display = 'none';
     // Show deposit and fulfillment for regular quotes
@@ -327,7 +359,8 @@ function toggleEndDate() {
   
   // Hide fulfillment date when ongoing
   var fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
-  if (document.getElementById('isLongTerm').checked) {
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  if (docType === 'long_term') {
     fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
   }
   
@@ -345,8 +378,11 @@ function toggleEndDate() {
 }
 
 function togglePricingFields() {
-  var isLongTerm = document.getElementById('isLongTerm').checked;
-  if (!isLongTerm) {
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
+  var isOnDemand = (docType === 'on_demand');
+  
+  if (docType === 'regular') {
     // Regular quote - show deposit and fulfillment
     document.getElementById('depositTypeLabel').style.display = 'block';
     document.getElementById('depositValueLabel').style.display = 'block';
@@ -390,7 +426,8 @@ function togglePricingFields() {
 }
 
 function updateDiscountWarning() {
-  var isLongTerm = document.getElementById('isLongTerm').checked;
+  var docType = document.querySelector('input[name="doc_type"]:checked').value;
+  var isLongTerm = (docType === 'long_term');
   var isOngoing = document.getElementById('endDateType').value === 'ongoing';
   var discountType = document.getElementById('discountType').value;
   

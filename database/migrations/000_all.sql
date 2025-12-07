@@ -150,7 +150,14 @@ CREATE TABLE IF NOT EXISTS link (
     title VARCHAR(255) NOT NULL,
     url VARCHAR(500) NOT NULL,
     type ENUM('manual','auto_dropbox','auto_gdrive','auto_s3') NOT NULL,
+    expiration_date DATE NULL,
+    is_expired TINYINT(1) DEFAULT 0,
+    ignore_auto_generation TINYINT(1) DEFAULT 0,
+    last_verified TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_link_expired (is_expired),
+    INDEX idx_link_expiration (expiration_date),
+    INDEX idx_link_ignore (ignore_auto_generation),
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -233,6 +240,7 @@ CREATE TABLE IF NOT EXISTS quotes (
   pricing_type ENUM('per_invoice','fixed_total','on_demand') NULL,
   price_per_invoice DECIMAL(12,2) NULL,
   scope TEXT NULL,
+  custom_fields JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_quotes_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   INDEX idx_quotes_client (client_id),
@@ -282,6 +290,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   fulfillment_date DATE NULL,
   weather_pending TINYINT(1) NOT NULL DEFAULT 0,
   scope TEXT NULL,
+  custom_fields JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_contracts_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
   CONSTRAINT fk_contracts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
@@ -329,7 +338,11 @@ CREATE TABLE IF NOT EXISTS invoices (
   fulfillment_date DATE NULL,
   weather_pending TINYINT(1) NOT NULL DEFAULT 0,
   scope TEXT NULL,
+  custom_fields JSON NULL,
+  is_deposit_invoice TINYINT(1) DEFAULT 0,
+  parent_contract_type ENUM('contract','long_term_contract','on_demand_contract') NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_invoice_deposit (is_deposit_invoice),
   CONSTRAINT fk_invoices_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
   CONSTRAINT fk_invoices_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
   CONSTRAINT fk_invoices_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
@@ -368,8 +381,14 @@ CREATE TABLE IF NOT EXISTS payments (
   check_number VARCHAR(100) NULL,
   notes TEXT NULL,
   stripe_payment_intent_id VARCHAR(100) NULL,
+  stripe_subscription_id VARCHAR(255) NULL,
+  stripe_charge_id VARCHAR(255) NULL,
+  auto_pay_attempt TINYINT(1) DEFAULT 0,
+  payment_method_id INT NULL,
   status ENUM('pending','succeeded','failed') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_payments_stripe_sub (stripe_subscription_id),
+  INDEX idx_payments_auto_pay (auto_pay_attempt),
   CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
   INDEX idx_payments_invoice (invoice_id),
   INDEX idx_payments_status (status)
@@ -379,12 +398,12 @@ CREATE TABLE IF NOT EXISTS payments (
 -- PAYMENT METHODS
 -- ============================================================================
 -- we need something similar to the following:
--- PaymentMethod
--- - id
--- - user_id (or org_id)
--- - type (enum: stripe, paypal, venmo)
--- - config (json: API keys, account IDs)
--- - active (boolean)
+PaymentMethod
+- id
+- user_id (or org_id)
+- type (enum: stripe, paypal, venmo)
+- config (json: API keys, account IDs)
+- active (boolean)
 
 -- ============================================================================
 -- PUBLIC LINKS
@@ -447,6 +466,12 @@ CREATE TABLE IF NOT EXISTS long_term_contracts (
   signed_pdf_path VARCHAR(255) NULL,
   scope TEXT NULL,
   terms TEXT NULL,
+  custom_fields JSON NULL,
+  auto_pay_enabled TINYINT(1) DEFAULT 0,
+  payment_method_id INT NULL,
+  stripe_subscription_id VARCHAR(255) NULL,
+  invoice_count INT NULL COMMENT 'For fixed_total pricing: number of invoices to divide total',
+  invoices_generated INT DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_ltc_client (client_id),
@@ -455,6 +480,8 @@ CREATE TABLE IF NOT EXISTS long_term_contracts (
   INDEX idx_ltc_project (project_code),
   INDEX idx_ltc_project_id (project_id),
   INDEX idx_ltc_next_invoice (next_invoice_date),
+  INDEX idx_ltc_auto_pay (auto_pay_enabled),
+  INDEX idx_ltc_stripe_sub (stripe_subscription_id),
   CONSTRAINT fk_ltc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   CONSTRAINT fk_ltc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
   CONSTRAINT fk_ltc_base_contract FOREIGN KEY (base_contract_id) REFERENCES contracts(id) ON DELETE SET NULL
@@ -501,6 +528,10 @@ CREATE TABLE IF NOT EXISTS on_demand_contracts (
   signed_pdf_path VARCHAR(255) NULL,
   scope TEXT NULL,
   terms TEXT NULL,
+  custom_fields JSON NULL,
+  auto_pay_enabled TINYINT(1) DEFAULT 0,
+  payment_method_id INT NULL,
+  invoice_type ENUM('set_amount','itemized','general_writeup') DEFAULT 'set_amount',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_odc_client (client_id),
@@ -509,6 +540,8 @@ CREATE TABLE IF NOT EXISTS on_demand_contracts (
   INDEX idx_odc_project (project_code),
   INDEX idx_odc_project_id (project_id),
   INDEX idx_odc_end_date (end_date),
+  INDEX idx_odc_auto_pay (auto_pay_enabled),
+  INDEX idx_odc_invoice_type (invoice_type),
   CONSTRAINT fk_odc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   CONSTRAINT fk_odc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -559,4 +592,114 @@ CREATE TABLE IF NOT EXISTS recurring_invoices (
   INDEX idx_recinv_project_id (project_id),
   CONSTRAINT fk_recinv_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   CONSTRAINT fk_recinv_template FOREIGN KEY (template_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- DOCUMENT CUSTOMIZATION
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS document_custom_fields (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  field_type ENUM('quote','contract','invoice') NOT NULL,
+  field_key VARCHAR(100) NOT NULL,
+  field_label VARCHAR(255) NOT NULL,
+  field_data_type ENUM('text','date','number','textarea') NOT NULL,
+  is_builtin TINYINT(1) DEFAULT 0,
+  is_required TINYINT(1) DEFAULT 0,
+  display_order INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_field (field_type, field_key),
+  INDEX idx_field_type (field_type),
+  INDEX idx_display_order (display_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- PAYMENT METHODS & AUTO-PAY
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS payment_methods (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  organization_id INT NULL,
+  provider ENUM('stripe','paypal','venmo') NOT NULL,
+  provider_name VARCHAR(100) NULL,
+  config JSON NOT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  is_default TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_payment_user (user_id),
+  INDEX idx_payment_org (organization_id),
+  INDEX idx_payment_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- LINK RESOLVER CONFIGURATION
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS link_resolver_config (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  provider ENUM('dropbox','gdrive','s3') NOT NULL,
+  is_enabled TINYINT(1) DEFAULT 0,
+  credentials JSON NOT NULL,
+  default_expiration_days INT DEFAULT 365,
+  org_level_only TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_provider (provider)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- CONTRACT SIGNATURES
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS contract_signatures (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  contract_id INT NULL,
+  long_term_contract_id INT NULL,
+  on_demand_contract_id INT NULL,
+  signer_title VARCHAR(255) NOT NULL,
+  signer_name VARCHAR(255) NULL,
+  signer_email VARCHAR(255) NULL,
+  signature_data TEXT NULL,
+  signed_at TIMESTAMP NULL,
+  display_order INT NOT NULL DEFAULT 1,
+  is_required TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE,
+  FOREIGN KEY (long_term_contract_id) REFERENCES long_term_contracts(id) ON DELETE CASCADE,
+  FOREIGN KEY (on_demand_contract_id) REFERENCES on_demand_contracts(id) ON DELETE CASCADE,
+  INDEX idx_sig_contract (contract_id),
+  INDEX idx_sig_ltc (long_term_contract_id),
+  INDEX idx_sig_odc (on_demand_contract_id),
+  INDEX idx_sig_signed (signed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- NOTIFICATION SETTINGS & LOGS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS notification_settings (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  setting_key VARCHAR(100) NOT NULL,
+  setting_value TEXT NULL,
+  is_enabled TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_setting (setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS notification_log (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  notification_type VARCHAR(100) NOT NULL,
+  recipient_email VARCHAR(255) NOT NULL,
+  subject VARCHAR(500) NULL,
+  entity_type VARCHAR(50) NULL,
+  entity_id INT NULL,
+  sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  status ENUM('sent','failed','pending') DEFAULT 'sent',
+  error_message TEXT NULL,
+  INDEX idx_notif_type (notification_type),
+  INDEX idx_notif_entity (entity_type, entity_id),
+  INDEX idx_notif_sent (sent_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

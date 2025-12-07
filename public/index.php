@@ -220,10 +220,6 @@ if ($isAjaxEarly && $page === 'jobs/job-details') {
     exit;
 }
 if ($isAjaxEarly) {
-    if ($page === 'client/clients-edit' || $page === 'clients-edit') {
-        require_once __DIR__ . '/../src/views/pages/client/clients-edit.php';
-        exit;
-    }
     if ($page === 'quote/quotes-edit' || $page === 'quotes-edit') {
         require_once __DIR__ . '/../src/views/pages/quote/quotes-edit.php';
         exit;

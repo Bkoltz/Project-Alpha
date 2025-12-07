@@ -1,39 +1,15 @@
 <?php
-namespace App\Entity;
-
-use Doctrine\ORM\Mapping as ORM;
-
-#[ORM\Entity]
-#[ORM\Table(name: "link")]
-class Link
-{
-    #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column(type: "integer")]
-    private int $id;
-
-    #[ORM\ManyToOne(targetEntity: Organization::class, inversedBy: "links")]
-    private ?Organization $organization = null;
-
-    #[ORM\ManyToOne(targetEntity: Client::class, inversedBy: "links")]
-    private ?Client $client = null;
-
-    #[ORM\Column(type: "string", length: 255)]
-    private string $title;
-
-    #[ORM\Column(type: "string", length: 500)]
-    private string $url;
-
-    #[ORM\Column(type: "string", length: 50)]
-    private string $type;
-
-    #[ORM\Column(type: "datetime")]
-    private \DateTimeInterface $createdAt;
-
-    public function __construct()
-    {
-        $this->createdAt = new \DateTimeImmutable();
-    }
-
-    // getters and setters...
-}
+// src/link_resolvers/link.php
+//
+// This file originally defined a Doctrine ORM entity for links.
+// The application does not use Doctrine ORM - it uses plain PDO with MySQL.
+//
+// The link table is defined in:
+// - database/migrations/000_all.sql (CREATE TABLE link)
+//
+// Links are managed through:
+// - LinkResolverService (src/services/LinkResolverService.php)
+// - Direct database queries via PDO
+// - links_section.php component (src/views/components/links_section.php)
+//
+// This file is kept for reference but is not actively used.

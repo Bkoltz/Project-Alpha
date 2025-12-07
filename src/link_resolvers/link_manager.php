@@ -1,41 +1,53 @@
 <?php
-namespace App\Service;
-
-use App\Entity\Client;
-use App\Entity\Organization;
-use App\LinkResolver\LinkResolverInterface;
+// src/link_resolvers/link_manager.php
+// This manager coordinates all link resolvers (manual and auto)
 
 class LinkResolverManager
 {
-    /** @var LinkResolverInterface[] */
-    private array $resolvers;
-
-    public function __construct(iterable $resolvers)
+    private $pdo;
+    
+    public function __construct($pdo)
     {
-        $this->resolvers = $resolvers;
+        $this->pdo = $pdo;
     }
-
-    public function resolveForOrganization(Organization $org): array
+    
+    /**
+     * Get all links for an organization
+     */
+    public function getAllLinksForOrganization($orgId)
     {
-        $links = [];
-        foreach ($this->resolvers as $resolver) {
-            $url = $resolver->resolveForOrganization($org);
-            if ($url) {
-                $links[] = ['title' => ucfirst($resolver->getType()), 'url' => $url];
-            }
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT type, url, expiration_date, is_expired 
+                FROM link 
+                WHERE entity_type = 'organization' AND entity_id = ?
+                ORDER BY type
+            ");
+            $stmt->execute([$orgId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            @error_log('[LinkResolverManager] Error: ' . $e->getMessage());
+            return [];
         }
-        return $links;
     }
-
-    public function resolveForClient(Client $client): array
+    
+    /**
+     * Get all links for a client
+     */
+    public function getAllLinksForClient($clientId)
     {
-        $links = [];
-        foreach ($this->resolvers as $resolver) {
-            $url = $resolver->resolveForClient($client);
-            if ($url) {
-                $links[] = ['title' => ucfirst($resolver->getType()), 'url' => $url];
-            }
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT type, url, expiration_date, is_expired 
+                FROM link 
+                WHERE entity_type = 'client' AND entity_id = ?
+                ORDER BY type
+            ");
+            $stmt->execute([$clientId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            @error_log('[LinkResolverManager] Error: ' . $e->getMessage());
+            return [];
         }
-        return $links;
     }
 }

@@ -120,6 +120,24 @@ try{
         }
     }
 
+    // Save contract signatures
+    $signatureTitles = $_POST['signature_titles'] ?? [];
+    $signatureOrders = $_POST['signature_orders'] ?? [];
+    $signatureRequired = $_POST['signature_required'] ?? [];
+    
+    if (!empty($signatureTitles)) {
+        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (on_demand_contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+        foreach ($signatureTitles as $idx => $title) {
+            $title = trim($title);
+            if (empty($title)) continue;
+            
+            $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
+            $isRequired = in_array('sig_' . $idx, $signatureRequired) ? 1 : 0;
+            
+            $sigStmt->execute([$odc_id, $title, $order, $isRequired]);
+        }
+    }
+
     $pdo->commit();
 } catch(Throwable $e){
     if ($pdo->inTransaction()) $pdo->rollBack();

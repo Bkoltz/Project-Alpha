@@ -38,6 +38,7 @@ $organizations = $orgStmt->fetchAll();
       <div>Organization</div>
       <input type="text" id="orgInputEdit" placeholder="Type to search organizations (leave blank for none)..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" value="<?php echo htmlspecialchars($client['organization_name'] ?? ''); ?>">
       <input type="hidden" id="orgIdEdit" name="organization_id" value="<?php echo (int)($client['organization_id'] ?? 0); ?>">
+      <small style="display:block;margin-top:4px;color:var(--muted)">Clear the text field to remove from organization</small>
       <div id="orgSuggestEdit" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
       <button type="button" id="createOrgBtnEdit" style="margin-top:8px;padding:8px 12px;background:#f0f0f0;border:1px solid #ddd;border-radius:8px;cursor:pointer;font-size:14px">
         + Create New Organization
@@ -72,6 +73,13 @@ $organizations = $orgStmt->fetchAll();
     </div>
   </form>
 
+  <?php
+  // Include links section
+  $entityType = 'client';
+  $entityId = (int)$client['id'];
+  include __DIR__ . '/../../components/links_section.php';
+  ?>
+
   <!-- Create Organization Modal -->
   <div id="createOrgModalEdit" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;flex-direction:column">
     <div style="background:#fff;padding:24px;border-radius:12px;max-width:400px;box-shadow:0 20px 25px rgba(0,0,0,0.15)">
@@ -92,11 +100,12 @@ $organizations = $orgStmt->fetchAll();
       </form>
     </div>
   </div>
-</section>
-
-<script>
-  // Ensure DOM is ready before initializing
-  function initializeOrgEdit() {
+  
+  <script>
+  console.log('=== CLIENT EDIT SCRIPT LOADED ===');
+  
+  // Make this function global so navigation.js can call it
+  window.initializeClientEditPage = function() {
     const orgInput = document.getElementById('orgInputEdit');
     const orgId = document.getElementById('orgIdEdit');
     const orgSuggest = document.getElementById('orgSuggestEdit');
@@ -104,7 +113,7 @@ $organizations = $orgStmt->fetchAll();
     
     if (!orgInput || !orgSuggest) {
       console.warn('Org edit elements not found, retrying in 50ms...');
-      setTimeout(initializeOrgEdit, 50);
+      setTimeout(window.initializeClientEditPage, 50);
       return;
     }
     
@@ -158,9 +167,25 @@ $organizations = $orgStmt->fetchAll();
       orgSuggest.style.display='block';
     }
     
-    const debouncedFetch = debounce((e)=>{ orgId.value=''; fetchOrgs(e.target.value); }, 200);
+    const debouncedFetch = debounce((e)=>{ 
+      const val = e.target.value;
+      if (!val || val.trim() === '') {
+        orgId.value = '0'; // Set to 0 to remove org
+        clearSuggestions();
+        orgValidationBanner.style.display = 'none';
+      } else {
+        orgId.value = ''; // Clear during search
+        fetchOrgs(val);
+      }
+    }, 200);
+    
     orgInput.addEventListener('input', debouncedFetch);
-    document.addEventListener('click', function(ev){ if (!orgSuggest.contains(ev.target) && ev.target !== orgInput) clearSuggestions(); });
+    
+    document.addEventListener('click', function(ev){ 
+      if (!orgSuggest.contains(ev.target) && ev.target !== orgInput) {
+        clearSuggestions();
+      }
+    });
 
     // Create organization modal
     const createOrgBtn = document.getElementById('createOrgBtnEdit');
@@ -171,25 +196,25 @@ $organizations = $orgStmt->fetchAll();
     const createOrgCsrf = document.getElementById('createOrgCsrfEdit');
     const createOrgNameInput = document.getElementById('createOrgNameInputEdit');
 
-    if (createOrgBtn) {
+    if (createOrgBtn && createOrgModal) {
       createOrgBtn.addEventListener('click', function(){
         console.log('Create org button clicked');
         const token = getCsrfToken();
-        createOrgCsrf.value = token;
-        createOrgNameInput.value = orgInput.value || '';
+        if (createOrgCsrf) createOrgCsrf.value = token;
+        if (createOrgNameInput) createOrgNameInput.value = orgInput.value || '';
         createOrgModal.style.display = 'flex';
-        createOrgNameInput.focus();
+        if (createOrgNameInput) createOrgNameInput.focus();
       });
     }
 
-    if (closeCreateOrgModal) {
+    if (closeCreateOrgModal && createOrgModal) {
       closeCreateOrgModal.addEventListener('click', ()=>{ createOrgModal.style.display='none'; });
     }
-    if (cancelCreateOrgModal) {
+    if (cancelCreateOrgModal && createOrgModal) {
       cancelCreateOrgModal.addEventListener('click', ()=>{ createOrgModal.style.display='none'; });
     }
 
-    if (createOrgForm) {
+    if (createOrgForm && createOrgCsrf && createOrgNameInput) {
       createOrgForm.addEventListener('submit', async function(ev){
         ev.preventDefault();
         const token = getCsrfToken();
@@ -211,11 +236,34 @@ $organizations = $orgStmt->fetchAll();
         }catch(e){ console.error('Form submit error:', e); alert('Failed to create organization'); }
       });
     }
+  };
+  
+  // Try immediate initialization first (works when script loads after DOM)
+  console.log('Attempting immediate initialization...');
+  setTimeout(function() {
+    if (document.getElementById('orgInputEdit')) {
+      console.log('Elements found immediately, initializing now');
+      window.initializeClientEditPage();
+    } else {
+      console.log('Elements not found immediately, waiting for DOM...');
+    }
+  }, 0);
+  
+  // Initialize on first load (check if DOM is ready)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('DOMContentLoaded fired, initializing...');
+      window.initializeClientEditPage();
+    });
+  } else {
+    // DOM already ready, initialize immediately
+    console.log('DOM already ready, initializing immediately...');
+    window.initializeClientEditPage();
   }
   
-  // Initialize immediately with a small delay to allow DOM to settle
-  setTimeout(initializeOrgEdit, 10);
-  
-  // Also listen for pageLoaded event for AJAX navigation
-  document.addEventListener('pageLoaded', ()=>{ setTimeout(initializeOrgEdit, 10); });
-</script>
+  // Also re-initialize when pages are loaded via AJAX
+  document.addEventListener('pageLoaded', function() {
+    console.log('pageLoaded event fired, re-initializing...');
+    setTimeout(window.initializeClientEditPage, 10); 
+  });
+  </script>

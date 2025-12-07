@@ -45,55 +45,59 @@ try {
             $items = [];
             
             if ($contract['pricing_type'] === 'per_invoice') {
-                // Simple per-invoice pricing
+                // Simple per-invoice pricing - recurring amount
                 $subtotal = (float)$contract['price_per_invoice'];
-            } else {
-                // Fixed total - use line items
+            } elseif ($contract['pricing_type'] === 'fixed_total') {
+                // Fixed total - divide total by invoice_count
+                $invoiceCount = (int)($contract['invoice_count'] ?? 1);
+                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $contractTotal = (float)$contract['total'];
+                $depositPaid = (float)$contract['deposit_paid'];
+                
+                // Calculate amount to invoice: (total - deposit) / invoice_count
+                $amountToInvoice = ($contractTotal - $depositPaid) / $invoiceCount;
+                $subtotal = $amountToInvoice;
+                
+                // Load items for display (will be shown proportionally)
                 $itemsQuery = $pdo->prepare('SELECT * FROM long_term_contract_items WHERE long_term_contract_id=?');
                 $itemsQuery->execute([$contractId]);
                 $items = $itemsQuery->fetchAll(PDO::FETCH_ASSOC);
-                
-                foreach ($items as $item) {
-                    $subtotal += (float)$item['line_total'];
-                }
             }
             
-            // Apply discount and tax
+            // Apply discount and tax (already factored into subtotal for fixed_total)
             $discountType = $contract['discount_type'] ?? 'none';
             $discountValue = (float)($contract['discount_value'] ?? 0);
-            $discount = 0;
+            $taxPercent = (float)$contract['tax_percent'];
             
-            if ($discountType === 'percent') {
-                $discount = max(0, min(100, $discountValue)) * $subtotal / 100;
-            } elseif ($discountType === 'fixed') {
-                $discount = $discountValue;
+            // For fixed_total, discount and tax are already calculated in the contract total
+            // For per_invoice, apply them per invoice
+            if ($contract['pricing_type'] === 'per_invoice') {
+                $discount = 0;
+                if ($discountType === 'percent') {
+                    $discount = max(0, min(100, $discountValue)) * $subtotal / 100;
+                } elseif ($discountType === 'fixed') {
+                    $discount = $discountValue;
+                }
+                $taxable = max(0, $subtotal - $discount);
+                $tax = max(0, $taxPercent) * $taxable / 100;
+                $total = max(0, $taxable + $tax);
+            } else {
+                // fixed_total: subtotal already has discount/tax baked in
+                $total = $subtotal;
             }
             
-            $taxable = max(0, $subtotal - $discount);
-            $tax = max(0, (float)$contract['tax_percent']) * $taxable / 100;
-            $total = max(0, $taxable + $tax);
-            
-            // Check if we've hit the contract total (for fixed_total pricing)
+            // Check if we've reached the invoice limit (for fixed_total pricing)
             if ($contract['pricing_type'] === 'fixed_total') {
-                $contractTotal = (float)$contract['total'];
-                $alreadyInvoiced = (float)$contract['total_invoiced'];
-                $depositPaid = (float)$contract['deposit_paid'];
+                $invoiceCount = (int)($contract['invoice_count'] ?? 1);
+                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
                 
-                // Adjust deposit from contract total
-                $remainingAmount = $contractTotal - $alreadyInvoiced - $depositPaid;
-                
-                if ($remainingAmount <= 0) {
-                    // Contract is fully invoiced - mark as completed
+                if ($invoicesGenerated >= $invoiceCount) {
+                    // All invoices generated - mark as completed
                     $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL WHERE id=?')
                         ->execute(['completed', $contractId]);
-                    @error_log("$logPrefix Contract LTC-{$contract['doc_number']} fully invoiced, marked as completed");
+                    @error_log("$logPrefix Contract LTC-{$contract['doc_number']} all {$invoiceCount} invoices generated, marked as completed");
                     $pdo->commit();
                     continue;
-                }
-                
-                // Don't invoice more than remaining
-                if ($total > $remainingAmount) {
-                    $total = $remainingAmount;
                 }
             }
             
@@ -102,14 +106,14 @@ try {
             
             $insertInvoice = $pdo->prepare('
                 INSERT INTO invoices (
-                    contract_id, client_id, project_code, 
+                    long_term_contract_id, client_id, project_code, 
                     discount_type, discount_value, tax_percent, 
                     subtotal, total, status, due_date, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
             
             $insertInvoice->execute([
-                null, // No regular contract_id, this is from long-term contract
+                $contractId, // Link to long-term contract
                 $clientId,
                 $projectCode,
                 $discountType,
@@ -140,16 +144,26 @@ try {
                 
                 $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)')
                     ->execute([$invoiceId, $description, 1, $total, $total]);
-            } else {
-                // Copy items from contract
+            } elseif ($contract['pricing_type'] === 'fixed_total') {
+                // For fixed_total, show items proportionally divided
+                $invoiceCount = (int)($contract['invoice_count'] ?? 1);
+                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $invoiceNum = $invoicesGenerated + 1;
+                
+                // Calculate proportion for this invoice
                 foreach ($items as $item) {
+                    $proportionalQty = (float)$item['quantity'] / $invoiceCount;
+                    $proportionalTotal = (float)$item['line_total'] / $invoiceCount;
+                    
+                    $description = $item['description'] . ' (Payment ' . $invoiceNum . ' of ' . $invoiceCount . ')';
+                    
                     $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)')
                         ->execute([
                             $invoiceId,
-                            $item['description'],
-                            $item['quantity'],
+                            $description,
+                            $proportionalQty,
                             $item['unit_price'],
-                            $item['line_total']
+                            $proportionalTotal
                         ]);
                 }
             }
@@ -172,13 +186,14 @@ try {
             
             // Update contract
             $newTotalInvoiced = (float)$contract['total_invoiced'] + $total;
+            $newInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0) + 1;
             
             if ($shouldContinue) {
-                $pdo->prepare('UPDATE long_term_contracts SET next_invoice_date=?, last_invoice_date=?, total_invoiced=? WHERE id=?')
-                    ->execute([$nextDate, $today, $newTotalInvoiced, $contractId]);
+                $pdo->prepare('UPDATE long_term_contracts SET next_invoice_date=?, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=?')
+                    ->execute([$nextDate, $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
             } else {
-                $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=? WHERE id=?')
-                    ->execute(['completed', $today, $newTotalInvoiced, $contractId]);
+                $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=?')
+                    ->execute(['completed', $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
             }
             
             $pdo->commit();
