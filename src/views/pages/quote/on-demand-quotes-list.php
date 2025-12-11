@@ -7,12 +7,16 @@ $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
 $project_code = trim($_GET['project_code'] ?? '');
+$min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
+$max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
 $where=['q.is_on_demand=1'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='q.status=?'; $p[] = $status; }
 if($project_code!==''){ $where[]='q.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($min_price !== null){ $where[]='q.price_per_invoice >= ?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='q.price_per_invoice <= ?'; $p[] = $max_price; }
 
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
@@ -37,46 +41,49 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="quote/on-demand-quotes-list">
-    <input type="hidden" name="client_id" id="clientIdODQ" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputODQ" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
-      <div id="clientSuggestODQ" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
-    </label>
-    <label><div>Project ID</div><input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="">All</option>
-        <option value="pending" <?php echo $status==='pending'?'selected':''; ?>>Pending</option>
-        <option value="approved" <?php echo $status==='approved'?'selected':''; ?>>Approved</option>
-        <option value="rejected" <?php echo $status==='rejected'?'selected':''; ?>>Rejected</option>
-      </select>
-    </label>
-    <div style="display:flex;gap:8px">
-      <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-      <a href="/?page=quote/on-demand-quotes-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;text-decoration:none;color:inherit">Reset</a>
-    </div>
-  </form>
-
-  <script>
-    (function(){
-      var input = document.getElementById('clientInputODQ');
-      var hid = document.getElementById('clientIdODQ');
-      var sug = document.getElementById('clientSuggestODQ');
-      input.addEventListener('input', function(){
-        hid.value='';
-        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-        fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
-          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-          sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
-          sug.style.display='block';
-        }).catch(()=>{sug.style.display='none'});
-      });
-      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
-    })();
-  </script>
+  <?php
+  $filterConfig = [
+    'page' => 'quote/on-demand-quotes-list',
+    'filters' => [
+      'client' => [
+        'type' => 'client_autocomplete',
+        'label' => 'Client',
+        'value' => $client_name,
+        'id_value' => $client_id
+      ],
+      'project_code' => [
+        'type' => 'text',
+        'label' => 'Project ID',
+        'value' => $project_code,
+        'placeholder' => 'PA-2025'
+      ],
+      'status' => [
+        'type' => 'select',
+        'label' => 'Status',
+        'value' => $status,
+        'options' => [
+          '' => 'All',
+          'pending' => 'Pending',
+          'approved' => 'Approved',
+          'rejected' => 'Rejected'
+        ]
+      ],
+      'min_price' => [
+        'type' => 'number',
+        'label' => 'Min ($)',
+        'value' => $min_price ?? '',
+        'step' => '0.01'
+      ],
+      'max_price' => [
+        'type' => 'number',
+        'label' => 'Max ($)',
+        'value' => $max_price ?? '',
+        'step' => '0.01'
+      ]
+    ]
+  ];
+  require __DIR__ . '/../../../components/document_list_filter.php';
+  ?>
 
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">

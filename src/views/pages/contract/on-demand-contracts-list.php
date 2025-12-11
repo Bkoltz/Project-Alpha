@@ -3,16 +3,27 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
+// Ensure the optional on_demand_contracts table exists before querying
+$has_on_demand_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='on_demand_contracts'")->fetchColumn();
+if (!$has_on_demand_table) {
+  echo '<section><h2>On-Demand Contracts</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">On-demand contracts are not available because the database table <code>on_demand_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
+  return;
+}
+
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
 $project_code = trim($_GET['project_code'] ?? '');
+$min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
+$max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 
 $where=[];$p=[];
 if($client_id>0){$where[]='odc.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='odc.status=?'; $p[] = $status; }
 if($project_code!==''){ $where[]='odc.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($min_price !== null){ $where[]='odc.price_per_invoice>=?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='odc.price_per_invoice<=?'; $p[] = $max_price; }
 
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
@@ -46,48 +57,51 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="contract/on-demand-contracts-list">
-    <input type="hidden" name="client_id" id="clientIdODC" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputODC" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
-      <div id="clientSuggestODC" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
-    </label>
-    <label><div>Project ID</div><input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="">All</option>
-        <option value="pending" <?php echo $status==='pending'?'selected':''; ?>>Pending</option>
-        <option value="active" <?php echo $status==='active'?'selected':''; ?>>Active</option>
-        <option value="paused" <?php echo $status==='paused'?'selected':''; ?>>Paused</option>
-        <option value="completed" <?php echo $status==='completed'?'selected':''; ?>>Completed</option>
-        <option value="cancelled" <?php echo $status==='cancelled'?'selected':''; ?>>Cancelled</option>
-      </select>
-    </label>
-    <div style="display:flex;gap:8px">
-      <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-      <a href="/?page=contract/on-demand-contracts-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;text-decoration:none;color:inherit">Reset</a>
-    </div>
-  </form>
-
-  <script>
-    (function(){
-      var input = document.getElementById('clientInputODC');
-      var hid = document.getElementById('clientIdODC');
-      var sug = document.getElementById('clientSuggestODC');
-      input.addEventListener('input', function(){
-        hid.value='';
-        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-        fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
-          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-          sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
-          sug.style.display='block';
-        }).catch(()=>{sug.style.display='none'});
-      });
-      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
-    })();
-  </script>
+  <?php
+  $filterConfig = [
+      'page' => 'contract/on-demand-contracts-list',
+      'filters' => [
+          'client' => [
+              'type' => 'client_autocomplete',
+              'label' => 'Client',
+              'value' => $client_name,
+              'id_value' => $client_id
+          ],
+          'status' => [
+              'type' => 'select',
+              'label' => 'Status',
+              'value' => $status,
+              'options' => [
+                  '' => 'All',
+                  'pending' => 'Pending',
+                  'active' => 'Active',
+                  'paused' => 'Paused',
+                  'completed' => 'Completed',
+                  'cancelled' => 'Cancelled'
+              ]
+          ],
+          'min_price' => [
+              'type' => 'number',
+              'label' => 'Min ($)',
+              'value' => $min_price ?? '',
+              'step' => '0.01'
+          ],
+          'max_price' => [
+              'type' => 'number',
+              'label' => 'Max ($)',
+              'value' => $max_price ?? '',
+              'step' => '0.01'
+          ],
+          'project_code' => [
+              'type' => 'text',
+              'label' => 'Project ID',
+              'value' => $project_code,
+              'placeholder' => 'PA-2025'
+          ]
+      ]
+  ];
+  require __DIR__ . '/../../../components/document_list_filter.php';
+  ?>
 
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">

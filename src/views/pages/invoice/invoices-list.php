@@ -80,62 +80,54 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
   <?php endif; ?>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="invoice/invoices-list">
-    <input type="hidden" name="client_id" id="clientIdIL" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative">
-      <div>Client</div>
-      <input type="text" name="client" id="clientInputIL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
-      <div id="clientSuggestIL" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
-    </label>
-    <label>
-      <div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <?php $sf = htmlspecialchars($statusFilter); ?>
-        <option value="all" <?php echo $sf==='all'?'selected':''; ?>>All</option>
-        <option value="paid" <?php echo $sf==='paid'?'selected':''; ?>>Paid</option>
-        <option value="unpaid" <?php echo $sf==='unpaid'?'selected':''; ?>>Unpaid/Partial</option>
-        <option value="overdue" <?php echo $sf==='overdue'?'selected':''; ?>>Overdue</option>
-      </select>
-    </label>
-    <label>
-      <div>Min Total ($)</div>
-      <input type="number" step="0.01" name="min" value="<?php echo htmlspecialchars($_GET['min'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-    </label>
-    <label>
-      <div>Max Total ($)</div>
-      <input type="number" step="0.01" name="max" value="<?php echo htmlspecialchars($_GET['max'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-    </label>
-    <label>
-      <div>Project</div>
-      <input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-    </label>
-    <label>
-      <div>Doc #</div>
-      <input type="number" name="doc_number" value="<?php echo htmlspecialchars($_GET['doc_number'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-    </label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=invoice/invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
-  </form>
-
-  <script>
-    (function(){
-      var input = document.getElementById('clientInputIL');
-      var hid = document.getElementById('clientIdIL');
-      var sug = document.getElementById('clientSuggestIL');
-      input.addEventListener('input', function(){
-        hid.value='';
-        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-  fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
-          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-          sug.innerHTML = list.map(x=>`<div data-id=\"${'${'}x.id}\" data-name=\"${'${'}x.name}\" style=\"padding:8px 10px;cursor:pointer\">${'${'}x.name}</div>`).join('');
-          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
-          sug.style.display='block';
-        }).catch(()=>{sug.style.display='none'});
-      });
-      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
-    })();
-  </script>
+  <?php
+  $filterConfig = [
+      'page' => 'invoice/invoices-list',
+      'filters' => [
+          'client' => [
+              'type' => 'client_autocomplete',
+              'label' => 'Client',
+              'value' => $client_name,
+              'id_value' => $client_id
+          ],
+          'status' => [
+              'type' => 'select',
+              'label' => 'Status',
+              'value' => $statusFilter,
+              'options' => [
+                  'all' => 'All',
+                  'paid' => 'Paid',
+                  'unpaid' => 'Unpaid/Partial',
+                  'overdue' => 'Overdue'
+              ]
+          ],
+          'min' => [
+              'type' => 'number',
+              'label' => 'Min ($)',
+              'value' => $min ?? '',
+              'step' => '0.01'
+          ],
+          'max' => [
+              'type' => 'number',
+              'label' => 'Max ($)',
+              'value' => $max ?? '',
+              'step' => '0.01'
+          ],
+          'project_code' => [
+              'type' => 'text',
+              'label' => 'Project',
+              'value' => $project_code,
+              'placeholder' => 'PA-2025'
+          ],
+          'doc_number' => [
+              'type' => 'number',
+              'label' => 'Doc #',
+              'value' => $doc_no
+          ]
+      ]
+  ];
+  require __DIR__ . '/../../../components/document_list_filter.php';
+  ?>
 
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
@@ -184,7 +176,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
             <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
             <td style="padding:10px"><?php echo (!empty($r['due_date'])) ? date('m/d/Y', strtotime($r['due_date'])) : ''; ?></td>
             <td style="padding:10px">
-              <a href="/?page=invoice/invoice-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px; font-size: small;">PDF</a>
+              <a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px; font-size: small;">View</a>
               <?php if (strtolower((string)$r['status']) !== 'void'): ?>
               <form method="post" action="/?page=email-send" style="display:inline;margin-right:6px">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">

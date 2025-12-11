@@ -6,6 +6,8 @@ $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';
 $status = $_GET['status'] ?? 'all'; // all|approved|rejected|pending
+$min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
+$max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
@@ -17,6 +19,8 @@ if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
 if(in_array($status,['approved','rejected','pending'],true)){ $where[]='q.status=?'; $p[]=$status; }
 if($project_code!==''){ $where[]='q.project_code LIKE ?'; $p[] = $project_code.'%'; }
 if($doc_no>0){ $where[]='q.doc_number=?'; $p[] = $doc_no; }
+if($min_price !== null){ $where[]='q.total>=?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='q.total<=?'; $p[] = $max_price; }
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
@@ -39,47 +43,64 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php elseif (!empty($_GET['email_err'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
   <?php endif; ?>
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="quote/long-term-quotes-list">
-    <input type="hidden" name="client_id" id="clientIdQL" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputQL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
-      <div id="clientSuggestQL" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
-    </label>
-    <label><div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <?php $sf=htmlspecialchars($status); ?>
-        <option value="all" <?php echo $sf==='all'?'selected':''; ?>>All</option>
-        <option value="approved" <?php echo $sf==='approved'?'selected':''; ?>>Approved</option>
-        <option value="rejected" <?php echo $sf==='rejected'?'selected':''; ?>>Denied</option>
-        <option value="pending" <?php echo $sf==='pending'?'selected':''; ?>>Pending</option>
-      </select>
-    </label>
-    <label><div>Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>End</div><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Project ID</div><input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Doc #</div><input type="number" name="doc_number" value="<?php echo htmlspecialchars($_GET['doc_number'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=quote/long-term-quotes-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
-  </form>
-  <script>
-    (function(){
-      var input = document.getElementById('clientInputQL');
-      var hid = document.getElementById('clientIdQL');
-      var sug = document.getElementById('clientSuggestQL');
-      input.addEventListener('input', function(){
-        hid.value='';
-        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-  fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
-          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-          sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
-          sug.style.display='block';
-        }).catch(()=>{sug.style.display='none'});
-      });
-      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
-    })();
-  </script>
+  <?php
+  $filterConfig = [
+      'page' => 'quote/long-term-quotes-list',
+      'filters' => [
+          'client' => [
+              'type' => 'client_autocomplete',
+              'label' => 'Client',
+              'value' => $client_name,
+              'id_value' => $client_id
+          ],
+          'status' => [
+              'type' => 'select',
+              'label' => 'Status',
+              'value' => $status,
+              'options' => [
+                  'all' => 'All',
+                  'approved' => 'Approved',
+                  'rejected' => 'Denied',
+                  'pending' => 'Pending'
+              ]
+          ],
+          'start' => [
+              'type' => 'date',
+              'label' => 'Start',
+              'value' => $start
+          ],
+          'end' => [
+              'type' => 'date',
+              'label' => 'End',
+              'value' => $end
+          ],
+          'min_price' => [
+              'type' => 'number',
+              'label' => 'Min ($)',
+              'value' => $min_price ?? '',
+              'step' => '0.01'
+          ],
+          'max_price' => [
+              'type' => 'number',
+              'label' => 'Max ($)',
+              'value' => $max_price ?? '',
+              'step' => '0.01'
+          ],
+          'project_code' => [
+              'type' => 'text',
+              'label' => 'Project ID',
+              'value' => $project_code,
+              'placeholder' => 'PA-2025'
+          ],
+          'doc_number' => [
+              'type' => 'number',
+              'label' => 'Doc #',
+              'value' => $doc_no
+          ]
+      ]
+  ];
+  require __DIR__ . '/../../../components/document_list_filter.php';
+  ?>
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
       <thead>

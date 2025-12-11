@@ -145,8 +145,8 @@ CREATE TABLE IF NOT EXISTS archived_entities (
 
 CREATE TABLE IF NOT EXISTS link (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NULL,
-    client_id INT NULL,
+    entity_type ENUM('client','organization') NOT NULL,
+    entity_id INT NOT NULL,
     title VARCHAR(255) NOT NULL,
     url VARCHAR(500) NOT NULL,
     type ENUM('manual','auto_dropbox','auto_gdrive','auto_s3') NOT NULL,
@@ -155,11 +155,10 @@ CREATE TABLE IF NOT EXISTS link (
     ignore_auto_generation TINYINT(1) DEFAULT 0,
     last_verified TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_link_entity (entity_type, entity_id),
     INDEX idx_link_expired (is_expired),
     INDEX idx_link_expiration (expiration_date),
-    INDEX idx_link_ignore (ignore_auto_generation),
-    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+    INDEX idx_link_ignore (ignore_auto_generation)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -398,12 +397,12 @@ CREATE TABLE IF NOT EXISTS payments (
 -- PAYMENT METHODS
 -- ============================================================================
 -- we need something similar to the following:
-PaymentMethod
-- id
-- user_id (or org_id)
-- type (enum: stripe, paypal, venmo)
-- config (json: API keys, account IDs)
-- active (boolean)
+-- PaymentMethod
+-- - id
+-- - user_id (or org_id)
+-- - type (enum: stripe, paypal, venmo)
+-- - config (json: API keys, account IDs)
+-- - active (boolean)
 
 -- ============================================================================
 -- PUBLIC LINKS
@@ -546,15 +545,37 @@ CREATE TABLE IF NOT EXISTS on_demand_contracts (
   CONSTRAINT fk_odc_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS long_term_contract_items (
+CREATE TABLE IF NOT EXISTS on_demand_contract_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  long_term_contract_id INT NOT NULL,
+  on_demand_contract_id INT NOT NULL,
   description VARCHAR(255) NOT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
   unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
-  CONSTRAINT fk_ltc_items_contract FOREIGN KEY (long_term_contract_id) REFERENCES long_term_contracts(id) ON DELETE CASCADE,
-  INDEX idx_ltc_items_contract (long_term_contract_id)
+  CONSTRAINT fk_odc_items_contract FOREIGN KEY (on_demand_contract_id) REFERENCES on_demand_contracts(id) ON DELETE CASCADE,
+  INDEX idx_odc_items_contract (on_demand_contract_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- ON-DEMAND INVOICES
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS on_demand_invoices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  on_demand_contract_id INT NOT NULL,
+  invoice_id INT NOT NULL,
+  invoice_number INT NULL,
+  amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  status ENUM('draft','sent','paid','overdue','cancelled') NOT NULL DEFAULT 'draft',
+  generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  due_date DATE NULL,
+  notes TEXT NULL,
+  CONSTRAINT fk_odinv_contract FOREIGN KEY (on_demand_contract_id) REFERENCES on_demand_contracts(id) ON DELETE CASCADE,
+  CONSTRAINT fk_odinv_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+  INDEX idx_odinv_contract (on_demand_contract_id),
+  INDEX idx_odinv_invoice (invoice_id),
+  INDEX idx_odinv_status (status),
+  INDEX idx_odinv_due_date (due_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================

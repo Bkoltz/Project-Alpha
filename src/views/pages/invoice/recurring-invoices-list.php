@@ -2,6 +2,13 @@
 // src/views/pages/invoice/recurring-invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
 
+// Ensure the optional long_term_contracts table exists before querying
+$has_long_term_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='long_term_contracts'")->fetchColumn();
+if (!$has_long_term_table) {
+  echo '<section><h2>Recurring Billing Schedule</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">Recurring billing is not available because the database table <code>long_term_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
+  return;
+}
+
 $status = $_GET['status'] ?? 'active';
 
 $where = [];
@@ -108,7 +115,7 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             ?>
             <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
               <td style="padding:10px">
-                <a href="/?page=contract/long-term-contract-print&id=<?php echo (int)$ltc['id']; ?>" style="text-decoration:none;color:inherit;font-weight:600">
+                <a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$ltc['id']; ?>" style="text-decoration:none;color:inherit;font-weight:600">
                   LTC-<?php echo (int)($ltc['doc_number'] ?? $ltc['id']); ?>
                 </a>
                 <div style="font-size:13px;color:#6b7280"><?php echo htmlspecialchars($ltc['project_code'] ?? ''); ?></div>

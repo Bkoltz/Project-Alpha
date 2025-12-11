@@ -4,6 +4,13 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
+// Ensure the optional on_demand_contracts table exists before querying
+$has_on_demand_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='on_demand_contracts'")->fetchColumn();
+if (!$has_on_demand_table) {
+  echo '<section><h2>On-Demand Invoices</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">On-demand invoices are not available because the database table <code>on_demand_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
+  return;
+}
+
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
@@ -98,7 +105,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
   $rowStyle = ($r['status']==='paid') ? 'background:#ecfdf5;' : (($r['status']==='unpaid' || $r['status']==='partial') ? 'background:#fffbeb;' : 'background:#fef2f2;');
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px"><a href="/?page=invoice/invoice-print&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">ODI-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">ODI-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><a href="/?page=contract/on-demand-contracts-list" style="text-decoration:none;color:inherit">ODC-<?php echo (int)$r['contract_doc_number']; ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
@@ -107,7 +114,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
             <td style="padding:10px"><?php echo $r['due_date'] ? date('M j, Y', strtotime($r['due_date'])) : '—'; ?></td>
             <td style="padding:10px"><?php echo date('M j, Y', strtotime($r['created_at'])); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-              <a href="/?page=invoice/invoice-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+              <a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <?php if ($r['status'] !== 'void' && $r['status'] !== 'paid'): ?>
               <form method="post" action="/?page=email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
