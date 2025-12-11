@@ -8,6 +8,8 @@ $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
+$min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
+$max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 $where=[];$p=[];
 if($client_id>0){$where[]='co.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
@@ -15,6 +17,8 @@ if($start!==''){$where[]='co.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='co.created_at<=?';$p[]=$end.' 23:59:59';}
 if($project_code!==''){ $where[]='co.project_code LIKE ?'; $p[] = $project_code.'%'; }
 if($doc_no>0){ $where[]='co.doc_number=?'; $p[] = $doc_no; }
+if($min_price !== null){ $where[]='co.total>=?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='co.total<=?'; $p[] = $max_price; }
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
@@ -46,39 +50,53 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php if (!empty($_GET['deposit_received'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Deposit marked as received.</div>
   <?php endif; ?>
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="contract/contracts-list">
-    <input type="hidden" name="client_id" id="clientIdCL" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputCL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
-      <div id="clientSuggestCL" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
-    </label>
-    <label><div>Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>End</div><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Project ID</div><input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Doc #</div><input type="number" name="doc_number" value="<?php echo htmlspecialchars($_GET['doc_number'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=contract/contracts-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
-  </form>
-
-  <script>
-    (function(){
-      var input = document.getElementById('clientInputCL');
-      var hid = document.getElementById('clientIdCL');
-      var sug = document.getElementById('clientSuggestCL');
-      input.addEventListener('input', function(){
-        hid.value='';
-        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-  fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
-          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-          sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
-          sug.style.display='block';
-        }).catch(()=>{sug.style.display='none'});
-      });
-      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
-    })();
-  </script>
+  <?php
+  $filterConfig = [
+      'page' => 'contract/contracts-list',
+      'filters' => [
+          'client' => [
+              'type' => 'client_autocomplete',
+              'label' => 'Client',
+              'value' => $client_name,
+              'id_value' => $client_id
+          ],
+          'start' => [
+              'type' => 'date',
+              'label' => 'Start',
+              'value' => $start
+          ],
+          'end' => [
+              'type' => 'date',
+              'label' => 'End',
+              'value' => $end
+          ],
+          'min_price' => [
+              'type' => 'number',
+              'label' => 'Min ($)',
+              'value' => $min_price ?? '',
+              'step' => '0.01'
+          ],
+          'max_price' => [
+              'type' => 'number',
+              'label' => 'Max ($)',
+              'value' => $max_price ?? '',
+              'step' => '0.01'
+          ],
+          'project_code' => [
+              'type' => 'text',
+              'label' => 'Project ID',
+              'value' => $project_code,
+              'placeholder' => 'PA-2025'
+          ],
+          'doc_number' => [
+              'type' => 'number',
+              'label' => 'Doc #',
+              'value' => $doc_no
+          ]
+      ]
+  ];
+  require __DIR__ . '/../../../components/document_list_filter.php';
+  ?>
 
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
@@ -100,13 +118,13 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : ((in_array($r['status'], ['cancelled','denied'], true)) ? 'background:#fef2f2;' : (($r['status']==='draft') ? 'background:#fdfdea;' : '')));
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px"><a href="/?page=contract/contract-print&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=contract/contract-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)($r['total'] ?? 0),2); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-              <a href="/?page=contract/contract-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
+              <a href="/?page=contract/contract-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <?php $cst = strtolower((string)$r['status']); if (!in_array($cst, ['denied','cancelled','void'], true)): ?>
               <form method="post" action="/?page=email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">

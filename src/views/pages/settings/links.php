@@ -34,7 +34,7 @@ $providers = ['dropbox', 'gdrive', 's3'];
 ?>
 
 <div style="max-width:1000px">
-    <h2 style="margin:0 0 8px 0">Link Resolver</h2>
+    <h2 style="margin:0 0 8px 0">Link Resolver *Beta*</h2>
     <p style="margin:0 0 24px 0;color:var(--muted)">Auto-generate and manage links for client/organization file storage</p>
 
     <!-- Stats Banner -->
