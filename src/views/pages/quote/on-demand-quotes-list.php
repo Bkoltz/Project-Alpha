@@ -2,6 +2,7 @@
 // src/views/pages/quote/on-demand-quotes-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
@@ -82,7 +83,9 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
       ]
     ]
   ];
-  require __DIR__ . '/../../../components/document_list_filter.php';
+  
+  // Render the filter using Twig template
+  echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 
   <div style="overflow:auto">

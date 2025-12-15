@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/contract/long-term-contracts-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
 // Ensure the optional long_term_contracts table exists before querying
@@ -99,7 +100,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           ]
       ]
   ];
-  require __DIR__ . '/../../../components/document_list_filter.php';
+  
+  // Render the filter using Twig template
+  echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 
   <div style="overflow:auto">

@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../config/app.php';
 $netDays = (int)($appConfig['net_terms_days'] ?? 30);
 if ($netDays < 0) $netDays = 0;
@@ -126,7 +127,9 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
           ]
       ]
   ];
-  require __DIR__ . '/../../../components/document_list_filter.php';
+  
+  // Render the filter using Twig template
+  echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 
   <div style="overflow:auto">

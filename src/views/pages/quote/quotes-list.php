@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/quotes-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
@@ -46,7 +47,16 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php elseif (!empty($_GET['email_err'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
   <?php endif; ?>
+  
   <?php
+  // Render the filter using Twig template instead of PHP include
+  $statusOptions = [
+      ['value' => 'all', 'label' => 'All'],
+      ['value' => 'approved', 'label' => 'Approved'],
+      ['value' => 'rejected', 'label' => 'Denied'],
+      ['value' => 'pending', 'label' => 'Pending']
+  ];
+  
   $filterConfig = [
       'page' => 'quote/quotes-list',
       'filters' => [
@@ -60,12 +70,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               'type' => 'select',
               'label' => 'Status',
               'value' => $status,
-              'options' => [
-                  'all' => 'All',
-                  'approved' => 'Approved',
-                  'rejected' => 'Denied',
-                  'pending' => 'Pending'
-              ]
+              'options' => $statusOptions
           ],
           'start' => [
               'type' => 'date',
@@ -102,7 +107,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           ]
       ]
   ];
-  require __DIR__ . '/../../../components/document_list_filter.php';
+  
+  // Render the filter component using Twig
+  echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
