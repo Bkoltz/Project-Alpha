@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/quote/long-term-quotes-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
@@ -99,7 +100,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           ]
       ]
   ];
-  require __DIR__ . '/../../../components/document_list_filter.php';
+  
+  // Render the filter using Twig template
+  echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
