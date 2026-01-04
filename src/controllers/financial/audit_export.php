@@ -7,67 +7,84 @@ require_once __DIR__ . '/../../config/app.php';
 csrf_verify_post_or_redirect('financial/audit-export');
 
 // Get form parameters
-$startYear = (int)($_POST['start_year'] ?? date('Y'));
-$endYear = (int)($_POST['end_year'] ?? date('Y'));
-$invoiceStatus = (string)($_POST['invoice_status'] ?? 'paid_only');
+$startDate = $_POST['start_date'] ?? date('Y-m-d', strtotime('January 1 ' . date('Y')));
+$endDate = $_POST['end_date'] ?? date('Y-m-d');
+$includeInvoices = isset($_POST['include_invoices']) && $_POST['include_invoices'] === '1';
+$includeUnpaidInvoices = isset($_POST['include_unpaid_invoices']) && $_POST['include_unpaid_invoices'] === '1';
 $includeContracts = isset($_POST['include_contracts']) && $_POST['include_contracts'] === '1';
+$includeQuotes = isset($_POST['include_quotes']) && $_POST['include_quotes'] === '1';
+$generateCsv = isset($_POST['generate_csv']) && $_POST['generate_csv'] === '1';
 $includePdfs = isset($_POST['include_pdfs']) && $_POST['include_pdfs'] === '1';
-$clientInfoOnly = isset($_POST['client_info_only']) && $_POST['client_info_only'] === '1';
+$enableScheduling = isset($_POST['enable_scheduling']) && $_POST['enable_scheduling'] === '1';
+$scheduleEmails = [];
 
-// Validate year range
-if ($startYear > $endYear) {
-    $temp = $startYear;
-    $startYear = $endYear;
-    $endYear = $temp;
+if ($enableScheduling) {
+    $scheduleEmails = array_filter($_POST['schedule_email'] ?? [], function($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    });
+    $scheduleEmails = array_slice($scheduleEmails, 0, 5); // Limit to 5 emails
 }
 
-$startDate = $startYear . '-01-01';
-$endDate = $endYear . '-12-31';
-
-// Build invoice query based on status filter
-$invoiceQuery = "
-    SELECT 
-        i.id,
-        i.doc_number,
-        i.client_id,
-        c.name as client_name,
-        i.project_code,
-        i.total,
-        i.status,
-        i.created_at,
-        i.due_date
-    FROM invoices i
-    LEFT JOIN clients c ON i.client_id = c.id
-    WHERE i.created_at BETWEEN ? AND ?
-";
-
-$params = [$startDate . ' 00:00:00', $endDate . ' 23:59:59'];
-
-// Apply invoice status filter
-switch ($invoiceStatus) {
-    case 'paid_and_partial':
-        $invoiceQuery .= " AND i.status IN ('paid', 'partial')";
-        break;
-    case 'unpaid_only':
-        $invoiceQuery .= " AND i.status IN ('unpaid', 'overdue')";
-        break;
-    case 'all':
-        // No status filter
-        break;
-    case 'paid_only':
-    default:
-        $invoiceQuery .= " AND i.status = 'paid'";
-        break;
+// Validate dates
+if (!$startDate || !$endDate) {
+    throw new Exception('Invalid date range selected.');
 }
-
-$invoiceQuery .= " ORDER BY i.created_at ASC, i.doc_number ASC";
 
 try {
-    // Fetch invoices
-    $stmt = $pdo->prepare($invoiceQuery);
-    $stmt->execute($params);
-    $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $start = new DateTime($startDate);
+    $end = new DateTime($endDate);
+} catch (Exception $e) {
+    throw new Exception('Invalid date format. Please use YYYY-MM-DD format.');
+}
 
+if ($start > $end) {
+    $temp = $start;
+    $start = $end;
+    $end = $temp;
+    $startDate = $start->format('Y-m-d');
+    $endDate = $end->format('Y-m-d');
+}
+
+// Build invoice query - only include if checkbox is checked
+$invoices = [];
+if ($includeInvoices) {
+    // Determine which invoice statuses to include
+    $statusFilter = $includeUnpaidInvoices 
+        ? "i.status IN ('paid', 'partial', 'unpaid')" 
+        : "i.status IN ('paid', 'partial')";
+    
+    $invoiceQuery = "
+        SELECT 
+            i.id,
+            i.doc_number,
+            i.client_id,
+            c.name as client_name,
+            i.project_code,
+            i.subtotal,
+            i.tax_percent as tax_percent,
+            i.tax_amount as tax,
+            i.tax_county as tax_county,
+            i.discount_value as discount_value,
+            i.total,
+            i.status,
+            i.created_at,
+            i.due_date,
+            COALESCE(SUM(CASE WHEN p.status = 'succeeded' THEN p.amount ELSE 0 END), 0) as amount_paid,
+            GROUP_CONCAT(DISTINCT p.method SEPARATOR ', ') as payment_methods
+        FROM invoices i
+        LEFT JOIN clients c ON i.client_id = c.id
+        LEFT JOIN payments p ON i.id = p.invoice_id
+        WHERE i.created_at BETWEEN ? AND ? AND {$statusFilter}
+        GROUP BY i.id
+        ORDER BY i.created_at ASC, i.doc_number ASC
+    ";
+    
+    $stmt = $pdo->prepare($invoiceQuery);
+    $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+    $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+try {
     // Fetch contracts if requested
     $contracts = [];
     if ($includeContracts) {
@@ -92,18 +109,44 @@ try {
         $contracts = $contractStmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // Fetch quotes if requested
+    $quotes = [];
+    if ($includeQuotes) {
+        $quoteQuery = "
+            SELECT 
+                q.id,
+                q.doc_number,
+                q.client_id,
+                cl.name as client_name,
+                q.project_code,
+                q.total,
+                q.status,
+                q.created_at,
+                q.valid_until
+            FROM quotes q
+            LEFT JOIN clients cl ON q.client_id = cl.id
+            WHERE q.created_at BETWEEN ? AND ?
+            ORDER BY q.created_at ASC, q.doc_number ASC
+        ";
+        $quoteStmt = $pdo->prepare($quoteQuery);
+        $quoteStmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        $quotes = $quoteStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // Prepare data for Python script
     $auditData = [
-        'start_year' => $startYear,
-        'end_year' => $endYear,
         'start_date' => $startDate,
         'end_date' => $endDate,
-        'invoice_status' => $invoiceStatus,
+        'include_invoices' => $includeInvoices,
+        'include_unpaid_invoices' => $includeUnpaidInvoices,
         'include_contracts' => $includeContracts,
+        'include_quotes' => $includeQuotes,
+        'generate_csv' => $generateCsv,
         'include_pdfs' => $includePdfs,
-        'client_info_only' => $clientInfoOnly,
+        'schedule_emails' => $scheduleEmails,
         'invoices' => $invoices,
         'contracts' => $contracts,
+        'quotes' => $quotes,
         'db_config' => [
             'host' => getenv('DB_HOST') ?: 'localhost',
             'user' => getenv('DB_USER') ?: 'root',

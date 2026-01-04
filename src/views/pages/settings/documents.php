@@ -20,6 +20,11 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
         <span style="font-weight:600">Enable "Scope of Project" field on quotes</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">If enabled, quotes will have a scope field. If left blank, it will be excluded from PDF.</div>
       </label>
+      <label style="display:block;margin-top:4px">
+        <input type="checkbox" name="quotes_show_terms" value="1" <?php echo (!isset($appConfig['quotes_show_terms']) || (int)($appConfig['quotes_show_terms']) === 1) ? 'checked' : ''; ?>>
+        <span style="font-weight:600">Show terms on Quotes</span>
+        <div style="margin-top:4px;color:var(--muted);font-size:12px">When enabled, the standard terms will be included on quote PDFs.</div>
+      </label>
     </div>
   </fieldset>
   
@@ -93,6 +98,12 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
     <p style="margin:0;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
       ⚙️ <strong>Invoice automation and notifications</strong> have been moved to the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab for easier management.
     </p>
+  </fieldset>
+
+  <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+    <legend style="padding:0 6px;color:var(--muted)">On-Demand Document Terms</legend>
+    <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Terms to include on on-demand documents (e.g., single-use invoices). Leave blank to use standard terms.</p>
+    <textarea name="on_demand_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Enter on-demand terms..."><?php echo htmlspecialchars($appConfig['on_demand_terms'] ?? ''); ?></textarea>
   </fieldset>
 <?php endif; ?>
 

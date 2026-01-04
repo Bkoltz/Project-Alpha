@@ -41,25 +41,27 @@ if ($hasExtraChargeCol) {
 }
 
 // Process extra charges (new and updated)
+$extraItems = $_POST['extra_item'] ?? [];
 $extraDescs = $_POST['extra_desc'] ?? [];
 $extraQtys = $_POST['extra_qty'] ?? [];
 $ExtraPrices = $_POST['extra_price'] ?? [];
 $extraIds = $_POST['extra_id'] ?? [];
 
-$extraItems = [];
+$extraItemsArr = [];
 $subtotal = 0.0;
 
-for ($i = 0; $i < count($extraDescs); $i++) {
+for ($i = 0; $i < count($extraItems); $i++) {
+  $itm = trim((string)($extraItems[$i] ?? ''));
   $d = trim((string)($extraDescs[$i] ?? ''));
   $q = (float)($extraQtys[$i] ?? 0);
   $p = (float)($ExtraPrices[$i] ?? 0);
   $eid = (int)($extraIds[$i] ?? 0);
   
-  if ($d === '' || $q <= 0 || $p < 0) continue;
+  if ($itm === '' || $q <= 0 || $p < 0) continue;
   
   $line = $q * $p;
   $subtotal += $line;
-  $extraItems[] = ['id' => $eid, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
+  $extraItemsArr[] = ['id' => $eid, 'i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
 }
 
 // Fetch all existing items to calculate subtotal including contract items
@@ -73,7 +75,7 @@ foreach ($allExistingItems->fetchAll(PDO::FETCH_ASSOC) as $item) {
 $subtotal = $contractSubtotal; // Reset and add extras
 
 // Add extra charges subtotal
-foreach ($extraItems as $ex) {
+foreach ($extraItemsArr as $ex) {
   $subtotal += $ex['t'];
 }
 
@@ -105,15 +107,15 @@ try {
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=? AND is_extra_charge=1')->execute([$id]);
 
     // Insert new extra charges with the flag
-    $ins = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total, is_extra_charge) VALUES (?,?,?,?,?,1)');
-    foreach ($extraItems as $it) {
-      $ins->execute([$id, $it['d'], $it['q'], $it['p'], $it['t']]);
+    $ins = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, is_extra_charge) VALUES (?,?,?,?,?,?,1)');
+    foreach ($extraItemsArr as $it) {
+      $ins->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
     }
   } else {
     // Schema doesn't have is_extra_charge yet: append entries as regular invoice_items
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
-    foreach ($extraItems as $it) {
-      $ii->execute([$id, $it['d'], $it['q'], $it['p'], $it['t']]);
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+    foreach ($extraItemsArr as $it) {
+      $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
     }
   }
   

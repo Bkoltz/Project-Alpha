@@ -119,17 +119,33 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 </section>
 <script>
 function money(n){return '$'+(Number(n)||0).toFixed(2)}
-function addItemCo(desc='', qty=1, price=0){
+var itemCounterCo = 0;
+function addItemCo(item='', desc='', qty=1, price=0){
   var wrap = document.createElement('div');
-  wrap.style.display='grid';wrap.style.gridTemplateColumns='2fr 1fr 1fr auto';wrap.style.gap='8px';
+  var itemId = 'itemCo_' + (itemCounterCo++);
+  var descId = 'descCo_' + itemCounterCo;
+  var priceId = 'priceCo_' + itemCounterCo;
+  wrap.style.display='grid';wrap.style.gridTemplateColumns='3fr 3fr 1fr 1fr auto';wrap.style.gap='8px';
   
-  var descInput = document.createElement('input');
-  descInput.required = true;
-  descInput.placeholder = 'Description';
-  descInput.name = 'item_desc[]';
-  descInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
-  descInput.value = desc;
-  descInput.oninput = recalcCo;
+  var itemInput = document.createElement('input');
+  itemInput.id = itemId;
+  itemInput.required = true;
+  itemInput.placeholder = 'Item name...';
+  itemInput.name = 'item[]';
+  itemInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
+  itemInput.value = item;
+  itemInput.oninput = recalcCo;
+  itemInput.setAttribute('data-item-autocomplete', '');
+  itemInput.setAttribute('data-description-field', descId);
+  itemInput.setAttribute('data-price-field', priceId);
+  
+  var descTextarea = document.createElement('textarea');
+  descTextarea.id = descId;
+  descTextarea.placeholder = 'Description (optional)';
+  descTextarea.name = 'item_desc[]';
+  descTextarea.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px';
+  descTextarea.value = desc;
+  descTextarea.oninput = recalcCo;
   
   var qtyInput = document.createElement('input');
   qtyInput.required = true;
@@ -142,6 +158,7 @@ function addItemCo(desc='', qty=1, price=0){
   qtyInput.oninput = recalcCo;
   
   var priceInput = document.createElement('input');
+  priceInput.id = priceId;
   priceInput.required = true;
   priceInput.type = 'number';
   priceInput.step = '0.01';
@@ -157,11 +174,21 @@ function addItemCo(desc='', qty=1, price=0){
   removeBtn.style.cssText = 'border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px';
   removeBtn.onclick = function(){ wrap.remove(); recalcCo(); };
   
-  wrap.appendChild(descInput);
+  wrap.appendChild(itemInput);
+  wrap.appendChild(descTextarea);
   wrap.appendChild(qtyInput);
   wrap.appendChild(priceInput);
   wrap.appendChild(removeBtn);
   document.getElementById('itemsCo').appendChild(wrap);
+  
+  // Initialize autocomplete for the new item input
+  if (window.ItemAutocomplete) {
+    new ItemAutocomplete(itemInput, {
+      descriptionField: descTextarea,
+      priceField: priceInput
+    });
+  }
+  
   recalcCo();
 }
 function recalcCo(){
@@ -181,10 +208,9 @@ function recalcCo(){
   document.getElementById('totalValCo').textContent = money(total);
 }
 ['discountTypeCo','discountValueCo','taxPercentCo'].forEach(id=>document.getElementById(id).addEventListener('input', recalcCo));
-// Debug: Check if items exist
-console.log('Items from PHP:', <?php echo json_encode($items); ?>);
+// Load existing items
 <?php foreach ($items as $it): ?>
-addItemCo(<?php echo json_encode($it['description']); ?>, <?php echo json_encode((float)$it['quantity']); ?>, <?php echo json_encode((float)$it['unit_price']); ?>);
+addItemCo(<?php echo json_encode($it['item'] ?? ''); ?>, <?php echo json_encode($it['description'] ?? ''); ?>, <?php echo json_encode((float)$it['quantity']); ?>, <?php echo json_encode((float)$it['unit_price']); ?>);
 <?php endforeach; ?>
 </script>
 </main>

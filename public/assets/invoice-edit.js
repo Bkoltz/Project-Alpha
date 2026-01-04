@@ -2,6 +2,7 @@
 // This file is loaded once in the main layout and persists across AJAX page loads
 
 // Extra charges management
+var extraChargeCounter = 0;
 function addExtraCharge() {
   console.log('addExtraCharge() called');
   try {
@@ -28,25 +29,44 @@ function addExtraCharge() {
       }
     }
     
-    // Create a new row for the extra charge
+    // Create a new row for the extra charge with item + description
     console.log('Creating new row...');
+    var itemId = 'extraItem_' + (extraChargeCounter++);
+    var descId = 'extraDesc_' + extraChargeCounter;
+    var priceId = 'extraPrice_' + extraChargeCounter;
+    
     var wrap = document.createElement('div');
     wrap.style.display = 'grid';
-    wrap.style.gridTemplateColumns = '2fr 1fr 1fr auto';
+    wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto';
     wrap.style.gap = '8px';
     wrap.style.padding = '8px';
     wrap.style.background = '#fff';
     wrap.style.borderRadius = '4px';
     wrap.style.border = '1px solid #fcd34d';
     wrap.innerHTML = `
-    <input type="text" name="extra_desc[]" placeholder="Description" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+    <input id="${itemId}" type="text" name="extra_item[]" placeholder="Item name..." style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
+    <textarea id="${descId}" name="extra_desc[]" placeholder="Description (optional)" style="padding:8px;border-radius:4px;border:1px solid #ddd;resize:vertical;min-height:34px" oninput="recalcInv()"></textarea>
     <input type="number" step="0.01" min="0" name="extra_qty[]" value="1" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
-    <input type="number" step="0.01" min="0" name="extra_price[]" value="0" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+    <input id="${priceId}" type="number" step="0.01" min="0" name="extra_price[]" value="0" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
     <input type="hidden" name="extra_id[]" value="">
     <button type="button" onclick="this.parentElement.remove();recalcInv()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
   `;
     container.appendChild(wrap);
     console.log('Row added to container');
+    
+    // Initialize autocomplete for the new item input
+    if (window.ItemAutocomplete) {
+      const input = document.getElementById(itemId);
+      const descField = document.getElementById(descId);
+      const priceField = document.getElementById(priceId);
+      if (input && descField && priceField) {
+        new ItemAutocomplete(input, {
+          descriptionField: descField,
+          priceField: priceField
+        });
+      }
+    }
+    
     recalcInv();
   } catch (e) {
     console.error('Error in addExtraCharge():', e.message, e.stack);

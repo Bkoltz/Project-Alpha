@@ -72,6 +72,7 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
           <table style="width:100%;border-collapse:collapse">
             <thead>
               <tr style="border-bottom:2px solid #e5e7eb">
+                <th style="text-align:left;padding:8px;color:#6b7280;font-weight:600">Item</th>
                 <th style="text-align:left;padding:8px;color:#6b7280;font-weight:600">Description</th>
                 <th style="text-align:right;padding:8px;color:#6b7280;font-weight:600;width:100px">Quantity</th>
                 <th style="text-align:right;padding:8px;color:#6b7280;font-weight:600;width:120px">Unit Price</th>
@@ -81,7 +82,8 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
             <tbody>
               <?php foreach ($contractItems as $it): ?>
                 <tr style="border-bottom:1px solid #e5e7eb">
-                  <td style="padding:8px"><?php echo htmlspecialchars($it['description']); ?></td>
+                  <td style="padding:8px;font-weight:600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></td>
+                  <td style="padding:8px;color:#6b7280;font-size:13px"><?php echo htmlspecialchars($it['description'] ?? ''); ?></td>
                   <td style="padding:8px;text-align:right"><?php echo htmlspecialchars(number_format((float)$it['quantity'], 2)); ?></td>
                   <td style="padding:8px;text-align:right">$<?php echo htmlspecialchars(number_format((float)$it['unit_price'], 2)); ?></td>
                   <td style="padding:8px;text-align:right">$<?php echo htmlspecialchars(number_format((float)$it['quantity'] * (float)$it['unit_price'], 2)); ?></td>
@@ -103,10 +105,11 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
         <?php else: ?>
           <div id="extraChargesContainer" style="display:grid;gap:8px">
             <?php foreach ($extraCharges as $idx => $it): ?>
-              <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;padding:8px;background:#fff;border-radius:4px;border:1px solid #fcd34d">
-                <input type="text" name="extra_desc[]" value="<?php echo htmlspecialchars($it['description']); ?>" placeholder="Description" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+              <div style="display:grid;grid-template-columns:3fr 3fr 1fr 1fr auto;gap:8px;padding:8px;background:#fff;border-radius:4px;border:1px solid #fcd34d">
+                <input type="text" name="extra_item[]" value="<?php echo htmlspecialchars($it['item'] ?? ''); ?>" placeholder="Item name..." style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()" data-item-autocomplete data-description-field="extra_desc_<?php echo $idx; ?>" data-price-field="extra_price_<?php echo $idx; ?>">
+                <textarea id="extra_desc_<?php echo $idx; ?>" name="extra_desc[]" placeholder="Description (optional)" style="padding:8px;border-radius:4px;border:1px solid #ddd;resize:vertical;min-height:34px" oninput="recalcInv()"><?php echo htmlspecialchars($it['description'] ?? ''); ?></textarea>
                 <input type="number" step="0.01" min="0" name="extra_qty[]" value="<?php echo htmlspecialchars($it['quantity']); ?>" placeholder="Qty" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
-                <input type="number" step="0.01" min="0" name="extra_price[]" value="<?php echo htmlspecialchars($it['unit_price']); ?>" placeholder="Price" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+                <input id="extra_price_<?php echo $idx; ?>" type="number" step="0.01" min="0" name="extra_price[]" value="<?php echo htmlspecialchars($it['unit_price']); ?>" placeholder="Price" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
                 <input type="hidden" name="extra_id[]" value="<?php echo htmlspecialchars($it['id']); ?>">
                 <button type="button" onclick="if(confirm('Remove this extra charge?')){this.parentElement.remove();recalcInv()}" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
               </div>

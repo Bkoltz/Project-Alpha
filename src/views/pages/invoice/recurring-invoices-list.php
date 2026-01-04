@@ -36,10 +36,10 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <section>
   <h2>Recurring Billing Schedule</h2>
   
-  <div style="margin:16px 0;padding:12px;background:#fef3c7;border:1px solid #fbbf24;border-radius:8px">
+  <!-- <div style="margin:16px 0;padding:12px;background:#fef3c7;border:1px solid #fbbf24;border-radius:8px">
     <div style="font-weight:600;margin-bottom:4px;color:#92400e">Automatic Invoice Generation</div>
     <div style="font-size:14px;color:#78350f">Invoices are automatically generated based on the billing schedule below. Active contracts will create new invoices on their next invoice date.</div>
-  </div>
+  </div> -->
 
   <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0">
     <input type="hidden" name="page" value="invoice/recurring-invoices-list">

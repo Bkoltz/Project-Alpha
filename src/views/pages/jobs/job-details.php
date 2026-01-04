@@ -125,7 +125,11 @@ require_once __DIR__ . '/../../../config/db.php';
                     <div style="font-weight:700">Primary Contract: C-<?php echo (int)($primaryContract['doc_number'] ?? $primaryContract['id']); ?></div>
                     <div style="color:var(--muted)">Status: <?php echo htmlspecialchars($primaryContract['status']); ?> · Created: <?php echo htmlspecialchars($primaryContract['created_at']); ?></div>
                     <?php if (!empty($primaryContract['signed_pdf_path'])): ?>
-                        <div style="margin-top:6px"><a href="<?php echo htmlspecialchars($primaryContract['signed_pdf_path']); ?>" target="_blank" style="padding:6px 10px;border-radius:6px;background:#3b82f6;color:#fff;text-decoration:none">View PDF</a></div>
+                        <?php $u_main = (string)$primaryContract['signed_pdf_path']; $dl_main = $u_main . (strpos($u_main, '?') !== false ? '&download=1' : ''); ?>
+                        <div style="margin-top:6px;display:flex;gap:6px">
+                            <a href="<?php echo htmlspecialchars($u_main); ?>" target="_blank" style="padding:6px 10px;border-radius:6px;background:#3b82f6;color:#fff;text-decoration:none">View PDF</a>
+                            <a href="<?php echo htmlspecialchars($dl_main); ?>" style="padding:6px 10px;border-radius:6px;background:#6366f1;color:#fff;text-decoration:none">Download</a>
+                        </div>
                     <?php endif; ?>
                 </div>
             <?php endif;
@@ -144,7 +148,9 @@ require_once __DIR__ . '/../../../config/db.php';
                                     <div class="doc-toggle" data-type="contract" data-id="<?php echo $coid; ?>" style="flex:1;cursor:pointer">C-<?php echo (int)($con['doc_number'] ?? $con['id']); ?> · <?php echo htmlspecialchars($con['status']); ?> · <?php echo htmlspecialchars($con['created_at']); ?></div>
                                     <div style="display:flex;gap:6px;align-items:center">
                                         <?php if (!empty($con['signed_pdf_path'])): ?>
-                                            <a href="<?php echo htmlspecialchars($con['signed_pdf_path']); ?>" target="_blank" style="padding:6px 10px;border-radius:6px;background:#3b82f6;color:#fff;text-decoration:none">View PDF</a>
+                                            <?php $u = (string)$con['signed_pdf_path']; $dl = $u . (strpos($u, '?') !== false ? '&download=1' : ''); ?>
+                                            <a href="<?php echo htmlspecialchars($u); ?>" target="_blank" style="padding:6px 10px;border-radius:6px;background:#3b82f6;color:#fff;text-decoration:none">View PDF</a>
+                                            <a href="<?php echo htmlspecialchars($dl); ?>" style="padding:6px 10px;border-radius:6px;background:#6366f1;color:#fff;text-decoration:none;margin-left:6px;">Download</a>
                                         <?php endif; ?>
                                         <button type="button" class="doc-toggle" data-type="contract" data-id="<?php echo $coid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">Details</button>
                                         <a href="/?page=contract/contracts-edit&id=<?php echo $coid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">View Document</a>

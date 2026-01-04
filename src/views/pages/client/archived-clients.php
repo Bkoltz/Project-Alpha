@@ -8,13 +8,13 @@ $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 $q = trim($_GET['q'] ?? '');
 $params=[]; $where='';
-if ($q !== '') { $where = 'WHERE name LIKE ?'; $params[] = '%'.$q.'%'; }
+if ($q !== '') { $where = 'WHERE ac.name LIKE ?'; $params[] = '%'.$q.'%'; }
 
-$stc = $pdo->prepare('SELECT COUNT(*) FROM archived_clients '.($where));
+$stc = $pdo->prepare('SELECT COUNT(*) FROM archived_clients ac '.($where));
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = "SELECT id, client_id, name, email, phone, organization, archived_at FROM archived_clients ".($where)." ORDER BY archived_at DESC LIMIT $per OFFSET $offset";
+$sql = "SELECT ac.id, ac.client_id, ac.name, ac.email, ac.phone, org.name AS organization, ac.archived_at FROM archived_clients ac LEFT JOIN organizations org ON ac.organization_id = org.id ".($where)." ORDER BY ac.archived_at DESC LIMIT $per OFFSET $offset";
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);

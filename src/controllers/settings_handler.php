@@ -152,14 +152,20 @@ if (isset($_POST['long_term_terms'])) {
     $lt = trim((string)$_POST['long_term_terms']);
     $settings['long_term_terms'] = $lt !== '' ? mb_substr($lt, 0, 20000) : null;
 }
-// Documents valid days (terms tab)
+// Documents valid days (moved to Documents → Customization tab)
 if (isset($_POST['documents_valid_days'])) {
     $dv = (int)$_POST['documents_valid_days'];
     if ($dv < 0) $dv = 0;
     $settings['documents_valid_days'] = $dv;
 }
-// Toggle terms on quotes
+// Toggle terms on quotes (moved to Documents → Quotes tab)
 $settings['quotes_show_terms'] = !empty($_POST['quotes_show_terms']) ? 1 : 0;
+
+// On-demand document terms (new)
+if (isset($_POST['on_demand_terms'])) {
+    $od = trim((string)$_POST['on_demand_terms']);
+    $settings['on_demand_terms'] = $od !== '' ? mb_substr($od, 0, 20000) : null;
+}
 // Billing defaults
 if (isset($_POST['net_terms_days'])) {
     $n = (int)$_POST['net_terms_days'];
@@ -329,7 +335,17 @@ if ($ok === false) {
     $fbPayload = json_encode($mergedFb, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     $fbOk = @file_put_contents($fallback, $fbPayload);
     if ($fbOk !== false) {
-        header('Location: /?page=settings&saved=1&fallback=1');
+        // Preserve tab when redirecting
+        $tab = $_POST['tab'] ?? '';
+        $docTab = $_POST['doc_tab'] ?? $_GET['doc_tab'] ?? '';
+        $redirect = '/?page=settings&saved=1&fallback=1';
+        if ($tab !== '') {
+            $redirect .= '&tab=' . rawurlencode($tab);
+        }
+        if ($docTab !== '') {
+            $redirect .= '&doc_tab=' . rawurlencode($docTab);
+        }
+        header('Location: ' . $redirect);
         exit;
     }
 
@@ -339,5 +355,15 @@ if ($ok === false) {
     exit;
 }
 
-header('Location: /?page=settings&saved=1');
+// Preserve tab and subtab when redirecting
+$tab = $_POST['tab'] ?? '';
+$docTab = $_POST['doc_tab'] ?? $_GET['doc_tab'] ?? '';
+$redirect = '/?page=settings&saved=1';
+if ($tab !== '') {
+    $redirect .= '&tab=' . rawurlencode($tab);
+}
+if ($docTab !== '') {
+    $redirect .= '&doc_tab=' . rawurlencode($docTab);
+}
+header('Location: ' . $redirect);
 exit;

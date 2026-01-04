@@ -21,7 +21,15 @@ try {
         <strong>ℹ️ About Custom Fields:</strong> Built-in fields (like Fulfillment Date) can be renamed but not deleted. 
         Custom fields you create can be reordered, edited, or removed at any time.
     </div>
-
+    <!-- Documents Validity Setting -->
+    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:16px">
+        <legend style="padding:0 6px;color:var(--muted)">Document Validity</legend>
+        <label style="margin-bottom:8px;display:block">
+            <div style="margin-bottom:6px">Documents Valid for (days)</div>
+            <input type="number" min="0" name="documents_valid_days" value="<?php echo htmlspecialchars((string)($appConfig['documents_valid_days'] ?? 14)); ?>" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <div style="margin-top:6px;color:var(--muted);font-size:13px">Number of days public document links remain valid. Previously located in Terms &amp; Conditions.</div>
+        </label>
+    </fieldset>
     <!-- Custom Fields List -->
     <div id="fieldsList" style="display:grid;gap:12px;margin-bottom:24px">
         <?php if (empty($fields)): ?>
@@ -113,6 +121,7 @@ try {
             <label>
                 <div style="margin-bottom:4px;font-weight:600">Field Type *</div>
                 <select name="field_data_type" id="fieldDataType" required 
+                        onchange="toggleNumberFields()"
                         style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
                     <option value="text">Text (short)</option>
                     <option value="textarea">Text Area (long)</option>
@@ -120,6 +129,32 @@ try {
                     <option value="number">Number</option>
                 </select>
             </label>
+            
+            <label>
+                <div style="margin-bottom:4px;font-weight:600">Default Value</div>
+                <input type="text" name="default_value" id="fieldDefaultValue" 
+                       placeholder="Optional default value"
+                       style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <div style="margin-top:4px;font-size:12px;color:var(--muted)">Pre-fill this value when creating new documents</div>
+            </label>
+            
+            <div id="numberFieldsSection" style="display:none">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <label>
+                        <div style="margin-bottom:4px;font-weight:600">Min Value</div>
+                        <input type="number" step="0.01" name="min_value" id="fieldMinValue" 
+                               placeholder="Minimum"
+                               style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                    </label>
+                    <label>
+                        <div style="margin-bottom:4px;font-weight:600">Max Value</div>
+                        <input type="number" step="0.01" name="max_value" id="fieldMaxValue" 
+                               placeholder="Maximum"
+                               style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                    </label>
+                </div>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">Optional constraints for number fields</div>
+            </div>
             
             <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">
                 <legend style="padding:0 8px;font-weight:600">Include on:</legend>
@@ -159,16 +194,28 @@ try {
 </div>
 
 <script>
+function toggleNumberFields() {
+    var dataType = document.getElementById('fieldDataType').value;
+    var numberSection = document.getElementById('numberFieldsSection');
+    if (numberSection) {
+        numberSection.style.display = dataType === 'number' ? 'block' : 'none';
+    }
+}
+
 function showAddFieldModal() {
     document.getElementById('modalTitle').textContent = 'Add Custom Field';
     document.getElementById('fieldAction').value = 'create';
     document.getElementById('fieldId').value = '';
     document.getElementById('fieldLabel').value = '';
     document.getElementById('fieldDataType').value = 'text';
+    document.getElementById('fieldDefaultValue').value = '';
+    document.getElementById('fieldMinValue').value = '';
+    document.getElementById('fieldMaxValue').value = '';
     document.getElementById('includeQuote').checked = true;
     document.getElementById('includeContract').checked = true;
     document.getElementById('includeInvoice').checked = true;
     document.getElementById('fieldRequired').checked = false;
+    toggleNumberFields();
     document.getElementById('fieldModal').style.display = 'flex';
 }
 
@@ -183,10 +230,14 @@ function editField(fieldId) {
                 document.getElementById('fieldId').value = fieldId;
                 document.getElementById('fieldLabel').value = data.field.field_label;
                 document.getElementById('fieldDataType').value = data.field.field_data_type;
+                document.getElementById('fieldDefaultValue').value = data.field.default_value || '';
+                document.getElementById('fieldMinValue').value = data.field.min_value || '';
+                document.getElementById('fieldMaxValue').value = data.field.max_value || '';
                 document.getElementById('includeQuote').checked = docTypes.includes('quote');
                 document.getElementById('includeContract').checked = docTypes.includes('contract');
                 document.getElementById('includeInvoice').checked = docTypes.includes('invoice');
                 document.getElementById('fieldRequired').checked = data.field.is_required == 1;
+                toggleNumberFields();
                 document.getElementById('fieldModal').style.display = 'flex';
             } else {
                 alert('Error loading field data');

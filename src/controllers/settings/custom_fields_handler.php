@@ -64,6 +64,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fieldLabel = trim($_POST['field_label'] ?? '');
             $fieldDataType = $_POST['field_data_type'] ?? 'text';
             $isRequired = isset($_POST['is_required']) ? 1 : 0;
+            $defaultValue = trim($_POST['default_value'] ?? '') ?: null;
+            $minValue = null;
+            $maxValue = null;
+            
+            // Only set min/max for number fields
+            if ($fieldDataType === 'number') {
+                $minValue = isset($_POST['min_value']) && $_POST['min_value'] !== '' ? (float)$_POST['min_value'] : null;
+                $maxValue = isset($_POST['max_value']) && $_POST['max_value'] !== '' ? (float)$_POST['max_value'] : null;
+            }
             
             // Build field_type from checkboxes (comma-separated list)
             $types = [];
@@ -94,8 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Get max display order
             $maxOrder = (int)$pdo->query('SELECT COALESCE(MAX(display_order), 0) FROM document_custom_fields')->fetchColumn();
             
-            $stmt = $pdo->prepare('INSERT INTO document_custom_fields (field_type, field_key, field_label, field_data_type, is_builtin, is_required, display_order) VALUES (?, ?, ?, ?, 0, ?, ?)');
-            $stmt->execute([$fieldType, $fieldKey, $fieldLabel, $fieldDataType, $isRequired, $maxOrder + 1]);
+            $stmt = $pdo->prepare('INSERT INTO document_custom_fields (field_type, field_key, field_label, field_data_type, default_value, min_value, max_value, is_builtin, is_required, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)');
+            $stmt->execute([$fieldType, $fieldKey, $fieldLabel, $fieldDataType, $defaultValue, $minValue, $maxValue, $isRequired, $maxOrder + 1]);
             
             header('Location: /?page=settings&tab=documents&doc_tab=customization&saved=1');
             exit;
@@ -106,6 +115,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fieldLabel = trim($_POST['field_label'] ?? '');
             $fieldDataType = $_POST['field_data_type'] ?? 'text';
             $isRequired = isset($_POST['is_required']) ? 1 : 0;
+            $defaultValue = trim($_POST['default_value'] ?? '') ?: null;
+            $minValue = null;
+            $maxValue = null;
+            
+            // Only set min/max for number fields
+            if ($fieldDataType === 'number') {
+                $minValue = isset($_POST['min_value']) && $_POST['min_value'] !== '' ? (float)$_POST['min_value'] : null;
+                $maxValue = isset($_POST['max_value']) && $_POST['max_value'] !== '' ? (float)$_POST['max_value'] : null;
+            }
             
             // Build field_type from checkboxes
             $types = [];
@@ -130,8 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // Update field (don't change field_key to preserve data integrity)
-            $stmt = $pdo->prepare('UPDATE document_custom_fields SET field_label = ?, field_data_type = ?, is_required = ?, field_type = ? WHERE id = ?');
-            $stmt->execute([$fieldLabel, $fieldDataType, $isRequired, $fieldType, $fieldId]);
+            $stmt = $pdo->prepare('UPDATE document_custom_fields SET field_label = ?, field_data_type = ?, default_value = ?, min_value = ?, max_value = ?, is_required = ?, field_type = ? WHERE id = ?');
+            $stmt->execute([$fieldLabel, $fieldDataType, $defaultValue, $minValue, $maxValue, $isRequired, $fieldType, $fieldId]);
             
             header('Location: /?page=settings&tab=documents&doc_tab=customization&saved=1');
             exit;

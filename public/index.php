@@ -199,6 +199,10 @@ if ($page === 'financial/financial-api') {
     require_once __DIR__ . '/../src/controllers/financial/financial_api.php';
     exit;
 }
+if ($page === 'settings/item-library-search') {
+    require_once __DIR__ . '/../src/controllers/settings/item_library_search.php';
+    exit;
+}
 if ($isAjaxEarly && $page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
     exit;
@@ -268,6 +272,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
+        exit;
+    }
+    if ($page === 'settings/tax-rates-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/tax-rates-handler.php';
+        exit;
+    }
+    if ($page === 'settings/custom-fields-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/custom_fields_handler.php';
         exit;
     }
     if ($page === 'accounts-create') {
@@ -358,6 +370,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract/contract_deposit_received.php';
         exit;
     }
+    if ($page === 'document-reenable') {
+        require_once __DIR__ . '/../src/controllers/document_reenable_handler.php';
+        exit;
+    }
+    if ($page === 'document-date-update') {
+        require_once __DIR__ . '/../src/controllers/document_date_update_handler.php';
+        exit;
+    }
     if ($page === 'contract/contract-deny') { // legacy
         require_once __DIR__ . '/../src/controllers/contract/contract_deny.php';
         exit;
@@ -434,6 +454,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/financial/audit_export.php';
         exit;
     }
+    if ($page === 'financial/audit-schedule-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/audit_schedule_handler.php';
+        exit;
+    }
     if ($page === 'organization/org-create') {
         require_once __DIR__ . '/../src/controllers/organization/org_create.php';
         exit;
@@ -460,6 +484,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'organization/organizations_upload' || $page === 'organization/organizations-upload') {
         require_once __DIR__ . '/../src/controllers/organization/organizations_upload.php';
+        exit;
+    }
+    if ($page === 'settings/item-library-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/item_library_handler.php';
         exit;
     }
 }

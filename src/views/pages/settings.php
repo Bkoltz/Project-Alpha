@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../config/app.php';
 $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 'system';
 
 // Valid tabs
-$validTabs = ['system', 'terms', 'billing', 'documents', 'notifications', 'links'];
+$validTabs = ['system', 'terms', 'billing', 'taxes', 'documents', 'notifications', 'links'];
 if (!in_array($tab, $validTabs)) {
   $tab = 'system';
 }
@@ -29,9 +29,11 @@ if (!in_array($tab, $validTabs)) {
       <a href="/?page=settings&tab=system" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'system' ? 'background:#f8fafc;font-weight:600' : ''; ?>">System</a>
       <a href="/?page=settings&tab=terms" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'terms' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Terms & Conditions</a>
       <a href="/?page=settings&tab=billing" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'billing' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Billing</a>
+      <a href="/?page=settings&tab=taxes" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'taxes' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Taxes</a>
       <a href="/?page=settings&tab=documents" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'documents' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Documents</a>
       <a href="/?page=settings&tab=notifications" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'notifications' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Notifications</a>
       <a href="/?page=settings&tab=links" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'links' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Links</a>
+      <a href="/?page=settings/item-library" style="display:block;padding:10px 12px;border-bottom:1px solid #eee">Item Library</a>
       <a href="/?page=api-keys" style="display:block;padding:10px 12px;">API Keys</a>
     </aside>
 

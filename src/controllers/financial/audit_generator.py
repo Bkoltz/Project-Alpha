@@ -27,9 +27,12 @@ def main():
         
         # Create temporary directory for audit files
         tmpdir = tempfile.mkdtemp()
+        # Build a safe zip filename from start/end dates
+        sd = data.get('start_date', '')[:10].replace('-', '')
+        ed = data.get('end_date', '')[:10].replace('-', '')
         zip_filename = os.path.join(
             tmpdir,
-            f"audit_{data['start_year']}-{data['end_year']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            f"audit_{sd or 'start'}-{ed or 'end'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
         )
         
         # Create zip file
@@ -64,91 +67,99 @@ def main():
         sys.exit(1)
 
 def generate_csv(output_file, data):
-    """Generate CSV audit report"""
+    """Generate CSV audit report with detailed columns for invoices"""
     invoices = data.get('invoices', [])
     contracts = data.get('contracts', [])
-    client_info_only = data.get('client_info_only', False)
+    quotes = data.get('quotes', [])
     
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        if client_info_only:
-            # Summary mode: client, doc_id, project_id, total
-            fieldnames = ['Document Type', 'Doc ID', 'Client Name', 'Project Code', 'Amount', 'Status', 'Date']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+        # Detailed CSV with all required columns
+        fieldnames = [
+            'Date', 
+            'Client', 
+            'Doc Number/ID', 
+            'Document Type',
+            'Invoice Tax',
+            'Invoice Tax County',
+            'Amount Paid',
+            'Payment Method',
+            'Discount',
+            'Running Total'
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        running_total = 0
+        
+        # Process invoices
+        for inv in invoices:
+            amount_paid = float(inv.get('amount_paid', 0))
+            tax = float(inv.get('tax_percent', inv.get('tax', 0)))
+            discount = float(inv.get('discount_value', inv.get('discount', 0)))
+            running_total += amount_paid
             
-            running_total = 0
-            for inv in invoices:
-                amount = float(inv.get('total', 0))
-                running_total += amount
-                writer.writerow({
-                    'Document Type': 'Invoice',
-                    'Doc ID': inv.get('doc_number', ''),
-                    'Client Name': inv.get('client_name', ''),
-                    'Project Code': inv.get('project_code', ''),
-                    'Amount': f"${amount:.2f}",
-                    'Status': inv.get('status', ''),
-                    'Date': inv.get('created_at', '')[:10]
-                })
-            
-            if contracts:
-                for contract in contracts:
-                    amount = float(contract.get('total', 0))
-                    running_total += amount
-                    writer.writerow({
-                        'Document Type': 'Contract',
-                        'Doc ID': contract.get('doc_number', ''),
-                        'Client Name': contract.get('client_name', ''),
-                        'Project Code': contract.get('project_code', ''),
-                        'Amount': f"${amount:.2f}",
-                        'Status': contract.get('status', ''),
-                        'Date': contract.get('created_at', '')[:10]
-                    })
-            
-            # Add totals row
             writer.writerow({
-                'Document Type': 'TOTAL',
-                'Doc ID': '',
-                'Client Name': '',
-                'Project Code': '',
-                'Amount': f"${running_total:.2f}",
-                'Status': '',
-                'Date': ''
+                'Date': inv.get('created_at', '')[:10],
+                'Client': inv.get('client_name', ''),
+                'Doc Number/ID': inv.get('doc_number', ''),
+                'Document Type': 'Invoice',
+                'Invoice Tax': f"${tax:.2f}",
+                'Invoice Tax County': inv.get('tax_county', ''),
+                'Amount Paid': f"${amount_paid:.2f}",
+                'Payment Method': inv.get('payment_methods', ''),
+                'Discount': f"${discount:.2f}",
+                'Running Total': f"${running_total:.2f}"
             })
-        else:
-            # Detailed mode
-            fieldnames = ['Document Type', 'Doc ID', 'Client Name', 'Project Code', 'Amount', 'Status', 'Date', 'Running Total']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            
-            running_total = 0
-            for inv in invoices:
-                amount = float(inv.get('total', 0))
+        
+        # Process contracts if included
+        if contracts:
+            for contract in contracts:
+                amount = float(contract.get('total', 0))
                 running_total += amount
                 writer.writerow({
-                    'Document Type': 'Invoice',
-                    'Doc ID': inv.get('doc_number', ''),
-                    'Client Name': inv.get('client_name', ''),
-                    'Project Code': inv.get('project_code', ''),
-                    'Amount': f"${amount:.2f}",
-                    'Status': inv.get('status', ''),
-                    'Date': inv.get('created_at', '')[:10],
+                    'Date': contract.get('created_at', '')[:10],
+                    'Client': contract.get('client_name', ''),
+                    'Doc Number/ID': contract.get('doc_number', ''),
+                    'Document Type': 'Contract',
+                    'Invoice Tax': '',
+                    'Invoice Tax County': '',
+                    'Amount Paid': f"${amount:.2f}",
+                    'Payment Method': '',
+                    'Discount': '',
                     'Running Total': f"${running_total:.2f}"
                 })
-            
-            if contracts:
-                for contract in contracts:
-                    amount = float(contract.get('total', 0))
-                    running_total += amount
-                    writer.writerow({
-                        'Document Type': 'Contract',
-                        'Doc ID': contract.get('doc_number', ''),
-                        'Client Name': contract.get('client_name', ''),
-                        'Project Code': contract.get('project_code', ''),
-                        'Amount': f"${amount:.2f}",
-                        'Status': contract.get('status', ''),
-                        'Date': contract.get('created_at', '')[:10],
-                        'Running Total': f"${running_total:.2f}"
-                    })
+        
+        # Process quotes if included
+        if quotes:
+            for quote in quotes:
+                amount = float(quote.get('total', 0))
+                running_total += amount
+                writer.writerow({
+                    'Date': quote.get('created_at', '')[:10],
+                    'Client': quote.get('client_name', ''),
+                    'Doc Number/ID': quote.get('doc_number', ''),
+                    'Document Type': 'Quote',
+                    'Invoice Tax': '',
+                    'Invoice Tax County': '',
+                    'Amount Paid': f"${amount:.2f}",
+                    'Payment Method': '',
+                    'Discount': '',
+                    'Running Total': f"${running_total:.2f}"
+                })
+        
+        # Add totals row
+        writer.writerow({
+            'Date': '',
+            'Client': '',
+            'Doc Number/ID': 'TOTAL',
+            'Document Type': '',
+            'Invoice Tax': '',
+            'Invoice Tax County': '',
+            'Amount Paid': f"${running_total:.2f}",
+            'Payment Method': '',
+            'Discount': '',
+            'Running Total': f"${running_total:.2f}"
+        })
 
 def generate_pdfs(tmpdir, data):
     """Generate PDF invoices (if available)"""
@@ -166,31 +177,41 @@ def generate_manifest(output_file, data):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("=== FINANCIAL AUDIT REPORT ===\n\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Audit Period: {data['start_year']} - {data['end_year']}\n")
-        f.write(f"Date Range: {data['start_date']} to {data['end_date']}\n\n")
+        f.write(f"Audit Period: {data['start_date']} to {data['end_date']}\n\n")
         
         f.write("REPORT CONFIGURATION:\n")
-        f.write(f"- Invoice Status Filter: {data['invoice_status']}\n")
+        f.write(f"- Include Invoices (Paid/Partial): {'Yes' if data['include_invoices'] else 'No'}\n")
         f.write(f"- Include Contracts: {'Yes' if data['include_contracts'] else 'No'}\n")
+        f.write(f"- Include Quotes: {'Yes' if data['include_quotes'] else 'No'}\n")
+        f.write(f"- Generate CSV: {'Yes' if data['generate_csv'] else 'No'}\n")
         f.write(f"- Include PDFs: {'Yes' if data['include_pdfs'] else 'No'}\n")
-        f.write(f"- Summary Mode Only: {'Yes' if data['client_info_only'] else 'No'}\n\n")
         
-        f.write("REPORT SUMMARY:\n")
+        if data.get('schedule_emails'):
+            f.write(f"- Scheduled Email Recipients: {', '.join(data['schedule_emails'])}\n")
+        
+        f.write("\nREPORT SUMMARY:\n")
         f.write(f"- Total Invoices: {len(data['invoices'])}\n")
         if data['include_contracts']:
             f.write(f"- Total Contracts: {len(data['contracts'])}\n")
+        if data['include_quotes']:
+            f.write(f"- Total Quotes: {len(data['quotes'])}\n")
         
-        total_amount = sum(float(inv.get('total', 0)) for inv in data['invoices'])
+        total_amount = sum(float(inv.get('amount_paid', inv.get('total', 0))) for inv in data['invoices'])
         if data['include_contracts']:
             total_amount += sum(float(c.get('total', 0)) for c in data['contracts'])
+        if data['include_quotes']:
+            total_amount += sum(float(q.get('total', 0)) for q in data['quotes'])
         
         f.write(f"- Total Amount: ${total_amount:.2f}\n\n")
         
         f.write("FILES INCLUDED:\n")
-        f.write("- audit_report.csv: Detailed audit data\n")
+        f.write("- audit_report.csv: Detailed audit data with Date, Client, Doc ID, Taxes, Payment Info, and Running Total\n")
         f.write("- MANIFEST.txt: This file\n")
         if data.get('include_pdfs'):
             f.write("- invoices/: PDF files for all invoices\n")
+        
+        f.write("\nAUDIT INTEGRITY NOTE:\n")
+        f.write("- Audit logs are read-only and cannot be edited within the system to ensure data integrity\n")
 
 if __name__ == '__main__':
     main()

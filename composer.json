@@ -8,6 +8,7 @@
     "ext-pdo": "*",
     "ext-mbstring": "*",
     "phpmailer/phpmailer": "^6.9",
+    "monolog/monolog": "^3.0",
     "dompdf/dompdf": "^2.0",
     "symfony/security-csrf": "^7.0",
     "symfony/http-foundation": "^7.0",

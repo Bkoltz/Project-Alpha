@@ -38,6 +38,12 @@ use Dompdf\Options;
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
+// Fetch document_date from the database
+$stmt = $pdo->prepare('SELECT document_date FROM invoices WHERE id=?');
+$stmt->execute([$id]);
+$doc = $stmt->fetch(PDO::FETCH_ASSOC);
+$documentDate = $doc && !empty($doc['document_date']) ? date('m/d/Y', strtotime($doc['document_date'])) : date('m/d/Y');
+
 // Build HTML by invoking the existing invoice print view in PDF mode (hides toolbar)
 ob_start();
 define('PDF_MODE', true);
@@ -70,8 +76,7 @@ $dompdf->render();
 $canvas = $dompdf->getCanvas();
 $font = $dompdf->getFontMetrics()->getFont('Helvetica', 'normal');
 $w = $canvas->get_width();
-$dateStr = date('m/d/Y');
-$canvas->page_text(54, 22, $dateStr, $font, 10, [0,0,0]);
+$canvas->page_text(54, 22, $documentDate, $font, 10, [0,0,0]);
 $pageText = 'Page {PAGE_NUM} of {PAGE_COUNT}';
 $canvas->page_text($w - 140, 22, $pageText, $font, 10, [0,0,0]);
 // Footer: powered-by text at bottom-left on every page
