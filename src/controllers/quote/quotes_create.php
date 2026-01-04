@@ -46,11 +46,12 @@ if ($is_long_term || $is_on_demand) {
     $scope = '';
 }
 
+$item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 
-if ($client_id <= 0 || empty($desc)) {
+if ($client_id <= 0 || empty($item)) {
     header('Location: /?page=quote/quotes-create&error=Invalid%20input');
     exit;
 }
@@ -63,14 +64,15 @@ if ($is_long_term && ($pricing_type === 'per_invoice' || $pricing_type === 'on_d
     $subtotal = $price_per_invoice;
 } else {
     // Process items for regular quotes or fixed_total long-term quotes
-    for ($i=0; $i<count($desc); $i++) {
+    for ($i=0; $i<count($item); $i++) {
+        $itm = trim((string)($item[$i] ?? ''));
         $d = trim((string)($desc[$i] ?? ''));
         $q = (float)($qty[$i] ?? 0);
         $p = (float)($price[$i] ?? 0);
-        if ($d === '' || $q <= 0 || $p < 0) continue;
+        if ($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $items[] = ['description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
+        $items[] = ['item'=>$itm,'description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
     }
     if (!$items) {
         header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -113,9 +115,9 @@ try {
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {
-        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
+        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
         foreach ($items as $it) {
-            $qi->execute([$quote_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+            $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
         }
     }
     $pdo->commit();

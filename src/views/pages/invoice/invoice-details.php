@@ -44,9 +44,27 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 <section>
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Invoice</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+  <?php 
+    // Status banner styling
+    $istatus = strtolower($inv['status'] ?? 'unpaid');
+    $istatusColors = [
+      'unpaid' => ['bg' => '#fffbeb', 'text' => '#92400e', 'border' => '#fbbf24'],
+      'partial' => ['bg' => '#fef3c7', 'text' => '#92400e', 'border' => '#f59e0b'],
+      'paid' => ['bg' => '#ecfdf5', 'text' => '#065f46', 'border' => '#10b981'],
+      'void' => ['bg' => '#f3f4f6', 'text' => '#6b7280', 'border' => '#9ca3af']
+    ];
+    $icolors = $istatusColors[$istatus] ?? ['bg' => '#f3f4f6', 'text' => '#374151', 'border' => '#9ca3af'];
+  ?>
+  <div class="no-print" style="padding:12px 16px;background:<?php echo $icolors['bg']; ?>;color:<?php echo $icolors['text']; ?>;border-left:4px solid <?php echo $icolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
+    Status: <?php echo htmlspecialchars($inv['status']); ?>
+  </div>
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+    <?php if ($inv['status'] !== 'paid'): ?>
+      <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+    <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) !== 'void'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -55,6 +73,41 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
       <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
     </form>
+    <?php endif; ?>
+    <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
+      <form method="post" action="/?page=invoice/invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;">Mark as Paid</button>
+      </form>
+    <?php endif; ?>
+    <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
+    <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="invoice">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+    </form>
+    <?php endif; ?>
+    <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="invoice">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+    </form>
+  </div>
+  <?php if (!empty($_GET['reenabled'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Invoice re-enabled successfully</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['date_updated'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Document date updated successfully</div>
+  <?php endif; ?>
+  <div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:8px;font-size:13px;color:#374151">
+    <strong>Created:</strong> <?php echo !empty($inv['created_at']) ? date('M j, Y g:i A', strtotime($inv['created_at'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <strong>Document Date:</strong> <?php echo !empty($inv['document_date']) ? date('M j, Y g:i A', strtotime($inv['document_date'])) : 'N/A'; ?>
+    <?php if (!empty($inv['document_date_updated_at'])): ?>
+      <span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated: <?php echo date('M j, Y g:i A', strtotime($inv['document_date_updated_at'])); ?>)</span>
     <?php endif; ?>
   </div>
   <?php endif; ?>
@@ -225,6 +278,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
+        <th style="padding:10px">Item</th>
         <th style="padding:10px">Description</th>
         <th style="padding:10px">Qty</th>
         <th style="padding:10px">Unit</th>
@@ -235,11 +289,12 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6<?php echo (int)($it['is_extra_charge'] ?? 0) ? ';background:#fffbeb' : ''; ?>">
         <td style="padding:10px">
-          <?php echo htmlspecialchars($it['description']); ?>
+          <div style="font-weight:600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></div>
           <?php if ((int)($it['is_extra_charge'] ?? 0) === 1): ?>
-            <span style="display:inline-block;margin-left:8px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:10px;font-weight:600">Extra Charge</span>
+            <span style="display:inline-block;margin-top:4px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:10px;font-weight:600">Extra Charge</span>
           <?php endif; ?>
         </td>
+        <td style="padding:10px;color:#6b7280;font-size:13px"><?php echo htmlspecialchars($it['description'] ?? ''); ?></td>
         <td style="padding:10px"><?php echo number_format($it['quantity'],2); ?></td>
         <td style="padding:10px">$<?php echo number_format($it['unit_price'],2); ?></td>
         <td style="padding:10px">$<?php echo number_format($it['line_total'],2); ?></td>

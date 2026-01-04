@@ -14,25 +14,27 @@ if (!$due_date || trim($due_date) === '') {
     $due_date = date('Y-m-d', strtotime('+' . $netDays . ' days'));
 }
 
+$item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 
-if ($client_id <= 0 || empty($desc)) {
+if ($client_id <= 0 || empty($item)) {
     header('Location: /?page=invoice/invoices-create&error=Invalid%20input');
     exit;
 }
 
 $items = [];
 $subtotal = 0.0;
-for ($i=0; $i<count($desc); $i++) {
+for ($i=0; $i<count($item); $i++) {
+    $itm = trim((string)($item[$i] ?? ''));
     $d = trim((string)($desc[$i] ?? ''));
     $q = (float)($qty[$i] ?? 0);
     $p = (float)($price[$i] ?? 0);
-    if ($d === '' || $q <= 0 || $p < 0) continue;
+    if ($itm === '' || $q <= 0 || $p < 0) continue;
     $line = $q * $p;
     $subtotal += $line;
-    $items[] = ['description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
+    $items[] = ['item'=>$itm,'description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
 }
 if (!$items) {
     header('Location: /?page=invoice/invoices-create&error=Add%20at%20least%20one%20item');
@@ -65,9 +67,9 @@ try {
     $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
     foreach ($items as $it) {
-        $ii->execute([$invoice_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
     }
     $pdo->commit();
 } catch (Throwable $e) {

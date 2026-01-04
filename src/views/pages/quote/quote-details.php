@@ -36,17 +36,77 @@ $isPdf = defined('PDF_MODE');
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Quote</div>
   <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+  <?php 
+    // Status banner styling
+    $status = strtolower($quote['status'] ?? 'pending');
+    $statusColors = [
+      'pending' => ['bg' => '#fffbeb', 'text' => '#92400e', 'border' => '#fbbf24'],
+      'approved' => ['bg' => '#ecfdf5', 'text' => '#065f46', 'border' => '#10b981'],
+      'rejected' => ['bg' => '#fef2f2', 'text' => '#991b1b', 'border' => '#ef4444']
+    ];
+    $colors = $statusColors[$status] ?? ['bg' => '#f3f4f6', 'text' => '#374151', 'border' => '#9ca3af'];
+  ?>
+  <div class="no-print" style="padding:12px 16px;background:<?php echo $colors['bg']; ?>;color:<?php echo $colors['text']; ?>;border-left:4px solid <?php echo $colors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
+    Status: <?php echo htmlspecialchars($quote['status']); ?>
+  </div>
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+    <?php if ($quote['status'] === 'pending'): ?>
+      <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+    <?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
-<input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
       <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
     </form>
+    <?php endif; ?>
+    <?php if ($quote['status'] === 'pending'): ?>
+      <form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('Approve this quote and generate contract + invoice?');">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: medium;">Approve</button>
+      </form>
+      <form method="post" action="/?page=quote/quote-reject" style="display:inline" onsubmit="return confirm('Deny this quote?');">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: medium;">Deny</button>
+      </form>
+    <?php endif; ?>
+    <?php if (!empty($quote['status']) && strtolower($quote['status']) === 'rejected'): ?>
+    <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this quote? It will be set back to pending status.');">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="quote">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+    </form>
+    <?php endif; ?>
+    <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="quote">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+    </form>
+  </div>
+  <?php if (!empty($_GET['error'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;margin-bottom:8px;font-size:14px">⚠ Error: <?php echo htmlspecialchars($_GET['error']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['reenabled'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Quote re-enabled successfully</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['date_updated'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Document date updated successfully</div>
+  <?php endif; ?>
+  <div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:8px;font-size:13px;color:#374151">
+    <strong>Created:</strong> <?php echo !empty($quote['created_at']) ? date('M j, Y g:i A', strtotime($quote['created_at'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <strong>Document Date:</strong> <?php echo !empty($quote['document_date']) ? date('M j, Y g:i A', strtotime($quote['document_date'])) : 'N/A'; ?>
+    <?php if (!empty($quote['document_date_updated_at'])): ?>
+      <span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated: <?php echo date('M j, Y g:i A', strtotime($quote['document_date_updated_at'])); ?>)</span>
     <?php endif; ?>
   </div>
   <?php endif; ?>
@@ -262,6 +322,7 @@ $isPdf = defined('PDF_MODE');
   <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
+        <th style="padding:10px">Item</th>
         <th style="padding:10px">Description</th>
         <th style="padding:10px">Qty</th>
         <th style="padding:10px">Unit</th>
@@ -271,7 +332,8 @@ $isPdf = defined('PDF_MODE');
     <tbody>
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6">
-        <td style="padding:10px"><?php echo htmlspecialchars($it['description']); ?></td>
+        <td style="padding:10px;font-weight:600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></td>
+        <td style="padding:10px;color:#6b7280;font-size:13px"><?php echo htmlspecialchars($it['description'] ?? ''); ?></td>
         <td style="padding:10px"><?php echo number_format($it['quantity'],2); ?></td>
         <td style="padding:10px">$<?php echo number_format($it['unit_price'],2); ?></td>
         <td style="padding:10px">$<?php echo number_format($it['line_total'],2); ?></td>

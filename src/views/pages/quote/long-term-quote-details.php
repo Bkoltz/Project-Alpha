@@ -83,6 +83,7 @@ $isOngoing = empty($quote['end_date']);
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
     <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" download="longterm-quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">

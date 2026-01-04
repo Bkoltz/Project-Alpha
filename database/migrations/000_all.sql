@@ -241,6 +241,8 @@ CREATE TABLE IF NOT EXISTS quotes (
   scope TEXT NULL,
   custom_fields JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  document_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  document_date_updated_at TIMESTAMP NULL DEFAULT NULL,
   CONSTRAINT fk_quotes_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   INDEX idx_quotes_client (client_id),
   INDEX idx_quotes_status (status),
@@ -252,7 +254,8 @@ CREATE TABLE IF NOT EXISTS quotes (
 CREATE TABLE IF NOT EXISTS quote_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
   quote_id INT NOT NULL,
-  description VARCHAR(255) NOT NULL,
+  item VARCHAR(255) NOT NULL,
+  description TEXT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
   unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -271,7 +274,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   project_id INT NULL,
   doc_number INT NULL,
   project_code VARCHAR(64) NULL,
-  status ENUM('draft','pending','active','completed','cancelled','denied','void') NOT NULL DEFAULT 'pending',
+  status ENUM('pending','active','completed','cancelled','denied','void') NOT NULL DEFAULT 'pending',
   discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
   discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
   tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
@@ -291,6 +294,8 @@ CREATE TABLE IF NOT EXISTS contracts (
   scope TEXT NULL,
   custom_fields JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  document_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  document_date_updated_at TIMESTAMP NULL DEFAULT NULL,
   CONSTRAINT fk_contracts_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
   CONSTRAINT fk_contracts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   INDEX idx_contracts_client (client_id),
@@ -303,7 +308,8 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE TABLE IF NOT EXISTS contract_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
   contract_id INT NOT NULL,
-  description VARCHAR(255) NOT NULL,
+  item VARCHAR(255) NOT NULL,
+  description TEXT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
   unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -328,6 +334,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
   discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
   tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+  tax_amount DECIMAL(12,2) NULL DEFAULT NULL,
+  tax_county VARCHAR(100) NULL DEFAULT NULL,
   subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
   total DECIMAL(12,2) NOT NULL DEFAULT 0,
   status ENUM('unpaid','partial','paid','void') NOT NULL DEFAULT 'unpaid',
@@ -341,6 +349,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   is_deposit_invoice TINYINT(1) DEFAULT 0,
   parent_contract_type ENUM('contract','long_term_contract','on_demand_contract') NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  document_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  document_date_updated_at TIMESTAMP NULL DEFAULT NULL,
   INDEX idx_invoice_deposit (is_deposit_invoice),
   CONSTRAINT fk_invoices_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
   CONSTRAINT fk_invoices_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
@@ -358,7 +368,8 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE TABLE IF NOT EXISTS invoice_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
   invoice_id INT NOT NULL,
-  description VARCHAR(255) NOT NULL,
+  item VARCHAR(255) NOT NULL,
+  description TEXT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
   unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -366,6 +377,40 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   CONSTRAINT fk_invoice_items_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
   INDEX idx_invoice_items_invoice (invoice_id),
   INDEX idx_invoice_items_extra (is_extra_charge)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- ITEM LIBRARY
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS item_library (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  item_name VARCHAR(255) NOT NULL,
+  description TEXT NULL,
+  unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_item_active (is_active),
+  INDEX idx_item_name (item_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- TAX RATES
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS tax_rates (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(150) NOT NULL,
+  country VARCHAR(100) NOT NULL DEFAULT 'USA',
+  state VARCHAR(100) NULL,
+  county VARCHAR(100) NULL,
+  rate DECIMAL(5,2) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_tax_country (country),
+  INDEX idx_tax_state (state),
+  INDEX idx_tax_county (county)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -489,7 +534,8 @@ CREATE TABLE IF NOT EXISTS long_term_contracts (
 CREATE TABLE IF NOT EXISTS long_term_contract_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
   long_term_contract_id INT NOT NULL,
-  description VARCHAR(255) NOT NULL,
+  item VARCHAR(255) NOT NULL,
+  description TEXT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
   unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -548,7 +594,8 @@ CREATE TABLE IF NOT EXISTS on_demand_contracts (
 CREATE TABLE IF NOT EXISTS on_demand_contract_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
   on_demand_contract_id INT NOT NULL,
-  description VARCHAR(255) NOT NULL,
+  item VARCHAR(255) NOT NULL,
+  description TEXT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
   unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -694,6 +741,73 @@ CREATE TABLE IF NOT EXISTS contract_signatures (
   INDEX idx_sig_ltc (long_term_contract_id),
   INDEX idx_sig_odc (on_demand_contract_id),
   INDEX idx_sig_signed (signed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- SYSTEM AUDIT
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS system_audit (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  level VARCHAR(16) NOT NULL,
+  category VARCHAR(64) NOT NULL,
+  actor_type VARCHAR(32) NULL,
+  actor_id INT NULL,
+  ip VARCHAR(45) NULL,
+  message TEXT NULL,
+  payload JSON NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_audit_category (category),
+  INDEX idx_audit_actor (actor_type, actor_id),
+  INDEX idx_audit_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- RECEIPTS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS receipts (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  org_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  receipt_date DATE NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  file_path VARCHAR(500) NOT NULL,
+  uploaded_by INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_receipt_org (org_id),
+  INDEX idx_receipt_date (receipt_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- FORMS & DOCUMENTS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS form_categories (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  org_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  created_by INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_form_cat_org (org_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS form_documents (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  category_id INT UNSIGNED NOT NULL,
+  file_path VARCHAR(500) NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  file_size INT UNSIGNED NULL,
+  mime_type VARCHAR(100) NULL,
+  uploaded_by INT NULL,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES form_categories(id) ON DELETE CASCADE,
+  FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_form_doc_category (category_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================

@@ -31,6 +31,7 @@
   <script src="/assets/navigation.js" defer></script>
   <script src="/assets/invoice-edit.js" defer></script>
   <script src="/assets/client-create.js" defer></script>
+  <script src="/assets/item-autocomplete.js" defer></script>
 </head>
 
 <body>

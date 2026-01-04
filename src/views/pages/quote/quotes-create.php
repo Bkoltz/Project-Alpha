@@ -221,16 +221,33 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 </section>
 <script>
 function money(n){return '$'+(Number(n)||0).toFixed(2)}
-function addItem(desc='', qty=1, price=0){
+var itemCounter = 0;
+function addItem(item='', desc='', qty=1, price=0){
   var wrap = document.createElement('div');
-  wrap.style.display='grid';wrap.style.gridTemplateColumns='2fr 1fr 1fr auto';wrap.style.gap='8px';
+  var itemId = 'item_' + (itemCounter++);
+  var descId = 'desc_' + itemCounter;
+  var priceId = 'price_' + itemCounter;
+  wrap.style.display='grid';wrap.style.gridTemplateColumns='3fr 3fr 1fr 1fr auto';wrap.style.gap='8px';
   wrap.innerHTML = `
-    <input required placeholder="Description" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${desc}" oninput="recalc()">
+    <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalc()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
+    <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalc()">${desc}</textarea>
     <input required type="number" step="0.01" min="0" name="item_qty[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalc()">
-    <input required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalc()">
+    <input id="${priceId}" required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalc()">
     <button type="button" onclick="this.parentElement.remove();recalc()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
   document.getElementById('items').appendChild(wrap);
+  
+  // Re-initialize autocomplete for the new item input
+  if (window.ItemAutocomplete) {
+    const input = document.getElementById(itemId);
+    const descField = document.getElementById(descId);
+    const priceField = document.getElementById(priceId);
+    new ItemAutocomplete(input, {
+      descriptionField: descField,
+      priceField: priceField
+    });
+  }
+  
   recalc();
 }
 function recalc(){

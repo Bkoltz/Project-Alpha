@@ -1,5 +1,7 @@
 <?php
 // src/views/pages/settings/billing.php
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 ?>
 <script>
   (function() {
@@ -139,6 +141,11 @@
     <textarea name="payment_methods" rows="3" style="width:100%;padding:8px;border-radius:6px;border:1px solid #eee;margin-top:8px;display:none"><?php echo htmlspecialchars(implode("\n", $paymentMethods)); ?></textarea>
   </div>
 </fieldset>
+
+<div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:14px">
+  <strong>💡 Looking for Tax Rates?</strong>
+  <div style="margin-top:8px;color:#1e40af">Tax rate management has been moved to the <a href="/?page=settings&tab=taxes" style="color:var(--nav-accent);font-weight:600">Taxes</a> tab for better organization.</div>
+</div>
 
 <fieldset id="stripeConfig" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;display:none">
   <legend style="padding:0 6px;color:var(--muted)">Stripe Configuration</legend>

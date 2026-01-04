@@ -1,5 +1,65 @@
 <?php
 // src/utils/logger.php
+// Lightweight logger wrapper: uses Monolog when available otherwise falls back to a simple JSON-line file logger.
+use Monolog\Logger as MonologLogger;
+use Monolog\Handler\RotatingFileHandler;
+use Monolog\Formatter\JsonFormatter;
+
+if (!function_exists('app_logger')) {
+  function app_logger(string $name = 'app') {
+    static $instances = [];
+    if (isset($instances[$name])) return $instances[$name];
+    try {
+      if (!class_exists(MonologLogger::class)) throw new \Exception('monolog not installed');
+      $projectRoot = realpath(__DIR__ . '/../../') ?: __DIR__ . '/../../';
+      $logDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'logs';
+      if (!is_dir($logDir)) @mkdir($logDir, 0755, true);
+      $handler = new RotatingFileHandler($logDir . DIRECTORY_SEPARATOR . 'app.log', 30, MonologLogger::DEBUG);
+      $formatter = new JsonFormatter();
+      $formatter->includeStacktraces(true);
+      $handler->setFormatter($formatter);
+      $logger = new MonologLogger($name);
+      $logger->pushHandler($handler);
+      $instances[$name] = $logger;
+      return $logger;
+    } catch (Throwable $e) {
+      // fallback simple logger
+      $projectRoot = realpath(__DIR__ . '/../../') ?: __DIR__ . '/../../';
+      $file = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR . 'app.log';
+      if (!is_dir(dirname($file))) @mkdir(dirname($file), 0755, true);
+      $fallback = new class($file, $name) {
+        private $file; private $name;
+        public function __construct($file, $name){ $this->file = $file; $this->name = $name; }
+        private function write($level, $message, $context=[]){ $entry = ['ts'=>gmdate('c'),'level'=>$level,'logger'=>$this->name,'message'=>$message,'context'=>$context]; @file_put_contents($this->file, json_encode($entry, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n", FILE_APPEND|LOCK_EX); }
+        public function info($m,$c=[]){ $this->write('info',$m,$c); }
+        public function error($m,$c=[]){ $this->write('error',$m,$c); }
+        public function warning($m,$c=[]){ $this->write('warning',$m,$c); }
+        public function debug($m,$c=[]){ $this->write('debug',$m,$c); }
+      };
+      $instances[$name] = $fallback;
+      return $fallback;
+    }
+  }
+}
+
+if (!function_exists('audit_event')) {
+  function audit_event(PDO $pdo, string $level, string $category, ?string $actor_type = null, $actor_id = null, ?string $message = null, $payload = null) {
+    try {
+      $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+      $payloadJson = null;
+      if ($payload !== null) {
+        if (is_string($payload)) $payloadJson = $payload; else $payloadJson = json_encode($payload, JSON_UNESCAPED_UNICODE);
+      }
+      $st = $pdo->prepare('INSERT INTO system_audit (level, category, actor_type, actor_id, ip, message, payload) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      $st->execute([$level, $category, $actor_type, $actor_id, $ip, $message, $payloadJson]);
+    } catch (Throwable $e) {
+      // ignore if table missing or insert fails; log to fallback logger
+      try { app_logger()->error('audit_event failed: '.$e->getMessage(), ['level'=>$level,'category'=>$category]); } catch (Throwable $_) { /* ignore */ }
+    }
+  }
+}
+// <?php
+// src/utils/logger.php
 // Simple application logger writing to config/uploads/logs/YYYY-MM-DD.log
 
 function app_log(string $category, string $message, array $context = []): void {
