@@ -1,0 +1,294 @@
+<?php
+// src/views/pages/financial/receipt-detail.php
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
+
+$receiptId = (int)($_GET['id'] ?? 0);
+$orgId = 1; // Should come from session/user context
+
+// Get existing stores for edit modal
+$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
+$storeStmt->execute([$orgId]);
+$stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
+
+if (!$receiptId) {
+    header('Location: /?page=financial/receipts-list');
+    exit;
+}
+
+// Fetch receipt details
+$stmt = $pdo->prepare('
+    SELECT r.*, u.username as uploaded_by_name
+    FROM receipts r
+    LEFT JOIN users u ON r.uploaded_by = u.id
+    WHERE r.id = ? AND r.org_id = ?
+');
+$stmt->execute([$receiptId, $orgId]);
+$receipt = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$receipt) {
+    header('Location: /?page=financial/receipts-list');
+    exit;
+}
+
+$fileExt = strtolower(pathinfo($receipt['file_path'], PATHINFO_EXTENSION));
+$isPdf = $fileExt === 'pdf';
+
+require_once __DIR__ . '/../../partials/header.php';
+?>
+
+<div style="max-width:1200px;margin:0 auto;padding:24px">
+    <div style="margin-bottom:24px">
+        <a href="/?page=financial/receipts-list" style="color:var(--nav-accent);text-decoration:none;font-size:14px">
+            ← Back to Receipts
+        </a>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 400px;gap:32px;align-items:start">
+        <!-- Receipt Preview -->
+        <div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <?php if ($isPdf): ?>
+                    <div style="height:800px">
+                        <iframe src="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                                style="width:100%;height:100%;border:0"></iframe>
+                    </div>
+                <?php else: ?>
+                    <img src="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                         alt="Receipt" 
+                         style="width:100%;height:auto;display:block">
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Receipt Info & Actions -->
+        <div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px">
+                <h1 style="margin:0 0 16px 0;font-size:24px"><?php echo htmlspecialchars($receipt['title']); ?></h1>
+                
+                <div style="display:grid;gap:16px">
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Amount</div>
+                        <div style="font-size:32px;font-weight:700;color:var(--nav-accent)">
+                            $<?php echo number_format($receipt['amount'], 2); ?>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($receipt['store_name'])): ?>
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Store</div>
+                        <div style="font-weight:600">
+                            <?php echo htmlspecialchars($receipt['store_name']); ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <div style="padding-top:16px;border-top:1px solid #e5e7eb">
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Receipt Date</div>
+                        <div style="font-weight:600">
+                            <?php echo date('F j, Y', strtotime($receipt['receipt_date'])); ?>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
+                        <div style="font-weight:600">
+                            <?php echo date('F j, Y', strtotime($receipt['created_at'])); ?>
+                        </div>
+                        <?php if ($receipt['uploaded_by_name']): ?>
+                            <div style="font-size:13px;color:var(--muted);margin-top:2px">
+                                by <?php echo htmlspecialchars($receipt['uploaded_by_name']); ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">File Type</div>
+                        <div style="font-weight:600;text-transform:uppercase">
+                            <?php echo htmlspecialchars($fileExt); ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
+                <div style="font-weight:600;margin-bottom:12px">Actions</div>
+                
+                <div style="display:grid;gap:8px">
+                    <!-- Download -->
+                    <a href="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                       download
+                       style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
+                        📥 Download
+                    </a>
+
+                    <!-- View in New Tab -->
+                    <a href="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                       target="_blank"
+                       style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
+                        🔗 View in New Tab
+                    </a>
+
+                    <!-- Edit -->
+                    <button onclick="showEditModal()" 
+                            style="width:100%;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:600;cursor:pointer">
+                        ✏️ Edit Details
+                    </button>
+
+                    <!-- Delete -->
+                    <button onclick="confirmDelete()" 
+                            style="width:100%;padding:10px;border-radius:6px;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;font-weight:600;cursor:pointer;margin-top:8px">
+                        🗑️ Delete Receipt
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto">
+        <h3 style="margin:0 0 16px 0">Edit Receipt</h3>
+        
+        <form id="editForm" enctype="multipart/form-data">
+            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+            <input type="hidden" name="action" value="update">
+            <input type="hidden" name="receipt_id" value="<?php echo $receiptId; ?>">
+            
+            <div style="display:grid;gap:16px">
+                <div>
+                    <label style="display:block;margin-bottom:4px;font-weight:600">Store Name</label>
+                    <input type="text" name="store_name" value="<?php echo htmlspecialchars($receipt['store_name'] ?? ''); ?>" list="editStoresList"
+                           placeholder="e.g., Home Depot, Walmart"
+                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+                    <datalist id="editStoresList">
+                        <?php foreach ($stores as $store): ?>
+                            <option value="<?php echo htmlspecialchars($store); ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                </div>
+
+                <div>
+                    <label style="display:block;margin-bottom:4px;font-weight:600">Title *</label>
+                    <input type="text" name="title" value="<?php echo htmlspecialchars($receipt['title']); ?>" required
+                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+                </div>
+
+                <div>
+                    <label style="display:block;margin-bottom:4px;font-weight:600">Receipt Date *</label>
+                    <input type="date" name="receipt_date" value="<?php echo htmlspecialchars($receipt['receipt_date']); ?>" required
+                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+                </div>
+
+                <div>
+                    <label style="display:block;margin-bottom:4px;font-weight:600">Amount *</label>
+                    <div style="position:relative">
+                        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)">$</span>
+                        <input type="number" name="amount" value="<?php echo htmlspecialchars($receipt['amount']); ?>" required step="0.01" min="0"
+                               style="width:100%;padding:10px 10px 10px 24px;border:1px solid #ddd;border-radius:8px">
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display:block;margin-bottom:4px;font-weight:600">Replace File (Optional)</label>
+                    <input type="file" name="receipt_file" accept="image/*,.pdf"
+                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+                    <div style="margin-top:4px;font-size:13px;color:var(--muted)">
+                        Leave empty to keep current file
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:12px;margin-top:8px">
+                    <button type="submit" id="updateBtn"
+                            style="flex:1;padding:10px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">
+                        Update
+                    </button>
+                    <button type="button" onclick="closeEditModal()"
+                            style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-weight:600;cursor:pointer">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <div id="editMessage" style="display:none;margin-top:16px;padding:12px;border-radius:8px"></div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showEditModal() {
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+document.getElementById('editForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const updateBtn = document.getElementById('updateBtn');
+    const editMessage = document.getElementById('editMessage');
+    const formData = new FormData(this);
+    
+    updateBtn.disabled = true;
+    updateBtn.textContent = 'Updating...';
+    editMessage.style.display = 'none';
+    
+    try {
+        const response = await fetch('/?page=receipts-handler', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.reload();
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        editMessage.style.display = 'block';
+        editMessage.style.background = '#fee2e2';
+        editMessage.style.border = '1px solid #fca5a5';
+        editMessage.style.color = '#991b1b';
+        editMessage.textContent = error.message || 'Failed to update receipt';
+        
+        updateBtn.disabled = false;
+        updateBtn.textContent = 'Update';
+    }
+});
+
+async function confirmDelete() {
+    if (!confirm('Are you sure you want to delete this receipt? This action cannot be undone.')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('action', 'delete');
+    formData.append('receipt_id', '<?php echo $receiptId; ?>');
+    
+    try {
+        const response = await fetch('/?page=receipts-handler', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.href = '/?page=financial/receipts-list';
+        } else {
+            alert(result.message || 'Failed to delete receipt');
+        }
+    } catch (error) {
+        alert('Failed to delete receipt');
+    }
+}
+</script>
+
+<?php require_once __DIR__ . '/../../partials/footer.php'; ?>

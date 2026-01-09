@@ -6,19 +6,27 @@ $per = null; // show all clients
 $pageN = 1;
 $offset = 0;
 $q = trim($_GET['q'] ?? '');
-$where = '';
+$org = trim($_GET['org'] ?? '');
+$where = [];
 $params = [];
-if ($q !== '') { $where = 'WHERE name LIKE ?'; $params[] = '%'.$q.'%'; }
+if ($q !== '') { $where[] = 'c.name LIKE ?'; $params[] = '%'.$q.'%'; }
+if ($org !== '') { $where[] = 'o.name LIKE ?'; $params[] = '%'.$org.'%'; }
 
 // Guard for older DBs without 'archived' column
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
 $activeFilter = $hasArchived ? 'archived=0' : '1=1';
 
+// Build WHERE clause
+$whereClause = 'WHERE '.$activeFilter;
+if (!empty($where)) {
+  $whereClause .= ' AND ('.implode(' AND ', $where).')';
+}
+
 // fetch all clients without pagination
 $sql = "SELECT c.id, c.name, c.email, c.phone, c.created_at, o.name as organization_name 
         FROM clients c 
         LEFT JOIN organizations o ON c.organization_id = o.id 
-        ".($where? 'WHERE c.name LIKE ? AND '.$activeFilter : 'WHERE '.$activeFilter)." 
+        $whereClause
         ORDER BY c.name ASC";
 $st = $pdo->prepare($sql);
 $st->execute($params);
@@ -45,6 +53,10 @@ $clients = $st->fetchAll();
       <div>Search by name</div>
       <input id="clientSearchBox" type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Type to search..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
       <div id="clientSearchSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
+    </label>
+    <label style="flex:1">
+      <div>Search by organization</div>
+      <input id="orgSearchBox" type="text" name="org" value="<?php echo htmlspecialchars($org); ?>" placeholder="Type to search..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
     </label>
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
     <a href="/?page=client/clients-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Reset</a>

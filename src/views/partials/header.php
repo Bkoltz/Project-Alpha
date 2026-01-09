@@ -120,6 +120,8 @@
               <div class="section-label">Financial</div>
               <ul>
                 <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Financial Dashboard</a></li>
+                <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms & Docs</a></li>
+                <li><a href="/?page=financial/receipts-list" data-page="financial/receipts-list">Receipts</a></li>
                 <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
               </ul>
             </li>
