@@ -24,3 +24,12 @@ function csrf_verify_post_or_redirect(string $page): void {
         exit;
     }
 }
+
+function csrf_validate(): bool {
+    csrf_init();
+    $token = $_POST['csrf'] ?? '';
+    if (empty($_SESSION['csrf']) || !is_string($token) || !hash_equals($_SESSION['csrf'], $token)) {
+        return false;
+    }
+    return true;
+}

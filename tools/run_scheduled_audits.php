@@ -8,7 +8,15 @@
  * 
  * Example crontab entry:
  * 0 * * * * php /path/to/tools/run_scheduled_audits.php >> /path/to/logs/scheduled_audits.log 2>&1
+ * 
+ * Windows PowerShell example:
+ * $env:DB_HOST="localhost"; php K:\Projects\Project-Alpha\tools\run_scheduled_audits.php
  */
+
+// Set default DB_HOST to localhost if running from CLI and not set
+if (php_sapi_name() === 'cli' && !getenv('DB_HOST')) {
+    putenv('DB_HOST=localhost');
+}
 
 // Load database configuration
 require_once __DIR__ . '/../src/config/db.php';

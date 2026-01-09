@@ -490,6 +490,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/item_library_handler.php';
         exit;
     }
+    if ($page === 'receipts-handler') {
+        require_once __DIR__ . '/../src/controllers/receipts_handler.php';
+        exit;
+    }
+    if ($page === 'forms-handler') {
+        require_once __DIR__ . '/../src/controllers/forms_handler.php';
+        exit;
+    }
 }
 
 // Standalone login and reset pages use a minimal top header

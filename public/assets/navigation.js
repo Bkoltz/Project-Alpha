@@ -34,6 +34,7 @@
         if (mainContent) {
             mainContent.style.opacity = '0.7';
             mainContent.style.pointerEvents = 'none';
+            mainContent.style.cursor = 'wait';
         }
     }
     
@@ -41,7 +42,8 @@
         const mainContent = document.querySelector('.main-content');
         if (mainContent) {
             mainContent.style.opacity = '1';
-            mainContent.style.pointerEvents = 'auto';
+            mainContent.style.pointerEvents = '';
+            mainContent.style.cursor = '';
         }
     }
 
