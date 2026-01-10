@@ -33,8 +33,6 @@ if (!$receipt) {
 
 $fileExt = strtolower(pathinfo($receipt['file_path'], PATHINFO_EXTENSION));
 $isPdf = $fileExt === 'pdf';
-
-require_once __DIR__ . '/../../partials/header.php';
 ?>
 
 <div style="max-width:1200px;margin:0 auto;padding:24px">
@@ -46,15 +44,19 @@ require_once __DIR__ . '/../../partials/header.php';
 
     <div style="display:grid;grid-template-columns:1fr 400px;gap:32px;align-items:start">
         <!-- Receipt Preview -->
-        <div>
+        <div style="min-width:0">
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <?php 
+                $fileParam = str_replace('/src/uploads/', '', $receipt['file_path']);
+                $fileUrl = '/?page=serve-upload&file=' . urlencode($fileParam);
+                ?>
                 <?php if ($isPdf): ?>
-                    <div style="height:800px">
-                        <iframe src="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
-                                style="width:100%;height:100%;border:0"></iframe>
+                    <div style="height:800px;max-height:800px;min-height:800px">
+                        <iframe src="<?php echo htmlspecialchars($fileUrl); ?>" 
+                                style="width:100%;height:800px;max-height:800px;border:0;display:block"></iframe>
                     </div>
                 <?php else: ?>
-                    <img src="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                    <img src="<?php echo htmlspecialchars($fileUrl); ?>" 
                          alt="Receipt" 
                          style="width:100%;height:auto;display:block">
                 <?php endif; ?>
@@ -62,7 +64,7 @@ require_once __DIR__ . '/../../partials/header.php';
         </div>
 
         <!-- Receipt Info & Actions -->
-        <div>
+        <div style="width:400px;max-width:400px;min-width:400px">
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px">
                 <h1 style="margin:0 0 16px 0;font-size:24px"><?php echo htmlspecialchars($receipt['title']); ?></h1>
                 
@@ -117,14 +119,14 @@ require_once __DIR__ . '/../../partials/header.php';
                 
                 <div style="display:grid;gap:8px">
                     <!-- Download -->
-                    <a href="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                    <a href="<?php echo htmlspecialchars($fileUrl . '&download=1'); ?>" 
                        download
                        style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
                         📥 Download
                     </a>
 
                     <!-- View in New Tab -->
-                    <a href="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                    <a href="<?php echo htmlspecialchars($fileUrl); ?>" 
                        target="_blank"
                        style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
                         🔗 View in New Tab
@@ -290,5 +292,3 @@ async function confirmDelete() {
     }
 }
 </script>
-
-<?php require_once __DIR__ . '/../../partials/footer.php'; ?>

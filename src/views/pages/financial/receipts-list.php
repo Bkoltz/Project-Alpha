@@ -5,10 +5,10 @@ require_once __DIR__ . '/../../../utils/format.php';
 
 $orgId = 1; // Should come from session/user context
 
-// Get filter parameters
+// Get filter parameters with defaults to current year/month
 $filterStore = $_GET['store'] ?? '';
-$filterMonth = $_GET['month'] ?? '';
-$filterYear = $_GET['year'] ?? '';
+$filterMonth = $_GET['month'] ?? date('n'); // Current month (1-12)
+$filterYear = $_GET['year'] ?? date('Y'); // Current year
 $filterMinAmount = $_GET['min_amount'] ?? '';
 $filterMaxAmount = $_GET['max_amount'] ?? '';
 
@@ -63,7 +63,11 @@ $yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM recei
 $yearStmt->execute([$orgId]);
 $years = $yearStmt->fetchAll(PDO::FETCH_COLUMN);
 
-require_once __DIR__ . '/../../partials/header.php';
+// Always include current year if not present
+$currentYear = (int)date('Y');
+if (!in_array($currentYear, $years)) {
+    array_unshift($years, $currentYear);
+}
 ?>
 
 <div style="max-width:1400px;margin:0 auto;padding:24px">
@@ -168,7 +172,10 @@ require_once __DIR__ . '/../../partials/header.php';
                                 <div style="font-size:12px;font-weight:600">PDF Document</div>
                             </div>
                         <?php else: ?>
-                            <img src="<?php echo htmlspecialchars($receipt['file_path']); ?>" 
+                            <?php 
+                            $fileParam = str_replace('/src/uploads/', '', $receipt['file_path']);
+                            ?>
+                            <img src="/?page=serve-upload&file=<?php echo urlencode($fileParam); ?>" 
                                  alt="Receipt preview" 
                                  style="width:100%;height:100%;object-fit:cover"
                                  loading="lazy">
@@ -196,7 +203,10 @@ require_once __DIR__ . '/../../partials/header.php';
                         
                         <!-- Action Buttons -->
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb">
-                            <a href="<?php echo htmlspecialchars($receipt['file_path']); ?>" download
+                            <?php 
+                            $fileParam = str_replace('/src/uploads/', '', $receipt['file_path']);
+                            ?>
+                            <a href="/?page=serve-upload&file=<?php echo urlencode($fileParam); ?>&download=1" download
                                style="padding:8px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-size:13px;font-weight:600">
                                 📥 Download
                             </a>
@@ -211,5 +221,3 @@ require_once __DIR__ . '/../../partials/header.php';
         </div>
     <?php endif; ?>
 </div>
-
-<?php require_once __DIR__ . '/../../partials/footer.php'; ?>

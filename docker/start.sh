@@ -118,7 +118,20 @@ JSON
   fi
 fi
 
-# 4) Database and config setup complete
+# 5) Ensure uploads directories exist with correct permissions
+UPLOADS_DIR="/var/www/src/uploads"
+if [ ! -d "${UPLOADS_DIR}/receipts" ]; then
+  echo "Creating receipts upload directory..."
+  mkdir -p "${UPLOADS_DIR}/receipts" || true
+fi
+if [ ! -d "${UPLOADS_DIR}/forms" ]; then
+  echo "Creating forms upload directory..."
+  mkdir -p "${UPLOADS_DIR}/forms" || true
+fi
+chown -R www-data:www-data "${UPLOADS_DIR}" || true
+chmod -R 775 "${UPLOADS_DIR}" || true
+
+# 6) Database and config setup complete
 # Note: Cron jobs are now handled by the separate 'cron' service in docker-compose.yml
 # This web service no longer manages scheduled tasks.
 

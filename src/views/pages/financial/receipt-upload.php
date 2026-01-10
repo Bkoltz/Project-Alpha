@@ -9,8 +9,6 @@ $orgId = 1;
 $stmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
 $stmt->execute([$orgId]);
 $stores = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-require_once __DIR__ . '/../../partials/header.php';
 ?>
 
 <div style="max-width:800px;margin:0 auto;padding:24px">
@@ -208,5 +206,3 @@ document.getElementById('receiptUploadForm').addEventListener('submit', async fu
     }
 });
 </script>
-
-<?php require_once __DIR__ . '/../../partials/footer.php'; ?>
