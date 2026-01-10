@@ -1,43 +1,41 @@
 <?php
-// src/views/pages/financial/form-detail.php
+// src/views/pages/financial/folder-detail.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
-$categoryId = (int)($_GET['id'] ?? 0);
+$folderId = (int)($_GET['id'] ?? 0);
 $orgId = 1; // Should come from session/user context
 
-if (!$categoryId) {
+if (!$folderId) {
     header('Location: /?page=financial/forms-list');
     exit;
 }
 
-// Fetch category and document details
+// Fetch folder details
+$stmt = $pdo->prepare('
+    SELECT * FROM form_categories 
+    WHERE id = ? AND org_id = ? AND type = "folder"
+');
+$stmt->execute([$folderId, $orgId]);
+$folder = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$folder) {
+    header('Location: /?page=financial/forms-list');
+    exit;
+}
+
+// Fetch all documents in this folder
 $stmt = $pdo->prepare('
     SELECT 
-        fc.*,
-        fd.id as doc_id,
-        fd.file_path,
-        fd.file_name,
-        fd.file_size,
-        fd.mime_type,
-        fd.uploaded_at,
+        fd.*,
         u.username as uploaded_by_name
-    FROM form_categories fc
-    LEFT JOIN form_documents fd ON fc.id = fd.category_id
+    FROM form_documents fd
     LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fc.id = ? AND fc.org_id = ?
+    WHERE fd.category_id = ?
+    ORDER BY fd.uploaded_at DESC
 ');
-$stmt->execute([$categoryId, $orgId]);
-$category = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$category) {
-    header('Location: /?page=financial/forms-list');
-    exit;
-}
-
-$hasDocument = !empty($category['file_path']);
-$fileExt = $hasDocument ? strtolower(pathinfo($category['file_path'], PATHINFO_EXTENSION)) : '';
-$isPdf = $fileExt === 'pdf';
+$stmt->execute([$folderId]);
+$documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch clients for email modal
 $stmt = $pdo->prepare('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name');
@@ -51,147 +49,139 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div style="max-width:1400px;margin:0 auto;padding:24px">
+    <!-- Back Button -->
     <div style="margin-bottom:24px">
         <a href="/?page=financial/forms-list" style="color:var(--nav-accent);text-decoration:none;font-size:14px">
             ← Back to Forms & Docs
         </a>
     </div>
 
-    <?php if (!$hasDocument): ?>
-        <!-- No Document Uploaded State -->
-        <div style="max-width:800px;margin:0 auto">
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:32px;text-align:center">
-                <h1 style="margin:0 0 8px 0;font-size:24px"><?php echo htmlspecialchars($category['title']); ?></h1>
-                <p style="margin:0 0 24px 0;color:var(--muted)">No document has been uploaded to this category yet</p>
-                
-                <div style="font-size:64px;margin-bottom:24px">📂</div>
-                
-                <button onclick="showUploadModal()" 
-                        style="padding:12px 24px;border-radius:8px;background:var(--nav-accent);color:#fff;border:0;font-weight:600;cursor:pointer">
-                    Upload Document
-                </button>
+    <!-- Folder Header -->
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:24px">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:16px">
+            <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+                    <h1 style="margin:0;font-size:28px"><?php echo htmlspecialchars($folder['title']); ?></h1>
+                    <span style="padding:4px 12px;background:#dbeafe;color:#1e40af;border-radius:6px;font-size:13px;font-weight:600">
+                        📁 FOLDER
+                    </span>
+                </div>
+                <p style="margin:0;color:var(--muted)">
+                    Created <?php echo date('F j, Y', strtotime($folder['created_at'])); ?>
+                    • <?php echo count($documents); ?> document<?php echo count($documents) !== 1 ? 's' : ''; ?>
+                </p>
             </div>
         </div>
+
+        <!-- Folder Actions -->
+        <div style="display:flex;gap:8px;padding-top:16px;border-top:1px solid #e5e7eb">
+            <button onclick="showUploadModal()" 
+                    style="padding:10px 16px;border-radius:8px;background:var(--nav-accent);color:#fff;border:0;font-weight:600;cursor:pointer">
+                📤 Upload Document
+            </button>
+            <button id="emailSelectedBtn" onclick="showEmailModal()" 
+                    style="padding:10px 16px;border-radius:8px;background:#10b981;color:#fff;border:0;font-weight:600;cursor:pointer">
+                ✉️ Email Documents (<span id="selectedCount">0</span>)
+            </button>
+            <button onclick="editFolder(<?php echo $folder['id']; ?>, '<?php echo htmlspecialchars(addslashes($folder['title'])); ?>')" 
+                    style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;font-weight:600;cursor:pointer">
+                ✏️ Rename Folder
+            </button>
+            <button onclick="deleteFolder()" 
+                    style="padding:10px 16px;border-radius:8px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;font-weight:600;cursor:pointer">
+                🗑️ Delete Folder
+            </button>
+        </div>
+    </div>
+
+    <!-- Documents Grid -->
+    <?php if (empty($documents)): ?>
+        <div style="text-align:center;padding:64px 24px;border:2px dashed #e5e7eb;border-radius:12px;background:#fff">
+            <div style="font-size:48px;margin-bottom:16px">📂</div>
+            <h2 style="margin:0 0 8px 0;font-size:20px">No documents in this folder yet</h2>
+            <p style="margin:0 0 24px 0;color:var(--muted)">Upload your first document to get started</p>
+            <button onclick="showUploadModal()" 
+                    style="padding:12px 24px;border-radius:8px;background:var(--nav-accent);color:#fff;border:0;font-weight:600;cursor:pointer">
+                📤 Upload Document
+            </button>
+        </div>
     <?php else: ?>
-        <!-- Document View -->
-        <div style="display:grid;grid-template-columns:1fr 400px;gap:32px;align-items:start">
-            <!-- Document Preview -->
-            <div style="min-width:0">
-                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-                    <?php 
-                    $fileParam = str_replace('/src/uploads/', '', $category['file_path']);
-                    $fileUrl = '/?page=serve-upload&file=' . urlencode($fileParam);
-                    ?>
-                    <?php if ($isPdf): ?>
-                        <div style="height:900px;max-height:900px;min-height:900px">
-                            <iframe src="<?php echo htmlspecialchars($fileUrl); ?>" 
-                                    style="width:100%;height:900px;max-height:900px;border:0;display:block"></iframe>
-                        </div>
-                    <?php else: ?>
-                        <div style="padding:24px;text-align:center;background:#f9fafb">
-                            <img src="<?php echo htmlspecialchars($fileUrl); ?>" 
-                                 alt="<?php echo htmlspecialchars($category['title']); ?>" 
-                                 style="max-width:100%;height:auto;border-radius:8px;display:block;margin:0 auto">
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <!-- Document Info & Actions -->
-            <div style="width:400px;max-width:400px;min-width:400px">
-                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px">
-                    <h1 style="margin:0 0 16px 0;font-size:24px"><?php echo htmlspecialchars($category['title']); ?></h1>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px">
+            <?php foreach ($documents as $doc): 
+                $fileExt = strtolower(pathinfo($doc['file_path'], PATHINFO_EXTENSION));
+                $isPdf = $fileExt === 'pdf';
+                $fileParam = str_replace('/src/uploads/', '', $doc['file_path']);
+            ?>
+                <div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;display:flex;flex-direction:column;position:relative">
+                    <!-- Checkbox -->
+                    <div style="position:absolute;top:8px;left:8px;z-index:10">
+                        <input type="checkbox" 
+                               class="doc-checkbox" 
+                               data-doc-id="<?php echo $doc['id']; ?>" 
+                               data-file-path="<?php echo htmlspecialchars($doc['file_path']); ?>"
+                               data-file-name="<?php echo htmlspecialchars($doc['file_name']); ?>"
+                               onchange="updateSelectedCount()"
+                               style="width:20px;height:20px;cursor:pointer">
+                    </div>
                     
-                    <div style="display:grid;gap:16px">
-                        <div>
-                            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">File Name</div>
-                            <div style="font-weight:600;word-break:break-word">
-                                <?php echo htmlspecialchars($category['file_name']); ?>
+                    <!-- Document Preview -->
+                    <div style="height:200px;background:#f9fafb;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                        <?php if ($isPdf): ?>
+                            <div style="text-align:center;color:var(--muted)">
+                                <div style="font-size:48px;margin-bottom:8px">📄</div>
+                                <div style="font-size:12px;font-weight:600">PDF Document</div>
                             </div>
-                        </div>
-
-                        <div style="padding-top:16px;border-top:1px solid #e5e7eb">
-                            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">File Type</div>
-                            <div style="font-weight:600;text-transform:uppercase">
-                                <?php echo htmlspecialchars($fileExt); ?>
-                            </div>
-                        </div>
-
-                        <?php if ($category['file_size']): ?>
-                        <div>
-                            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">File Size</div>
-                            <div style="font-weight:600">
-                                <?php echo number_format($category['file_size'] / 1024 / 1024, 2); ?> MB
-                            </div>
-                        </div>
+                        <?php else: ?>
+                            <img src="/?page=serve-upload&file=<?php echo urlencode($fileParam); ?>" 
+                                 alt="<?php echo htmlspecialchars($doc['file_name']); ?>" 
+                                 style="width:100%;height:100%;object-fit:cover"
+                                 loading="lazy">
                         <?php endif; ?>
-
-                        <div>
-                            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
-                            <div style="font-weight:600">
-                                <?php echo date('F j, Y', strtotime($category['uploaded_at'])); ?>
-                            </div>
-                            <?php if ($category['uploaded_by_name']): ?>
-                                <div style="font-size:13px;color:var(--muted);margin-top:2px">
-                                    by <?php echo htmlspecialchars($category['uploaded_by_name']); ?>
-                                </div>
+                    </div>
+                    
+                    <!-- Document Info -->
+                    <div style="padding:16px;flex:1;display:flex;flex-direction:column">
+                        <div style="font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?php echo htmlspecialchars($doc['file_name']); ?>">
+                            <?php echo htmlspecialchars($doc['file_name']); ?>
+                        </div>
+                        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
+                            Uploaded <?php echo date('M j, Y', strtotime($doc['uploaded_at'])); ?>
+                            <?php if ($doc['uploaded_by_name']): ?>
+                                <br>by <?php echo htmlspecialchars($doc['uploaded_by_name']); ?>
                             <?php endif; ?>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
-                    <div style="font-weight:600;margin-bottom:12px">Actions</div>
-                    
-                    <div style="display:grid;gap:8px">
-                        <!-- Download -->
-                        <a href="<?php echo htmlspecialchars($fileUrl . '&download=1'); ?>" 
-                           download
-                           style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
-                            📥 Download
-                        </a>
-
-                        <!-- View in New Tab -->
-                        <a href="<?php echo htmlspecialchars($fileUrl); ?>" 
-                           target="_blank"
-                           style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
-                            🔗 View in New Tab
-                        </a>
-
-                        <!-- Email -->
-                        <button onclick="showEmailModal()" 
-                                style="width:100%;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:600;cursor:pointer">
-                            ✉️ Email
-                        </button>
-
-                        <!-- Replace File -->
-                        <button onclick="showUploadModal()" 
-                                style="width:100%;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:600;cursor:pointer;margin-top:8px">
-                            🔄 Replace File
-                        </button>
-
-                        <!-- Delete -->
-                        <button onclick="confirmDelete()" 
-                                style="width:100%;padding:10px;border-radius:6px;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;font-weight:600;cursor:pointer">
-                            🗑️ Delete Document
+                        
+                        <!-- Action Buttons -->
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid #e5e7eb">
+                            <a href="/?page=serve-upload&file=<?php echo urlencode($fileParam); ?>&download=1" download
+                               style="padding:8px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-size:13px;font-weight:600">
+                                📥 Download
+                            </a>
+                            <a href="/?page=financial/document-detail&id=<?php echo $doc['id']; ?>&folder=<?php echo $folderId; ?>"
+                               style="padding:8px;border-radius:6px;background:var(--nav-accent);color:#fff;text-align:center;text-decoration:none;font-size:13px;font-weight:600">
+                                👁️ View
+                            </a>
+                        </div>
+                        <button onclick="deleteDocument(<?php echo $doc['id']; ?>)"
+                                style="width:100%;padding:8px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px">
+                            🗑️ Delete
                         </button>
                     </div>
                 </div>
-            </div>
+            <?php endforeach; ?>
         </div>
     <?php endif; ?>
 </div>
 
-<!-- Upload/Replace Modal -->
+<!-- Upload Document Modal -->
 <div id="uploadModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%">
-        <h3 style="margin:0 0 16px 0"><?php echo $hasDocument ? 'Replace' : 'Upload'; ?> Document</h3>
+        <h3 style="margin:0 0 16px 0">Upload Document to Folder</h3>
         
         <form id="uploadForm" enctype="multipart/form-data">
             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
             <input type="hidden" name="action" value="upload_document">
-            <input type="hidden" name="category_id" value="<?php echo $categoryId; ?>">
+            <input type="hidden" name="category_id" value="<?php echo $folderId; ?>">
             
             <label style="display:block;margin-bottom:16px">
                 <div style="margin-bottom:4px;font-weight:600">Document File *</div>
@@ -218,16 +208,16 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<?php if ($hasDocument): ?>
 <!-- Email Modal -->
 <div id="emailModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto">
-        <h3 style="margin:0 0 16px 0">Email Form to Client</h3>
+        <h3 style="margin:0 0 16px 0">Email Documents to Client</h3>
         
         <form id="emailForm">
             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-            <input type="hidden" name="action" value="email_form">
-            <input type="hidden" name="category_id" value="<?php echo $categoryId; ?>">
+            <input type="hidden" name="action" value="email_bulk_documents">
+            <input type="hidden" name="folder_id" value="<?php echo $folderId; ?>">
+            <input type="hidden" name="document_ids" id="documentIds">
             
             <div style="margin-bottom:16px">
                 <label style="display:block;margin-bottom:8px;font-weight:600">Send To:</label>
@@ -319,7 +309,38 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </form>
     </div>
 </div>
-<?php endif; ?>
+
+<!-- Edit Folder Modal -->
+<div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%">
+        <h3 style="margin:0 0 16px 0">Rename Folder</h3>
+        
+        <form id="editForm">
+            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+            <input type="hidden" name="action" value="update_category">
+            <input type="hidden" name="category_id" id="editFolderId">
+            
+            <label style="display:block;margin-bottom:16px">
+                <div style="margin-bottom:4px;font-weight:600">Folder Name *</div>
+                <input type="text" name="title" id="editTitle" required 
+                       style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+            </label>
+
+            <div style="display:flex;gap:12px">
+                <button type="submit" id="updateBtn"
+                        style="flex:1;padding:10px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">
+                    Update
+                </button>
+                <button type="button" onclick="closeEditModal()"
+                        style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-weight:600;cursor:pointer">
+                    Cancel
+                </button>
+            </div>
+
+            <div id="editMessage" style="display:none;margin-top:16px;padding:12px;border-radius:8px"></div>
+        </form>
+    </div>
+</div>
 
 <script>
 // Upload Modal
@@ -368,9 +389,69 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
     }
 });
 
-<?php if ($hasDocument): ?>
+// Edit Folder Modal
+function editFolder(id, title) {
+    document.getElementById('editFolderId').value = id;
+    document.getElementById('editTitle').value = title;
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+document.getElementById('editForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const btn = document.getElementById('updateBtn');
+    const msg = document.getElementById('editMessage');
+    const formData = new FormData(this);
+    
+    btn.disabled = true;
+    btn.textContent = 'Updating...';
+    msg.style.display = 'none';
+    
+    try {
+        const response = await fetch('/?page=forms-handler', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.reload();
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        msg.style.display = 'block';
+        msg.style.background = '#fee2e2';
+        msg.style.border = '1px solid #fca5a5';
+        msg.style.color = '#991b1b';
+        msg.textContent = error.message || 'Failed to update folder';
+        
+        btn.disabled = false;
+        btn.textContent = 'Update';
+    }
+});
+
 // Email Modal
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.doc-checkbox:checked');
+    const count = checkboxes.length;
+    document.getElementById('selectedCount').textContent = count;
+}
+
 function showEmailModal() {
+    const checkboxes = document.querySelectorAll('.doc-checkbox:checked');
+    if (checkboxes.length === 0) {
+        alert('Please select at least one document to email');
+        return;
+    }
+    
+    const docIds = Array.from(checkboxes).map(cb => cb.dataset.docId);
+    document.getElementById('documentIds').value = JSON.stringify(docIds);
     document.getElementById('emailModal').style.display = 'flex';
 }
 
@@ -387,8 +468,7 @@ function closeEmailModal() {
 
 function selectRecipientType(type) {
     if (type === 'organization') {
-        // Show confirmation for organization email
-        if (!confirm('This will email the document to ALL clients in the selected organization. Do you want to continue?')) {
+        if (!confirm('This will email the documents to ALL clients in the selected organization. Do you want to continue?')) {
             return;
         }
     }
@@ -480,6 +560,9 @@ document.getElementById('emailForm').addEventListener('submit', async function(e
             
             setTimeout(() => {
                 closeEmailModal();
+                // Uncheck all checkboxes
+                document.querySelectorAll('.doc-checkbox:checked').forEach(cb => cb.checked = false);
+                updateSelectedCount();
             }, 2000);
         } else {
             throw new Error(result.message);
@@ -496,8 +579,8 @@ document.getElementById('emailForm').addEventListener('submit', async function(e
     }
 });
 
-// Delete Document
-async function confirmDelete() {
+// Delete Functions
+async function deleteDocument(docId) {
     if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
         return;
     }
@@ -505,7 +588,7 @@ async function confirmDelete() {
     const formData = new FormData();
     formData.append('csrf', '<?php echo csrf_token(); ?>');
     formData.append('action', 'delete_document');
-    formData.append('document_id', '<?php echo $category['doc_id']; ?>');
+    formData.append('document_id', docId);
     
     try {
         const response = await fetch('/?page=forms-handler', {
@@ -516,7 +599,7 @@ async function confirmDelete() {
         const result = await response.json();
         
         if (result.success) {
-            window.location.href = result.redirect;
+            window.location.reload();
         } else {
             alert(result.message || 'Failed to delete document');
         }
@@ -524,5 +607,32 @@ async function confirmDelete() {
         alert('Failed to delete document');
     }
 }
-<?php endif; ?>
+
+async function deleteFolder() {
+    if (!confirm('Are you sure you want to delete this folder and ALL its documents? This action cannot be undone.')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('action', 'delete_category');
+    formData.append('category_id', <?php echo $folderId; ?>);
+    
+    try {
+        const response = await fetch('/?page=forms-handler', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            window.location.href = '/?page=financial/forms-list';
+        } else {
+            alert(result.message || 'Failed to delete folder');
+        }
+    } catch (error) {
+        alert('Failed to delete folder');
+    }
+}
 </script>

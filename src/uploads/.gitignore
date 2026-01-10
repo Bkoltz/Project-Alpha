@@ -1,0 +1,6 @@
+# Ignore all uploaded files
+*
+# But keep the directory structure
+!.gitignore
+!receipts/
+!forms/

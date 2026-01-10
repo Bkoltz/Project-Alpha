@@ -832,11 +832,13 @@ CREATE TABLE IF NOT EXISTS form_categories (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   org_id INT NOT NULL,
   title VARCHAR(255) NOT NULL,
+  type ENUM('file', 'folder') NOT NULL DEFAULT 'folder' COMMENT 'file=single document, folder=multiple documents',
   created_by INT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
-  INDEX idx_form_cat_org (org_id)
+  INDEX idx_form_cat_org (org_id),
+  INDEX idx_form_cat_type (type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS form_documents (
@@ -850,7 +852,8 @@ CREATE TABLE IF NOT EXISTS form_documents (
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (category_id) REFERENCES form_categories(id) ON DELETE CASCADE,
   FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
-  INDEX idx_form_doc_category (category_id)
+  INDEX idx_form_doc_category (category_id),
+  INDEX idx_form_doc_uploaded (uploaded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -881,3 +884,16 @@ CREATE TABLE IF NOT EXISTS notification_log (
   INDEX idx_notif_entity (entity_type, entity_id),
   INDEX idx_notif_sent (sent_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- DEFAULT DATA
+-- ============================================================================
+
+-- Insert default organization
+INSERT IGNORE INTO organizations (id, name, notes, created_at, updated_at)
+VALUES (1, 'Default Organization', 'Default organization for system', NOW(), NOW());
+
+-- Insert default admin user (username: admin, password: admin123)
+-- Password hash is bcrypt hash of 'admin123'
+INSERT IGNORE INTO users (id, email, username, password_hash, role, created_at, updated_at)
+VALUES (1, 'admin@localhost', 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', NOW(), NOW());

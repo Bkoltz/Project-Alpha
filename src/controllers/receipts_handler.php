@@ -25,7 +25,18 @@ if (!csrf_validate()) {
 try {
     // Get current org_id (default to 1 for now, should come from session/user context)
     $orgId = 1;
-    $userId = $_SESSION['user_id'] ?? 1;
+    $userId = $_SESSION['user_id'] ?? null;
+    
+    // Ensure we have a valid user ID or NULL
+    if ($userId === null) {
+        // Get first admin user if exists
+        $stmt = $pdo->query("SELECT id FROM users WHERE role='admin' LIMIT 1");
+        $adminUser = $stmt->fetch();
+        if ($adminUser) {
+            $userId = $adminUser['id'];
+        }
+        // Otherwise $userId remains NULL which is acceptable for uploaded_by
+    }
 
     switch ($action) {
         case 'create':
@@ -69,7 +80,7 @@ try {
             // Organize by year/month
             $year = date('Y', strtotime($receiptDate));
             $month = date('m', strtotime($receiptDate));
-            $baseDir = __DIR__ . '/../../uploads/receipts';
+            $baseDir = __DIR__ . '/../uploads/receipts';
             $uploadDir = $baseDir . '/' . $year . '/' . $month;
             
             // Ensure base directory exists
@@ -95,7 +106,7 @@ try {
             }
             
             $uploadPath = $uploadDir . '/' . $filename;
-            $dbPath = '/uploads/receipts/' . $year . '/' . $month . '/' . $filename;
+            $dbPath = '/src/uploads/receipts/' . $year . '/' . $month . '/' . $filename;
 
             if (!move_uploaded_file($file['tmp_name'], $uploadPath)) {
                 throw new Exception('Failed to upload file');
@@ -134,7 +145,7 @@ try {
             $stmt->execute([$receiptId, $orgId]);
 
             // Delete file
-            $filePath = __DIR__ . '/../../' . ltrim($receipt['file_path'], '/');
+            $filePath = __DIR__ . '/../..' . $receipt['file_path'];
             if (file_exists($filePath)) {
                 @unlink($filePath);
             }
@@ -211,7 +222,7 @@ try {
                 // Organize by year/month based on new receipt date
                 $year = date('Y', strtotime($receiptDate));
                 $month = date('m', strtotime($receiptDate));
-                $baseDir = __DIR__ . '/../../uploads/receipts';
+                $baseDir = __DIR__ . '/../uploads/receipts';
                 $uploadDir = $baseDir . '/' . $year . '/' . $month;
                 
                 // Ensure base directory exists
@@ -237,7 +248,7 @@ try {
                 }
                 
                 $uploadPath = $uploadDir . '/' . $filename;
-                $dbPath = '/uploads/receipts/' . $year . '/' . $month . '/' . $filename;
+                $dbPath = '/src/uploads/receipts/' . $year . '/' . $month . '/' . $filename;
 
                 if (!move_uploaded_file($file['tmp_name'], $uploadPath)) {
                     throw new Exception('Failed to upload new file');
@@ -249,7 +260,7 @@ try {
 
                 // Delete old file
                 if ($oldReceipt) {
-                    $oldFilePath = __DIR__ . '/../../' . ltrim($oldReceipt['file_path'], '/');
+                    $oldFilePath = __DIR__ . '/../..' . $oldReceipt['file_path'];
                     if (file_exists($oldFilePath)) {
                         @unlink($oldFilePath);
                     }
