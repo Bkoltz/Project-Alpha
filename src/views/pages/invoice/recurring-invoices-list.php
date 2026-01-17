@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoice/recurring-invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 
 // Ensure the optional long_term_contracts table exists before querying
 $has_long_term_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='long_term_contracts'")->fetchColumn();
@@ -9,15 +10,25 @@ if (!$has_long_term_table) {
   return;
 }
 
+$client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
+$client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? 'active';
+$project_code = trim($_GET['project_code'] ?? '');
+$min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
+$max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
 $where = [];
 $p = [];
 
+if($client_id>0){$where[]='ltc.client_id=?';$p[]=$client_id;}
+elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if ($status !== '' && $status !== 'all') {
     $where[] = 'ltc.status=?';
     $p[] = $status;
 }
+if($project_code!==''){ $where[]='ltc.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($min_price !== null){ $where[]='ltc.price_per_invoice >= ?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='ltc.price_per_invoice <= ?'; $p[] = $max_price; }
 
 $sql = "SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.start_date, ltc.end_date, c.name client_name, c.id AS client_id 
         FROM long_term_contracts ltc 
@@ -41,21 +52,53 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div style="font-size:14px;color:#78350f">Invoices are automatically generated based on the billing schedule below. Active contracts will create new invoices on their next invoice date.</div>
   </div> -->
 
-  <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0">
-    <input type="hidden" name="page" value="invoice/recurring-invoices-list">
-    <label style="display:flex;flex-direction:column;gap:4px">
-      <div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="all" <?php echo $status==='all'?'selected':''; ?>>All</option>
-        <option value="active" <?php echo $status==='active'?'selected':''; ?>>Active</option>
-        <option value="pending" <?php echo $status==='pending'?'selected':''; ?>>Pending</option>
-        <option value="paused" <?php echo $status==='paused'?'selected':''; ?>>Paused</option>
-        <option value="completed" <?php echo $status==='completed'?'selected':''; ?>>Completed</option>
-      </select>
-    </label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=invoice/recurring-invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit; font-size: small;">Reset</a>
-  </form>
+  <?php
+  $filterConfig = [
+      'page' => 'invoice/recurring-invoices-list',
+      'filters' => [
+          'client' => [
+              'type' => 'client_autocomplete',
+              'label' => 'Client',
+              'value' => $client_name,
+              'id_value' => $client_id
+          ],
+          'status' => [
+              'type' => 'select',
+              'label' => 'Status',
+              'value' => $status,
+              'options' => [
+                  ['value' => 'all', 'label' => 'All'],
+                  ['value' => 'active', 'label' => 'Active'],
+                  ['value' => 'pending', 'label' => 'Pending'],
+                  ['value' => 'paused', 'label' => 'Paused'],
+                  ['value' => 'completed', 'label' => 'Completed'],
+                  ['value' => 'cancelled', 'label' => 'Cancelled']
+              ]
+          ],
+          'min_price' => [
+              'type' => 'number',
+              'label' => 'Min ($)',
+              'value' => $min_price ?? '',
+              'step' => '0.01'
+          ],
+          'max_price' => [
+              'type' => 'number',
+              'label' => 'Max ($)',
+              'value' => $max_price ?? '',
+              'step' => '0.01'
+          ],
+          'project_code' => [
+              'type' => 'text',
+              'label' => 'Project ID',
+              'value' => $project_code,
+              'placeholder' => 'PA-2025'
+          ]
+      ]
+  ];
+  
+  // Render the filter using Twig template
+  echo render_template('components/document-filter.html.twig', $filterConfig);
+  ?>
 
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">

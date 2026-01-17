@@ -132,5 +132,5 @@ $stmt->execute([
     $id
 ]);
 
-header('Location: /?page=organization/organizations-view&id=' . $id . '&updated=1');
+header('Location: /?page=organization/organizations-list&updated=1');
 exit;

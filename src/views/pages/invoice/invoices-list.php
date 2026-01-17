@@ -96,10 +96,10 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
               'label' => 'Status',
               'value' => $statusFilter,
               'options' => [
-                  'all' => 'All',
-                  'paid' => 'Paid',
-                  'unpaid' => 'Unpaid/Partial',
-                  'overdue' => 'Overdue'
+                  ['value' => 'all', 'label' => 'All'],
+                  ['value' => 'paid', 'label' => 'Paid'],
+                  ['value' => 'unpaid', 'label' => 'Unpaid/Partial'],
+                  ['value' => 'overdue', 'label' => 'Overdue']
               ]
           ],
           'min' => [

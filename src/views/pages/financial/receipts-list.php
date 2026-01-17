@@ -2,6 +2,7 @@
 // src/views/pages/financial/receipts-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/format.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 
 $orgId = 1; // Should come from session/user context
 
@@ -82,56 +83,64 @@ if (!in_array($currentYear, $years)) {
     </div>
 
     <!-- Filters -->
-    <form method="get" action="/?page=financial/receipts-list" style="margin-bottom:24px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px">
-        <input type="hidden" name="page" value="financial/receipts-list">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:12px">
-            <div>
-                <label style="display:block;margin-bottom:4px;font-size:13px;font-weight:600">Store</label>
-                <select name="store" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
-                    <option value="">All Stores</option>
-                    <?php foreach ($stores as $store): ?>
-                        <option value="<?php echo htmlspecialchars($store); ?>" <?php echo $filterStore === $store ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($store); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div>
-                <label style="display:block;margin-bottom:4px;font-size:13px;font-weight:600">Year</label>
-                <select name="year" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
-                    <option value="">All Years</option>
-                    <?php foreach ($years as $year): ?>
-                        <option value="<?php echo $year; ?>" <?php echo $filterYear == $year ? 'selected' : ''; ?>>
-                            <?php echo $year; ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div>
-                <label style="display:block;margin-bottom:4px;font-size:13px;font-weight:600">Month</label>
-                <select name="month" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
-                    <option value="">All Months</option>
-                    <?php for ($m = 1; $m <= 12; $m++): ?>
-                        <option value="<?php echo $m; ?>" <?php echo $filterMonth == $m ? 'selected' : ''; ?>>
-                            <?php echo date('F', mktime(0, 0, 0, $m, 1)); ?>
-                        </option>
-                    <?php endfor; ?>
-                </select>
-            </div>
-            <div>
-                <label style="display:block;margin-bottom:4px;font-size:13px;font-weight:600">Min Amount</label>
-                <input type="number" name="min_amount" value="<?php echo htmlspecialchars($filterMinAmount); ?>" step="0.01" placeholder="$0.00" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
-            </div>
-            <div>
-                <label style="display:block;margin-bottom:4px;font-size:13px;font-weight:600">Max Amount</label>
-                <input type="number" name="max_amount" value="<?php echo htmlspecialchars($filterMaxAmount); ?>" step="0.01" placeholder="$999.99" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
-            </div>
-        </div>
-        <div style="display:flex;gap:8px">
-            <button type="submit" style="padding:8px 16px;border-radius:6px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">Apply Filters</button>
-            <a href="/?page=financial/receipts-list" style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;text-decoration:none;color:inherit;font-weight:600;display:inline-block">Clear</a>
-        </div>
-    </form>
+    <?php
+    // Prepare store options
+    $storeOptions = [['value' => '', 'label' => 'All Stores']];
+    foreach ($stores as $store) {
+        $storeOptions[] = ['value' => $store, 'label' => $store];
+    }
+    
+    // Prepare year options
+    $yearOptions = [['value' => '', 'label' => 'All Years']];
+    foreach ($years as $year) {
+        $yearOptions[] = ['value' => (string)$year, 'label' => (string)$year];
+    }
+    
+    // Prepare month options
+    $monthOptions = [['value' => '', 'label' => 'All Months']];
+    for ($m = 1; $m <= 12; $m++) {
+        $monthOptions[] = ['value' => (string)$m, 'label' => date('F', mktime(0, 0, 0, $m, 1))];
+    }
+    
+    $filterConfig = [
+        'page' => 'financial/receipts-list',
+        'filters' => [
+            'store' => [
+                'type' => 'select',
+                'label' => 'Store',
+                'value' => $filterStore,
+                'options' => $storeOptions
+            ],
+            'year' => [
+                'type' => 'select',
+                'label' => 'Year',
+                'value' => (string)$filterYear,
+                'options' => $yearOptions
+            ],
+            'month' => [
+                'type' => 'select',
+                'label' => 'Month',
+                'value' => (string)$filterMonth,
+                'options' => $monthOptions
+            ],
+            'min_amount' => [
+                'type' => 'number',
+                'label' => 'Min Amount ($)',
+                'value' => $filterMinAmount,
+                'step' => '0.01',
+                'placeholder' => '0.00'
+            ],
+            'max_amount' => [
+                'type' => 'number',
+                'label' => 'Max Amount ($)',
+                'value' => $filterMaxAmount,
+                'step' => '0.01',
+                'placeholder' => '999.99'
+            ]
+        ]
+    ];
+    echo render_template('components/document-filter.html.twig', $filterConfig);
+    ?>
 
     <!-- Summary Card -->
     <div style="margin-bottom:24px;padding:16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px">

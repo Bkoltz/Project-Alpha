@@ -59,10 +59,10 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               'label' => 'Status',
               'value' => $status,
               'options' => [
-                  'all' => 'All',
-                  'approved' => 'Approved',
-                  'rejected' => 'Denied',
-                  'pending' => 'Pending'
+                  ['value' => 'all', 'label' => 'All'],
+                  ['value' => 'approved', 'label' => 'Approved'],
+                  ['value' => 'rejected', 'label' => 'Denied'],
+                  ['value' => 'pending', 'label' => 'Pending']
               ]
           ],
           'start' => [

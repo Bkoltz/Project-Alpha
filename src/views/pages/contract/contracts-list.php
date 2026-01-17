@@ -9,6 +9,7 @@ $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
+$status = $_GET['status'] ?? '';
 $min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 $where=[];$p=[];
@@ -16,6 +17,7 @@ if($client_id>0){$where[]='co.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='co.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='co.created_at<=?';$p[]=$end.' 23:59:59';}
+if($status!==''){ $where[]='co.status=?'; $p[] = $status; }
 if($project_code!==''){ $where[]='co.project_code LIKE ?'; $p[] = $project_code.'%'; }
 if($doc_no>0){ $where[]='co.doc_number=?'; $p[] = $doc_no; }
 if($min_price !== null){ $where[]='co.total>=?'; $p[] = $min_price; }
@@ -60,6 +62,19 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               'label' => 'Client',
               'value' => $client_name,
               'id_value' => $client_id
+          ],
+          'status' => [
+              'type' => 'select',
+              'label' => 'Status',
+              'value' => $status,
+              'options' => [
+                  ['value' => '', 'label' => 'All'],
+                  ['value' => 'pending', 'label' => 'Pending'],
+                  ['value' => 'active', 'label' => 'Active'],
+                  ['value' => 'completed', 'label' => 'Completed'],
+                  ['value' => 'cancelled', 'label' => 'Cancelled'],
+                  ['value' => 'void', 'label' => 'Void']
+              ]
           ],
           'start' => [
               'type' => 'date',

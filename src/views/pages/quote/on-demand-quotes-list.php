@@ -7,7 +7,10 @@ require_once __DIR__ . '/../../../utils/twig.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
+$start = $_GET['start'] ?? '';
+$end = $_GET['end'] ?? '';
 $project_code = trim($_GET['project_code'] ?? '');
+$doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
@@ -15,7 +18,10 @@ $where=['q.is_on_demand=1'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='q.status=?'; $p[] = $status; }
+if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
+if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
 if($project_code!==''){ $where[]='q.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($doc_no>0){ $where[]='q.doc_number=?'; $p[] = $doc_no; }
 if($min_price !== null){ $where[]='q.price_per_invoice >= ?'; $p[] = $min_price; }
 if($max_price !== null){ $where[]='q.price_per_invoice <= ?'; $p[] = $max_price; }
 
@@ -63,11 +69,32 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
         'label' => 'Status',
         'value' => $status,
         'options' => [
-          '' => 'All',
-          'pending' => 'Pending',
-          'approved' => 'Approved',
-          'rejected' => 'Rejected'
+          ['value' => '', 'label' => 'All'],
+          ['value' => 'pending', 'label' => 'Pending'],
+          ['value' => 'approved', 'label' => 'Approved'],
+          ['value' => 'rejected', 'label' => 'Rejected']
         ]
+      ],
+      'project_code' => [
+        'type' => 'text',
+        'label' => 'Project ID',
+        'value' => $project_code,
+        'placeholder' => 'PA-2025'
+      ],
+      'doc_number' => [
+        'type' => 'number',
+        'label' => 'Doc #',
+        'value' => isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : ''
+      ],
+      'start' => [
+        'type' => 'date',
+        'label' => 'Start',
+        'value' => $_GET['start'] ?? ''
+      ],
+      'end' => [
+        'type' => 'date',
+        'label' => 'End',
+        'value' => $_GET['end'] ?? ''
       ],
       'min_price' => [
         'type' => 'number',
