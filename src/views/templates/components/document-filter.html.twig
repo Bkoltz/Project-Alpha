@@ -136,10 +136,28 @@ document.querySelectorAll('[data-autocomplete="client"]').forEach(input => {
             return;
         }
         
-        // This would typically call an API, for now just show instructions
-        // In a real app, you'd fetch from /api/clients/search or similar
-        suggestionsDiv.innerHTML = '<div style="padding:8px;color:#6b7280;font-size:13px">Type to search clients...</div>';
-        suggestionsDiv.style.display = 'block';
+        fetch('/?page=clients-search&term=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(list => {
+                if (!Array.isArray(list) || list.length === 0) {
+                    suggestionsDiv.style.display = 'none';
+                    return;
+                }
+                suggestionsDiv.innerHTML = list.map(x => 
+                    `<div data-id="${x.id}" data-name="${x.name}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6">${x.name}</div>`
+                ).join('');
+                Array.from(suggestionsDiv.children).forEach(el => {
+                    el.addEventListener('click', function() {
+                        input.value = this.dataset.name;
+                        document.getElementById(hiddenId).value = this.dataset.id;
+                        suggestionsDiv.style.display = 'none';
+                    });
+                });
+                suggestionsDiv.style.display = 'block';
+            })
+            .catch(() => {
+                suggestionsDiv.style.display = 'none';
+            });
     });
     
     input.addEventListener('blur', function() {

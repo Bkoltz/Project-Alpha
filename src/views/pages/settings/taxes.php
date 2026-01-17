@@ -5,10 +5,19 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 
 $editTaxId = (int)($_GET['edit_tax_id'] ?? 0);
 $taxRates = [];
+// Detect whether the tax_rates table includes an `is_default` column (older DBs may not)
+$hasDefault = false;
 try {
-  $taxRates = $pdo->query('SELECT id, name, country, state, county, rate, is_active, is_default, created_at FROM tax_rates ORDER BY is_default DESC, country, state, county, name')->fetchAll(PDO::FETCH_ASSOC);
+  $hasDefault = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tax_rates' AND COLUMN_NAME='is_default'")->fetchColumn();
+} catch (Throwable $_e) {
+  // ignore
+}
+try {
+  $cols = 'id, name, country, state, county, rate, is_active' . ($hasDefault ? ', is_default' : '') . ', created_at';
+  $order = $hasDefault ? 'is_default DESC, country, state, county, name' : 'country, state, county, name';
+  $taxRates = $pdo->query("SELECT {$cols} FROM tax_rates ORDER BY {$order}")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
-  // ignore if table doesn't exist
+  // ignore if table doesn't exist or other DB issues
 }
 ?>
 

@@ -3,6 +3,7 @@
 // Dedicated view for ALL on-demand invoices (ODI prefix)
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 
 // Ensure the optional on_demand_contracts table exists before querying
 $has_on_demand_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='on_demand_contracts'")->fetchColumn();
@@ -15,12 +16,16 @@ $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
 $project_code = trim($_GET['project_code'] ?? '');
+$min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
+$max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
 $where=['i.on_demand_contract_id IS NOT NULL'];$p=[];
 if($client_id>0){$where[]='i.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='i.status=?'; $p[] = $status; }
 if($project_code!==''){ $where[]='i.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($min_price !== null){ $where[]='i.total >= ?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='i.total <= ?'; $p[] = $max_price; }
 
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
@@ -42,47 +47,52 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="invoice/on-demand-invoices-list">
-    <input type="hidden" name="client_id" id="clientIdODI" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputODI" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
-      <div id="clientSuggestODI" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
-    </label>
-    <label><div>Project ID</div><input type="text" name="project_code" value="<?php echo htmlspecialchars($project_code); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="">All</option>
-        <option value="unpaid" <?php echo $status==='unpaid'?'selected':''; ?>>Unpaid</option>
-        <option value="partial" <?php echo $status==='partial'?'selected':''; ?>>Partial</option>
-        <option value="paid" <?php echo $status==='paid'?'selected':''; ?>>Paid</option>
-        <option value="void" <?php echo $status==='void'?'selected':''; ?>>Void</option>
-      </select>
-    </label>
-    <div style="display:flex;gap:8px">
-      <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-      <a href="/?page=invoice/on-demand-invoices-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;text-decoration:none;color:inherit">Reset</a>
-    </div>
-  </form>
-
-  <script>
-    (function(){
-      var input = document.getElementById('clientInputODI');
-      var hid = document.getElementById('clientIdODI');
-      var sug = document.getElementById('clientSuggestODI');
-      input.addEventListener('input', function(){
-        hid.value='';
-        var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-        fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
-          if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-          sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-          Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
-          sug.style.display='block';
-        }).catch(()=>{sug.style.display='none'});
-      });
-      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==input){ sug.style.display='none'; } });
-    })();
-  </script>
+  <?php
+  $filterConfig = [
+      'page' => 'invoice/on-demand-invoices-list',
+      'filters' => [
+          'client' => [
+              'type' => 'client_autocomplete',
+              'label' => 'Client',
+              'value' => $client_name,
+              'id_value' => $client_id
+          ],
+          'project_code' => [
+              'type' => 'text',
+              'label' => 'Project ID',
+              'value' => $project_code,
+              'placeholder' => 'PA-2025'
+          ],
+          'status' => [
+              'type' => 'select',
+              'label' => 'Status',
+              'value' => $status,
+              'options' => [
+                  ['value' => '', 'label' => 'All'],
+                  ['value' => 'unpaid', 'label' => 'Unpaid'],
+                  ['value' => 'partial', 'label' => 'Partial'],
+                  ['value' => 'paid', 'label' => 'Paid'],
+                  ['value' => 'void', 'label' => 'Void']
+              ]
+          ],
+          'min_price' => [
+              'type' => 'number',
+              'label' => 'Min ($)',
+              'value' => $min_price ?? '',
+              'step' => '0.01'
+          ],
+          'max_price' => [
+              'type' => 'number',
+              'label' => 'Max ($)',
+              'value' => $max_price ?? '',
+              'step' => '0.01'
+          ]
+      ]
+  ];
+  
+  // Render the filter using Twig template
+  echo render_template('components/document-filter.html.twig', $filterConfig);
+  ?>
 
   <div style="overflow:auto">
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">

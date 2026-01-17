@@ -14,7 +14,10 @@ if (!$has_on_demand_table) {
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
+$start = $_GET['start'] ?? '';
+$end = $_GET['end'] ?? '';
 $project_code = trim($_GET['project_code'] ?? '');
+$doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 
@@ -22,7 +25,10 @@ $where=[];$p=[];
 if($client_id>0){$where[]='odc.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='odc.status=?'; $p[] = $status; }
+if($start!==''){$where[]='odc.created_at>=?';$p[]=$start.' 00:00:00';}
+if($end!==''){$where[]='odc.created_at<=?';$p[]=$end.' 23:59:59';}
 if($project_code!==''){ $where[]='odc.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($doc_no>0){ $where[]='odc.doc_number=?'; $p[] = $doc_no; }
 if($min_price !== null){ $where[]='odc.price_per_invoice>=?'; $p[] = $min_price; }
 if($max_price !== null){ $where[]='odc.price_per_invoice<=?'; $p[] = $max_price; }
 
@@ -73,12 +79,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               'label' => 'Status',
               'value' => $status,
               'options' => [
-                  '' => 'All',
-                  'pending' => 'Pending',
-                  'active' => 'Active',
-                  'paused' => 'Paused',
-                  'completed' => 'Completed',
-                  'cancelled' => 'Cancelled'
+                  ['value' => '', 'label' => 'All'],
+                  ['value' => 'pending', 'label' => 'Pending'],
+                  ['value' => 'active', 'label' => 'Active'],
+                  ['value' => 'paused', 'label' => 'Paused'],
+                  ['value' => 'completed', 'label' => 'Completed'],
+                  ['value' => 'cancelled', 'label' => 'Cancelled']
               ]
           ],
           'min_price' => [
@@ -98,6 +104,21 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               'label' => 'Project ID',
               'value' => $project_code,
               'placeholder' => 'PA-2025'
+          ],
+          'doc_number' => [
+              'type' => 'number',
+              'label' => 'Doc #',
+              'value' => $doc_no
+          ],
+          'start' => [
+              'type' => 'date',
+              'label' => 'Start',
+              'value' => $start
+          ],
+          'end' => [
+              'type' => 'date',
+              'label' => 'End',
+              'value' => $end
           ]
       ]
   ];

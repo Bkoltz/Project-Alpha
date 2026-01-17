@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/jobs-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 // TODo: Change the Details Button in the project list view to "Preview" and then add button called "Details" That will open up a new page with all the details of the project.
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $prefix = trim($_GET['project_prefix'] ?? '');
@@ -47,24 +48,33 @@ if ($selected !== '') {
 ?>
 <section>
   <h2>Jobs</h2>
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0">
-    <input type="hidden" name="page" value="jobs/jobs-list">
-    <label>
-      <div>Client</div>
-      <select name="client_id" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="0">All</option>
-        <?php foreach ($clients as $c): ?>
-          <option value="<?php echo (int)$c['id']; ?>" <?php echo $client_id === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
-        <?php endforeach; ?>
-      </select>
-    </label>
-    <label>
-      <div>Project prefix</div>
-      <input type="text" name="project_prefix" value="<?php echo htmlspecialchars($prefix); ?>" placeholder="PA-2025" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-    </label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=jobs/jobs-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
-  </form>
+  <?php
+  // Prepare client options for dropdown
+  $clientOptions = [['value' => '0', 'label' => 'All Clients']];
+  foreach ($clients as $c) {
+      $clientOptions[] = ['value' => (string)$c['id'], 'label' => $c['name']];
+  }
+  
+  $filterConfig = [
+      'page' => 'jobs/jobs-list',
+      'filters' => [
+          'client_id' => [
+              'type' => 'select',
+              'label' => 'Client',
+              'value' => (string)$client_id,
+              'options' => $clientOptions
+          ],
+          'project_prefix' => [
+              'type' => 'text',
+              'label' => 'Project Prefix',
+              'value' => $prefix,
+              'placeholder' => 'PA-2025'
+          ]
+      ],
+      'columns' => 4
+  ];
+  echo render_template('components/document-filter.html.twig', $filterConfig);
+  ?>
 
   <?php if (!$projects): ?>
     <div style="color:var(--muted)">No jobs yet.</div>

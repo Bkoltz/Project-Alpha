@@ -891,7 +891,7 @@ CREATE TABLE IF NOT EXISTS notification_log (
 
 -- Insert default organization
 INSERT IGNORE INTO organizations (id, name, notes, created_at, updated_at)
-VALUES (1, 'Default Organization', 'Default organization for system', NOW(), NOW());
+VALUES (1, 'Default Organization', 'Default organization for system (delete if not needed)', NOW(), NOW());
 
 -- Insert default admin user (username: admin, password: admin123)
 -- Password hash is bcrypt hash of 'admin123'

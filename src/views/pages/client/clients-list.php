@@ -2,6 +2,7 @@
 // src/views/pages/clients-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/format.php';
+require_once __DIR__ . '/../../../utils/twig.php';
 $per = null; // show all clients
 $pageN = 1;
 $offset = 0;
@@ -47,43 +48,27 @@ $clients = $st->fetchAll();
   <?php $selected = isset($_GET['selected_client_id']) ? (int)$_GET['selected_client_id'] : 0; ?>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
   <div>
-  <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="client/clients-list">
-    <label style="flex:1;position:relative">
-      <div>Search by name</div>
-      <input id="clientSearchBox" type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Type to search..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-      <div id="clientSearchSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
-    </label>
-    <label style="flex:1">
-      <div>Search by organization</div>
-      <input id="orgSearchBox" type="text" name="org" value="<?php echo htmlspecialchars($org); ?>" placeholder="Type to search..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-    </label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=client/clients-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Reset</a>
-  </form>
-  <script>
-    (function(){
-      var box = document.getElementById('clientSearchBox');
-      var sug = document.getElementById('clientSearchSuggest');
-      box.addEventListener('input', function(){
-        var t = this.value.trim();
-        if(!t){sug.style.display='none';sug.innerHTML='';return;}
-  fetch('/?page=clients-search&term='+encodeURIComponent(t))
-          .then(r=>r.json())
-          .then(list=>{
-            if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-            sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-            Array.from(sug.children).forEach(el=>{
-              el.addEventListener('click', function(){
-                window.location = '/?page=client/clients-list&selected_client_id='+this.dataset.id;
-              });
-            });
-            sug.style.display='block';
-          }).catch(()=>{sug.style.display='none'});
-      });
-      document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==box){ sug.style.display='none'; } });
-    })();
-  </script>
+  <?php
+  $filterConfig = [
+      'page' => 'client/clients-list',
+      'filters' => [
+          'q' => [
+              'type' => 'text',
+              'label' => 'Search by Name',
+              'value' => $q,
+              'placeholder' => 'Type to search...'
+          ],
+          'org' => [
+              'type' => 'text',
+              'label' => 'Search by Organization',
+              'value' => $org,
+              'placeholder' => 'Type to search...'
+          ]
+      ],
+      'columns' => 4
+  ];
+  echo render_template('components/document-filter.html.twig', $filterConfig);
+  ?>
   <?php if (!empty($_GET['created'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Client created.</div>
   <?php endif; ?>
