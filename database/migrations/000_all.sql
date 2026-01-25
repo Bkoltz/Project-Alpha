@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS projects (
   client_id INT NULL,
   parent_id INT NULL,
   organization_id INT NULL,
+  status ENUM('not_started', 'active', 'overdue', 'completed', 'cancelled') NOT NULL DEFAULT 'not_started',
   estimated_start DATE NULL,
   estimated_end DATE NULL,
   notes TEXT NULL,
@@ -198,7 +199,8 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_projects_client (client_id),
   INDEX idx_projects_parent (parent_id),
-  INDEX idx_projects_organization (organization_id)
+  INDEX idx_projects_organization (organization_id),
+  INDEX idx_projects_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS project_documents (
@@ -663,25 +665,6 @@ CREATE TABLE IF NOT EXISTS recurring_invoices (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
--- DOCUMENT CUSTOMIZATION
--- ============================================================================
-
-CREATE TABLE IF NOT EXISTS document_custom_fields (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  field_type ENUM('quote','contract','invoice') NOT NULL,
-  field_key VARCHAR(100) NOT NULL,
-  field_label VARCHAR(255) NOT NULL,
-  field_data_type ENUM('text','date','number','textarea') NOT NULL,
-  is_builtin TINYINT(1) DEFAULT 0,
-  is_required TINYINT(1) DEFAULT 0,
-  display_order INT DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY unique_field (field_type, field_key),
-  INDEX idx_field_type (field_type),
-  INDEX idx_display_order (display_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================================
 -- PAYMENT METHODS & AUTO-PAY
 -- ============================================================================
 
@@ -844,6 +827,7 @@ CREATE TABLE IF NOT EXISTS form_categories (
 CREATE TABLE IF NOT EXISTS form_documents (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   category_id INT UNSIGNED NOT NULL,
+  project_id INT NULL,
   file_path VARCHAR(500) NOT NULL,
   file_name VARCHAR(255) NOT NULL,
   file_size INT UNSIGNED NULL,
@@ -852,9 +836,64 @@ CREATE TABLE IF NOT EXISTS form_documents (
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (category_id) REFERENCES form_categories(id) ON DELETE CASCADE,
   FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
   INDEX idx_form_doc_category (category_id),
-  INDEX idx_form_doc_uploaded (uploaded_at)
+  INDEX idx_form_doc_uploaded (uploaded_at),
+  INDEX idx_form_doc_project (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- DOCUMENT CUSTOMIZATION SETTINGS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS document_settings (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  document_type ENUM('regular', 'long_term', 'on_demand') NOT NULL,
+  settings JSON NOT NULL COMMENT 'Customization settings for document type',
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_doc_type (document_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Insert default settings for each document type
+INSERT IGNORE INTO document_settings (document_type, settings) VALUES
+('regular', '{"show_deposit":true,"show_fulfillment_date":true,"show_scope":true}'),
+('long_term', '{"show_deposit":true,"show_fulfillment_date":false,"show_scope":true,"show_billing_settings":true}'),
+('on_demand', '{"show_deposit":true,"show_fulfillment_date":false,"show_scope":true,"show_billing_settings":false}');
+
+-- ============================================================================
+-- DOCUMENT CUSTOM FIELDS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS document_custom_fields (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  document_type ENUM('regular', 'long_term', 'on_demand') NOT NULL,
+  field_key VARCHAR(100) NOT NULL COMMENT 'Internal key like pickup_date',
+  field_label VARCHAR(255) NOT NULL COMMENT 'Display label like Pick Up Date',
+  field_type ENUM('text', 'date', 'number', 'textarea', 'select') NOT NULL DEFAULT 'text',
+  field_options JSON NULL COMMENT 'For select fields, array of options',
+  is_required TINYINT(1) NOT NULL DEFAULT 0,
+  is_builtin TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Built-in fields cannot be deleted',
+  is_enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether field is shown',
+  display_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_field_key_type (document_type, field_key),
+  INDEX idx_doc_type_enabled (document_type, is_enabled),
+  INDEX idx_display_order (document_type, display_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Seed built-in fields for all document types
+-- Deposit field (composite: type + value, handled specially in UI)
+INSERT IGNORE INTO document_custom_fields (document_type, field_key, field_label, field_type, is_required, is_builtin, is_enabled, display_order) VALUES
+('regular', 'deposit', 'Deposit Required', 'text', 0, 1, 1, 1),
+('long_term', 'deposit', 'Deposit Required', 'text', 0, 1, 1, 1),
+('on_demand', 'deposit', 'Deposit Required', 'text', 0, 1, 1, 1);
+
+-- Fulfillment date field
+INSERT IGNORE INTO document_custom_fields (document_type, field_key, field_label, field_type, is_required, is_builtin, is_enabled, display_order) VALUES
+('regular', 'fulfillment_date', 'Fulfillment Date (Estimated)', 'date', 0, 1, 1, 2),
+('long_term', 'fulfillment_date', 'Fulfillment Date (Estimated)', 'date', 0, 1, 1, 2),
+('on_demand', 'fulfillment_date', 'Fulfillment Date (Estimated)', 'date', 0, 1, 1, 2);
 
 -- ============================================================================
 -- NOTIFICATION SETTINGS & LOGS

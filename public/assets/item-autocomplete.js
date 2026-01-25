@@ -223,16 +223,25 @@ class ItemAutocomplete {
   }
 }
 
+// Expose globally for manual initialization
+window.ItemAutocomplete = ItemAutocomplete;
+
 // Initialize autocomplete for all item inputs on page
 function initItemAutocomplete() {
   document.querySelectorAll('[data-item-autocomplete]').forEach(input => {
+    // Skip if already initialized
+    if (input._itemAutocomplete) return;
+    
     const descriptionFieldId = input.dataset.descriptionField;
     const priceFieldId = input.dataset.priceField;
     
-    new ItemAutocomplete(input, {
+    const instance = new ItemAutocomplete(input, {
       descriptionField: descriptionFieldId ? document.getElementById(descriptionFieldId) : null,
       priceField: priceFieldId ? document.getElementById(priceFieldId) : null
     });
+    
+    // Mark as initialized
+    input._itemAutocomplete = instance;
   });
 }
 
@@ -242,3 +251,6 @@ if (document.readyState === 'loading') {
 } else {
   initItemAutocomplete();
 }
+
+// Expose globally for manual initialization
+window.ItemAutocomplete = ItemAutocomplete;

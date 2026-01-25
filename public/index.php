@@ -190,6 +190,14 @@ if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
     exit;
 }
+if ($page === 'projects-search-autocomplete') {
+    require_once __DIR__ . '/../src/controllers/project/projects_search_autocomplete.php';
+    exit;
+}
+if ($page === 'projects-search') {
+    require_once __DIR__ . '/../src/controllers/project/projects_search.php';
+    exit;
+}
 // Organization search for client creation (AJAX)
 if ($page === 'org-search' || $page === 'organization/org-search') {
     require_once __DIR__ . '/../src/controllers/organization/org_search.php';
@@ -346,6 +354,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/project/project_remove_document.php';
         exit;
     }
+    if ($page === 'project/projects-update-status') {
+        require_once __DIR__ . '/../src/controllers/project/projects_update_status.php';
+        exit;
+    }
     if ($page === 'quote/quotes-create' || $page === 'quotes-create') {
         require_once __DIR__ . '/../src/controllers/quote/quotes_create.php';
         exit;
@@ -488,6 +500,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/item-library-handler') {
         require_once __DIR__ . '/../src/controllers/settings/item_library_handler.php';
+        exit;
+    }
+    if ($page === 'settings/document-customization-save') {
+        require_once __DIR__ . '/../src/controllers/settings/document-customization-save.php';
+        exit;
+    }
+    if ($page === 'settings/document-custom-fields-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/document-custom-fields-handler.php';
         exit;
     }
     if ($page === 'receipts-handler') {

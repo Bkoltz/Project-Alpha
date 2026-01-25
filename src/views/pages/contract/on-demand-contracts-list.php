@@ -87,6 +87,16 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   ['value' => 'cancelled', 'label' => 'Cancelled']
               ]
           ],
+                    'start' => [
+              'type' => 'date',
+              'label' => 'Start',
+              'value' => $start
+          ],
+          'end' => [
+              'type' => 'date',
+              'label' => 'End',
+              'value' => $end
+          ],
           'min_price' => [
               'type' => 'number',
               'label' => 'Min ($)',
@@ -109,16 +119,6 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               'type' => 'number',
               'label' => 'Doc #',
               'value' => $doc_no
-          ],
-          'start' => [
-              'type' => 'date',
-              'label' => 'Start',
-              'value' => $start
-          ],
-          'end' => [
-              'type' => 'date',
-              'label' => 'End',
-              'value' => $end
           ]
       ]
   ];

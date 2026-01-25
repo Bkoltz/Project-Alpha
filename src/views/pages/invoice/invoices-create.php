@@ -42,6 +42,22 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
       </label>
     </div>
 
+    <div id="projectSectionInv" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+      <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
+      <div style="display:grid;gap:12px">
+        <label>
+          <div>Add to Existing Project</div>
+          <select id="projectSelectInv" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <option value="">-- Select Project --</option>
+          </select>
+        </label>
+        <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
+        <div>
+          <button type="button" id="createProjectBtnInv" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
+        </div>
+      </div>
+    </div>
+
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
       <div id="itemsInv" style="display:grid;gap:8px"></div>
@@ -133,6 +149,7 @@ ciI.addEventListener('input', function(){
         el.addEventListener('click', function(){
           ciI.value = this.dataset.name; cidI.value = this.dataset.id; 
           if(this.dataset.taxexempt){taxBannerInv.style.display='block';}else{taxBannerInv.style.display='none';}
+          loadProjectsForClientInv(this.dataset.id);
           sugI.style.display='none';
         });
       });
@@ -140,5 +157,78 @@ ciI.addEventListener('input', function(){
     }).catch(()=>{sugI.style.display='none'});
   });
 document.addEventListener('click', function(e){ if(!sugI.contains(e.target) && e.target!==ciI){ sugI.style.display='none'; } });
+
+function loadProjectsForClientInv(clientId) {
+  if (!clientId) {
+    document.getElementById('projectSectionInv').style.display = 'none';
+    return;
+  }
+  
+  fetch('/?page=projects-search&client_id=' + encodeURIComponent(clientId))
+    .then(r => r.json())
+    .then(projects => {
+      const projectSelect = document.getElementById('projectSelectInv');
+      projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
+      
+      if (projects && projects.length > 0) {
+        projects.forEach(project => {
+          const option = document.createElement('option');
+          option.value = project.id;
+          option.textContent = project.name + ' (' + project.status.replace('_', ' ') + ')';
+          projectSelect.appendChild(option);
+        });
+        document.getElementById('projectSectionInv').style.display = 'block';
+      } else {
+        document.getElementById('projectSectionInv').style.display = 'none';
+      }
+    })
+    .catch(() => {
+      document.getElementById('projectSectionInv').style.display = 'none';
+    });
+}
+
+document.getElementById('createProjectBtnInv').addEventListener('click', function() {
+  const clientId = document.getElementById('clientIdInv').value;
+  if (!clientId) {
+    alert('Please select a client first.');
+    return;
+  }
+  
+  const projectName = prompt('Enter project name:');
+  if (!projectName || !projectName.trim()) return;
+  
+  fetch('/?page=project/projects-create-quick', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) + 
+          '&name=' + encodeURIComponent(projectName.trim()) + 
+          '&client_id=' + encodeURIComponent(clientId)
+  })
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      // Reload projects for this client
+      loadProjectsForClientInv(clientId);
+      // Select the new project
+      setTimeout(() => {
+        const projectSelect = document.getElementById('projectSelectInv');
+        for (let i = 0; i < projectSelect.options.length; i++) {
+          if (projectSelect.options[i].value == result.project_id) {
+            projectSelect.selectedIndex = i;
+            break;
+          }
+        }
+      }, 100);
+    } else {
+      alert('Failed to create project: ' + (result.error || 'Unknown error'));
+    }
+  })
+  .catch(() => {
+    alert('Failed to create project.');
+  });
+});
+
 document.getElementById('invoiceForm').addEventListener('submit', function(e){ if(!cidI.value){ e.preventDefault(); alert('Please select a client from suggestions.'); } });
 </script>

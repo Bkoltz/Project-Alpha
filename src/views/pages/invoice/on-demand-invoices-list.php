@@ -57,12 +57,6 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
               'value' => $client_name,
               'id_value' => $client_id
           ],
-          'project_code' => [
-              'type' => 'text',
-              'label' => 'Project ID',
-              'value' => $project_code,
-              'placeholder' => 'PA-2025'
-          ],
           'status' => [
               'type' => 'select',
               'label' => 'Status',
@@ -86,6 +80,12 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
               'label' => 'Max ($)',
               'value' => $max_price ?? '',
               'step' => '0.01'
+          ],
+          'project_code' => [
+              'type' => 'text',
+              'label' => 'Project ID',
+              'value' => $project_code,
+              'placeholder' => 'PA-2025'
           ]
       ]
   ];
