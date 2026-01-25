@@ -8,9 +8,11 @@ if ($netDays < 0) $netDays = 0;
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
-$min = isset($_GET['min']) ? (float)$_GET['min'] : null;
-$max = isset($_GET['max']) ? (float)$_GET['max'] : null;
+$start = $_GET['start'] ?? '';
+$end = $_GET['end'] ?? '';
 $statusFilter = $_GET['status'] ?? 'all'; // all|paid|unpaid|overdue
+$min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
+$max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 
@@ -23,13 +25,21 @@ if ($client_id > 0) {
   $where[] = 'c.name LIKE ?';
   $params[] = '%'.$client_name.'%';
 }
-if ($min !== null) {
-  $where[] = 'i.total>=?';
-  $params[] = $min;
+if ($start !== '') {
+  $where[] = 'i.created_at>=?';
+  $params[] = $start.' 00:00:00';
 }
-if ($max !== null) {
+if ($end !== '') {
+  $where[] = 'i.created_at<=?';
+  $params[] = $end.' 23:59:59';
+}
+if ($min_price !== null) {
+  $where[] = 'i.total>=?';
+  $params[] = $min_price;
+}
+if ($max_price !== null) {
   $where[] = 'i.total<=?';
-  $params[] = $max;
+  $params[] = $max_price;
 }
 if ($statusFilter === 'paid') {
   $where[] = "i.status='paid'";
@@ -102,16 +112,26 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                   ['value' => 'overdue', 'label' => 'Overdue']
               ]
           ],
-          'min' => [
+          'start' => [
+              'type' => 'date',
+              'label' => 'Start',
+              'value' => $start
+          ],
+          'end' => [
+              'type' => 'date',
+              'label' => 'End',
+              'value' => $end
+          ],
+          'min_price' => [
               'type' => 'number',
               'label' => 'Min ($)',
-              'value' => $min ?? '',
+              'value' => $min_price ?? '',
               'step' => '0.01'
           ],
-          'max' => [
+          'max_price' => [
               'type' => 'number',
               'label' => 'Max ($)',
-              'value' => $max ?? '',
+              'value' => $max_price ?? '',
               'step' => '0.01'
           ],
           'project_code' => [

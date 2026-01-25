@@ -1,7 +1,7 @@
 <?php
 // src/views/pages/settings/item-library.php
-require_once __DIR__ . '/../../config/db.php';
-require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 
 $successMsg = '';
 $errorMsg = '';

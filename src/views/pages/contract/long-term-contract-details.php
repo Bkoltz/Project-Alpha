@@ -134,7 +134,8 @@ $isOngoing = empty($contract['end_date']);
     <tr>
       <td style="vertical-align:middle;width:70%">
         <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
-        <?php if (!empty($contract['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project: <?php echo htmlspecialchars($contract['project_code']); ?></div><?php endif; ?>
+        <?php if (!empty($contract['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Job <?php echo htmlspecialchars($contract['project_code']); ?></div><?php endif; ?>
+        <?php if (!empty($contract['project_id'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project <?php echo htmlspecialchars($contract['project_id']); ?></div><?php endif; ?>
       </td>
       <td style="vertical-align:middle;width:30%;text-align:right">
         <?php if ($canShowLogo): ?>

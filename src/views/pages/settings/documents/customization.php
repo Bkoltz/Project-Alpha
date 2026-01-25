@@ -1,89 +1,101 @@
 <?php
 // src/views/pages/settings/documents/customization.php
 require_once __DIR__ . '/../../../../config/db.php';
+require_once __DIR__ . '/../../../../utils/csrf.php';
 
-// Fetch existing custom fields
-$fields = [];
-try {
-    $stmt = $pdo->query('SELECT * FROM document_custom_fields ORDER BY display_order, id');
-    $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) {
-    @error_log('[customization] Error fetching custom fields: ' . $e->getMessage());
+$activeTab = $_GET['field_tab'] ?? 'regular';
+if (!in_array($activeTab, ['regular', 'long_term', 'on_demand'])) {
+    $activeTab = 'regular';
 }
+
+// Fetch fields for active tab
+$stmt = $pdo->prepare('SELECT * FROM document_custom_fields WHERE document_type = ? ORDER BY display_order, id');
+$stmt->execute([$activeTab]);
+$fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<div style="max-width:900px">
-    <h3 style="margin:0 0 8px 0">Custom Fields</h3>
-    <p style="margin:0 0 20px 0;color:var(--muted);font-size:14px">Add custom fields to your documents. Choose which document types should include each field.</p>
+<div style="max-width:1100px">
+    <h3 style="margin:0 0 8px 0">Document Header Fields</h3>
+    <p style="margin:0 0 20px 0;color:var(--muted);font-size:14px">Customize which fields appear in the top section of your documents. Fields left empty won't appear on the document.</p>
+
+    <!-- Document Type Tabs -->
+    <div style="display:flex;gap:12px;margin-bottom:24px;border-bottom:2px solid #e5e7eb;padding-bottom:2px">
+        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=regular" data-skip-nav
+           style="padding:10px 20px;font-weight:<?php echo $activeTab === 'regular' ? '600' : '400'; ?>;color:<?php echo $activeTab === 'regular' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $activeTab === 'regular' ? '3px solid var(--nav-accent)' : '3px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">
+            Regular
+        </a>
+        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=long_term" data-skip-nav
+           style="padding:10px 20px;font-weight:<?php echo $activeTab === 'long_term' ? '600' : '400'; ?>;color:<?php echo $activeTab === 'long_term' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $activeTab === 'long_term' ? '3px solid var(--nav-accent)' : '3px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">
+            Long Term
+        </a>
+        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=on_demand" data-skip-nav
+           style="padding:10px 20px;font-weight:<?php echo $activeTab === 'on_demand' ? '600' : '400'; ?>;color:<?php echo $activeTab === 'on_demand' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $activeTab === 'on_demand' ? '3px solid var(--nav-accent)' : '3px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">
+            On-Demand
+        </a>
+    </div>
 
     <!-- Info Banner -->
     <div style="margin-bottom:20px;padding:12px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:13px">
-        <strong>ℹ️ About Custom Fields:</strong> Built-in fields (like Fulfillment Date) can be renamed but not deleted. 
-        Custom fields you create can be reordered, edited, or removed at any time.
+        <strong>ℹ️ About Custom Fields:</strong> Built-in fields (Deposit, Fulfillment Date) cannot be deleted but can be reordered. Custom fields can be added, edited, reordered, or removed.
     </div>
-    <!-- Documents Validity Setting -->
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:16px">
-        <legend style="padding:0 6px;color:var(--muted)">Document Validity</legend>
-        <label style="margin-bottom:8px;display:block">
-            <div style="margin-bottom:6px">Documents Valid for (days)</div>
-            <input type="number" min="0" name="documents_valid_days" value="<?php echo htmlspecialchars((string)($appConfig['documents_valid_days'] ?? 14)); ?>" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
-            <div style="margin-top:6px;color:var(--muted);font-size:13px">Number of days public document links remain valid. Previously located in Terms &amp; Conditions.</div>
-        </label>
-    </fieldset>
-    <!-- Custom Fields List -->
+
+    <!-- Fields List -->
     <div id="fieldsList" style="display:grid;gap:12px;margin-bottom:24px">
         <?php if (empty($fields)): ?>
             <div style="padding:24px;text-align:center;color:var(--muted);border:2px dashed #e5e7eb;border-radius:8px">
-                No custom fields yet. Click "Add Field" below to create one.
+                No fields configured yet. Click "+ Add Custom Field" below to create one.
             </div>
         <?php else: ?>
-            <?php foreach ($fields as $field): 
-                // Parse field_type to check which doc types this field applies to
-                $docTypes = explode(',', $field['field_type']);
-                $hasQuote = in_array('quote', $docTypes);
-                $hasContract = in_array('contract', $docTypes);
-                $hasInvoice = in_array('invoice', $docTypes);
-            ?>
-                <div class="field-item" data-field-id="<?php echo $field['id']; ?>" 
-                     style="display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+            <?php foreach ($fields as $field): ?>
+                <div class="field-item" data-field-id="<?php echo $field['id']; ?>" draggable="true"
+                     style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:12px;align-items:center;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:move">
                     
                     <!-- Drag Handle -->
-                    <div class="drag-handle" style="cursor:move;color:#9ca3af;font-size:18px" title="Drag to reorder">⋮⋮</div>
+                    <div class="drag-handle" style="color:#9ca3af;font-size:18px;cursor:move" title="Drag to reorder">⋮⋮</div>
                     
                     <!-- Field Info -->
                     <div>
                         <div style="font-weight:600;margin-bottom:4px">
                             <?php echo htmlspecialchars($field['field_label']); ?>
                             <?php if ($field['is_required']): ?>
-                                <span style="color:#dc2626;font-size:12px">*</span>
+                                <span style="color:#dc2626;font-size:12px;margin-left:4px">*</span>
                             <?php endif; ?>
                             <?php if ($field['is_builtin']): ?>
-                                <span style="margin-left:8px;padding:2px 6px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px">Built-in</span>
+                                <span style="margin-left:8px;padding:2px 6px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px;font-weight:600">Built-in</span>
+                            <?php endif; ?>
+                            <?php if (!$field['is_enabled']): ?>
+                                <span style="margin-left:8px;padding:2px 6px;background:#f3f4f6;color:#6b7280;border-radius:4px;font-size:11px;font-weight:600">Disabled</span>
                             <?php endif; ?>
                         </div>
                         <div style="font-size:12px;color:var(--muted)">
-                            Type: <?php echo ucfirst($field['field_data_type']); ?> • 
-                            Include on: 
-                            <?php 
-                            $included = [];
-                            if ($hasQuote) $included[] = 'Quotes';
-                            if ($hasContract) $included[] = 'Contracts';
-                            if ($hasInvoice) $included[] = 'Invoices';
-                            echo implode(', ', $included);
-                            ?>
+                            Type: <?php echo ucfirst($field['field_type']); ?>
+                            <?php if ($field['field_key']): ?> • Key: <?php echo htmlspecialchars($field['field_key']); ?><?php endif; ?>
                         </div>
                     </div>
                     
-                    <!-- Edit Button -->
-                    <button type="button" onclick="editField(<?php echo $field['id']; ?>)" 
-                            style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:13px">
-                        Edit
-                    </button>
+                    <!-- Toggle Switch -->
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap" title="Enable/Disable">
+                        <input type="checkbox" class="field-toggle" data-field-id="<?php echo $field['id']; ?>" 
+                               <?php echo $field['is_enabled'] ? 'checked' : ''; ?> 
+                               <?php echo $field['is_builtin'] ? 'disabled' : ''; ?>
+                               style="width:16px;height:16px">
+                        <span style="font-size:13px;color:#6b7280">Enabled</span>
+                    </label>
                     
-                    <!-- Delete Button (only for non-builtin) -->
+                    <!-- Edit Button -->
+                    <?php if (!$field['is_builtin']): ?>
+                        <button type="button" onclick="editField(<?php echo $field['id']; ?>)" 
+                                style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:13px;white-space:nowrap">
+                            Edit
+                        </button>
+                    <?php else: ?>
+                        <div style="width:54px"></div>
+                    <?php endif; ?>
+                    
+                    <!-- Delete Button -->
                     <?php if (!$field['is_builtin']): ?>
                         <button type="button" onclick="deleteField(<?php echo $field['id']; ?>)" 
-                                style="padding:6px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;cursor:pointer;font-size:13px">
+                                style="padding:6px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;cursor:pointer;font-size:13px;white-space:nowrap">
                             Delete
                         </button>
                     <?php else: ?>
@@ -106,7 +118,7 @@ try {
     <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto">
         <h3 style="margin:0 0 16px 0" id="modalTitle">Add Custom Field</h3>
         
-        <form id="fieldForm" method="post" action="/?page=settings/custom-fields-handler" style="display:grid;gap:16px">
+        <form id="fieldForm" method="post" style="display:grid;gap:16px">
             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
             <input type="hidden" name="action" id="fieldAction" value="create">
             <input type="hidden" name="field_id" id="fieldId" value="">
@@ -114,62 +126,46 @@ try {
             <label>
                 <div style="margin-bottom:4px;font-weight:600">Field Label *</div>
                 <input type="text" name="field_label" id="fieldLabel" required 
-                       placeholder="e.g., Delivery Date, Project Name, PO Number"
+                       placeholder="e.g., Pick Up Date, Rental Duration"
                        style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             </label>
             
             <label>
                 <div style="margin-bottom:4px;font-weight:600">Field Type *</div>
-                <select name="field_data_type" id="fieldDataType" required 
-                        onchange="toggleNumberFields()"
+                <select name="field_type" id="fieldType" required onchange="toggleOptionsField()"
                         style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
                     <option value="text">Text (short)</option>
                     <option value="textarea">Text Area (long)</option>
                     <option value="date">Date</option>
                     <option value="number">Number</option>
+                    <option value="select">Select Dropdown</option>
                 </select>
             </label>
             
-            <label>
-                <div style="margin-bottom:4px;font-weight:600">Default Value</div>
-                <input type="text" name="default_value" id="fieldDefaultValue" 
-                       placeholder="Optional default value"
-                       style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-                <div style="margin-top:4px;font-size:12px;color:var(--muted)">Pre-fill this value when creating new documents</div>
-            </label>
-            
-            <div id="numberFieldsSection" style="display:none">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                    <label>
-                        <div style="margin-bottom:4px;font-weight:600">Min Value</div>
-                        <input type="number" step="0.01" name="min_value" id="fieldMinValue" 
-                               placeholder="Minimum"
-                               style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-                    </label>
-                    <label>
-                        <div style="margin-bottom:4px;font-weight:600">Max Value</div>
-                        <input type="number" step="0.01" name="max_value" id="fieldMaxValue" 
-                               placeholder="Maximum"
-                               style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-                    </label>
-                </div>
-                <div style="font-size:12px;color:var(--muted);margin-top:4px">Optional constraints for number fields</div>
+            <div id="optionsField" style="display:none">
+                <label>
+                    <div style="margin-bottom:4px;font-weight:600">Options (one per line) *</div>
+                    <textarea name="field_options" id="fieldOptions" rows="4" 
+                              placeholder="Option 1&#10;Option 2&#10;Option 3"
+                              style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></textarea>
+                    <div style="margin-top:4px;font-size:12px;color:var(--muted)">Enter each option on a new line</div>
+                </label>
             </div>
             
-            <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">
-                <legend style="padding:0 8px;font-weight:600">Include on:</legend>
+            <fieldset id="docTypesSection" style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">
+                <legend style="padding:0 8px;font-weight:600">Apply to Document Types:</legend>
                 <div style="display:grid;gap:8px">
                     <label style="display:flex;align-items:center;gap:8px">
-                        <input type="checkbox" name="include_quote" id="includeQuote" value="1" checked>
-                        <span>Quotes</span>
+                        <input type="checkbox" name="document_types[]" value="regular" checked>
+                        <span>Regular</span>
                     </label>
                     <label style="display:flex;align-items:center;gap:8px">
-                        <input type="checkbox" name="include_contract" id="includeContract" value="1" checked>
-                        <span>Contracts</span>
+                        <input type="checkbox" name="document_types[]" value="long_term" checked>
+                        <span>Long Term</span>
                     </label>
                     <label style="display:flex;align-items:center;gap:8px">
-                        <input type="checkbox" name="include_invoice" id="includeInvoice" value="1" checked>
-                        <span>Invoices</span>
+                        <input type="checkbox" name="document_types[]" value="on_demand" checked>
+                        <span>On-Demand</span>
                     </label>
                 </div>
             </fieldset>
@@ -194,12 +190,12 @@ try {
 </div>
 
 <script>
-function toggleNumberFields() {
-    var dataType = document.getElementById('fieldDataType').value;
-    var numberSection = document.getElementById('numberFieldsSection');
-    if (numberSection) {
-        numberSection.style.display = dataType === 'number' ? 'block' : 'none';
-    }
+const activeTab = '<?php echo $activeTab; ?>';
+
+function toggleOptionsField() {
+    const fieldType = document.getElementById('fieldType').value;
+    const optionsField = document.getElementById('optionsField');
+    optionsField.style.display = fieldType === 'select' ? 'block' : 'none';
 }
 
 function showAddFieldModal() {
@@ -207,37 +203,43 @@ function showAddFieldModal() {
     document.getElementById('fieldAction').value = 'create';
     document.getElementById('fieldId').value = '';
     document.getElementById('fieldLabel').value = '';
-    document.getElementById('fieldDataType').value = 'text';
-    document.getElementById('fieldDefaultValue').value = '';
-    document.getElementById('fieldMinValue').value = '';
-    document.getElementById('fieldMaxValue').value = '';
-    document.getElementById('includeQuote').checked = true;
-    document.getElementById('includeContract').checked = true;
-    document.getElementById('includeInvoice').checked = true;
+    document.getElementById('fieldType').value = 'text';
+    document.getElementById('fieldOptions').value = '';
     document.getElementById('fieldRequired').checked = false;
-    toggleNumberFields();
+    
+    // Show document type checkboxes for create, check current tab
+    document.getElementById('docTypesSection').style.display = 'block';
+    document.querySelectorAll('[name="document_types[]"]').forEach(cb => {
+        cb.checked = cb.value === activeTab;
+    });
+    
+    toggleOptionsField();
     document.getElementById('fieldModal').style.display = 'flex';
 }
 
 function editField(fieldId) {
-    fetch('/?page=settings/custom-fields-handler&action=get&id=' + fieldId)
+    fetch('/?page=settings/document-custom-fields-handler&action=get&id=' + fieldId)
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                const docTypes = data.field.field_type.split(',');
                 document.getElementById('modalTitle').textContent = 'Edit Field';
                 document.getElementById('fieldAction').value = 'update';
                 document.getElementById('fieldId').value = fieldId;
                 document.getElementById('fieldLabel').value = data.field.field_label;
-                document.getElementById('fieldDataType').value = data.field.field_data_type;
-                document.getElementById('fieldDefaultValue').value = data.field.default_value || '';
-                document.getElementById('fieldMinValue').value = data.field.min_value || '';
-                document.getElementById('fieldMaxValue').value = data.field.max_value || '';
-                document.getElementById('includeQuote').checked = docTypes.includes('quote');
-                document.getElementById('includeContract').checked = docTypes.includes('contract');
-                document.getElementById('includeInvoice').checked = docTypes.includes('invoice');
+                document.getElementById('fieldType').value = data.field.field_type;
                 document.getElementById('fieldRequired').checked = data.field.is_required == 1;
-                toggleNumberFields();
+                
+                // Populate options for select fields
+                if (data.field.field_type === 'select' && data.field.field_options) {
+                    document.getElementById('fieldOptions').value = data.field.field_options.join('\n');
+                } else {
+                    document.getElementById('fieldOptions').value = '';
+                }
+                
+                // Hide document type checkboxes when editing (can't change)
+                document.getElementById('docTypesSection').style.display = 'none';
+                
+                toggleOptionsField();
                 document.getElementById('fieldModal').style.display = 'flex';
             } else {
                 alert('Error loading field data');
@@ -247,14 +249,14 @@ function editField(fieldId) {
 }
 
 function deleteField(fieldId) {
-    if (!confirm('Are you sure you want to delete this field?')) return;
+    if (!confirm('Are you sure you want to delete this field? This cannot be undone.')) return;
     
     const formData = new FormData();
     formData.append('csrf', '<?php echo csrf_token(); ?>');
     formData.append('action', 'delete');
     formData.append('field_id', fieldId);
     
-    fetch('/?page=settings/custom-fields-handler', {
+    fetch('/?page=settings/document-custom-fields-handler', {
         method: 'POST',
         body: formData
     })
@@ -273,50 +275,107 @@ function closeFieldModal() {
     document.getElementById('fieldModal').style.display = 'none';
 }
 
-// Enable drag and drop reordering (simplified)
-document.addEventListener('DOMContentLoaded', function() {
-    const fieldsList = document.getElementById('fieldsList');
-    if (!fieldsList) return;
+// Handle form submission
+document.getElementById('fieldForm').addEventListener('submit', function(e) {
+    e.preventDefault();
     
-    let draggedElement = null;
+    const formData = new FormData(this);
     
-    fieldsList.addEventListener('dragstart', function(e) {
-        if (e.target.classList.contains('field-item')) {
-            draggedElement = e.target;
-            e.target.style.opacity = '0.5';
+    fetch('/?page=settings/document-custom-fields-handler', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.message || 'Unknown error'));
         }
-    });
-    
-    fieldsList.addEventListener('dragend', function(e) {
-        if (e.target.classList.contains('field-item')) {
-            e.target.style.opacity = '1';
-        }
-    });
-    
-    fieldsList.addEventListener('dragover', function(e) {
-        e.preventDefault();
-    });
-    
-    fieldsList.addEventListener('drop', function(e) {
-        e.preventDefault();
-        if (!draggedElement) return;
+    })
+    .catch(err => alert('Error: ' + err.message));
+});
+
+// Handle toggle switches
+document.querySelectorAll('.field-toggle').forEach(toggle => {
+    toggle.addEventListener('change', function() {
+        const fieldId = this.dataset.fieldId;
+        const isEnabled = this.checked ? 1 : 0;
         
-        const target = e.target.closest('.field-item');
-        if (target && target !== draggedElement) {
-            const rect = target.getBoundingClientRect();
-            const next = (e.clientY - rect.top) / rect.height > 0.5;
-            fieldsList.insertBefore(draggedElement, next ? target.nextSibling : target);
-            
-            // Save new order
-            saveFieldOrder();
-        }
-    });
-    
-    // Make items draggable
-    document.querySelectorAll('.field-item').forEach(item => {
-        item.setAttribute('draggable', 'true');
+        const formData = new FormData();
+        formData.append('csrf', '<?php echo csrf_token(); ?>');
+        formData.append('action', 'toggle');
+        formData.append('field_id', fieldId);
+        formData.append('is_enabled', isEnabled);
+        
+        fetch('/?page=settings/document-custom-fields-handler', {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                alert('Error toggling field');
+                this.checked = !this.checked; // Revert
+            }
+        })
+        .catch(err => {
+            alert('Error: ' + err.message);
+            this.checked = !this.checked; // Revert
+        });
     });
 });
+
+// Drag and drop reordering
+const fieldsList = document.getElementById('fieldsList');
+let draggedElement = null;
+
+fieldsList.addEventListener('dragstart', function(e) {
+    if (e.target.classList.contains('field-item')) {
+        draggedElement = e.target;
+        e.target.style.opacity = '0.5';
+    }
+});
+
+fieldsList.addEventListener('dragend', function(e) {
+    if (e.target.classList.contains('field-item')) {
+        e.target.style.opacity = '1';
+    }
+});
+
+fieldsList.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    if (!draggedElement) return;
+    
+    const afterElement = getDragAfterElement(fieldsList, e.clientY);
+    if (afterElement == null) {
+        fieldsList.appendChild(draggedElement);
+    } else {
+        fieldsList.insertBefore(draggedElement, afterElement);
+    }
+});
+
+fieldsList.addEventListener('drop', function(e) {
+    e.preventDefault();
+    if (draggedElement) {
+        saveFieldOrder();
+    }
+});
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.field-item:not(.dragging)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
 
 function saveFieldOrder() {
     const items = document.querySelectorAll('.field-item');
@@ -330,7 +389,7 @@ function saveFieldOrder() {
     formData.append('action', 'reorder');
     formData.append('order', JSON.stringify(order));
     
-    fetch('/?page=settings/custom-fields-handler', {
+    fetch('/?page=settings/document-custom-fields-handler', {
         method: 'POST',
         body: formData
     });

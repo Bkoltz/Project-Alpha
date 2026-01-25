@@ -58,12 +58,6 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
         'value' => $client_name,
         'id_value' => $client_id
       ],
-      'project_code' => [
-        'type' => 'text',
-        'label' => 'Project ID',
-        'value' => $project_code,
-        'placeholder' => 'PA-2025'
-      ],
       'status' => [
         'type' => 'select',
         'label' => 'Status',
@@ -75,26 +69,15 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
           ['value' => 'rejected', 'label' => 'Rejected']
         ]
       ],
-      'project_code' => [
-        'type' => 'text',
-        'label' => 'Project ID',
-        'value' => $project_code,
-        'placeholder' => 'PA-2025'
-      ],
-      'doc_number' => [
-        'type' => 'number',
-        'label' => 'Doc #',
-        'value' => isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : ''
-      ],
       'start' => [
         'type' => 'date',
         'label' => 'Start',
-        'value' => $_GET['start'] ?? ''
+        'value' => $start
       ],
       'end' => [
         'type' => 'date',
         'label' => 'End',
-        'value' => $_GET['end'] ?? ''
+        'value' => $end
       ],
       'min_price' => [
         'type' => 'number',
@@ -107,6 +90,17 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
         'label' => 'Max ($)',
         'value' => $max_price ?? '',
         'step' => '0.01'
+      ],
+      'project_code' => [
+        'type' => 'text',
+        'label' => 'Project ID',
+        'value' => $project_code,
+        'placeholder' => 'PA-2025'
+      ],
+      'doc_number' => [
+        'type' => 'number',
+        'label' => 'Doc #',
+        'value' => $doc_no
       ]
     ]
   ];

@@ -34,21 +34,34 @@ try {
     $is_active = isset($_POST['is_active']) ? 1 : 0;
     $is_default = isset($_POST['is_default']) ? 1 : 0;
     
-    @error_log('[tax-rates-handler] Parsed values - name: ' . $name . ', rate: ' . $rate . ', active: ' . $is_active);
+    // Check if is_default column exists
+    $hasDefault = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tax_rates' AND COLUMN_NAME='is_default'")->fetchColumn();
+    
+    @error_log('[tax-rates-handler] Parsed values - name: ' . $name . ', rate: ' . $rate . ', active: ' . $is_active . ', hasDefault: ' . ($hasDefault ? 'yes' : 'no'));
     
     if ($name === '') throw new Exception('Name required');
     
-    // If setting as default, clear all other defaults first
-    if ($is_default) {
+    // If setting as default, clear all other defaults first (only if column exists)
+    if ($is_default && $hasDefault) {
       $pdo->exec('UPDATE tax_rates SET is_default = 0');
     }
     
     if ($id > 0) {
-      $st = $pdo->prepare('UPDATE tax_rates SET name=?, country=?, state=?, county=?, rate=?, is_active=?, is_default=? WHERE id=?');
-      $st->execute([$name, $country, $state, $county, $rate, $is_active, $is_default, $id]);
+      if ($hasDefault) {
+        $st = $pdo->prepare('UPDATE tax_rates SET name=?, country=?, state=?, county=?, rate=?, is_active=?, is_default=? WHERE id=?');
+        $st->execute([$name, $country, $state, $county, $rate, $is_active, $is_default, $id]);
+      } else {
+        $st = $pdo->prepare('UPDATE tax_rates SET name=?, country=?, state=?, county=?, rate=?, is_active=? WHERE id=?');
+        $st->execute([$name, $country, $state, $county, $rate, $is_active, $id]);
+      }
     } else {
-      $st = $pdo->prepare('INSERT INTO tax_rates (name,country,state,county,rate,is_active,is_default) VALUES (?,?,?,?,?,?,?)');
-      $st->execute([$name, $country, $state, $county, $rate, $is_active, $is_default]);
+      if ($hasDefault) {
+        $st = $pdo->prepare('INSERT INTO tax_rates (name,country,state,county,rate,is_active,is_default) VALUES (?,?,?,?,?,?,?)');
+        $st->execute([$name, $country, $state, $county, $rate, $is_active, $is_default]);
+      } else {
+        $st = $pdo->prepare('INSERT INTO tax_rates (name,country,state,county,rate,is_active) VALUES (?,?,?,?,?,?)');
+        $st->execute([$name, $country, $state, $county, $rate, $is_active]);
+      }
       @error_log('[tax-rates-handler] INSERT successful, ID: ' . $pdo->lastInsertId());
     }
     header('Location: /?page=settings&tab=taxes&saved=1'); exit;
