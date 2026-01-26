@@ -38,7 +38,7 @@ $clients = $pdo->query('SELECT id,name FROM clients')->fetchAll(PDO::FETCH_KEY_P
           <th style="padding:10px">Date</th>
           <th style="padding:10px">Type</th>
           <th style="padding:10px">No.</th>
-          <th style="padding:10px">Project</th>
+          <th style="padding:10px">Job</th>
           <th style="padding:10px">Client</th>
           <th style="padding:10px">Status</th>
         </tr>

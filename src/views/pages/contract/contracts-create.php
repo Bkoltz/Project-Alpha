@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/document_fields.php';
 $csrf = csrf_sf_token('contracts-create');
 // TODO: We need to update the logic for the long-term contracts as follows:
   //When selecting the start and end date, we should only be able to select the days that are relative to the billing period. For example:
@@ -45,24 +46,27 @@ $csrf = csrf_sf_token('contracts-create');
       </label>
     </div>
 
-    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
-      <label id="depositTypeLabelCo">
-        <div>Deposit Required</div>
-        <select id="depositTypeCo" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <option value="none">None</option>
-          <option value="percent">Percent</option>
-          <option value="fixed">Fixed $</option>
-        </select>
-      </label>
-      <label id="depositValueLabelCo">
-        <div>Deposit Value</div>
-        <input id="depositValueCo" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
-      <label id="fulfillmentDateLabelCo">
-        <div>Fulfillment Date</div>
-        <input type="date" name="fulfillment_date" id="fulfillmentDateInputCo" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
+    <div id="projectSectionCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+      <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
+      <div style="display:grid;gap:12px">
+        <label>
+          <div>Add to Existing Project</div>
+          <select id="projectSelectCo" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <option value="">-- Select Project --</option>
+          </select>
+        </label>
+        <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
+        <div>
+          <button type="button" id="createProjectBtnCo" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
+        </div>
+      </div>
     </div>
+
+    <?php
+    // Dynamically render custom fields for regular contracts by default
+    // JavaScript will update this when document type changes
+    echo renderDocumentCustomFields($pdo, 'regular', [], 'Co');
+    ?>
 
     <div style="margin:12px 0">
       <div style="font-weight:600;margin-bottom:8px">Document Type</div>
@@ -352,8 +356,17 @@ function recalcCo(){
   // Update discount warning
   updateDiscountWarning();
 }
-['discountTypeCo','discountValueCo','taxPercentCo','depositTypeCo','depositValueCo'].forEach(id=>document.getElementById(id).addEventListener('input', recalcCo));
-document.getElementById('discountTypeCo').addEventListener('change', updateDiscountWarning);
+// Safely add event listeners only if elements exist
+['discountTypeCo','discountValueCo','taxPercentCo'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', recalcCo);
+});
+['depositTypeCo','depositValueCo'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', recalcCo);
+});
+const discountTypeElCo = document.getElementById('discountTypeCo');
+if (discountTypeElCo) discountTypeElCo.addEventListener('change', updateDiscountWarning);
 
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
@@ -385,10 +398,11 @@ function toggleDocTypeFields() {
     // Regular contract - always show items
     document.getElementById('itemsCo').parentElement.style.display = 'block';
     document.getElementById('invoiceAmountRow').style.display = 'none';
-    // Show deposit and fulfillment for regular contracts
-    document.getElementById('depositTypeLabelCo').style.display = 'block';
-    document.getElementById('depositValueLabelCo').style.display = 'block';
-    document.getElementById('fulfillmentDateLabelCo').style.display = 'block';
+    // Show custom fields for regular contracts (if they exist)
+    ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
   }
   recalcCo();
 }
@@ -402,7 +416,7 @@ function toggleEndDate() {
   // Hide fulfillment date when ongoing
   var fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
   var docType = document.querySelector('input[name="doc_type"]:checked').value;
-  if (docType === 'long_term') {
+  if (docType === 'long_term' && fulfillmentLabel) {
     fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
   }
   
@@ -427,8 +441,39 @@ function togglePricingFields() {
   var isOnDemand = (docType === 'on_demand');
   
   if (docType === 'regular') {
-    // Regular contract - show deposit and fulfillment
-    document.getElementById('depositTypeLabelCo').style.display = 'block';
+    // Regular contract - show custom fields
+    ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
+    return;
+  }
+  
+  var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
+  
+  if (pricingType === 'per_invoice') {
+    // Recurring amount - hide custom fields
+    ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  } else if (pricingType === 'on_demand') {
+    // On-demand - show deposits, hide fulfillment
+    ['depositTypeLabelCo', 'depositValueLabelCo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
+    const fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
+    if (fulfillmentLabel) fulfillmentLabel.style.display = 'none';
+  } else {
+    // Fixed total - show deposit and fulfillment
+    ['depositTypeLabelCo', 'depositValueLabelCo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
+    var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
+    const fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
+    if (fulfillmentLabel) fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
     document.getElementById('depositValueLabelCo').style.display = 'block';
     document.getElementById('fulfillmentDateLabelCo').style.display = 'block';
     return;
@@ -499,6 +544,7 @@ sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" data-t
         el.addEventListener('click', function(){
           ci.value = this.dataset.name; cid.value = this.dataset.id; 
           if(this.dataset.taxexempt){taxBanner.style.display='block';}else{taxBanner.style.display='none';}
+          loadProjectsForClientCo(this.dataset.id);
           sug.style.display='none';
         });
       });
@@ -506,6 +552,79 @@ sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" data-t
     }).catch(()=>{sug.style.display='none'});
   });
 document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==ci){ sug.style.display='none'; } });
+
+function loadProjectsForClientCo(clientId) {
+  if (!clientId) {
+    document.getElementById('projectSectionCo').style.display = 'none';
+    return;
+  }
+  
+  fetch('/?page=projects-search&client_id=' + encodeURIComponent(clientId))
+    .then(r => r.json())
+    .then(projects => {
+      const projectSelect = document.getElementById('projectSelectCo');
+      projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
+      
+      if (projects && projects.length > 0) {
+        projects.forEach(project => {
+          const option = document.createElement('option');
+          option.value = project.id;
+          option.textContent = project.name + ' (' + project.status.replace('_', ' ') + ')';
+          projectSelect.appendChild(option);
+        });
+        document.getElementById('projectSectionCo').style.display = 'block';
+      } else {
+        document.getElementById('projectSectionCo').style.display = 'none';
+      }
+    })
+    .catch(() => {
+      document.getElementById('projectSectionCo').style.display = 'none';
+    });
+}
+
+document.getElementById('createProjectBtnCo').addEventListener('click', function() {
+  const clientId = document.getElementById('clientIdCo').value;
+  if (!clientId) {
+    alert('Please select a client first.');
+    return;
+  }
+  
+  const projectName = prompt('Enter project name:');
+  if (!projectName || !projectName.trim()) return;
+  
+  fetch('/?page=project/projects-create-quick', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) + 
+          '&name=' + encodeURIComponent(projectName.trim()) + 
+          '&client_id=' + encodeURIComponent(clientId)
+  })
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      // Reload projects for this client
+      loadProjectsForClientCo(clientId);
+      // Select the new project
+      setTimeout(() => {
+        const projectSelect = document.getElementById('projectSelectCo');
+        for (let i = 0; i < projectSelect.options.length; i++) {
+          if (projectSelect.options[i].value == result.project_id) {
+            projectSelect.selectedIndex = i;
+            break;
+          }
+        }
+      }, 100);
+    } else {
+      alert('Failed to create project: ' + (result.error || 'Unknown error'));
+    }
+  })
+  .catch(() => {
+    alert('Failed to create project.');
+  });
+});
+
 document.getElementById('coCreateForm').addEventListener('submit', function(e){ 
   if(!cid.value){ 
     e.preventDefault(); 

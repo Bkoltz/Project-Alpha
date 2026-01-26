@@ -39,6 +39,7 @@ if (!empty($inv['project_code'])) {
   }
 }
 if ($termsText === '') { $termsText = trim((string)($inv['terms'] ?? '')); }
+if ($termsText === '' && !empty($inv['on_demand_contract_id'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
 <section>
@@ -183,7 +184,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <td style="vertical-align:middle;width:70%">
         <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
         <div style="color:#374151;font-size:13px;margin-top:2px">Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?></div>
-        <?php if (!empty($inv['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project: <?php echo htmlspecialchars($inv['project_code']); ?></div><?php endif; ?>
+        <?php if (!empty($inv['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Job <?php echo htmlspecialchars($inv['project_code']); ?></div><?php endif; ?>
+        <?php if (!empty($inv['project_id'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project <?php echo htmlspecialchars($inv['project_id']); ?></div><?php endif; ?>
       </td>
       <td style="vertical-align:middle;width:30%;text-align:right">
         <?php if ($canShowLogo): ?>

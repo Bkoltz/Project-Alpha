@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS user_2fa (
 
 -- Table to log 2FA verification attempts
 CREATE TABLE IF NOT EXISTS login_2fa_attempts (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   ip VARCHAR(45) NOT NULL,
   success TINYINT(1) NOT NULL DEFAULT 0,

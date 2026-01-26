@@ -2,6 +2,7 @@
 // src/views/pages/quotes-create.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/document_fields.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 ?>
 <section>
@@ -23,7 +24,21 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
-        <div>Discount Type</div>
+    <div id="projectSection" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+      <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
+      <div style="display:grid;gap:12px">
+        <label>
+          <div>Add to Existing Project</div>
+          <select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <option value="">-- Select Project --</option>
+          </select>
+        </label>
+        <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
+        <div>
+          <button type="button" id="createProjectBtn" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
+        </div>
+      </div>
+    </div>        <div>Discount Type</div>
         <select id="discountType" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="none">None</option>
           <option value="percent">Percent</option>
@@ -36,24 +51,11 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </label>
     </div>
 
-    <div id="depositFulfillmentRow" style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
-      <label id="depositTypeLabel">
-        <div>Deposit Required</div>
-        <select id="depositType" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <option value="none">None</option>
-          <option value="percent">Percent</option>
-          <option value="fixed">Fixed $</option>
-        </select>
-      </label>
-      <label id="depositValueLabel">
-        <div>Deposit Value</div>
-        <input id="depositValue" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
-      <label id="fulfillmentDateLabel">
-        <div>Fulfillment Date (Estimated)</div>
-        <input type="date" name="fulfillment_date" id="fulfillmentDateInput" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
-    </div>
+    <?php
+    // Dynamically render custom fields for regular documents by default
+    // JavaScript will update this when document type changes
+    echo renderDocumentCustomFields($pdo, 'regular', []);
+    ?>
 
     <div style="margin:12px 0">
       <div style="font-weight:600;margin-bottom:8px">Document Type</div>
@@ -238,15 +240,25 @@ function addItem(item='', desc='', qty=1, price=0){
   document.getElementById('items').appendChild(wrap);
   
   // Re-initialize autocomplete for the new item input
-  if (window.ItemAutocomplete) {
-    const input = document.getElementById(itemId);
-    const descField = document.getElementById(descId);
-    const priceField = document.getElementById(priceId);
-    new ItemAutocomplete(input, {
-      descriptionField: descField,
-      priceField: priceField
-    });
+  function initAutocomplete() {
+    if (window.ItemAutocomplete) {
+      const input = document.getElementById(itemId);
+      if (input && !input._itemAutocomplete) {
+        const descField = document.getElementById(descId);
+        const priceField = document.getElementById(priceId);
+        const instance = new ItemAutocomplete(input, {
+          descriptionField: descField,
+          priceField: priceField
+        });
+        // Mark as initialized
+        input._itemAutocomplete = instance;
+      }
+    } else {
+      // Retry after a short delay if ItemAutocomplete not loaded yet
+      setTimeout(initAutocomplete, 100);
+    }
   }
+  initAutocomplete();
   
   recalc();
 }
@@ -330,8 +342,17 @@ function recalc(){
   updateDiscountWarning();
 }
 
-['discountType','discountValue','taxPercent','depositType','depositValue'].forEach(id=>document.getElementById(id).addEventListener('input', recalc));
-document.getElementById('discountType').addEventListener('change', updateDiscountWarning);
+// Safely add event listeners only if elements exist
+['discountType','discountValue','taxPercent'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', recalc);
+});
+['depositType','depositValue'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', recalc);
+});
+const discountTypeEl = document.getElementById('discountType');
+if (discountTypeEl) discountTypeEl.addEventListener('change', updateDiscountWarning);
 
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
@@ -360,10 +381,11 @@ function toggleDocTypeFields() {
     // Regular quote
     document.getElementById('items').parentElement.style.display = 'block';
     document.getElementById('invoiceAmountRow').style.display = 'none';
-    // Show deposit and fulfillment for regular quotes
-    document.getElementById('depositTypeLabel').style.display = 'block';
-    document.getElementById('depositValueLabel').style.display = 'block';
-    document.getElementById('fulfillmentDateLabel').style.display = 'block';
+    // Show custom fields for regular quotes (if they exist)
+    ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
   }
   recalc();
 }
@@ -377,7 +399,7 @@ function toggleEndDate() {
   // Hide fulfillment date when ongoing
   var fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
   var docType = document.querySelector('input[name="doc_type"]:checked').value;
-  if (docType === 'long_term') {
+  if (docType === 'long_term' && fulfillmentLabel) {
     fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
   }
   
@@ -400,10 +422,11 @@ function togglePricingFields() {
   var isOnDemand = (docType === 'on_demand');
   
   if (docType === 'regular') {
-    // Regular quote - show deposit and fulfillment
-    document.getElementById('depositTypeLabel').style.display = 'block';
-    document.getElementById('depositValueLabel').style.display = 'block';
-    document.getElementById('fulfillmentDateLabel').style.display = 'block';
+    // Regular quote - show custom fields
+    ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
     document.getElementById('billingIntervalFields').style.display = 'grid';
     return;
   }
@@ -412,28 +435,35 @@ function togglePricingFields() {
   
   if (pricingType === 'per_invoice') {
     // Recurring amount - hide deposit and fulfillment
-    document.getElementById('depositTypeLabel').style.display = 'none';
-    document.getElementById('depositValueLabel').style.display = 'none';
-    document.getElementById('fulfillmentDateLabel').style.display = 'none';
+    ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
     document.getElementById('perInvoiceField').style.display = 'block';
     document.getElementById('fixedTotalFields').style.display = 'none';
     document.getElementById('items').parentElement.style.display = 'none';
     document.getElementById('billingIntervalFields').style.display = 'grid';
   } else if (pricingType === 'on_demand') {
     // On-demand - show deposits, hide fulfillment and billing interval
-    document.getElementById('depositTypeLabel').style.display = 'block';
-    document.getElementById('depositValueLabel').style.display = 'block';
-    document.getElementById('fulfillmentDateLabel').style.display = 'none';
+    ['depositTypeLabel', 'depositValueLabel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
+    const fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
+    if (fulfillmentLabel) fulfillmentLabel.style.display = 'none';
     document.getElementById('perInvoiceField').style.display = 'block';
     document.getElementById('fixedTotalFields').style.display = 'none';
     document.getElementById('items').parentElement.style.display = 'none';
     document.getElementById('billingIntervalFields').style.display = 'none';
   } else {
     // Fixed total - show deposit and fulfillment
-    document.getElementById('depositTypeLabel').style.display = 'block';
-    document.getElementById('depositValueLabel').style.display = 'block';
+    ['depositTypeLabel', 'depositValueLabel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
     var isOngoing = document.getElementById('endDateType').value === 'ongoing';
-    document.getElementById('fulfillmentDateLabel').style.display = isOngoing ? 'none' : 'block';
+    const fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
+    if (fulfillmentLabel) fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
     document.getElementById('perInvoiceField').style.display = 'none';
     document.getElementById('fixedTotalFields').style.display = 'block';
     document.getElementById('items').parentElement.style.display = 'block';
@@ -476,6 +506,7 @@ ci.addEventListener('input', function(){
         el.addEventListener('click', function(){
           ci.value = this.dataset.name; cid.value = this.dataset.id; 
           if(this.dataset.taxexempt){taxBanner.style.display='block';}else{taxBanner.style.display='none';}
+          loadProjectsForClient(this.dataset.id);
           sug.style.display='none';
         });
       });
@@ -483,6 +514,78 @@ ci.addEventListener('input', function(){
     }).catch(()=>{sug.style.display='none'});
   });
 document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==ci){ sug.style.display='none'; } });
+
+function loadProjectsForClient(clientId) {
+  if (!clientId) {
+    document.getElementById('projectSection').style.display = 'none';
+    return;
+  }
+  
+  fetch('/?page=projects-search&client_id=' + encodeURIComponent(clientId))
+    .then(r => r.json())
+    .then(projects => {
+      const projectSelect = document.getElementById('projectSelect');
+      projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
+      
+      if (projects && projects.length > 0) {
+        projects.forEach(project => {
+          const option = document.createElement('option');
+          option.value = project.id;
+          option.textContent = project.name + ' (' + project.status.replace('_', ' ') + ')';
+          projectSelect.appendChild(option);
+        });
+        document.getElementById('projectSection').style.display = 'block';
+      } else {
+        document.getElementById('projectSection').style.display = 'none';
+      }
+    })
+    .catch(() => {
+      document.getElementById('projectSection').style.display = 'none';
+    });
+}
+
+document.getElementById('createProjectBtn').addEventListener('click', function() {
+  const clientId = document.getElementById('clientId').value;
+  if (!clientId) {
+    alert('Please select a client first.');
+    return;
+  }
+  
+  const projectName = prompt('Enter project name:');
+  if (!projectName || !projectName.trim()) return;
+  
+  fetch('/?page=project/projects-create-quick', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) + 
+          '&name=' + encodeURIComponent(projectName.trim()) + 
+          '&client_id=' + encodeURIComponent(clientId)
+  })
+  .then(r => r.json())
+  .then(result => {
+    if (result.success) {
+      // Reload projects for this client
+      loadProjectsForClient(clientId);
+      // Select the new project
+      setTimeout(() => {
+        const projectSelect = document.getElementById('projectSelect');
+        for (let i = 0; i < projectSelect.options.length; i++) {
+          if (projectSelect.options[i].value == result.project_id) {
+            projectSelect.selectedIndex = i;
+            break;
+          }
+        }
+      }, 100);
+    } else {
+      alert('Failed to create project: ' + (result.error || 'Unknown error'));
+    }
+  })
+  .catch(() => {
+    alert('Failed to create project.');
+  });
+});
 
 document.getElementById('quoteForm').addEventListener('submit', function(e){ if(!cid.value){ e.preventDefault(); alert('Please select a client from suggestions.'); } });
 </script>

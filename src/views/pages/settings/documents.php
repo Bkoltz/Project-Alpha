@@ -99,12 +99,6 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
       ⚙️ <strong>Invoice automation and notifications</strong> have been moved to the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab for easier management.
     </p>
   </fieldset>
-
-  <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
-    <legend style="padding:0 6px;color:var(--muted)">On-Demand Document Terms</legend>
-    <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Terms to include on on-demand documents (e.g., single-use invoices). Leave blank to use standard terms.</p>
-    <textarea name="on_demand_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Enter on-demand terms..."><?php echo htmlspecialchars($appConfig['on_demand_terms'] ?? ''); ?></textarea>
-  </fieldset>
 <?php endif; ?>
 
 <?php if ($docTab === 'customization'): ?>

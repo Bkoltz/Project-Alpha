@@ -68,6 +68,20 @@ $gridCols = $columns ?? (count($filters) + 2);
                 <div id="<?php echo $instanceId; ?>_client_suggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
             </label>
             
+        <?php elseif ($type === 'project_autocomplete'): ?>
+            <!-- Project Autocomplete -->
+            <label style="position:relative">
+                <div><?php echo htmlspecialchars($label); ?></div>
+                <input 
+                    type="text" 
+                    name="q" 
+                    id="<?php echo $instanceId; ?>_project_input" 
+                    value="<?php echo htmlspecialchars($value); ?>" 
+                    placeholder="<?php echo htmlspecialchars($placeholder ?: 'Type project name...'); ?>" 
+                    style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+                <div id="<?php echo $instanceId; ?>_project_suggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
+            </label>
+            
         <?php elseif ($type === 'select'): ?>
             <!-- Select Dropdown -->
             <?php $options = $config['options'] ?? []; ?>
@@ -135,76 +149,145 @@ $gridCols = $columns ?? (count($filters) + 2);
 <?php
 // Generate JavaScript for client autocomplete if needed
 $hasClientAutocomplete = false;
+$hasProjectAutocomplete = false;
 foreach ($filters as $name => $config) {
     if (($config['type'] ?? '') === 'client_autocomplete') {
         $hasClientAutocomplete = true;
-        break;
+    }
+    if (($config['type'] ?? '') === 'project_autocomplete') {
+        $hasProjectAutocomplete = true;
     }
 }
 
-if ($hasClientAutocomplete):
+if ($hasClientAutocomplete || $hasProjectAutocomplete):
 ?>
 <script>
 (function() {
-    var input = document.getElementById('<?php echo $instanceId; ?>_client_input');
-    var hid = document.getElementById('<?php echo $instanceId; ?>_client_id');
-    var sug = document.getElementById('<?php echo $instanceId; ?>_client_suggest');
+    <?php if ($hasClientAutocomplete): ?>
+    // Client autocomplete
+    var clientInput = document.getElementById('<?php echo $instanceId; ?>_client_input');
+    var clientHid = document.getElementById('<?php echo $instanceId; ?>_client_id');
+    var clientSug = document.getElementById('<?php echo $instanceId; ?>_client_suggest');
     
-    if (!input || !hid || !sug) return;
-    
-    input.addEventListener('input', function() {
-        hid.value = '';
-        var term = this.value.trim();
-        
-        if (!term) {
-            sug.style.display = 'none';
-            sug.innerHTML = '';
-            return;
-        }
-        
-        fetch('/?page=clients-search&term=' + encodeURIComponent(term))
-            .then(r => r.json())
-            .then(list => {
-                if (!Array.isArray(list) || list.length === 0) {
-                    sug.style.display = 'none';
-                    sug.innerHTML = '';
-                    return;
-                }
-                
-                sug.innerHTML = list.map(x => 
-                    '<div data-id="' + x.id + '" data-name="' + x.name + '" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6">' + 
-                    x.name + 
-                    '</div>'
-                ).join('');
-                
-                Array.from(sug.children).forEach(el => {
-                    el.addEventListener('click', function() {
-                        input.value = this.dataset.name;
-                        hid.value = this.dataset.id;
-                        sug.style.display = 'none';
+    if (clientInput && clientHid && clientSug) {
+        clientInput.addEventListener('input', function() {
+            clientHid.value = '';
+            var term = this.value.trim();
+            
+            if (!term) {
+                clientSug.style.display = 'none';
+                clientSug.innerHTML = '';
+                return;
+            }
+            
+            fetch('/?page=clients-search&term=' + encodeURIComponent(term))
+                .then(r => r.json())
+                .then(list => {
+                    if (!Array.isArray(list) || list.length === 0) {
+                        clientSug.style.display = 'none';
+                        clientSug.innerHTML = '';
+                        return;
+                    }
+                    
+                    clientSug.innerHTML = list.map(x => 
+                        '<div data-id="' + x.id + '" data-name="' + x.name + '" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6">' + 
+                        x.name + 
+                        '</div>'
+                    ).join('');
+                    
+                    Array.from(clientSug.children).forEach(el => {
+                        el.addEventListener('click', function() {
+                            clientInput.value = this.dataset.name;
+                            clientHid.value = this.dataset.id;
+                            clientSug.style.display = 'none';
+                        });
+                        
+                        el.addEventListener('mouseenter', function() {
+                            this.style.background = '#f3f4f6';
+                        });
+                        
+                        el.addEventListener('mouseleave', function() {
+                            this.style.background = '#fff';
+                        });
                     });
                     
-                    el.addEventListener('mouseenter', function() {
-                        this.style.background = '#f3f4f6';
-                    });
-                    
-                    el.addEventListener('mouseleave', function() {
-                        this.style.background = '#fff';
-                    });
+                    clientSug.style.display = 'block';
+                })
+                .catch(() => {
+                    clientSug.style.display = 'none';
                 });
-                
-                sug.style.display = 'block';
-            })
-            .catch(() => {
-                sug.style.display = 'none';
-            });
-    });
+        });
+    }
+    <?php endif; ?>
+    
+    <?php if ($hasProjectAutocomplete): ?>
+    // Project autocomplete
+    var projectInput = document.getElementById('<?php echo $instanceId; ?>_project_input');
+    var projectSug = document.getElementById('<?php echo $instanceId; ?>_project_suggest');
+    
+    if (projectInput && projectSug) {
+        projectInput.addEventListener('input', function() {
+            var term = this.value.trim();
+            
+            if (!term) {
+                projectSug.style.display = 'none';
+                projectSug.innerHTML = '';
+                return;
+            }
+            
+            fetch('/?page=projects-search-autocomplete&term=' + encodeURIComponent(term))
+                .then(r => r.json())
+                .then(list => {
+                    if (!Array.isArray(list) || list.length === 0) {
+                        projectSug.style.display = 'none';
+                        projectSug.innerHTML = '';
+                        return;
+                    }
+                    
+                    projectSug.innerHTML = list.map(x => 
+                        '<div data-name="' + x.name + '" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6">' + 
+                        x.name + 
+                        (x.client_name ? ' · ' + x.client_name : '') +
+                        (x.organization_name ? ' · ' + x.organization_name : '') +
+                        '</div>'
+                    ).join('');
+                    
+                    Array.from(projectSug.children).forEach(el => {
+                        el.addEventListener('click', function() {
+                            projectInput.value = this.dataset.name;
+                            projectSug.style.display = 'none';
+                        });
+                        
+                        el.addEventListener('mouseenter', function() {
+                            this.style.background = '#f3f4f6';
+                        });
+                        
+                        el.addEventListener('mouseleave', function() {
+                            this.style.background = '#fff';
+                        });
+                    });
+                    
+                    projectSug.style.display = 'block';
+                })
+                .catch(() => {
+                    projectSug.style.display = 'none';
+                });
+        });
+    }
+    <?php endif; ?>
     
     // Close suggestions when clicking outside
     document.addEventListener('click', function(e) {
-        if (!sug.contains(e.target) && e.target !== input) {
-            sug.style.display = 'none';
+        <?php if ($hasClientAutocomplete): ?>
+        if (clientSug && !clientSug.contains(e.target) && e.target !== clientInput) {
+            clientSug.style.display = 'none';
         }
+        <?php endif; ?>
+        <?php if ($hasProjectAutocomplete): ?>
+        if (projectSug && !projectSug.contains(e.target) && e.target !== projectInput) {
+            projectSug.style.display = 'none';
+        }
+        <?php endif; ?>
     });
 })();
 </script>

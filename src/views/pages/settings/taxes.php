@@ -36,7 +36,7 @@ try {
             <th style="padding:12px">County</th>
             <th style="padding:12px">Rate %</th>
             <th style="padding:12px">Status</th>
-            <th style="padding:12px">Default</th>
+            <?php if ($hasDefault): ?><th style="padding:12px">Default</th><?php endif; ?>
             <th style="padding:12px">Actions</th>
           </tr>
         </thead>
@@ -55,6 +55,7 @@ try {
                   <span style="padding:4px 8px;border-radius:6px;background:#f3f4f6;color:#6b7280;font-size:12px">Inactive</span>
                 <?php endif; ?>
               </td>
+              <?php if ($hasDefault): ?>
               <td style="padding:12px">
                 <?php if ($tr['is_default']): ?>
                   <span style="padding:4px 8px;border-radius:6px;background:#dbeafe;color:#1e40af;font-size:12px;font-weight:600">✓ Default</span>
@@ -62,6 +63,7 @@ try {
                   —
                 <?php endif; ?>
               </td>
+              <?php endif; ?>
               <td style="padding:12px">
                 <div style="display:flex;gap:8px">
                   <a href="/?page=settings&tab=taxes&edit_tax_id=<?php echo (int)$tr['id']; ?>" 
@@ -155,6 +157,7 @@ try {
             <div style="font-size:12px;color:var(--muted)">Available for selection in documents</div>
           </div>
         </label>
+        <?php if ($hasDefault): ?>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
           <input type="checkbox" name="is_default" value="1" 
                  <?php echo ($editRow['is_default'] ?? 0) ? 'checked' : ''; ?>>
@@ -163,6 +166,7 @@ try {
             <div style="font-size:12px;color:var(--muted)">Auto-fill this rate when creating documents</div>
           </div>
         </label>
+        <?php endif; ?>
       </div>
       
       <div style="display:flex;gap:12px;padding-top:8px">

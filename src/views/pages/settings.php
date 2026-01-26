@@ -38,6 +38,17 @@ if (!in_array($tab, $validTabs)) {
     </aside>
 
     <div>
+      <?php if ($tab === 'taxes'): ?>
+        <?php
+        // Include the taxes tab without the form wrapper since it has its own form
+        $tabFile = __DIR__ . '/settings/' . $tab . '.php';
+        if (file_exists($tabFile)) {
+          include $tabFile;
+        } else {
+          echo '<p style="color:var(--muted)">Settings tab not found.</p>';
+        }
+        ?>
+      <?php else: ?>
       <form method="post" action="/?page=settings&tab=<?php echo $tab; ?><?php echo isset($_GET['doc_tab']) ? '&doc_tab=' . htmlspecialchars($_GET['doc_tab']) : ''; ?>" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:800px">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="tab" value="<?php echo $tab; ?>">
@@ -56,6 +67,7 @@ if (!in_array($tab, $validTabs)) {
           <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save</button>
         </div>
       </form>
+      <?php endif; ?>
     </div>
   </div>
 </section>

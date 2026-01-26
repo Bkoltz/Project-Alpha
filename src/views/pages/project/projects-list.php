@@ -2,18 +2,92 @@
 // src/views/pages/project/projects-list.php
 require_once __DIR__ . '/../../../config/db.php';
 
-$selected = (int)($_GET['id'] ?? 0);
-$rows = $pdo->query('SELECT p.*, c.name AS client_name, o.name AS organization_name FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN organizations o ON o.id=p.organization_id ORDER BY p.created_at DESC')->fetchAll();
-$clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
+// Get filter parameters
+$q = trim($_GET['q'] ?? '');
+$status = trim($_GET['status'] ?? '');
+$client_id = trim($_GET['client_id'] ?? '');
+$org_id = trim($_GET['org_id'] ?? '');
+
+// Build WHERE clause
+$where = [];
+$params = [];
+if ($q !== '') { $where[] = 'p.name LIKE ?'; $params[] = '%'.$q.'%'; }
+if ($status !== '') { $where[] = 'p.status = ?'; $params[] = $status; }
+if ($client_id !== '') { $where[] = 'p.client_id = ?'; $params[] = $client_id; }
+if ($org_id !== '') { $where[] = 'p.organization_id = ?'; $params[] = $org_id; }
+
+$whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+$sql = "SELECT p.*, c.name AS client_name, o.name AS organization_name
+        FROM projects p
+        LEFT JOIN clients c ON c.id = p.client_id
+        LEFT JOIN organizations o ON o.id = p.organization_id
+        $whereClause
+        ORDER BY p.created_at DESC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$rows = $stmt->fetchAll();
+
+// Get all organizations for filter dropdown
+$orgStmt = $pdo->query('SELECT id, name FROM organizations ORDER BY name');
+$organizations = $orgStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get all clients for filter dropdown
+$clientStmt = $pdo->query('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name');
+$clients = $clientStmt->fetchAll(PDO::FETCH_ASSOC);
 
 ?>
 <section>
   <h2>Projects</h2>
-  <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
-    <a href="/?page=project/projects-create" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:var(--nav-accent);color:#fff;text-decoration:none">Create Project</a>
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+    <a href="/?page=project/projects-create" style="padding:8px 16px;border:1px solid #ddd;border-radius:8px;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600">Create Project</a>
   </div>
+
+  <!-- Filters -->
+  <form method="get" action="/" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:24px">
+    <input type="hidden" name="page" value="project/projects-list">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:12px">
+      <label>
+        <div style="margin-bottom:4px;font-weight:600;font-size:14px">Search by Name</div>
+        <input type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Type project name..." style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px">
+      </label>
+      
+      <label>
+        <div style="margin-bottom:4px;font-weight:600;font-size:14px">Status</div>
+        <select name="status" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px">
+          <option value="">All Statuses</option>
+          <option value="not_started" <?php echo $status === 'not_started' ? 'selected' : ''; ?>>Not Started</option>
+          <option value="active" <?php echo $status === 'active' ? 'selected' : ''; ?>>Active</option>
+          <option value="overdue" <?php echo $status === 'overdue' ? 'selected' : ''; ?>>Overdue</option>
+          <option value="completed" <?php echo $status === 'completed' ? 'selected' : ''; ?>>Completed</option>
+          <option value="cancelled" <?php echo $status === 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
+        </select>
+      </label>
+      
+      <label style="position:relative">
+        <div style="margin-bottom:4px;font-weight:600;font-size:14px">Client</div>
+        <input type="text" id="clientSearchInput" placeholder="Type to search clients..." autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px">
+        <input type="hidden" name="client_id" id="clientIdInput" value="<?php echo htmlspecialchars($client_id); ?>">
+        <div id="clientSuggestions" style="display:none;position:absolute;z-index:100;left:0;right:0;top:100%;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:200px;overflow-y:auto;margin-top:2px"></div>
+      </label>
+      
+      <label style="position:relative">
+        <div style="margin-bottom:4px;font-weight:600;font-size:14px">Organization</div>
+        <input type="text" id="orgSearchInput" placeholder="Type to search organizations..." autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px">
+        <input type="hidden" name="org_id" id="orgIdInput" value="<?php echo htmlspecialchars($org_id); ?>">
+        <div id="orgSuggestions" style="display:none;position:absolute;z-index:100;left:0;right:0;top:100%;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:200px;overflow-y:auto;margin-top:2px"></div>
+      </label>
+    </div>
+    
+    <div style="display:flex;gap:8px">
+      <button type="submit" style="padding:8px 16px;border-radius:6px;background:var(--nav-accent);color:#fff;border:0;font-weight:600;cursor:pointer">Apply Filters</button>
+      <a href="/?page=project/projects-list" style="padding:8px 16px;border-radius:6px;background:#f3f4f6;color:#374151;border:0;font-weight:600;text-decoration:none;display:inline-block">Clear</a>
+    </div>
+  </form>
+
   <?php if (!$rows): ?>
-    <div style="color:var(--muted)">No projects created yet.</div>
+    <div style="color:var(--muted)">No projects found matching your filters.</div>
   <?php else: ?>
     <div style="display:grid;gap:12px">
       <?php foreach ($rows as $r): ?>
@@ -25,13 +99,13 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
               <?php if (!empty($r['organization_name'])): ?> · <?php echo htmlspecialchars($r['organization_name']); ?><?php endif; ?>
             </div>
             <div style="font-size:13px;color:var(--muted)">
-              Created: <?php echo htmlspecialchars($r['created_at']); ?>
+              Status: <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $r['status']))); ?> · Created: <?php echo htmlspecialchars($r['created_at']); ?>
               <?php if (!empty($r['estimated_start'])): ?> · Start: <?php echo htmlspecialchars($r['estimated_start']); ?><?php endif; ?>
               <?php if (!empty($r['estimated_end'])): ?> · End: <?php echo htmlspecialchars($r['estimated_end']); ?><?php endif; ?>
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
-            <a href="/?page=project/projects-list&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff">Details</a>
+            <a href="/?page=project/projects-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff">View Details</a>
             <form method="post" action="/?page=project/projects-delete" onsubmit="return confirm('Delete this project and all mappings?');">
               <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
               <input type="hidden" name="redirect" value="/?page=project/projects-list">
@@ -42,73 +116,88 @@ $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
-
-  <?php if ($selected):
-    $st = $pdo->prepare('SELECT * FROM projects WHERE id=?'); $st->execute([$selected]); $project = $st->fetch();
-    if ($project):
-  ?>
-    <div style="margin-top:12px;border:1px solid #eee;border-radius:8px;padding:12px;background:#fff">
-      <h3 id="projectNameHeading">Project <?php echo htmlspecialchars($project['name']); ?></h3>
-      <form method="post" action="/?page=project/projects-update" style="display:grid;gap:8px;max-width:520px">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'] ?? ''); ?>">
-        <input type="hidden" name="id" value="<?php echo (int)$project['id']; ?>">
-        <label><div>Name</div><input type="text" id="projectNameInputUpdate" name="name" value="<?php echo htmlspecialchars($project['name']); ?>" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-
-        <label>
-          <div>Client (optional)</div>
-          <input id="clientSearchBoxProjectUpdate" type="text" name="client_search" value="<?php echo htmlspecialchars($project['client_name'] ?? ''); ?>" placeholder="Search client..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-          <input type="hidden" name="client_id" id="client_id_update" value="<?php echo (int)($project['client_id'] ?? 0); ?>">
-          <div id="clientSearchSuggestProjectUpdate" style="position:relative;z-index:60;left:0;right:0;top:0;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
-        </label>
-        <!-- Single client search input above -->
-        <!-- Parent Project no longer supported -->
-        <label>
-          <div>Organization (search)</div>
-          <input id="orgInputProjectUpdate" type="text" name="organization_search" placeholder="Search organization..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%" value="<?php echo htmlspecialchars($project['organization_name'] ?? ''); ?>">
-          <input type="hidden" name="organization_id" id="organization_id_update" value="<?php echo (int)($project['organization_id'] ?? 0); ?>">
-          <div id="orgSuggestProjectUpdate" style="position:relative;z-index:60;left:0;right:0;top:0;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
-        </label>
-        <div style="display:flex;gap:8px">
-          <label style="flex:1"><div>Estimated Start</div><input type="date" name="estimated_start" value="<?php echo htmlspecialchars($project['estimated_start'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%"></label>
-          <label style="flex:1"><div>Estimated End</div><input type="date" name="estimated_end" value="<?php echo htmlspecialchars($project['estimated_end'] ?? ''); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%"></label>
-        </div>
-        <label><div>Notes</div><textarea name="notes" rows="4" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($project['notes'] ?? ''); ?></textarea></label>
-        <div style="display:flex;gap:8px"><button type="submit" style="padding:8px 12px;border-radius:8px;background:var(--nav-accent);color:#fff">Save</button><a href="/?page=project/projects-list" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Close</a></div>
-      </form>
-      <div style="margin-top:12px">
-        <h4>Documents</h4>
-        <form method="post" action="/?page=project/project-add-document" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-          <input type="hidden" name="project_id" value="<?php echo (int)$project['id']; ?>">
-          <select name="document_type" required style="padding:8px;border-radius:8px;border:1px solid #ddd">
-            <option value="quote">Quote</option>
-            <option value="contract">Contract</option>
-            <option value="invoice">Invoice</option>
-          </select>
-          <input type="text" name="document_id" placeholder="Document ID" required style="padding:8px;border-radius:8px;border:1px solid #ddd">
-          <button type="submit" style="padding:8px 12px;border-radius:8px;background:var(--nav-accent);color:#fff">Add</button>
-        </form>
-        <div>
-          <?php
-            $docs = $pdo->prepare('SELECT id, document_type, document_id FROM project_documents WHERE project_id=? ORDER BY created_at DESC');
-            $docs->execute([$project['id']]);
-            $drows = $docs->fetchAll();
-            if ($drows):
-          ?>
-            <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px">
-              <?php foreach($drows as $d): ?>
-                <li style="display:flex;gap:8px;align-items:center"><span style="font-weight:600"><?php echo htmlspecialchars($d['document_type']); ?></span> #<?php echo (int)$d['document_id']; ?>
-                  <form method="post" action="/?page=project/project-remove-document" style="margin-left:auto">
-                    <input type="hidden" name="id" value="<?php echo (int)$d['id']; ?>">
-                    <button type="submit" style="padding:4px 8px;border-radius:6px;border:1px solid #eee;background:#fff">Remove</button>
-                  </form>
-                </li>
-              <?php endforeach; ?>
-            </ul>
-          <?php else: ?>
-            <div style="color:var(--muted)">No documents linked.</div>
-          <?php endif; ?>
-        </div>
-      </div>
-    </div>
-  <?php endif; endif; ?>
 </section>
+
+<script>
+// Client autocomplete
+const clientData = <?php echo json_encode($clients); ?>;
+const orgData = <?php echo json_encode($organizations); ?>;
+
+const clientInput = document.getElementById('clientSearchInput');
+const clientIdInput = document.getElementById('clientIdInput');
+const clientSuggestions = document.getElementById('clientSuggestions');
+
+const orgInput = document.getElementById('orgSearchInput');
+const orgIdInput = document.getElementById('orgIdInput');
+const orgSuggestions = document.getElementById('orgSuggestions');
+
+// Set initial display values
+if (clientIdInput.value) {
+  const client = clientData.find(c => c.id == clientIdInput.value);
+  if (client) clientInput.value = client.name;
+}
+
+if (orgIdInput.value) {
+  const org = orgData.find(o => o.id == orgIdInput.value);
+  if (org) orgInput.value = org.name;
+}
+
+function setupAutocomplete(input, hiddenInput, suggestions, data) {
+  input.addEventListener('input', function() {
+    const query = this.value.toLowerCase();
+    
+    if (query.length === 0) {
+      suggestions.style.display = 'none';
+      hiddenInput.value = '';
+      return;
+    }
+    
+    const filtered = data.filter(item => 
+      item.name.toLowerCase().includes(query)
+    ).slice(0, 10);
+    
+    if (filtered.length === 0) {
+      suggestions.style.display = 'none';
+      return;
+    }
+    
+    suggestions.innerHTML = filtered.map(item => 
+      `<div class="suggestion-item" data-id="${item.id}" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6">${item.name}</div>`
+    ).join('');
+    
+    suggestions.style.display = 'block';
+    
+    // Add click handlers
+    suggestions.querySelectorAll('.suggestion-item').forEach(item => {
+      item.addEventListener('mouseenter', function() {
+        this.style.background = '#f9fafb';
+      });
+      item.addEventListener('mouseleave', function() {
+        this.style.background = '#fff';
+      });
+      item.addEventListener('click', function() {
+        input.value = this.textContent;
+        hiddenInput.value = this.dataset.id;
+        suggestions.style.display = 'none';
+      });
+    });
+  });
+  
+  // Hide suggestions when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+      suggestions.style.display = 'none';
+    }
+  });
+  
+  // Clear hidden value if input is manually cleared
+  input.addEventListener('blur', function() {
+    if (this.value === '') {
+      hiddenInput.value = '';
+    }
+  });
+}
+
+setupAutocomplete(clientInput, clientIdInput, clientSuggestions, clientData);
+setupAutocomplete(orgInput, orgIdInput, orgSuggestions, orgData);
+</script>
