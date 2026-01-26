@@ -44,6 +44,7 @@ try {
         case 'quick_upload':
             // Quick upload - create category and upload file in one action
             $title = trim($_POST['title'] ?? '');
+            $projectId = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 
             if (empty($title)) {
                 throw new Exception('File name is required');
@@ -98,12 +99,12 @@ try {
                 throw new Exception('Failed to upload file');
             }
 
-            // Insert document
+            // Insert document with optional project_id
             $stmt = $pdo->prepare('
-                INSERT INTO form_documents (category_id, file_path, file_name, file_size, mime_type, uploaded_by)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO form_documents (category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ');
-            $stmt->execute([$categoryId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+            $stmt->execute([$categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
 
             $response['success'] = true;
             $response['message'] = 'File uploaded successfully';
@@ -183,6 +184,7 @@ try {
 
         case 'upload_document':
             $categoryId = (int)($_POST['category_id'] ?? 0);
+            $projectId = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 
             if (!$categoryId) {
                 throw new Exception('Category ID is required');
@@ -269,25 +271,25 @@ try {
                     // Update existing document
                     $stmt = $pdo->prepare('
                         UPDATE form_documents 
-                        SET file_path = ?, file_name = ?, file_size = ?, mime_type = ?, uploaded_by = ?, uploaded_at = NOW()
+                        SET file_path = ?, file_name = ?, file_size = ?, mime_type = ?, uploaded_by = ?, project_id = ?, uploaded_at = NOW()
                         WHERE category_id = ?
                     ');
-                    $stmt->execute([$dbPath, $file['name'], $file['size'], $file['type'], $userId, $categoryId]);
+                    $stmt->execute([$dbPath, $file['name'], $file['size'], $file['type'], $userId, $projectId, $categoryId]);
                 } else {
                     // Insert new document
                     $stmt = $pdo->prepare('
-                        INSERT INTO form_documents (category_id, file_path, file_name, file_size, mime_type, uploaded_by)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO form_documents (category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                     ');
-                    $stmt->execute([$categoryId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                    $stmt->execute([$categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
                 }
             } else {
                 // For folder categories, always add new document (allow multiple)
                 $stmt = $pdo->prepare('
-                    INSERT INTO form_documents (category_id, file_path, file_name, file_size, mime_type, uploaded_by)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO form_documents (category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ');
-                $stmt->execute([$categoryId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                $stmt->execute([$categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
             }
 
             $response['success'] = true;

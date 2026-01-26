@@ -185,7 +185,7 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <!-- Upload/Replace Modal -->
 <div id="uploadModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto">
         <h3 style="margin:0 0 16px 0"><?php echo $hasDocument ? 'Replace' : 'Upload'; ?> Document</h3>
         
         <form id="uploadForm" enctype="multipart/form-data">
@@ -199,6 +199,25 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                        style="width:100%;padding:10px;border:2px dashed #ddd;border-radius:8px;cursor:pointer">
                 <div style="margin-top:4px;font-size:13px;color:var(--muted)">
                     Accepts: JPEG, PNG, GIF, PDF (Max 20MB)
+                </div>
+            </label>
+            
+            <label style="display:block;margin-bottom:16px">
+                <div style="margin-bottom:4px;font-weight:600">Project (Optional)</div>
+                <select name="project_id" id="projectSelectFormDetail" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+                    <option value="">-- No Project --</option>
+                    <?php
+                    $projectsStmt = $pdo->query('SELECT id, name, status FROM projects ORDER BY name ASC');
+                    $allProjects = $projectsStmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($allProjects as $proj):
+                    ?>
+                        <option value="<?php echo $proj['id']; ?>">
+                            <?php echo htmlspecialchars($proj['name']); ?> (<?php echo ucwords(str_replace('_', ' ', $proj['status'])); ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div style="margin-top:4px;font-size:13px;color:var(--muted)">
+                    Associate this document with a project
                 </div>
             </label>
 

@@ -37,6 +37,7 @@ try {
     
     $clientId = $contract['client_id'];
     $projectCode = $contract['project_code'];
+    $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
     
     // Calculate invoice amount
     $subtotal = (float)$contract['price_per_invoice'];
@@ -61,15 +62,16 @@ try {
     
     $insertInvoice = $pdo->prepare('
         INSERT INTO invoices (
-            on_demand_contract_id, client_id, project_code, 
+            on_demand_contract_id, client_id, project_id, project_code, 
             discount_type, discount_value, tax_percent, 
             subtotal, total, status, due_date, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ');
     
     $insertInvoice->execute([
         $contract_id,
         $clientId,
+        $projectId,
         $projectCode,
         $discountType,
         $discountValue,

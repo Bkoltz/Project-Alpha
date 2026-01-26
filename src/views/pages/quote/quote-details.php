@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/document_fields.php';
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
 $stmt->execute([$id]);
@@ -28,6 +29,7 @@ if (!empty($quote['project_code'])) {
   } catch (Throwable $e) { /* ignore */ }
 }
 if ($termsText === '') { $termsText = trim((string)($quote['terms'] ?? '')); }
+if ($termsText === '' && !empty($quote['is_on_demand'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 // Detect PDF mode for conditional page breaks
 $isPdf = defined('PDF_MODE');
@@ -197,7 +199,8 @@ $isPdf = defined('PDF_MODE');
       <td style="vertical-align:middle;width:70%">
         <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
         <div style="color:#374151;font-size:13px;margin-top:2px">Quote Q-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?></div>
-        <?php if (!empty($quote['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project: <?php echo htmlspecialchars($quote['project_code']); ?></div><?php endif; ?>
+        <?php if (!empty($quote['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Job <?php echo htmlspecialchars($quote['project_code']); ?></div><?php endif; ?>
+        <?php if (!empty($quote['project_id'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project <?php echo htmlspecialchars($quote['project_id']); ?></div><?php endif; ?>
       </td>
       <td style="vertical-align:middle;width:30%;text-align:right">
         <?php if ($canShowLogo): ?>

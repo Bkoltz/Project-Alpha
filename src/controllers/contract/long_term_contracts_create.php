@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/project_id.php';
 @error_log('[long_term_contracts_create] POST received', 0);
 
 $client_id = (int)($_POST['client_id'] ?? 0);
+$project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -117,15 +118,15 @@ try{
 
     // Insert long-term contract
     $sql = 'INSERT INTO long_term_contracts (
-        client_id, project_code, status, start_date, end_date, 
+        client_id, project_id, project_code, status, start_date, end_date, 
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid, total_invoiced,
         next_invoice_date, invoice_count, invoices_generated, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $projectCode, 'pending', $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'pending', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0, 0,
@@ -173,6 +174,11 @@ try{
             
             $sigStmt->execute([$ltc_id, $title, $order, $isRequired]);
         }
+    }
+
+    // Add to project_documents if project_id is set
+    if ($project_id) {
+        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "long_term_contract", ?)')->execute([$project_id, $ltc_id]);
     }
 
     $pdo->commit();

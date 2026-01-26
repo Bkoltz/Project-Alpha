@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../config/app.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
+$project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -52,8 +53,8 @@ $total = max(0.0, $subtotal - $discount_amount + $tax_amount);
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null]);
+    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null]);
     $invoice_id = (int)$pdo->lastInsertId();
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);
@@ -71,6 +72,12 @@ try {
     foreach ($items as $it) {
         $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
     }
+    
+    // Add to project_documents if project_id is set
+    if ($project_id) {
+        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, $invoice_id]);
+    }
+    
     $pdo->commit();
 } catch (Throwable $e) {
     $pdo->rollBack();

@@ -39,6 +39,7 @@ try {
             $contractId = $contract['id'];
             $clientId = $contract['client_id'];
             $projectCode = $contract['project_code'];
+            $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
             
             // Calculate invoice amount
             $subtotal = 0;
@@ -106,15 +107,16 @@ try {
             
             $insertInvoice = $pdo->prepare('
                 INSERT INTO invoices (
-                    long_term_contract_id, client_id, project_code, 
+                    long_term_contract_id, client_id, project_id, project_code, 
                     discount_type, discount_value, tax_percent, 
                     subtotal, total, status, due_date, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
             
             $insertInvoice->execute([
                 $contractId, // Link to long-term contract
                 $clientId,
+                $projectId,
                 $projectCode,
                 $discountType,
                 $discountValue,
