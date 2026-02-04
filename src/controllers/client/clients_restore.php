@@ -25,11 +25,11 @@ try {
   $useOrig = $origId > 0 && (int)$exists->fetchColumn() === 0;
 
   if ($useOrig) {
-    $ins = $pdo->prepare('INSERT INTO clients (id,name,email,phone,organization,notes,address_line1,address_line2,city,state,postal,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $ins->execute([$origId, $row['name'], $row['email'], $row['phone'], $row['organization'], $row['notes'], $row['address_line1'], $row['address_line2'], $row['city'], $row['state'], $row['postal'], $row['country'], $row['created_at']]);
+    $ins = $pdo->prepare('INSERT INTO clients (id,name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $ins->execute([$origId, $row['name'], $row['email'], $row['phone'], $row['organization_id'], $row['notes'], $row['address_line1'], $row['address_line2'], $row['city'], $row['state'], $row['postal'], $row['country'], $row['created_at']]);
   } else {
-    $ins = $pdo->prepare('INSERT INTO clients (name,email,phone,organization,notes,address_line1,address_line2,city,state,postal,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-    $ins->execute([$row['name'], $row['email'], $row['phone'], $row['organization'], $row['notes'], $row['address_line1'], $row['address_line2'], $row['city'], $row['state'], $row['postal'], $row['country'], $row['created_at']]);
+    $ins = $pdo->prepare('INSERT INTO clients (name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+    $ins->execute([$row['name'], $row['email'], $row['phone'], $row['organization_id'], $row['notes'], $row['address_line1'], $row['address_line2'], $row['city'], $row['state'], $row['postal'], $row['country'], $row['created_at']]);
   }
 
   // Remove archive record (keep archived_entities for historical record)
