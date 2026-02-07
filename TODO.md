@@ -1,3 +1,61 @@
+# Project running total
+- Database Schema (Detailed)
+A. Projects Table (existing, but needs enhancements)
+Add fields
+  - Note: You can calculate totals on the fly, but caching improves performance dramatically as projects grow.
+- Project Items Table (NEW)
+This table stores every billable item tied to a project, regardless of whether it came from a contract, on‑demand job, or manual entry.
+  - Project Items Table (NEW)
+This table stores every billable item tied to a project, regardless of whether it came from a contract, on‑demand job, or manual entry.
+- Backend Logic (Detailed)
+  - A. When a contract or on‑demand job generates an invoice
+    - Each line item is also inserted into project_items
+    - billed = 1
+    - billed_invoice_id = invoice.id
+  - Running Total Calculation
+    - SUM(line_total) WHERE project_id = X
+    - SUM(line_total) WHERE project_id = X AND billed = 0
+    - You can cache these in the projects table and update them whenever items change.
+  - Batch Invoice Generation Logic
+    - Query all unbilled items for the project:
+      - SELECT * FROM project_items WHERE project_id = X AND billed = 0
+    - Group by:
+      - date
+      - description
+      - or leave as individual lines (configurable)
+    - Create a new invoice:
+      - invoice.project_id = X
+      - invoice.project_id = X
+      - invoice.billing_period_end = latest item date
+    - Insert invoice items based on aggregated project_items
+    - Mark project_items as billed:
+  - Recurring Billing Logic
+    - If project.billing_cycle is set:
+        - Weekly:
+          - Every 7 days from last_billed_at
+        - Biweekly:
+          - Every 14 days
+        - Monthly:
+          - On billing_day each month
+    - Logic:
+      - Cron job checks eligible projects
+      - If unbilled_total > 0 → auto-generate invoice
+      - Send email notification (optional)
+      - Update last_billed_at
+
+
+
+
+
+
+
+# Add Redis?
+- email sending
+- PDF generation
+- webhook processing
+- anything triggered by user actions
+
+
 # Logging
 - Implement structured, and rotating logs capturing user, system, and security events.
 
