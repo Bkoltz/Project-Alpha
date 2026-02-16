@@ -1,6 +1,7 @@
 <?php
 // src/controllers/contracts_update.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/document_fields.php';
 $id = (int)($_POST['id'] ?? 0);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
@@ -25,9 +26,13 @@ $terms = trim((string)($_POST['terms'] ?? '')) ?: null;
 $estimated = trim((string)($_POST['estimated_completion'] ?? '')) ?: null;
 $weather = isset($_POST['weather_pending']) ? 1 : 0;
 $scope = trim((string)($_POST['scope'] ?? '')) ?: null;
+// Extract custom field values from POST
+$customFieldValues = extractCustomFieldValues($_POST);
+$customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null;
+
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$id]);
+  $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, custom_fields=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$customFieldsJson,$id]);
   
   // Sync changes to linked invoices
   $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
@@ -53,6 +58,6 @@ try{
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=contract/contracts-list&error=Update%20failed'); exit; }
-header('Location: /?page=contract/contracts-list&updated=1');
+}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=contract/contract-details&id=' . $id . '&error=Update%20failed'); exit; }
+header('Location: /?page=contract/contract-details&id=' . $id . '&updated=1');
 exit;

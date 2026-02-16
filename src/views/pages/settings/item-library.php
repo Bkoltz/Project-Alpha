@@ -22,9 +22,9 @@ $stmt->execute();
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<section style="padding:20px;max-width:1200px;margin:0 auto">
+<div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-    <h1 style="margin:0">Item Library</h1>
+    <h3 style="margin:0">Item Library</h3>
     <button onclick="showCreateModal()" style="padding:10px 20px;background:#3b82f6;color:#fff;border:0;border-radius:8px;cursor:pointer;font-size:14px">
       + Add New Item
     </button>
@@ -92,7 +92,6 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
       </tbody>
     </table>
   </div>
-</section>
 
 <!-- Create/Edit Modal -->
 <div id="itemModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
@@ -179,3 +178,4 @@ document.getElementById('itemModal').addEventListener('click', function(e) {
   }
 });
 </script>
+</div>

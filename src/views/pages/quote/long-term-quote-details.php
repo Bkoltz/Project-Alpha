@@ -12,7 +12,7 @@ if(!$quote){ echo '<p>Long-term quote not found</p>'; return; }
 // Get items if fixed_total pricing
 $items = [];
 if ($quote['pricing_type'] === 'fixed_total') {
-    $itemsQuery = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
     $itemsQuery->execute([$id]);
     $items = $itemsQuery->fetchAll();
 }

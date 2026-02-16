@@ -211,6 +211,15 @@ if ($page === 'settings/item-library-search') {
     require_once __DIR__ . '/../src/controllers/settings/item_library_search.php';
     exit;
 }
+if ($page === 'custom-fields-ajax') {
+    require_once __DIR__ . '/../src/controllers/api/custom_fields_ajax.php';
+    exit;
+}
+// Document custom fields handler (GET for fetching field data)
+if ($page === 'settings/document-custom-fields-handler' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    require_once __DIR__ . '/../src/controllers/settings/document-custom-fields-handler.php';
+    exit;
+}
 if ($isAjaxEarly && $page === 'project-notes') {
     require_once __DIR__ . '/../src/controllers/project_notes.php';
     exit;

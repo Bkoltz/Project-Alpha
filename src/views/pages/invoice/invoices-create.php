@@ -2,6 +2,7 @@
 // src/views/pages/invoices-create.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/document_fields.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
 $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
@@ -40,6 +41,13 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
         <div>Discount Value</div>
         <input id="discountValueInv" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+    </div>
+
+    <div id="customFieldsContainerInv">
+    <?php
+    // Render custom fields for regular invoices
+    echo renderDocumentCustomFields($pdo, 'regular', [], 'Inv');
+    ?>
     </div>
 
     <div id="projectSectionInv" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">

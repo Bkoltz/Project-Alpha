@@ -81,7 +81,7 @@ try {
           $stmt->execute([$idParam]);
           $quote = $stmt->fetch(PDO::FETCH_ASSOC);
           if ($quote) {
-            $itemsSt = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+            $itemsSt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
             $itemsSt->execute([$idParam]);
             $items = $itemsSt->fetchAll(PDO::FETCH_ASSOC);
 

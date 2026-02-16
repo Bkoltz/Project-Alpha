@@ -83,7 +83,7 @@ require_once __DIR__ . '/../../../config/db.php';
                             </div>
                             <div class="doc-details" id="quote-details-<?php echo $qid; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">
                                 <?php
-                                    $itemsSt = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+                                    $itemsSt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
                                     $itemsSt->execute([$qid]);
                                     $items = $itemsSt->fetchAll();
                                 ?>
@@ -158,7 +158,7 @@ require_once __DIR__ . '/../../../config/db.php';
                                 </div>
                                 <div class="doc-details" id="contract-details-<?php echo $coid; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">
                                     <?php
-                                        $citems = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
+                                        $citems = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
                                         $citems->execute([$coid]);
                                         $citemsRows = $citems->fetchAll();
                                     ?>
@@ -209,7 +209,7 @@ require_once __DIR__ . '/../../../config/db.php';
                             </div>
                             <div class="doc-details" id="invoice-details-<?php echo $ivId; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">
                                 <?php
-                                    $it = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM invoice_items WHERE invoice_id=?');
+                                    $it = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM invoice_items WHERE invoice_id=?');
                                     $it->execute([$ivId]);
                                     $itemsInv = $it->fetchAll();
                                 ?>

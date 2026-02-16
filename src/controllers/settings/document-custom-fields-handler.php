@@ -51,11 +51,16 @@ try {
     
     // CREATE: Add new custom field
     if ($action === 'create') {
+        error_log('[custom-fields-handler] CREATE action started');
+        error_log('[custom-fields-handler] POST data: ' . json_encode($_POST));
+        
         $fieldLabel = trim($_POST['field_label'] ?? '');
         $fieldType = $_POST['field_type'] ?? 'text';
         $fieldOptions = trim($_POST['field_options'] ?? '');
         $isRequired = !empty($_POST['is_required']) ? 1 : 0;
         $documentTypes = $_POST['document_types'] ?? []; // Array of types to apply to
+        
+        error_log('[custom-fields-handler] documentTypes: ' . json_encode($documentTypes));
         
         if (empty($fieldLabel)) {
             http_response_code(400);
@@ -122,6 +127,7 @@ try {
             }
             
             $pdo->commit();
+            error_log('[custom-fields-handler] Field created successfully');
             echo json_encode(['success' => true, 'message' => 'Field created successfully']);
             exit;
             

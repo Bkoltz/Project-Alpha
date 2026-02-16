@@ -281,19 +281,41 @@ document.getElementById('fieldForm').addEventListener('submit', function(e) {
     
     const formData = new FormData(this);
     
+    // Debug: log what's being sent
+    console.log('Submitting form with action:', formData.get('action'));
+    console.log('Document types:', formData.getAll('document_types[]'));
+    
     fetch('/?page=settings/document-custom-fields-handler', {
         method: 'POST',
         body: formData
     })
-    .then(r => r.json())
+    .then(r => {
+        console.log('Response status:', r.status);
+        return r.text(); // Get raw text first to debug
+    })
+    .then(text => {
+        console.log('Raw response:', text);
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            console.error('JSON parse error:', e);
+            alert('Server returned invalid response: ' + text.substring(0, 200));
+            throw e;
+        }
+    })
     .then(data => {
+        console.log('Parsed response:', data);
         if (data.success) {
+            closeFieldModal();
             location.reload();
         } else {
             alert('Error: ' + (data.message || 'Unknown error'));
         }
     })
-    .catch(err => alert('Error: ' + err.message));
+    .catch(err => {
+        console.error('Fetch error:', err);
+        alert('Error: ' + err.message);
+    });
 });
 
 // Handle toggle switches
