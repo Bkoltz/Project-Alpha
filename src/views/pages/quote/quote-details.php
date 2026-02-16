@@ -367,7 +367,7 @@ $isPdf = defined('PDF_MODE');
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
-        <th style="padding:10px;width:25%;vertical-align:top">Item</th>
+        <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
         <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
@@ -377,7 +377,7 @@ $isPdf = defined('PDF_MODE');
     <tbody>
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6">
-        <td style="padding:10px;font-weight:600;vertical-align:top"><?php echo htmlspecialchars($it['item'] ?? ''); ?></td>
+        <td style="padding:10px;font-weight:600;vertical-align:top;text-align:center"><?php echo htmlspecialchars($it['item'] ?? ''); ?></td>
         <td style="padding:10px;color:#6b7280;font-size:13px;vertical-align:top"><?php echo htmlspecialchars($it['description'] ?? ''); ?></td>
         <td style="padding:10px;text-align:right;vertical-align:top"><?php echo number_format($it['quantity'],2); ?></td>
         <td style="padding:10px;text-align:right;vertical-align:top">$<?php echo number_format($it['unit_price'],2); ?></td>

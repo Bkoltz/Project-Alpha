@@ -8,7 +8,6 @@ if (!in_array($per, [50, 100], true)) $per = 50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 $q = trim($_GET['q'] ?? '');
-<<<<<<< Updated upstream
 $params=[]; $where='';
 if ($q !== '') { $where = 'WHERE ac.name LIKE ?'; $params[] = '%'.$q.'%'; }
 
@@ -17,7 +16,6 @@ $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
 $sql = "SELECT ac.id, ac.client_id, ac.name, ac.email, ac.phone, org.name AS organization, ac.archived_at FROM archived_clients ac LEFT JOIN organizations org ON ac.organization_id = org.id ".($where)." ORDER BY ac.archived_at DESC LIMIT $per OFFSET $offset";
-=======
 $params = [];
 $where = '';
 
@@ -32,7 +30,6 @@ $total = (int)$stc->fetchColumn();
 
 $sql = "SELECT id, client_id, name, email, phone, organization_id, archived_at FROM archived_clients " . ($where) . " ORDER BY archived_at DESC LIMIT $per OFFSET $offset";
 
->>>>>>> Stashed changes
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
