@@ -2,6 +2,7 @@
 // src/views/pages/invoices-edit.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/document_fields.php';
 $id = (int)($_GET['id'] ?? 0);
 $iv = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
 $iv->execute([$id]);
@@ -51,6 +52,57 @@ foreach ($clients as $c) { if ((int)$c['id'] === (int)$inv['client_id']) { $clie
         <input type="date" name="fulfillment_date" value="<?php echo htmlspecialchars($inv['fulfillment_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
+
+    <?php
+    // Render custom fields for invoices (use 'regular' type)
+    $documentType = 'regular';
+    
+    // Get existing custom field values
+    $existingCustomFields = !empty($inv['custom_fields']) ? json_decode($inv['custom_fields'], true) : [];
+    if (!is_array($existingCustomFields)) $existingCustomFields = [];
+    
+    // Fetch non-builtin custom fields for this document type
+    $customFieldsStmt = $pdo->prepare('
+        SELECT * FROM document_custom_fields 
+        WHERE document_type = ? AND is_enabled = 1 AND is_builtin = 0
+        ORDER BY display_order, id
+    ');
+    $customFieldsStmt->execute([$documentType]);
+    $customFields = $customFieldsStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    if (!empty($customFields)):
+    ?>
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+      <div style="font-weight:600;margin-bottom:12px;color:#374151">Custom Fields</div>
+      <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr))">
+        <?php foreach ($customFields as $field): 
+          $fieldKey = $field['field_key'];
+          $fieldValue = $existingCustomFields[$fieldKey] ?? '';
+        ?>
+        <label>
+          <div><?php echo htmlspecialchars($field['field_label']); ?><?php if ($field['is_required']): ?> <span style="color:#dc2626">*</span><?php endif; ?></div>
+          <?php if ($field['field_type'] === 'date'): ?>
+            <input type="date" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <?php elseif ($field['field_type'] === 'number'): ?>
+            <input type="number" step="0.01" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <?php elseif ($field['field_type'] === 'textarea'): ?>
+            <textarea name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" rows="3" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($fieldValue); ?></textarea>
+          <?php elseif ($field['field_type'] === 'select'): ?>
+            <?php $options = json_decode($field['field_options'] ?? '[]', true); ?>
+            <select name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              <option value="">-- Select --</option>
+              <?php foreach ($options as $opt): ?>
+                <option value="<?php echo htmlspecialchars($opt); ?>" <?php echo $fieldValue === $opt ? 'selected' : ''; ?>><?php echo htmlspecialchars($opt); ?></option>
+              <?php endforeach; ?>
+            </select>
+          <?php else: ?>
+            <input type="text" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <?php endif; ?>
+        </label>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <?php endif; ?>
 
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items (from contract - read only)</div>

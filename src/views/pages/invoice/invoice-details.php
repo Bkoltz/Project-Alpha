@@ -9,7 +9,7 @@ $st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.ema
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
-$items = $pdo->prepare('SELECT description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
+$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
 $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
@@ -207,6 +207,56 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </tr>
   </table>
 
+  <?php
+    // Get custom fields for display
+    $documentType = 'regular';
+    
+    $customFieldValues = !empty($inv['custom_fields']) ? json_decode($inv['custom_fields'], true) : [];
+    if (!is_array($customFieldValues)) $customFieldValues = [];
+    
+    // Fetch custom field definitions (non-builtin only)
+    $customFieldDefs = [];
+    try {
+      $cfStmt = $pdo->prepare('SELECT * FROM document_custom_fields WHERE document_type = ? AND is_enabled = 1 AND is_builtin = 0 ORDER BY display_order, id');
+      $cfStmt->execute([$documentType]);
+      $customFieldDefs = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) { /* ignore */ }
+    
+    // Build array of custom fields with values to display
+    $displayCustomFields = [];
+    foreach ($customFieldDefs as $cf) {
+      $key = $cf['field_key'];
+      if (isset($customFieldValues[$key]) && $customFieldValues[$key] !== '') {
+        $val = $customFieldValues[$key];
+        // Format based on type
+        if ($cf['field_type'] === 'date' && !empty($val)) {
+          $val = date('M j, Y', strtotime($val));
+        } elseif ($cf['field_type'] === 'number' && is_numeric($val)) {
+          $val = number_format((float)$val, 2);
+        }
+        $displayCustomFields[] = ['label' => $cf['field_label'], 'value' => $val];
+      }
+    }
+    $hasCustomFields = !empty($displayCustomFields);
+    $showFulfillmentDate = !empty($inv['fulfillment_date']);
+  ?>
+  <?php if ($hasCustomFields || $showFulfillmentDate): ?>
+  <table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb">
+    <tr>
+      <?php if ($showFulfillmentDate): ?>
+      <td style="padding:8px;<?php echo $hasCustomFields ? 'border-right:1px solid #e5e7eb;' : ''; ?>vertical-align:top">
+        <div style="font-size:11px;color:#6b7280">Fulfillment Date: <span style="font-weight:600;color:#2563eb"><?php echo date('M j, Y', strtotime($inv['fulfillment_date'])); ?></span></div>
+      </td>
+      <?php endif; ?>
+      <?php foreach ($displayCustomFields as $idx => $cf): ?>
+      <td style="padding:8px;<?php echo $idx < count($displayCustomFields) - 1 ? 'border-right:1px solid #e5e7eb;' : ''; ?>vertical-align:top">
+        <div style="font-size:11px;color:#6b7280"><?php echo htmlspecialchars($cf['label']); ?>: <span style="font-weight:600;color:#374151"><?php echo htmlspecialchars($cf['value']); ?></span></div>
+      </td>
+      <?php endforeach; ?>
+    </tr>
+  </table>
+  <?php endif; ?>
+
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
@@ -277,61 +327,67 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 
 
 
-  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+  <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
-        <th style="padding:10px">Item</th>
-        <th style="padding:10px">Description</th>
-        <th style="padding:10px">Qty</th>
-        <th style="padding:10px">Unit</th>
-        <th style="padding:10px">Line Total</th>
+        <th style="padding:10px;width:25%;vertical-align:top">Item</th>
+        <th style="padding:10px;width:35%;vertical-align:top">Description</th>
+        <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
       </tr>
     </thead>
     <tbody>
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6<?php echo (int)($it['is_extra_charge'] ?? 0) ? ';background:#fffbeb' : ''; ?>">
-        <td style="padding:10px">
+        <td style="padding:10px;vertical-align:top">
           <div style="font-weight:600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></div>
           <?php if ((int)($it['is_extra_charge'] ?? 0) === 1): ?>
             <span style="display:inline-block;margin-top:4px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:10px;font-weight:600">Extra Charge</span>
           <?php endif; ?>
         </td>
-        <td style="padding:10px;color:#6b7280;font-size:13px"><?php echo htmlspecialchars($it['description'] ?? ''); ?></td>
-        <td style="padding:10px"><?php echo number_format($it['quantity'],2); ?></td>
-        <td style="padding:10px">$<?php echo number_format($it['unit_price'],2); ?></td>
-        <td style="padding:10px">$<?php echo number_format($it['line_total'],2); ?></td>
+        <td style="padding:10px;color:#6b7280;font-size:13px;vertical-align:top"><?php echo htmlspecialchars($it['description'] ?? ''); ?></td>
+        <td style="padding:10px;text-align:right;vertical-align:top"><?php echo number_format($it['quantity'],2); ?></td>
+        <td style="padding:10px;text-align:right;vertical-align:top">$<?php echo number_format($it['unit_price'],2); ?></td>
+        <td style="padding:10px;text-align:right;vertical-align:top">$<?php echo number_format($it['line_total'],2); ?></td>
       </tr>
       <?php endforeach; ?>
-      <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
-      <tr>
-        <td></td><td></td>
-        <td style="padding:10px;font-weight:600">Subtotal</td>
-        <td style="padding:10px">$<?php echo number_format($inv['subtotal'],2); ?></td>
-      </tr>
-      <tr>
-        <td></td><td></td>
-        <td style="padding:10px;font-weight:600">Discount</td>
-        <td style="padding:10px">
-          <?php if ($inv['discount_type']==='percent'): ?>
-            <?php echo number_format($inv['discount_value'],2); ?>%
-          <?php elseif ($inv['discount_type']==='fixed'): ?>
-            $<?php echo number_format($inv['discount_value'],2); ?>
-          <?php else: ?>
-            $0.00
-          <?php endif; ?>
-        </td>
-      </tr>
-      <tr>
-        <td></td><td></td>
-        <td style="padding:10px;font-weight:600">Tax</td>
-        <td style="padding:10px"><?php echo number_format($inv['tax_percent'],2); ?>%</td>
-      </tr>
-      <tr>
-        <td></td><td></td>
-        <td style="padding:10px;font-weight:700">Total</td>
-        <td style="padding:10px;font-weight:700">$<?php echo number_format($inv['total'],2); ?></td>
-      </tr>
     </tbody>
+  </table>
+
+  <!-- Totals section - uses table for PDF compatibility -->
+  <table style="width:100%;border-collapse:collapse;margin-top:16px">
+    <tr>
+      <td style="width:60%"></td>
+      <td style="width:40%">
+        <table style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="padding:8px 10px;font-weight:600;text-align:right">Subtotal</td>
+            <td style="padding:8px 10px;text-align:right;width:120px">$<?php echo number_format($inv['subtotal'],2); ?></td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px;font-weight:600;text-align:right">Discount</td>
+            <td style="padding:8px 10px;text-align:right">
+              <?php if ($inv['discount_type']==='percent'): ?>
+                <?php echo number_format($inv['discount_value'],2); ?>%
+              <?php elseif ($inv['discount_type']==='fixed'): ?>
+                $<?php echo number_format($inv['discount_value'],2); ?>
+              <?php else: ?>
+                $0.00
+              <?php endif; ?>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px;font-weight:600;text-align:right">Tax</td>
+            <td style="padding:8px 10px;text-align:right"><?php echo number_format($inv['tax_percent'],2); ?>%</td>
+          </tr>
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 10px;font-weight:700;text-align:right">Total</td>
+            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($inv['total'],2); ?></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
   </table>
 </section>
 <style>

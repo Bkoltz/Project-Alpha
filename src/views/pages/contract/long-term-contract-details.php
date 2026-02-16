@@ -12,7 +12,7 @@ if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
 // Get items if fixed_total pricing
 $items = [];
 if ($contract['pricing_type'] === 'fixed_total') {
-    $itemsQuery = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM long_term_contract_items WHERE long_term_contract_id=?');
+    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM long_term_contract_items WHERE long_term_contract_id=?');
     $itemsQuery->execute([$id]);
     $items = $itemsQuery->fetchAll();
 }

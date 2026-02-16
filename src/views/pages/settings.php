@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../config/app.php';
 $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 'system';
 
 // Valid tabs
-$validTabs = ['system', 'terms', 'billing', 'taxes', 'documents', 'notifications', 'links'];
+$validTabs = ['system', 'terms', 'billing', 'taxes', 'documents', 'notifications', 'links', 'item-library'];
 if (!in_array($tab, $validTabs)) {
   $tab = 'system';
 }
@@ -33,14 +33,14 @@ if (!in_array($tab, $validTabs)) {
       <a href="/?page=settings&tab=documents" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'documents' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Documents</a>
       <a href="/?page=settings&tab=notifications" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'notifications' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Notifications</a>
       <a href="/?page=settings&tab=links" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'links' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Links</a>
-      <a href="/?page=settings/item-library" style="display:block;padding:10px 12px;border-bottom:1px solid #eee">Item Library</a>
+      <a href="/?page=settings&tab=item-library" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'item-library' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Item Library</a>
       <a href="/?page=api-keys" style="display:block;padding:10px 12px;">API Keys</a>
     </aside>
 
     <div>
-      <?php if ($tab === 'taxes'): ?>
+      <?php if ($tab === 'taxes' || $tab === 'item-library' || $tab === 'documents'): ?>
         <?php
-        // Include the taxes tab without the form wrapper since it has its own form
+        // Include tabs without the form wrapper since they have their own forms
         $tabFile = __DIR__ . '/settings/' . $tab . '.php';
         if (file_exists($tabFile)) {
           include $tabFile;

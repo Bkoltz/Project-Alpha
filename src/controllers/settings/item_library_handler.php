@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 
 $action = $_POST['action'] ?? '';
-$redirect = '/?page=settings/item-library';
+$redirect = '/?page=settings&tab=item-library';
 
 try {
     switch ($action) {

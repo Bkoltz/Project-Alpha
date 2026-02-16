@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/document_fields.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
@@ -51,10 +52,14 @@ if ($discount_type === 'percent') {
 $tax_amount = max(0.0, $tax_percent) * max(0.0, $subtotal - $discount_amount) / 100.0;
 $total = max(0.0, $subtotal - $discount_amount + $tax_amount);
 
+// Extract custom field values from POST data (only non-empty values)
+$customFields = extractCustomFieldValues($_POST);
+$customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
+
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date) VALUES (?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null]);
+    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson]);
     $invoice_id = (int)$pdo->lastInsertId();
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);

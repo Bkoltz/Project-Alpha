@@ -2,6 +2,7 @@
 // src/controllers/invoices_update.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/document_fields.php';
 $id = (int)($_POST['id'] ?? 0);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
@@ -88,10 +89,14 @@ if ($discount_type === 'percent') {
 $tax = max(0, $tax_percent) * max(0, $subtotal - $discount_amount) / 100;
 $total = max(0, $subtotal - $discount_amount + $tax);
 
+// Extract custom field values from POST
+$customFieldValues = extractCustomFieldValues($_POST);
+$customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null;
+
 $pdo->beginTransaction();
 try {
-  $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=? WHERE id=?')
-    ->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $id]);
+  $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=?, custom_fields=? WHERE id=?')
+    ->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $customFieldsJson, $id]);
   
   $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');
   $row->execute([$id]);
@@ -122,8 +127,8 @@ try {
   $pdo->commit();
 } catch (Throwable $e) {
   $pdo->rollBack();
-  header('Location: /?page=invoice/invoices-list&error=Update%20failed');
+  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=Update%20failed');
   exit;
 }
-header('Location: /?page=invoice/invoices-list&updated=1');
+header('Location: /?page=invoice/invoice-details&id=' . $id . '&updated=1');
 exit;

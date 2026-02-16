@@ -62,11 +62,13 @@ $csrf = csrf_sf_token('contracts-create');
       </div>
     </div>
 
+    <div id="customFieldsContainerCo">
     <?php
     // Dynamically render custom fields for regular contracts by default
     // JavaScript will update this when document type changes
     echo renderDocumentCustomFields($pdo, 'regular', [], 'Co');
     ?>
+    </div>
 
     <div style="margin:12px 0">
       <div style="font-weight:600;margin-bottom:8px">Document Type</div>
@@ -370,10 +372,27 @@ if (discountTypeElCo) discountTypeElCo.addEventListener('change', updateDiscount
 
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
+function loadCustomFieldsCo(docType) {
+  fetch('/?page=custom-fields-ajax&doc_type=' + encodeURIComponent(docType) + '&suffix=Co')
+    .then(r => r.text())
+    .then(html => {
+      document.getElementById('customFieldsContainerCo').innerHTML = html;
+      // Re-attach event listeners for deposit fields if they exist
+      ['depositTypeCo','depositValueCo'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', recalcCo);
+      });
+    })
+    .catch(err => console.error('Failed to load custom fields:', err));
+}
+
 function toggleDocTypeFields() {
   var docType = document.querySelector('input[name="doc_type"]:checked').value;
   var isLongTerm = (docType === 'long_term');
   var isOnDemand = (docType === 'on_demand');
+  
+  // Load custom fields for the selected document type
+  loadCustomFieldsCo(docType);
   
   document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
   

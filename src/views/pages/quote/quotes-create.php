@@ -51,11 +51,13 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </label>
     </div>
 
+    <div id="customFieldsContainer">
     <?php
     // Dynamically render custom fields for regular documents by default
     // JavaScript will update this when document type changes
     echo renderDocumentCustomFields($pdo, 'regular', []);
     ?>
+    </div>
 
     <div style="margin:12px 0">
       <div style="font-weight:600;margin-bottom:8px">Document Type</div>
@@ -356,10 +358,27 @@ if (discountTypeEl) discountTypeEl.addEventListener('change', updateDiscountWarn
 
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
+function loadCustomFields(docType) {
+  fetch('/?page=custom-fields-ajax&doc_type=' + encodeURIComponent(docType) + '&suffix=')
+    .then(r => r.text())
+    .then(html => {
+      document.getElementById('customFieldsContainer').innerHTML = html;
+      // Re-attach event listeners for deposit fields if they exist
+      ['depositType','depositValue'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', recalc);
+      });
+    })
+    .catch(err => console.error('Failed to load custom fields:', err));
+}
+
 function toggleDocTypeFields() {
   var docType = document.querySelector('input[name="doc_type"]:checked').value;
   var isLongTerm = (docType === 'long_term');
   var isOnDemand = (docType === 'on_demand');
+  
+  // Load custom fields for the selected document type
+  loadCustomFields(docType);
   
   document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
   

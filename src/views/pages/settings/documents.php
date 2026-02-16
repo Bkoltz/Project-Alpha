@@ -11,6 +11,12 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
   <a href="/?page=settings&tab=documents&doc_tab=customization" data-skip-nav style="padding:10px 16px;font-weight:<?php echo $docTab === 'customization' ? '600' : '400'; ?>;color:<?php echo $docTab === 'customization' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $docTab === 'customization' ? '2px solid var(--nav-accent)' : '2px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">Customization</a>
 </div>
 
+<?php if ($docTab !== 'customization'): ?>
+<form method="post" action="/?page=settings&tab=documents&doc_tab=<?php echo htmlspecialchars($docTab); ?>" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:800px">
+  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+  <input type="hidden" name="tab" value="documents">
+<?php endif; ?>
+
 <?php if ($docTab === 'quotes'): ?>
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
     <legend style="padding:0 6px;color:var(--muted)">Quote Options</legend>
@@ -99,6 +105,13 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
       ⚙️ <strong>Invoice automation and notifications</strong> have been moved to the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab for easier management.
     </p>
   </fieldset>
+<?php endif; ?>
+
+<?php if ($docTab !== 'customization'): ?>
+  <div>
+    <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save</button>
+  </div>
+</form>
 <?php endif; ?>
 
 <?php if ($docTab === 'customization'): ?>
