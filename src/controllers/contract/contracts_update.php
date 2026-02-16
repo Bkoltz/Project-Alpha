@@ -57,6 +57,27 @@ try{
   $pdo->prepare('DELETE FROM contract_items WHERE contract_id=?')->execute([$id]);
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
+  
+  // Save contract signatures
+  $pdo->prepare('DELETE FROM contract_signatures WHERE contract_id=?')->execute([$id]);
+  $signatureTitles = $_POST['signature_titles'] ?? [];
+  $signatureOrders = $_POST['signature_orders'] ?? [];
+  $signatureRequired = $_POST['signature_required'] ?? [];
+  
+  if (!empty($signatureTitles)) {
+      $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+      foreach ($signatureTitles as $idx => $title) {
+          $title = trim($title);
+          if (empty($title)) continue;
+          
+          $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
+          // Check if any of the signature_required values match this index
+          $isRequired = !empty($signatureRequired[$idx]) ? 1 : 0;
+          
+          $sigStmt->execute([$id, $title, $order, $isRequired]);
+      }
+  }
+  
   $pdo->commit();
 }catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=contract/contract-details&id=' . $id . '&error=Update%20failed'); exit; }
 header('Location: /?page=contract/contract-details&id=' . $id . '&updated=1');

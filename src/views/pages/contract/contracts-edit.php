@@ -12,6 +12,11 @@ $items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+
+// Fetch existing signatures
+$sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
+$sigStmt->execute([$id]);
+$existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <main class="main-content" role="main">
 <section>
@@ -164,6 +169,19 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalValCo" style="min-width:120px;text-align:right">$0.00</div></div>
     </div>
 
+    <!-- Signatures Section -->
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+      <h3 style="margin:0 0 8px 0;font-size:15px">Contract Signatures</h3>
+      <p style="margin:0 0 12px 0;font-size:13px;color:var(--muted)">Add up to 5 signatures for this contract</p>
+      
+      <div id="signaturesList" style="display:grid;gap:12px"></div>
+      
+      <button type="button" onclick="addSignature()" id="addSigBtn"
+              style="margin-top:12px;padding:8px 14px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px">
+        + Add Signature
+      </button>
+    </div>
+
     <div>
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Contract</button>
     </div>
@@ -264,5 +282,104 @@ function recalcCo(){
 <?php foreach ($items as $it): ?>
 addItemCo(<?php echo json_encode($it['item'] ?? ''); ?>, <?php echo json_encode($it['description'] ?? ''); ?>, <?php echo json_encode((float)$it['quantity']); ?>, <?php echo json_encode((float)$it['unit_price']); ?>);
 <?php endforeach; ?>
+
+// Signature Management
+let signatureCount = 0;
+const MAX_SIGNATURES = 5;
+
+function addSignature(title = 'Client Signature', isRequired = true) {
+  if (signatureCount >= MAX_SIGNATURES) {
+    alert('Maximum of ' + MAX_SIGNATURES + ' signatures allowed');
+    return;
+  }
+  
+  signatureCount++;
+  const sigId = 'sig_' + Date.now() + '_' + signatureCount;
+  
+  const wrap = document.createElement('div');
+  wrap.className = 'signature-item';
+  wrap.dataset.sigId = sigId;
+  wrap.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff';
+  
+  wrap.innerHTML = `
+    <div style="display:grid;gap:8px">
+      <input type="text" name="signature_titles[]" value="${title}" required placeholder="Signature Title (e.g., Project Manager, Owner)"
+             style="padding:8px;border-radius:6px;border:1px solid #ddd;font-weight:600">
+      <div style="font-size:12px;color:var(--muted)">Order: ${signatureCount}</div>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+      <input type="checkbox" name="signature_required[]" value="${sigId}" ${isRequired ? 'checked' : ''}>
+      Required
+    </label>
+    <button type="button" onclick="removeSignature('${sigId}')" ${signatureCount === 1 ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}
+            style="padding:6px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;font-size:13px">
+      Remove
+    </button>
+    <input type="hidden" name="signature_orders[]" value="${signatureCount}">
+  `;
+  
+  document.getElementById('signaturesList').appendChild(wrap);
+  updateSignatureButtons();
+}
+
+function removeSignature(sigId) {
+  const item = document.querySelector(`[data-sig-id="${sigId}"]`);
+  if (item) {
+    item.remove();
+    signatureCount--;
+    
+    // Update order numbers
+    const items = document.querySelectorAll('.signature-item');
+    items.forEach((el, idx) => {
+      const orderDiv = el.querySelector('[style*="Order:"]');
+      if (orderDiv) orderDiv.textContent = 'Order: ' + (idx + 1);
+      const orderInput = el.querySelector('input[name="signature_orders[]"]');
+      if (orderInput) orderInput.value = idx + 1;
+    });
+    
+    updateSignatureButtons();
+  }
+}
+
+function updateSignatureButtons() {
+  const items = document.querySelectorAll('.signature-item');
+  
+  // Enable/disable add button
+  if (signatureCount >= MAX_SIGNATURES) {
+    document.getElementById('addSigBtn').disabled = true;
+    document.getElementById('addSigBtn').style.opacity = '0.5';
+    document.getElementById('addSigBtn').style.cursor = 'not-allowed';
+  } else {
+    document.getElementById('addSigBtn').disabled = false;
+    document.getElementById('addSigBtn').style.opacity = '1';
+    document.getElementById('addSigBtn').style.cursor = 'pointer';
+  }
+  
+  // Disable remove button on first signature if it's the only one
+  items.forEach((el, idx) => {
+    const removeBtn = el.querySelector('button[onclick^="removeSignature"]');
+    if (removeBtn) {
+      if (signatureCount === 1) {
+        removeBtn.disabled = true;
+        removeBtn.style.opacity = '0.5';
+        removeBtn.style.cursor = 'not-allowed';
+      } else {
+        removeBtn.disabled = false;
+        removeBtn.style.opacity = '1';
+        removeBtn.style.cursor = 'pointer';
+      }
+    }
+  });
+}
+
+// Load existing signatures
+<?php if (!empty($existingSignatures)): ?>
+<?php foreach ($existingSignatures as $sig): ?>
+addSignature(<?php echo json_encode($sig['signer_title']); ?>, <?php echo $sig['is_required'] ? 'true' : 'false'; ?>);
+<?php endforeach; ?>
+<?php else: ?>
+// Add default signature if none exist
+addSignature();
+<?php endif; ?>
 </script>
 </main>

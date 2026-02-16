@@ -330,7 +330,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
-        <th style="padding:10px;width:25%;vertical-align:top">Item</th>
+        <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
         <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
@@ -340,7 +340,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <tbody>
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6<?php echo (int)($it['is_extra_charge'] ?? 0) ? ';background:#fffbeb' : ''; ?>">
-        <td style="padding:10px;vertical-align:top">
+        <td style="padding:10px;vertical-align:top;text-align:center">
           <div style="font-weight:600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></div>
           <?php if ((int)($it['is_extra_charge'] ?? 0) === 1): ?>
             <span style="display:inline-block;margin-top:4px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:10px;font-weight:600">Extra Charge</span>

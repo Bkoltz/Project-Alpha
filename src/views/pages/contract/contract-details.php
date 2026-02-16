@@ -11,6 +11,15 @@ if(!$contract){ echo '<p>Contract not found</p>'; return; }
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
+
+// Fetch contract signatures
+$sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
+$sigStmt->execute([$id]);
+$signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+// If no signatures defined, use a default
+if (empty($signatures)) {
+    $signatures = [['signer_title' => 'Client Signature', 'is_required' => 1]];
+}
 require_once __DIR__ . '/../../../utils/format.php';
 $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
 $fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
@@ -393,7 +402,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
-        <th style="padding:10px;width:25%;vertical-align:top">Item</th>
+        <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
         <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
@@ -403,7 +412,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <tbody>
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6">
-        <td style="padding:10px;font-weight:600;vertical-align:top"><?php echo htmlspecialchars($it['item'] ?? ''); ?></td>
+        <td style="padding:10px;font-weight:600;vertical-align:top;text-align:center"><?php echo htmlspecialchars($it['item'] ?? ''); ?></td>
         <td style="padding:10px;color:#6b7280;font-size:13px;vertical-align:top"><?php echo htmlspecialchars($it['description'] ?? ''); ?></td>
         <td style="padding:10px;text-align:right;vertical-align:top"><?php echo number_format($it['quantity'],2); ?></td>
         <td style="padding:10px;text-align:right;vertical-align:top">$<?php echo number_format($it['unit_price'],2); ?></td>
@@ -470,10 +479,25 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
     <strong>By signing below</strong>, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.
   </div>
-  <div style="padding:20px 10px 40px">
-    <div style="border-top:2px solid #111;width:50%;margin-top:40px"></div>
-    <div style="margin-top:4px;color:#4b5563">Client Signature</div>
+  <?php foreach ($signatures as $sig): ?>
+  <div style="padding:10px 10px 16px">
+    <table style="width:100%;border-collapse:collapse;margin-top:24px">
+      <tr>
+        <td style="width:60%;vertical-align:bottom;padding-right:20px">
+          <div style="border-top:2px solid #111"></div>
+          <div style="margin-top:4px;color:#4b5563">
+            <?php echo htmlspecialchars($sig['signer_title']); ?>
+            <?php if (!empty($sig['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
+          </div>
+        </td>
+        <td style="width:40%;vertical-align:bottom">
+          <div style="border-top:2px solid #111"></div>
+          <div style="margin-top:4px;color:#4b5563">Date</div>
+        </td>
+      </tr>
+    </table>
   </div>
+  <?php endforeach; ?>
 
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
