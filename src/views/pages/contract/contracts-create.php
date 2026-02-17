@@ -152,18 +152,11 @@ $csrf = csrf_sf_token('contracts-create');
             <div style="font-size:13px;color:#6b7280">Client pays the same amount on each invoice (e.g., $20/month)</div>
           </div>
         </label>
-        <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+        <label id="fixedTotalOption" style="display:flex;align-items:start;gap:8px;cursor:pointer">
           <input type="radio" id="recurringFixedTotal" name="pricing_type" value="fixed_total" onchange="togglePricingFields()" style="margin-top:3px">
           <div>
             <div style="font-weight:600;color:#374151">Fixed Total (Billed Over Time)</div>
             <div style="font-size:13px;color:#6b7280">Total contract amount is divided across invoices until paid in full</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
-          <input type="radio" id="onDemandOption" name="pricing_type" value="on_demand" onchange="togglePricingFields()" style="margin-top:3px">
-          <div>
-            <div style="font-weight:600;color:#374151">On Demand</div>
-            <div style="font-size:13px;color:#6b7280">Invoices generated manually on-demand without deposits</div>
           </div>
         </label>
       </div>
@@ -190,6 +183,60 @@ $csrf = csrf_sf_token('contracts-create');
 
       <div id="discountWarning" style="display:none;margin-top:12px;padding:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;font-size:13px">
         <strong>Note:</strong> For ongoing contracts, discounts apply to each invoice, not the total contract value.
+      </div>
+    </div>
+
+    <div id="onDemandFieldsCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+      <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Contract Settings</h3>
+      
+      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+        <label>
+          <div>Start Date</div>
+          <input id="onDemandStartDateCo" type="date" name="od_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>Contract Duration</div>
+          <select id="onDemandEndDateTypeCo" name="od_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleOnDemandEndDateCo()">
+            <option value="ongoing">Ongoing (Until Terminated)</option>
+            <option value="fixed">Fixed End Date</option>
+          </select>
+        </label>
+      </div>
+      
+      <div id="onDemandEndDateFieldCo" style="display:none;margin-top:12px">
+        <label>
+          <div>End Date</div>
+          <input type="date" name="od_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+      </div>
+
+      <div style="margin-top:16px;padding:12px;background:#e0f2fe;border-radius:8px;border:1px solid #7dd3fc">
+        <div style="font-weight:600;margin-bottom:8px;color:#0369a1">How do you want to specify pricing?</div>
+        <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="radio" name="od_pricing_mode" value="items" checked onchange="toggleOnDemandPricingModeCo()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Use Line Items</div>
+            <div style="font-size:13px;color:#6b7280">Add individual items with quantities and prices</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+          <input type="radio" name="od_pricing_mode" value="flat" onchange="toggleOnDemandPricingModeCo()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Flat Amount</div>
+            <div style="font-size:13px;color:#6b7280">Enter a single amount without itemized details</div>
+          </div>
+        </label>
+      </div>
+
+      <div id="onDemandFlatAmountCo" style="display:none;margin-top:12px">
+        <label>
+          <div>Contract Amount * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
+          <input id="onDemandAmountInputCo" type="number" step="0.01" name="od_flat_amount" placeholder="0.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalcCo()">
+        </label>
+      </div>
+
+      <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:13px">
+        <strong>ℹ️ Note:</strong> On-demand contracts allow you to generate invoices manually as needed. No recurring billing schedule is set.
       </div>
     </div>
 
@@ -281,26 +328,35 @@ function recalcCo(){
   var docType = document.querySelector('input[name="doc_type"]:checked').value;
   var isLongTerm = (docType === 'long_term');
   var isOnDemand = (docType === 'on_demand');
-  var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
-  var isOngoing = (isLongTerm || isOnDemand) && document.getElementById('endDateTypeCo').value === 'ongoing';
+  var pricingType = isLongTerm ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
+  var isOngoing = isLongTerm && document.getElementById('endDateTypeCo').value === 'ongoing';
   
   var subtotal = 0;
   
-  // Calculate subtotal based on pricing type
-  if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
+  // Calculate subtotal based on document type and pricing type
+  if (isOnDemand) {
+    var pricingMode = document.querySelector('input[name="od_pricing_mode"]:checked')?.value;
+    if (pricingMode === 'flat') {
+      subtotal = parseFloat(document.getElementById('onDemandAmountInputCo').value) || 0;
+    } else {
+      var qtys = Array.from(document.querySelectorAll('[name="item_qty[]"]')).map(e=>parseFloat(e.value)||0);
+      var prices = Array.from(document.querySelectorAll('[name="item_price[]"]')).map(e=>parseFloat(e.value)||0);
+      for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
+    }
+  } else if (isLongTerm && pricingType === 'per_invoice') {
     // Use price per invoice
     subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
   } else {
     // Use line items
-    var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
-    var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
+    var qtys = Array.from(document.querySelectorAll('[name="item_qty[]"]')).map(e=>parseFloat(e.value)||0);
+    var prices = Array.from(document.querySelectorAll('[name="item_price[]"]')).map(e=>parseFloat(e.value)||0);
     for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
   }
   
   // For fixed_total pricing, recalculate based on items
   if (isLongTerm && pricingType === 'fixed_total') {
-    var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e=>parseFloat(e.value)||0);
-    var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e=>parseFloat(e.value)||0);
+    var qtys = Array.from(document.querySelectorAll('[name="item_qty[]"]')).map(e=>parseFloat(e.value)||0);
+    var prices = Array.from(document.querySelectorAll('[name="item_price[]"]')).map(e=>parseFloat(e.value)||0);
     subtotal = 0;
     for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
   }
@@ -394,25 +450,30 @@ function toggleDocTypeFields() {
   // Load custom fields for the selected document type
   loadCustomFieldsCo(docType);
   
-  document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
+  // Show/hide the appropriate section based on document type
+  document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
+  document.getElementById('onDemandFieldsCo').style.display = isOnDemand ? 'block' : 'none';
   
-  if (isLongTerm || isOnDemand) {
-    // Set start date to today when first enabling LT or On-Demand
+  if (isLongTerm) {
+    // Set start date to today when first enabling Long Term
     var startField = document.getElementById('startDateFieldCo');
     if (!startField.value) {
       startField.value = new Date().toISOString().split('T')[0];
-    }
-    
-    // Hide/show billing intervals based on type
-    var billingFields = document.querySelector('#longTermFields > div:nth-of-type(3)');
-    if (billingFields) {
-      billingFields.style.display = isOnDemand ? 'none' : 'grid';
     }
     
     // Trigger toggleEndDate to set initial state correctly
     toggleEndDate();
     togglePricingFields();
     updateDiscountWarning();
+  } else if (isOnDemand) {
+    // Set start date to today for on-demand
+    var startField = document.getElementById('onDemandStartDateCo');
+    if (!startField.value) {
+      startField.value = new Date().toISOString().split('T')[0];
+    }
+    
+    // Show/hide items based on pricing mode
+    toggleOnDemandPricingModeCo();
   } else {
     // Regular contract - always show items
     document.getElementById('itemsCo').parentElement.style.display = 'block';
@@ -422,6 +483,26 @@ function toggleDocTypeFields() {
       const el = document.getElementById(id);
       if (el) el.style.display = 'block';
     });
+  }
+  recalcCo();
+}
+
+function toggleOnDemandEndDateCo() {
+  var type = document.getElementById('onDemandEndDateTypeCo').value;
+  document.getElementById('onDemandEndDateFieldCo').style.display = (type === 'ongoing') ? 'none' : 'block';
+}
+
+function toggleOnDemandPricingModeCo() {
+  var pricingMode = document.querySelector('input[name="od_pricing_mode"]:checked')?.value;
+  var itemsSection = document.getElementById('itemsCo').parentElement;
+  var flatAmountSection = document.getElementById('onDemandFlatAmountCo');
+  
+  if (pricingMode === 'flat') {
+    itemsSection.style.display = 'none';
+    flatAmountSection.style.display = 'block';
+  } else {
+    itemsSection.style.display = 'block';
+    flatAmountSection.style.display = 'none';
   }
   recalcCo();
 }
@@ -457,10 +538,9 @@ function toggleEndDate() {
 function togglePricingFields() {
   var docType = document.querySelector('input[name="doc_type"]:checked').value;
   var isLongTerm = (docType === 'long_term');
-  var isOnDemand = (docType === 'on_demand');
   
-  if (docType === 'regular') {
-    // Regular contract - show custom fields
+  if (docType === 'regular' || docType === 'on_demand') {
+    // Regular or On-Demand contract - show custom fields
     ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'block';
@@ -471,19 +551,14 @@ function togglePricingFields() {
   var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
   
   if (pricingType === 'per_invoice') {
-    // Recurring amount - hide custom fields
+    // Recurring amount - hide deposit and fulfillment
     ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
-  } else if (pricingType === 'on_demand') {
-    // On-demand - show deposits, hide fulfillment
-    ['depositTypeLabelCo', 'depositValueLabelCo'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'block';
-    });
-    const fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
-    if (fulfillmentLabel) fulfillmentLabel.style.display = 'none';
+    document.getElementById('perInvoiceField').style.display = 'block';
+    document.getElementById('fixedTotalFieldsCo').style.display = 'none';
+    document.getElementById('itemsCo').parentElement.style.display = 'none';
   } else {
     // Fixed total - show deposit and fulfillment
     ['depositTypeLabelCo', 'depositValueLabelCo'].forEach(id => {
@@ -493,35 +568,6 @@ function togglePricingFields() {
     var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
     const fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
     if (fulfillmentLabel) fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
-    document.getElementById('depositValueLabelCo').style.display = 'block';
-    document.getElementById('fulfillmentDateLabelCo').style.display = 'block';
-    return;
-  }
-  
-  var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
-  
-  if (pricingType === 'per_invoice') {
-    // Recurring amount - hide deposit and fulfillment
-    document.getElementById('depositTypeLabelCo').style.display = 'none';
-    document.getElementById('depositValueLabelCo').style.display = 'none';
-    document.getElementById('fulfillmentDateLabelCo').style.display = 'none';
-    document.getElementById('perInvoiceField').style.display = 'block';
-    document.getElementById('fixedTotalFieldsCo').style.display = 'none';
-    document.getElementById('itemsCo').parentElement.style.display = 'none';
-  } else if (pricingType === 'on_demand') {
-    // On-demand - show deposits, hide fulfillment, show price per invoice
-    document.getElementById('depositTypeLabelCo').style.display = 'block';
-    document.getElementById('depositValueLabelCo').style.display = 'block';
-    document.getElementById('fulfillmentDateLabelCo').style.display = 'none';
-    document.getElementById('perInvoiceField').style.display = 'block';
-    document.getElementById('fixedTotalFieldsCo').style.display = 'none';
-    document.getElementById('itemsCo').parentElement.style.display = 'none';
-  } else {
-    // Fixed total - show deposit and fulfillment
-    document.getElementById('depositTypeLabelCo').style.display = 'block';
-    document.getElementById('depositValueLabelCo').style.display = 'block';
-    var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
-    document.getElementById('fulfillmentDateLabelCo').style.display = isOngoing ? 'none' : 'block';
     document.getElementById('perInvoiceField').style.display = 'none';
     document.getElementById('fixedTotalFieldsCo').style.display = 'block';
     document.getElementById('itemsCo').parentElement.style.display = 'block';
