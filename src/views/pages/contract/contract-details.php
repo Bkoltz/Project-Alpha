@@ -479,25 +479,55 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
     <strong>By signing below</strong>, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.
   </div>
-  <?php foreach ($signatures as $sig): ?>
-  <div style="padding:10px 10px 16px">
-    <table style="width:100%;border-collapse:collapse;margin-top:24px">
-      <tr>
-        <td style="width:60%;vertical-align:bottom;padding-right:20px">
-          <div style="border-top:2px solid #111"></div>
-          <div style="margin-top:4px;color:#4b5563">
-            <?php echo htmlspecialchars($sig['signer_title']); ?>
-            <?php if (!empty($sig['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
-          </div>
-        </td>
-        <td style="width:40%;vertical-align:bottom">
-          <div style="border-top:2px solid #111"></div>
-          <div style="margin-top:4px;color:#4b5563">Date</div>
-        </td>
-      </tr>
-    </table>
-  </div>
-  <?php endforeach; ?>
+  <table style="width:100%;border-collapse:collapse">
+    <?php 
+    $sigCount = count($signatures);
+    for ($i = 0; $i < $sigCount; $i += 2): 
+      $sig1 = $signatures[$i];
+      $sig2 = isset($signatures[$i + 1]) ? $signatures[$i + 1] : null;
+    ?>
+    <tr>
+      <td style="width:50%;vertical-align:top;padding:10px 16px 16px 10px">
+        <table style="width:100%;border-collapse:collapse;margin-top:20px">
+          <tr>
+            <td style="width:65%;vertical-align:bottom;padding-right:12px">
+              <div style="border-top:2px solid #111"></div>
+              <div style="margin-top:4px;color:#4b5563;font-size:12px">
+                <?php echo htmlspecialchars($sig1['signer_title']); ?>
+                <?php if (!empty($sig1['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
+              </div>
+            </td>
+            <td style="width:35%;vertical-align:bottom">
+              <div style="border-top:2px solid #111"></div>
+              <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <?php if ($sig2): ?>
+      <td style="width:50%;vertical-align:top;padding:10px 10px 16px 16px">
+        <table style="width:100%;border-collapse:collapse;margin-top:20px">
+          <tr>
+            <td style="width:65%;vertical-align:bottom;padding-right:12px">
+              <div style="border-top:2px solid #111"></div>
+              <div style="margin-top:4px;color:#4b5563;font-size:12px">
+                <?php echo htmlspecialchars($sig2['signer_title']); ?>
+                <?php if (!empty($sig2['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
+              </div>
+            </td>
+            <td style="width:35%;vertical-align:bottom">
+              <div style="border-top:2px solid #111"></div>
+              <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <?php else: ?>
+      <td style="width:50%"></td>
+      <?php endif; ?>
+    </tr>
+    <?php endfor; ?>
+  </table>
 
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>

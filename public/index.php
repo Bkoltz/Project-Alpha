@@ -519,6 +519,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/document-custom-fields-handler.php';
         exit;
     }
+    if ($page === 'settings/link-test-connection') {
+        require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
+        exit;
+    }
     if ($page === 'receipts-handler') {
         require_once __DIR__ . '/../src/controllers/receipts_handler.php';
         exit;
