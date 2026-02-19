@@ -21,6 +21,8 @@ services:
       retries: 5
     restart: unless-stopped
     volumes:
+      - ./src:/var/www/src 
+      - ./public:/var/www/html
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
   cron:
@@ -62,6 +64,8 @@ services:
       timeout: 5s
       start_period: 40s
       retries: 10
+    ports:
+      - 3307:3306
 volumes:
   db_data: {}
   cron_logs: {}

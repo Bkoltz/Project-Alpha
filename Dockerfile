@@ -50,9 +50,13 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" gd mbstring zip dom pdo_mysql mysqli \
     && a2enmod rewrite
 
+# Create php ini file for error logging and future php customization
+COPY php.ini /usr/local/etc/php/conf.d/php.ini
+
 # Copy application code
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/
+
 # Copy all migration SQL files into the image (no host mounts needed on TrueNAS)
 COPY ./database/migrations/ /usr/local/share/app-migrations/
 
@@ -65,6 +69,10 @@ RUN chown -R www-data:www-data /var/www/html /var/www/src /var/www/vendor \
 
 # RUN chown -R www-data:www-data /var/www/config && chmod -R 755 /var/www/config
 
+# Create log file
+RUN mkdir -p /var/log && \
+    touch /var/log/error_log.txt && \
+    chmod 666 /var/log/error_log.txt
 
 # Entry script
 WORKDIR /var/www
