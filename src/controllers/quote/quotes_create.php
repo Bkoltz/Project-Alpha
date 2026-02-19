@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../utils/document_fields.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
-$discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
+$discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none', 'percent', 'fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 // Check both direct field names and custom_field_ prefixed names (from dynamic rendering)
@@ -26,8 +26,8 @@ if ($is_long_term || $is_on_demand) {
     $start_date = !empty($_POST['lt_start_date']) ? $_POST['lt_start_date'] : null;
     $end_date_type = $_POST['lt_end_date_type'] ?? 'ongoing';
     $end_date = ($end_date_type === 'fixed' && !empty($_POST['lt_end_date'])) ? $_POST['lt_end_date'] : null;
-    $pricing_type = in_array(($_POST['lt_pricing_type'] ?? 'per_invoice'), ['per_invoice','fixed_total','on_demand']) ? $_POST['lt_pricing_type'] : 'per_invoice';
-    
+    $pricing_type = in_array(($_POST['lt_pricing_type'] ?? 'per_invoice'), ['per_invoice', 'fixed_total', 'on_demand']) ? $_POST['lt_pricing_type'] : 'per_invoice';
+
     // Check if this is an on-demand quote
     if ($pricing_type === 'on_demand') {
         $is_on_demand = 1;
@@ -35,9 +35,9 @@ if ($is_long_term || $is_on_demand) {
         $billing_interval_unit = 'month';
     } else {
         $billing_interval_count = (int)($_POST['lt_billing_interval_count'] ?? 1);
-        $billing_interval_unit = in_array(($_POST['lt_billing_interval_unit'] ?? 'month'), ['day','week','month','year']) ? $_POST['lt_billing_interval_unit'] : 'month';
+        $billing_interval_unit = in_array(($_POST['lt_billing_interval_unit'] ?? 'month'), ['day', 'week', 'month', 'year']) ? $_POST['lt_billing_interval_unit'] : 'month';
     }
-    
+
     $price_per_invoice = ($pricing_type === 'per_invoice' || $pricing_type === 'on_demand') ? (float)($_POST['lt_price_per_invoice'] ?? 0) : null;
     $scope = trim((string)($_POST['scope'] ?? ''));
 } else {
@@ -78,7 +78,7 @@ if ($is_long_term && ($pricing_type === 'per_invoice' || $pricing_type === 'on_d
     $subtotal = $price_per_invoice;
 } else {
     // Process items for regular quotes or fixed_total long-term quotes
-    for ($i=0; $i<count($item); $i++) {
+    for ($i = 0; $i < count($item); $i++) {
         $itm = trim((string)($item[$i] ?? ''));
         $d = trim((string)($desc[$i] ?? ''));
         $q = (float)($qty[$i] ?? 0);
@@ -86,7 +86,7 @@ if ($is_long_term && ($pricing_type === 'per_invoice' || $pricing_type === 'on_d
         if ($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $items[] = ['item'=>$itm,'description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line];
     }
     if (!$items) {
         header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -109,18 +109,21 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, is_long_term, is_on_demand, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $is_long_term, $is_on_demand, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson]);
+    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, is_long_term, is_on_demand, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, null, null, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $is_long_term, $is_on_demand, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, date("Y-m-d H:i:s")]);
     $quote_id = (int)$pdo->lastInsertId();
+
     // Assign a new Project ID for this quote
     $projectCode = project_next_code($pdo, $client_id);
     $pdo->prepare('UPDATE quotes SET project_code=? WHERE id=?')->execute([$projectCode, $quote_id]);
+
     // Upsert project notes if provided
     $notes = trim((string)($_POST['project_notes'] ?? ''));
     if ($notes !== '') {
-      $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
-      $up->execute([$projectCode, $client_id, $notes]);
+        $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
+        $up->execute([$projectCode, $client_id, $notes]);
     }
+
     // Assign per-type doc_number for quotes (separate sequences for regular, long-term, and on-demand)
     if ($is_on_demand) {
         $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_on_demand=1')->fetchColumn();
@@ -129,7 +132,9 @@ try {
     } else {
         $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_long_term=0 AND is_on_demand=0')->fetchColumn();
     }
-    $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?')->execute([$qMax + 1, $quote_id]);
+
+    $stmt = $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?');
+    $stmt->execute([$qMax + 1, $quote_id]);
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {
@@ -138,15 +143,18 @@ try {
             $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
         }
     }
-    
+
     // Add to project_documents if project_id is set
     if ($project_id) {
         $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "quote", ?)')->execute([$project_id, $quote_id]);
     }
-    
+
     $pdo->commit();
 } catch (Throwable $e) {
     $pdo->rollBack();
+
+    error_log($e);
+
     header('Location: /?page=quote/quotes-create&error=Failed%20to%20create%20quote');
     exit;
 }

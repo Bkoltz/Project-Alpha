@@ -1,6 +1,7 @@
 <?php
 // src/utils/project_id.php
-// TODO: We need to add logic, so that all related long-term invoices show in the same project as the corresponding contract. We don't need to list all invoices in the project list view, but we need to add a way to let the user know there are multiple invoices for that project.
+// TODO: We need to add logic, so that all related long-term invoices show in the same project as the corresponding contract. 
+// We don't need to list all invoices in the project list view, but we need to add a way to let the user know there are multiple invoices for that project.
 function project_client_initials(string $name): string {
     // Build up to 2 initials from first two words; fallback to first two alphanumerics
     $name = trim($name);

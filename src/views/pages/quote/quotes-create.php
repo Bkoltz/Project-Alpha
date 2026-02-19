@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 ?>
+
 <section>
   <h2>Create Quote</h2>
   <div id="taxExemptBanner" style="display:none;margin:12px 0;padding:12px 16px;border-radius:8px;background:#fef3c7;border:1px solid #fbbf24;color:#78350f">
@@ -13,32 +14,41 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
   <form id="quoteForm" method="post" action="/?page=quote/quotes-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+
+      <!-- Client input -->
       <label style="grid-column:1/2;position:relative">
         <div>Client</div>
         <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <input id="clientId" type="hidden" name="client_id">
         <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
+
+      <!-- Tax input -->
       <label style="grid-column:2/3">
         <div>Tax (%)</div>
         <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+
+      <!-- Project selection -->
       <label>
-    <div id="projectSection" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
-      <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
-      <div style="display:grid;gap:12px">
-        <label>
-          <div>Add to Existing Project</div>
-          <select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-            <option value="">-- Select Project --</option>
-          </select>
-        </label>
-        <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
-        <div>
-          <button type="button" id="createProjectBtn" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
+        <div id="projectSection" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+          <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
+          <div style="display:grid;gap:12px">
+            <label>
+              <div>Add to Existing Project</div>
+              <select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <option value="">-- Select Project --</option>
+              </select>
+            </label>
+            <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
+            <div>
+              <button type="button" id="createProjectBtn" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>        <div>Discount Type</div>
+
+        <!-- Discount inputs -->
+        <div>Discount Type</div>
         <select id="discountType" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="none">None</option>
           <option value="percent">Percent</option>
@@ -49,6 +59,8 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         <div>Discount Value</div>
         <input id="discountValue" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+
+
     </div>
 
     <div id="customFieldsContainer">
@@ -59,6 +71,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     ?>
     </div>
 
+    <!-- Billing type -->
     <div style="margin:12px 0">
       <div style="font-weight:600;margin-bottom:8px">Document Type</div>
       <div style="display:flex;gap:24px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
@@ -86,9 +99,10 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </div>
     </div>
 
+    <!-- Recurring billing -->
     <div id="longTermFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
       <h3 style="margin:0 0 12px 0;color:#374151">Recurring Billing Settings</h3>
-      
+
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
         <label>
           <div>Start Date *</div>
@@ -102,7 +116,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
           </select>
         </label>
       </div>
-      
+
       <div id="endDateField" style="display:none;margin-top:12px">
         <label>
           <div>End Date *</div>
@@ -229,23 +243,78 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </div>
     </div>
 
+    <div id="onDemandFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+      <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Quote Settings</h3>
+      
+      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+        <label>
+          <div>Start Date</div>
+          <input id="onDemandStartDate" type="date" name="od_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>Contract Duration</div>
+          <select id="onDemandEndDateType" name="od_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleOnDemandEndDate()">
+            <option value="ongoing">Ongoing (Until Terminated)</option>
+            <option value="fixed">Fixed End Date</option>
+          </select>
+        </label>
+      </div>
+      
+      <div id="onDemandEndDateField" style="display:none;margin-top:12px">
+        <label>
+          <div>End Date</div>
+          <input type="date" name="od_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+      </div>
+
+      <div style="margin-top:16px;padding:12px;background:#e0f2fe;border-radius:8px;border:1px solid #7dd3fc">
+        <div style="font-weight:600;margin-bottom:8px;color:#0369a1">How do you want to specify pricing?</div>
+        <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="radio" name="od_pricing_mode" value="items" checked onchange="toggleOnDemandPricingMode()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Use Line Items</div>
+            <div style="font-size:13px;color:#6b7280">Add individual items with quantities and prices</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+          <input type="radio" name="od_pricing_mode" value="flat" onchange="toggleOnDemandPricingMode()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Flat Amount</div>
+            <div style="font-size:13px;color:#6b7280">Enter a single amount without itemized details</div>
+          </div>
+        </label>
+      </div>
+
+      <div id="onDemandFlatAmount" style="display:none;margin-top:12px">
+        <label>
+          <div>Quote Amount * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
+          <input id="onDemandAmountInput" type="number" step="0.01" name="od_flat_amount" placeholder="0.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+        </label>
+      </div>
+
+      <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:13px">
+        <strong>ℹ️ Note:</strong> On-demand quotes allow you to generate invoices manually as needed. No recurring billing schedule is set.
+      </div>
+    </div>
+
+    <!-- Items input -->
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
       <div id="items" style="display:grid;gap:8px"></div>
       <button type="button" onclick="addItem()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
+    <!-- Scope -->
     <?php if (!isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled'])): ?>
-    <label>
-      <div>Scope of Work</div>
-      <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
-    </label>
+      <label>
+        <div>Scope of Work</div>
+        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
+      </label>
     <?php endif; ?>
 
     <label>
       <div>Job Notes (shared across related docs)</div>
-      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"
-      ></textarea>
+      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"></textarea>
     </label>
 
     <div id="invoiceAmountRow" style="display:none;margin-top:8px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
@@ -255,13 +324,29 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </div>
     </div>
 
+    <!-- Totals -->
     <div id="totals" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div><div id="subtotalVal" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div><div id="discountVal" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div><div id="taxVal" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalVal" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div id="depositRow" style="display:none;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:6px">
-        <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:#059669;font-weight:700;font-size:15px">Deposit Due</div><div id="depositVal" style="min-width:120px;text-align:right;color:#059669;font-weight:700;font-size:15px">$0.00</div></div>
+      <div style="display:flex;gap:16px;justify-content:flex-end">
+        <div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
+        <div id="subtotalVal" style="min-width:120px;text-align:right">$0.00</div>
+      </div>
+      <div style="display:flex;gap:16px;justify-content:flex-end">
+        <div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div>
+        <div id="discountVal" style="min-width:120px;text-align:right">$0.00</div>
+      </div>
+      <div style="display:flex;gap:16px;justify-content:flex-end">
+        <div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div>
+        <div id="taxVal" style="min-width:120px;text-align:right">$0.00</div>
+      </div>
+      <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700">
+        <div style="min-width:140px;text-align:right">Total</div>
+        <div id="totalVal" style="min-width:120px;text-align:right">$0.00</div>
+      </div>
+      <div id="depositRow" style="display:flex;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:6px">
+        <div style="display:flex;gap:16px;justify-content:flex-end">
+          <div style="min-width:140px;text-align:right;color:#059669;font-weight:700;font-size:15px">Deposit Due</div>
+          <div id="depositVal" style="min-width:120px;text-align:right;color:#059669;font-weight:700;font-size:15px">$0.00</div>
+        </div>
       </div>
     </div>
 
@@ -270,409 +355,6 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     </div>
   </form>
 </section>
-<script>
-function money(n){return '$'+(Number(n)||0).toFixed(2)}
-var itemCounter = 0;
-function addItem(item='', desc='', qty=1, price=0){
-  var wrap = document.createElement('div');
-  var itemId = 'item_' + (itemCounter++);
-  var descId = 'desc_' + itemCounter;
-  var priceId = 'price_' + itemCounter;
-  wrap.style.display='grid';wrap.style.gridTemplateColumns='3fr 3fr 1fr 1fr auto';wrap.style.gap='8px';
-  wrap.innerHTML = `
-    <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalc()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
-    <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalc()">${desc}</textarea>
-    <input required type="number" step="0.01" min="0" name="item_qty[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalc()">
-    <input id="${priceId}" required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalc()">
-    <button type="button" onclick="this.parentElement.remove();recalc()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
-  `;
-  document.getElementById('items').appendChild(wrap);
-  
-  // Re-initialize autocomplete for the new item input
-  function initAutocomplete() {
-    if (window.ItemAutocomplete) {
-      const input = document.getElementById(itemId);
-      if (input && !input._itemAutocomplete) {
-        const descField = document.getElementById(descId);
-        const priceField = document.getElementById(priceId);
-        const instance = new ItemAutocomplete(input, {
-          descriptionField: descField,
-          priceField: priceField
-        });
-        // Mark as initialized
-        input._itemAutocomplete = instance;
-      }
-    } else {
-      // Retry after a short delay if ItemAutocomplete not loaded yet
-      setTimeout(initAutocomplete, 100);
-    }
-  }
-  initAutocomplete();
-  
-  recalc();
-}
-function recalc(){
-  var docType = document.querySelector('input[name="doc_type"]:checked').value;
-  var isLongTerm = (docType === 'long_term');
-  var isOnDemand = (docType === 'on_demand');
-  var pricingType = isLongTerm ? document.querySelector('input[name="lt_pricing_type"]:checked')?.value : null;
-  var isOngoing = isLongTerm && document.getElementById('endDateType').value === 'ongoing';
-  
-  var subtotal = 0;
-  
-  // Calculate subtotal based on document type and pricing type
-  if (isOnDemand) {
-    var pricingMode = document.querySelector('input[name="od_pricing_mode"]:checked')?.value;
-    if (pricingMode === 'flat') {
-      subtotal = parseFloat(document.getElementById('onDemandAmountInput').value) || 0;
-    } else {
-      var qtys = Array.from(document.querySelectorAll('[name="item_qty[]"]')).map(e=>parseFloat(e.value)||0);
-      var prices = Array.from(document.querySelectorAll('[name="item_price[]"]')).map(e=>parseFloat(e.value)||0);
-      for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
-    }
-  } else if (isLongTerm && pricingType === 'per_invoice') {
-    subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
-  } else {
-    var qtys = Array.from(document.querySelectorAll('[name="item_qty[]"]')).map(e=>parseFloat(e.value)||0);
-    var prices = Array.from(document.querySelectorAll('[name="item_price[]"]')).map(e=>parseFloat(e.value)||0);
-    for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
-  }
-  
-  // For fixed_total pricing, calculate price per invoice
-  if (isLongTerm && pricingType === 'fixed_total') {
-    var invoiceCount = parseInt(document.getElementById('invoiceCountInput').value) || 1;
-    var qtys = Array.from(document.querySelectorAll('[name="item_qty[]"]')).map(e=>parseFloat(e.value)||0);
-    var prices = Array.from(document.querySelectorAll('[name="item_price[]"]')).map(e=>parseFloat(e.value)||0);
-    subtotal = 0;
-    for (var i=0;i<qtys.length;i++){ subtotal += qtys[i]*prices[i]; }
-  }
-  
-  var dtype = document.getElementById('discountType').value;
-  var dval = parseFloat(document.getElementById('discountValue').value)||0;
-  var taxp = parseFloat(document.getElementById('taxPercent').value)||0;
-  var discount = 0; 
-  if (dtype==='percent'){ discount = Math.max(0, Math.min(100,dval))*subtotal/100; } 
-  else if (dtype==='fixed'){ discount = Math.max(0,dval); }
-  var taxable = Math.max(0, subtotal - discount);
-  var tax = Math.max(0, taxp)*taxable/100;
-  var total = Math.max(0, taxable + tax);
-  
-  // Calculate deposit
-  var depType = document.getElementById('depositType').value;
-  var depVal = parseFloat(document.getElementById('depositValue').value)||0;
-  var deposit = 0;
-  if (depType==='percent'){ deposit = Math.max(0, Math.min(100,depVal))*total/100; } 
-  else if (depType==='fixed'){ deposit = Math.max(0,depVal); }
-  
-  document.getElementById('subtotalVal').textContent = money(subtotal);
-  document.getElementById('discountVal').textContent = money(discount);
-  document.getElementById('taxVal').textContent = money(tax);
-  
-  // For ongoing quotes, don't show total (unknown)
-  if (isOngoing) {
-    document.getElementById('totalVal').parentElement.style.display = 'none';
-  } else {
-    document.getElementById('totalVal').parentElement.style.display = 'flex';
-    document.getElementById('totalVal').textContent = money(total);
-  }
-  
-  // Show calculated price per invoice for fixed_total
-  if (isLongTerm && pricingType === 'fixed_total') {
-    var invoiceCount = parseInt(document.getElementById('invoiceCountInput').value) || 1;
-    var pricePerInv = total / invoiceCount;
-    document.getElementById('calcPriceVal').textContent = money(pricePerInv);
-    document.getElementById('invoiceAmountRow').style.display = 'none';
-  } else if (isLongTerm) {
-    document.getElementById('invoiceAmountRow').style.display = 'block';
-    document.getElementById('invoiceAmountVal').textContent = money(total);
-  } else {
-    document.getElementById('invoiceAmountRow').style.display = 'none';
-  }
-  
-  // Show/hide deposit row
-  if (depType !== 'none' && deposit > 0) {
-    document.getElementById('depositRow').style.display = 'block';
-    document.getElementById('depositVal').textContent = money(deposit);
-  } else {
-    document.getElementById('depositRow').style.display = 'none';
-  }
-  
-  updateDiscountWarning();
-}
 
-// Safely add event listeners only if elements exist
-['discountType','discountValue','taxPercent'].forEach(id=>{
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', recalc);
-});
-['depositType','depositValue'].forEach(id=>{
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', recalc);
-});
-const discountTypeEl = document.getElementById('discountType');
-if (discountTypeEl) discountTypeEl.addEventListener('change', updateDiscountWarning);
-
-// No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
-
-function loadCustomFields(docType) {
-  fetch('/?page=custom-fields-ajax&doc_type=' + encodeURIComponent(docType) + '&suffix=')
-    .then(r => r.text())
-    .then(html => {
-      document.getElementById('customFieldsContainer').innerHTML = html;
-      // Re-attach event listeners for deposit fields if they exist
-      ['depositType','depositValue'].forEach(id=>{
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('input', recalc);
-      });
-    })
-    .catch(err => console.error('Failed to load custom fields:', err));
-}
-
-function toggleDocTypeFields() {
-  var docType = document.querySelector('input[name="doc_type"]:checked').value;
-  var isLongTerm = (docType === 'long_term');
-  var isOnDemand = (docType === 'on_demand');
-  
-  // Load custom fields for the selected document type
-  loadCustomFields(docType);
-  
-  // Show/hide the appropriate section based on document type
-  document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
-  document.getElementById('onDemandFields').style.display = isOnDemand ? 'block' : 'none';
-  
-  if (isLongTerm) {
-    // Set start date to today when first enabling Long Term
-    var startField = document.getElementById('startDateField');
-    if (!startField.value) {
-      startField.value = new Date().toISOString().split('T')[0];
-    }
-    
-    // Trigger toggleEndDate to set initial state correctly
-    toggleEndDate();
-    togglePricingFields();
-    updateDiscountWarning();
-  } else if (isOnDemand) {
-    // Set start date to today for on-demand
-    var startField = document.getElementById('onDemandStartDate');
-    if (!startField.value) {
-      startField.value = new Date().toISOString().split('T')[0];
-    }
-    
-    // Show/hide items based on pricing mode
-    toggleOnDemandPricingMode();
-  } else {
-    // Regular quote
-    document.getElementById('items').parentElement.style.display = 'block';
-    document.getElementById('invoiceAmountRow').style.display = 'none';
-    // Show custom fields for regular quotes (if they exist)
-    ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'block';
-    });
-  }
-  recalc();
-}
-
-function toggleOnDemandEndDate() {
-  var type = document.getElementById('onDemandEndDateType').value;
-  document.getElementById('onDemandEndDateField').style.display = (type === 'ongoing') ? 'none' : 'block';
-}
-
-function toggleOnDemandPricingMode() {
-  var pricingMode = document.querySelector('input[name="od_pricing_mode"]:checked')?.value;
-  var itemsSection = document.getElementById('items').parentElement;
-  var flatAmountSection = document.getElementById('onDemandFlatAmount');
-  
-  if (pricingMode === 'flat') {
-    itemsSection.style.display = 'none';
-    flatAmountSection.style.display = 'block';
-  } else {
-    itemsSection.style.display = 'block';
-    flatAmountSection.style.display = 'none';
-  }
-  recalc();
-}
-
-function toggleEndDate() {
-  var type = document.getElementById('endDateType').value;
-  var isOngoing = (type === 'ongoing');
-  
-  document.getElementById('endDateField').style.display = isOngoing ? 'none' : 'block';
-  
-  // Hide fulfillment date when ongoing
-  var fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
-  var docType = document.querySelector('input[name="doc_type"]:checked').value;
-  if (docType === 'long_term' && fulfillmentLabel) {
-    fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
-  }
-  
-  var fixedTotalOption = document.getElementById('fixedTotalOption');
-  if (isOngoing) {
-    fixedTotalOption.style.display = 'none';
-    document.getElementById('recurringPerInvoice').checked = true;
-  } else {
-    fixedTotalOption.style.display = 'flex';
-  }
-  
-  togglePricingFields();
-  updateDiscountWarning();
-  recalc();
-}
-
-function togglePricingFields() {
-  var docType = document.querySelector('input[name="doc_type"]:checked').value;
-  var isLongTerm = (docType === 'long_term');
-  
-  if (docType === 'regular' || docType === 'on_demand') {
-    // Regular or On-Demand quote - show custom fields
-    ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'block';
-    });
-    return;
-  }
-  
-  var pricingType = document.querySelector('input[name="lt_pricing_type"]:checked').value;
-  
-  if (pricingType === 'per_invoice') {
-    // Recurring amount - hide deposit and fulfillment
-    ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-    document.getElementById('perInvoiceField').style.display = 'block';
-    document.getElementById('fixedTotalFields').style.display = 'none';
-    document.getElementById('items').parentElement.style.display = 'none';
-  } else {
-    // Fixed total - show deposit and fulfillment
-    ['depositTypeLabel', 'depositValueLabel'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'block';
-    });
-    var isOngoing = document.getElementById('endDateType').value === 'ongoing';
-    const fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
-    if (fulfillmentLabel) fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
-    document.getElementById('perInvoiceField').style.display = 'none';
-    document.getElementById('fixedTotalFields').style.display = 'block';
-    document.getElementById('items').parentElement.style.display = 'block';
-  }
-  recalc();
-}
-
-function updateDiscountWarning() {
-  var docType = document.querySelector('input[name="doc_type"]:checked').value;
-  var isLongTerm = (docType === 'long_term');
-  var isOngoing = document.getElementById('endDateType').value === 'ongoing';
-  var discountType = document.getElementById('discountType').value;
-  
-  var warning = document.getElementById('discountWarning');
-  if (isLongTerm && isOngoing && discountType !== 'none') {
-    warning.style.display = 'block';
-  } else {
-    warning.style.display = 'none';
-  }
-}
-
-addItem();
-
-// Client typeahead
-var ci = document.getElementById('clientInput');
-var cid = document.getElementById('clientId');
-var sug = document.getElementById('clientSuggest');
-var taxBanner = document.getElementById('taxExemptBanner');
-ci.addEventListener('input', function(){
-  cid.value='';
-  var t = this.value.trim();
-  if(!t){sug.style.display='none';sug.innerHTML='';taxBanner.style.display='none';return;}
-  fetch('/?page=clients-search&term='+encodeURIComponent(t))
-    .then(r=>r.json())
-    .then(list=>{
-      if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-      sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-      Array.from(sug.children).forEach(el=>{
-        el.addEventListener('click', function(){
-          ci.value = this.dataset.name; cid.value = this.dataset.id; 
-          if(this.dataset.taxexempt){taxBanner.style.display='block';}else{taxBanner.style.display='none';}
-          loadProjectsForClient(this.dataset.id);
-          sug.style.display='none';
-        });
-      });
-      sug.style.display='block';
-    }).catch(()=>{sug.style.display='none'});
-  });
-document.addEventListener('click', function(e){ if(!sug.contains(e.target) && e.target!==ci){ sug.style.display='none'; } });
-
-function loadProjectsForClient(clientId) {
-  if (!clientId) {
-    document.getElementById('projectSection').style.display = 'none';
-    return;
-  }
-  
-  fetch('/?page=projects-search&client_id=' + encodeURIComponent(clientId))
-    .then(r => r.json())
-    .then(projects => {
-      const projectSelect = document.getElementById('projectSelect');
-      projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
-      
-      if (projects && projects.length > 0) {
-        projects.forEach(project => {
-          const option = document.createElement('option');
-          option.value = project.id;
-          option.textContent = project.name + ' (' + project.status.replace('_', ' ') + ')';
-          projectSelect.appendChild(option);
-        });
-        document.getElementById('projectSection').style.display = 'block';
-      } else {
-        document.getElementById('projectSection').style.display = 'none';
-      }
-    })
-    .catch(() => {
-      document.getElementById('projectSection').style.display = 'none';
-    });
-}
-
-document.getElementById('createProjectBtn').addEventListener('click', function() {
-  const clientId = document.getElementById('clientId').value;
-  if (!clientId) {
-    alert('Please select a client first.');
-    return;
-  }
-  
-  const projectName = prompt('Enter project name:');
-  if (!projectName || !projectName.trim()) return;
-  
-  fetch('/?page=project/projects-create-quick', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) + 
-          '&name=' + encodeURIComponent(projectName.trim()) + 
-          '&client_id=' + encodeURIComponent(clientId)
-  })
-  .then(r => r.json())
-  .then(result => {
-    if (result.success) {
-      // Reload projects for this client
-      loadProjectsForClient(clientId);
-      // Select the new project
-      setTimeout(() => {
-        const projectSelect = document.getElementById('projectSelect');
-        for (let i = 0; i < projectSelect.options.length; i++) {
-          if (projectSelect.options[i].value == result.project_id) {
-            projectSelect.selectedIndex = i;
-            break;
-          }
-        }
-      }, 100);
-    } else {
-      alert('Failed to create project: ' + (result.error || 'Unknown error'));
-    }
-  })
-  .catch(() => {
-    alert('Failed to create project.');
-  });
-});
-
-document.getElementById('quoteForm').addEventListener('submit', function(e){ if(!cid.value){ e.preventDefault(); alert('Please select a client from suggestions.'); } });
-</script>
+<!-- Logic script -->
+<script src="js/quotes-create-logic.js"></script>

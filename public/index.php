@@ -45,7 +45,8 @@ if (strpos($pageRaw, '&') !== false) {
 }
 
 // Helper: Resolve view path with case-insensitive subfolder checks
-function resolve_view_path(string $page): string {
+function resolve_view_path(string $page): string
+{
     $base = __DIR__ . '/../src/views/pages/';
     $candidates = [];
 
@@ -65,7 +66,9 @@ function resolve_view_path(string $page): string {
         $candidates[] = $base . implode('/', $parts_ucfirst) . '.php';
 
         // Try uppercasing all segments (maybe folders/filenames are TitleCase)
-        $parts_uc = array_map(function($p){ return ucfirst($p); }, $parts);
+        $parts_uc = array_map(function ($p) {
+            return ucfirst($p);
+        }, $parts);
         $candidates[] = $base . implode('/', $parts_uc) . '.php';
     }
 
@@ -79,9 +82,22 @@ function resolve_view_path(string $page): string {
     }
     return $base . 'home.php';
 }
+
+// Error logging into error log file stored in /var/log/error_log.txt
+error_reporting(E_ALL);
+ini_set("display_errors", 1);
+
+function error_handler($errorno, $errorstr, $errorfile, $errorline) {
+    $errorMessage = "Error[$errorno]: $errorstr ($errorfile:$errorline)";
+    error_log($errorMessage . PHP_EOL, 3,  __DIR__ . "/error_log.txt");
+    return true;
+}
+
+set_error_handler("error_handler");
+
 // Temporary debug logging: record incoming page parsing to server error log
 // (remove or narrow this later once the issue is fixed)
-error_log('DEBUG incoming pageRaw=' . $pageRaw . ' parsed_page=' . $page . ' GET=' . json_encode($_GET));
+// error_log('DEBUG incoming pageRaw=' . $pageRaw . ' parsed_page=' . $page . ' GET=' . json_encode($_GET));
 // Whitelist of allowed pages
 // $allowedPages = [
 //     'home',
@@ -89,7 +105,7 @@ error_log('DEBUG incoming pageRaw=' . $pageRaw . ' parsed_page=' . $page . ' GET
 //     'settings',
 //     'financial/financial-dashboard',
 //     'financial/audit',
-    
+
 // ];
 
 // // If not in whitelist, force to home (or show error)
@@ -267,19 +283,19 @@ if ($page === 'serveupload' || $page === 'serve-upload') {
     require_once __DIR__ . '/../src/controllers/serve_upload.php';
     exit;
 }
-    // Handle PDF generation routes - only -pdf pages, not -print pages
-    if (in_array($page, ['contract/contract-pdf', 'contract-pdf'])) {
-        require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
-        exit;
-    }
-    if (in_array($page, ['quote/quote-pdf', 'quote-pdf'])) {
-        require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
-        exit;
-    }
-    if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
-        require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
-        exit;
-    }
+// Handle PDF generation routes - only -pdf pages, not -print pages
+if (in_array($page, ['contract/contract-pdf', 'contract-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
+    exit;
+}
+if (in_array($page, ['quote/quote-pdf', 'quote-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
+    exit;
+}
+if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
+    exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
     $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'organization/org-create'];
@@ -569,12 +585,12 @@ if ($isAjax) {
 
     // Resolve view path (supports alternate folder casing like Jobs/ vs jobs/)
     $view = resolve_view_path($page);
-    
+
     // Special case for calendar
     if (basename($view) === 'calendar.php') {
         $view = __DIR__ . '/../src/views/pages/home.php';
     }
-    
+
     require $view;
 
     echo '</main>';
@@ -584,12 +600,12 @@ if ($isAjax) {
 
     // Resolve view path (supports alternate folder casing like Jobs/ vs jobs/)
     $view = resolve_view_path($page);
-    
+
     // Special case for calendar
     if (basename($view) === 'calendar.php') {
         $view = __DIR__ . '/../src/views/pages/home.php';
     }
-    
+
     require $view;
 
     require_once __DIR__ . '/../src/views/partials/footer.php';
