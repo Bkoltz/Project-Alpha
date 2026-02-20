@@ -1,0 +1,105 @@
+// Notes editing
+function toggleNotesEdit() {
+    const display = document.getElementById('notesDisplay');
+    const form = document.getElementById('notesForm');
+    if (form.style.display === 'none') {
+        display.style.display = 'none';
+        form.style.display = 'block';
+        document.getElementById('notesTextarea').focus();
+    } else {
+        display.style.display = 'block';
+        form.style.display = 'none';
+    }
+}
+
+// Client search
+(function () {
+    const searchInput = document.getElementById('clientSearchInput');
+    const searchResults = document.getElementById('clientSearchResults');
+    
+    function debounce(fn, ms) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => fn.apply(this, args), ms);
+        };
+    }
+
+    function clearResults() {
+        searchResults.style.display = 'none';
+        searchResults.innerHTML = '';
+    }
+
+    function searchClients(query) {
+        if (!query || query.trim().length === 0) {
+            clearResults();
+            return;
+        }
+
+        const q = query.toLowerCase();
+        const matches = availableClients.filter(c =>
+            c.name.toLowerCase().includes(q) ||
+            (c.email && c.email.toLowerCase().includes(q))
+        );
+
+        if (matches.length === 0) {
+            clearResults();
+            return;
+        }
+
+        searchResults.innerHTML = '';
+        matches.forEach(client => {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:10px;cursor:pointer;border-bottom:1px solid #f0f0f0;transition:background 0.2s';
+            div.innerHTML = `<div style="font-weight:500">${escapeHtml(client.name)}</div>${client.email ? `<div style="font-size:small;color:var(--muted)">${escapeHtml(client.email)}</div>` : ''}`;
+
+            div.addEventListener('mouseenter', () => { div.style.background = '#f9fafb'; });
+            div.addEventListener('mouseleave', () => { div.style.background = '#fff'; });
+            div.addEventListener('click', () => {
+                addClientToOrg(client.id, client.name);
+            });
+
+            searchResults.appendChild(div);
+        });
+        searchResults.style.display = 'block';
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async function addClientToOrg(clientId, clientName) {
+        if (!confirm(`Add ${clientName} to this organization?`)) return;
+
+        const formData = new FormData();
+        formData.append('csrf', '<?php echo csrf_token(); ?>');
+        formData.append('organization_id', orgId);
+        formData.append('client_id', clientId);
+
+        try {
+            const res = await fetch('/?page=organization/organization-add-client', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (res.ok) {
+                window.location.href = '/?page=organization/organization-view&id=' + orgId + '&client_added=1';
+            } else {
+                alert('Failed to add client to organization');
+            }
+        } catch (e) {
+            alert('Failed to add client to organization');
+        }
+    }
+
+    const debouncedSearch = debounce(searchClients, 200);
+    searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));
+
+    document.addEventListener('click', (e) => {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+            clearResults();
+        }
+    });
+})();

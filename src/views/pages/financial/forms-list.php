@@ -350,4 +350,4 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<script src="js/forms-list-log" defer></script>
+<script src="js/forms-list-logic.js" defer></script>
