@@ -1,20 +1,13 @@
-// Invoice edit page - client-side functionality
-// This file is loaded once in the main layout and persists across AJAX page loads
-
 // Extra charges management
 var extraChargeCounter = 0;
+function money(n) { return '$' + (Number(n) || 0).toFixed(2) }
 function addExtraCharge() {
-  console.log('addExtraCharge() called');
   try {
     var container = document.getElementById('extraChargesContainer');
-    console.log('Container found:', container !== null);
-    
     var anchorBtn = document.getElementById('addExtraChargeBtn');
-    console.log('Button found:', anchorBtn !== null);
-    
+
     // If container doesn't exist, create it and insert it right before the button
     if (!container) {
-      console.log('Creating new container...');
       container = document.createElement('div');
       container.id = 'extraChargesContainer';
       container.style.display = 'grid';
@@ -22,19 +15,17 @@ function addExtraCharge() {
       // Insert before the button in the DOM
       if (anchorBtn && anchorBtn.parentNode) {
         anchorBtn.parentNode.insertBefore(container, anchorBtn);
-        console.log('Container inserted before button');
       } else {
         console.error('Could not find button or its parent');
         return;
       }
     }
-    
+
     // Create a new row for the extra charge with item + description
-    console.log('Creating new row...');
     var itemId = 'extraItem_' + (extraChargeCounter++);
     var descId = 'extraDesc_' + extraChargeCounter;
     var priceId = 'extraPrice_' + extraChargeCounter;
-    
+
     var wrap = document.createElement('div');
     wrap.style.display = 'grid';
     wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto';
@@ -52,8 +43,7 @@ function addExtraCharge() {
     <button type="button" onclick="this.parentElement.remove();recalcInv()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
   `;
     container.appendChild(wrap);
-    console.log('Row added to container');
-    
+
     // Initialize autocomplete for the new item input
     if (window.ItemAutocomplete) {
       const input = document.getElementById(itemId);
@@ -66,7 +56,7 @@ function addExtraCharge() {
         });
       }
     }
-    
+
     recalcInv();
   } catch (e) {
     console.error('Error in addExtraCharge():', e.message, e.stack);
@@ -78,48 +68,69 @@ function recalcInv() {
   var extraQtys = Array.from(document.querySelectorAll('[name="extra_qty[]"]')).map(e => parseFloat(e.value) || 0);
   var extraPrices = Array.from(document.querySelectorAll('[name="extra_price[]"]')).map(e => parseFloat(e.value) || 0);
   var extraSubtotal = 0;
+
   for (var i = 0; i < extraQtys.length; i++) {
     extraSubtotal += extraQtys[i] * extraPrices[i];
   }
-  // Note: Contract items are read-only and calculated on server. Add extra charges to visible form values.
-  // Display update not needed here since it's recalc for extra charges only.
+
+  //Update totals
+  var dtype = document.getElementById('discountTypeInv').value;
+  var dval = parseFloat(document.getElementById('discountValueInv').value) || 0;
+  var taxp = parseFloat(document.getElementById('taxPercentInv').value) || 0;
+
+  var taxable = Math.max(0, extraSubtotal - discount);
+  var tax = Math.max(0, taxp) * taxable / 100;
+  var total = Math.max(0, taxable + tax);
+
+  var discount = 0;
+  if (dtype === 'percent') {
+    discount = Math.max(0, Math.min(100, dval)) * subtotal / 100;
+  } else if (dtype === 'fixed') {
+    discount = Math.max(0, dval);
+  }
+
+  document.getElementById('subtotalValInv').textContent = money(extraSubtotal);
+  document.getElementById('discountValInv').textContent = money(discount);
+  document.getElementById('taxValInv').textContent = money(tax);
+  document.getElementById('totalValInv').textContent = money(total);
 }
+
 
 // Initialize invoice edit page event listeners
 function initInvoiceEdit() {
   // Client typeahead for invoice edit
   var ciI = document.getElementById('clientInputInv');
   if (!ciI) return; // Not on invoice edit page
-  
+
   var cidI = document.getElementById('clientIdInv');
   var sugI = document.getElementById('clientSuggestInv');
-  
-  ciI.addEventListener('input', function(){
-    cidI.value='';
+
+  ciI.addEventListener('input', function () {
+    cidI.value = '';
     var t = this.value.trim();
-    if(!t){sugI.style.display='none';sugI.innerHTML='';return;}
-    fetch('/?page=clients-search&term='+encodeURIComponent(t))
-      .then(r=>r.json())
-      .then(list=>{
-        if(!Array.isArray(list)||list.length===0){sugI.style.display='none';sugI.innerHTML='';return;}
-        sugI.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
-        Array.from(sugI.children).forEach(el=>{
-          el.addEventListener('click', function(){
-            ciI.value = this.dataset.name; cidI.value = this.dataset.id; sugI.style.display='none';
+    if (!t) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
+    fetch('/?page=clients-search&term=' + encodeURIComponent(t))
+      .then(r => r.json())
+      .then(list => {
+        if (!Array.isArray(list) || list.length === 0) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
+        sugI.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+        Array.from(sugI.children).forEach(el => {
+          el.addEventListener('click', function () {
+            ciI.value = this.dataset.name; cidI.value = this.dataset.id; sugI.style.display = 'none';
           });
         });
-        sugI.style.display='block';
-      }).catch(()=>{sugI.style.display='none'});
+        sugI.style.display = 'block';
+      }).catch(() => { sugI.style.display = 'none' });
   });
-  document.addEventListener('click', function(e){ if(!sugI.contains(e.target) && e.target!==ciI){ sugI.style.display='none'; } });
-  
+  document.addEventListener('click', function (e) { if (!sugI.contains(e.target) && e.target !== ciI) { sugI.style.display = 'none'; } });
+
   var form = document.getElementById('invEditForm');
   if (form) {
-    form.addEventListener('submit', function(e){ 
-      if(!cidI.value){ 
-        e.preventDefault(); 
-        alert('Please select a client from suggestions.'); 
-      } 
+    form.addEventListener('submit', function (e) {
+      if (!cidI.value) {
+        e.preventDefault();
+        alert('Please select a client from suggestions.');
+      }
     });
   }
 
@@ -138,6 +149,36 @@ if (document.readyState === 'loading') {
 }
 
 // Re-initialize after AJAX page load (for client-side navigation)
-document.addEventListener('pageLoaded', function() {
+document.addEventListener('pageLoaded', function () {
   initInvoiceEdit();
+});
+
+var items = document.querySelectorAll("#item");
+var descriptions = document.querySelectorAll("#description");
+var quantities = document.querySelectorAll("#qunatity");
+var prices = document.querySelectorAll("#price");
+
+var confirmButton = document.getElementById("confirm");
+
+confirmButton.addEventListener("click", function () {
+  if (confirm('Remove this extra charge?')) {
+    this.parentElement.remove();
+    recalcInv()
+  }
+});
+
+items.forEach(item => {
+  item.addEventListener('input', recalcInv);
+});
+
+descriptions.forEach(description => {
+  description.addEventListener('input', recalcInv);
+});
+
+quantities.forEach(quantity => {
+  quantity.addEventListener('input', recalcInv);
+});
+
+prices.forEach(price => {
+  price.addEventListener('input', recalcInv);
 });

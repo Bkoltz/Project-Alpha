@@ -1082,19 +1082,19 @@ CREATE TABLE
 -- DEFAULT DATA
 -- ============================================================================
 -- Insert default organization
-INSERT IGNORE INTO organizations (id, name, notes, created_at, updated_at)
+INSERT INTO organizations (id, name, notes, created_at, updated_at)
 VALUES
   (
     1,
     'Default Organization',
     'Default organization for system (delete if not needed)',
-    NOW (),
-    NOW ()
+    NOW(),
+    NOW()
   );
 
 -- Insert default admin user (username: admin, password: admin123)
 -- Password hash is bcrypt hash of 'admin123'
-INSERT IGNORE INTO users (
+INSERT INTO users (
   id,
   email,
   username,
@@ -1110,6 +1110,6 @@ VALUES
     'admin',
     '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'admin',
-    NOW (),
-    NOW ()
+    NOW(),
+    NOW()
   );

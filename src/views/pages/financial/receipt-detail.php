@@ -219,4 +219,4 @@ $isPdf = $fileExt === 'pdf';
     </div>
 </div>
 
-<script src="receipt-detail-logic.js" defer></script>
+<script src="js/receipt-detail-logic.js" defer></script>

@@ -26,7 +26,7 @@ try {
     // Get current org_id (default to 1 for now, should come from session/user context)
     $orgId = 1;
     $userId = $_SESSION['user_id'] ?? null;
-    
+
     // Ensure we have a valid user ID
     if ($userId === null) {
         // Get first admin user or create a default one if none exists
@@ -57,7 +57,7 @@ try {
 
             $file = $_FILES['document_file'];
             $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-            
+
             if (!in_array($file['type'], $allowedTypes)) {
                 throw new Exception('Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed');
             }
@@ -78,12 +78,12 @@ try {
             // Generate unique filename
             $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
             $filename = 'form_' . time() . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-            
+
             // Organize by category
             $categoryDir = preg_replace('/[^a-z0-9-_]/i', '_', $title);
             $baseDir = __DIR__ . '/../uploads/forms';
             $uploadDir = $baseDir . '/' . $categoryDir;
-            
+
             // Ensure directories exist
             if (!is_dir($baseDir) && !@mkdir($baseDir, 0755, true)) {
                 throw new Exception('Failed to create base forms directory');
@@ -91,7 +91,7 @@ try {
             if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0755, true)) {
                 throw new Exception('Failed to create upload directory');
             }
-            
+
             $uploadPath = $uploadDir . '/' . $filename;
             $dbPath = '/src/uploads/forms/' . $categoryDir . '/' . $filename;
 
@@ -205,7 +205,7 @@ try {
 
             $file = $_FILES['document_file'];
             $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-            
+
             if (!in_array($file['type'], $allowedTypes)) {
                 throw new Exception('Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed');
             }
@@ -215,23 +215,23 @@ try {
                 throw new Exception('File size must be less than 20MB');
             }
 
-            
+
             // Generate unique filename
             $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
             $filename = 'form_' . time() . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-            
+
             // Organize by category
             $categoryDir = preg_replace('/[^a-z0-9-_]/i', '_', $category['title']);
             $baseDir = __DIR__ . '/../uploads/forms';
             $uploadDir = $baseDir . '/' . $categoryDir;
-            
+
             // Ensure base directory exists
             if (!is_dir($baseDir)) {
                 if (!@mkdir($baseDir, 0755, true)) {
                     throw new Exception('Failed to create base forms directory');
                 }
             }
-            
+
             // Ensure base directory is writable
             if (!is_writable($baseDir)) {
                 @chmod($baseDir, 0755);
@@ -239,14 +239,14 @@ try {
                     throw new Exception('Forms directory is not writable');
                 }
             }
-            
+
             // Create category directory if it doesn't exist
             if (!is_dir($uploadDir)) {
                 if (!@mkdir($uploadDir, 0755, true)) {
                     throw new Exception('Failed to create upload directory for category: ' . $categoryDir);
                 }
             }
-            
+
             $uploadPath = $uploadDir . '/' . $filename;
             $dbPath = '/src/uploads/forms/' . $categoryDir . '/' . $filename;
 
@@ -260,14 +260,14 @@ try {
                 $stmt = $pdo->prepare('SELECT file_path FROM form_documents WHERE category_id = ?');
                 $stmt->execute([$categoryId]);
                 $oldDoc = $stmt->fetch();
-                
+
                 if ($oldDoc) {
                     // Delete old file
                     $oldFilePath = __DIR__ . '/../..' . $oldDoc['file_path'];
                     if (file_exists($oldFilePath)) {
                         @unlink($oldFilePath);
                     }
-                    
+
                     // Update existing document
                     $stmt = $pdo->prepare('
                         UPDATE form_documents 
@@ -357,7 +357,7 @@ try {
             if (!$categoryId || !$recipientType) {
                 throw new Exception('Missing required parameters');
             }
-            
+
             if ($recipientType !== 'clients' && !$recipientId) {
                 throw new Exception('Missing required parameters');
             }
@@ -414,10 +414,10 @@ try {
             require_once __DIR__ . '/../config/app.php';
             $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
             $fromEmail = $appConfig['from_email'] ?? 'noreply@localhost';
-            
+
             $subject = $brandName . ' - ' . $form['title'];
             $filePath = __DIR__ . '/../../' . ltrim($form['file_path'], '/');
-            
+
             $successCount = 0;
             foreach ($emails as $recipient) {
                 $body = "Hello " . $recipient['name'] . ",\n\n";
@@ -427,7 +427,7 @@ try {
                 // Simple email (in production, use PHPMailer or similar for attachments)
                 $headers = "From: " . $fromEmail . "\r\n";
                 $headers .= "Reply-To: " . $fromEmail . "\r\n";
-                
+
                 // Note: Basic mail() doesn't support attachments well
                 // This is a placeholder - integrate with proper email service
                 if (@mail($recipient['email'], $subject, $body, $headers)) {
@@ -528,24 +528,24 @@ try {
             require_once __DIR__ . '/../config/app.php';
             $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
             $fromEmail = $appConfig['from_email'] ?? 'noreply@localhost';
-            
+
             $subject = $brandName . ' - ' . $folder['title'] . ' Documents';
-            
+
             $successCount = 0;
             foreach ($emails as $recipient) {
                 $body = "Hello " . $recipient['name'] . ",\n\n";
                 $body .= "Please find the following documents from " . $folder['title'] . ":\n\n";
-                
+
                 foreach ($documents as $doc) {
                     $body .= "- " . $doc['file_name'] . "\n";
                 }
-                
+
                 $body .= "\nBest regards,\n" . $brandName;
 
                 // Simple email (in production, use PHPMailer or similar for attachments)
                 $headers = "From: " . $fromEmail . "\r\n";
                 $headers .= "Reply-To: " . $fromEmail . "\r\n";
-                
+
                 // Note: Basic mail() doesn't support attachments well
                 // This is a placeholder - integrate with proper email service
                 if (@mail($recipient['email'], $subject, $body, $headers)) {
