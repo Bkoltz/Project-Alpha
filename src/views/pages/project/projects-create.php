@@ -25,12 +25,12 @@ require_once __DIR__ . '/../../../utils/csrf.php';
       <div id="orgSuggestProject" style="position:relative;z-index:60;left:0;right:0;top:0;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
     </label>
 
-    <label>
-      <div>Client (optional)</div>
-      <input id="clientSearchBoxCreate" type="text" name="client_search" placeholder="Type to search a client..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-      <input type="hidden" name="client_id" id="client_id_create" value="">
-      <div id="clientSearchSuggestCreate" style="position:relative;z-index:60;left:0;right:0;top:0;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
-    </label>
+     <label style="grid-column:1/2;position:relative">
+        <div>Client</div>
+        <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientId" type="hidden" name="client_id">
+        <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
+      </label>
 
     <!-- Parent projects removed per spec: Projects have no parents -->
 
@@ -57,9 +57,4 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   </form>
 </section>
 
-<script>
-// Make client search box available for client-create.js to attach
-document.addEventListener('DOMContentLoaded', function(){
-  try { document.dispatchEvent(new Event('pageLoaded')); } catch (err) {}
-});
-</script>
+<script src="js/client-selection-dropdown-logic.js" defer></script>

@@ -356,5 +356,5 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
   </form>
 </section>
 
-<!-- Logic script -->
-<script src="js/quotes-create-logic.js"></script>
+<script src="js/quotes-create-logic.js" defer></script>
+<script src="js/client-selection-dropdown-logic.js" defer></script>

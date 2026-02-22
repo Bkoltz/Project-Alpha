@@ -134,7 +134,7 @@ $endDate = $currentYear . '-12-31';
         <div style="margin-bottom: 16px;">
           <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #374151;">Email Addresses (up to 5)</label>
           <div id="emailContainer" style="display: grid; gap: 8px;">
-            <input type="email" name="schedule_email[]" placeholder="email@example.com" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px;" required>
+            <input type="email" name="schedule_email[]" placeholder="email@example.com" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
           </div>
           <button type="button" id="addEmailBtn" style="margin-top: 8px; padding: 8px 12px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 14px;">+ Add Email</button>
         </div>

@@ -56,6 +56,7 @@ services:
       MYSQL_PASSWORD: apppassword
     volumes:
       - db_data:/var/lib/mysql
+      - ./database/migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test:
         - CMD-SHELL

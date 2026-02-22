@@ -28,6 +28,7 @@ function addItemInv(item = '', desc = '', qty = 1, price = 0) {
 
     recalcInv();
 }
+
 function recalcInv() {
     var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
     var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
@@ -44,6 +45,7 @@ function recalcInv() {
     document.getElementById('taxValInv').textContent = money(tax);
     document.getElementById('totalValInv').textContent = money(total);
 }
+
 ['discountTypeInv', 'discountValueInv', 'taxPercentInv'].forEach(id => document.getElementById(id).addEventListener('input', recalcInv));
 addItemInv();
 

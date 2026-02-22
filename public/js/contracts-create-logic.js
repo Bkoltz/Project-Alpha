@@ -120,7 +120,7 @@ function recalcCo() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', recalcCo);
 });
-const discountTypeElCo = document.getElementById('discountTypeCo');
+var discountTypeElCo = document.getElementById('discountTypeCo');
 if (discountTypeElCo) discountTypeElCo.addEventListener('change', updateDiscountWarning);
 
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
@@ -398,8 +398,8 @@ document.getElementById('coCreateForm').addEventListener('submit', function (e) 
 });
 
 // Signature Management
-let signatureCount = 0;
-const MAX_SIGNATURES = 5;
+var signatureCount = 0;
+var MAX_SIGNATURES = 5;
 
 function addSignature(title = 'Client Signature', isRequired = true) {
     if (signatureCount >= MAX_SIGNATURES) {

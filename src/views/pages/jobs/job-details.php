@@ -83,15 +83,15 @@ require_once __DIR__ . '/../../../config/db.php';
                             </div>
                             <div class="doc-details" id="quote-details-<?php echo $qid; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">
                                 <?php
-                                    $itemsSt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
-                                    $itemsSt->execute([$qid]);
-                                    $items = $itemsSt->fetchAll();
+                                $itemsSt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+                                $itemsSt->execute([$qid]);
+                                $items = $itemsSt->fetchAll();
                                 ?>
                                 <div style="font-weight:600;margin-bottom:6px">Items</div>
                                 <?php if ($items): ?>
                                     <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px">
                                         <?php foreach ($items as $it): ?>
-                                            <li><?php echo htmlspecialchars($it['description']); ?> · <?php echo (float)$it['quantity']; ?> × $<?php echo number_format((float)$it['unit_price'],2); ?> = $<?php echo number_format((float)$it['line_total'],2); ?></li>
+                                            <li><?php echo htmlspecialchars($it['description']); ?> · <?php echo (float)$it['quantity']; ?> × $<?php echo number_format((float)$it['unit_price'], 2); ?> = $<?php echo number_format((float)$it['line_total'], 2); ?></li>
                                         <?php endforeach; ?>
                                     </ul>
                                 <?php else: ?>
@@ -125,7 +125,8 @@ require_once __DIR__ . '/../../../config/db.php';
                     <div style="font-weight:700">Primary Contract: C-<?php echo (int)($primaryContract['doc_number'] ?? $primaryContract['id']); ?></div>
                     <div style="color:var(--muted)">Status: <?php echo htmlspecialchars($primaryContract['status']); ?> · Created: <?php echo htmlspecialchars($primaryContract['created_at']); ?></div>
                     <?php if (!empty($primaryContract['signed_pdf_path'])): ?>
-                        <?php $u_main = (string)$primaryContract['signed_pdf_path']; $dl_main = $u_main . (strpos($u_main, '?') !== false ? '&download=1' : ''); ?>
+                        <?php $u_main = (string)$primaryContract['signed_pdf_path'];
+                        $dl_main = $u_main . (strpos($u_main, '?') !== false ? '&download=1' : ''); ?>
                         <div style="margin-top:6px;display:flex;gap:6px">
                             <a href="<?php echo htmlspecialchars($u_main); ?>" target="_blank" style="padding:6px 10px;border-radius:6px;background:#3b82f6;color:#fff;text-decoration:none">View PDF</a>
                             <a href="<?php echo htmlspecialchars($dl_main); ?>" style="padding:6px 10px;border-radius:6px;background:#6366f1;color:#fff;text-decoration:none">Download</a>
@@ -142,45 +143,46 @@ require_once __DIR__ . '/../../../config/db.php';
             <?php else: ?>
                 <ul style="list-style:none;padding:0;margin:0;display:grid;gap:8px">
                     <?php foreach ($contracts as $con): ?>
-                            <?php $coid = (int)$con['id']; ?>
-                            <li style="display:block;border-bottom:1px solid #f3f4f6;padding:10px">
-                                <div style="display:flex;gap:8px;align-items:center">
-                                    <div class="doc-toggle" data-type="contract" data-id="<?php echo $coid; ?>" style="flex:1;cursor:pointer">C-<?php echo (int)($con['doc_number'] ?? $con['id']); ?> · <?php echo htmlspecialchars($con['status']); ?> · <?php echo htmlspecialchars($con['created_at']); ?></div>
-                                    <div style="display:flex;gap:6px;align-items:center">
-                                        <?php if (!empty($con['signed_pdf_path'])): ?>
-                                            <?php $u = (string)$con['signed_pdf_path']; $dl = $u . (strpos($u, '?') !== false ? '&download=1' : ''); ?>
-                                            <a href="<?php echo htmlspecialchars($u); ?>" target="_blank" style="padding:6px 10px;border-radius:6px;background:#3b82f6;color:#fff;text-decoration:none">View PDF</a>
-                                            <a href="<?php echo htmlspecialchars($dl); ?>" style="padding:6px 10px;border-radius:6px;background:#6366f1;color:#fff;text-decoration:none;margin-left:6px;">Download</a>
-                                        <?php endif; ?>
-                                        <button type="button" class="doc-toggle" data-type="contract" data-id="<?php echo $coid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">Details</button>
-                                        <a href="/?page=contract/contracts-edit&id=<?php echo $coid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">View Document</a>
-                                    </div>
-                                </div>
-                                <div class="doc-details" id="contract-details-<?php echo $coid; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">
-                                    <?php
-                                        $citems = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
-                                        $citems->execute([$coid]);
-                                        $citemsRows = $citems->fetchAll();
-                                    ?>
-                                    <div style="font-weight:600;margin-bottom:6px">Items</div>
-                                    <?php if ($citemsRows): ?>
-                                        <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px">
-                                            <?php foreach ($citemsRows as $ci): ?>
-                                                <li><?php echo htmlspecialchars($ci['description']); ?> · <?php echo (float)$ci['quantity']; ?> × $<?php echo number_format((float)$ci['unit_price'],2); ?> = $<?php echo number_format((float)$ci['line_total'],2); ?></li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    <?php else: ?>
-                                        <div style="color:var(--muted)">No items listed.</div>
+                        <?php $coid = (int)$con['id']; ?>
+                        <li style="display:block;border-bottom:1px solid #f3f4f6;padding:10px">
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <div class="doc-toggle" data-type="contract" data-id="<?php echo $coid; ?>" style="flex:1;cursor:pointer">C-<?php echo (int)($con['doc_number'] ?? $con['id']); ?> · <?php echo htmlspecialchars($con['status']); ?> · <?php echo htmlspecialchars($con['created_at']); ?></div>
+                                <div style="display:flex;gap:6px;align-items:center">
+                                    <?php if (!empty($con['signed_pdf_path'])): ?>
+                                        <?php $u = (string)$con['signed_pdf_path'];
+                                        $dl = $u . (strpos($u, '?') !== false ? '&download=1' : ''); ?>
+                                        <a href="<?php echo htmlspecialchars($u); ?>" target="_blank" style="padding:6px 10px;border-radius:6px;background:#3b82f6;color:#fff;text-decoration:none">View PDF</a>
+                                        <a href="<?php echo htmlspecialchars($dl); ?>" style="padding:6px 10px;border-radius:6px;background:#6366f1;color:#fff;text-decoration:none;margin-left:6px;">Download</a>
                                     <?php endif; ?>
-                                    <div style="margin-top:6px">
-                                        <div>Subtotal: $<?php echo number_format((float)($con['subtotal'] ?? 0), 2); ?></div>
-                                        <div>Total: $<?php echo number_format((float)($con['total'] ?? 0), 2); ?></div>
-                                        <?php if (!empty($con['deposit_amount']) && $con['deposit_amount']>0): ?>
-                                            <div>Deposit: $<?php echo number_format((float)$con['deposit_amount'],2); ?> (Paid: $<?php echo number_format((float)$con['deposit_paid'] ?? 0,2); ?>)</div>
-                                        <?php endif; ?>
-                                    </div>
+                                    <button type="button" class="doc-toggle" data-type="contract" data-id="<?php echo $coid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">Details</button>
+                                    <a href="/?page=contract/contracts-edit&id=<?php echo $coid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">View Document</a>
                                 </div>
-                            </li>
+                            </div>
+                            <div class="doc-details" id="contract-details-<?php echo $coid; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">
+                                <?php
+                                $citems = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
+                                $citems->execute([$coid]);
+                                $citemsRows = $citems->fetchAll();
+                                ?>
+                                <div style="font-weight:600;margin-bottom:6px">Items</div>
+                                <?php if ($citemsRows): ?>
+                                    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px">
+                                        <?php foreach ($citemsRows as $ci): ?>
+                                            <li><?php echo htmlspecialchars($ci['description']); ?> · <?php echo (float)$ci['quantity']; ?> × $<?php echo number_format((float)$ci['unit_price'], 2); ?> = $<?php echo number_format((float)$ci['line_total'], 2); ?></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php else: ?>
+                                    <div style="color:var(--muted)">No items listed.</div>
+                                <?php endif; ?>
+                                <div style="margin-top:6px">
+                                    <div>Subtotal: $<?php echo number_format((float)($con['subtotal'] ?? 0), 2); ?></div>
+                                    <div>Total: $<?php echo number_format((float)($con['total'] ?? 0), 2); ?></div>
+                                    <?php if (!empty($con['deposit_amount']) && $con['deposit_amount'] > 0): ?>
+                                        <div>Deposit: $<?php echo number_format((float)$con['deposit_amount'], 2); ?> (Paid: $<?php echo number_format((float)$con['deposit_paid'] ?? 0, 2); ?>)</div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </li>
                     <?php endforeach; ?>
                 </ul>
             <?php endif; ?>
@@ -209,15 +211,15 @@ require_once __DIR__ . '/../../../config/db.php';
                             </div>
                             <div class="doc-details" id="invoice-details-<?php echo $ivId; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">
                                 <?php
-                                    $it = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM invoice_items WHERE invoice_id=?');
-                                    $it->execute([$ivId]);
-                                    $itemsInv = $it->fetchAll();
+                                $it = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM invoice_items WHERE invoice_id=?');
+                                $it->execute([$ivId]);
+                                $itemsInv = $it->fetchAll();
                                 ?>
                                 <div style="font-weight:600;margin-bottom:6px">Items</div>
                                 <?php if ($itemsInv): ?>
                                     <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px">
                                         <?php foreach ($itemsInv as $ivi): ?>
-                                            <li><?php echo htmlspecialchars($ivi['description']); ?> · <?php echo (float)$ivi['quantity']; ?> × $<?php echo number_format((float)$ivi['unit_price'],2); ?> = $<?php echo number_format((float)$ivi['line_total'],2); ?></li>
+                                            <li><?php echo htmlspecialchars($ivi['description']); ?> · <?php echo (float)$ivi['quantity']; ?> × $<?php echo number_format((float)$ivi['unit_price'], 2); ?> = $<?php echo number_format((float)$ivi['line_total'], 2); ?></li>
                                         <?php endforeach; ?>
                                     </ul>
                                 <?php else: ?>
@@ -262,23 +264,23 @@ require_once __DIR__ . '/../../../config/db.php';
     </div>
 </section>
 <script>
-// Toggle document details in Job Details page
-document.addEventListener('click', function (e) {
-    const t = e.target;
-    if (!t.classList) return;
-    if (t.classList.contains('doc-toggle')) {
-        const dtype = t.getAttribute('data-type');
-        const did = t.getAttribute('data-id');
-        const el = document.getElementById(dtype + '-details-' + did);
-        if (el) {
-            if (el.style.display === 'none' || el.style.display === '') {
-                el.style.display = 'block';
-                t.textContent = 'Hide';
-            } else {
-                el.style.display = 'none';
-                t.textContent = 'Details';
+    // Toggle document details in Job Details page
+    document.addEventListener('click', function(e) {
+        const t = e.target;
+        if (!t.classList) return;
+        if (t.classList.contains('doc-toggle')) {
+            const dtype = t.getAttribute('data-type');
+            const did = t.getAttribute('data-id');
+            const el = document.getElementById(dtype + '-details-' + did);
+            if (el) {
+                if (el.style.display === 'none' || el.style.display === '') {
+                    el.style.display = 'block';
+                    t.textContent = 'Hide';
+                } else {
+                    el.style.display = 'none';
+                    t.textContent = 'Details';
+                }
             }
         }
-    }
-});
+    });
 </script>

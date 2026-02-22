@@ -1,5 +1,5 @@
-let retryCount = 0;
-const maxRetries = 10; // Stop after 10 retries (500ms total)
+var retryCount = 0;
+var maxRetries = 10; // Stop after 10 retries (500ms total)
 
 function initializeOrgCreate() {
     const orgInput = document.getElementById('orgInput');
@@ -24,8 +24,6 @@ function initializeOrgCreate() {
         // Silently stop after max retries - we're probably not on the right page
         return;
     }
-
-    console.log('✓ Org create script initialized');
 
     // Get CSRF token from meta tag
     function getCsrfToken() {
