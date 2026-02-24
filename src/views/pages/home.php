@@ -27,16 +27,16 @@ try {
 </section>
 
 <?php if (isset($db_error) && $db_error): ?>
-<div style="margin:24px 0;padding:16px;border-radius:10px;background:#fef3c7;border:2px solid #f59e0b;color:#92400e">
-  <h3 style="margin:0 0 8px">⚠️ Database Not Initialized</h3>
-  <p style="margin:0">The database tables haven't been created yet. Please run the migration script located at <code>database/migrations/000_all.sql</code> to initialize your database.</p>
-</div>
+  <div style="margin:24px 0;padding:16px;border-radius:10px;background:#fef3c7;border:2px solid #f59e0b;color:#92400e">
+    <h3 style="margin:0 0 8px">⚠️ Database Not Initialized</h3>
+    <p style="margin:0">The database tables haven't been created yet. Please run the migration script located at <code>database/migrations/000_all.sql</code> to initialize your database.</p>
+  </div>
 <?php endif; ?>
 
 <section style="margin-top:24px;display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">
   <article class="card" style="padding:16px;border-radius:10px;background:#fff;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <div style="color:var(--muted)">Income (30d)</div>
-    <div style="font-weight:700;font-size:22px">$<?php echo number_format($income_30,2); ?></div>
+    <div style="font-weight:700;font-size:22px">$<?php echo number_format($income_30, 2); ?></div>
   </article>
   <article class="card" style="padding:16px;border-radius:10px;background:#fff;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <div style="color:var(--muted)">Pending Quotes</div>
@@ -69,7 +69,7 @@ try {
     <ul style="margin:0;padding:0;list-style:none;display:grid;gap:8px">
       <?php foreach ($payments_recent as $p): ?>
         <li style="padding:8px 12px;border-radius:8px;background:#fff;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
-          $<?php echo number_format((float)$p['amount'],2); ?> on Invoice #<?php echo (int)$p['invoice_id']; ?>
+          $<?php echo number_format((float)$p['amount'], 2); ?> on Invoice #<?php echo (int)$p['invoice_id']; ?>
           <span style="color:var(--muted);font-size:12px"> · <?php echo htmlspecialchars($p['created_at']); ?></span>
         </li>
       <?php endforeach; ?>

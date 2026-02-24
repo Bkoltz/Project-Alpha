@@ -113,4 +113,6 @@ function recalcCo() {
     document.getElementById('totalValCo').textContent = money(total);
 }
 
+document.getElementById("addItemBtn").addEventListener('click', function(e) {addItemCo();});
+
 ['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => document.getElementById(id).addEventListener('input', recalcCo));

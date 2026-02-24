@@ -1,21 +1,21 @@
 <?php
-// src/views/pages/quotes-edit.php
-require_once __DIR__ . '/../../../config/db.php';
-require_once __DIR__ . '/../../../config/app.php';
-require_once __DIR__ . '/../../../utils/document_fields.php';
-$id = (int)($_GET['id'] ?? 0);
-$q = $pdo->prepare('SELECT * FROM quotes WHERE id=?');
-$q->execute([$id]);
-$quote = $q->fetch(PDO::FETCH_ASSOC);
-if (!$quote) {
-  echo '<p>Quote not found</p>';
-  return;
-}
-$items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
-$items->execute([$id]);
-$items = $items->fetchAll(PDO::FETCH_ASSOC);
-$clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+  require_once __DIR__ . '/../../../config/db.php';
+  require_once __DIR__ . '/../../../config/app.php';
+  require_once __DIR__ . '/../../../utils/document_fields.php';
+  $id = (int)($_GET['id'] ?? 0);
+  $q = $pdo->prepare('SELECT * FROM quotes WHERE id=?');
+  $q->execute([$id]);
+  $quote = $q->fetch(PDO::FETCH_ASSOC);
+  if (!$quote) {
+    echo '<p>Quote not found</p>';
+    return;
+  }
+  $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
+  $items->execute([$id]);
+  $items = $items->fetchAll(PDO::FETCH_ASSOC);
+  $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 ?>
+
 <section>
   <h2>Edit Quote Q-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?><?php if (!empty($quote['project_code'])) echo ' (Job ' . htmlspecialchars($quote['project_code']) . ')'; ?></h2>
   <form id="quoteEditForm" method="post" action="/?page=quote/quotes-update" style="display:grid;gap:16px;max-width:900px">
@@ -120,7 +120,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
       <div id="items" style="display:grid;gap:8px"></div>
-      <button type="button" onclick="addItem()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
+      <button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
     <?php

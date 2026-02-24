@@ -46,7 +46,6 @@ function buildUrlFromPageString(page) {
     const [pagePart, rest] = page.split('&', 2);
     u.searchParams.set('page', pagePart);
 
-    // console.log(pagePart + ' + ' + rest);
     if (rest) {
         const tmp = new URLSearchParams(rest);
         for (const [k, v] of tmp) {
@@ -73,7 +72,6 @@ async function loadPageContent(page) {
         const response = await fetch(url, {
             method: 'GET',
             headers: {
-                'X-Requested-With': 'XMLHttpRequest',
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
                 'Pragma': 'no-cache'
             }
@@ -92,11 +90,12 @@ async function loadPageContent(page) {
 
         if (!newMainContent) {
             console.error('ERROR: .main-content not found in response!');
-            console.log('Document body:', doc.body ? doc.body.innerHTML.substring(0, 500) : 'No body');
+            console.log('Document body:', document.body ? document.body.innerHTML.substring(0, 500) : 'No body');
             console.log('Checking for section tag:', doc.querySelector('section') ? 'Found' : 'Not found');
         }
 
         if (newMainContent) {
+            console.log("main content found");
             const scripts = Array.from(newMainContent.querySelectorAll('script'));
 
             // Debug: check if script exists in raw HTML
@@ -130,6 +129,8 @@ async function navigateToPage(page, updateHistory = true) {
     if (page === currentPage && !page.includes('selected_client_id')) {
         return; // Already on this page
     }
+
+    console.log("navigatyinh");
 
     //Removed previously added scripts
     cachedScripts.forEach(s => {
@@ -274,6 +275,7 @@ function handleNavigation(event) {
         .join('&');
 
     const fullPage = additionalParams ? `${pageName}&${additionalParams}` : pageName;
+
     navigateToPage(fullPage);
 }
 

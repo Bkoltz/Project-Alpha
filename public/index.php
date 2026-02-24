@@ -87,7 +87,8 @@ function resolve_view_path(string $page): string
 error_reporting(E_ALL);
 ini_set("display_errors", 1);
 
-function error_handler($errorno, $errorstr, $errorfile, $errorline) {
+function error_handler($errorno, $errorstr, $errorfile, $errorline)
+{
     $errorMessage = "Error[$errorno]: $errorstr ($errorfile:$errorline)";
     error_log($errorMessage . PHP_EOL, 3,  __DIR__ . "/error_log.txt");
     return true;
@@ -577,36 +578,14 @@ if ($page === 'public-doc') {
 }
 
 // Check if this is an AJAX request for client-side navigation
-$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+// OUTDATED $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-if ($isAjax) {
-    // For AJAX requests, return only the main content
-    echo '<main class="main-content" role="main">';
+//Load header
+require_once __DIR__ . '/../src/views/partials/header.php';
 
-    // Resolve view path (supports alternate folder casing like Jobs/ vs jobs/)
-    $view = resolve_view_path($page);
+//Load page content
+$view = resolve_view_path($page);
+require $view;
 
-    // Special case for calendar
-    if (basename($view) === 'calendar.php') {
-        $view = __DIR__ . '/../src/views/pages/home.php';
-    }
-
-    require $view;
-
-    echo '</main>';
-} else {
-    // Default layout for full page loads
-    require_once __DIR__ . '/../src/views/partials/header.php';
-
-    // Resolve view path (supports alternate folder casing like Jobs/ vs jobs/)
-    $view = resolve_view_path($page);
-
-    // Special case for calendar
-    if (basename($view) === 'calendar.php') {
-        $view = __DIR__ . '/../src/views/pages/home.php';
-    }
-
-    require $view;
-
-    require_once __DIR__ . '/../src/views/partials/footer.php';
-}
+//Load footer
+require_once __DIR__ . '/../src/views/partials/footer.php';
