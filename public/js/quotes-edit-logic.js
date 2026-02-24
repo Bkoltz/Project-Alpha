@@ -24,6 +24,7 @@ function getItemData() {
 }
 
 function addItem(item = '', desc = '', qty = 1, price = 0) {
+    console.log(item);
     var wrap = document.createElement('div');
     var itemId = 'item_' + (itemCounter++);
     var descId = 'desc_' + itemCounter;
@@ -38,7 +39,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     itemInput.placeholder = 'Item name...';
     itemInput.name = 'item[]';
     itemInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
-    itemInput.value = item;
+    itemInput.value = item ;
     itemInput.oninput = recalc;
     itemInput.setAttribute('data-item-autocomplete', '');
     itemInput.setAttribute('data-description-field', descId);
@@ -126,3 +127,5 @@ function recalc() {
 }
 
 ['discountType', 'discountValue', 'taxPercent'].forEach(id => document.getElementById(id).addEventListener('input', recalc));
+
+document.getElementById("addItemBtn")?.addEventListener("click", (e) => addItem('','',1,0));
