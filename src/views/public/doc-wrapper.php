@@ -1,21 +1,206 @@
 <?php
 // src/views/public/doc-wrapper.php
-// Expects variables set by controller: $type, $rid, $token, $notice, $err, $pdo, $appConfig
+// Expects variables set by controller: $type, $rid, $token, $notice, $err, $pdo, $appConfig, $row (link data)
+
+// Get link expiration info
+$linkExpiresAt = isset($row['expires_at']) && $row['expires_at'] !== null && $row['expires_at'] !== '' ? $row['expires_at'] : null;
+$linkExpireWhenPaid = isset($row['expire_when_paid']) && (int)$row['expire_when_paid'] === 1;
+$expirationText = '';
+
+if ($linkExpireWhenPaid) {
+    // Only show "valid until paid" if explicitly set
+    $expirationText = 'This link is valid until the invoice is paid in full.';
+} elseif ($linkExpiresAt !== null) {
+    // Date-based expiration
+    $expTime = strtotime($linkExpiresAt);
+    if ($expTime !== false) {
+        $daysLeft = max(0, (int)ceil(($expTime - time()) / 86400));
+        if ($daysLeft <= 0) {
+            $expirationText = 'This link expires today.';
+        } elseif ($daysLeft === 1) {
+            $expirationText = 'This link expires tomorrow.';
+        } else {
+            $expirationText = 'This link expires in ' . $daysLeft . ' days (' . date('M j, Y', $expTime) . ').';
+        }
+    }
+}
+// If neither expire_when_paid nor expires_at is set, no expiration text is shown
+
+// Get invoice payment info if invoice type
+$invoiceData = null;
+$showPayButton = false;
+$calculatedAmountDue = 0;
+if ($type === 'invoice') {
+    require_once __DIR__ . '/../../services/StripeService.php';
+    $stripeConfigured = StripeService::isConfigured($appConfig);
+    try {
+        $invSt = $pdo->prepare('SELECT status, total FROM invoices WHERE id = ?');
+        $invSt->execute([$rid]);
+        $invoiceData = $invSt->fetch(PDO::FETCH_ASSOC);
+        if ($invoiceData) {
+            // Calculate amount paid from payments table for accuracy
+            $paidSt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+            $paidSt->execute([$rid]);
+            $amountPaid = (float)$paidSt->fetchColumn();
+            $invoiceData['amount_paid'] = $amountPaid;
+            
+            $invStatus = strtolower($invoiceData['status'] ?? '');
+            $calculatedAmountDue = (float)($invoiceData['total'] ?? 0) - $amountPaid;
+            $showPayButton = $stripeConfigured && in_array($invStatus, ['unpaid', 'partial'], true) && $calculatedAmountDue > 0;
+        }
+    } catch (Throwable $e) { 
+        @error_log('[DocWrapper] Error checking invoice: ' . $e->getMessage());
+    }
+}
 ?>
-<style>.public-doc-wrap{max-width:816px;margin:24px auto;padding:0 16px 96px}.notice{margin:10px 0;padding:10px 12px;border-radius:8px}.n-ok{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}.n-err{background:#fff1f2;color:#881337;border:1px solid #fca5a5}</style>
+<style>
+  body { background: #e5e7eb !important; }
+  .public-doc-wrap {
+    max-width: 850px;
+    margin: 32px auto;
+    padding: 0 24px 96px;
+  }
+  .public-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .public-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 0 8px;
+  }
+  .link-expiry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .paper-document {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08);
+    padding: 48px 56px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .paper-document::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #4f46e5, #7c3aed);
+    border-radius: 8px 8px 0 0;
+  }
+  .payment-banner {
+    margin-bottom: 24px;
+    padding: 24px;
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border: 1px solid #93c5fd;
+    border-radius: 12px;
+    text-align: center;
+  }
+  .payment-banner h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1e40af;
+    margin: 0 0 8px;
+  }
+  .payment-banner .amount-due {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin: 12px 0;
+  }
+  .payment-banner .pay-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 32px;
+    background: #4f46e5;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 16px;
+    box-shadow: 0 4px 12px rgba(79,70,229,0.3);
+    transition: all 0.2s;
+  }
+  .payment-banner .pay-btn:hover {
+    background: #4338ca;
+    transform: translateY(-1px);
+  }
+  .notice { margin: 10px 0; padding: 12px 16px; border-radius: 8px; }
+  .n-ok { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .n-err { background: #fff1f2; color: #881337; border: 1px solid #fca5a5; }
+  @media (max-width: 640px) {
+    .paper-document { padding: 24px 20px; }
+    .public-doc-wrap { padding: 0 12px 64px; margin-top: 16px; }
+  }
+</style>
+
 <div class="public-doc-wrap">
   <?php if (!empty($notice)): ?><div class="notice n-ok">Thank you! Your response has been recorded.</div><?php endif; ?>
   <?php if (!empty($err)): ?><div class="notice n-err"><?php echo htmlspecialchars($err); ?></div><?php endif; ?>
 
+  <!-- Header with expiration info -->
+  <div class="public-header">
+    <?php if ($expirationText): ?>
+      <div class="link-expiry">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <?php echo htmlspecialchars($expirationText); ?>
+      </div>
+    <?php endif; ?>
+  </div>
+
   <?php
-    if ($type === 'quote') {
-      require __DIR__ . '/../../views/pages/quote/quote-print-wrapper.php';
-    } elseif ($type === 'contract') {
-      require __DIR__ . '/../../views/pages/contract/contract-print.php';
-    } elseif ($type === 'invoice') {
-      require __DIR__ . '/../../views/pages/invoice/invoice-print.php';
-    }
+    // Show payment banner at TOP for invoices if Stripe is configured and payment is due
+    if ($type === 'invoice' && $invoiceData):
+      $amountDue = $calculatedAmountDue;
+      if ($showPayButton):
   ?>
+  <div class="payment-banner">
+    <h2>💳 Pay This Invoice</h2>
+    <div style="color:#3b82f6;margin-bottom:8px">Secure payment via credit or debit card</div>
+    <div class="amount-due">$<?php echo number_format($amountDue, 2); ?> due</div>
+    <a href="/?page=stripe-checkout&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" class="pay-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+        <line x1="1" y1="10" x2="23" y2="10"></line>
+      </svg>
+      Pay Now
+    </a>
+    <div style="margin-top:12px;font-size:13px;color:#6b7280">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+      Secure payment powered by Stripe
+    </div>
+  </div>
+  <?php endif; // showPayButton ?>
+  <?php endif; // type === invoice ?>
+
+  <!-- Paper-like document container -->
+  <div class="paper-document">
+    <?php
+      // Use the detail views - they check for PUBLIC_VIEW constant to hide admin controls
+      if ($type === 'quote') {
+        require __DIR__ . '/../pages/quote/quote-details.php';
+      } elseif ($type === 'contract') {
+        require __DIR__ . '/../pages/contract/contract-details.php';
+      } elseif ($type === 'invoice') {
+        require __DIR__ . '/../pages/invoice/invoice-details.php';
+      }
+    ?>
+  </div>
 
   <?php if ($type === 'quote'):
     // Show approve/deny forms if controller allowed it (controller may set $showActions)
@@ -59,4 +244,8 @@
     </div>
   <?php endif; ?>
 
+  <!-- Powered by footer -->
+  <div style="text-align:center;margin-top:24px;color:#9ca3af;font-size:12px">
+    <a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a>
+  </div>
 </div>

@@ -310,6 +310,37 @@ if (isset($_POST['signature_agreement'])) {
     $settings['signature_agreement'] = $sig !== '' ? mb_substr($sig, 0, 500) : 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.';
 }
 
+// Stripe settings
+if (isset($_POST['stripe_publishable_key'])) {
+    $settings['stripe_publishable_key'] = trim((string)$_POST['stripe_publishable_key']) ?: null;
+}
+if (isset($_POST['stripe_secret_key'])) {
+    $sk = trim((string)$_POST['stripe_secret_key']);
+    if ($sk !== '') {
+        // Encrypt the secret key for storage
+        require_once __DIR__ . '/../utils/crypto.php';
+        $enc = crypto_encrypt($sk);
+        if ($enc) {
+            $settings['stripe_secret_key_enc'] = $enc;
+        } else {
+            // Fallback: store with prefix if encryption fails
+            $settings['stripe_secret_key_enc'] = 'plain::' . $sk;
+        }
+    }
+}
+if (isset($_POST['stripe_webhook_secret'])) {
+    $ws = trim((string)$_POST['stripe_webhook_secret']);
+    if ($ws !== '') {
+        require_once __DIR__ . '/../utils/crypto.php';
+        $enc = crypto_encrypt($ws);
+        if ($enc) {
+            $settings['stripe_webhook_secret_enc'] = $enc;
+        } else {
+            $settings['stripe_webhook_secret_enc'] = 'plain::' . $ws;
+        }
+    }
+}
+
 // Merge with existing file on target before writing to avoid overwriting unrelated fields
 $target = $settingsFile;
 $existing = [];

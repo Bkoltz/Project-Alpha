@@ -165,18 +165,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Signed PDF</a>
               <?php endif; ?>
               <?php 
-                // Calculate if deposit is required and not yet received
+                // Check if deposit is required and not yet received
+                // Note: deposit_amount already stores the calculated dollar amount (not percentage)
                 $depositType = $r['deposit_type'] ?? 'none';
-                $depositValue = (float)($r['deposit_amount'] ?? 0);
+                $depositCalc = (float)($r['deposit_amount'] ?? 0);
                 $depositPaid = (float)($r['deposit_paid'] ?? 0);
-                $total = (float)($r['total'] ?? 0);
-                $depositCalc = 0;
-                if ($depositType === 'percent') {
-                  $depositCalc = max(0, min(100, $depositValue)) * $total / 100;
-                } elseif ($depositType === 'fixed') {
-                  $depositCalc = $depositValue;
-                }
-                $needsDeposit = $depositCalc > 0 && $depositPaid < $depositCalc;
+                $needsDeposit = $depositType !== 'none' && $depositCalc > 0 && $depositPaid < $depositCalc;
               ?>
               <?php if ($needsDeposit && $r['status'] === 'pending'): ?>
                 <form method="post" action="/?page=contract/contract-deposit-received" style="display:inline" onsubmit="return confirm('Mark deposit as received ($<?php echo number_format($depositCalc, 2); ?>)?')">

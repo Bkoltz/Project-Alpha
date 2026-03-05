@@ -66,18 +66,12 @@ if ($termsText === '') {
     ];
     $ccolors = $cstatusColors[$cstatus] ?? ['bg' => '#f3f4f6', 'text' => '#374151', 'border' => '#9ca3af'];
 
-    // Calculate deposit info
+    // Check deposit info
+    // Note: deposit_amount already stores the calculated dollar amount (not percentage)
     $depositType = $contract['deposit_type'] ?? 'none';
-    $depositValue = (float)($contract['deposit_amount'] ?? 0);
+    $depositCalc = (float)($contract['deposit_amount'] ?? 0);
     $depositPaid = (float)($contract['deposit_paid'] ?? 0);
-    $contractTotal = (float)($contract['total'] ?? 0);
-    $depositCalc = 0;
-    if ($depositType === 'percent') {
-      $depositCalc = max(0, min(100, $depositValue)) * $contractTotal / 100;
-    } elseif ($depositType === 'fixed') {
-      $depositCalc = $depositValue;
-    }
-    $needsDeposit = $depositCalc > 0 && $depositPaid < $depositCalc;
+    $needsDeposit = $depositType !== 'none' && $depositCalc > 0 && $depositPaid < $depositCalc;
     ?>
     <div class="no-print" style="padding:12px 16px;background:<?php echo $ccolors['bg']; ?>;color:<?php echo $ccolors['text']; ?>;border-left:4px solid <?php echo $ccolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
       Status: <?php echo htmlspecialchars($contract['status']); ?>

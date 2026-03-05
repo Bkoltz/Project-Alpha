@@ -36,13 +36,23 @@ if ($pref > 0) {
     </label>
     <label>
       <div>Method</div>
-    <?php require_once __DIR__ . '/../../../config/app.php'; $methods = (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']); ?>
+    <?php require_once __DIR__ . '/../../../config/app.php';
+         require_once __DIR__ . '/../../../services/StripeService.php';
+         $methods = (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']);
+         $stripeConfigured = StripeService::isConfigured($appConfig);
+    ?>
       <select name="method" id="paymentMethod" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <?php foreach ($methods as $m): ?>
           <option value="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></option>
         <?php endforeach; ?>
+        <?php if ($stripeConfigured): ?>
+          <option value="stripe">💳 Credit Card (Stripe)</option>
+        <?php endif; ?>
       </select>
     </label>
+    <div id="stripeNotice" style="display:none;padding:12px;background:#e6f4ff;border:1px solid #0284c7;border-radius:8px;font-size:14px">
+      <strong>Stripe Checkout:</strong> You will be redirected to Stripe to collect the card payment.
+    </div>
     <div id="checkNumberField" style="display:none">
       <label>
         <div>Check Number</div>
