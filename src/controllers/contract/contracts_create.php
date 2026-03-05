@@ -65,8 +65,8 @@ $deposit_amount = 0.0;
 if($deposit_type === 'percent') { $deposit_amount = max(0, min(100, $deposit_value)) * $total / 100; }
 elseif($deposit_type === 'fixed') { $deposit_amount = max(0, $deposit_value); }
 
-// Invoice total should be balance after deposit
-$invoice_total = max(0, $total - $deposit_amount);
+// Invoice total is the full amount - deposits are tracked via payments table
+$invoice_total = $total;
 
 // Extract custom field values from POST data (only non-empty values)
 $customFields = extractCustomFieldValues($_POST);

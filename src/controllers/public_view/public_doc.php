@@ -15,11 +15,49 @@ if ($token === '') {
 }
 
 try {
-  $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
-  $st->execute([$token]);
-  $row = $st->fetch(PDO::FETCH_ASSOC);
+  // First, ensure the expire_when_paid column exists (migration)
+  try {
+    $pdo->exec("ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0");
+  } catch (Throwable $e) { /* column already exists */ }
+  
+  // Try query with expire_when_paid column
+  try {
+    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
+    $st->execute([$token]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+  } catch (Throwable $e) {
+    // Fallback query without expire_when_paid column
+    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+    $st->execute([$token]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+      $row['expire_when_paid'] = 0; // Default to false
+    }
+  }
+  
   if (!$row) { throw new Exception('notfound'); }
-  if ((int)$row['revoked'] === 1 || strtotime((string)$row['expires_at']) < time()) { throw new Exception('expired'); }
+  
+  // Check if revoked
+  if ((int)($row['revoked'] ?? 0) === 1) { throw new Exception('expired'); }
+  
+  // Check expiration - either by date or by payment status
+  $expireWhenPaid = !empty($row['expire_when_paid']);
+  if ($expireWhenPaid) {
+    // For expire_when_paid links, check if the invoice is paid
+    if ($row['type'] === 'invoice') {
+      $invCheck = $pdo->prepare('SELECT status FROM invoices WHERE id = ?');
+      $invCheck->execute([(int)$row['record_id']]);
+      $invStatus = strtolower($invCheck->fetchColumn() ?: '');
+      if ($invStatus === 'paid' || $invStatus === 'void') {
+        throw new Exception('expired');
+      }
+    }
+  } else {
+    // For date-based expiration
+    if (!empty($row['expires_at']) && strtotime((string)$row['expires_at']) < time()) {
+      throw new Exception('expired');
+    }
+  }
 
   $type = (string)$row['type'];
   $rid = (int)$row['record_id'];
@@ -33,12 +71,15 @@ try {
 
   // For invoice links, ensure invoice remains in public-viewable states
   if ($type === 'invoice') {
-    try {
-      $vs = $pdo->prepare('SELECT status FROM invoices WHERE id=? LIMIT 1');
-      $vs->execute([$rid]);
-      $invStatus = (string)($vs->fetchColumn() ?: '');
-      if (!in_array($invStatus, ['unpaid', 'partial'], true)) { throw new Exception('expired'); }
-    } catch (Throwable $_e) { throw new Exception('expired'); }
+    $vs = $pdo->prepare('SELECT status FROM invoices WHERE id=? LIMIT 1');
+    $vs->execute([$rid]);
+    $invStatus = strtolower((string)($vs->fetchColumn() ?: ''));
+    if ($invStatus === '') {
+      throw new Exception('invoice_not_found:' . $rid);
+    }
+    if (!in_array($invStatus, ['unpaid', 'partial'], true)) {
+      throw new Exception('invoice_status_blocked:' . $invStatus);
+    }
   }
 
   // Determine whether to show actions or upload form in the view
@@ -150,6 +191,17 @@ try {
   }
 } catch (Throwable $e) {
   http_response_code(404);
-  echo '<main><div class="auth-wrap"><h1>Link expired</h1><p>This link has expired or is no longer valid. Please contact us for a new link.</p></div></main>';
+  @error_log('[PublicDoc] Error: ' . $e->getMessage() . ' Token: ' . $token);
+  echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Link Expired</title>
+  <style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f3f4f6;margin:0;padding:40px 20px;}
+  .wrap{max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.1);}
+  h1{color:#1f2937;font-size:24px;margin:0 0 12px;}p{color:#6b7280;margin:0 0 24px;line-height:1.6;}
+  .icon{width:64px;height:64px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;}
+  </style></head><body>
+  <div class="wrap">
+    <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+    <h1>Link Expired</h1>
+    <p>This link has expired or is no longer valid. Please contact us for a new link.</p>
+  </div></body></html>';
   exit;
 }

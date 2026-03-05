@@ -96,9 +96,29 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
     </form>
+    <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#f0fdf4;color:#166534; font-size: medium;">🔗 Share Link</button>
+    <?php 
+      require_once __DIR__ . '/../../../services/StripeService.php';
+      if (StripeService::isConfigured($appConfig) && in_array(strtolower($inv['status']), ['unpaid', 'partial'])): 
+    ?>
+    <form method="post" action="/?page=stripe-charge" style="display:inline" target="_blank">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="invoice_id" value="<?php echo (int)$id; ?>">
+      <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#4f46e5;color:#fff; font-size: medium;cursor:pointer">💳 Charge Card</button>
+    </form>
+    <?php endif; ?>
   </div>
   <?php if (!empty($_GET['reenabled'])): ?>
     <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Invoice re-enabled successfully</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['payment']) && $_GET['payment'] === 'success'): ?>
+    <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Payment processed successfully! The invoice status will update shortly.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['payment']) && $_GET['payment'] === 'cancelled'): ?>
+    <div class="no-print" style="padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;margin-bottom:8px;font-size:14px">Payment was cancelled.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['stripe_error'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;margin-bottom:8px;font-size:14px">Stripe error: <?php echo htmlspecialchars($_GET['stripe_error']); ?></div>
   <?php endif; ?>
   <?php if (!empty($_GET['date_updated'])): ?>
     <div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Document date updated successfully</div>
@@ -356,6 +376,17 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   </table>
 
   <!-- Totals section - uses table for PDF compatibility -->
+  <?php
+    $invoiceTotal = (float)($inv['total'] ?? 0);
+    // Calculate amount_paid from payments table for accuracy
+    $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+    $paidStmt->execute([$id]);
+    $amountPaid = (float)$paidStmt->fetchColumn();
+    $amountDue = $invoiceTotal - $amountPaid;
+    $invStatus = strtolower($inv['status'] ?? 'unpaid');
+    $isPartial = $invStatus === 'partial';
+    $isPaid = $invStatus === 'paid';
+  ?>
   <table style="width:100%;border-collapse:collapse;margin-top:16px">
     <tr>
       <td style="width:60%"></td>
@@ -382,9 +413,27 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
             <td style="padding:8px 10px;text-align:right"><?php echo number_format($inv['tax_percent'],2); ?>%</td>
           </tr>
           <tr style="border-top:1px solid #e5e7eb">
-            <td style="padding:8px 10px;font-weight:700;text-align:right">Total</td>
-            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($inv['total'],2); ?></td>
+            <td style="padding:8px 10px;font-weight:700;text-align:right"><?php echo $isPartial ? 'Invoice Total' : 'Total'; ?></td>
+            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($invoiceTotal,2); ?></td>
           </tr>
+          <?php if ($isPartial): ?>
+          <!-- Only show payment breakdown for partial invoices -->
+          <tr style="background:#ecfdf5">
+            <td style="padding:8px 10px;font-weight:600;text-align:right;color:#065f46">Amount Paid</td>
+            <td style="padding:8px 10px;text-align:right;color:#065f46">- $<?php echo number_format($amountPaid,2); ?></td>
+          </tr>
+          <tr style="background:#fef3c7;border-top:2px solid #f59e0b">
+            <td style="padding:10px;font-weight:700;text-align:right;color:#92400e;font-size:15px">Amount Due</td>
+            <td style="padding:10px;font-weight:700;text-align:right;color:#92400e;font-size:15px">$<?php echo number_format($amountDue,2); ?></td>
+          </tr>
+          <?php elseif ($isPaid): ?>
+          <!-- Paid in full -->
+          <tr style="background:#ecfdf5;border-top:2px solid #10b981">
+            <td style="padding:10px;font-weight:700;text-align:right;color:#065f46;font-size:15px">✓ Paid in Full</td>
+            <td style="padding:10px;font-weight:700;text-align:right;color:#065f46;font-size:15px">$0.00</td>
+          </tr>
+          <?php endif; ?>
+          <?php // For unpaid invoices, the Total row above is sufficient ?>
         </table>
       </td>
     </tr>
@@ -402,3 +451,209 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   }
 </style>
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
+
+<!-- Share Link Modal -->
+<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:18px">🔗 Share Invoice Link</h3>
+      <button onclick="closeShareModal()" style="border:0;background:none;font-size:20px;cursor:pointer;color:#6b7280">&times;</button>
+    </div>
+    <div id="shareLinkContent">
+      <p style="color:#6b7280;margin:0 0 16px">Generate a public link that clients can use to view and pay this invoice.</p>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer">
+        <input type="checkbox" id="expireWhenPaid" onchange="toggleDaysInput()" style="width:18px;height:18px">
+        <span style="font-weight:500">Expire when invoice is paid in full</span>
+      </label>
+      <label id="daysLabel" style="display:block;margin-bottom:12px">
+        <div style="font-weight:500;margin-bottom:4px">Link expires in (days)</div>
+        <input type="number" id="linkDays" value="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" min="1" max="365" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+      </label>
+      <button onclick="createPublicLink()" style="width:100%;padding:12px;background:#4f46e5;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer">Generate Link</button>
+    </div>
+    <div id="shareLinkResult" style="display:none">
+      <div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;margin-bottom:12px">
+        <div style="font-weight:600;color:#166534;margin-bottom:4px" id="linkStatus">✓ Link Generated!</div>
+        <div style="font-size:13px;color:#15803d" id="linkExpiry"></div>
+      </div>
+      <div style="position:relative">
+        <input type="text" id="generatedLink" readonly style="width:100%;padding:10px;padding-right:80px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#f9fafb">
+        <button onclick="copyLink()" style="position:absolute;right:4px;top:4px;padding:6px 12px;background:#4f46e5;color:#fff;border:0;border-radius:6px;font-size:12px;cursor:pointer">Copy</button>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="revokeBtn" onclick="revokeAndCreateNew()" style="flex:1;padding:10px;background:#fee2e2;color:#991b1b;border:0;border-radius:8px;cursor:pointer;display:none">Revoke & Create New</button>
+        <button onclick="closeShareModal()" style="flex:1;padding:10px;background:#4f46e5;color:#fff;border:0;border-radius:8px;cursor:pointer">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function generatePublicLink() {
+  document.getElementById('shareLinkModal').style.display = 'flex';
+  
+  // First, check if a link already exists
+  const formData = new FormData();
+  formData.append('type', 'invoice');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>');
+  formData.append('expire_when_paid', '0');
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  
+  fetch('/?page=public-link-create', {
+    method: 'POST',
+    body: formData
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success && data.existing) {
+      // Show the existing link directly
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkStatus').textContent = '\u2713 Existing Link';
+      document.getElementById('revokeBtn').style.display = 'block';
+      
+      if (data.expire_when_paid) {
+        document.getElementById('linkExpiry').textContent = 'Expires when invoice is paid in full';
+      } else {
+        document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days remaining)';
+      }
+      
+      document.getElementById('shareLinkContent').style.display = 'none';
+      document.getElementById('shareLinkResult').style.display = 'block';
+    } else {
+      // No existing link, show the create form
+      document.getElementById('shareLinkContent').style.display = 'block';
+      document.getElementById('shareLinkResult').style.display = 'none';
+      document.getElementById('expireWhenPaid').checked = false;
+      toggleDaysInput();
+    }
+  })
+  .catch(err => {
+    // On error, show the create form
+    document.getElementById('shareLinkContent').style.display = 'block';
+    document.getElementById('shareLinkResult').style.display = 'none';
+    document.getElementById('expireWhenPaid').checked = false;
+    toggleDaysInput();
+  });
+}
+
+function closeShareModal() {
+  document.getElementById('shareLinkModal').style.display = 'none';
+}
+
+function toggleDaysInput() {
+  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
+  const daysLabel = document.getElementById('daysLabel');
+  const daysInput = document.getElementById('linkDays');
+  if (expireWhenPaid) {
+    daysLabel.style.opacity = '0.5';
+    daysInput.disabled = true;
+  } else {
+    daysLabel.style.opacity = '1';
+    daysInput.disabled = false;
+  }
+}
+
+function createPublicLink() {
+  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
+  const days = document.getElementById('linkDays').value || 14;
+  const formData = new FormData();
+  formData.append('type', 'invoice');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', days);
+  formData.append('expire_when_paid', expireWhenPaid ? '1' : '0');
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  
+  fetch('/?page=public-link-create', {
+    method: 'POST',
+    body: formData
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      document.getElementById('generatedLink').value = data.url;
+      
+      // Update status and expiry display
+      const statusEl = document.getElementById('linkStatus');
+      const expiryEl = document.getElementById('linkExpiry');
+      const revokeBtn = document.getElementById('revokeBtn');
+      
+      if (data.existing) {
+        statusEl.textContent = '✓ Existing Link Found';
+        revokeBtn.style.display = 'block';
+      } else {
+        statusEl.textContent = '✓ Link Generated!';
+        revokeBtn.style.display = 'none';
+      }
+      
+      if (data.expire_when_paid) {
+        expiryEl.textContent = 'Expires when invoice is paid in full';
+      } else {
+        expiryEl.textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
+      }
+      
+      document.getElementById('shareLinkContent').style.display = 'none';
+      document.getElementById('shareLinkResult').style.display = 'block';
+    } else {
+      alert('Error: ' + (data.error || 'Failed to generate link'));
+    }
+  })
+  .catch(err => {
+    alert('Error generating link: ' + err.message);
+  });
+}
+
+function copyLink() {
+  const input = document.getElementById('generatedLink');
+  input.select();
+  document.execCommand('copy');
+  const btn = event.target;
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+}
+
+function revokeAndCreateNew() {
+  if (!confirm('This will revoke the existing link (it will no longer work) and create a new one. Continue?')) {
+    return;
+  }
+  
+  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
+  const days = document.getElementById('linkDays').value || 14;
+  const formData = new FormData();
+  formData.append('type', 'invoice');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', days);
+  formData.append('expire_when_paid', expireWhenPaid ? '1' : '0');
+  formData.append('force_new', '1');
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  
+  fetch('/?page=public-link-create', {
+    method: 'POST',
+    body: formData
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkStatus').textContent = '✓ New Link Created!';
+      document.getElementById('revokeBtn').style.display = 'none';
+      
+      if (data.expire_when_paid) {
+        document.getElementById('linkExpiry').textContent = 'Expires when invoice is paid in full';
+      } else {
+        document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
+      }
+    } else {
+      alert('Error: ' + (data.error || 'Failed to create link'));
+    }
+  })
+  .catch(err => {
+    alert('Error: ' + err.message);
+  });
+}
+
+// Close modal on outside click
+document.getElementById('shareLinkModal').addEventListener('click', function(e) {
+  if (e.target === this) closeShareModal();
+});
+</script>

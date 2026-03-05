@@ -7,6 +7,17 @@ $amount = (float)($_POST['amount'] ?? 0);
 $method = trim((string)($_POST['method'] ?? 'card'));
 $check_number = trim((string)($_POST['check_number'] ?? ''));
 $paid_in_advance = !empty($_POST['paid_in_advance']);
+
+// If Stripe is selected, redirect to Stripe checkout
+if (strtolower($method) === 'stripe') {
+  if ($invoice_id <= 0) {
+    header('Location: /?page=payments/payments-create&error=Please%20select%20an%20invoice');
+    exit;
+  }
+  header('Location: /?page=stripe-charge&invoice_id=' . $invoice_id);
+  exit;
+}
+
 if ($invoice_id <= 0 || $amount <= 0) {
   header('Location: /?page=payments-create&error=Invalid%20input');
   exit;
@@ -33,7 +44,8 @@ try {
 
   $status = 'partial';
   if ($paid >= $total) $status = 'paid';
-  $pdo->prepare('UPDATE invoices SET status=? WHERE id=?')->execute([$status, $invoice_id]);
+  // Update both status and amount_paid on the invoice
+  $pdo->prepare('UPDATE invoices SET status=?, amount_paid=? WHERE id=?')->execute([$status, $paid, $invoice_id]);
   // If invoice status moved out of public-viewable states, revoke public links
   if (!in_array($status, ['unpaid','partial'], true)) {
     try {

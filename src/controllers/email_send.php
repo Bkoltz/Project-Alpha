@@ -106,8 +106,34 @@ try {
   // Compose body
   $body = '<p>Hello '.htmlspecialchars($firstName).',</p>' .
     '<p>Please find your document attached and available at the link below:</p>' .
-    '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>' .
-    '<p>This link will expire in '.htmlspecialchars((string)$days).' day'.($days===1?'':'s').'. Do not share this link with untrusted parties!</p>' .
+    '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>';
+
+  // Add Pay via Credit Card button for invoices if Stripe is configured
+  if ($type === 'invoice') {
+    require_once __DIR__ . '/../services/StripeService.php';
+    if (StripeService::isConfigured($appConfig)) {
+      // Check if invoice is payable
+      try {
+        $invSt = $pdo->prepare('SELECT status, total, amount_paid FROM invoices WHERE id = ?');
+        $invSt->execute([$id]);
+        $invRow = $invSt->fetch(PDO::FETCH_ASSOC);
+        if ($invRow) {
+          $invStatus = strtolower($invRow['status'] ?? '');
+          $amountDue = (float)($invRow['total'] ?? 0) - (float)($invRow['amount_paid'] ?? 0);
+          if (in_array($invStatus, ['unpaid', 'partial'], true) && $amountDue > 0) {
+            $payUrl = $scheme . '://' . $host . '/?page=stripe-checkout&token=' . rawurlencode($token);
+            $body .= '<div style="margin:24px 0;padding:20px;background:#f0f7ff;border:1px solid #93c5fd;border-radius:8px;text-align:center">';
+            $body .= '<p style="margin:0 0 12px;color:#1e40af;font-weight:600;font-size:16px">Ready to pay? Use our secure online payment option:</p>';
+            $body .= '<a href="'.htmlspecialchars($payUrl).'" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">💳 Pay via Credit Card</a>';
+            $body .= '<p style="margin:12px 0 0;color:#6b7280;font-size:13px">Secure payment powered by Stripe</p>';
+            $body .= '</div>';
+          }
+        }
+      } catch (Throwable $e) { /* ignore */ }
+    }
+  }
+
+  $body .= '<p>This link will expire in '.htmlspecialchars((string)$days).' day'.($days===1?'':'s').'. Do not share this link with untrusted parties!</p>' .
     '<p>Thank you.</p>';
 
   // Optionally render PDF attachment using Dompdf

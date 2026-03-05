@@ -35,22 +35,8 @@ try {
   $contract = $c->fetch(PDO::FETCH_ASSOC);
   if (!$contract) throw new Exception('Not found');
   
-  // Check if deposit is required and if it has been received
-  $depositType = $contract['deposit_type'] ?? 'none';
-  $depositValue = (float)($contract['deposit_amount'] ?? 0);
-  $depositPaid = (float)($contract['deposit_paid'] ?? 0);
-  $total = (float)($contract['total'] ?? 0);
-  $depositCalc = 0;
-  
-  if ($depositType === 'percent') {
-    $depositCalc = max(0, min(100, $depositValue)) * $total / 100;
-  } elseif ($depositType === 'fixed') {
-    $depositCalc = $depositValue;
-  }
-  
-  if ($depositCalc > 0 && $depositPaid < $depositCalc) {
-    throw new Exception('Cannot activate contract: deposit must be received first');
-  }
+  // Note: Deposit and signed contract can be received in any order
+  // We no longer require deposit to be received before signing
 
   // Store signed PDF in src/uploads/signed_contracts for organization and separation
   $internal = __DIR__ . '/../../uploads/signed_contracts';

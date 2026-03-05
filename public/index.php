@@ -156,7 +156,7 @@ if ($page === 'logout') {
 }
 
 // Allow unauthenticated access only to explicit public pages
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action'];
+$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -299,7 +299,7 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'organization/org-create'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'organization/org-create', 'stripe-webhook'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -548,6 +548,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/forms_handler.php';
         exit;
     }
+    if ($page === 'public-link-create') {
+        require_once __DIR__ . '/../src/controllers/public_link_create.php';
+        exit;
+    }
+    if ($page === 'stripe-charge') {
+        require_once __DIR__ . '/../src/controllers/stripe_charge.php';
+        exit;
+    }
+    if ($page === 'stripe-webhook') {
+        require_once __DIR__ . '/../src/controllers/stripe_webhook.php';
+        exit;
+    }
 }
 
 // Standalone login and reset pages use a minimal top header
@@ -576,8 +588,17 @@ if ($page === 'public-doc') {
     require_once __DIR__ . '/../src/controllers/public_view/public_doc.php';
     exit;
 }
+if ($page === 'stripe-checkout') {
+    require_once __DIR__ . '/../src/controllers/public_view/stripe_checkout.php';
+    exit;
+}
+if ($page === 'stripe-success') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/controllers/public_view/stripe_success.php';
+    exit;
+}
 
-// Check if this is an AJAX request for client-side navigation
+// Check if this is an AJAX request
 // OUTDATED $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
 //Load header

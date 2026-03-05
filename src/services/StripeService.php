@@ -151,6 +151,104 @@ class StripeService {
     }
     
     /**
+     * Create a Stripe Checkout Session for one-time payment
+     * @param float $amount Amount to charge
+     * @param string $currency Currency code (e.g. 'usd')
+     * @param string $description Description for the payment
+     * @param string $successUrl URL to redirect after successful payment
+     * @param string $cancelUrl URL to redirect if payment is cancelled
+     * @param array $metadata Optional metadata to attach to the session
+     * @return array Checkout session data including 'url' for redirect
+     */
+    public function createCheckoutSession($amount, $currency, $description, $successUrl, $cancelUrl, $metadata = []) {
+        try {
+            $sessionData = [
+                'payment_method_types' => ['card'],
+                'mode' => 'payment',
+                'success_url' => $successUrl,
+                'cancel_url' => $cancelUrl,
+                'line_items' => [
+                    [
+                        'price_data' => [
+                            'currency' => strtolower($currency ?? 'usd'),
+                            'unit_amount' => (int)round($amount * 100), // Convert to cents
+                            'product_data' => [
+                                'name' => $description
+                            ]
+                        ],
+                        'quantity' => 1
+                    ]
+                ]
+            ];
+            
+            if (!empty($metadata)) {
+                $sessionData['metadata'] = $metadata;
+            }
+            
+            $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData);
+            
+            return $session;
+            
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error creating checkout session: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Initialize StripeService from app config settings
+     * @param array $appConfig The application configuration array
+     * @return StripeService|null Returns null if Stripe is not configured
+     */
+    public static function fromAppConfig($appConfig) {
+        $secretKey = null;
+        
+        // Try to get decrypted secret key
+        if (!empty($appConfig['stripe_secret_key_enc'])) {
+            $encVal = $appConfig['stripe_secret_key_enc'];
+            if (strpos($encVal, 'plain::') === 0) {
+                $secretKey = substr($encVal, 7);
+            } else {
+                require_once __DIR__ . '/../utils/crypto.php';
+                $pt = crypto_decrypt($encVal);
+                if (is_string($pt)) {
+                    $secretKey = $pt;
+                }
+            }
+        }
+        
+        if (!$secretKey) {
+            return null;
+        }
+        
+        // Get webhook secret if configured
+        $webhookSecret = null;
+        if (!empty($appConfig['stripe_webhook_secret_enc'])) {
+            $encVal = $appConfig['stripe_webhook_secret_enc'];
+            if (strpos($encVal, 'plain::') === 0) {
+                $webhookSecret = substr($encVal, 7);
+            } else {
+                require_once __DIR__ . '/../utils/crypto.php';
+                $pt = crypto_decrypt($encVal);
+                if (is_string($pt)) {
+                    $webhookSecret = $pt;
+                }
+            }
+        }
+        
+        return new self($secretKey, $webhookSecret);
+    }
+    
+    /**
+     * Check if Stripe is configured in app settings
+     * @param array $appConfig The application configuration array
+     * @return bool True if Stripe keys are configured
+     */
+    public static function isConfigured($appConfig) {
+        return !empty($appConfig['stripe_publishable_key']) && !empty($appConfig['stripe_secret_key_enc']);
+    }
+    
+    /**
      * Verify webhook signature
      */
     public function verifyWebhook($payload, $signature) {

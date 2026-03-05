@@ -13,9 +13,11 @@ if (!amt.value) { update(); }
 var methodSelect = document.getElementById('paymentMethod');
 var checkField = document.getElementById('checkNumberField');
 var checkInput = document.getElementById('checkNumberInput');
+var stripeNotice = document.getElementById('stripeNotice');
 
-function toggleCheckField() {
+function togglePaymentFields() {
     var method = methodSelect.value.toLowerCase();
+    // Check field
     if (method === 'check') {
         checkField.style.display = 'block';
         checkInput.required = true;
@@ -23,7 +25,11 @@ function toggleCheckField() {
         checkField.style.display = 'none';
         checkInput.required = false;
     }
+    // Stripe notice
+    if (stripeNotice) {
+        stripeNotice.style.display = method === 'stripe' ? 'block' : 'none';
+    }
 }
 
-methodSelect.addEventListener('change', toggleCheckField);
-toggleCheckField(); // Run on page load
+methodSelect.addEventListener('change', togglePaymentFields);
+togglePaymentFields(); // Run on page load
