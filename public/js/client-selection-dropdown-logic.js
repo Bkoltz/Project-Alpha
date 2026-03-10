@@ -8,8 +8,8 @@ ci.addEventListener('input', function () {
     var t = this.value.trim();
 
     if (!t) {
-        sug.style.display = 'none'; 
-        sug.innerHTML = ''; 
+        sug.style.display = 'none';
+        sug.innerHTML = '';
         return;
     }
 
@@ -27,15 +27,16 @@ ci.addEventListener('input', function () {
 
             Array.from(sug.children).forEach(el => {
                 el.addEventListener('click', function () {
-                    ci.value = this.dataset.name; 
+                    ci.value = this.dataset.name;
                     cid.value = this.dataset.id;
 
                     sug.style.display = 'none';
                 });
             });
             sug.style.display = 'block';
-        }).catch(() => {
-             sug.style.display = 'none' 
+        }).catch((e) => {
+            console.log(e);
+            sug.style.display = 'none'
         });
 });
 

@@ -86,6 +86,7 @@ function renderDocumentCustomFields($pdo, $documentType, $existingValues = [], $
 
             case 'select':
                 $options = json_decode($field['field_options'] ?? '[]', true);
+
                 $html .= '<select name="custom_field_' . htmlspecialchars($fieldKey) . '" ';
                 $html .= 'id="customField_' . htmlspecialchars($fieldKey) . $idSuffix . '" ';
                 if ($isRequired) $html .= 'required ';

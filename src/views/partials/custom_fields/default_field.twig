@@ -1,0 +1,8 @@
+<input type="defualt" 
+    name="{{ field.field_name ?? field.field_key }}" 
+    id="{{field_key}}{{idSuffix}}" 
+    style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"
+    {% if (is_required) %}
+        'required '
+    {% endif %}
+>

@@ -1,0 +1,19 @@
+<label id="{{field.field_key}}Label{{idSuffix}}">
+	<div>
+		{{ field.field_label }}
+		{% if field.is_required %}
+			<span style="color:#dc2626">*</span>
+		{% endif %}
+	</div>
+
+	{% set templates = {
+		"date": "partials/custom_fields/date_field.twig",
+		"number": "partials/custom_fields/number_field.twig",
+		"select": "partials/custom_fields/select_field.twig",
+		"text": "partials/custom_fields/text_field.twig"
+	} %}
+
+	{% set template = templates[field.field_type] | default("partials/custom_fields/default_field.twig") %}
+
+	{% include template with {field, idSuffix} %}
+</label>

@@ -1,58 +1,73 @@
 <?php
 // src/config/bootstrap.php
-// Ensures required tables exist (idempotent), currently only users for auth
 
+/*  
+    Bootstrap is responsible for loading all core function of the server and all previous database rendering logic has been delegated to db.php
+*/
+
+use Twig\Environment;
+use App\config\Container;
+use App\config\Router;
+use App\Config\Renderer;
+
+require_once BASE_PATH . '/vendor/autoload.php';
 require_once __DIR__ . '/db.php';
 
-try {
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            email VARCHAR(255) NOT NULL UNIQUE,
-            password_hash VARCHAR(255) NOT NULL,
-            role ENUM('admin','user') NOT NULL DEFAULT 'user',
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-    );
-    // Login attempts for throttling
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS login_attempts (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            ip VARCHAR(45) NOT NULL,
-            email VARCHAR(255) NULL,
-            attempted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX (ip),
-            INDEX (email),
-            INDEX (attempted_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-    );
-    // API keys and usage
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS api_keys (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            key_prefix VARCHAR(32) NOT NULL,
-            key_hash CHAR(64) NOT NULL,
-            scopes VARCHAR(1024) NULL,
-            allowed_ips TEXT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            last_used_at TIMESTAMP NULL,
-            revoked_at TIMESTAMP NULL,
-            UNIQUE KEY uq_key_hash (key_hash),
-            INDEX (key_prefix),
-            INDEX (revoked_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-    );
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS api_usage (
-            id BIGINT AUTO_INCREMENT PRIMARY KEY,
-            api_key_id INT NOT NULL,
-            used_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX (api_key_id, used_at),
-            CONSTRAINT fk_api_usage_key FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-    );
-} catch (Throwable $e) {
-    // Fail closed (but do not break public assets). If creation fails, login/setup will error later visibly.
+// Secure session cookies and start session
+$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '',
+    'secure' => $secure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
+//Load twig
+const TWIG_PATH = BASE_PATH . '/src/views';
+$loader = new \Twig\Loader\FilesystemLoader(TWIG_PATH);
+$twig = new \Twig\Environment($loader, [
+    'cache' => __DIR__ . '/../src/cache',
+    'auto_reload' => true
+]);
+
+$twig->addFilter(new \Twig\TwigFilter('json_decode', function (string $json) {
+    return json_decode($json, true) ?? [];
+}));
+
+$container = new Container();
+
+$container->registerSingleton(Router::class); 
+$container->registerSingleton(Renderer::class);
+$container->registerSingleton(Environment::class, $twig);
+$container->registerSingleton(PDO::class, $pdo);
+
+
+// Basic security headers (safe defaults for current app)
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: no-referrer-when-downgrade');
+header("Content-Security-Policy: script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;");
+
+// CSRF setup
+require_once __DIR__ . '/../../src/utils/csrf.php';
+csrf_init();
+
+// Error logging into error log file stored in /var/log/error_log.txt
+error_reporting(E_ALL);
+ini_set("display_errors", 1);
+
+function error_handler($errorno, $errorstr, $errorfile, $errorline)
+{
+    $errorMessage = "Error[$errorno]: $errorstr ($errorfile:$errorline)";
+    error_log($errorMessage . PHP_EOL, 3,  "/var/www/html/error_log.txt");
+    return true;
+}
+
+set_error_handler("error_handler");
+
+//Start session
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }

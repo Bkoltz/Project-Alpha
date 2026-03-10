@@ -1,5 +1,5 @@
 # ---------- Stage 1: Install PHP dependencies with Composer ----------
-FROM php:8.3-cli AS vendor
+FROM php:8.4-cli AS vendor
 WORKDIR /app
 
 # Copy only Composer manifests first for better layer caching
@@ -23,7 +23,7 @@ RUN composer install \
     --optimize-autoloader
 
 # ---------- Stage 2: Runtime image ----------
-FROM php:8.3-apache
+FROM php:8.4-apache
 
 # Tell Apache what hostname to use. NOTE: this is not needed to run, only to avoid warnings
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf

@@ -39,26 +39,26 @@ try {
   if (!empty($quote['is_on_demand'])) {
     // Create on-demand contract with project_id
     $pdo->prepare('INSERT INTO on_demand_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_amount, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-          $id, 
-          (int)$quote['client_id'],
-          $projectId,
-          'pending', 
-          $quote['discount_type'], 
-          $quote['discount_value'], 
-          $quote['tax_percent'], 
-          $quote['subtotal'], 
-          $quote['price_per_invoice'],
-          $quote['deposit_type'] ?? 'none',
-          $quote['deposit_amount'] ?? 0,
-          0,
-          $projectCode, 
-          $quote['start_date'],
-          $quote['end_date'],
-          $quote['billing_interval_count'],
-          $quote['billing_interval_unit'],
-          $quote['scope']
-        ]);
+      ->execute([
+        $id,
+        (int)$quote['client_id'],
+        $projectId,
+        'pending',
+        $quote['discount_type'],
+        $quote['discount_value'],
+        $quote['tax_percent'],
+        $quote['subtotal'],
+        $quote['price_per_invoice'],
+        $quote['deposit_type'] ?? 'none',
+        $quote['deposit_amount'] ?? 0,
+        0,
+        $projectCode,
+        $quote['start_date'],
+        $quote['end_date'],
+        $quote['billing_interval_count'],
+        $quote['billing_interval_unit'],
+        $quote['scope']
+      ]);
     $contract_id = (int)$pdo->lastInsertId();
 
     // Assign doc_number to on-demand contract
@@ -67,28 +67,28 @@ try {
   } elseif (!empty($quote['is_long_term'])) {
     // Create long-term contract with project_id
     $pdo->prepare('INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-          $id, 
-          (int)$quote['client_id'],
-          $projectId,
-          'pending', 
-          $quote['discount_type'], 
-          $quote['discount_value'], 
-          $quote['tax_percent'], 
-          $quote['subtotal'], 
-          $quote['total'], 
-          $projectCode, 
-          $quote['deposit_type'] ?? 'none', 
-          $quote['deposit_amount'] ?? 0, 
-          0,
-          $quote['start_date'],
-          $quote['end_date'],
-          $quote['billing_interval_count'],
-          $quote['billing_interval_unit'],
-          $quote['pricing_type'],
-          $quote['price_per_invoice'],
-          $quote['scope']
-        ]);
+      ->execute([
+        $id,
+        (int)$quote['client_id'],
+        $projectId,
+        'pending',
+        $quote['discount_type'],
+        $quote['discount_value'],
+        $quote['tax_percent'],
+        $quote['subtotal'],
+        $quote['total'],
+        $projectCode,
+        $quote['deposit_type'] ?? 'none',
+        $quote['deposit_amount'] ?? 0,
+        0,
+        $quote['start_date'],
+        $quote['end_date'],
+        $quote['billing_interval_count'],
+        $quote['billing_interval_unit'],
+        $quote['pricing_type'],
+        $quote['price_per_invoice'],
+        $quote['scope']
+      ]);
     $contract_id = (int)$pdo->lastInsertId();
 
     // Long-term contract items from quote items (only if we have items)
@@ -105,7 +105,7 @@ try {
   } else {
     // Create regular contract in pending state with project_id (transfer deposit info from quote)
     $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null]);
+      ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null]);
     $contract_id = (int)$pdo->lastInsertId();
 
     // Contract items from quote items
@@ -116,7 +116,7 @@ try {
 
     // Create invoice with no due date (set on completion), includes fulfillment date and project_id from quote
     $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([$contract_id, $id, (int)$quote['client_id'], $projectId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+      ->execute([$contract_id, $id, (int)$quote['client_id'], $projectId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
     $invoice_id = (int)$pdo->lastInsertId();
 
     $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
@@ -133,7 +133,9 @@ try {
 
   $pdo->commit();
 } catch (Throwable $e) {
-  if ($pdo->inTransaction()) { $pdo->rollBack(); }
+  if ($pdo->inTransaction()) {
+    $pdo->rollBack();
+  }
   error_log('[quote_approve] Failed: ' . $e->getMessage());
   header('Location: /?page=quote/quotes-list&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
   exit;

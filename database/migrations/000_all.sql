@@ -260,6 +260,7 @@ CREATE TABLE
     deposit_type ENUM ('none', 'percent', 'fixed') NOT NULL DEFAULT 'none',
     deposit_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
     fulfillment_date DATE NULL,
+    document_type ENUM ('regular', 'long_term', 'on_demand') NOT NULL,
     is_long_term TINYINT (1) NOT NULL DEFAULT 0,
     is_on_demand TINYINT (1) NOT NULL DEFAULT 0,
     start_date DATE NULL,
@@ -947,8 +948,9 @@ CREATE TABLE
     id INT AUTO_INCREMENT PRIMARY KEY,
     document_type ENUM ('regular', 'long_term', 'on_demand') NOT NULL,
     field_key VARCHAR(100) NOT NULL COMMENT 'Internal key like pickup_date',
+    field_name VARCHAR(100) NOT NULL COMMENT 'Display name, otherwise field_key',
     field_label VARCHAR(255) NOT NULL COMMENT 'Display label like Pick Up Date',
-    field_type ENUM ('text', 'date', 'number', 'textarea', 'select') NOT NULL DEFAULT 'text',
+    field_type ENUM ('text', 'deposit', 'date', 'number', 'textarea', 'select') NOT NULL DEFAULT 'text',
     field_options JSON NULL COMMENT 'For select fields, array of options',
     is_required TINYINT (1) NOT NULL DEFAULT 0,
     is_builtin TINYINT (1) NOT NULL DEFAULT 0 COMMENT 'Built-in fields cannot be deleted',
@@ -966,8 +968,10 @@ CREATE TABLE
 INSERT IGNORE INTO document_custom_fields (
   document_type,
   field_key,
+  field_name,
   field_label,
   field_type,
+  field_options,
   is_required,
   is_builtin,
   is_enabled,
@@ -976,9 +980,11 @@ INSERT IGNORE INTO document_custom_fields (
 VALUES
   (
     'regular',
-    'deposit',
+    'depositType',
+    'deposit_type',
     'Deposit Required',
-    'text',
+    'select',
+    '["None", "Percent", "Fixed"]',
     0,
     1,
     1,
@@ -986,9 +992,11 @@ VALUES
   ),
   (
     'long_term',
-    'deposit',
+    'depositType',
+    'deposit_type',
     'Deposit Required',
-    'text',
+    'select',
+     '["None", "Percent", "Fixed"]',
     0,
     1,
     1,
@@ -996,9 +1004,57 @@ VALUES
   ),
   (
     'on_demand',
-    'deposit',
+    'depositType',
+    'deposit_type',
     'Deposit Required',
-    'text',
+    'select',
+     '["None", "Percent", "Fixed"]',
+    0,
+    1,
+    1,
+    1
+  );
+INSERT IGNORE INTO document_custom_fields (
+  document_type,
+  field_key,
+  field_name,
+  field_label,
+  field_type,
+  is_required,
+  is_builtin,
+  is_enabled,
+  display_order
+)
+
+VALUES
+  (
+    'regular',
+    'depositValue',
+    'deposit_value',
+    'Deposit Value',
+    'number',
+    0,
+    1,
+    1,
+    1
+  ),
+  (
+    'long_term',
+    'depositValue',
+    'deposit_value',
+    'Deposit Value',
+    'number',
+    0,
+    1,
+    1,
+    1
+  ),
+  (
+    'on_demand',
+    'depositValue',
+    'deposit_value',
+    'Deposit Value',
+    'number',
     0,
     1,
     1,
@@ -1009,6 +1065,7 @@ VALUES
 INSERT IGNORE INTO document_custom_fields (
   document_type,
   field_key,
+  field_name,
   field_label,
   field_type,
   is_required,
@@ -1020,6 +1077,7 @@ VALUES
   (
     'regular',
     'fulfillment_date',
+    'fulfillment_date',
     'Fulfillment Date (Estimated)',
     'date',
     0,
@@ -1030,6 +1088,7 @@ VALUES
   (
     'long_term',
     'fulfillment_date',
+    'fulfillment_date',
     'Fulfillment Date (Estimated)',
     'date',
     0,
@@ -1039,6 +1098,7 @@ VALUES
   ),
   (
     'on_demand',
+    'fulfillment_date',
     'fulfillment_date',
     'Fulfillment Date (Estimated)',
     'date',

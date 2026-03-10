@@ -24,7 +24,6 @@ function getItemData() {
 }
 
 function addItem(item = '', desc = '', qty = 1, price = 0) {
-    console.log(item);
     var wrap = document.createElement('div');
     var itemId = 'item_' + (itemCounter++);
     var descId = 'desc_' + itemCounter;

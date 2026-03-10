@@ -1,0 +1,184 @@
+<?php
+
+namespace App\services\quotes;
+
+use App\repositories\quotes\QuotesListRepository;
+
+class QuotesListService
+{
+    private QuotesListRepository $repository;
+
+    public function __construct(QuotesListRepository $repository)
+    {
+        $this->repository = $repository;
+    }
+
+    public function getDisplayData(array $rawFilterData, array $rawCountData): array
+    {
+        $updatedCountData = $this->updateCountData($rawCountData);
+        $updatedFilterData = $this->updateFilterData($rawFilterData);
+
+        $displayData = $this->repository->getDisplayData($updatedFilterData, $updatedCountData);
+        $displayData['rows'] = $this->updateRowStyle($displayData['rows']);
+
+        $lastPage = $this->getLastPageNumber($displayData['totalQuotes'], $updatedCountData['perPage']);
+        $filterConfig = $this->generateFilterConfig($updatedFilterData);
+        $hasProject = $this->repository->hasProject();
+        $hasDocument = $this->repository->hasDocument();
+        $nextPagePath = $this->getPagePath($updatedCountData, $updatedFilterData, 1);
+        $previousPagePath = $this->getPagePath($updatedCountData, $updatedFilterData, -1);
+
+
+        return $displayData + $updatedCountData + [
+            'nextPagePath' => $nextPagePath,
+            'previousPagePath' => $previousPagePath,
+            'hasProject' => $hasProject,
+            'hasDocument' => $hasDocument,
+            'filterConfig' => $filterConfig,
+            'pageCount' => $lastPage,
+        ];
+    }
+
+    private function updateFilterData(array $rawFilterData): array
+    {
+        $client_id = (int)$rawFilterData['clientId'] ?: 0;
+        $client_name = trim($rawFilterData['clientName'] ?? '');
+        $start = $rawFilterData['start'] ?? '';
+        $end = $rawFilterData['end'] ?? '';
+        $status = $rawFilterData['status'] ?? 'all';
+        $project_code = trim($rawFilterData['projectCode'] ?? '');
+        $doc_no = (int)$rawFilterData['docNo'] ?: 0;
+        $min_price =  (float)$rawFilterData['minPrice'] ?: null;
+        $max_price =  (float)$rawFilterData['maxPrice'] ?: null;
+
+        return [
+            'clientId' => $client_id,
+            'clientName' => $client_name,
+            'start' => $start,
+            'end'  => $end,
+            'status' => $status,
+            'projectCode' => $project_code,
+            'docNo'  => $doc_no,
+            'minPrice' => $min_price,
+            'maxPrice' => $max_price,
+        ];
+    }
+
+    private function updateCountData(array $rawCountData): array
+    {
+        $amountPerPage = (int)($rawCountData['perPage'] ?? 50);
+
+        if (!in_array($amountPerPage, [50, 100], true))
+            $amountPerPage = 50;
+
+        $currentPageNumber = max(1, (int)($rawCountData['page'] ?? 1));
+        $offset = ($currentPageNumber - 1) * $amountPerPage;
+
+        return [
+            'perPage' => $amountPerPage,
+            'page' => $currentPageNumber,
+            'offset' => $offset
+        ];
+    }
+
+    private function getLastPageNumber(int $totalQuotes, int $perPage): int
+    {
+        return ceil(max(1, $totalQuotes) / $perPage);
+    }
+
+    //Expects filtered data
+    //Generates the link to move $amount pages from the current page
+    private function getPagePath(array $countData, array $filteredData, int $amount): string
+    {
+        $path = '/?' . http_build_query($filteredData + ['page' => 'quote/quotes-list', 'per_page' => $countData['perPage']]);
+        $path .= '&p=' . $countData['page'] += $amount;
+
+        return $path;
+    }
+
+    //Expects filtered data
+    private function generateFilterConfig(array $filteredData): array
+    {
+        $statusOptions = [
+            ['value' => 'all', 'label' => 'All'],
+            ['value' => 'approved', 'label' => 'Approved'],
+            ['value' => 'rejected', 'label' => 'Denied'],
+            ['value' => 'pending', 'label' => 'Pending']
+        ];
+
+        return [
+            'page' => 'quote/quotes-list',
+            'filters' => [
+                'client' => [
+                    'type' => 'client_autocomplete',
+                    'label' => 'Client',
+                    'value' => $filteredData['clientName'],
+                    'id_value' => $filteredData['clientId']
+                ],
+                'status' => [
+                    'type' => 'select',
+                    'label' => 'Status',
+                    'value' => $filteredData['status'],
+                    'options' => $statusOptions
+                ],
+                'start' => [
+                    'type' => 'date',
+                    'label' => 'Start',
+                    'value' => $filteredData['start']
+                ],
+                'end' => [
+                    'type' => 'date',
+                    'label' => 'End',
+                    'value' => $filteredData['end']
+                ],
+                'min_price' => [
+                    'type' => 'number',
+                    'label' => 'Min ($)',
+                    'value' => $filteredData['minPrice'],
+                    'step' => '0.01'
+                ],
+                'max_price' => [
+                    'type' => 'number',
+                    'label' => 'Max ($)',
+                    'value' => $filteredData['maxPrice'],
+                    'step' => '0.01'
+                ],
+                'project_code' => [
+                    'type' => 'text',
+                    'label' => 'Project ID',
+                    'value' => $filteredData['projectCode'],
+                    'placeholder' => 'PA-2025'
+                ],
+                'doc_number' => [
+                    'type' => 'number',
+                    'label' => 'Doc #',
+                    'value' => $filteredData['docNo']
+                ]
+            ]
+        ];
+    }
+
+    private function updateRowStyle(array $rows): array
+    {
+        foreach ($rows as &$row) {
+            switch ($row['status']) {
+                case 'approved':
+                    $row['style'] = 'background:#ecfdf5;';
+                    break;
+                case 'pending':
+                    $row['style'] = 'background:#fffbeb;';
+                    break;
+                case 'rejected':
+                    $row['style'] = 'background:#fef2f2;';
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return $rows;
+    }
+
+    // if ($k === 'per_page' || $k === 'p' || $k === 'page') continue;
+
+}

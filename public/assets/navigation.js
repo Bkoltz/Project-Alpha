@@ -88,12 +88,6 @@ async function loadPageContent(page) {
         const doc = parser.parseFromString(html, 'text/html');
         const newMainContent = doc.querySelector('.main-content');
 
-        if (!newMainContent) {
-            console.error('ERROR: .main-content not found in response!');
-            console.log('Document body:', document.body ? document.body.innerHTML.substring(0, 500) : 'No body');
-            console.log('Checking for section tag:', doc.querySelector('section') ? 'Found' : 'Not found');
-        }
-
         if (newMainContent) {
             console.log("main content found");
             const scripts = Array.from(newMainContent.querySelectorAll('script'));
@@ -116,6 +110,10 @@ async function loadPageContent(page) {
             return { html: newMainContent.innerHTML, scripts: inlineScripts };
         } else {
             // If no main content found, use the full response (fallback)
+            console.error('ERROR: .main-content not found in response!');
+            console.log('Document body:', document.body ? document.body.innerHTML.substring(0, 500) : 'No body');
+            console.log('Checking for section tag:', doc.querySelector('section') ? 'Found' : 'Not found');
+
             return { html, scripts: [] };
         }
     } catch (error) {
@@ -126,11 +124,10 @@ async function loadPageContent(page) {
 }
 
 async function navigateToPage(page, updateHistory = true) {
+    console.log(page);
     if (page === currentPage && !page.includes('selected_client_id')) {
         return; // Already on this page
     }
-
-    console.log("navigatyinh");
 
     //Removed previously added scripts
     cachedScripts.forEach(s => {

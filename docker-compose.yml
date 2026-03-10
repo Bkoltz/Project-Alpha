@@ -22,6 +22,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./src:/var/www/src 
+      - ./public:/var/www/html
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
   cron:
