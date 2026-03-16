@@ -5,6 +5,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../services/StripeService.php';
+require_once __DIR__ . '/../utils/notifications.php';
 
 // Get raw POST body for signature verification
 $payload = file_get_contents('php://input');
@@ -145,6 +146,13 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         $pdo->commit();
         @error_log('[StripeWebhook] Payment recorded for invoice ' . $invoiceId . ': $' . $amountTotal . ' - status: ' . $status);
         
+        // Notify admin of payment via public link
+        try {
+            notify_admin_invoice_paid($pdo, $invoiceId, $amountTotal, 'stripe');
+        } catch (Throwable $e) {
+            @error_log('[StripeWebhook] Failed to send admin notification: ' . $e->getMessage());
+        }
+        
     } catch (Throwable $e) {
         $pdo->rollBack();
         @error_log('[StripeWebhook] Failed to record payment: ' . $e->getMessage());
@@ -154,13 +162,83 @@ function handleCheckoutSessionCompleted($pdo, $session) {
 
 /**
  * Handle payment_intent.succeeded event
+ * Primary handler for Payment Intent based payments (auto-pay, direct charges)
  */
 function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
-    // This is a backup handler - primary handling is via checkout.session.completed
     $metadata = $paymentIntent['metadata'] ?? [];
-    $invoiceId = $metadata['invoice_id'] ?? null;
+    $invoiceId = $metadata['pa_invoice_id'] ?? $metadata['invoice_id'] ?? null;
+    $piId = $paymentIntent['id'] ?? null;
     
-    if ($invoiceId) {
-        @error_log('[StripeWebhook] PaymentIntent succeeded for invoice: ' . $invoiceId);
+    if (!$invoiceId || !$piId) {
+        @error_log('[StripeWebhook] PaymentIntent missing invoice_id or id in metadata');
+        return;
+    }
+    
+    $invoiceId = (int)$invoiceId;
+    $amountTotal = ($paymentIntent['amount'] ?? 0) / 100; // Convert from cents
+    
+    // Check if already recorded (idempotency)
+    $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id = ?');
+    $existsStmt->execute([$piId]);
+    if ($existsStmt->fetchColumn()) {
+        @error_log('[StripeWebhook] PaymentIntent already recorded: ' . $piId);
+        return;
+    }
+    
+    try {
+        $pdo->beginTransaction();
+        
+        // Record the payment
+        $isAutoPay = !empty($metadata['auto_pay']) ? 1 : 0;
+        $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, stripe_payment_intent_id, auto_pay_attempt, status) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute([$invoiceId, $amountTotal, 'stripe', $piId, $isAutoPay, 'succeeded']);
+        
+        // Update invoice status
+        $sum = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+        $sum->execute([$invoiceId]);
+        $paid = (float)$sum->fetchColumn();
+        
+        $tot = $pdo->prepare('SELECT total FROM invoices WHERE id = ?');
+        $tot->execute([$invoiceId]);
+        $total = (float)$tot->fetchColumn();
+        
+        $status = ($paid >= $total) ? 'paid' : 'partial';
+        
+        try {
+            $pdo->prepare('UPDATE invoices SET status = ?, amount_paid = ? WHERE id = ?')->execute([$status, $paid, $invoiceId]);
+        } catch (Throwable $e) {
+            $pdo->prepare('UPDATE invoices SET status = ? WHERE id = ?')->execute([$status, $invoiceId]);
+        }
+        
+        // If paid, revoke public links and complete contract
+        if ($status === 'paid') {
+            try {
+                $redir = '/?page=public-redirect&type=invoice&reason=paid';
+                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE type = "invoice" AND record_id = ? AND revoked = 0');
+                $rv->execute([$redir, $invoiceId]);
+            } catch (Throwable $e) { /* ignore */ }
+            
+            $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
+            $co->execute([$invoiceId]);
+            $contractId = (int)$co->fetchColumn();
+            if ($contractId > 0) {
+                $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')->execute(['completed', $contractId]);
+            }
+        }
+        
+        $pdo->commit();
+        @error_log('[StripeWebhook] PaymentIntent recorded for invoice ' . $invoiceId . ': $' . $amountTotal . ' - status: ' . $status);
+        
+        // Notify admin of payment via public link
+        try {
+            notify_admin_invoice_paid($pdo, $invoiceId, $amountTotal, 'stripe');
+        } catch (Throwable $e) {
+            @error_log('[StripeWebhook] Failed to send admin notification: ' . $e->getMessage());
+        }
+        
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        @error_log('[StripeWebhook] Failed to record PaymentIntent: ' . $e->getMessage());
+        throw $e;
     }
 }
