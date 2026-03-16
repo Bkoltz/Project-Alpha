@@ -285,7 +285,7 @@ CREATE TABLE
 CREATE TABLE
   IF NOT EXISTS quote_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    quote_id INT NOT NULL,
+    quote_id UNIQUE INT NOT NULL,
     item VARCHAR(255) NOT NULL,
     description TEXT NULL,
     quantity DECIMAL(10, 2) NOT NULL DEFAULT 1,

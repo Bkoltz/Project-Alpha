@@ -1,0 +1,284 @@
+<section>
+	<div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Quote</div>
+	<div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">
+		Valid for
+		{{appConfig.documents_valid_days ?? 14}}
+		days
+	</div>
+
+	{# Status #}
+	<div class="no-print" style="padding:12px 16px;background:{{colors.bg}};color:{{colors.text}};border-left:4px solid {{colors.border}};border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
+		Status:
+		{{quote.status}}
+	</div>
+	<div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+		<a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
+		<a href="/?page=quote/quote-pdf&id={{id}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+		<a href="/?page=quote/quote-pdf&id={{id}}" download="quote-{{quote.doc_number ?? quote.id}}.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+
+		{% if quote.status === 'pending' %}
+			<a href="/?page=quote/quote-edit&id={{id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+		{% endif %}
+
+		{% if quote.status is not empty and quote.status != 'rejected' %}
+			<form method="post" action="/?page=email-send" style="display:inline">
+				<input type="hidden" name="csrf" value="{{ csrf_token }}">
+				<input type="hidden" name="type" value="quote">
+				<input type="hidden" name="id" value="{{ id }}">
+				<input type="hidden" name="redirect_to" value="{{ requestUri }}">
+				<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:medium;">Email</button>
+			</form>
+		{% endif %}
+
+		{% if quote.status == 'pending' %}
+			<form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('Approve this quote and generate contract + invoice?');">
+				<input type="hidden" name="csrf" value="{{ csrf_token }}">
+				<input type="hidden" name="id" value="{{ id }}">
+				<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff;font-size:medium;">Approve</button>
+			</form>
+			<form method="post" action="/?page=quote/quote-reject" style="display:inline" onsubmit="return confirm('Deny this quote?');">
+				<input type="hidden" name="csrf" value="{{ csrf_token }}">
+				<input type="hidden" name="id" value="{{ id }}">
+				<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff;font-size:medium;">Deny</button>
+			</form>
+		{% endif %}
+
+		{% if quote.status is not empty and quote.status == 'rejected' %}
+			<form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this quote? It will be set back to pending status.');">
+				<input type="hidden" name="csrf" value="{{ csrf_token }}">
+				<input type="hidden" name="type" value="quote">
+				<input type="hidden" name="id" value="{{ id }}">
+				<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e;font-size:medium;">Re-enable</button>
+			</form>
+		{% endif %}
+
+		<form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
+			<input type="hidden" name="csrf" value="{{ csrf_token }}">
+			<input type="hidden" name="type" value="quote">
+			<input type="hidden" name="id" value="{{ id }}">
+			<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af;font-size:medium;">Update Document Date</button>
+		</form>
+	</div>
+
+	{% if getParams.error is not empty %}
+		<div class="no-print" style="padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;margin-bottom:8px;font-size:14px">⚠ Error:
+			{{ getParams.error }}</div>
+	{% endif %}
+
+	{% if getParams.reenabled is not empty %}
+		<div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Quote re-enabled successfully</div>
+	{% endif %}
+
+	{% if getParams.date_updated is not empty %}
+		<div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Document date updated successfully</div>
+	{% endif %}
+
+	<div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:8px;font-size:13px;color:#374151">
+		<strong>Created:</strong>
+		{{ quote.created_at is not empty ? quote.created_at|date('M j, Y g:i A') : 'N/A' }}
+
+		<span style="margin:0 8px">|</span>
+
+		<strong>Document Date:</strong>
+		{{ quote.document_date is not empty ? quote.document_date|date('M j, Y g:i A') : 'N/A' }}
+
+		{% if quote.document_date_updated_at is defined %}
+			<span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated:
+				{{ quote.document_date_updated_at|date('M j, Y g:i A') }})</span>
+		{% endif %}
+	</div>
+
+	{# Logo #}
+	<table style="width:100%;table-layout:fixed;margin-bottom:8px;border-collapse:collapse">
+		<tr>
+			<td style="vertical-align:middle;width:70%">
+				<div style="font-weight:700;font-size:20px">{{brand}}</div>
+				<div style="color:#374151;font-size:13px;margin-top:2px">Quote Q-{{quote.doc_number ?? quote.id}}</div>
+				{% if quote.project_code is not empty %}
+					<div style="color:#374151;font-size:13px;margin-top:2px">Job
+						{{quote.project_code}}</div>
+				{% endif %}
+				{% if quote.project_id is not empty %}
+					<div style="color:#374151;font-size:13px;margin-top:2px">Project
+						{{quote.project_id}}</div>
+				{% endif %}
+			</td>
+			<td style="vertical-align:middle;width:30%;text-align:right">
+				<img src="{{logoPath}}" alt="{{brand}}" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
+			</td>
+		</tr>
+	</table>
+
+	{# Custom fields #}
+	{# {% if showDepositInfo or showFulfillmentDate or hasCustomFields %} #}
+	<table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb">
+		<tr>
+			{% if showDepositInfo %}
+				<td style="padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+					<div style="font-size:11px;color:#6b7280">Deposit Due:
+						<span style="font-weight:600;color:#059669">${{ depositCalc|number_format(2) }}</span>
+					</div>
+				</td>
+			{% endif %}
+			{% if showFulfillmentDate %}
+				<td style="padding:8px;{{ hasCustomFields ? 'border-right:1px solid #e5e7eb;' : '' }}vertical-align:top">
+					<div style="font-size:11px;color:#6b7280">Fulfillment Date:
+						<span style="font-weight:600;color:#2563eb">{{ fulfillmentDate|date('M j, Y') }}</span>
+					</div>
+				</td>
+			{% endif %}
+			{% for idx, customField in customFields %}
+				<td style="padding:8px;{{ idx < customFields|length - 1 ? 'border-right:1px solid #e5e7eb;' : '' }}vertical-align:top">
+					<div style="font-size:11px;color:#6b7280">{{ customField.label|e }}:
+						<span style="font-weight:600;color:#374151">{{ customField.value|e }}</span>
+					</div>
+				</td>
+			{% endfor %}
+		</tr>
+	</table>
+	{# {% endif %} #}
+
+	{# To and from #}
+	<table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
+		<tr>
+			<td style="vertical-align:top;width:50%;padding-right:12px">
+				<div style="font-weight:600">From</div>
+				<div>
+					{% for line in fromLines %}
+						<div>{{line}}</div>
+					{% endfor %}
+				</div>
+
+				<div style="margin-top:6px;color:#4b5563;font-size:13px">
+					{% if fromPhone is not empty %}
+						<div>{{fromPhone}}</div>
+					{% endif %}
+
+					{% if fromEmail is not empty %}
+						<div>{{fromEmail}}</div>
+					{% endif %}
+				</div>
+			</td>
+
+			<td style="vertical-align:top;width:50%;padding-left:12px">
+				<div style="font-weight:600">To</div>
+				<div>
+					{% for line in toLines %}
+						<div>{{line}}</div>
+					{% endfor %}
+				</div>
+
+				<div style="margin-top:6px;color:#4b5563;font-size:13px">
+					{% if toPhone is not empty %}
+						<div>{{toPhone}}</div>
+					{% endif %}
+
+					{% if toEmail is not empty %}
+						<div>{{toEmail}}</div>
+					{% endif %}
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	{# Scope #}
+	{% if scope_enabled %}
+		<div style="page-break-before:auto;margin-top:20px">
+			<h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
+			<div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
+		</div>
+		<div style="page-break-after:always"></div>
+	{% endif %}
+
+	{# Items table #}
+	<table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+		<thead>
+			<tr style="text-align:left;border-bottom:1px solid #eee">
+				<th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
+				<th style="padding:10px;width:35%;vertical-align:top">Description</th>
+				<th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
+				<th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+				<th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for item in items %}
+				<tr style="border-top:1px solid #f3f4f6">
+					<td style="padding:10px;font-weight:600;vertical-align:top;text-align:center">{{item.item ?? ''}}</td>
+					<td style="padding:10px;color:#6b7280;font-size:13px;vertical-align:top">{{item.description ?? ''}}</td>
+					<td style="padding:10px;text-align:right;vertical-align:top">{{item.quantity|number_format(2)}}</td>
+					<td style="padding:10px;text-align:right;vertical-align:top">${{item.unit_price|number_format(2)}}</td>
+					<td style="padding:10px;text-align:right;vertical-align:top">${{item.line_total|number_format(2)}}</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+
+	{# Totals section #}
+	<table style="width:100%;border-collapse:collapse;margin-top:12px">
+		<tr>
+			<td style="width:60%"></td>
+			<td style="width:40%">
+				<table style="width:100%;border-collapse:collapse">
+					<tr>
+						<td style="padding:8px 12px;text-align:right;color:#6b7280">Subtotal</td>
+						<td style="padding:8px 12px;text-align:right;width:120px">${{quote.subtotal}}</td>
+					</tr>
+					<tr>
+						<td style="padding:8px 12px;text-align:right;color:#6b7280">Discount</td>
+						<td style="padding:8px 12px;text-align:right">
+							{{ quote.discount_type == 'percent' ? quote.discount_value|number_format(2) ~ '%' : quote.discount_type == 'fixed' ? '$' ~ quote.discount_value|number_format(2) : '$0.00' }}
+						</td>
+					</tr>
+					<tr>
+						<td style="padding:8px 12px;text-align:right;color:#6b7280">Tax</td>
+						<td style="padding:8px 12px;text-align:right">{{quote.tax_percent|number_format(2)}}%</td>
+					</tr>
+					<tr style="border-top:2px solid #e5e7eb">
+						<td style="padding:8px 12px;text-align:right;font-weight:700">Total</td>
+						<td style="padding:8px 12px;text-align:right;font-weight:700;font-size:16px">${{quote.total|number_format(2)}}</td>
+					</tr>
+				</table>
+			</td>
+		</tr>
+	</table>
+
+	{# Terms and conditions #}
+	{% if appConfig.quotes_show_terms is not empty or appConfig.quotes_show_terms == 1 %}
+		<div style="page-break-after:always"></div>
+		<h3>Terms and Conditions</h3>
+		<div style="white-space:pre-wrap;padding:6px 0;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#222">
+			{{termsText}}
+		</div>
+	{% endif %}
+</section>
+<style>
+	.no-print {
+											display: flex
+										}
+										.print-footer {
+											display: none
+										}
+										@media print {
+											.no-print {
+												display: none !important
+											}
+											.side-nav,
+											.nav-footer {
+												display: none
+											}
+											.main-content {
+												margin-left: 0
+											}
+											body {
+												background: #fff
+											}
+											.print-footer {
+												display: block;
+												position: fixed;
+												bottom: 6px;
+												left: 12px;
+												color: #374151;
+												font-size: 12px
+											}
+										}

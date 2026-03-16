@@ -8,34 +8,46 @@ class QuotesListService
 {
     private QuotesListRepository $repository;
 
+    private const PAGE_TITLES = [
+        'regular'  => 'Quotes',
+        'longTerm' => 'Long-Term Quotes',
+        'onDemand' => 'On-Demand Quotes',
+    ];
+
     public function __construct(QuotesListRepository $repository)
     {
         $this->repository = $repository;
     }
 
-    public function getDisplayData(array $rawFilterData, array $rawCountData): array
+    public function getRenderData(array $rawFilterData, array $rawCountData, string $documentType): array
     {
         $updatedCountData = $this->updateCountData($rawCountData);
         $updatedFilterData = $this->updateFilterData($rawFilterData);
 
-        $displayData = $this->repository->getDisplayData($updatedFilterData, $updatedCountData);
-        $displayData['rows'] = $this->updateRowStyle($displayData['rows']);
-
-        $lastPage = $this->getLastPageNumber($displayData['totalQuotes'], $updatedCountData['perPage']);
+        $displayData = $this->getDisplayData($documentType, $updatedFilterData, $updatedCountData);
+        $pageButtonData = $this->getPageButtonData($displayData['quotesCount'], $updatedCountData, $updatedFilterData);
         $filterConfig = $this->generateFilterConfig($updatedFilterData);
-        $hasProject = $this->repository->hasProject();
-        $hasDocument = $this->repository->hasDocument();
-        $nextPagePath = $this->getPagePath($updatedCountData, $updatedFilterData, 1);
-        $previousPagePath = $this->getPagePath($updatedCountData, $updatedFilterData, -1);
 
 
-        return $displayData + $updatedCountData + [
-            'nextPagePath' => $nextPagePath,
-            'previousPagePath' => $previousPagePath,
-            'hasProject' => $hasProject,
-            'hasDocument' => $hasDocument,
-            'filterConfig' => $filterConfig,
-            'pageCount' => $lastPage,
+        return array_merge($displayData, $updatedCountData, $pageButtonData, ['filterConfig' => $filterConfig, 'documentType' => $documentType]);
+    }
+
+    private function getDisplayData(string $documentType, array $updatedFilterData, array $updatedCountData): array
+    {
+        $displayData = $this->repository->getDisplayData($documentType, $updatedFilterData, $updatedCountData);
+
+        $displayData['rows'] = $this->updateRowStyle($displayData['rows']);
+        $displayData['title'] = $this::PAGE_TITLES[$documentType] ?? 'Quotes';
+
+        return $displayData;
+    }
+
+    private function getPageButtonData(int $quotesCount, array $countData, array $filteredData): array
+    {
+        return [
+            'nextPagePath' => $this->getPagePath($countData, $filteredData, 1),
+            'previousPagePath' => $this->getPagePath($countData, $filteredData, -1),
+            'pageCount' => $this->getLastPageNumber($quotesCount, $countData['perPage']),
         ];
     }
 
@@ -81,16 +93,16 @@ class QuotesListService
         ];
     }
 
-    private function getLastPageNumber(int $totalQuotes, int $perPage): int
+    private function getLastPageNumber(int $quotesCount, int $perPage): int
     {
-        return ceil(max(1, $totalQuotes) / $perPage);
+        return ceil(max(1, $quotesCount) / $perPage);
     }
 
     //Expects filtered data
     //Generates the link to move $amount pages from the current page
     private function getPagePath(array $countData, array $filteredData, int $amount): string
     {
-        $path = '/?' . http_build_query($filteredData + ['page' => 'quote/quotes-list', 'per_page' => $countData['perPage']]);
+        $path = '/?' . http_build_query($filteredData + ['page' => 'quote/quote-list', 'per_page' => $countData['perPage']]);
         $path .= '&p=' . $countData['page'] += $amount;
 
         return $path;
@@ -107,7 +119,7 @@ class QuotesListService
         ];
 
         return [
-            'page' => 'quote/quotes-list',
+            'page' => 'quote/quote-list',
             'filters' => [
                 'client' => [
                     'type' => 'client_autocomplete',
@@ -178,7 +190,4 @@ class QuotesListService
 
         return $rows;
     }
-
-    // if ($k === 'per_page' || $k === 'p' || $k === 'page') continue;
-
 }

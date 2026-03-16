@@ -44,7 +44,7 @@ class __TwigTemplate_2c34459c1a9c2f67d685ebf4c082dbf5 extends Template
         yield "\" style=\"display:grid;gap:12px;grid-template-columns:repeat(";
         yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(($context["columns"] ?? null), "html", null, true);
         yield ", 1fr)\">
-    ";
+\t";
         // line 2
         $context['_parent'] = $context;
         $context['_seq'] = CoreExtension::ensureTraversable(($context["fields"] ?? null));
@@ -63,10 +63,10 @@ class __TwigTemplate_2c34459c1a9c2f67d685ebf4c082dbf5 extends Template
         }
         foreach ($context['_seq'] as $context["_key"] => $context["field"]) {
             // line 3
-            yield "        ";
+            yield "\t\t";
             yield from $this->load("partials/custom_fields/custom_field_item.twig", 3)->unwrap()->yield(CoreExtension::merge($context, ["field" => $context["field"], "idSuffix" => ($context["idSuffix"] ?? null)]));
             // line 4
-            yield "    ";
+            yield "\t";
             ++$context['loop']['index0'];
             ++$context['loop']['index'];
             $context['loop']['first'] = false;
@@ -80,7 +80,8 @@ class __TwigTemplate_2c34459c1a9c2f67d685ebf4c082dbf5 extends Template
         unset($context['_seq'], $context['_key'], $context['field'], $context['_parent'], $context['loop']);
         $context = array_intersect_key($context, $_parent) + $_parent;
         // line 5
-        yield "</div>";
+        yield "</div>
+";
         yield from [];
     }
 

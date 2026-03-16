@@ -39,7 +39,7 @@ class __TwigTemplate_c6c6ef5ee7707e7a3483a09763699d62 extends Template
     {
         $macros = $this->macros;
         // line 1
-        yield "<input type=\"number\" step=\"0.01\" placeholder = \"0\" name=\"";
+        yield "<input type=\"number\" step=\"0.01\" placeholder=\"0\" name=\"";
         yield (((CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", true, true, false, 1) &&  !(null === CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", false, false, false, 1)))) ? ($this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", false, false, false, 1), "html", null, true)) : ($this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_key", [], "any", false, false, false, 1), "html", null, true)));
         yield "\" id=\"";
         yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_key", [], "any", false, false, false, 1), "html", null, true);

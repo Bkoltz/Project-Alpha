@@ -39,25 +39,15 @@ class __TwigTemplate_3b04387fd50da5eab63c271c7921c302 extends Template
     {
         $macros = $this->macros;
         // line 1
-        yield "<input type=\"date\" 
-    name=\"";
-        // line 2
-        yield (((CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", true, true, false, 2) &&  !(null === CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", false, false, false, 2)))) ? ($this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", false, false, false, 2), "html", null, true)) : ($this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_key", [], "any", false, false, false, 2), "html", null, true)));
-        yield "\" 
-    id=\"";
-        // line 3
-        yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_key", [], "any", false, false, false, 3), "html", null, true);
+        yield "<input type=\"date\" name=\"";
+        yield (((CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", true, true, false, 1) &&  !(null === CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", false, false, false, 1)))) ? ($this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_name", [], "any", false, false, false, 1), "html", null, true)) : ($this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_key", [], "any", false, false, false, 1), "html", null, true)));
+        yield "\" id=\"";
+        yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "field_key", [], "any", false, false, false, 1), "html", null, true);
         yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(($context["idSuffix"] ?? null), "html", null, true);
-        yield "\" 
-    style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\"
-    ";
-        // line 5
-        if ((($tmp = CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "is_required", [], "any", false, false, false, 5)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
-            // line 6
-            yield "        'required '
-    ";
+        yield "\" style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\" ";
+        if ((($tmp = CoreExtension::getAttribute($this->env, $this->source, ($context["field"] ?? null), "is_required", [], "any", false, false, false, 1)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
+            yield " 'required ' ";
         }
-        // line 8
         yield ">
 ";
         yield from [];
@@ -84,7 +74,7 @@ class __TwigTemplate_3b04387fd50da5eab63c271c7921c302 extends Template
      */
     public function getDebugInfo(): array
     {
-        return array (  61 => 8,  57 => 6,  55 => 5,  49 => 3,  45 => 2,  42 => 1,);
+        return array (  42 => 1,);
     }
 
     public function getSourceContext(): Source

@@ -1,5 +1,5 @@
 <div id="customFields{{idSuffix}}" style="display:grid;gap:12px;grid-template-columns:repeat({{columns}}, 1fr)">
-    {% for field in fields %}
-        {% include 'partials/custom_fields/custom_field_item.twig' with {field, idSuffix} %}
-    {% endfor %}
+	{% for field in fields %}
+		{% include 'partials/custom_fields/custom_field_item.twig' with {field, idSuffix} %}
+	{% endfor %}
 </div>

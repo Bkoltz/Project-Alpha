@@ -266,7 +266,7 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px">
                 <div style="font-weight:600;margin-bottom:12px">Quick Actions</div>
                 <div style="display:grid;gap:8px">
-                    <a href="/?page=quote/quotes-create&project_id=<?php echo $projectId; ?>" 
+                    <a href="/?page=quote/quote-create&project_id=<?php echo $projectId; ?>" 
                        style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
                         📄 Create Quote
                     </a>

@@ -1,7 +1,5 @@
 <select name="{{ field.field_name ?? field.field_key }}" id="{{ field.field_key }}{{ idSuffix }}" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" {% if field.is_required %} required {% endif %}>
 	{% for option in field.field_options|json_decode %}
-		<option value="{{ option }}">
-			{{ option }}
-		</option>
-	{% endfor %}
-</select>
+		<option value="{{ option }}"></option>
+	{{ option }}
+</option>{% endfor %}</select>

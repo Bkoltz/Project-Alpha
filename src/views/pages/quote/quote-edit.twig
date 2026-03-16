@@ -1,0 +1,85 @@
+<section>
+	<h2>Edit Quote Q-{{quote.doc_number ?? quote.id}}
+		{% if quote.project_code is defined %}
+			Job
+			{{quote.project_code}}
+		{% endif %}
+	</h2>
+	<form id="quoteEditForm" method="post" action="/?page=quote/quote-edit" style="display:grid;gap:16px;max-width:900px">
+		<input type="hidden" name="csrf" value="{{token}}">
+		<input type="hidden" name="id" value="{{quote.id}}">
+		<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+			<label>
+				<!-- Client input -->
+				{% include "partials/client_components/client_input_autocomplete.twig" with {clientName: quote.client_name, clientId: quote.client_id} %}
+			</label>
+		</label>
+		<label>
+			<div>Tax (%)</div>
+			<input id="taxPercent" type="number" step="0.01" name="tax_percent" value="{{quote.tax_percent}}" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+		</label>
+		<label>
+			<div>Discount Type</div>
+			<select id="discountType" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+				<option value="none" {{quote.discount_type}}>None</option>
+				<option value="percent" {{quote.discount_type}}>Percent</option>
+				<option value="fixed" {{quote.discount_type}}>Fixed $</option>
+			</select>
+		</label>
+		<label>
+			<div>Discount Value</div>
+			<input id="discountValue" type="number" step="0.01" name="discount_value" value="{{quote.discount_value}}" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+		</label>
+	</div>
+
+	{# TODO add rendering prexisting values #}
+	<div id="customFieldsContainer">
+		{% include "partials/custom_fields/custom_field.twig" with {fields, columns, idSuffix} %}
+	</div>
+
+	<div>
+		<div style="font-weight:600;margin-bottom:8px">Items</div>
+		<div id="items" style="display:grid;gap:8px"></div>
+		<button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
+	</div>
+
+	{% if appConfig.quote_scope_enabled %}
+		<label>
+			<div>Scope of Work</div>
+			<textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."><?php echo htmlspecialchars($quote['scope'] ?? ''); ?></textarea>
+		</label>
+	{% endif %}
+
+	<label>
+		<div>Job Notes</div>
+		<textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs">{{notes}}</textarea>
+	</label>
+
+	<label>
+		<div>Job Terms (override default terms for this job)</div>
+		<textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project">{{terms}}</textarea>
+	</label>
+
+	<div id="totals" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
+		<div style="display:flex;gap:16px;justify-content:flex-end">
+			<div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
+			<div id="subtotalVal" style="min-width:120px;text-align:right">$0.00</div>
+		</div>
+		<div style="display:flex;gap:16px;justify-content:flex-end">
+			<div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div>
+			<div id="discountVal" style="min-width:120px;text-align:right">$0.00</div>
+		</div>
+		<div style="display:flex;gap:16px;justify-content:flex-end">
+			<div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div>
+			<div id="taxVal" style="min-width:120px;text-align:right">$0.00</div>
+		</div>
+		<div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700">
+			<div style="min-width:140px;text-align:right">Total</div>
+			<div id="totalVal" style="min-width:120px;text-align:right">$0.00</div>
+		</div>
+	</div>
+
+	<div>
+		<button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Quote</button>
+	</div>
+</form></section><div id="quote-items-data" type="application/json" style="display:none">{{items}}</div><!-- Client logic --><script src="js/quotes-edit-logic.js" defer></script>

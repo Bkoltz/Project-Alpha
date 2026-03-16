@@ -259,69 +259,67 @@ class __TwigTemplate_7f5e749b1a51d9b0c6fbad99aa870a25 extends Template
   ";
         // line 112
         yield "\t";
-        if (((($context["showDepositInfo"] ?? null) || ($context["showFulfillmentDate"] ?? null)) || ($context["hasCustomFields"] ?? null))) {
-            // line 113
-            yield "\t\t<table style=\"width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb\">
+        // line 113
+        yield "\t\t<table style=\"width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb\">
 \t\t\t<tr>
 \t\t\t\t";
-            // line 115
-            if ((($tmp = ($context["showDepositInfo"] ?? null)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
-                // line 116
-                yield "\t\t\t\t\t<td style=\"padding:8px;border-right:1px solid #e5e7eb;vertical-align:top\">
+        // line 115
+        if ((($tmp = ($context["showDepositInfo"] ?? null)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
+            // line 116
+            yield "\t\t\t\t\t<td style=\"padding:8px;border-right:1px solid #e5e7eb;vertical-align:top\">
 \t\t\t\t\t\t<div style=\"font-size:11px;color:#6b7280\">Deposit Due:
 \t\t\t\t\t\t\t<span style=\"font-weight:600;color:#059669\">\$";
-                // line 118
-                yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape($this->extensions['Twig\Extension\CoreExtension']->formatNumber(($context["depositCalc"] ?? null), 2), "html", null, true);
-                yield "</span>
+            // line 118
+            yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape($this->extensions['Twig\Extension\CoreExtension']->formatNumber(($context["depositCalc"] ?? null), 2), "html", null, true);
+            yield "</span>
 \t\t\t\t\t\t</div>
 \t\t\t\t\t</td>
 \t\t\t\t";
-            }
-            // line 122
-            yield "\t\t\t\t";
-            if ((($tmp = ($context["showFulfillmentDate"] ?? null)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
-                // line 123
-                yield "\t\t\t\t\t<td style=\"padding:8px;";
-                yield (((($tmp = ($context["hasCustomFields"] ?? null)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) ? ("border-right:1px solid #e5e7eb;") : (""));
-                yield "vertical-align:top\">
+        }
+        // line 122
+        yield "\t\t\t\t";
+        if ((($tmp = ($context["showFulfillmentDate"] ?? null)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
+            // line 123
+            yield "\t\t\t\t\t<td style=\"padding:8px;";
+            yield (((($tmp = ($context["hasCustomFields"] ?? null)) && $tmp instanceof Markup ? (string) $tmp : $tmp)) ? ("border-right:1px solid #e5e7eb;") : (""));
+            yield "vertical-align:top\">
 \t\t\t\t\t\t<div style=\"font-size:11px;color:#6b7280\">Fulfillment Date:
 \t\t\t\t\t\t\t<span style=\"font-weight:600;color:#2563eb\">";
-                // line 125
-                yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape($this->extensions['Twig\Extension\CoreExtension']->formatDate(($context["fulfillmentDate"] ?? null), "M j, Y"), "html", null, true);
-                yield "</span>
+            // line 125
+            yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape($this->extensions['Twig\Extension\CoreExtension']->formatDate(($context["fulfillmentDate"] ?? null), "M j, Y"), "html", null, true);
+            yield "</span>
 \t\t\t\t\t\t</div>
 \t\t\t\t\t</td>
 \t\t\t\t";
-            }
-            // line 129
-            yield "\t\t\t\t";
-            $context['_parent'] = $context;
-            $context['_seq'] = CoreExtension::ensureTraversable(($context["displayCustomFields"] ?? null));
-            foreach ($context['_seq'] as $context["idx"] => $context["customField"]) {
-                // line 130
-                yield "\t\t\t\t\t<td style=\"padding:8px;";
-                yield ((($context["idx"] < (Twig\Extension\CoreExtension::length($this->env->getCharset(), ($context["displayCustomFields"] ?? null)) - 1))) ? ("border-right:1px solid #e5e7eb;") : (""));
-                yield "vertical-align:top\">
+        }
+        // line 129
+        yield "\t\t\t\t";
+        $context['_parent'] = $context;
+        $context['_seq'] = CoreExtension::ensureTraversable(($context["customFields"] ?? null));
+        foreach ($context['_seq'] as $context["idx"] => $context["customField"]) {
+            // line 130
+            yield "\t\t\t\t\t<td style=\"padding:8px;";
+            yield ((($context["idx"] < (Twig\Extension\CoreExtension::length($this->env->getCharset(), ($context["customFields"] ?? null)) - 1))) ? ("border-right:1px solid #e5e7eb;") : (""));
+            yield "vertical-align:top\">
 \t\t\t\t\t\t<div style=\"font-size:11px;color:#6b7280\">";
-                // line 131
-                yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, $context["customField"], "label", [], "any", false, false, false, 131));
-                yield ":
+            // line 131
+            yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, $context["customField"], "label", [], "any", false, false, false, 131));
+            yield ":
 \t\t\t\t\t\t\t<span style=\"font-weight:600;color:#374151\">";
-                // line 132
-                yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, $context["customField"], "value", [], "any", false, false, false, 132));
-                yield "</span>
+            // line 132
+            yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(CoreExtension::getAttribute($this->env, $this->source, $context["customField"], "value", [], "any", false, false, false, 132));
+            yield "</span>
 \t\t\t\t\t\t</div>
 \t\t\t\t\t</td>
 \t\t\t\t";
-            }
-            $_parent = $context['_parent'];
-            unset($context['_seq'], $context['idx'], $context['customField'], $context['_parent']);
-            $context = array_intersect_key($context, $_parent) + $_parent;
-            // line 136
-            yield "\t\t\t</tr>
+        }
+        $_parent = $context['_parent'];
+        unset($context['_seq'], $context['idx'], $context['customField'], $context['_parent']);
+        $context = array_intersect_key($context, $_parent) + $_parent;
+        // line 136
+        yield "\t\t\t</tr>
 \t\t</table>
 \t";
-        }
         // line 139
         yield "
   ";
@@ -598,7 +596,7 @@ class __TwigTemplate_7f5e749b1a51d9b0c6fbad99aa870a25 extends Template
      */
     public function getDebugInfo(): array
     {
-        return array (  545 => 253,  539 => 250,  534 => 247,  531 => 246,  521 => 238,  514 => 234,  506 => 229,  498 => 224,  489 => 217,  484 => 213,  475 => 210,  471 => 209,  467 => 208,  463 => 207,  459 => 206,  456 => 205,  452 => 204,  439 => 193,  436 => 191,  428 => 185,  425 => 184,  418 => 178,  412 => 176,  410 => 175,  407 => 174,  401 => 172,  399 => 171,  394 => 168,  385 => 166,  381 => 165,  373 => 159,  367 => 157,  365 => 156,  362 => 155,  356 => 153,  354 => 152,  349 => 149,  340 => 147,  336 => 146,  329 => 141,  326 => 139,  321 => 136,  311 => 132,  307 => 131,  302 => 130,  297 => 129,  290 => 125,  284 => 123,  281 => 122,  274 => 118,  270 => 116,  268 => 115,  264 => 113,  261 => 112,  251 => 106,  247 => 104,  242 => 102,  239 => 101,  236 => 100,  231 => 98,  228 => 97,  226 => 96,  222 => 95,  218 => 94,  213 => 91,  209 => 88,  204 => 86,  201 => 85,  199 => 84,  194 => 82,  186 => 77,  181 => 74,  174 => 58,  169 => 56,  165 => 54,  158 => 50,  153 => 48,  150 => 47,  148 => 46,  145 => 45,  138 => 41,  134 => 40,  127 => 36,  123 => 35,  120 => 34,  118 => 33,  115 => 32,  108 => 28,  104 => 27,  99 => 25,  96 => 24,  94 => 23,  91 => 22,  85 => 20,  83 => 19,  76 => 17,  72 => 16,  65 => 12,  55 => 10,  48 => 5,  42 => 1,);
+        return array (  543 => 253,  537 => 250,  532 => 247,  529 => 246,  519 => 238,  512 => 234,  504 => 229,  496 => 224,  487 => 217,  482 => 213,  473 => 210,  469 => 209,  465 => 208,  461 => 207,  457 => 206,  454 => 205,  450 => 204,  437 => 193,  434 => 191,  426 => 185,  423 => 184,  416 => 178,  410 => 176,  408 => 175,  405 => 174,  399 => 172,  397 => 171,  392 => 168,  383 => 166,  379 => 165,  371 => 159,  365 => 157,  363 => 156,  360 => 155,  354 => 153,  352 => 152,  347 => 149,  338 => 147,  334 => 146,  327 => 141,  324 => 139,  320 => 136,  310 => 132,  306 => 131,  301 => 130,  296 => 129,  289 => 125,  283 => 123,  280 => 122,  273 => 118,  269 => 116,  267 => 115,  263 => 113,  261 => 112,  251 => 106,  247 => 104,  242 => 102,  239 => 101,  236 => 100,  231 => 98,  228 => 97,  226 => 96,  222 => 95,  218 => 94,  213 => 91,  209 => 88,  204 => 86,  201 => 85,  199 => 84,  194 => 82,  186 => 77,  181 => 74,  174 => 58,  169 => 56,  165 => 54,  158 => 50,  153 => 48,  150 => 47,  148 => 46,  145 => 45,  138 => 41,  134 => 40,  127 => 36,  123 => 35,  120 => 34,  118 => 33,  115 => 32,  108 => 28,  104 => 27,  99 => 25,  96 => 24,  94 => 23,  91 => 22,  85 => 20,  83 => 19,  76 => 17,  72 => 16,  65 => 12,  55 => 10,  48 => 5,  42 => 1,);
     }
 
     public function getSourceContext(): Source

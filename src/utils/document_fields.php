@@ -19,7 +19,7 @@ function renderDocumentCustomFields($pdo, $documentType, $existingValues = [], $
         WHERE document_type = ? AND is_enabled = 1 
         ORDER BY display_order, id
     ');
-    
+
     $stmt->execute([$documentType]);
     $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -168,10 +168,9 @@ function extractCustomFieldValues($postData)
             // Only include non-empty values
             if (is_string($value)) {
                 $value = trim($value);
-                if ($value !== '') {
-                    $customFields[$fieldKey] = $value;
-                }
-            } elseif (!empty($value)) {
+            }
+
+            if (!empty($value)) {
                 $customFields[$fieldKey] = $value;
             }
         }

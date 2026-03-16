@@ -2,23 +2,25 @@
 
 namespace App\config;
 
-use App\controllers\quote\QuotesCreateController;
+use App\controllers\quote\QuotesDataController;
 use App\Controllers\Quote\QuotesDetailsController;
 use App\controllers\quote\QuotesListController;
 
 class Router
 {
-    private Container $container;
-
     public static $routes = [
         'GET' => [
-            'quote/quotes-details' => [QuotesDetailsController::class, 'load'],
-            'quote/quotes-create' => [QuotesCreateController::class, 'load'],
+            'quote/quote-details' => [QuotesDetailsController::class, 'load'],
+            'quote/quote-create' => [QuotesDataController::class, 'load'],
+            'quote/quote-edit' => [QuotesDataController::class, 'load'],
             'quote/quote-pdf' => [QuotesDetailsController::class, 'toPDF'],
-            'quote/quotes-list' => [QuotesListController::class, 'load']
+            'quote/regular-quote-list' => [QuotesListController::class, 'loadRegular'],
+            'quote/on-demand-quote-list' => [QuotesListController::class, 'loadOnDemand'],
+            'quote/long-term-quote-list' => [QuotesListController::class, 'loadLongTerm'],
         ],
         'POST' => [
-            'quote/quotes-create' => [QuotesCreateController::class, 'create'],
+            'quote/quote-create' => [QuotesDataController::class, 'create'],
+            'quote/quote-edit' => [QuotesDataController::class, 'edit'],
             'quote/quote-reject' => [QuotesDetailsController::class, 'reject'],
             'quote/quote-approve' => [QuotesDetailsController::class, 'approve']
         ]
@@ -66,8 +68,6 @@ class Router
         'contract/contract-deny' => '/src/controllers/contract/contract_deny.php',
         'invoice/invoices-mark-paid' => '/src/controllers/invoice/invoices_mark_paid.php',
         'payments/payments-create' => '/src/controllers/payments_create.php',
-        'quote/quotes-update' => '/src/controllers/quote/quotes_update.php',
-        'quotes-update' => '/src/controllers/quote/quotes_update.php',
         'client/clients-update' => '/src/controllers/client/clients_update.php',
         'clients-update' => '/src/controllers/client/clients_update.php',
         'client/clients-delete' => '/src/controllers/client/clients_delete.php',

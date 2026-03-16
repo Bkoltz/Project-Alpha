@@ -4,7 +4,7 @@
 		<strong>ℹ️ Tax Exempt Organization:</strong>
 		The selected client's organization has a tax-exempt form on file. You can still choose whether to charge taxes.
 	</div>
-	<form id="quoteForm" method="post" action="/?page=quote/quotes-create" style="display:grid;gap:16px;max-width:900px">
+	<form id="quoteForm" method="post" action="/?page=quote/quote-create" style="display:grid;gap:16px;max-width:900px">
 		<input type="hidden" name="csrf" value="{{csrfToken}}">
 		<div
 			style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
@@ -58,7 +58,7 @@
 		<div id="customFieldsContainer">
 			{% include "partials/custom_fields/custom_field.twig" with {fields, columns, idSuffix} %}
 		</div>
-		
+
 		<!-- Billing type -->
 		<div style="margin:12px 0">
 			<div style="font-weight:600;margin-bottom:8px">Document Type</div>
@@ -304,12 +304,12 @@
 		</div>
 
 		<!-- Scope -->
-		{# <?php if (!isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled'])): ?> #}
-		<label>
-			<div>Scope of Work</div>
-			<textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
-		</label>
-		{# <?php endif; ?> #}
+		{% if appConfig.quote_scope_enabled is not empty %}
+			<label>
+				<div>Scope of Work</div>
+				<textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
+			</label>
+		{% endif %}
 
 		<label>
 			<div>Job Notes (shared across related docs)</div>

@@ -4,6 +4,7 @@ namespace App\controllers\quote;
 
 use App\config\AppConfiguration;
 use App\services\quotes\QuotesDetailsService;
+use App\utils\enum\DocumentType;
 use App\Config\Renderer;
 
 require_once BASE_PATH . '/src/utils/csrf.php';
@@ -13,16 +14,24 @@ class QuotesDetailsController
   private QuotesDetailsService $service;
   private Renderer $renderer;
 
+  private const DOCUMENT_PATHS = [
+    DocumentType::REGULAR->value => 'partials/document_list/details/regular-quote-details.twig',
+    DocumentType::LONG_TERM->value => 'partials/document_list/details/long-term-quote-details.twig',
+    DocumentType::ON_DEMAND->value => 'partials/document_list/details/on-demand-quote-details.twig'
+  ];
+
   public function __construct(QuotesDetailsService $service, Renderer $renderer)
   {
     $this->service = $service;
     $this->renderer = $renderer;
   }
 
-  public function load()
+  public function load(): array
   {
     $output = $this->getRenderData();
-    return $this->showQuoteDetails($output);
+    $file = $this::DOCUMENT_PATHS[$output['documentType']->value ?? DocumentType::REGULAR->value];
+
+    return [$file, $output];
   }
 
   public function toPDF()
@@ -31,12 +40,11 @@ class QuotesDetailsController
     $appConfig = AppConfiguration::$ConfigSettings;
 
     $output = $this->getRenderData();
-    $content = $this->renderer->getRenderHTML('pages/quote/quotes-pdf.twig', $output);
+    $content = $this->renderer->getRenderHTML('pages/quote/quote-pdf.twig', $output);
     $this->service->createPDF($id, $content, $appConfig);
   }
 
-  private function getRenderData(): array
-  {
+  private function getRenderData() : array {
     $requestData = $this->getRequestData();
     return $this->service->getPageData($requestData);
   }
@@ -52,18 +60,13 @@ class QuotesDetailsController
     ];
   }
 
-  private function showQuoteDetails(array $output)
-  {
-    return ['pages/quote/quotes-details.twig', $output];
-  }
-
   public function reject()
   {
     $id = $_POST['id'];
 
     $this->service->rejectQuote($id);
 
-    header("Location:/?page=quote/quotes-list");
+    header("Location:/?page=quote/quote-list");
     exit;
   }
 

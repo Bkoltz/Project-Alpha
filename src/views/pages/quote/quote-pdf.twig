@@ -159,33 +159,35 @@
 	<div style="white-space:pre-wrap;padding:6px 0;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#222">
 		{{termsText}}
 	</div>
-{% endif %}</section><style>
-.no-print {
-									display: flex
-								}
-								.print-footer {
-									display: none
-								}
-								@media print {
-									.no-print {
-										display: none !important
-									}
-									.side-nav,
-									.nav-footer {
-										display: none
-									}
-									.main-content {
-										margin-left: 0
-									}
-									body {
-										background: #fff
+{% endif %}
+
+<style>
+	.no-print {
+										display: flex
 									}
 									.print-footer {
-										display: block;
-										position: fixed;
-										bottom: 6px;
-										left: 12px;
-										color: #374151;
-										font-size: 12px
+										display: none
 									}
-								}
+									@media print {
+										.no-print {
+											display: none !important
+										}
+										.side-nav,
+										.nav-footer {
+											display: none
+										}
+										.main-content {
+											margin-left: 0
+										}
+										body {
+											background: #fff
+										}
+										.print-footer {
+											display: block;
+											position: fixed;
+											bottom: 6px;
+											left: 12px;
+											color: #374151;
+											font-size: 12px
+										}
+									}

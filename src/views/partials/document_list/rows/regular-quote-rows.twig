@@ -1,0 +1,61 @@
+{# Headers #}
+<thead>
+	<tr style="text-align:left;border-bottom:1px solid #eee">
+		<th style="padding:10px">No.</th>
+		<th style="padding:10px">Project</th>
+		<th style="padding:10px">Client</th>
+		<th style="padding:10px">Status</th>
+		<th style="padding:10px">Total</th>
+		<th style="padding:10px">Created</th>
+		<th style="padding:10px;text-align:right">Actions</th>
+	</tr>
+</thead>
+
+{# Rows #}
+<tbody>
+	{% for row in rows %}
+		<tr style="border-top:1px solid #f3f4f6;{{row.style}}">
+
+			<td style="padding:10px">Q-{{row.doc_number ?? row.id}}</td>
+			<td style="padding:10px">
+				{{row.project_code}}
+			</td>
+			<td style="padding:10px">
+				<a href="/?page=client/clients-list&selected_client_id={{row.client_id}} ?>">{{row.client_name}}</a>
+			</td>
+			<td style="padding:10px;text-transform:capitalize">{{row.status}}</td>
+			<td style="padding:10px">${{row.total}}</td>
+			<td style="padding:10px">{{row.created_at}}</td>
+			<td style="padding:10px">
+				<div style="display:flex;gap:6px;justify-content:flex-end">
+					<a href="/?page=quote/quote-details&id={{row.id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+
+					{% if row.status == 'pending' %}
+						<a href="/?page=quote/quote-edit&id={{row.id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
+					{% endif %}
+
+					{% if row.status == 'rejected' %}
+						<form method="post" action="/?page=quote/email-send" style="display:inline">
+							<input type="hidden" name="csrf" value="{{token}}">
+							<input type="hidden" name="type" value="{{quote}}">
+							<input type="hidden" name="id" value="{{row.id}}">
+							<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
+						</form>
+					{% endif %}
+
+					{% if row.status == 'pending' %}
+						<form method="post" action="/?page=quote/quote-approve" onsubmit="return confirm('Approve this quote and generate contract + invoice?')">
+							<input type="hidden" name="id" value="{{row.id}}">
+							<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: small;">Approve</button>
+						</form>
+						<form method="post" action="/?page=quote/quote-reject" onsubmit="return confirm('Deny this quote?')">
+							<input type="hidden" name="id" value="{{row.id}}">
+							<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
+						</form>
+					{% endif %}
+
+				</div>
+			</td>
+		</tr>
+	{% endfor %}
+</tbody>

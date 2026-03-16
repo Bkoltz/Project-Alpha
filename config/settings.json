@@ -31,7 +31,7 @@
     "dashboard": {
         "months_to_show": 6
     },
-    "quote_scope_enabled": 0,
+    "quote_scope_enabled": 1,
     "quote_auto_create_contract": 0,
     "quote_auto_create_invoice": 0,
     "contract_scope_enabled": 0,

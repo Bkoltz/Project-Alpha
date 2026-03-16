@@ -105,7 +105,7 @@ class __TwigTemplate_579fcad14a7d2a72c17c69ab0a12ed39 extends Template
         yield from $this->load("partials/custom_fields/custom_field.twig", 59)->unwrap()->yield(CoreExtension::merge($context, ["fields" => ($context["fields"] ?? null), "columns" => ($context["columns"] ?? null), "idSuffix" => ($context["idSuffix"] ?? null)]));
         // line 60
         yield "\t\t</div>
-\t\t
+
 \t\t<!-- Billing type -->
 \t\t<div style=\"margin:12px 0\">
 \t\t\t<div style=\"font-weight:600;margin-bottom:8px\">Document Type</div>
@@ -352,12 +352,15 @@ class __TwigTemplate_579fcad14a7d2a72c17c69ab0a12ed39 extends Template
 
 \t\t<!-- Scope -->
 \t\t";
-        // line 308
-        yield "\t\t<label>
-\t\t\t<div>Scope of Work</div>
-\t\t\t<textarea name=\"scope\" rows=\"4\" style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\" placeholder=\"Optional: Describe the scope of work and deliverables...\"></textarea>
-\t\t</label>
+        // line 307
+        if ((($tmp =  !Twig\Extension\CoreExtension::testEmpty(CoreExtension::getAttribute($this->env, $this->source, ($context["appConfig"] ?? null), "quote_scope_enabled", [], "any", false, false, false, 307))) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
+            // line 308
+            yield "\t\t\t<label>
+\t\t\t\t<div>Scope of Work</div>
+\t\t\t\t<textarea name=\"scope\" rows=\"4\" style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\" placeholder=\"Optional: Describe the scope of work and deliverables...\"></textarea>
+\t\t\t</label>
 \t\t";
+        }
         // line 313
         yield "
 \t\t<label>
@@ -405,7 +408,8 @@ class __TwigTemplate_579fcad14a7d2a72c17c69ab0a12ed39 extends Template
 </section>
 
 <script src=\"js/quotes-create-logic.js\" defer></script>
-<script src=\"js/client-selection-dropdown-logic.js\" defer></script>";
+<script src=\"js/client-selection-dropdown-logic.js\" defer></script>
+";
         yield from [];
     }
 
@@ -430,7 +434,7 @@ class __TwigTemplate_579fcad14a7d2a72c17c69ab0a12ed39 extends Template
      */
     public function getDebugInfo(): array
     {
-        return array (  362 => 313,  356 => 308,  107 => 60,  105 => 59,  51 => 8,  42 => 1,);
+        return array (  365 => 313,  358 => 308,  356 => 307,  107 => 60,  105 => 59,  51 => 8,  42 => 1,);
     }
 
     public function getSourceContext(): Source

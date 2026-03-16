@@ -57,18 +57,17 @@ class __TwigTemplate_efdc83e594f1b7ab2cf7bba22110f30b extends Template
             // line 3
             yield "\t\t<option value=\"";
             yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape($context["option"], "html", null, true);
-            yield "\">
-\t\t\t";
+            yield "\"></option>
+\t";
             // line 4
             yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape($context["option"], "html", null, true);
             yield "
-\t\t</option>
-\t";
+</option>";
         }
         $_parent = $context['_parent'];
         unset($context['_seq'], $context['_key'], $context['option'], $context['_parent']);
         $context = array_intersect_key($context, $_parent) + $_parent;
-        // line 7
+        // line 5
         yield "</select>
 ";
         yield from [];
@@ -95,7 +94,7 @@ class __TwigTemplate_efdc83e594f1b7ab2cf7bba22110f30b extends Template
      */
     public function getDebugInfo(): array
     {
-        return array (  72 => 7,  63 => 4,  58 => 3,  54 => 2,  42 => 1,);
+        return array (  71 => 5,  63 => 4,  58 => 3,  54 => 2,  42 => 1,);
     }
 
     public function getSourceContext(): Source

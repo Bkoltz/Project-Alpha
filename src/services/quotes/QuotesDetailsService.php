@@ -2,9 +2,9 @@
 
 namespace App\services\quotes;
 
-use function PHPUnit\Framework\isEmpty;
 use App\repositories\quotes\QuotesDetailsRepository;
 use App\config\AppConfiguration;
+use App\utils\enum\DocumentType;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use finfo;
@@ -22,20 +22,25 @@ class QuotesDetailsService
     {
         $id = $data['id'] ?? 0;
         $appConfig = AppConfiguration::$ConfigSettings;
-        $quote = $this->repository->getQuoteById($id);
+
+        $documentType = $this->getDocumentTypeById($id);
+        $quote = $this->repository->getQuoteById($id, $documentType);
         $quote = $this->updateQuoteData($quote, $appConfig);
 
-        return array_merge($data, [
+        $recieverInfo = $this->getRecieverInformation($quote);
+        $senderInfo = $this->getSenderInformation($appConfig);
+
+        $finacialData = QuotesFinances::calculateFinancialData($data);
+
+        return array_merge($data, $finacialData, $recieverInfo, $senderInfo, [
+            'documentType' => $documentType,
             'appConfig' => $appConfig,
             'brand' => $appConfig['brand_name'] ?? 'Project Alpha',
             'quote' => $quote,
-            'senderInfo' =>  $this->getSenderInformation($appConfig),
-            'recieverInfo' => $this->getRecieverInformation($quote),
             'logoPath' => $this->resolveLogoPath($appConfig),
             'items' => $this->repository->getItemsById($id),
             'customFields' => $this->getCustomFields($quote),
             'colors' => $this->getStatusColors($quote),
-            'isPdf' => $this->isPDF()
         ]);
     }
 
@@ -105,7 +110,6 @@ class QuotesDetailsService
 
         $fromLines = array_filter([
             trim((string)($appConfig['brand_name'] ?? 'Project Alpha')),
-            trim((string)($appConfig['brand_name'] ?? 'Project Alpha')),
             trim((string)($appConfig['from_address_line1'] ?? '')),
             trim((string)($appConfig['from_address_line2'] ?? '')),
             $cityLine
@@ -114,7 +118,7 @@ class QuotesDetailsService
         return ['fromLines' => $fromLines, 'fromName' => $fromName, 'fromPhone' => $fromPhone, 'fromEmail' => $fromEmail];
     }
 
-    public function getRecieverInformation(array $quote)
+    public function getRecieverInformation(array $quote): array
     {
         $cityLine = array_filter([
             trim((string)($quote['city'] ?? '')),
@@ -132,7 +136,7 @@ class QuotesDetailsService
             $cityLine
         ]);
 
-        return $toLines;
+        return ['toLines' => $toLines];
     }
 
     public function resolveTerms(array $quote, array $appConfig): string
@@ -218,6 +222,19 @@ class QuotesDetailsService
         return $logoSrc;
     }
 
+    private function getDocumentTypeById(int $id): DocumentType
+    {
+        $data = $this->repository->getDocumentTypeData($id);
+
+        if ($data['is_on_demand'] == 1) {
+            return DocumentType::ON_DEMAND;
+        } else if ($data['is_long_term'] == 1) {
+            return DocumentType::LONG_TERM;
+        } else {
+            return DocumentType::REGULAR;
+        }
+    }
+
     /* 
         TODO: COME BACK TO RECHECK THIS
 
@@ -235,7 +252,7 @@ class QuotesDetailsService
         foreach ($customFieldDefs as $customField) {
             $key = $customField['field_key'];
 
-            if (!isEmpty($customFieldValues['key'])) {
+            if (!empty($customFieldValues['key'])) {
                 $val = $customFieldValues[$key];
 
                 $displayCustomFields[] = ['label' => $customField['field_label'], 'value' => $val];
@@ -245,9 +262,6 @@ class QuotesDetailsService
         return $displayCustomFields;
     }
 
-    /* 
-        Returns the deposit value
-    */
     public function getDepositvalue(array $quote): int
     {
         $depositType = $quote['deposit_type'] ?? 'none';
@@ -282,15 +296,8 @@ class QuotesDetailsService
         $svgData = 'data:image/svg+xml;base64,' . base64_encode($svgContents);
     }
 
-    public function isPDF(): bool
-    {
-        $isPdf = defined('PDF_MODE');
-
-        return $isPdf;
-    }
-
     public function rejectQuote(int $id)
     {
-       $this->repository->rejectQuote($id);
+        $this->repository->rejectQuote($id);
     }
 }

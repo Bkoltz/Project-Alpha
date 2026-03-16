@@ -8,16 +8,41 @@ class QuotesListRepository
 {
     private PDO $pdo;
 
-    private static array $FilterStatements = [
-        'clientId' => 'q.client_id=?',
-        'clientName' => 'c.name LIKE ?',
-        'start' => 'q.created_at>=?',
-        'end'  => 'q.created_at<=?',
-        'status' => 'q.status=?',
-        'projectCode' => 'q.project_code LIKE ?',
-        'docNo'  => 'q.doc_number=?',
-        'minPrice' => 'q.total>=?',
-        'maxPrice' => 'q.total<=?',
+    private const FILTERS = [
+        'clientId' => [
+            'sql' => 'q.client_id = ?',
+            'ignore' => ''
+        ],
+        'clientName' => [
+            'sql' => 'c.name LIKE ?',
+            'ignore' => ''
+        ],
+        'start' => [
+            'sql' => 'q.created_at >= ?',
+            'ignore' => ''
+        ],
+        'end' => [
+            'sql' => 'q.created_at <= ?',
+            'ignore' => ''
+        ],
+        'status' => [
+            'sql' => 'q.status = ?',
+            'ignore' => 'all'
+        ],
+        'projectCode' => [
+            'sql' => 'q.project_code LIKE ?',
+            'ignore' => ''
+        ],
+    ];
+
+    private const DOCUMENT_TYPE_FILTERS = [
+        'onDemand' => '(COALESCE(q.is_long_term, 0) = 0 AND q.is_on_demand = 1)',
+        'longTerm' => '(q.is_long_term = 1 AND COALESCE(q.is_on_demand, 0) = 0)',
+    ];
+
+    private const DOCUMENT_TYPE_VALUES = [
+        'onDemand' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.start_date', 'q.end_date', 'q.price_per_invoice', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id'],
+        'longTerm' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.created_at', 'q.start_date', 'q.end_date', 'q.billing_interval_count', 'q.billing_interval_unit', 'c.name AS client_name', 'c.id AS client_id']
     ];
 
     public function __construct(PDO $pdo)
@@ -25,71 +50,68 @@ class QuotesListRepository
         $this->pdo = $pdo;
     }
 
-    public function getDisplayData(array $filterValues, array $countData): array
+    public function getDisplayData(string $documentType, array $filterValues, array $countData): array
     {
-        $filter = $this->createFilteredStatement($filterValues);
+        $filter = $this->createFilteredStatement($documentType, $filterValues);
 
-        $statement = $filter['statement'];
-        $values = $filter['values'];
+        $quoteRows = $this->getRawQuotes($documentType, $filter, $countData['perPage'], $countData['offset']);
+        $totalQuotes = $this->getTotalQuotes($filter);
 
-        $quoteRows = $this->getRawQuotes($statement, $values, $countData['perPage'], $countData['offset']);
-        $totalQuotes = $this->getTotalQuotes($statement, $values);
-
-        return ['rows' => $quoteRows, 'totalQuotes' => $totalQuotes];
+        return ['rows' => $quoteRows, 'quotesCount' => $totalQuotes];
     }
 
-    public function hasProject(): bool
+    public function getClient(int $clientId): array
     {
-        return (bool)$this->pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='quotes' AND COLUMN_NAME='project_code'")->fetchColumn();
+        $stmt = $this->pdo->prepare('SELECT * FROM clients WHERE id = ?');
+        $stmt->execute([$clientId]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    public function hasDocument(): bool
+    private function createFilteredStatement(string $documentType, array $filterValues): array
     {
-        return (bool)$this->pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='quotes' AND COLUMN_NAME='doc_number'")->fetchColumn();
-    }
-
-    private function createFilteredStatement(array $filterValues): array
-    {
-        $where = ['(q.is_long_term IS NULL OR q.is_long_term=0)'];
+        $where[] = self::DOCUMENT_TYPE_FILTERS[$documentType] ?? '((q.is_long_term = 0 OR q.is_long_term IS NULL) AND (q.is_on_demand = 0 OR q.is_on_demand IS NULL))'; // Default to regular quotes becuase I dont know
         $values = [];
 
-        foreach ($filterValues as [$key, $value]) {
-            if (array_key_exists($key, $filterValues)) {
-                $where[] = QuotesListRepository::$FilterStatements[$key];
-                $values[] = $value;
-            }
+        foreach ($filterValues as $key => $value) {
+            if (!isset(self::FILTERS[$key]))
+                continue;
+
+            $filter = self::FILTERS[$key];
+
+            if ($value === $filter['ignore'] || empty($value))
+                continue;
+
+            $where[] = $filter['sql'];
+            $values[] = $value;
         }
 
         $where = ' WHERE ' . implode(' AND ', $where);
+
         return ['statement' => $where, 'values' => $values];
     }
 
-    private function getRawQuotes(string $statement, array $values, int $amount, int $offset): array
+    private function getRawQuotes(string $documentType, array $filter, int $amount, int $offset): array
     {
-        $hasDocument = $this->hasDocument();
-        $hasProject = $this->hasProject();
-
-        $columns = ['q.id', 'q.status', 'q.total', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id'];
-        $columns[] = $hasDocument ? 'q.doc_number' : 'q.id AS doc_number';
-        $columns[] = $hasProject ? 'q.project_code' : "'' AS project_code";
+        $columns = $this::DOCUMENT_TYPE_VALUES[$documentType] ?? ['q.id', 'q.status', 'q.total', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id', 'q.doc_number', 'q.project_code']; // Same thing here, default to regular quotes if it aint found
         $select = implode(', ', $columns);
 
         $sql = "SELECT $select FROM quotes q JOIN clients c ON c.id=q.client_id";
-        $sql .= $statement;
+        $sql .= $filter['statement'];
         $sql .= " ORDER BY q.created_at DESC LIMIT $amount OFFSET $offset";
-
         $st = $this->pdo->prepare($sql);
-        $st->execute($values);
+
+        $st->execute($filter['values']);
 
         return $st->fetchAll();
     }
 
-    private function getTotalQuotes(string $statement, array $values): int
+    private function getTotalQuotes(array $filter): int
     {
-        $sqlCount = 'SELECT COUNT(*) FROM quotes q' . $statement;
+        $sqlCount = 'SELECT COUNT(*) FROM quotes q' . $filter['statement'];
 
         $stc = $this->pdo->prepare($sqlCount);
-        $stc->execute($values);
+        $stc->execute($filter['values']);
 
         return (int)$stc->fetchColumn();
     }

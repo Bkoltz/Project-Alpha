@@ -14,7 +14,7 @@ use Twig\Source;
 use Twig\Template;
 use Twig\TemplateWrapper;
 
-/* /pages/quote/quotes-create.twig */
+/* pages/quote/quotes-create.twig */
 class __TwigTemplate_c8300555d8932182dfb110e350d5af45 extends Template
 {
     private Source $source;
@@ -414,7 +414,7 @@ class __TwigTemplate_c8300555d8932182dfb110e350d5af45 extends Template
      */
     public function getTemplateName(): string
     {
-        return "/pages/quote/quotes-create.twig";
+        return "pages/quote/quotes-create.twig";
     }
 
     /**
@@ -435,6 +435,6 @@ class __TwigTemplate_c8300555d8932182dfb110e350d5af45 extends Template
 
     public function getSourceContext(): Source
     {
-        return new Source("", "/pages/quote/quotes-create.twig", "/var/www/src/views/pages/quote/quotes-create.twig");
+        return new Source("", "pages/quote/quotes-create.twig", "/var/www/src/views/pages/quote/quotes-create.twig");
     }
 }

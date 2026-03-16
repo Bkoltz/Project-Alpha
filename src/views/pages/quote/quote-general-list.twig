@@ -1,0 +1,50 @@
+{% set rowTemplates = {
+		"regular": "partials/document_list/rows/regular-quote-rows.twig",
+		"longTerm": "partials/document_list/rows/long-term-quote-rows.twig",
+		"onDemand": "partials/document_list/rows/on-demand-quote-rows.twig",
+	} %}
+
+<section>
+	<h2>{{title}}</h2>
+	{# Filter data #}
+	{% include 'templates/components/document-filter.html.twig' with filterConfig %}
+
+	{# Row data #}
+	<div style="overflow:auto">
+		<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+			{% set template = rowTemplates[documentType] %}
+
+			{% include template with rows %}
+		</table>
+	</div>
+
+	{# Page display data #}
+	<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+		<div>
+			<form method="get" action="/">
+				<input type="hidden" name="page" value="quote/quote-list">
+				<label>Per page
+					<select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
+						<option value="50">50</option>
+						<option value="100">100</option>
+					</select>
+				</label>
+			</form>
+		</div>
+
+		{# Page buttons #}
+		<div style="display:flex;gap:8px">
+			{% if page > 1 %}
+				<a href="{{previousPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a>
+			{% endif %}
+			<div style="padding:6px 10px;color:var(--muted)">Page
+				{{page}}
+				/
+				{{pageCount}}
+			</div>
+			{% if page < pageCount %}
+				<a href="{{nextPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a>
+			{% endif %}
+		</div>
+	</div>
+</section>

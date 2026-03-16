@@ -39,10 +39,10 @@
         <li class="nav-section">
             <div class="section-label">Quotes</div>
             <ul>
-                <li><a href="/?page=quote/quotes-list" data-page="quote/quotes-list">Quotes</a></li>
-                <li><a href="/?page=quote/long-term-quotes-list" data-page="quote/long-term-quotes-list">Long-term Quotes</a></li>
-                <li><a href="/?page=quote/on-demand-quotes-list" data-page="quote/on-demand-quotes-list">On-Demand Quotes</a></li>
-                <li><a href="/?page=quote/quotes-create" data-page="quote/quotes-create">Create Quote</a></li>
+                <li><a href="/?page=quote/regular-quote-list" data-page="quote/regular-quote-list">Quotes</a></li>
+                <li><a href="/?page=quote/long-term-quote-list" data-page="quote/long-term-quote-list">Long-term Quotes</a></li>
+                <li><a href="/?page=quote/on-demand-quote-list" data-page="quote/on-demand-quote-list">On-Demand Quotes</a></li>
+                <li><a href="/?page=quote/quote-create" data-page="quote/quote-create">Create Quote</a></li>
             </ul>
         </li>
         <li class="nav-section">

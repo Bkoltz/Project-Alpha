@@ -78,7 +78,7 @@ require_once __DIR__ . '/../../../config/db.php';
                                 <div class="doc-toggle" data-type="quote" data-id="<?php echo $qid; ?>" style="flex:1;cursor:pointer">Q-<?php echo (int)($q['doc_number'] ?? $q['id']); ?> · $<?php echo number_format((float)($q['total'] ?? 0), 2); ?> · <?php echo htmlspecialchars($q['status']); ?> · <?php echo htmlspecialchars($q['created_at']); ?></div>
                                 <div style="display:flex;gap:6px;align-items:center">
                                     <button type="button" class="doc-toggle" data-type="quote" data-id="<?php echo $qid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">Details</button>
-                                    <a href="/?page=quote/quotes-edit&id=<?php echo $qid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">View Document</a>
+                                    <a href="/?page=quote/quote-edit&id=<?php echo $qid; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">View Document</a>
                                 </div>
                             </div>
                             <div class="doc-details" id="quote-details-<?php echo $qid; ?>" style="display:none;margin-top:8px;padding:8px;border-top:1px solid #eee">

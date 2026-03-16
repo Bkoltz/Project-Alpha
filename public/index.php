@@ -108,9 +108,8 @@ if ($page === 'public-doc') {
     exit;
 }
 
-$twigFile = Router::resolveViewPathTwig($page);
 $request = $_SERVER['REQUEST_METHOD'];
-
+$isTwig = false;
 $bodyView = null;
 
 if (isset(Router::$routes[$request][$page])) {
@@ -118,6 +117,7 @@ if (isset(Router::$routes[$request][$page])) {
     $method = Router::$routes[$request][$page][1];
 
     $bodyView = $container->get($className)->$method();
+    $isTwig = true;
 } elseif (empty($twigFile)) {
     $bodyView = Router::resolveViewPath($page);
 }
@@ -125,7 +125,7 @@ if (isset(Router::$routes[$request][$page])) {
 require_once BASE_PATH . '/src/views/partials/header.php';
 
 if ($bodyView) {
-    if (!empty($twigFile)) {
+    if ($isTwig) {
         echo $twig->render($bodyView[0], $bodyView[1]);
     } else {
         require $bodyView;
