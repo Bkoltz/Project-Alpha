@@ -312,7 +312,7 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'organization/org-create', 'stripe-webhook'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'stripe-webhook'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -375,6 +375,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'public-quote-action') {
         require_once __DIR__ . '/../src/controllers/public_view/public_quote_action.php';
+        exit;
+    }
+    if ($page === 'public-contract-sign') {
+        require_once __DIR__ . '/../src/controllers/public_view/public_contract_sign.php';
         exit;
     }
     if ($page === 'api-keys-create') {

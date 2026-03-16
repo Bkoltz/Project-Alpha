@@ -249,6 +249,87 @@ class StripeService {
     }
     
     /**
+     * List Payment Intents created since a given timestamp
+     * Used for reconciliation after downtime
+     * @param int $since Unix timestamp
+     * @return array List of Payment Intent objects
+     */
+    public function listPaymentIntents($since) {
+        try {
+            $allIntents = [];
+            $hasMore = true;
+            $startingAfter = null;
+            
+            while ($hasMore) {
+                $params = [
+                    'limit' => 100,
+                    'created[gte]' => $since
+                ];
+                if ($startingAfter) {
+                    $params['starting_after'] = $startingAfter;
+                }
+                
+                $response = $this->apiRequest('GET', 'payment_intents?' . http_build_query($params));
+                
+                if (!empty($response['data'])) {
+                    $allIntents = array_merge($allIntents, $response['data']);
+                    $lastItem = end($response['data']);
+                    $startingAfter = $lastItem['id'] ?? null;
+                }
+                
+                $hasMore = !empty($response['has_more']);
+                
+                // Safety limit
+                if (count($allIntents) >= 1000) {
+                    break;
+                }
+            }
+            
+            return $allIntents;
+            
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error listing payment intents: ' . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Create a Payment Intent with metadata for tracking
+     * @param float $amount Amount in dollars
+     * @param string $currency Currency code
+     * @param array $metadata Metadata including pa_invoice_id
+     * @param string|null $customerId Optional Stripe customer ID
+     * @param string|null $paymentMethodId Optional saved payment method for auto-pay
+     * @return array Payment Intent object
+     */
+    public function createPaymentIntentWithMetadata($amount, $currency, $metadata, $customerId = null, $paymentMethodId = null) {
+        try {
+            $params = [
+                'amount' => (int)round($amount * 100), // Convert to cents
+                'currency' => strtolower($currency ?? 'usd'),
+                'metadata' => $metadata,
+                'automatic_payment_methods' => ['enabled' => true]
+            ];
+            
+            if ($customerId) {
+                $params['customer'] = $customerId;
+            }
+            
+            if ($paymentMethodId) {
+                $params['payment_method'] = $paymentMethodId;
+                $params['confirm'] = true;
+                $params['off_session'] = true;
+            }
+            
+            return $this->apiRequest('POST', 'payment_intents', $params);
+            
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error creating payment intent: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
      * Verify webhook signature
      */
     public function verifyWebhook($payload, $signature) {

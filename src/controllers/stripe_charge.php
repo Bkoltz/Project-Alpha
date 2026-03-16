@@ -83,7 +83,8 @@ try {
         $successUrl,
         $cancelUrl,
         [
-            'invoice_id' => $invoiceId,
+            'pa_invoice_id' => (string)$invoiceId,
+            'invoice_id' => (string)$invoiceId, // Legacy support
             'doc_number' => $docNumber,
             'charged_by' => 'admin'
         ]

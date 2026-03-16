@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 
 $logPrefix = '[generate_recurring_invoices]';
+$jobName = 'generate_recurring_invoices';
 
 // Check if cron is enabled in settings
 if (empty($appConfig['cron_enabled'])) {
@@ -344,7 +345,15 @@ try {
         @error_log("$logPrefix Notification pass error: " . $e->getMessage());
     }
 
-    // Update last run timestamp in settings
+    // Update cron_job_runs table
+    try {
+        $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status) VALUES (?, NOW(), "success") ON DUPLICATE KEY UPDATE last_run = NOW(), status = "success", error_message = NULL')
+            ->execute([$jobName]);
+    } catch (Throwable $e) {
+        @error_log("$logPrefix Failed to update cron_job_runs: " . $e->getMessage());
+    }
+    
+    // Update last run timestamp in settings (legacy support)
     $configMount = '/var/www/config';
     $projectConfig = __DIR__ . '/../../config';
     $configDir = is_dir($configMount) ? $configMount : $projectConfig;

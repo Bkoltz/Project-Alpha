@@ -140,6 +140,9 @@ if ($termsText === '') {
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
         <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
       </form>
+      <?php if (!in_array($cstatus, ['denied', 'cancelled', 'void'], true)): ?>
+      <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #4f46e5;border-radius:8px;background:#eef2ff;color:#4f46e5; font-size: medium;">🔗 Share Link</button>
+      <?php endif; ?>
     </div>
     <?php if (!empty($_GET['reenabled'])): ?>
       <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Contract re-enabled successfully</div>
@@ -640,3 +643,114 @@ if ($termsText === '') {
     }
   }
 </style>
+<div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
+
+<!-- Share Link Modal -->
+<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:18px">🔗 Share Contract Link</h3>
+      <button onclick="closeShareModal()" style="border:0;background:none;font-size:20px;cursor:pointer;color:#6b7280">&times;</button>
+    </div>
+    <div id="shareLinkContent">
+      <p style="color:#6b7280;margin:0 0 16px">Generate a public link that clients can use to view and upload a signed copy of this contract.</p>
+      <label id="daysLabel" style="display:block;margin-bottom:12px">
+        <div style="font-weight:500;margin-bottom:4px">Link expires in (days)</div>
+        <input type="number" id="linkDays" value="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" min="1" max="365" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+      </label>
+      <button onclick="createPublicLink()" style="width:100%;padding:12px;background:#4f46e5;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer">Generate Link</button>
+    </div>
+    <div id="shareLinkResult" style="display:none">
+      <div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;margin-bottom:12px">
+        <div style="font-weight:600;color:#166534;margin-bottom:4px" id="linkStatus">✓ Link Generated!</div>
+        <div style="font-size:13px;color:#15803d" id="linkExpiry"></div>
+      </div>
+      <div style="position:relative">
+        <input type="text" id="generatedLink" readonly style="width:100%;padding:10px;padding-right:80px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#f9fafb">
+        <button onclick="copyLink()" style="position:absolute;right:4px;top:4px;padding:6px 12px;background:#4f46e5;color:#fff;border:0;border-radius:6px;font-size:12px;cursor:pointer">Copy</button>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="revokeBtn" onclick="revokeAndCreateNew()" style="flex:1;padding:10px;background:#fee2e2;color:#991b1b;border:0;border-radius:8px;cursor:pointer;display:none">Revoke & Create New</button>
+        <button onclick="closeShareModal()" style="flex:1;padding:10px;background:#4f46e5;color:#fff;border:0;border-radius:8px;cursor:pointer">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function generatePublicLink() {
+  document.getElementById('shareLinkModal').style.display = 'flex';
+  const formData = new FormData();
+  formData.append('type', 'contract');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>');
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  
+  fetch('/?page=public-link-create', { method: 'POST', body: formData })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success && data.existing) {
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkStatus').textContent = '✓ Existing Link';
+      document.getElementById('revokeBtn').style.display = 'block';
+      document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days remaining)';
+      document.getElementById('shareLinkContent').style.display = 'none';
+      document.getElementById('shareLinkResult').style.display = 'block';
+    }
+  }).catch(() => {});
+}
+
+function closeShareModal() { document.getElementById('shareLinkModal').style.display = 'none'; }
+
+function createPublicLink() {
+  const days = document.getElementById('linkDays').value || 14;
+  const formData = new FormData();
+  formData.append('type', 'contract');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', days);
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  
+  fetch('/?page=public-link-create', { method: 'POST', body: formData })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkStatus').textContent = data.existing ? '✓ Existing Link Found' : '✓ Link Generated!';
+      document.getElementById('revokeBtn').style.display = data.existing ? 'block' : 'none';
+      document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
+      document.getElementById('shareLinkContent').style.display = 'none';
+      document.getElementById('shareLinkResult').style.display = 'block';
+    } else { alert('Error: ' + (data.error || 'Failed')); }
+  }).catch(err => alert('Error: ' + err.message));
+}
+
+function copyLink() {
+  const input = document.getElementById('generatedLink');
+  input.select();
+  document.execCommand('copy');
+  event.target.textContent = 'Copied!';
+  setTimeout(() => { event.target.textContent = 'Copy'; }, 2000);
+}
+
+function revokeAndCreateNew() {
+  if (!confirm('Revoke existing link and create new?')) return;
+  const days = document.getElementById('linkDays').value || 14;
+  const formData = new FormData();
+  formData.append('type', 'contract');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', days);
+  formData.append('force_new', '1');
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  
+  fetch('/?page=public-link-create', { method: 'POST', body: formData })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkStatus').textContent = '✓ New Link Created!';
+      document.getElementById('revokeBtn').style.display = 'none';
+      document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
+    } else { alert('Error: ' + (data.error || 'Failed')); }
+  }).catch(err => alert('Error: ' + err.message));
+}
+</script>

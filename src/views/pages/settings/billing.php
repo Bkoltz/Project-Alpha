@@ -42,6 +42,15 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   </div>
 </fieldset>
 
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">Review Request</legend>
+  <label>
+    <div style="margin-bottom:4px">Review Link <span style="color:#666;font-weight:normal">(Optional)</span></div>
+    <input type="url" name="review_link" value="<?php echo htmlspecialchars($appConfig['review_link'] ?? ''); ?>" placeholder="https://g.page/your-business/review" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <div style="font-size:0.85em;color:#666;margin-top:4px">If set, this link will appear on invoices to encourage clients to leave a review.</div>
+  </label>
+</fieldset>
+
 <div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:14px">
   <strong>💡 Looking for Tax Rates?</strong>
   <div style="margin-top:8px;color:#1e40af">Tax rate management has been moved to the <a href="/?page=settings&tab=taxes" style="color:var(--nav-accent);font-weight:600">Taxes</a> tab for better organization.</div>
