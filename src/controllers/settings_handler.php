@@ -310,6 +310,12 @@ if (isset($_POST['signature_agreement'])) {
     $settings['signature_agreement'] = $sig !== '' ? mb_substr($sig, 0, 500) : 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.';
 }
 
+// Review link for invoices
+if (isset($_POST['review_link'])) {
+    $rl = trim((string)$_POST['review_link']);
+    $settings['review_link'] = $rl !== '' ? $rl : null;
+}
+
 // Stripe settings
 if (isset($_POST['stripe_publishable_key'])) {
     $settings['stripe_publishable_key'] = trim((string)$_POST['stripe_publishable_key']) ?: null;
