@@ -439,6 +439,19 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </tr>
   </table>
 </section>
+
+<?php
+  // Review link section - show if configured and invoice is paid
+  $reviewLink = trim($appConfig['review_link'] ?? '');
+  if ($reviewLink !== '' && $isPaid):
+?>
+<div style="margin-top:24px;padding:16px;background:linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);border-radius:12px;text-align:center">
+  <div style="font-size:16px;font-weight:600;color:#92400e;margin-bottom:8px">⭐ Enjoyed our service?</div>
+  <div style="color:#78350f;margin-bottom:12px">We'd love to hear your feedback!</div>
+  <a href="<?php echo htmlspecialchars($reviewLink); ?>" target="_blank" rel="noopener" style="display:inline-block;padding:10px 20px;background:#f59e0b;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Leave a Review</a>
+</div>
+<?php endif; ?>
+
 <style>
   .no-print{display:flex}
   .print-footer{display:none}

@@ -161,6 +161,89 @@ if ($type === 'invoice') {
   </div>
 
   <?php
+    // Quote approve/deny actions - show at top
+    if ($type === 'quote'):
+      $showActions = $showActions ?? false;
+      if ($showActions):
+        require_once __DIR__ . '/../../utils/csrf_sf.php';
+        $csrf = csrf_sf_token('public_quote_action');
+  ?>
+  <div class="action-banner" style="margin-bottom:24px;padding:20px;background:linear-gradient(135deg, #f0fdf4, #dcfce7);border:1px solid #86efac;border-radius:12px;text-align:center">
+    <h2 style="font-size:18px;font-weight:600;color:#166534;margin:0 0 12px">📋 Review This Quote</h2>
+    <p style="color:#15803d;margin:0 0 16px">Please review the quote below and approve or deny it.</p>
+    <div style="display:flex;gap:12px;justify-content:center">
+      <form method="post" action="/?page=public-quote-action" onsubmit="return confirmAction('approve')">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
+        <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
+        <input type="hidden" name="action" value="approve">
+        <button type="submit" style="padding:12px 28px;border-radius:8px;border:0;background:#16a34a;color:#fff;font-weight:600;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(22,163,74,0.3)">✓ Approve Quote</button>
+      </form>
+      <form method="post" action="/?page=public-quote-action" onsubmit="return confirmAction('deny')">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
+        <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
+        <input type="hidden" name="action" value="deny">
+        <button type="submit" style="padding:12px 28px;border-radius:8px;border:0;background:#dc2626;color:#fff;font-weight:600;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,0.3)">✗ Deny Quote</button>
+      </form>
+    </div>
+  </div>
+  <script>
+  function confirmAction(action) {
+    if (action === 'approve') {
+      return confirm('Are you sure you want to APPROVE this quote?');
+    } else {
+      return confirm('Are you sure you want to DENY this quote? This action cannot be undone.');
+    }
+  }
+  </script>
+  <?php
+      endif;
+    endif;
+  ?>
+
+  <?php
+    // Contract upload form - show at top if pending
+    if ($type === 'contract' && !empty($showUpload)):
+      require_once __DIR__ . '/../../utils/csrf_sf.php';
+      $csrf = csrf_sf_token('public_contract_sign');
+  ?>
+  <div class="action-banner" style="margin-bottom:24px;padding:20px;background:linear-gradient(135deg, #eff6ff, #dbeafe);border:1px solid #93c5fd;border-radius:12px;text-align:center">
+    <h2 style="font-size:18px;font-weight:600;color:#1e40af;margin:0 0 12px">📝 Sign This Contract</h2>
+    <p style="color:#3b82f6;margin:0 0 16px">Please review the contract below, then upload a signed copy.</p>
+    <form method="post" action="/?page=public-contract-sign" enctype="multipart/form-data" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
+      <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
+      <input type="file" name="signed_pdf" accept="application/pdf,image/*" required style="padding:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff">
+      <button type="submit" style="padding:12px 28px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-weight:600;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,0.3)">📤 Upload Signed Contract</button>
+    </form>
+    <p style="margin-top:12px;font-size:13px;color:#6b7280">Accepts PDF or image files. Maximum 10 MB.</p>
+  </div>
+  <?php
+    endif;
+    
+    // Show "signed contract received" message if contract has signed_pdf_path
+    if ($type === 'contract' && empty($showUpload)):
+      $contractSigned = false;
+      try {
+        $signedCheck = $pdo->prepare('SELECT signed_pdf_path, status FROM contracts WHERE id = ?');
+        $signedCheck->execute([$rid]);
+        $contractData = $signedCheck->fetch(PDO::FETCH_ASSOC);
+        if ($contractData && !empty($contractData['signed_pdf_path'])) {
+          $contractSigned = true;
+        }
+      } catch (Throwable $e) { /* ignore */ }
+      
+      if ($contractSigned):
+  ?>
+  <div style="margin-bottom:24px;padding:16px 20px;background:linear-gradient(135deg, #ecfdf5, #d1fae5);border:1px solid #86efac;border-radius:12px;text-align:center">
+    <div style="font-size:16px;font-weight:600;color:#166534">✓ Signed Contract Received</div>
+    <p style="color:#15803d;margin:8px 0 0;font-size:14px">Thank you! Your signed contract has been received and is being processed.</p>
+  </div>
+  <?php
+      endif;
+    endif;
+  ?>
+
+  <?php
     // Show payment banner at TOP for invoices if Stripe is configured and payment is due
     if ($type === 'invoice' && $invoiceData):
       $amountDue = $calculatedAmountDue;
@@ -201,48 +284,6 @@ if ($type === 'invoice') {
       }
     ?>
   </div>
-
-  <?php if ($type === 'quote'):
-    // Show approve/deny forms if controller allowed it (controller may set $showActions)
-    $showActions = $showActions ?? false;
-    if ($showActions):
-      require_once __DIR__ . '/../../utils/csrf_sf.php';
-      $csrf = csrf_sf_token('public_quote_action');
-  ?>
-    <div style="margin:16px 0 64px; display:flex; gap:8px">
-      <form method="post" action="/?page=public-quote-action">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-        <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
-        <input type="hidden" name="action" value="approve">
-        <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#16a34a;color:#fff">Approve</button>
-      </form>
-      <form method="post" action="/?page=public-quote-action">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-        <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
-        <input type="hidden" name="action" value="deny">
-        <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#ef4444;color:#fff">Deny</button>
-      </form>
-    </div>
-  <?php
-    endif;
-  endif; ?>
-
-  <?php
-    // Contract upload form (controller may set $showUpload true)
-    if (!empty($showUpload)):
-      require_once __DIR__ . '/../../utils/csrf_sf.php';
-      $csrf = csrf_sf_token('public_contract_action');
-  ?>
-    <div style="margin:16px 0 64px">
-      <form method="post" action="/?page=public-contract-action" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-        <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
-        <input type="file" name="signed_pdf" accept="application/pdf" required style="padding:6px">
-        <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#0ea5a4;color:#fff">Upload Signed Contract</button>
-      </form>
-      <div style="margin-top:8px;color:var(--muted);font-size:13px">Upload a signed PDF to mark this contract active. Maximum 25 MB. PDF only.</div>
-    </div>
-  <?php endif; ?>
 
   <!-- Powered by footer -->
   <div style="text-align:center;margin-top:24px;color:#9ca3af;font-size:12px">
