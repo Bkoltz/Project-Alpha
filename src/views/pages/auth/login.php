@@ -37,8 +37,8 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
       <input type="hidden" name="action" value="<?php echo $noUsers ? 'register_first' : 'login'; ?>">
       <label>
-        <div>Email</div>
-        <input required type="email" name="email" autocomplete="username" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div>Email or Username</div>
+        <input required type="text" name="email" autocomplete="username" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
         <div>Password</div>
