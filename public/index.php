@@ -312,6 +312,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/tax-rates-handler.php';
         exit;
     }
+    if ($page === 'settings/tax-rates-import-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/tax-rates-import-handler.php';
+        exit;
+    }
     if ($page === 'settings/custom-fields-handler') {
         require_once __DIR__ . '/../src/controllers/settings/custom_fields_handler.php';
         exit;
