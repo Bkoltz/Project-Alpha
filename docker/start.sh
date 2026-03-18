@@ -39,6 +39,22 @@ fi
 # Apply base schema if missing, then runtime migrations (both idempotent)
 DB_NAME="${MYSQL_DATABASE:-project_alpha}"
 
+# Compute admin password hash
+ADMIN_PASSWORD="${ADMIN_PASSWORD}"
+if [ -z "$ADMIN_PASSWORD" ]; then
+  echo "❌ ADMIN_PASSWORD environment variable is required"
+  exit 1
+fi
+ADMIN_PASSWORD_HASH=$(php -r "echo password_hash('${ADMIN_PASSWORD}', PASSWORD_DEFAULT);")
+echo "Using admin password hash: ${ADMIN_PASSWORD_HASH}"
+
+# Replace placeholder in SQL file (use a non-/ delimiter to avoid issues with bcrypt hashes)
+sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" /usr/local/share/app-migrations/000_all.sql
+
+# If the DB already exists and contains the placeholder hash (from a previous run), update it
+mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e \
+  "UPDATE users SET password_hash='${ADMIN_PASSWORD_HASH}' WHERE password_hash='{{ADMIN_PASSWORD_HASH}}';" || true
+
 # 1) Base schema: if key table (quotes) is missing, load 000_all.sql
 if [ -f "/usr/local/share/app-migrations/000_all.sql" ]; then
   echo "Checking if base schema needs to be applied to '${DB_NAME}'..."
