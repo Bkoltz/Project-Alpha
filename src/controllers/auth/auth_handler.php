@@ -154,6 +154,20 @@ if ($action === 'login') {
             }
         }
         */
+        
+        // Check if force password reset is required
+        $forceReset = false;
+        try {
+            $st = $pdo->prepare('SELECT force_password_reset FROM users WHERE id = ?');
+            $st->execute([(int)$u['id']]);
+            $forceReset = (bool)$st->fetchColumn();
+        } catch (Throwable $e) {}
+        
+        if ($forceReset) {
+            header('Location: /?page=account&force=1');
+            exit;
+        }
+        
         app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
         header('Location: /');
         exit;

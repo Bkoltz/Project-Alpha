@@ -33,7 +33,7 @@ try {
     exit;
   }
   $newHash = password_hash($new, PASSWORD_DEFAULT);
-  $up = $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?');
+  $up = $pdo->prepare('UPDATE users SET password_hash=?, force_password_reset=0 WHERE id=?');
   $up->execute([$newHash, $uid]);
   header('Location: /?page=account&pwd=1');
   exit;

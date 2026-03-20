@@ -143,15 +143,28 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // 
 
 // Handle logout early
 if ($page === 'logout') {
+    // Start session if not already started
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    
+    // Clear session data
     $_SESSION = [];
+    
+    // Delete session cookie
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
         setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', $params['secure'] ?? false, $params['httponly'] ?? true);
     }
+    
     // Clear remember-me cookie
     setcookie('remember', '', time() - 3600, '/', '', $secure, true);
+    
+    // Destroy the session
     session_destroy();
-    header('Location: /?page=login');
+    
+    // Redirect to logout confirmation (which will start a fresh session)
+    header('Location: /?page=logout-confirm');
     exit;
 }
 
@@ -585,6 +598,12 @@ if ($page === 'reset-verify' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
 if ($page === 'reset-new') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/views/pages/auth/reset-new.php';
+    exit;
+}
+if ($page === 'logout-confirm') {
+    if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/auth/logout.php';
     exit;
 }
 if ($page === 'public-doc') {
