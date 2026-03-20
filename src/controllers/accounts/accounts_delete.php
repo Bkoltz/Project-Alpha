@@ -1,7 +1,14 @@
 <?php
 // src/controllers/accounts/accounts_delete.php
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+
+// Ensure user is logged in and is an admin
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
+    header('Location: /?page=login');
+    exit;
+}
 
 csrf_verify_post_or_redirect('accounts');
 
@@ -16,6 +23,15 @@ if ($userId <= 0) {
 // Prevent deleting yourself
 if ($userId == ($_SESSION['user']['id'] ?? 0)) {
     header('Location: /?page=accounts&error=' . urlencode('Cannot delete your own account'));
+    exit;
+}
+
+// Prevent deleting admin accounts
+$stmt = $pdo->prepare('SELECT role FROM users WHERE id = ?');
+$stmt->execute([$userId]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
+if ($user && $user['role'] === 'admin') {
+    header('Location: /?page=accounts&error=' . urlencode('Cannot delete admin accounts'));
     exit;
 }
 

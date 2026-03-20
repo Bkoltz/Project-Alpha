@@ -10,6 +10,8 @@ require_once __DIR__ . '/../../config/app.php';
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Password updated.</div>
   <?php elseif (!empty($_GET['pwd_error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($_GET['pwd_error']); ?></div>
+  <?php elseif (!empty($_GET['force'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b">You must change your password before continuing.</div>
   <?php endif; ?>
 
   <form method="post" action="/?page=account-update" style="display:grid;gap:16px;max-width:600px">
