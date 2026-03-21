@@ -52,29 +52,31 @@ try {
     ];
     
     // Validate file uploads
+    // ZIP file contains: boundary CSV + rate CSV
+    // TXT file is FIPS county reference (uploaded separately)
     if (!isset($_FILES['zip_file']) || $_FILES['zip_file']['error'] === UPLOAD_ERR_NO_FILE) {
-        throw new Exception('Please upload a ZIP file containing FIPS and boundary files');
+        throw new Exception('Please upload a ZIP file containing boundary and rate CSV files');
     }
-    if (!isset($_FILES['rate_file']) || $_FILES['rate_file']['error'] === UPLOAD_ERR_NO_FILE) {
-        throw new Exception('Please upload the SSTGB rate file (.csv)');
+    if (!isset($_FILES['fips_file']) || $_FILES['fips_file']['error'] === UPLOAD_ERR_NO_FILE) {
+        throw new Exception('Please upload the FIPS county reference file (.txt)');
     }
     
     if ($_FILES['zip_file']['error'] !== UPLOAD_ERR_OK) {
         throw new Exception('Error uploading ZIP file: ' . getUploadErrorMessage($_FILES['zip_file']['error']));
     }
-    if ($_FILES['rate_file']['error'] !== UPLOAD_ERR_OK) {
-        throw new Exception('Error uploading rate file: ' . getUploadErrorMessage($_FILES['rate_file']['error']));
+    if ($_FILES['fips_file']['error'] !== UPLOAD_ERR_OK) {
+        throw new Exception('Error uploading FIPS file: ' . getUploadErrorMessage($_FILES['fips_file']['error']));
     }
     
     // Validate file extensions
     $zipExt = strtolower(pathinfo($_FILES['zip_file']['name'], PATHINFO_EXTENSION));
-    $rateExt = strtolower(pathinfo($_FILES['rate_file']['name'], PATHINFO_EXTENSION));
+    $fipsExt = strtolower(pathinfo($_FILES['fips_file']['name'], PATHINFO_EXTENSION));
     
     if ($zipExt !== 'zip') {
         throw new Exception('First file must be a .zip file');
     }
-    if ($rateExt !== 'csv') {
-        throw new Exception('Rate file must be a .csv file');
+    if ($fipsExt !== 'txt') {
+        throw new Exception('FIPS file must be a .txt file');
     }
     
     // Create temp directory for extraction
@@ -91,10 +93,11 @@ try {
     $zip->extractTo($tempDir);
     $zip->close();
     
-    // Find FIPS file (pipe-delimited TXT with county data)
-    // Find boundary file (CSV with ZIP+4 mappings)
-    $fipsFile = null;
+    // Find boundary file and rate file from extracted ZIP
+    // Boundary file: CSV with "B" in pattern (like WIB032026.csv)
+    // Rate file: CSV with "R" in pattern (like WIR032026.csv)
     $boundaryFile = null;
+    $rateFile = null;
     
     $extractedFiles = glob($tempDir . '/*');
     foreach ($extractedFiles as $file) {
@@ -102,34 +105,47 @@ try {
             $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
             $basename = basename($file);
             
-            // FIPS file: usually named like st55_wi_cou2020.txt (contains "cou" for county)
-            if ($ext === 'txt' && (stripos($basename, 'cou') !== false || stripos($basename, 'county') !== false)) {
-                $fipsFile = $file;
-            }
-            // Boundary file: CSV with "B" in name (like WIB032026.csv)
-            elseif ($ext === 'csv' && preg_match('/[A-Z]{2}B\d+\.csv$/i', $basename)) {
+            if ($ext !== 'csv') continue;
+            
+            // Boundary file: has "B" followed by digits (like WIB032026.csv)
+            if (preg_match('/[A-Z]{2}B\d+\.csv$/i', $basename)) {
                 $boundaryFile = $file;
             }
-            // Fallback: any TXT could be FIPS
-            elseif ($ext === 'txt' && $fipsFile === null) {
-                // Check if it looks like FIPS format (pipe-delimited)
-                $firstLine = fgets(fopen($file, 'r'));
-                if (strpos($firstLine, '|') !== false) {
-                    $fipsFile = $file;
+            // Rate file: has "R" followed by digits (like WIR032026.csv)
+            elseif (preg_match('/[A-Z]{2}R\d+\.csv$/i', $basename)) {
+                $rateFile = $file;
+            }
+            // Fallback: check first line content to distinguish
+            else {
+                $handle = fopen($file, 'r');
+                $firstLine = fgets($handle);
+                fclose($handle);
+                
+                $parts = str_getcsv($firstLine);
+                if (count($parts) >= 9) {
+                    // Rate file has 9 columns: state,county,code,r1,r2,r3,r4,start,end
+                    // Check if columns 3-6 look like rates (small decimals)
+                    $col3 = (float)($parts[3] ?? 0);
+                    if ($col3 >= 0 && $col3 < 1) {
+                        $rateFile = $rateFile ?: $file;
+                    }
                 }
-            }
-            // Fallback: any CSV in ZIP could be boundary
-            elseif ($ext === 'csv' && $boundaryFile === null) {
-                $boundaryFile = $file;
+                if (count($parts) >= 26 && trim($parts[0]) === '4') {
+                    // Boundary file starts with record type "4"
+                    $boundaryFile = $boundaryFile ?: $file;
+                }
             }
         }
     }
     
-    if (!$fipsFile) {
-        throw new Exception('Could not find FIPS county file in ZIP. Expected a pipe-delimited .txt file with county data.');
+    // FIPS file is uploaded separately
+    $fipsFile = $_FILES['fips_file']['tmp_name'];
+    
+    if (!$rateFile) {
+        throw new Exception('Could not find rate CSV in ZIP. Expected a file like WIR032026.csv with tax rates.');
     }
     
-    // Boundary file is optional - some imports may only have FIPS + rates
+    // Boundary file is optional - some imports may only have rates
     $hasBoundaryFile = ($boundaryFile !== null);
     
     // Ensure required tables exist
@@ -287,11 +303,11 @@ try {
     }
     
     // ========================================
-    // STEP 4: Parse SSTGB Rate CSV
+    // STEP 4: Parse SSTGB Rate CSV (from ZIP)
     // ========================================
-    $rateContent = file_get_contents($_FILES['rate_file']['tmp_name']);
+    $rateContent = file_get_contents($rateFile);
     if ($rateContent === false) {
-        throw new Exception('Could not read rate file');
+        throw new Exception('Could not read rate file from ZIP');
     }
     
     $today = date('Ymd');
