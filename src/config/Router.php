@@ -58,7 +58,6 @@ class Router
         'project/project-add-document' =>  '/src/controllers/project/project_add_document.php',
         'project/project-remove-document' => '/src/controllers/project/project_remove_document.php',
         'project/projects-update-status' => '/src/controllers/project/projects_update_status.php',
-        'quote/quote-approve' => '/src/controllers/quote/quote_approve.php',
         'contract/contract-sign' => '/src/controllers/contract/contract_sign.php',
         'contract/contract-complete' => '/src/controllers/contract/contract_complete.php',
         'contract/contract-void' => '/src/controllers/contract/contract_void.php',

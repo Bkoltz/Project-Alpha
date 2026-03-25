@@ -4,6 +4,8 @@ namespace App\services\quotes;
 
 use App\repositories\quotes\QuotesDetailsRepository;
 use App\config\AppConfiguration;
+use App\data_transfer_objects\QuoteData;
+use App\data_transfer_objects\QuoteItemsData;
 use App\utils\enum\DocumentType;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -12,10 +14,12 @@ use finfo;
 class QuotesDetailsService
 {
     private QuotesDetailsRepository $repository;
+    private QuoteService $quoteService;
 
-    public function __construct(QuotesDetailsRepository $repository)
+    public function __construct(QuotesDetailsRepository $repository, QuoteService $quoteService)
     {
         $this->repository = $repository;
+        $this->quoteService = $quoteService;
     }
 
     public function getPageData(array $data): array
@@ -30,9 +34,15 @@ class QuotesDetailsService
         $recieverInfo = $this->getRecieverInformation($quote);
         $senderInfo = $this->getSenderInformation($appConfig);
 
-        $finacialData = QuotesFinances::calculateFinancialData($data);
+        $quoteData = QuoteData::fromArray($data);
+        $this->quoteService->validateQuoteData($quoteData);
 
-        return array_merge($data, $finacialData, $recieverInfo, $senderInfo, [
+        $quoteItems = QuoteItemsData::fromArray($this->repository->getItemsById($id));
+        $this->quoteService->validateQuoteItems($quoteItems);
+
+        $data = QuotesFinances::calculateFinancialData($quoteData, $quoteItems)->toArray();
+
+        return array_merge($data, $recieverInfo, $senderInfo, [
             'documentType' => $documentType,
             'appConfig' => $appConfig,
             'brand' => $appConfig['brand_name'] ?? 'Project Alpha',
@@ -43,6 +53,8 @@ class QuotesDetailsService
             'colors' => $this->getStatusColors($quote),
         ]);
     }
+
+
 
     public function updateQuoteData(array $quote, array $appConfig): array
     {
@@ -295,6 +307,7 @@ class QuotesDetailsService
         $svgContents = @file_get_contents($logoPath);
         $svgData = 'data:image/svg+xml;base64,' . base64_encode($svgContents);
     }
+
 
     public function rejectQuote(int $id)
     {

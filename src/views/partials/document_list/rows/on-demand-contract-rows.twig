@@ -1,0 +1,72 @@
+<div style="overflow:auto">
+	<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+		<thead>
+			<tr style="text-align:left;border-bottom:1px solid #eee">
+				<th style="padding:10px">No.</th>
+				<th style="padding:10px">Project</th>
+				<th style="padding:10px">Client</th>
+				<th style="padding:10px">Status</th>
+				<th style="padding:10px">Billing</th>
+				<th style="padding:10px">Price/Invoice</th>
+				<th style="padding:10px">Invoices</th>
+				<th style="padding:10px">Last Invoice</th>
+				<th style="padding:10px">Actions</th>
+			</tr>
+		</thead>
+        
+		<tbody>
+			{% for row in rows %}
+				<tr style="border-top:1px solid #f3f4f6;{{row.style}}>">
+					<td style="padding:10px">ODC-{{row.id}}</td>
+					<td style="padding:10px">{{row.projectCode}}</td>
+					<td style="padding:10px">
+						<a href="/?page=client/clients-list&selected_client_id={{row.clientId}}">{{row.clientName}}</a>
+					</td>
+					<td style="padding:10px;text-transform:capitalize">{{row.status}}</td>
+					<td style="padding:10px">{{row.billingIntervalCount}} {{row.billingIntervalUnit}}</td>
+					<td style="padding:10px">${{row.pricePerInvoice}}</td>
+					<td style="padding:10px">{{row.invoiceCount}} {{row.totalInvoiced}}</td>
+					<td style="padding:10px">{{row.lastInvoiced}}</td>
+					<td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+						<a href="/?page=contract/on-demand-invoices-list&contract_id={{row.id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Invoices</a>
+						{% if row.status == 'pending' %}
+							<form method="post" action="/?page=on-demand-contract-activate" style="display:inline">
+								<input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
+							</form>
+
+							{% if canGenerate %}
+								<form method="post" action="/?page=on-demand-invoice-generate" style="display:inline" onsubmit="return confirm('Generate invoice for this contract?')">
+									<input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+									<input type="hidden" name="id" value="{{row.id}}">
+									<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#3b82f6;color:#fff; font-size: small;">Generate Invoice</button>
+								</form>
+							{% endif %}
+                            
+							<form method="post" action="/?page=on-demand-contract-pause" style="display:inline">
+								<input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#f59e0b;color:#fff; font-size: small;">Pause</button>
+							</form>
+						{% elseif row.status == 'paused' %}
+							<form method="post" action="/?page=on-demand-contract-resume" style="display:inline">
+								<input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Resume</button>
+							</form>
+						{% endif %}
+
+						{% if row.status != 'rejected' %}
+							<form method="post" action="/?page=on-demand-contract-terminate" style="display:inline" onsubmit="return confirm('Terminate this on-demand contract?')">
+								<input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#dc2626;color:#fff; font-size: small;">Terminate</button>
+							</form>
+						{% endif %}
+					</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>

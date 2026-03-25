@@ -50,9 +50,6 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" gd mbstring zip dom pdo_mysql mysqli \
     && a2enmod rewrite
 
-# Create php ini file for error logging and future php customization
-COPY php.ini /usr/local/etc/php/conf.d/php.ini
-
 # Copy application code
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/

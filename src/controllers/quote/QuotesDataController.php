@@ -3,21 +3,32 @@
 namespace App\controllers\quote;
 
 use App\Config\Renderer;
+use App\data_transfer_objects\QuoteData;
+use App\data_transfer_objects\QuoteItems;
+use App\data_transfer_objects\QuoteItemsData;
 use App\services\quotes\QuotesDataService;
+use App\services\quotes\QuoteService;
 
 class QuotesDataController
 {
-    private QuotesDataService $service;
+    private QuotesDataService $dataService;
+    private QuoteService $quoteService;
 
-    public function __construct(QuotesDataService $service)
+    public function __construct(QuoteService $quoteService, QuotesDataService $dataService)
     {
-        $this->service = $service;
+        $this->quoteService = $quoteService;
+        $this->dataService = $dataService;
     }
 
     public function create()
     {
         $quoteData = $this->extractCreateData();
-        $this->service->addQuote($quoteData);
+        $quoteData = QuoteData::fromArray($quoteData);
+
+        $quoteItems = $this->extractItemData();
+        $quoteItems = QuoteItemsData::fromArray($quoteItems);
+
+        $this->quoteService->createQuote($quoteData, $quoteItems);
 
         //Redirect to list
         header('Location: /?page=quote/regular-quote-list');
@@ -28,11 +39,11 @@ class QuotesDataController
     {
         if (key_exists('id', $_GET)) {
             $id = $_GET['id'];
-            $output = $this->service->getEditRenderData($id);
+            $output = $this->dataService->getEditRenderData($id);
 
             return ['pages/quote/quote-edit.twig', $output];
         } else {
-            $output = $this->service->getCreateRenderData();
+            $output = $this->dataService->getCreateRenderData();
 
             return ['pages/quote/quote-create.twig', $output];
         }
@@ -43,19 +54,21 @@ class QuotesDataController
         $id = $_POST['id'] ?? 0;
 
         $quoteData = $this->extractEditData();
-        
-        $success = $this->service->editQuote($quoteData, $id);
+        $quoteData = QuoteData::fromArray($quoteData);
 
-        if ($success === false) {
-            header('Location: /?page=quote/quote-edit&id=' . $id . '&error=1');
-            return;
-        }
+        $this->quoteService->editQuote($id, $quoteData);
+
+        // if ($success === false) {
+        //     header('Location: /?page=quote/quote-edit&id=' . $id . '&error=1');
+        //     return;
+        // }
 
         header('Location: /?page=quote/quote-list');
         exit;
     }
 
-    private function extractEditData(): array {
+    private function extractEditData(): array
+    {
         return array_merge(
             $this->extractItemData(),
             $this->extractDiscountData(),
@@ -80,7 +93,8 @@ class QuotesDataController
         );
     }
 
-    private function extractStoredData() : array {
+    private function extractStoredData(): array
+    {
         return isset($_POST['quote']) ? $_POST['quote'] : [];
     }
 
@@ -145,9 +159,10 @@ class QuotesDataController
     {
         return [
             'item' => $_POST['item'] ?? [],
-            'desc' => $_POST['item_desc'] ?? [],
-            'qty' => $_POST['item_qty'] ?? [],
-            'price' => $_POST['item_price'] ?? []
+            'description' => $_POST['item_desc'] ?? [],
+            'quantity' => $_POST['item_qty'] ?? [],
+            'unit_price' => $_POST['item_price'] ?? [],
+            'line_total' => []
         ];
     }
 

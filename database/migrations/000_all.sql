@@ -285,7 +285,7 @@ CREATE TABLE
 CREATE TABLE
   IF NOT EXISTS quote_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    quote_id UNIQUE INT NOT NULL,
+    quote_id INT UNIQUE NOT NULL,
     item VARCHAR(255) NOT NULL,
     description TEXT NULL,
     quantity DECIMAL(10, 2) NOT NULL DEFAULT 1,
@@ -304,7 +304,7 @@ CREATE TABLE
     quote_id INT NULL,
     client_id INT NOT NULL,
     project_id INT NULL,
-    doc_number INT NULL,
+    doc_number INT NOT NULL DEFAULT 0,
     project_code VARCHAR(64) NULL,
     status ENUM (
       'pending',
@@ -369,7 +369,7 @@ CREATE TABLE
     on_demand_contract_id INT NULL,
     client_id INT NOT NULL,
     project_id INT NULL,
-    doc_number INT NULL,
+    doc_number INT NOT NULL DEFAULT 0,
     project_code VARCHAR(64) NULL,
     discount_type ENUM ('none', 'percent', 'fixed') NOT NULL DEFAULT 'none',
     discount_value DECIMAL(10, 2) NOT NULL DEFAULT 0,

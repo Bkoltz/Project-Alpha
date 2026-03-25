@@ -40,7 +40,7 @@ class __TwigTemplate_f2d211677f8cd824f2cdbe5a510cc9dd extends Template
         $macros = $this->macros;
         // line 1
         yield "<section>
-\t<div class=\"doc-type\" style=\"text-align:center;font-weight:700;font-size:22px;margin-bottom:6px\">On-Demand Quote</div>
+\t<div class=\"doc-type\" style=\"text-align:center;font-weight:700;font-size:22px;margin-bottom:6px\">On-demand Quote</div>
 \t<div style=\"text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px\">
 \t\tValid for
 \t\t";

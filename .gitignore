@@ -7,6 +7,8 @@
 # /vendor/*/.gitmodules
 # /vendor/*/*/.github
 /vendor/
+/src/cache
+
 
 # OS artifacts (Windows/macOS)
 Thumbs.db

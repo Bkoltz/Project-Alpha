@@ -21,36 +21,69 @@ $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 
-$where=[];$p=[];
-if($client_id>0){$where[]='ltc.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
-if($status!==''){ $where[]='ltc.status=?'; $p[] = $status; }
-if($start!==''){$where[]='ltc.created_at>=?';$p[]=$start.' 00:00:00';}
-if($end!==''){$where[]='ltc.created_at<=?';$p[]=$end.' 23:59:59';}
-if($project_code!==''){ $where[]='ltc.project_code LIKE ?'; $p[] = $project_code.'%'; }
-if($doc_no>0){ $where[]='ltc.doc_number=?'; $p[] = $doc_no; }
-if($min_price !== null){ $where[]='ltc.total>=?'; $p[] = $min_price; }
-if($max_price !== null){ $where[]='ltc.total<=?'; $p[] = $max_price; }
+$where = [];
+$p = [];
+if ($client_id > 0) {
+  $where[] = 'ltc.client_id=?';
+  $p[] = $client_id;
+} elseif ($client_name !== '') {
+  $where[] = 'c.name LIKE ?';
+  $p[] = '%' . $client_name . '%';
+}
+if ($status !== '') {
+  $where[] = 'ltc.status=?';
+  $p[] = $status;
+}
+if ($start !== '') {
+  $where[] = 'ltc.created_at>=?';
+  $p[] = $start . ' 00:00:00';
+}
+if ($end !== '') {
+  $where[] = 'ltc.created_at<=?';
+  $p[] = $end . ' 23:59:59';
+}
+if ($project_code !== '') {
+  $where[] = 'ltc.project_code LIKE ?';
+  $p[] = $project_code . '%';
+}
+if ($doc_no > 0) {
+  $where[] = 'ltc.doc_number=?';
+  $p[] = $doc_no;
+}
+if ($min_price !== null) {
+  $where[] = 'ltc.total>=?';
+  $p[] = $min_price;
+}
+if ($max_price !== null) {
+  $where[] = 'ltc.total<=?';
+  $p[] = $max_price;
+}
 
-$per = (int)($_GET['per_page'] ?? 50); 
-if(!in_array($per,[50,100],true)) $per=50;
+$per = (int)($_GET['per_page'] ?? 50);
+if (!in_array($per, [50, 100], true)) $per = 50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM long_term_contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
-$stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
+$sqlCount = 'SELECT COUNT(*) FROM long_term_contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id' . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
+$stc = $pdo->prepare($sqlCount);
+$stc->execute($p);
+$total = (int)$stc->fetchColumn();
 
-$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, c.name client, c.id AS client_id FROM long_term_contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
-if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
-$sql.=" ORDER BY ltc.created_at DESC LIMIT $per OFFSET $offset";
-$st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
+$sql = "SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, c.name client, c.id AS client_id FROM long_term_contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
+if ($where) {
+  $sql .= ' WHERE ' . implode(' AND ', $where);
+}
+$sql .= " ORDER BY ltc.created_at DESC LIMIT $per OFFSET $offset";
+$st = $pdo->prepare($sql);
+$st->execute($p);
+$rows = $st->fetchAll();
 
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
-$clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
+$clients = $pdo->query('SELECT id,name FROM clients ' . ($hasArchived ? 'WHERE archived=0 ' : '') . 'ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>Long-term Contracts</h2>
-  
+
   <?php if (!empty($_GET['created'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Long-term contract created successfully.</div>
   <?php endif; ?>
@@ -65,63 +98,63 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
 
   <?php
   $filterConfig = [
-      'page' => 'contract/long-term-contracts-list',
-      'filters' => [
-          'client' => [
-              'type' => 'client_autocomplete',
-              'label' => 'Client',
-              'value' => $client_name,
-              'id_value' => $client_id
-          ],
-          'status' => [
-              'type' => 'select',
-              'label' => 'Status',
-              'value' => $status,
-              'options' => [
-                  ['value' => '', 'label' => 'All'],
-                  ['value' => 'pending', 'label' => 'Pending'],
-                  ['value' => 'active', 'label' => 'Active'],
-                  ['value' => 'paused', 'label' => 'Paused'],
-                  ['value' => 'completed', 'label' => 'Completed'],
-                  ['value' => 'cancelled', 'label' => 'Cancelled']
-              ]
-          ],
-                    'start' => [
-              'type' => 'date',
-              'label' => 'Start',
-              'value' => $start
-          ],
-          'end' => [
-              'type' => 'date',
-              'label' => 'End',
-              'value' => $end
-          ],
-          'min_price' => [
-              'type' => 'number',
-              'label' => 'Min ($)',
-              'value' => $min_price ?? '',
-              'step' => '0.01'
-          ],
-          'max_price' => [
-              'type' => 'number',
-              'label' => 'Max ($)',
-              'value' => $max_price ?? '',
-              'step' => '0.01'
-          ],
-          'project_code' => [
-              'type' => 'text',
-              'label' => 'Project ID',
-              'value' => $project_code,
-              'placeholder' => 'PA-2025'
-          ],
-          'doc_number' => [
-              'type' => 'number',
-              'label' => 'Doc #',
-              'value' => $doc_no
-          ]
+    'page' => 'contract/long-term-contracts-list',
+    'filters' => [
+      'client' => [
+        'type' => 'client_autocomplete',
+        'label' => 'Client',
+        'value' => $client_name,
+        'id_value' => $client_id
+      ],
+      'status' => [
+        'type' => 'select',
+        'label' => 'Status',
+        'value' => $status,
+        'options' => [
+          ['value' => '', 'label' => 'All'],
+          ['value' => 'pending', 'label' => 'Pending'],
+          ['value' => 'active', 'label' => 'Active'],
+          ['value' => 'paused', 'label' => 'Paused'],
+          ['value' => 'completed', 'label' => 'Completed'],
+          ['value' => 'cancelled', 'label' => 'Cancelled']
+        ]
+      ],
+      'start' => [
+        'type' => 'date',
+        'label' => 'Start',
+        'value' => $start
+      ],
+      'end' => [
+        'type' => 'date',
+        'label' => 'End',
+        'value' => $end
+      ],
+      'min_price' => [
+        'type' => 'number',
+        'label' => 'Min ($)',
+        'value' => $min_price ?? '',
+        'step' => '0.01'
+      ],
+      'max_price' => [
+        'type' => 'number',
+        'label' => 'Max ($)',
+        'value' => $max_price ?? '',
+        'step' => '0.01'
+      ],
+      'project_code' => [
+        'type' => 'text',
+        'label' => 'Project ID',
+        'value' => $project_code,
+        'placeholder' => 'PA-2025'
+      ],
+      'doc_number' => [
+        'type' => 'number',
+        'label' => 'Doc #',
+        'value' => $doc_no
       ]
+    ]
   ];
-  
+
   // Render the filter using Twig template
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
@@ -142,19 +175,19 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
-<?php 
-  $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : ((in_array($r['status'], ['cancelled','paused'], true)) ? 'background:#fef2f2;' : ''));
-  
-  $billingText = $r['billing_interval_count'] . ' ' . ucfirst($r['billing_interval_unit']);
-  if ($r['billing_interval_count'] > 1) $billingText .= 's';
-  
-  $amountText = '';
-  if ($r['pricing_type'] === 'per_invoice') {
-    $amountText = '$' . number_format((float)$r['price_per_invoice'], 2) . '/inv';
-  } else {
-    $amountText = '$' . number_format((float)$r['total'], 2) . ' total';
-  }
-?>
+          <?php
+          $rowStyle = ($r['status'] === 'active') ? 'background:#fffbeb;' : (($r['status'] === 'completed') ? 'background:#ecfdf5;' : ((in_array($r['status'], ['cancelled', 'paused'], true)) ? 'background:#fef2f2;' : ''));
+
+          $billingText = $r['billing_interval_count'] . ' ' . ucfirst($r['billing_interval_unit']);
+          if ($r['billing_interval_count'] > 1) $billingText .= 's';
+
+          $amountText = '';
+          if ($r['pricing_type'] === 'per_invoice') {
+            $amountText = '$' . number_format((float)$r['price_per_invoice'], 2) . '/inv';
+          } else {
+            $amountText = '$' . number_format((float)$r['total'], 2) . ' total';
+          }
+          ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px"><a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">LTC-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
@@ -200,27 +233,32 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   </div>
 
   <?php
-    $last=(int)ceil(max(1,$total)/$per);
-    $qs=$_GET; unset($qs['p']); $base='/?'.http_build_query($qs+['page'=>'contract/long-term-contracts-list','per_page'=>$per]);
+  $last = (int)ceil(max(1, $total) / $per);
+  $qs = $_GET;
+  unset($qs['p']);
+  $base = '/?' . http_build_query($qs + ['page' => 'contract/long-term-contracts-list', 'per_page' => $per]);
   ?>
   <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <form method="get" action="/">
-        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'\" value="'.htmlspecialchars($v).'">'; }
+        <?php foreach ($_GET as $k => $v) {
+          if ($k === 'per_page' || $k === 'p' || $k === 'page') continue;
+          echo '<input type="hidden" name="' . htmlspecialchars($k) . '\" value="' . htmlspecialchars($v) . '">';
+        }
         ?>
         <input type="hidden" name="page" value="contract/long-term-contracts-list">
         <label>Per page
           <select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
-            <option value="50" <?php echo $per===50?'selected':''; ?>>50</option>
-            <option value="100" <?php echo $per===100?'selected':''; ?>>100</option>
+            <option value="50" <?php echo $per === 50 ? 'selected' : ''; ?>>50</option>
+            <option value="100" <?php echo $per === 100 ? 'selected' : ''; ?>>100</option>
           </select>
         </label>
       </form>
     </div>
     <div style="display:flex;gap:8px">
-      <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
+      <?php if ($pageN > 1): ?><a href="<?php echo $base . '&p=' . ($pageN - 1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
       <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
-      <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
+      <?php if ($pageN < $last): ?><a href="<?php echo $base . '&p=' . ($pageN + 1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
     </div>
   </div>
 </section>

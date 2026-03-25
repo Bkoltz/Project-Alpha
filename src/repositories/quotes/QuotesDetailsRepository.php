@@ -28,7 +28,7 @@ class QuotesDetailsRepository
             $quoteItems = $this->getItemsById($id);
 
         $projectCode = $quote['project_code'] ?? '';
-        if (!empty($projectCode)) 
+        if (!empty($projectCode))
             $terms = $this->getTerms($projectCode);
 
         $custom_fields = $this->getCustomFields($documentType->value);
@@ -36,7 +36,8 @@ class QuotesDetailsRepository
         return ['quote' => $quote, 'quote_items' => $quoteItems, 'quote_terms' => $terms, 'custom_fields' => $custom_fields];
     }
 
-    public function getDocumentTypeData(int $id) : array {
+    public function getDocumentTypeData(int $id): array
+    {
         $stmt = $this->pdo->prepare('SELECT is_on_demand, is_long_term FROM quotes WHERE id=?');
         $stmt->execute([$id]);
 
@@ -94,5 +95,11 @@ class QuotesDetailsRepository
     {
         $st = $this->pdo->prepare('UPDATE quotes SET status="rejected" WHERE id=? AND status="pending"');
         $st->execute([$id]);
+    }
+
+    public function approveQuote(int $id)
+    {
+        $stmt = $this->pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?');
+        $stmt->execute([$id]);
     }
 }

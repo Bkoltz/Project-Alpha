@@ -2,6 +2,8 @@
 
 namespace App\services\quotes;
 
+use App\data_transfer_objects\QuoteData;
+use App\data_transfer_objects\QuoteItemsData;
 use App\repositories\quotes\QuotesDataRepository;
 
 require_once BASE_PATH . '/src/utils/csrf.php';
@@ -18,7 +20,7 @@ class QuotesDataService
     public function addQuote(array $pageData)
     {
         $updatedPageData = $this->verifyCreateData($pageData);
-        
+
         if ($updatedPageData === false)
             return false;
 
@@ -72,23 +74,28 @@ class QuotesDataService
         $oldQuote = $this->repository->getQuote($id);
         $pageData += $oldQuote;
 
-        $pageData['items'] = $this->getInputQuoteItems($pageData);
         $pageData['fulfillment_date'] = $this->verifyFulfillmentData($pageData['fulfillment_date']);
         $pageData['custom_fields'] = json_encode($this->getCustomFields('regular'));
 
-        $finacialData = QuotesFinances::calculateFinancialData($pageData);
+        $quoteData = QuoteData::fromArray($pageData);
+        $quoteItems = QuoteItemsData::fromArray($this->getInputQuoteItems($pageData));
+        
+        $finacialData = QuotesFinances::calculateFinancialData($quoteData, $quoteItems)->toArray();
 
         return array_merge($pageData, $finacialData);
     }
 
     private function verifyCreateData(array $pageData) : array {
         $documentData = $this->getInputDocumentData($pageData['doc_type']);
-        $pageData['items'] = $this->getInputQuoteItems($pageData);
+
         $pageData['fulfillment_date'] = $this->verifyFulfillmentData($pageData['fulfillment_date']);
         $pageData['custom_fields'] = json_encode($this->getCustomFields('regular'));
         $pageData['project_code'] = $this->repository->getNextProjectCode($pageData['client_id']);
 
-        $finacialData = QuotesFinances::calculateFinancialData($pageData);
+        $quoteData = QuoteData::fromArray($pageData);
+        $quoteItems = QuoteItemsData::fromArray($this->getInputQuoteItems($pageData));
+        
+        $finacialData = QuotesFinances::calculateFinancialData($quoteData, $quoteItems)->toArray();
 
         return array_merge($pageData, $documentData, $finacialData);
     }

@@ -6,12 +6,14 @@ use App\config\AppConfiguration;
 use App\services\quotes\QuotesDetailsService;
 use App\utils\enum\DocumentType;
 use App\Config\Renderer;
+use App\services\DocumentService;
 
 require_once BASE_PATH . '/src/utils/csrf.php';
 
 class QuotesDetailsController
 {
   private QuotesDetailsService $service;
+  private DocumentService $documentService;
   private Renderer $renderer;
 
   private const DOCUMENT_PATHS = [
@@ -20,9 +22,10 @@ class QuotesDetailsController
     DocumentType::ON_DEMAND->value => 'partials/document_list/details/on-demand-quote-details.twig'
   ];
 
-  public function __construct(QuotesDetailsService $service, Renderer $renderer)
+  public function __construct(QuotesDetailsService $service, DocumentService $documentService, Renderer $renderer)
   {
     $this->service = $service;
+    $this->documentService = $documentService;
     $this->renderer = $renderer;
   }
 
@@ -44,7 +47,8 @@ class QuotesDetailsController
     $this->service->createPDF($id, $content, $appConfig);
   }
 
-  private function getRenderData() : array {
+  private function getRenderData(): array
+  {
     $requestData = $this->getRequestData();
     return $this->service->getPageData($requestData);
   }
@@ -70,5 +74,13 @@ class QuotesDetailsController
     exit;
   }
 
-  private function approve() {}
+  public function approve()
+  {
+    $id = $_POST['id'];
+
+    $this->documentService->acceptQuoteAndCreateFullDoc($id);
+
+    header("Location:/?page=quote/quote-list");
+    exit;
+  }
 }
