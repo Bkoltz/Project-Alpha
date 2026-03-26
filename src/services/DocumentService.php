@@ -5,7 +5,7 @@ namespace App\services;
 use App\data_transfer_objects\QuoteData;
 use App\data_transfer_objects\ContractData;
 use App\data_transfer_objects\InvoiceData;
-
+use APp\data_transfer_objects\ItemData;
 use App\services\contract\ContractService;
 use App\services\invoice\InvoiceService;
 use App\services\quotes\QuoteService;
@@ -26,25 +26,36 @@ class DocumentService
         $this->quoteService->approveQuote($id);
 
         $quoteData = $this->quoteService->getQuoteData($id);
-        $this->createFullDocumentFromQuote($quoteData);
+        $itemData = $this->quoteService->getQuoteItems($id);
+        $this->createFullDocumentFromQuote($quoteData, $itemData);
     }
 
-    public function createFullDocumentFromQuote(QuoteData $quoteData)
+    public function createFullDocumentFromQuote(QuoteData $quoteData, ItemData $itemData)
     {
-        $this->createContractFromQuote($quoteData);
-        $this->createInvoiceFromQuote($quoteData);
+        $this->createContractFromQuote($quoteData, $itemData);
+        $this->createInvoiceFromQuote($quoteData, $itemData);
     }
 
-    public function createContractFromQuote(QuoteData $quoteData)
+    public function createContractFromQuote(QuoteData $quoteData, ItemData $quoteItems)
     {
         $contractData = $this->quoteToContractData($quoteData);
-        $this->contractService->createContract($contractData);
+        $this->contractService->createContract($contractData, $quoteItems);
     }
 
-    public function createInvoiceFromQuote(QuoteData $quoteData)
+    public function createInvoiceFromQuote(QuoteData $quoteData, ItemData $quoteItems)
     {
         $invoiceData = $this->quoteToInvoiceData($quoteData);
-        $this->invoiceService->createInvoice($invoiceData);
+        $this->invoiceService->createInvoice($invoiceData, $quoteItems);
+    }
+
+    public function denyContractAndFullDoc(int $id) {
+        $this->contractService->denyContract($id);
+        $this->invoiceService->denyInvoice($id);
+    }
+
+    public function completeContractAndFullDoc(int $id) {
+        $this->contractService->completeContract($id);
+        $this->invoiceService->setInvoiceDueDate($id); //Set based off AppConfig
     }
 
     //Maps quote data to contract data

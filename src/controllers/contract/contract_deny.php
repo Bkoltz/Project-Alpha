@@ -8,9 +8,9 @@ if ($id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%2
 $pdo->beginTransaction();
 try {
   // Mark contract denied
-  $pdo->prepare('UPDATE contracts SET status="denied" WHERE id=?')->execute([$id]);
+  $pdo->prepare('UPDATE contracts SET status="denied" WHERE id=?')->execute([$id]); 
   // Mark linked invoices denied (do not alter paid ones)
-  $pdo->prepare("UPDATE invoices SET status='denied' WHERE contract_id=? AND status<>'paid'")->execute([$id]);
+  $pdo->prepare("UPDATE invoices SET status='denied' WHERE contract_id=? AND status<>'paid'")->execute([$id]); 
   // Revoke public links for affected invoices
   try {
     $redir = '/?page=public-redirect&type=invoice&reason=denied';

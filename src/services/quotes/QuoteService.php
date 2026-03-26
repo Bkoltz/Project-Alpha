@@ -2,9 +2,9 @@
 
 namespace App\services\quotes;
 
+use APp\data_transfer_objects\ItemData;
 use App\data_transfer_objects\QuoteData;
-use App\data_transfer_objects\QuoteItemsData;
-use App\record_transfer_objects\QuoteItemsRecord;
+use App\record_transfer_objects\ItemRecord;
 use App\record_transfer_objects\QuoteMetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use App\repositories\quotes\QuotesRepository;
@@ -18,14 +18,14 @@ class QuoteService
         $this->repository = $repository;
     }
 
-    public function createQuote(QuoteData $quoteData, QuoteItemsData $quoteItems)
+    public function createQuote(QuoteData $quoteData, ItemData $quoteItems)
     {
         $this->updateQuoteData($quoteData, $quoteItems);
         $this->updateQuoteItems($quoteItems);
 
         $record = QuoteRecord::fromArray($quoteData->toArray());
         $recordMeta = QuoteMetaRecord::fromArray($quoteData->toArray());
-        $recordItems = QuoteItemsRecord::fromArray($quoteItems->toArray());
+        $recordItems = ItemRecord::fromArray($quoteItems->toArray());
 
         $this->repository->createNewQuote($record, $recordMeta, $recordItems);
     }
@@ -46,10 +46,15 @@ class QuoteService
     public function getQuoteData(int $id): QuoteData
     {
         $data = $this->repository->getQuoteData($id);
-        return QuoteData::fromArray($data);
+        return QuoteData::fromArray($data->toArray());
     }
 
-    private function updateQuoteData(QuoteData $quoteData, QuoteItemsData $quoteItems): void
+    public function getQuoteItems(int $id) : ItemData {
+        $data = $this->repository->getQuoteItems($id);
+        return ItemData::fromArray($data->toArray());
+    }
+
+    private function updateQuoteData(QuoteData $quoteData, ItemData $quoteItems): void
     {
         $this->validateQuoteData($quoteData);
         $this->updateProjectCode($quoteData);
@@ -58,7 +63,7 @@ class QuoteService
         QuotesFinances::calculateFinancialData($quoteData, $quoteItems);
     }
 
-    private function updateQuoteItems(QuoteItemsData $quoteItems): void
+    private function updateQuoteItems(ItemData $quoteItems): void
     {
         $this->validateQuoteItems($quoteItems);
         $this->calculateLineTotal($quoteItems);
@@ -69,7 +74,7 @@ class QuoteService
         $quoteData->project_code ??= $this->repository->getNextProjectCode($quoteData->client_id);
     }
 
-    private function calculateLineTotal(QuoteItemsData $quoteItems): void
+    private function calculateLineTotal(ItemData $quoteItems): void
     {
         for ($i = 0; $i < count($quoteItems->item); $i++) {
             $quantity = $quoteItems->quantity[$i];
@@ -111,16 +116,11 @@ class QuoteService
         $quoteData->created_at = !empty($quoteData->created_at) ?  $quoteData->created_at : date('Y-m-d H:i:s');
     }
 
-    public function validateQuoteItems(QuoteItemsData $quoteItems): void
+    public function validateQuoteItems(ItemData $quoteItems): void
     {
         $quoteItems->item ??= [];
         $quoteItems->description ??= [];
         $quoteItems->quantity ??= [];
         $quoteItems->unit_price ??= [];
-    }
-
-    private function sortEditData(): array
-    {
-        return [];
     }
 }

@@ -378,7 +378,7 @@ CREATE TABLE
     tax_county VARCHAR(100) NULL DEFAULT NULL,
     subtotal DECIMAL(12, 2) NOT NULL DEFAULT 0,
     total DECIMAL(12, 2) NOT NULL DEFAULT 0,
-    status ENUM ('unpaid', 'partial', 'paid', 'void') NOT NULL DEFAULT 'unpaid',
+    status ENUM ('unpaid', 'partial', 'paid', 'void', 'denied') NOT NULL DEFAULT 'unpaid',
     due_date DATE NULL,
     scheduled_date DATE NULL,
     estimated_completion VARCHAR(200) NULL,

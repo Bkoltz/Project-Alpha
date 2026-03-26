@@ -2,8 +2,10 @@
 
 namespace App\repositories\contract;
 
+use App\record_transfer_objects\ContractItemsRecord;
 use PDO;
 use App\utils\enum\DocumentType;
+use App\record_transfer_objects\ContractRecord;
 
 class ContractRepository
 {
@@ -20,37 +22,39 @@ class ContractRepository
         $this->pdo = $pdo;
     }
 
-    public function createContract(array $contractData, array $contractItems)
+    public function createContract(ContractRecord $contractData, ContractItemsRecord $contractItems) : void
     {
         $id = $this->insertContract($contractData);
         $this->insertContractItems($id, $contractItems);
     }
 
-    private function insertContract(array $contractData): int
+    private function insertContract(ContractRecord $contractData): int
     {
         $insertStatement = $this::DOCUMENT_TYPE_INSERT_STATEMENTS['regular'];
 
         $stmt = $this->pdo->prepare($insertStatement);
-        $stmt->execute($contractData);
+        $stmt->execute($contractData->toArray());
 
         return (int)$this->pdo->lastInsertId();
     }
 
-    private function insertContractItems(int $id, array $contractItems)
+    private function insertContractItems(int $id, ContractItemsRecord $contractItems): void
     {
         $stmt = $this->pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
 
-        foreach ($contractItems as $item) {
-            if (!empty($item))
-                $stmt->execute([$id, $item['description'], $item['description'], $item['quantity'], $item['unit_price'], $item['line_total']]);
+        for ($i = 0; $i > 0; $i++) {
+            $row = array_merge([$id], $contractItems->getRow($i));
+            $stmt->execute($row);
         }
     }
 
-    public function denyContract() {
-        
+    public function denyContract(int $id): void
+    {
+        $this->pdo->prepare('UPDATE contracts SET status="denied" WHERE id=?')->execute([$id]);
     }
 
-    public function approveContract() {
-        
+    public function completeContract(int $id): void
+    {
+        $this->pdo->prepare('UPDATE contracts SET status=?, completed_at=CURRENT_TIMESTAMP WHERE id=?')->execute(['completed', $id]);
     }
 }

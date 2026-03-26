@@ -2,7 +2,7 @@
 
 namespace App\repositories\quotes;
 
-use App\record_transfer_objects\QuoteItemsRecord;
+use App\record_transfer_objects\ItemRecord;
 use App\record_transfer_objects\QuoteMetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use PDO;
@@ -18,7 +18,7 @@ class QuotesRepository
         $this->pdo = $pdo;
     }
 
-    public function createNewQuote(QuoteRecord $quoteData, QuoteMetaRecord $quoteMeta, QuoteItemsRecord $quoteItems)
+    public function createNewQuote(QuoteRecord $quoteData, QuoteMetaRecord $quoteMeta, ItemRecord $quoteItems)
     {
         $id = $this->insertNewQuote($quoteData);
         $this->setQuoteItems($id, $quoteItems);
@@ -26,7 +26,7 @@ class QuotesRepository
         $this->setQuoteNotes($quoteMeta);
     }
 
-    public function editStoredQuote(int $id, QuoteRecord $quoteData, QuoteMetaRecord $quoteMeta, QuoteItemsRecord $quoteItems)
+    public function editStoredQuote(int $id, QuoteRecord $quoteData, QuoteMetaRecord $quoteMeta, ItemRecord $quoteItems)
     {
         // $this->updateStoredQuote($id, $quoteData);
         $this->setQuoteItems($id, $quoteItems);
@@ -50,7 +50,7 @@ class QuotesRepository
     }
 
     //This function is reusable for editing and creation of new quotes
-    private function setQuoteItems(int $id, QuoteItemsRecord $quoteItems)
+    private function setQuoteItems(int $id, ItemRecord $quoteItems)
     {
         //Remove old items if they exist
         $stmt = $this->pdo->prepare('DELETE FROM quote_items WHERE quote_id = ?');
@@ -95,12 +95,21 @@ class QuotesRepository
         $st->execute([$id]);
     }
 
-    public function getQuoteData(int $id)
+    public function getQuoteData(int $id) : QuoteRecord
     {
         $stmt = $this->pdo->prepare('SELECT * FROM quotes WHERE id = ?');
         $stmt->execute([$id]);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        return QuoteRecord::fromArray($data);
+    }
+
+    public function getQuoteItems(int $id) : ItemRecord {
+        $stmt = $this->pdo->prepare('SELECT * FROM quote_items WHERE quote_id = ?');
+        $stmt->execute([$id]);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return ItemRecord::fromArray($data);
     }
 
     public function getNextProjectCode(int $clientId): string

@@ -3,11 +3,11 @@
 namespace App\services\quotes;
 
 use App\data_transfer_objects\QuoteData;
-use App\data_transfer_objects\QuoteItemsData;
+use App\data_transfer_objects\ItemData;
 
 class QuotesFinances
 {
-    public static function calculateFinancialData(QuoteData $quoteData, QuoteItemsData $quoteItems): QuoteData
+    public static function calculateFinancialData(QuoteData $quoteData, ItemData $quoteItems): QuoteData
     {
         $discount_type = $quoteData->discount_type;
         $discount_value =  $quoteData->discount_value;
@@ -49,7 +49,7 @@ class QuotesFinances
         return max(0.0, $tax_percent) * max(0.0, $subtotal - $discount_amount) / 100.0;
     }
 
-    private  static function getSubtotal(QuoteItemsData $quoteItems): float
+    private  static function getSubtotal(ItemData $quoteItems): float
     {
         $subtotal = 0;
 

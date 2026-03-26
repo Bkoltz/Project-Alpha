@@ -35,11 +35,3 @@ class QuoteData extends TransferObject
     public ?string $notes = null;
     public ?string $terms = null;
 }
-
-class QuoteItemsData extends TransferObject {
-    public ?array $item = null;
-    public ?array $description = null;
-    public ?array $quantity = null;
-    public ?array $unit_price = null;
-    public ?array $line_total = null;
-}
