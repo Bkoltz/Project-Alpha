@@ -3,10 +3,12 @@
 namespace App\services\contract;
 
 use App\data_transfer_objects\ContractData;
+use App\data_transfer_objects\ContractSignatures;
 use App\data_transfer_objects\ItemData;
 use App\record_transfer_objects\ContractItemsRecord;
 use App\record_transfer_objects\ContractRecord;
 use App\repositories\contract\ContractRepository;
+use App\services\quotes\FinancialService;
 
 class ContractService
 {
@@ -17,7 +19,7 @@ class ContractService
         $this->repository = $repository;
     }
 
-    public function createContract(ContractData $contractData, ItemData $contractItems) : void
+    public function createContract(ContractData $contractData, ItemData $contractItems) : int 
     {
         $this->validateContractData($contractData);
         $this->validateContractItems($contractItems);
@@ -25,7 +27,29 @@ class ContractService
         $record = ContractRecord::fromArray($contractData->toArray());
         $recordItems = ContractItemsRecord::fromArray($contractItems->toArray());
 
-        $this->repository->createContract($record, $recordItems);
+        return $this->repository->createContract($record, $recordItems);
+    }
+
+    public function createContractWithSignatures(ContractData $contractData, ItemData $contractItems, ContractSignatures $contractSignatures) : void {
+        $id = $this->createContract($contractData, $contractItems);
+        $this->addContractSignatures($id, $contractSignatures);
+    }
+
+    public function addContractSignatures(int $id, ContractSignatures $contractSignatures) : void {
+        $this->repository->updateContractSignatures($id, $contractSignatures);
+    }
+
+    public function voidContract(int $id) : void {
+        $this->repository->voidContract($id);
+    }
+
+    public function payDeposit(int $id) : float {
+        $storedContract = $this->repository->getStoredContract($id);
+
+        $paidDeposit = FinancialService::calculateDepositValue($storedContract);
+
+        $this->repository->payDeposit($id, $paidDeposit);
+        return $paidDeposit;
     }
 
     public function denyContract(int $id) : void {

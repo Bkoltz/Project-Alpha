@@ -2,6 +2,7 @@
 
 namespace App\services\quotes;
 
+use APp\data_transfer_objects\ItemData;
 use App\data_transfer_objects\QuoteData;
 use App\data_transfer_objects\QuoteItemsData;
 use App\repositories\quotes\QuotesDataRepository;
@@ -78,9 +79,9 @@ class QuotesDataService
         $pageData['custom_fields'] = json_encode($this->getCustomFields('regular'));
 
         $quoteData = QuoteData::fromArray($pageData);
-        $quoteItems = QuoteItemsData::fromArray($this->getInputQuoteItems($pageData));
+        $quoteItems = ItemData::fromArray($this->getInputQuoteItems($pageData));
         
-        $finacialData = QuotesFinances::calculateFinancialData($quoteData, $quoteItems)->toArray();
+        $finacialData = FinancialService::calculateFinancialData($quoteData, $quoteItems)->toArray();
 
         return array_merge($pageData, $finacialData);
     }
@@ -93,9 +94,9 @@ class QuotesDataService
         $pageData['project_code'] = $this->repository->getNextProjectCode($pageData['client_id']);
 
         $quoteData = QuoteData::fromArray($pageData);
-        $quoteItems = QuoteItemsData::fromArray($this->getInputQuoteItems($pageData));
+        $quoteItems = ItemData::fromArray($this->getInputQuoteItems($pageData));
         
-        $finacialData = QuotesFinances::calculateFinancialData($quoteData, $quoteItems)->toArray();
+        $finacialData = FinancialService::calculateFinancialData($quoteData, $quoteItems)->toArray();
 
         return array_merge($pageData, $documentData, $finacialData);
     }

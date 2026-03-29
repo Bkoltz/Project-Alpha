@@ -3,9 +3,13 @@
 namespace App\repositories\contract;
 
 use App\record_transfer_objects\ContractItemsRecord;
+use App\data_transfer_objects\ContractSignatures;
+use APp\data_transfer_objects\ItemData;
 use PDO;
 use App\utils\enum\DocumentType;
 use App\record_transfer_objects\ContractRecord;
+use App\record_transfer_objects\ContractEditRecord;
+use App\record_transfer_objects\ItemRecord;
 
 class ContractRepository
 {
@@ -22,10 +26,32 @@ class ContractRepository
         $this->pdo = $pdo;
     }
 
-    public function createContract(ContractRecord $contractData, ContractItemsRecord $contractItems) : void
+    public function createContract(ContractRecord $contractData, ItemData $contractItems): int
     {
         $id = $this->insertContract($contractData);
         $this->insertContractItems($id, $contractItems);
+
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    public function updatedContract(ContractEditRecord $editRecord) {
+
+    }
+
+    public function updateContractSignatures(int $id, ContractSignatures $contractSignatures): void
+    {
+        $this->pdo->prepare('DELETE FROM contract_signatures WHERE contract_id=?')->execute([$id]);
+
+        $stmt = $this->pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+        for ($i = 0; $i < 0; $i++) {
+            $row = $contractSignatures->getRow($i);
+            $stmt->execute(array_merge([$id], $row));
+        }
+    }
+
+    public function voidContract(int $id): void
+    {
+        $this->pdo->prepare("UPDATE contracts SET status='cancelled', voided_at=CURRENT_TIMESTAMP WHERE id=?")->execute([$id]);
     }
 
     private function insertContract(ContractRecord $contractData): int
@@ -38,7 +64,7 @@ class ContractRepository
         return (int)$this->pdo->lastInsertId();
     }
 
-    private function insertContractItems(int $id, ContractItemsRecord $contractItems): void
+    private function insertContractItems(int $id, ItemRecord $contractItems): void
     {
         $stmt = $this->pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
 
@@ -46,6 +72,11 @@ class ContractRepository
             $row = array_merge([$id], $contractItems->getRow($i));
             $stmt->execute($row);
         }
+    }
+
+    public function payDeposit(int $id, float $depositPaid): void
+    {
+        $this->pdo->prepare('UPDATE contracts SET deposit_paid=? WHERE id=?')->execute([$depositPaid, $id]);
     }
 
     public function denyContract(int $id): void
@@ -56,5 +87,12 @@ class ContractRepository
     public function completeContract(int $id): void
     {
         $this->pdo->prepare('UPDATE contracts SET status=?, completed_at=CURRENT_TIMESTAMP WHERE id=?')->execute(['completed', $id]);
+    }
+
+    public function getStoredContract(int $id): ContractRecord
+    {
+        $stmt = $this->pdo->prepare('SELECT deposit_type, deposit_amount, total, deposit_paid FROM contracts WHERE id=? FOR UPDATE');
+        $stmt->execute([$id]);
+        return ContractRecord::fromArray($stmt->fetch(PDO::FETCH_ASSOC) ?? []);
     }
 }

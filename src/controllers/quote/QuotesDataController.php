@@ -3,6 +3,7 @@
 namespace App\controllers\quote;
 
 use App\Config\Renderer;
+use APp\data_transfer_objects\ItemData;
 use App\data_transfer_objects\QuoteData;
 use App\data_transfer_objects\QuoteItems;
 use App\data_transfer_objects\QuoteItemsData;
@@ -26,7 +27,7 @@ class QuotesDataController
         $quoteData = QuoteData::fromArray($quoteData);
 
         $quoteItems = $this->extractItemData();
-        $quoteItems = QuoteItemsData::fromArray($quoteItems);
+        $quoteItems = ItemData::fromArray($quoteItems);
 
         $this->quoteService->createQuote($quoteData, $quoteItems);
 
@@ -57,11 +58,6 @@ class QuotesDataController
         $quoteData = QuoteData::fromArray($quoteData);
 
         $this->quoteService->editQuote($id, $quoteData);
-
-        // if ($success === false) {
-        //     header('Location: /?page=quote/quote-edit&id=' . $id . '&error=1');
-        //     return;
-        // }
 
         header('Location: /?page=quote/quote-list');
         exit;

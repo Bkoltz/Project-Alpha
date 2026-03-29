@@ -30,6 +30,14 @@ class InvoiceService
         $this->repository->createInvoice($record, $itemsRecord);
     }
 
+    public function voidInvoice(int $id) : void {
+        $this->repository->voidInvoice($id);
+    }
+
+    public function payDeposit(int $id, float $paidDeposit) : void {
+       $this->repository->payDeposit($id, $paidDeposit); 
+    }
+
     public function setInvoiceDueDate(int $id): void
     {
         $netDays = (int)(AppConfiguration::$ConfigSettings['net_terms_days'] ?? 30);

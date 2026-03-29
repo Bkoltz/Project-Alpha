@@ -29,6 +29,11 @@ class InvoicesRepository
         return (int)$this->pdo->lastInsertId();
     }
 
+    public function voidInvoice(int $id): void
+    {
+        $this->pdo->prepare("UPDATE invoices SET status='void' WHERE contract_id=?")->execute([$id]);
+    }
+
     private function insertInvoiceItems(int $id, ItemRecord $invoiceItems)
     {
         $stmt = $this->pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
@@ -45,6 +50,11 @@ class InvoicesRepository
         $stmt->execute(['id' => $id]);
 
         return (bool) $stmt->fetchColumn();
+    }
+
+    public function payDeposit(int $id, float $depositAmount): void
+    {
+        $this->pdo->prepare('UPDATE invoices SET total = total - ?, status = "partial" WHERE contract_id = ? AND status = "unpaid"')->execute([$depositAmount, $id]);
     }
 
     public function getDueDateFromContractId(int $id): array

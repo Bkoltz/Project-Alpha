@@ -40,7 +40,7 @@ class QuotesDetailsService
         $quoteItems = QuoteItemsData::fromArray($this->repository->getItemsById($id));
         $this->quoteService->validateQuoteItems($quoteItems);
 
-        $data = QuotesFinances::calculateFinancialData($quoteData, $quoteItems)->toArray();
+        $data = FinancialService::calculateFinancialData($quoteData, $quoteItems)->toArray();
 
         return array_merge($data, $recieverInfo, $senderInfo, [
             'documentType' => $documentType,

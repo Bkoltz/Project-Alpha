@@ -60,7 +60,7 @@ class QuoteService
         $this->updateProjectCode($quoteData);
         $this->updateDocumentType($quoteData);
 
-        QuotesFinances::calculateFinancialData($quoteData, $quoteItems);
+        FinancialService::calculateFinancialData($quoteData, $quoteItems);
     }
 
     private function updateQuoteItems(ItemData $quoteItems): void

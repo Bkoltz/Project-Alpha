@@ -4,46 +4,68 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 $id = (int)($_POST['id'] ?? 0);
 $client_id = (int)($_POST['client_id'] ?? 0);
-$discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
+$discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none', 'percent', 'fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
-$deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
+$deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none', 'percent', 'fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_amount = (float)($_POST['deposit_amount'] ?? 0);
 $deposit_paid = (float)($_POST['deposit_paid'] ?? 0);
 $fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
+
 $item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
-if ($id<=0 || $client_id<=0) { header('Location: /?page=contract/contracts-list&error=Invalid'); exit; }
-$items=[];$subtotal=0.0;
-for($i=0;$i<count($item);$i++){
-  $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
-  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line];
+
+if ($id <= 0 || $client_id <= 0) {
+  header('Location: /?page=contract/contracts-list&error=Invalid');
+  exit;
 }
-$discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(100,$discount_value))*$subtotal/100;} elseif($discount_type==='fixed'){$discount_amount=max(0,$discount_value);} $tax=max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
+
+$items = [];
+$subtotal = 0.0;
+for ($i = 0; $i < count($item); $i++) {
+  $itm = trim((string)($item[$i] ?? ''));
+  $d = trim((string)($desc[$i] ?? ''));
+  $q = (float)($qty[$i] ?? 0);
+  $p = (float)($price[$i] ?? 0);
+  if ($itm === '' || $q <= 0 || $p < 0) continue;
+  $line = $q * $p;
+  $subtotal += $line;
+  $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
+}
+$discount_amount = 0.0;
+if ($discount_type === 'percent') {
+  $discount_amount = max(0, min(100, $discount_value)) * $subtotal / 100;
+} elseif ($discount_type === 'fixed') {
+  $discount_amount = max(0, $discount_value);
+}
+$tax = max(0, $tax_percent) * max(0, $subtotal - $discount_amount) / 100;
+$total = max(0, $subtotal - $discount_amount + $tax);
 $terms = trim((string)($_POST['terms'] ?? '')) ?: null;
 $estimated = trim((string)($_POST['estimated_completion'] ?? '')) ?: null;
 $weather = isset($_POST['weather_pending']) ? 1 : 0;
 $scope = trim((string)($_POST['scope'] ?? '')) ?: null;
 // Extract custom field values from POST
 $customFieldValues = extractCustomFieldValues($_POST);
-$customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null;
+$customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues) : null; //Not even using this lmao :/
 
 $pdo->beginTransaction();
-try{
-  $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, custom_fields=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$customFieldsJson,$id]);
-  
+try {
+  $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, custom_fields=? WHERE id=?')->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $terms, $estimated, $weather, $deposit_type, $deposit_amount, $deposit_paid, $fulfillment_date, $scope, $customFieldsJson, $id]);
+
   // Sync changes to linked invoices
-  $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
-  
+  $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $estimated, $fulfillment_date, $weather, $scope, $id]);
+
   // Sync items to linked invoices
   $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
   $invoiceIds->execute([$id]);
-  foreach($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invId) {
+  foreach ($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invId) {
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invId]);
-    $insInv=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-    foreach($items as $it){ $insInv->execute([$invId,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
+    $insInv = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+    foreach ($items as $it) {
+      $insInv->execute([$invId, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
+    }
   }
   $row = $pdo->prepare('SELECT project_code FROM contracts WHERE id=?');
   $row->execute([$id]);
@@ -55,30 +77,36 @@ try{
     $up->execute([$pc, $client_id, $pn !== '' ? $pn : null, $pt !== '' ? $pt : null]);
   }
   $pdo->prepare('DELETE FROM contract_items WHERE contract_id=?')->execute([$id]);
-  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-  foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
-  
+  $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+  foreach ($items as $it) {
+    $ins->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
+  }
+
   // Save contract signatures
   $pdo->prepare('DELETE FROM contract_signatures WHERE contract_id=?')->execute([$id]);
   $signatureTitles = $_POST['signature_titles'] ?? [];
   $signatureOrders = $_POST['signature_orders'] ?? [];
   $signatureRequired = $_POST['signature_required'] ?? [];
-  
+
   if (!empty($signatureTitles)) {
-      $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
-      foreach ($signatureTitles as $idx => $title) {
-          $title = trim($title);
-          if (empty($title)) continue;
-          
-          $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
-          // Check if any of the signature_required values match this index
-          $isRequired = !empty($signatureRequired[$idx]) ? 1 : 0;
-          
-          $sigStmt->execute([$id, $title, $order, $isRequired]);
-      }
+    $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+    foreach ($signatureTitles as $idx => $title) {
+      $title = trim($title);
+      if (empty($title)) continue;
+
+      $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
+      // Check if any of the signature_required values match this index
+      $isRequired = !empty($signatureRequired[$idx]) ? 1 : 0;
+
+      $sigStmt->execute([$id, $title, $order, $isRequired]);
+    }
   }
-  
+
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=contract/contract-details&id=' . $id . '&error=Update%20failed'); exit; }
+} catch (Throwable $e) {
+  $pdo->rollBack();
+  header('Location: /?page=contract/contract-details&id=' . $id . '&error=Update%20failed');
+  exit;
+}
 header('Location: /?page=contract/contract-details&id=' . $id . '&updated=1');
 exit;

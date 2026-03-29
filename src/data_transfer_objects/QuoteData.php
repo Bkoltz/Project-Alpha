@@ -35,3 +35,17 @@ class QuoteData extends TransferObject
     public ?string $notes = null;
     public ?string $terms = null;
 }
+
+class QuoteEditData extends TransferObject
+{
+    public ?int $client_id =  null;
+    public ?string $discount_type = null;
+    public ?float $discount_value =  null;
+    public ?float $tax_percent =  null;
+    public ?float $subtotal =  null;
+    public ?float $total =  null;
+    public ?string $deposit_type = null;
+    public ?float $deposit_amount = null;
+    public ?string $fulfillment_date = null;
+    public ?array $custom_fields = null;
+}

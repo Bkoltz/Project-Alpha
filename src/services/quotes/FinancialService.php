@@ -2,10 +2,12 @@
 
 namespace App\services\quotes;
 
+use App\data_transfer_objects\ContractData;
+use App\data_transfer_objects\DepositValues;
 use App\data_transfer_objects\QuoteData;
 use App\data_transfer_objects\ItemData;
 
-class QuotesFinances
+class FinancialService
 {
     public static function calculateFinancialData(QuoteData $quoteData, ItemData $quoteItems): QuoteData
     {
@@ -13,10 +15,10 @@ class QuotesFinances
         $discount_value =  $quoteData->discount_value;
         $tax_percent = $quoteData->tax_percent;
 
-        $subtotal = QuotesFinances::getSubtotal($quoteItems);
-        $discount_amount = QuotesFinances::getDiscountAmount($discount_type, $discount_value, $subtotal);
-        $tax_amount = QuotesFinances::getTaxAmount($subtotal, $discount_amount, $tax_percent);
-        $total = QuotesFinances::getTotal($subtotal, $discount_amount, $tax_amount);
+        $subtotal = FinancialService::getSubtotal($quoteItems);
+        $discount_amount = FinancialService::getDiscountAmount($discount_type, $discount_value, $subtotal);
+        $tax_amount = FinancialService::getTaxAmount($subtotal, $discount_amount, $tax_percent);
+        $total = FinancialService::getTotal($subtotal, $discount_amount, $tax_amount);
 
         $quoteData->subtotal = $subtotal;
         $quoteData->discount_value = $discount_amount;
@@ -24,6 +26,23 @@ class QuotesFinances
         $quoteData->total = $total;
 
         return $quoteData;
+    }
+
+    public static function calculateDepositValue(DepositValues $contractData) : float
+    {
+        $depositType = $contractData->getDepositType();
+        $depositValue = $contractData->getDepositAmount();
+        $total = $contractData->getTotal();
+
+        $depositCalc = 0;
+
+        if ($depositType === 'percent') {
+            $depositCalc = max(0, min(100, $depositValue)) * $total / 100;
+        } elseif ($depositType === 'fixed') {
+            $depositCalc = $depositValue;
+        }
+
+        return $depositCalc;
     }
 
     private static function getDiscountAmount(string $discount_type, float $discount_value, float $subtotal): float

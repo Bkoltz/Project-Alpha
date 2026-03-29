@@ -6,6 +6,7 @@ use App\data_transfer_objects\QuoteData;
 use App\data_transfer_objects\ContractData;
 use App\data_transfer_objects\InvoiceData;
 use APp\data_transfer_objects\ItemData;
+use App\data_transfer_objects\TransferObject;
 use App\services\contract\ContractService;
 use App\services\invoice\InvoiceService;
 use App\services\quotes\QuoteService;
@@ -32,20 +33,23 @@ class DocumentService
 
     public function createFullDocumentFromQuote(QuoteData $quoteData, ItemData $itemData)
     {
-        $this->createContractFromQuote($quoteData, $itemData);
-        $this->createInvoiceFromQuote($quoteData, $itemData);
+        $this->createContractFromTransferData($quoteData, $itemData);
+        $this->createInvoiceFromTransferData($quoteData, $itemData);
     }
 
-    public function createContractFromQuote(QuoteData $quoteData, ItemData $quoteItems)
-    {
-        $contractData = $this->quoteToContractData($quoteData);
-        $this->contractService->createContract($contractData, $quoteItems);
+    public function createInvoiceFromContract(ContractData $contractData, ItemData $items) : void {
+        $this->createInvoiceFromTransferData($contractData, $items);
+    }
+  
+
+    public function voidContractAndFullDoc(int $id) : void {
+        $this->contractService->voidContract($id);
+        $this->invoiceService->voidInvoice($id);
     }
 
-    public function createInvoiceFromQuote(QuoteData $quoteData, ItemData $quoteItems)
-    {
-        $invoiceData = $this->quoteToInvoiceData($quoteData);
-        $this->invoiceService->createInvoice($invoiceData, $quoteItems);
+    public function payDepositFullDoc(int $id) : void {
+        $depositAmount = $this->contractService->payDeposit($id);
+        $this->invoiceService->payDeposit($id, $depositAmount);
     }
 
     public function denyContractAndFullDoc(int $id) {
@@ -58,19 +62,15 @@ class DocumentService
         $this->invoiceService->setInvoiceDueDate($id); //Set based off AppConfig
     }
 
-    //Maps quote data to contract data
-    private function quoteToContractData(QuoteData $quoteData): ContractData    
+    private function createContractFromTransferData(TransferObject $object, ItemData $items)
     {
-        $array = $quoteData->toArray();
-
-        return ContractData::fromArray($array);
+        $contractData = ContractData::fromArray($object->toArray());
+        $this->contractService->createContract($contractData, $items);
     }
 
-    //Maps quote data to invoice data
-    private function quoteToInvoiceData(QuoteData $quoteData): InvoiceData
+    private function createInvoiceFromTransferData(TransferObject $object, ItemData $items)
     {
-       $array = $quoteData->toArray();
-
-       return InvoiceData::fromArray($array);
+        $invoiceData = InvoiceData::fromArray($object->toArray());
+        $this->invoiceService->createInvoice($invoiceData, $items);
     }
 }
