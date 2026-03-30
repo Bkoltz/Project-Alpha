@@ -1,18 +1,57 @@
 # Project Alpha (PA)
 
-A PHP-based business document management system for quotes, contracts, and invoices with Stripe payment integration.
+A PHP-based business document management system for quotes, contracts, invoices, and receipts with Stripe payment integration. Built for organizations requiring automated billing, secure document handling, and comprehensive financial reporting.
 
-## Core Features
+## ✅ What's Working
 
-- Create and manage clients, organizations, Jobs (auto-generated project_codes), and Projects (manual parent groups)
-- Draft, approve, and archive quotes
-- Generate contracts and invoices automatically from quotes
-- Generate downloadable PDFs for quotes, contracts, and invoices
-- Upload signed contracts (signed PDF files) and serve them securely
-- Long-term and on-demand document support (project-level configurations)
-- Stripe payment integration (Payment Intents, not Stripe Invoices)
-- Public shareable links for quotes, contracts, and invoices
-- Automated invoice generation and reminders
+### Core Features
+
+- **Document Management**
+  - Quotes (Regular, Long-term, On-Demand)
+  - Contracts (Regular, Long-term, On-Demand)
+  - Invoices (including recurring billing)
+  - Public shareable links with expiration
+  - Document re-enablement (un-void functionality)
+
+- **Payment Integration**
+  - Stripe Payment Intents (not Stripe Invoices)
+  - Public invoice payment pages
+  - Admin-initiated card charges
+  - Webhook handling for payment confirmations
+  - Stripe reconciliation for missed payments
+
+- **Automated Workflows**
+  - Recurring invoice generation for long-term contracts
+  - Auto-termination of expired contracts
+  - Invoice reminder system
+  - Document link expiration checking
+
+- **Financial Tools**
+  - Receipt management (upload, track, categorize)
+  - W-9 and form storage system
+  - Tax rate management with jurisdiction support
+  - Custom tax calculations per document
+
+- **Reporting & Audit**
+  - Audit report generation (CSV, PDF, ZIP)
+  - Scheduled audit delivery via email
+  - Running totals and financial tracking
+  - System audit log for critical actions
+
+### Supported Document Types
+
+| Type | Prefix | Description |
+|------|--------|-------------|
+| Regular Quote | Q-XXX | One-time project quoting |
+| Long-term Quote | LTQ-XXX | Recurring service quotes |
+| On-Demand Quote | ODQ-XXX | Flexible quoting without intervals |
+| Regular Contract | C-XXX | One-time service contracts |
+| Long-term Contract | LTC-XXX | Subscription/retainer contracts |
+| On-Demand Contract | ODC-XXX | Flexible billing contracts |
+| Invoice | I-XXX | Standard invoices |
+| On-Demand Invoice | ODI-XXX | Manual invoice generation |
+
+---
 
 ## Quick Start
 
@@ -32,6 +71,7 @@ After starting Docker, run the migrations:
 ```bash
 docker compose exec app php /var/www/src/migrations/add_cron_job_runs.php
 docker compose exec app php /var/www/src/migrations/add_amount_paid.php
+docker compose exec app php /var/www/src/migrations/add_activity_log.php
 ```
 
 ---
@@ -140,27 +180,6 @@ The `cron_job_runs` table tracks:
 
 ---
 
-## API Endpoints
-
-### Public Endpoints (No Auth Required)
-
-| Route | Description |
-|-------|-------------|
-| `/?page=public-doc&token=...` | View public quote/contract/invoice |
-| `/?page=stripe-checkout&token=...` | Initiate Stripe payment |
-| `/?page=stripe-success&token=...` | Payment success page |
-| `/?page=stripe-webhook` | Stripe webhook receiver |
-
-### Admin Endpoints (Auth Required)
-
-| Route | Description |
-|-------|-------------|
-| `/?page=stripe-charge&invoice_id=...` | Admin-initiated card charge |
-| `/?page=public-link-create` | Generate shareable link |
-| `/?page=payments/payments-create` | Record payment (supports Stripe redirect) |
-
----
-
 ## Database Schema
 
 ### Key Tables
@@ -173,6 +192,14 @@ The `cron_job_runs` table tracks:
 - **`public_links`**: Shareable document links with expiration
 - **`cron_job_runs`**: Cron execution tracking for catch-up logic
 - **`invoice_notifications`**: Tracks sent reminders (idempotency)
+- **`tax_rates`**: Predefined tax rates per jurisdiction
+- **`system_audit`**: Audit log for critical system actions
+- **`organizations`**: Organizations with tax-exempt form storage
+- **`clients`**: Client records with archived status
+- **`projects`**: Manual parent grouping for Jobs
+- **`project_codes`**: Auto-generated project codes
+- **`api_keys`**: API key management
+- **`link`**: External resource links (Dropbox, Google Drive, S3)
 
 ### Payments Table Columns
 
@@ -198,6 +225,67 @@ Configure in `config/settings.json` or via Settings UI:
 | `net_terms_days` | Default payment terms (days) |
 | `documents_valid_days` | Public link expiration days |
 
+Environment variables (Docker):
+
+| Variable | Purpose |
+|----------|---------|
+| `DB_HOST` | MySQL host (default: `db`) |
+| `MYSQL_DATABASE` | Database name (default: `project_alpha`) |
+| `MYSQL_USER` / `MYSQL_PASSWORD` | DB credentials |
+| `APP_AUTH_DISABLED` | Set `true` to bypass authentication |
+| `APP_API_ENABLED` | Enable/disable API endpoints (default: `true`) |
+
+---
+
+## Advanced Features
+
+### Custom Fields
+
+PA supports customizable document fields:
+
+- **Field Types**: Text short/long, Number, Date
+- **Per-Org Configuration**: Each organization can define their own fields
+- **Validation**: Required toggle, min/max for numbers
+- **Auto-Population**: Default values can be set per field
+
+### Tax Management
+
+- **Predefined Tax Rates**: Store tax rates by country/state/county
+- **Auto-Selection**: System selects appropriate rate based on document context
+- **Manual Override**: Users can enter custom tax percentages when needed
+- **Tax Tracking**: Records `tax_amount` and `tax_county` for audit compliance
+
+### Receipt Management
+
+- Upload images of receipts (JPEG, PNG, PDF)
+- Track date, amount, and description
+- Store in `/uploads/receipts/`
+- Search and filter by date range, amount, client
+
+### Forms & Documents Storage
+
+- Upload and organize forms (W-9, W-8, etc.)
+- Store in `/uploads/forms/`
+- Email forms directly to clients/organizations
+- View/download/replacement capabilities
+
+### Audit System
+
+- Generate CSV, PDF, or ZIP reports
+- Include/exclude invoices, contracts, quotes
+- Auto-select current year (or custom date range)
+- Quick presets: Last Quarter, Last Month, All Time, Current Year
+- Scheduled email delivery (up to 5 recipients)
+- Read-only audit records (immutable)
+
+### Logging System
+
+- Structured JSON logs with rotation
+- User actions logged (document changes, status transitions)
+- System events logged (cron jobs, sync tasks)
+- Security events logged (login attempts, permission changes)
+- 10MB rotation, 30 files retained, archival to cold storage
+
 ---
 
 ## Troubleshooting
@@ -208,6 +296,7 @@ Configure in `config/settings.json` or via Settings UI:
 2. Verify webhook secret matches in PA settings
 3. Check `/?page=stripe-webhook` is accessible (no auth)
 4. Review error logs: `docker compose logs app`
+5. Run manual reconciliation: `docker compose exec app php /var/www/src/cron/stripe_reconciliation.php`
 
 ### Missed Payments After Downtime
 
@@ -227,6 +316,13 @@ docker compose exec app php /var/www/src/cron/stripe_reconciliation.php
 SELECT * FROM cron_job_runs ORDER BY updated_at DESC;
 ```
 
+### Document Re-enablement Not Working
+
+- Ensure you're on a recent version (requires `document_date` columns)
+- Re-enabling a voided contract will also restore its linked invoice
+- The document date will be updated to current date on re-enable
+- Related documents (invoices from contracts) are automatically restored
+
 ---
 
 ## File Structure
@@ -242,34 +338,104 @@ src/
 ├── cron/             # Scheduled job scripts
 ├── migrations/       # Database migrations
 ├── services/         # Business logic (StripeService, etc.)
-├── utils/            # Helpers (crypto, mailer, etc.)
+├── utils/            # Helpers (crypto, mailer, logger, twig)
 └── views/            # HTML templates
+    ├── pages/        # Page templates (organized by domain)
+    ├── partials/     # Shared layout components
+    ├── templates/    # Twig templates and components
+    │   ├── layouts/
+    │   └── components/
+    └── uploads/      # User uploads (receipts, forms, etc.)
 docs/
 └── work_flow/        # Detailed workflow documentation
-    ├── document_types.md
-    ├── projects.md
-    ├── regular_docs.md
-    ├── long-term_docs.md
-    └── settings.md
+tools/
+├── generate_audit.py # Python audit report generator
+└── requirements.txt  # Python dependencies
 ```
 
 ---
 
 ## Contributing and Development
 
-If you'd like to contribute or extend the project, please read through the `docs/work_flow` docs first. The public-facing routes are routed through `public/index.php` where `page` query parameters map to controllers and views under `src/controllers` and `src/views/pages`.
+### Getting Started
 
-To run tests:
+1. Clone the repository
+2. Run `docker compose build --no-cache && docker compose up -d`
+3. Install dependencies: `docker compose exec app composer install`
+4. Run migrations (see Quick Start above)
+
+### Code Style
+
+- PHP 8.1+ required
+- PSR-4 autoloading via Composer
+- Use Twig for templating where possible
+- Follow existing controller/view naming conventions
+
+### Running Tests
 
 ```bash
 composer install
 vendor/bin/phpunit --colors=always
 ```
 
+### API Endpoints
+
+#### Public Endpoints (No Auth Required)
+
+| Route | Description |
+|-------|-------------|
+| `/?page=public-doc&token=...` | View public quote/contract/invoice |
+| `/?page=stripe-checkout&token=...` | Initiate Stripe payment |
+| `/?page=stripe-success&token=...` | Payment success page |
+| `/?page=stripe-webhook` | Stripe webhook receiver |
+
+#### Admin Endpoints (Auth Required)
+
+| Route | Description |
+|-------|-------------|
+| `/?page=stripe-charge&invoice_id=...` | Admin-initiated card charge |
+| `/?page=public-link-create` | Generate shareable link |
+| `/?page=payments/payments-create` | Record payment (supports Stripe redirect) |
+
+---
+
+## Security
+
+To report any security vulnerabilities, send an email to bkoltz1627@gmail.com with as much details as possible. Please avoid creating any public issues before notifying us of any vulnerabilities. All vulnerabilities will be treated as highest priority with fixes provided within a couple of days of receiving all required information.
+
 ---
 
 ## License
 
 Proprietary - All rights reserved.
-test
-test
+
+---
+
+## Recent Updates (2025-2026)
+
+- ✅ Re-enabled document re-enablement (un-void) for voided contracts/invoices
+- ✅ Fixed document date display to show creation date instead of current date
+- ✅ Added "Update Document Date" button for manual date extension
+- ✅ Implemented On-Demand contract/quote type with flexible billing
+- ✅ Added tax rates table with jurisdiction support (country/state/county)
+- ✅ Created audit report system with CSV/PDF generation and email scheduling
+- ✅ Added receipt management system for business expense tracking
+- ✅ Implemented forms & docs storage (W-9, W-8, etc.) with client org email
+- ✅ Upgraded to PHP 8.3 with updated dependencies (Twig 3.21, Monolog 3.0)
+- ✅ Fixed recurring billing and on-demand document logic
+- ✅ Resolved multi-signature function issues on contracts
+- ✅ Added project and client filtering improvements
+- ✅ Integrated Twig templating for consistent list views
+- ✅ Fixed invoice public view and Stripe connection issues
+- ✅ Moved document settings to consolidated Documents tab with sub-tabs
+
+---
+
+*For detailed technical documentation, see the `docs/` folder including:*
+- `AGENTS.md` - Development guidance for AI assistants
+- `IMPLEMENTATION_ORDER.md` - Feature implementation sequence
+- `PROGRESS_SUMMARY.md` - Completed tasks and status
+- `RECURRING_INVOICES_SETUP.md` - Recurring billing guide
+- `ON_DEMAND_CONTRACTS_README.md` - On-demand features
+- `FILTER_MIGRATION_SUMMARY.md` - Template migration notes
+- `SECURITY.md` - Security contact info
