@@ -20,7 +20,7 @@ try {
         
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => 'null',
+            CURLOPT_POSTFIELDS => '',  // Empty body (not 'null')
             CURLOPT_HTTPHEADER => [
                 'Authorization: Bearer ' . $accessToken,
                 'Content-Type: application/json'
