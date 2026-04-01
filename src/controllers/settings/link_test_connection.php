@@ -16,14 +16,15 @@ try {
         }
         
         // Test Dropbox connection by calling get_current_account endpoint
+        // Using official Dropbox API v2 endpoint as documented in riptutorial.com
         $ch = curl_init('https://api.dropboxapi.com/2/users/get_current_account');
         
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => '',  // Empty body (not 'null')
+            CURLOPT_POSTFIELDS => '',  // Empty body - official Dropbox API v2 requires this
             CURLOPT_HTTPHEADER => [
-                'Authorization: Bearer ' . $accessToken,
-                'Content-Type: application/json'
+                'Authorization: Bearer ' . $accessToken
+                // Note: Content-Type header not required for this endpoint per Dropbox docs
             ],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 15
