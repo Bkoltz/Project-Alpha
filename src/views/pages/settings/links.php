@@ -2,16 +2,6 @@
 // src/views/pages/settings/links.php
 require_once __DIR__ . '/../../../config/db.php';
 
-// Make CSRF token available to JavaScript
-$csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-if (empty($_SESSION['csrf'])) {
-    $_SESSION['csrf'] = bin2hex(random_bytes(32));
-}
-$csrfToken = $_SESSION['csrf'];
-
 // Fetch link resolver configurations
 $linkConfigs = [];
 try {
@@ -41,9 +31,25 @@ try {
 }
 
 $providers = ['dropbox', 'gdrive', 's3'];
-?>
 
+// Make CSRF token available to JavaScript
+$csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+if (empty($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf'];
+
+?>
 <div style="max-width:1000px">
+    <!-- CSRF token for JavaScript -->
+    <script nonce="<?php echo htmlspecialchars($csrfToken); ?>">
+    (function() {
+        window.csrfToken = "<?php echo htmlspecialchars($csrfToken); ?>";
+    })();
+    </script>
     <h2 style="margin:0 0 8px 0">Link Resolver *Beta*</h2>
     <p style="margin:0 0 24px 0;color:var(--muted)">Auto-generate and manage links for client/organization file storage</p>
 
@@ -220,11 +226,6 @@ $providers = ['dropbox', 'gdrive', 's3'];
 </div>
 
 <script>
-// Get CSRF token from meta tag or session
-function getCsrfToken() {
-    return window.csrfToken || '<?php echo $csrfToken; ?>';
-}
-
 function toggleProviderFields(provider) {
     const checkbox = document.querySelector(`input[name="provider_enabled_${provider}"]`);
     const fields = document.getElementById(`fields_${provider}`);
