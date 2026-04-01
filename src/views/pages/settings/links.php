@@ -2,6 +2,16 @@
 // src/views/pages/settings/links.php
 require_once __DIR__ . '/../../../config/db.php';
 
+// Make CSRF token available to JavaScript
+$csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+if (empty($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf'];
+
 // Fetch link resolver configurations
 $linkConfigs = [];
 try {
@@ -210,6 +220,11 @@ $providers = ['dropbox', 'gdrive', 's3'];
 </div>
 
 <script>
+// Get CSRF token from meta tag or session
+function getCsrfToken() {
+    return window.csrfToken || '<?php echo $csrfToken; ?>';
+}
+
 function toggleProviderFields(provider) {
     const checkbox = document.querySelector(`input[name="provider_enabled_${provider}"]`);
     const fields = document.getElementById(`fields_${provider}`);
@@ -224,6 +239,7 @@ function testConnection(provider) {
     // Gather credentials for this provider
     const formData = new FormData();
     formData.append('provider', provider);
+    formData.append('csrf', getCsrfToken());  // Add CSRF token
     
     if (provider === 'dropbox') {
         formData.append('access_token', document.querySelector(`input[name="${provider}_access_token"]`).value);
