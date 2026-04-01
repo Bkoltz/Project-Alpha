@@ -16,6 +16,11 @@ function csrf_token(): string {
 }
 
 function csrf_verify_post_or_redirect(string $page): void {
+    // Skip CSRF validation for API/endpoint pages
+    if (in_array($page, ['settings/link-test-connection'], true)) {
+        return;
+    }
+    
     $token = $_POST['csrf'] ?? '';
     if (empty($_SESSION['csrf']) || !is_string($token) || !hash_equals($_SESSION['csrf'], $token)) {
         $err = rawurlencode('Invalid request (CSRF)');
