@@ -30,6 +30,16 @@ try {
     @error_log('[links] Error fetching link stats: ' . $e->getMessage());
 }
 
+// Make CSRF token available to JavaScript
+$csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+if (empty($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf'];
+
 $providers = ['dropbox', 'gdrive', 's3'];
 
 // Make CSRF token available to JavaScript
