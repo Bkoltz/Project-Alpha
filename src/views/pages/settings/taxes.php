@@ -5,43 +5,13 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
-// Check for import success/error messages (three importers)
-$fipsSuccess = isset($_GET['fips_success']);
-$fipsError = isset($_GET['fips_error']) ? $_GET['fips_error'] : null;
-$fipsSummary = $_SESSION['fips_import_summary'] ?? null;
-
-$ratesSuccess = isset($_GET['rates_success']);
-$ratesError = isset($_GET['rates_error']) ? $_GET['rates_error'] : null;
-$ratesSummary = $_SESSION['rates_import_summary'] ?? null;
-
-$boundariesSuccess = isset($_GET['boundaries_success']);
-$boundariesError = isset($_GET['boundaries_error']) ? $_GET['boundaries_error'] : null;
-$boundariesSummary = $_SESSION['boundaries_import_summary'] ?? null;
-
-// Legacy combined import handling
+// Check for import success/error messages
 $importSuccess = isset($_GET['import_success']);
 $importError = isset($_GET['import_error']) ? $_GET['import_error'] : null;
 $importSummary = $_SESSION['tax_import_summary'] ?? null;
 
 // Clear session data after reading
-if ($fipsSuccess) unset($_SESSION['fips_import_summary']);
-if ($ratesSuccess) unset($_SESSION['rates_import_summary']);
-if ($boundariesSuccess) unset($_SESSION['boundaries_import_summary']);
-if ($importSuccess) unset($_SESSION['tax_import_summary'], $_SESSION['tax_import_stats']);
-
-// Get last import dates for each type
-$lastImports = ['fips' => null, 'rates' => null, 'boundaries' => null];
-try {
-    $stmt = $pdo->query("SELECT import_type, MAX(imported_at) as last_import, 
-                         (SELECT filename FROM tax_import_log t2 WHERE t2.import_type = t1.import_type ORDER BY imported_at DESC LIMIT 1) as filename,
-                         (SELECT records_imported FROM tax_import_log t3 WHERE t3.import_type = t1.import_type ORDER BY imported_at DESC LIMIT 1) as records
-                         FROM tax_import_log t1 GROUP BY import_type");
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $lastImports[$row['import_type']] = $row;
-    }
-} catch (Throwable $e) {
-    // Table may not exist yet
-}
+if ($importSuccess) unset($_SESSION['tax_import_summary']);
 
 $editTaxId = (int)($_GET['edit_tax_id'] ?? 0);
 $taxRates = [];
@@ -242,156 +212,76 @@ try {
   
   <!-- Import Tax Rates Section -->
   <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:24px;background:#fff;margin-top:24px">
-    <legend style="padding:0 12px;font-weight:600;font-size:16px">📥 Import Tax Data</legend>
+    <legend style="padding:0 12px;font-weight:600;font-size:16px">📥 Import Tax Rates</legend>
     
     <p style="margin:0 0 16px;color:#6b7280;font-size:14px">
-      Import tax rates from official SSTGB-compliant files. For best results, run imports in order: <strong>1) FIPS</strong> → <strong>2) Rates</strong> → <strong>3) Boundaries</strong>
+      Import county-level tax rates from SSTGB files. Upload both files and click Import.
     </p>
     
-    <div style="display:grid;gap:20px">
+    <?php if ($importSuccess && $importSummary): ?>
+      <div style="margin-bottom:16px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px">
+        <pre style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;color:#047857"><?php echo htmlspecialchars($importSummary); ?></pre>
+      </div>
+    <?php endif; ?>
+    <?php if ($importError): ?>
+      <div style="margin-bottom:16px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px">
+        <div style="color:#b91c1c;font-size:13px">❌ <?php echo htmlspecialchars($importError); ?></div>
+      </div>
+    <?php endif; ?>
+    
+    <form method="post" action="/?page=settings/tax-import-handler" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:600px">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       
-      <!-- Step 1: FIPS Import -->
-      <div style="padding:16px;border:1px solid #e5e7eb;border-radius:8px;background:#fafafa">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-          <span style="width:24px;height:24px;background:#3b82f6;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">1</span>
-          <span style="font-weight:600;font-size:15px">📍 FIPS Places Import</span>
-          <span style="font-size:12px;color:#6b7280">— County & city reference data</span>
-          <?php if ($lastImports['fips']): ?>
-            <span style="margin-left:auto;font-size:11px;color:#059669;background:#ecfdf5;padding:2px 8px;border-radius:4px">
-              ✓ Last: <?php echo date('M j, Y g:ia', strtotime($lastImports['fips']['last_import'])); ?>
-              (<?php echo number_format($lastImports['fips']['records']); ?> records)
-            </span>
-          <?php endif; ?>
+      <div style="display:grid;gap:12px">
+        <div>
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">📍 FIPS County File (TXT) *</label>
+          <input type="file" name="fips_file" accept=".txt" required
+                 style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">Census Bureau county file (e.g., st55_wi_cou2020.txt)</div>
         </div>
         
-        <?php if ($fipsSuccess && $fipsSummary): ?>
-          <div style="margin-bottom:12px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px">
-            <pre style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;color:#047857"><?php echo htmlspecialchars($fipsSummary); ?></pre>
-          </div>
-        <?php endif; ?>
-        <?php if ($fipsError): ?>
-          <div style="margin-bottom:12px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px">
-            <div style="color:#b91c1c;font-size:13px"><?php echo htmlspecialchars($fipsError); ?></div>
-          </div>
-        <?php endif; ?>
-        
-        <form method="post" action="/?page=settings/fips-import-handler" enctype="multipart/form-data" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
-          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-          <div style="flex:1;min-width:250px">
-            <input type="file" name="fips_file" accept=".txt" required
-                   style="padding:8px 10px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-            <div style="margin-top:4px;color:var(--muted);font-size:11px">TXT file from Census Bureau (e.g., st55_wi_cousub2020.txt)</div>
-          </div>
-          <button type="submit" style="padding:8px 16px;border-radius:6px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap">
-            Import FIPS
-          </button>
-        </form>
-      </div>
-      
-      <!-- Step 2: Rates Import -->
-      <div style="padding:16px;border:1px solid #e5e7eb;border-radius:8px;background:#fafafa">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-          <span style="width:24px;height:24px;background:#059669;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">2</span>
-          <span style="font-weight:600;font-size:15px">💰 Tax Rates Import</span>
-          <span style="font-size:12px;color:#6b7280">— SSTGB rate file (sums all 4 rate columns)</span>
-          <?php if ($lastImports['rates']): ?>
-            <span style="margin-left:auto;font-size:11px;color:#059669;background:#ecfdf5;padding:2px 8px;border-radius:4px">
-              ✓ Last: <?php echo date('M j, Y g:ia', strtotime($lastImports['rates']['last_import'])); ?>
-              (<?php echo number_format($lastImports['rates']['records']); ?> records)
-            </span>
-          <?php endif; ?>
+        <div>
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">💰 Tax Rates File (CSV) *</label>
+          <input type="file" name="rate_file" accept=".csv" required
+                 style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">SSTGB rate file (e.g., WIR032026.csv)</div>
         </div>
         
-        <?php if ($ratesSuccess && $ratesSummary): ?>
-          <div style="margin-bottom:12px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px">
-            <pre style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;color:#047857"><?php echo htmlspecialchars($ratesSummary); ?></pre>
-          </div>
-        <?php endif; ?>
-        <?php if ($ratesError): ?>
-          <div style="margin-bottom:12px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px">
-            <div style="color:#b91c1c;font-size:13px"><?php echo htmlspecialchars($ratesError); ?></div>
-          </div>
-        <?php endif; ?>
-        
-        <form method="post" action="/?page=settings/rates-import-handler" enctype="multipart/form-data" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
-          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-          <div style="flex:1;min-width:250px">
-            <input type="file" name="rate_file" accept=".csv" required
-                   style="padding:8px 10px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-            <div style="margin-top:4px;color:var(--muted);font-size:11px">CSV rate file (e.g., WIR032026.csv)</div>
-          </div>
-          <button type="submit" style="padding:8px 16px;border-radius:6px;border:0;background:#059669;color:#fff;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap">
-            Import Rates
-          </button>
-        </form>
-      </div>
-      
-      <!-- Step 3: Boundaries Import -->
-      <div style="padding:16px;border:1px solid #e5e7eb;border-radius:8px;background:#fafafa">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-          <span style="width:24px;height:24px;background:#7c3aed;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">3</span>
-          <span style="font-weight:600;font-size:15px">🗺️ Boundaries Import</span>
-          <span style="font-size:12px;color:#6b7280">— ZIP+4 to jurisdiction mapping (large file)</span>
-          <?php if ($lastImports['boundaries']): ?>
-            <span style="margin-left:auto;font-size:11px;color:#059669;background:#ecfdf5;padding:2px 8px;border-radius:4px">
-              ✓ Last: <?php echo date('M j, Y g:ia', strtotime($lastImports['boundaries']['last_import'])); ?>
-              (<?php echo number_format($lastImports['boundaries']['records']); ?> records)
-            </span>
-          <?php endif; ?>
+        <div>
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">State Tax Rate (%)</label>
+          <input type="number" step="0.01" min="0" max="20" name="state_tax_rate" value="5.00" 
+                 style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:120px;font-size:13px;background:#fff">
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">State sales tax to add (e.g., 5.00 for Wisconsin)</div>
         </div>
-        
-        <?php if ($boundariesSuccess && $boundariesSummary): ?>
-          <div style="margin-bottom:12px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px">
-            <pre style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;color:#047857"><?php echo htmlspecialchars($boundariesSummary); ?></pre>
-          </div>
-        <?php endif; ?>
-        <?php if ($boundariesError): ?>
-          <div style="margin-bottom:12px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px">
-            <div style="color:#b91c1c;font-size:13px"><?php echo htmlspecialchars($boundariesError); ?></div>
-          </div>
-        <?php endif; ?>
-        
-        <form method="post" action="/?page=settings/boundaries-import-handler" enctype="multipart/form-data" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
-          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-          <div style="flex:1;min-width:250px">
-            <input type="file" name="boundary_file" accept=".csv" required
-                   style="padding:8px 10px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-            <div style="margin-top:4px;color:var(--muted);font-size:11px">CSV boundary file (e.g., WIB032026.csv) — may take a while for large files</div>
-          </div>
-          <button type="submit" style="padding:8px 16px;border-radius:6px;border:0;background:#7c3aed;color:#fff;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap">
-            Import Boundaries
-          </button>
-        </form>
       </div>
       
-    </div>
+      <button type="submit" style="padding:12px 24px;border-radius:8px;border:0;background:#059669;color:#fff;font-weight:600;cursor:pointer;font-size:14px;width:fit-content">
+        📥 Import Tax Rates
+      </button>
+    </form>
     
     <div style="margin-top:20px;padding:12px;background:#f0f9ff;border-left:4px solid #0284c7;border-radius:4px;font-size:13px">
-      <strong>📋 Import Process:</strong>
+      <strong>📋 How it works:</strong>
       <ul style="margin:8px 0 0 16px;padding:0;color:#1e40af">
-        <li><strong>FIPS</strong> → provides county/city names for jurisdictions</li>
-        <li><strong>Rates</strong> → imports tax percentages (all 4 rate columns are summed)</li>
-        <li><strong>Boundaries</strong> → maps ZIP+4 ranges to jurisdictions, flags complex ZIPs</li>
+        <li>FIPS file provides county names (parsed first)</li>
+        <li>Rates file provides local tax rates (county-level only, cities skipped)</li>
+        <li>State tax is added to each county's local rate for the total</li>
+        <li>Existing rates for the state are replaced on import</li>
       </ul>
     </div>
     
     <details style="margin-top:16px">
       <summary style="cursor:pointer;font-weight:600;color:#374151;padding:8px 0">📖 Where to get these files</summary>
       <div style="padding:12px;background:#f9fafb;border-radius:8px;margin-top:8px;font-size:13px;line-height:1.6">
-        <p style="margin:0 0 12px"><strong>1. FIPS Places (TXT file):</strong></p>
+        <p style="margin:0 0 12px"><strong>1. FIPS Counties (TXT file):</strong></p>
         <ul style="margin:0 0 16px 20px;padding:0">
           <li>Census Bureau: <a href="https://www.census.gov/library/reference/code-lists/ansi.html#cou" target="_blank" rel="noopener" style="color:#2563eb">ANSI FIPS County Codes</a></li>
-          <li>Download the county subdivision file for your state (e.g., st55_wi_cousub2020.txt)</li>
+          <li>Download the county file for your state (e.g., st55_wi_cou2020.txt)</li>
         </ul>
-        <p style="margin:0 0 12px"><strong>2. Tax Rates & Boundaries (CSV files):</strong></p>
+        <p style="margin:0 0 12px"><strong>2. Tax Rates (CSV file):</strong></p>
         <ul style="margin:0 0 16px 20px;padding:0">
           <li>Wisconsin: <a href="https://www.revenue.wi.gov/Pages/SSTGB/home.aspx" target="_blank" rel="noopener" style="color:#2563eb">WI Dept of Revenue - SSTGB Files</a></li>
-          <li>Rate file: WIR032026.csv (or similar naming)</li>
-          <li>Boundary file: WIB032026.csv (or similar naming)</li>
-        </ul>
-        <p style="margin:0 0 12px"><strong>SSTGB (All States):</strong></p>
-        <ul style="margin:0 0 0 20px;padding:0">
-          <li>Streamlined Sales Tax: <a href="https://www.streamlinedsalestax.org/" target="_blank" rel="noopener" style="color:#2563eb">Official Website</a></li>
+          <li>Rate file: WIR032026.csv (or similar)</li>
         </ul>
       </div>
     </details>
