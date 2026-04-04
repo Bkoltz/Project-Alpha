@@ -2,6 +2,17 @@
 // src/views/pages/settings/links.php
 require_once __DIR__ . '/../../../config/db.php';
 
+// Fetch global app config
+$appConfig = [];
+try {
+    $stmt = $pdo->query('SELECT config_key, config_value FROM app_config');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $appConfig[$row['config_key']] = $row['config_value'];
+    }
+} catch (Throwable $e) {
+    // Table may not exist yet - will be created on first save
+}
+
 // Fetch link resolver configurations
 $linkConfigs = [];
 try {
@@ -10,7 +21,7 @@ try {
         $linkConfigs[$row['provider']] = $row;
     }
 } catch (Throwable $e) {
-    @error_log('[links] Error fetching link configs: ' . $e->getMessage());
+    // Table may not exist yet
 }
 
 // Get counts of links, expired links, and ignored clients/orgs
@@ -41,17 +52,6 @@ if (empty($_SESSION['csrf'])) {
 $csrfToken = $_SESSION['csrf'];
 
 $providers = ['dropbox', 'gdrive', 's3'];
-
-// Make CSRF token available to JavaScript
-$csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-if (empty($_SESSION['csrf'])) {
-    $_SESSION['csrf'] = bin2hex(random_bytes(32));
-}
-$csrfToken = $_SESSION['csrf'];
-
 ?>
 <div style="max-width:1000px">
     <!-- CSRF token for JavaScript -->
@@ -83,6 +83,9 @@ $csrfToken = $_SESSION['csrf'];
         </div>
     </div>
 
+    <form method="POST" action="/?page=settings/links-handler">
+    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrfToken); ?>">
+    
     <!-- Global Settings -->
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-bottom:20px">
         <legend style="padding:0 8px;font-weight:600">Global Settings</legend>
@@ -233,6 +236,19 @@ $csrfToken = $_SESSION['csrf'];
             </div>
         </div>
     </fieldset>
+    
+    <!-- Save Button -->
+    <div style="margin-top:20px">
+        <button type="submit" style="padding:10px 24px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px">
+            Save Settings
+        </button>
+        <?php if (isset($_GET['saved']) && $_GET['saved'] === '1'): ?>
+            <span style="margin-left:12px;color:#059669;font-weight:600">✓ Settings saved!</span>
+        <?php elseif (isset($_GET['saved']) && $_GET['saved'] === '0'): ?>
+            <span style="margin-left:12px;color:#dc2626;font-weight:600">✗ Failed to save settings. <?php echo isset($_GET['error']) ? htmlspecialchars($_GET['error']) : ''; ?></span>
+        <?php endif; ?>
+    </div>
+    </form>
 </div>
 
 <script>
@@ -250,7 +266,7 @@ function testConnection(provider) {
     // Gather credentials for this provider
     const formData = new FormData();
     formData.append('provider', provider);
-    formData.append('csrf', getCsrfToken());  // Add CSRF token
+    formData.append('csrf', window.csrfToken || '');  // Add CSRF token
     
     if (provider === 'dropbox') {
         formData.append('access_token', document.querySelector(`input[name="${provider}_access_token"]`).value);

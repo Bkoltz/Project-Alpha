@@ -329,6 +329,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/tax-import-handler.php';
         exit;
     }
+    if ($page === 'settings/links-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/links_handler.php';
+        exit;
+    }
     if ($page === 'settings/custom-fields-handler') {
         require_once __DIR__ . '/../src/controllers/settings/custom_fields_handler.php';
         exit;
