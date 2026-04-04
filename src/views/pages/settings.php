@@ -38,7 +38,7 @@ if (!in_array($tab, $validTabs)) {
     </aside>
 
     <div>
-      <?php if ($tab === 'taxes' || $tab === 'item-library' || $tab === 'documents'): ?>
+      <?php if ($tab === 'taxes' || $tab === 'item-library' || $tab === 'documents' || $tab === 'links'): ?>
         <?php
         // Include tabs without the form wrapper since they have their own forms
         $tabFile = __DIR__ . '/settings/' . $tab . '.php';
