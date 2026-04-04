@@ -1,6 +1,6 @@
 <?php
 // src/controllers/settings/tax-import-handler.php
-// Combined FIPS + Rates import - county-level only
+// Combined FIPS + Rates import using staging tables with JOIN
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
@@ -23,10 +23,12 @@ if (empty($_SESSION['csrf']) || !is_string($token) || !hash_equals($_SESSION['cs
 
 try {
     $stats = [
-        'counties_parsed' => 0,
-        'rates_imported' => 0,
+        'counties_loaded' => 0,
+        'rates_loaded' => 0,
+        'rates_matched' => 0,
         'skipped_inactive' => 0,
-        'skipped_city' => 0
+        'skipped_city' => 0,
+        'skipped_no_match' => 0
     ];
     
     // Validate both file uploads
@@ -46,61 +48,108 @@ try {
     
     // Get state tax rate from form (default 5% for Wisconsin)
     $stateTaxRate = (float)($_POST['state_tax_rate'] ?? 5.0);
+    $today = date('Ymd');
     
     // ============================================
-    // STEP 1: Parse FIPS file to build county lookup
+    // Create staging tables (drop and recreate to ensure clean slate)
+    // ============================================
+    $pdo->exec("DROP TABLE IF EXISTS tax_import_fips");
+    $pdo->exec("DROP TABLE IF EXISTS tax_import_rates");
+    
+    $pdo->exec("CREATE TABLE tax_import_fips (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        state_abbr VARCHAR(2) NOT NULL,
+        state_fips VARCHAR(2) NOT NULL,
+        county_fips VARCHAR(3) NOT NULL,
+        county_name VARCHAR(100) NOT NULL,
+        UNIQUE KEY uk_fips (state_fips, county_fips)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    
+    $pdo->exec("CREATE TABLE tax_import_rates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        state_fips VARCHAR(2) NOT NULL,
+        county_fips VARCHAR(3) NOT NULL,
+        local_rate DECIMAL(8,4) NOT NULL,
+        UNIQUE KEY uk_rates (state_fips, county_fips)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    
+    // ============================================
+    // STEP 1: Load FIPS file into staging table
     // ============================================
     // Format: STATE|STATEFP|COUNTYFP|COUNTYNS|COUNTYNAME|CLASSFP|FUNCSTAT
     // Example: WI|55|001|01581060|Adams County|H1|A
     
-    $countyLookup = []; // Key: "55001" => "Adams"
-    $stateAbbr = '';
-    $stateFips = '';
+    $fipsInsert = $pdo->prepare('INSERT IGNORE INTO tax_import_fips (state_abbr, state_fips, county_fips, county_name) VALUES (?, ?, ?, ?)');
     
     $fipsFile = new SplFileObject($_FILES['fips_file']['tmp_name'], 'r');
     $fipsFile->setFlags(SplFileObject::READ_AHEAD | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE);
+    
+    $detectedStateAbbr = '';
+    $headerMap = null; // Will map column names to indices
     
     foreach ($fipsFile as $lineNum => $line) {
         $line = trim($line);
         if (empty($line)) continue;
         
+        // Remove BOM if present
+        $line = preg_replace('/^\xEF\xBB\xBF/', '', $line);
+        
         $parts = explode('|', $line);
         if (count($parts) < 5) continue;
         
-        // Skip header row
-        if (strtoupper(trim($parts[0])) === 'STATE' || strtoupper(trim($parts[0])) === 'USPS') {
+        // First row with pipe delimiter = header row
+        $col0Upper = strtoupper(trim($parts[0]));
+        if ($col0Upper === 'STATE' || $col0Upper === 'USPS') {
+            // Build header map: column name -> index
+            $headerMap = [];
+            foreach ($parts as $idx => $colName) {
+                $headerMap[strtoupper(trim($colName))] = $idx;
+            }
             continue;
         }
         
-        // Parse columns
-        $stateAbbr = trim($parts[0]); // "WI"
-        $stateFips = str_pad(trim($parts[1]), 2, '0', STR_PAD_LEFT); // "55"
-        $countyFips = str_pad(trim($parts[2]), 3, '0', STR_PAD_LEFT); // "001"
-        $countyNameRaw = trim($parts[4]); // "Adams County"
+        // Use header map if available, otherwise use default indices
+        $stateAbbrIdx = $headerMap['STATE'] ?? $headerMap['USPS'] ?? 0;
+        $stateFipsIdx = $headerMap['STATEFP'] ?? 1;
+        $countyFipsIdx = $headerMap['COUNTYFP'] ?? 2;
+        $countyNameIdx = $headerMap['COUNTYNAME'] ?? 4;
         
-        // Remove " County" suffix for cleaner display
+        $stateAbbr = trim($parts[$stateAbbrIdx] ?? '');       // "WI"
+        $stateFips = trim($parts[$stateFipsIdx] ?? '');       // "55"
+        $countyFipsRaw = trim($parts[$countyFipsIdx] ?? '');  // "001"
+        $countyNameRaw = trim($parts[$countyNameIdx] ?? '');  // "Adams County"
+        
+        // Validate we have actual data
+        if (empty($stateAbbr) || empty($stateFips) || empty($countyFipsRaw) || empty($countyNameRaw)) {
+            continue;
+        }
+        
+        // Pad FIPS codes
+        $stateFips = str_pad($stateFips, 2, '0', STR_PAD_LEFT);
+        $countyFips = str_pad($countyFipsRaw, 3, '0', STR_PAD_LEFT);
+        
+        // Remove " County" suffix
         $countyName = preg_replace('/\s+County$/i', '', $countyNameRaw);
         
-        // Build lookup key
-        $key = $stateFips . $countyFips; // "55001"
-        $countyLookup[$key] = $countyName;
+        $detectedStateAbbr = $stateAbbr;
         
-        $stats['counties_parsed']++;
+        $fipsInsert->execute([$stateAbbr, $stateFips, $countyFips, $countyName]);
+        $stats['counties_loaded']++;
     }
     
-    if (empty($countyLookup)) {
-        throw new Exception('No counties found in FIPS file. Check file format (should be pipe-delimited).');
+    if ($stats['counties_loaded'] === 0) {
+        throw new Exception('No counties found in FIPS file. Check format (pipe-delimited with header: STATE|STATEFP|COUNTYFP|COUNTYNS|COUNTYNAME|...)');
     }
     
     // ============================================
-    // STEP 2: Parse Rates CSV - county rows only
+    // STEP 2: Load Rates CSV into staging table
     // ============================================
     // County format: stateFips,00,countyFips,rate,rate,rate,rate,startDate,endDate
     // Example: 55,00,001,0.005,0.005,0.005,0.005,19940101,99991231
-    // City format (SKIP): 55,01,00100,0.0,0.0,0.0,0.0,20230918,99991231
+    // City format (col1 != "00"): SKIP
     
-    $today = date('Ymd');
-    $countyRates = []; // Key: countyFips => ['name' => 'Adams', 'rate' => 5.5]
+    $ratesInsert = $pdo->prepare('INSERT INTO tax_import_rates (state_fips, county_fips, local_rate) 
+        VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE local_rate = VALUES(local_rate)');
     
     $rateFile = new SplFileObject($_FILES['rate_file']['tmp_name'], 'r');
     $rateFile->setFlags(SplFileObject::READ_CSV | SplFileObject::READ_AHEAD | SplFileObject::SKIP_EMPTY);
@@ -108,10 +157,10 @@ try {
     foreach ($rateFile as $lineNum => $parts) {
         if (!is_array($parts) || count($parts) < 9) continue;
         
-        $col0 = trim($parts[0]); // State FIPS
+        $col0 = trim($parts[0]); // State FIPS (55)
         $col1 = trim($parts[1]); // "00" for county, or county code for city
-        $col2 = trim($parts[2]); // County FIPS (3 digits) or city code
-        $rate = (float)$parts[3]; // Use first rate column (they're all the same)
+        $col2 = trim($parts[2]); // County FIPS (001) when col1="00"
+        $rate = (float)$parts[3]; // Local rate (0.005)
         $startDate = trim($parts[7]);
         $endDate = preg_replace('/[^0-9]/', '', trim($parts[8]));
         
@@ -129,72 +178,85 @@ try {
             }
         }
         
-        // Build lookup key
-        $rateStateFips = str_pad($col0, 2, '0', STR_PAD_LEFT);
+        $stateFips = str_pad($col0, 2, '0', STR_PAD_LEFT);
         $countyFips = str_pad($col2, 3, '0', STR_PAD_LEFT);
-        $lookupKey = $rateStateFips . $countyFips;
+        $localRate = $rate * 100; // Convert 0.005 to 0.5%
         
-        // Get county name from lookup
-        $countyName = $countyLookup[$lookupKey] ?? null;
-        if (!$countyName) {
-            // Fallback: use generic name
-            $countyName = "County " . $countyFips;
-        }
-        
-        // Calculate total rate: local rate (as %) + state tax
-        $localRate = $rate * 100; // Convert 0.005 to 0.5
-        $totalRate = round($stateTaxRate + $localRate, 2);
-        
-        // Store (may override older rows for same county - we want the latest active)
-        $countyRates[$countyFips] = [
-            'name' => $countyName . ', ' . $stateAbbr,
-            'county' => $countyName,
-            'state' => $stateAbbr,
-            'local_rate' => $localRate,
-            'total_rate' => $totalRate
-        ];
+        $ratesInsert->execute([$stateFips, $countyFips, $localRate]);
+        $stats['rates_loaded']++;
     }
     
-    if (empty($countyRates)) {
+    if ($stats['rates_loaded'] === 0) {
         throw new Exception('No active county rates found in rate file.');
     }
     
     // ============================================
-    // STEP 3: Insert into tax_rates table
+    // STEP 3: JOIN and insert into tax_rates
     // ============================================
     
     // Check if is_default column exists
     $hasDefault = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='tax_rates' AND COLUMN_NAME='is_default'")->fetchColumn();
     
     // Delete existing rates for this state
-    $pdo->prepare('DELETE FROM tax_rates WHERE state = ?')->execute([$stateAbbr]);
+    $pdo->prepare('DELETE FROM tax_rates WHERE state = ?')->execute([$detectedStateAbbr]);
     
-    // Insert new rates
-    $insertSql = $hasDefault 
-        ? 'INSERT INTO tax_rates (name, country, state, county, rate, is_active, is_default) VALUES (?, ?, ?, ?, ?, 1, 0)'
-        : 'INSERT INTO tax_rates (name, country, state, county, rate, is_active) VALUES (?, ?, ?, ?, ?, 1)';
-    $insertStmt = $pdo->prepare($insertSql);
+    // Join the two staging tables and insert matched records
+    $joinSql = $hasDefault
+        ? "INSERT INTO tax_rates (name, country, state, county, rate, is_active, is_default)
+           SELECT 
+               CONCAT(f.county_name, ', ', f.state_abbr) as name,
+               'USA' as country,
+               f.state_abbr as state,
+               f.county_name as county,
+               ROUND(r.local_rate + ?, 2) as rate,
+               1 as is_active,
+               0 as is_default
+           FROM tax_import_fips f
+           INNER JOIN tax_import_rates r 
+               ON f.state_fips = r.state_fips AND f.county_fips = r.county_fips"
+        : "INSERT INTO tax_rates (name, country, state, county, rate, is_active)
+           SELECT 
+               CONCAT(f.county_name, ', ', f.state_abbr) as name,
+               'USA' as country,
+               f.state_abbr as state,
+               f.county_name as county,
+               ROUND(r.local_rate + ?, 2) as rate,
+               1 as is_active
+           FROM tax_import_fips f
+           INNER JOIN tax_import_rates r 
+               ON f.state_fips = r.state_fips AND f.county_fips = r.county_fips";
     
-    foreach ($countyRates as $data) {
-        $insertStmt->execute([
-            $data['name'],
-            'USA',
-            $data['state'],
-            $data['county'],
-            $data['total_rate']
-        ]);
-        $stats['rates_imported']++;
-    }
+    $joinStmt = $pdo->prepare($joinSql);
+    $joinStmt->execute([$stateTaxRate]);
+    $stats['rates_matched'] = $joinStmt->rowCount();
+    
+    // Count unmatched rates (in rates table but no matching FIPS)
+    $unmatchedCount = $pdo->query("
+        SELECT COUNT(*) FROM tax_import_rates r
+        LEFT JOIN tax_import_fips f ON f.state_fips = r.state_fips AND f.county_fips = r.county_fips
+        WHERE f.id IS NULL
+    ")->fetchColumn();
+    $stats['skipped_no_match'] = (int)$unmatchedCount;
+    
+    // ============================================
+    // STEP 4: Cleanup staging tables
+    // ============================================
+    $pdo->exec("DROP TABLE IF EXISTS tax_import_fips");
+    $pdo->exec("DROP TABLE IF EXISTS tax_import_rates");
     
     // ============================================
     // Build summary
     // ============================================
     $summary = "Tax Import Summary\n";
     $summary .= str_repeat("-", 40) . "\n\n";
-    $summary .= "📍 Counties parsed from FIPS: " . $stats['counties_parsed'] . "\n";
-    $summary .= "💰 Tax rates imported: " . $stats['rates_imported'] . "\n";
-    $summary .= "⏭️ Skipped (inactive dates): " . $stats['skipped_inactive'] . "\n";
+    $summary .= "📍 Counties loaded from FIPS: " . $stats['counties_loaded'] . "\n";
+    $summary .= "📊 County rates loaded: " . $stats['rates_loaded'] . "\n";
+    $summary .= "✅ Rates matched & imported: " . $stats['rates_matched'] . "\n";
+    $summary .= "\n⏭️ Skipped (inactive dates): " . $stats['skipped_inactive'] . "\n";
     $summary .= "🏙️ Skipped (city-level): " . $stats['skipped_city'] . "\n";
+    if ($stats['skipped_no_match'] > 0) {
+        $summary .= "⚠️ Skipped (no FIPS match): " . $stats['skipped_no_match'] . "\n";
+    }
     $summary .= "\n📊 State tax applied: " . $stateTaxRate . "%\n";
     $summary .= "\n✅ Import completed!";
     
@@ -204,6 +266,12 @@ try {
     exit;
     
 } catch (Throwable $e) {
+    // Cleanup on error
+    try {
+        $pdo->exec("DROP TABLE IF EXISTS tax_import_fips");
+        $pdo->exec("DROP TABLE IF EXISTS tax_import_rates");
+    } catch (Throwable $ignored) {}
+    
     error_log('[tax-import] Error: ' . $e->getMessage());
     header('Location: /?page=settings&tab=taxes&import_error=' . rawurlencode($e->getMessage()));
     exit;
