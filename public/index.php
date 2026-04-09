@@ -215,6 +215,22 @@ if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages,
     exit;
 }
 
+// Enforce force-password-reset: lock user to account page until they change it
+if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    $allowedForForceReset = ['account', 'account-update', 'logout'];
+    if (!in_array($page, $allowedForForceReset, true)) {
+        try {
+            require_once __DIR__ . '/../src/config/db.php';
+            $fpStmt = $pdo->prepare('SELECT force_password_reset FROM users WHERE id = ?');
+            $fpStmt->execute([(int)$_SESSION['user']['id']]);
+            if ((int)$fpStmt->fetchColumn() === 1) {
+                header('Location: /?page=account&force=1');
+                exit;
+            }
+        } catch (Throwable $e) { /* allow through if check fails */ }
+    }
+}
+
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
@@ -578,11 +594,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($page === 'stripe-charge') {
-        require_once __DIR__ . '/../src/controllers/stripe_charge.php';
+        require_once __DIR__ . '/../src/controllers/stripe/stripe_charge.php';
         exit;
     }
     if ($page === 'stripe-webhook') {
-        require_once __DIR__ . '/../src/controllers/stripe_webhook.php';
+        require_once __DIR__ . '/../src/controllers/stripe/stripe_webhook.php';
         exit;
     }
 }
@@ -620,12 +636,12 @@ if ($page === 'public-doc') {
     exit;
 }
 if ($page === 'stripe-checkout') {
-    require_once __DIR__ . '/../src/controllers/public_view/stripe_checkout.php';
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_checkout.php';
     exit;
 }
 if ($page === 'stripe-success') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/controllers/public_view/stripe_success.php';
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_success.php';
     exit;
 }
 

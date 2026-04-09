@@ -1,11 +1,11 @@
 <?php
-// src/controllers/stripe_webhook.php
+// src/controllers/stripe/stripe_webhook.php
 // Handles Stripe webhook events (checkout.session.completed, etc.)
 
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../services/StripeService.php';
-require_once __DIR__ . '/../utils/notifications.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../services/StripeService.php';
+require_once __DIR__ . '/../../utils/notifications.php';
 
 // Get raw POST body for signature verification
 $payload = file_get_contents('php://input');
@@ -33,7 +33,7 @@ try {
         if (strpos($encVal, 'plain::') === 0) {
             $webhookSecret = substr($encVal, 7);
         } else {
-            require_once __DIR__ . '/../utils/crypto.php';
+            require_once __DIR__ . '/../../utils/crypto.php';
             $pt = crypto_decrypt($encVal);
             if (is_string($pt)) {
                 $webhookSecret = $pt;

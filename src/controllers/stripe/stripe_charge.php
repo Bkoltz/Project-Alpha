@@ -1,11 +1,11 @@
 <?php
-// src/controllers/stripe_charge.php
+// src/controllers/stripe/stripe_charge.php
 // Creates a Stripe Checkout session for admin to process card payment
 // Used when merchant wants to charge a card manually (e.g., customer on phone)
 
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../services/StripeService.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../services/StripeService.php';
 
 $invoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
 $returnUrl = $_POST['return_url'] ?? $_GET['return_url'] ?? '';

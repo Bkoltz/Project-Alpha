@@ -11,7 +11,7 @@ services:
       MYSQL_PASSWORD: apppassword
       MYSQL_ROOT_PASSWORD: rootpass
       ADMIN_PASSWORD: admin123
-      APP_AUTH_DISABLED: true
+      # APP_AUTH_DISABLED: true
     depends_on:
       - db
     healthcheck:
@@ -27,9 +27,9 @@ services:
       - ./config:/var/www/config
   cron:
     build:
-      context: .
-      dockerfile: ./docker/cron.dockerfile
-    image: "bkoltz/project-alpha-cron:latest"
+      context: ./cron
+      dockerfile: Dockerfile
+    image: "bkoltz/project-alpha:cron"
     environment:
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser

@@ -10,7 +10,6 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
     exit;
 }
 
-csrf_verify_post_or_redirect('accounts');
 
 $userId = (int)($_POST['user_id'] ?? 0);
 $email = trim($_POST['email'] ?? '');
@@ -21,6 +20,12 @@ $forceReset = !empty($_POST['force_reset']);
 // Validation
 if ($userId <= 0) {
     header('Location: /?page=accounts&error=' . urlencode('Invalid user ID'));
+    exit;
+}
+
+// Protect the seeded admin account (id=1)
+if ($userId === 1) {
+    header('Location: /?page=accounts&error=' . urlencode('The default admin account cannot be modified'));
     exit;
 }
 
