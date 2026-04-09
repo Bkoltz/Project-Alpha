@@ -49,9 +49,9 @@ RUN mkdir -p /var/log/cron && \
           /var/log/cron/stripe_reconciliation.log && \
     chmod 666 /var/log/cron/*.log
 
-# Install crontab
+# Install crontab into /etc/cron.d/ (requires user field in each entry)
 COPY crontab /etc/cron.d/project-alpha
-RUN chmod 0644 /etc/cron.d/project-alpha && crontab /etc/cron.d/project-alpha
+RUN sed -i 's/\r$//' /etc/cron.d/project-alpha && chmod 0644 /etc/cron.d/project-alpha
 
 # Entrypoint script (waits for DB, exports env vars, starts cron)
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
