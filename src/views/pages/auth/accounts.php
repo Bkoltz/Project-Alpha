@@ -83,6 +83,11 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Edit User Form -->
     <?php
     $userId = (int)$_GET['id'];
+    // Block editing the seeded admin account (id=1) — managed via Dockerfile
+    if ($userId === 1) {
+        header('Location: /?page=accounts&error=' . urlencode('The default admin account cannot be edited here. It is managed through the Dockerfile.'));
+        exit;
+    }
     $stmt = $pdo->prepare('SELECT id, email, username, role, force_password_reset FROM users WHERE id = ?');
     $stmt->execute([$userId]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -173,6 +178,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </td>
             <td style="padding:12px;color:#6b7280"><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
             <td style="padding:12px;text-align:right">
+              <?php if ((int)$user['id'] !== 1): ?>
               <div style="display:flex;gap:8px;justify-content:flex-end">
                 <a href="/?page=accounts&action=edit&id=<?php echo $user['id']; ?>" style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151;font-size:14px">Edit</a>
                 <?php if ($user['id'] != ($_SESSION['user']['id'] ?? 0)): ?>
@@ -183,6 +189,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </form>
                 <?php endif; ?>
               </div>
+              <?php endif; ?>
             </td>
           </tr>
           <?php endforeach; ?>

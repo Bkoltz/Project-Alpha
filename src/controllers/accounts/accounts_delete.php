@@ -10,7 +10,6 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
     exit;
 }
 
-csrf_verify_post_or_redirect('accounts');
 
 $userId = (int)($_POST['user_id'] ?? 0);
 
@@ -26,7 +25,13 @@ if ($userId == ($_SESSION['user']['id'] ?? 0)) {
     exit;
 }
 
-// Prevent deleting admin accounts
+// Protect the seeded admin account (id=1)
+if ($userId === 1) {
+    header('Location: /?page=accounts&error=' . urlencode('The default admin account cannot be deleted'));
+    exit;
+}
+
+// Prevent deleting other admin accounts
 $stmt = $pdo->prepare('SELECT role FROM users WHERE id = ?');
 $stmt->execute([$userId]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);

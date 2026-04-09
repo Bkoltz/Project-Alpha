@@ -10,7 +10,6 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
     exit;
 }
 
-csrf_verify_post_or_redirect('accounts');
 
 $userId = (int)($_POST['user_id'] ?? 0);
 $newPassword = $_POST['new_password'] ?? '';

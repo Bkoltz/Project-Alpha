@@ -10,7 +10,6 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
     exit;
 }
 
-csrf_verify_post_or_redirect('accounts');
 
 $email = trim($_POST['email'] ?? '');
 $username = trim($_POST['username'] ?? '');
