@@ -3,6 +3,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 // Auth is enforced by the main router; avoid duplicate/false Unauthorized here.
 require_once __DIR__ . '/../../config/app.php';
+$isForceReset = !empty($_GET['force']);
 ?>
 <section>
   <h2>Account</h2>
@@ -10,18 +11,20 @@ require_once __DIR__ . '/../../config/app.php';
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Password updated.</div>
   <?php elseif (!empty($_GET['pwd_error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($_GET['pwd_error']); ?></div>
-  <?php elseif (!empty($_GET['force'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b">You must change your password before continuing.</div>
+  <?php elseif ($isForceReset): ?>
+    <div style="margin:10px 0;padding:16px 20px;border-radius:8px;background:#fef3c7;color:#92400e;border:2px solid #f59e0b;font-weight:600;font-size:16px">
+      ⚠️ You must change your password before you can use the application.
+    </div>
   <?php endif; ?>
 
   <form method="post" action="/?page=account-update" style="display:grid;gap:16px;max-width:600px">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'] ?? ''); ?>">
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+    <fieldset style="border:<?php echo $isForceReset ? '2px solid #f59e0b' : '1px solid #eee'; ?>;border-radius:8px;padding:12px">
       <legend style="padding:0 6px;color:var(--muted)">Change Password</legend>
       <p style="margin:0 0 8px;color:var(--muted);font-size:12px">Update your password. You must enter your current password.</p>
       <label>
         <div>Current Password</div>
-        <input required type="password" name="current_password" autocomplete="current-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input required type="password" name="current_password" autocomplete="current-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" autofocus>
       </label>
       <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
         <label>
