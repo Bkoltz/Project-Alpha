@@ -7,8 +7,11 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header('Location: /?page=login');
-    exit;
+    echo '<section><div style="padding:20px;background:#fff1f2;color:#881337;border:1px solid #fca5a5;border-radius:8px;margin:16px 0">';
+    echo '<h3 style="margin:0 0 8px">Access Denied</h3>';
+    echo '<p style="margin:0">You must be an admin to manage accounts. <a href="/">Return to Dashboard</a></p>';
+    echo '</div></section>';
+    return;
 }
 
 // CSRF token
