@@ -3,7 +3,7 @@
 namespace App\repositories\quotes;
 
 use App\record_transfer_objects\ItemRecord;
-use App\record_transfer_objects\QuoteMetaRecord;
+use App\record_transfer_objects\MetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use PDO;
 
@@ -18,7 +18,7 @@ class QuotesRepository
         $this->pdo = $pdo;
     }
 
-    public function createNewQuote(QuoteRecord $quoteData, QuoteMetaRecord $quoteMeta, ItemRecord $quoteItems)
+    public function createNewQuote(QuoteRecord $quoteData, MetaRecord $quoteMeta, ItemRecord $quoteItems)
     {
         $id = $this->insertNewQuote($quoteData);
         $this->setQuoteItems($id, $quoteItems);
@@ -26,7 +26,7 @@ class QuotesRepository
         $this->setQuoteNotes($quoteMeta);
     }
 
-    public function editStoredQuote(int $id, QuoteRecord $quoteData, QuoteMetaRecord $quoteMeta, ItemRecord $quoteItems)
+    public function editStoredQuote(int $id, QuoteRecord $quoteData, MetaRecord $quoteMeta, ItemRecord $quoteItems)
     {
         // $this->updateStoredQuote($id, $quoteData);
         $this->setQuoteItems($id, $quoteItems);
@@ -77,7 +77,7 @@ class QuotesRepository
         $stmt->execute([$qMax + 1, $id]);
     }
 
-    private function setQuoteNotes(QuoteMetaRecord $metaRecord): void
+    private function setQuoteNotes(MetaRecord $metaRecord): void
     {
         $up = $this->pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes, terms) VALUES (:project_code, :client_id, :notes, :terms) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes), terms=VALUES(terms)');
         $up->execute($metaRecord->toArray());
@@ -109,7 +109,8 @@ class QuotesRepository
         $stmt->execute([$id]);
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return ItemRecord::fromArray($data);
+        $return = ItemRecord::fromArray($data);
+        return $return;
     }
 
     public function getNextProjectCode(int $clientId): string

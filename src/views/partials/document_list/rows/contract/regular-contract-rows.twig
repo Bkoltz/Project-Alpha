@@ -1,0 +1,89 @@
+<div style="overflow:auto">
+	<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+		<thead>
+			<tr style="text-align:left;border-bottom:1px solid #eee">
+				<th style="padding:10px">No.</th>
+				<th style="padding:10px">Project</th>
+				<th style="padding:10px">Client</th>
+				<th style="padding:10px">Status</th>
+				<th style="padding:10px">Total</th>
+				<th style="padding:10px">Actions</th>
+				<th style="padding:10px">Edit</th>
+			</tr>
+		</thead>
+
+		<tbody>
+			{% for row in rows %}
+				<tr style="border-top:1px solid #f3f4f6;{{row.style}}">
+					<td style="padding:10px">
+						<a href="/?page=contract/contract-details&id={{row.id}}" style="text-decoration:none;color:inherit">C-{{row.id}}</a>
+					</td>
+					<td style="padding:10px">{{row.project_code}}</td>
+					<td style="padding:10px">
+						<a href="/?page=client/clients-list&selected_client_id={{row.client_id}}">{{row.client_name}}</a>
+					</td>
+					<td style="padding:10px;text-transform:capitalize">{{row.status}}</td>
+					<td style="padding:10px">${{row.total}}</td>
+					<td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+						<a href="/?page=contract/regular-contract-details&id={{row.id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+
+						{% if row.status !== 'cancelled' %}
+							<form method="post" action="/?page=email-send" style="display:inline">
+								<input type="hidden" name="csrf" value="{{token}}">
+								<input type="hidden" name="type" value="contract">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+								<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
+							</form>
+
+							<form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
+								<input type="hidden" name="csrf" value="{{token}}">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<input id="upload-{{row.id}}" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+								<button type="button" onclick="document.getElementById('upload-{{row.id}}').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">{{row.signed_pdf_path is defined ? 'Upload' : 'New Upload'}}</button>
+							</form>
+						{% endif %}
+
+						{% if row.signed_pdf_path is defined %}
+							<a href="{{row.signedPdfPath}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Signed PDF</a>
+						{% endif %}
+
+						{% if needsDeposit and row.status == 'pending' %}
+							<form method="post" action="/?page=contract/contract-deposit-received" style="display:inline" onsubmit="return confirm('Mark deposit as received ($<?php echo number_format($depositCalc, 2); ?>)?')">
+								<input type="hidden" name="csrf" value="{{token}}">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Deposit Received</button>
+							</form>
+						{% endif %}
+
+						{% if row.status == 'active' %}
+							<form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?')">
+								<input type="hidden" name="csrf" value="{{token}}">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Complete</button>
+							</form>
+						{% endif %}
+
+						{% if row.status != 'cancelled' %}
+							<form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
+								<input type="hidden" name="csrf" value="{{token}}">
+								<input type="hidden" name="id" value="{{row.id}}">
+								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#6b7280;color:#fff; font-size: small;">Void</button>
+							</form>
+						{% endif %}
+					</td>
+
+					<td style="padding:10px">
+						{% if row.status == 'pending' %}
+							<a href="/?page=contract/contracts-edit&id={{row.id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
+						{% else %}
+							<span style="color:#9ca3af;font-size:small">—</span>
+						{% endif %}
+					</td>
+				</tr>
+
+
+			{% endfor %}
+		</tbody>
+	</table>
+</div>

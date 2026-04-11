@@ -31,11 +31,3 @@ class QuoteRecord extends TransferObject
     public ?string $custom_fields = null;
     public ?string $created_at = null;
 }
-
-class QuoteMetaRecord extends TransferObject
-{
-    public ?string $project_code = null;
-    public ?int $client_id = null;
-    public ?string $notes = null;
-    public ?string $terms = null;
-}

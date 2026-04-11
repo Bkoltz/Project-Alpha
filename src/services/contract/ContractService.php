@@ -3,12 +3,15 @@
 namespace App\services\contract;
 
 use App\data_transfer_objects\ContractData;
+use App\data_transfer_objects\ContractEditData;
 use App\data_transfer_objects\ContractSignatures;
 use App\data_transfer_objects\ItemData;
-use App\record_transfer_objects\ContractItemsRecord;
+use App\record_transfer_objects\ContractEditRecord;
 use App\record_transfer_objects\ContractRecord;
+use App\record_transfer_objects\ItemRecord;
 use App\repositories\contract\ContractRepository;
 use App\services\quotes\FinancialService;
+use App\utils\enum\DocumentType;
 
 class ContractService
 {
@@ -19,31 +22,67 @@ class ContractService
         $this->repository = $repository;
     }
 
-    public function createContract(ContractData $contractData, ItemData $contractItems) : int 
+    public function createContract(DocumentType $documentType, ContractData $contractData, ItemData $contractItems): int
     {
-        $this->validateContractData($contractData);
+        $this->updateAndValidateContractData($contractData);
         $this->validateContractItems($contractItems);
 
         $record = ContractRecord::fromArray($contractData->toArray());
-        $recordItems = ContractItemsRecord::fromArray($contractItems->toArray());
+        $recordItems = ItemRecord::fromArray($contractItems->toArray());
 
-        return $this->repository->createContract($record, $recordItems);
+        return $this->repository->createContract($documentType, $record, $recordItems);
     }
 
-    public function createContractWithSignatures(ContractData $contractData, ItemData $contractItems, ContractSignatures $contractSignatures) : void {
-        $id = $this->createContract($contractData, $contractItems);
+    public function updateContract(int $id, DocumentType $documentType, ContractEditData $contractData, ItemData $contractItems): void
+    {
+        $this->validateContractEditData($contractData);
+        $this->validateContractItems($contractItems);
+
+        $record = ContractEditRecord::fromArray($contractData->toArray());
+        $recordItems = ItemRecord::fromArray($contractItems->toArray());
+
+        $this->repository->updateContract($id, $record);
+        $this->repository->updateContractItems($id, $documentType, $recordItems);
+    }
+
+    public function createContractWithSignatures(DocumentType $documentType, ContractData $contractData, ItemData $contractItems, ContractSignatures $contractSignatures): void
+    {
+        $id = $this->createContract($documentType, $contractData, $contractItems);
         $this->addContractSignatures($id, $contractSignatures);
     }
 
-    public function addContractSignatures(int $id, ContractSignatures $contractSignatures) : void {
+    public function updateContractWithSignatures(int $id, DocumentType $documentType, ContractEditData $contractData, ItemData $contractItems, ContractSignatures $contractSignatures): void
+    {
+        $this->updateContract($id, $documentType, $contractData, $contractItems);
+        $this->updateContractSignatures($id, $contractSignatures);
+    }
+
+    public function addContractSignatures(int $id, ContractSignatures $contractSignatures): void
+    {
         $this->repository->updateContractSignatures($id, $contractSignatures);
     }
 
-    public function voidContract(int $id) : void {
-        $this->repository->voidContract($id);
+    public function updateContractSignatures(int $id, ContractSignatures $contractSignatures): void
+    {
+        $this->repository->updateContractSignatures($id, $contractSignatures);
     }
 
-    public function payDeposit(int $id) : float {
+    public function getStoredContractItems(int $id) : ItemData {
+        $items = $this->repository->getStoredContractItems($id);
+        return ItemData::fromArray($items->toArray());
+    }
+
+    public function getStoredContract(int $id) : ContractData {
+        $storedContract = $this->repository->getStoredContract($id);
+        return ContractData::fromArray($storedContract->toArray());
+    }
+
+    public function getStoredSignatures(int $id) : ContractSignatures {
+        return $this->repository->getStoredSignatures($id);
+    }
+
+    public function payDeposit(int $id): float
+    {
         $storedContract = $this->repository->getStoredContract($id);
 
         $paidDeposit = FinancialService::calculateDepositValue($storedContract);
@@ -52,15 +91,28 @@ class ContractService
         return $paidDeposit;
     }
 
-    public function denyContract(int $id) : void {
-        $this->repository->denyContract($id);
+    /* 
+        Data validation
+    */
+
+    private function validateContractEditData(ContractEditData $contractData): void
+    {
+        $contractData->client_id ??= 0;
+        $contractData->discount_type ??= 'none';
+        $contractData->discount_value ??= 0;
+        $contractData->tax_percent ??= 0;
+        $contractData->subtotal ??= 0;
+        $contractData->total ??= 0;
+        $contractData->terms ??= '';
+        $contractData->weather_pending ??= false;
+        $contractData->deposit_type ??= 'none';
+        $contractData->deposit_amount ??= 0;
+        $contractData->deposit_paid ??= 0;
+        $contractData->scope ??= '';
+        $contractData->custom_fields ??= [];
     }
 
-    public function completeContract(int $id) : void {
-        $this->repository->completeContract($id);
-    }
-
-    private function validateContractItems(ItemData $contractItem) : void
+    private function validateContractItems(ItemData $contractItem): void
     {
         $contractItem->item ??= 0;
         $contractItem->description ??= 0;
@@ -69,21 +121,53 @@ class ContractService
         $contractItem->line_total ??= 0;
     }
 
-    // quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date
-    private function validateContractData(ContractData $contractData) : void
+    private function validateContractData(ContractData $contractData): void
     {
-        $contractData->quote_id ??= 0;
-        $contractData->client_id ??= 0;
+        $contractData->quote_id ?: null;
+        $contractData->client_id ?: null;
         $contractData->project_id ??= 0;
         $contractData->status ??= 'pending';
         $contractData->discount_type ??= 'none';
-        $contractData->discount_value ??= '';
         $contractData->tax_percent ??= 0;
         $contractData->subtotal ??= 0;
         $contractData->total ??= 0;
-        $contractData->project_code ??= '';
         $contractData->deposit_type ??= 'none';
         $contractData->deposit_amount ??= 0;
         $contractData->deposit_paid ??= 0;
+    }
+
+    private function updateAndValidateContractData(ContractData $contractData) :void {
+        $this->validateContractData($contractData);
+
+        $contractData->status = 'pending';
+    }
+
+    /* 
+        Status related methods
+    */
+
+    public function activateContract(int $id, DocumentType $documentType): void 
+    {
+        $this->repository->activateContract($id, $documentType);
+    }
+
+    public function pauseContract(int $id, DocumentType $documentType): void 
+    {
+        $this->repository->pauseContract($id, $documentType);
+    }
+
+    public function denyContract(int $id, DocumentType $documentType): void
+    {
+        $this->repository->denyContract($id, $documentType);
+    }
+
+    public function completeContract(int $id, DocumentType $documentType): void
+    {
+        $this->repository->completeContract($id, $documentType);
+    }
+
+    public function voidContract(int $id, DocumentType $documentType): void
+    {
+        $this->repository->voidContract($id, $documentType);
     }
 }

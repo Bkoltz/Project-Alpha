@@ -53,14 +53,11 @@ class __TwigTemplate_b994baad1224ecd154e411d65b35404e extends Template
 \t\t<div
 \t\t\tstyle=\"display:grid;gap:12px;grid-template-columns:1fr 1fr\">
 
-\t\t\t<!-- Client input -->
-\t\t\t<label style=\"grid-column:1/2;position:relative\">
-\t\t\t\t<div>Client</div>
-\t\t\t\t<input id=\"clientInput\" type=\"text\" placeholder=\"Type client name...\" autocomplete=\"off\" style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\">
-\t\t\t\t<input id=\"clientId\" type=\"hidden\" name=\"client_id\">
-\t\t\t\t<div id=\"clientSuggest\" style=\"position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto\"></div>
-\t\t\t</label>
-
+\t\t\t";
+        // line 12
+        yield from $this->load("partials/client_components/client-input-autocomplete.twig", 12)->unwrap()->yield(CoreExtension::merge($context, ["documemt" => null]));
+        // line 13
+        yield "
 \t\t\t<!-- Tax input -->
 \t\t\t<label style=\"grid-column:2/3\">
 \t\t\t\t<div>Tax (%)</div>
@@ -101,9 +98,9 @@ class __TwigTemplate_b994baad1224ecd154e411d65b35404e extends Template
 
 \t\t<div id=\"customFieldsContainer\">
 \t\t\t";
-        // line 59
-        yield from $this->load("partials/custom_fields/custom_field.twig", 59)->unwrap()->yield(CoreExtension::merge($context, ["fields" => ($context["fields"] ?? null), "columns" => ($context["columns"] ?? null), "idSuffix" => ($context["idSuffix"] ?? null)]));
-        // line 60
+        // line 53
+        yield from $this->load("partials/document_details/input/custom-field-input.twig", 53)->unwrap()->yield(CoreExtension::merge($context, ["fields" => ($context["fields"] ?? null), "columns" => ($context["columns"] ?? null), "idSuffix" => ($context["idSuffix"] ?? null)]));
+        // line 54
         yield "\t\t</div>
 
 \t\t<!-- Billing type -->
@@ -352,16 +349,16 @@ class __TwigTemplate_b994baad1224ecd154e411d65b35404e extends Template
 
 \t\t<!-- Scope -->
 \t\t";
-        // line 307
-        if ((($tmp =  !Twig\Extension\CoreExtension::testEmpty(CoreExtension::getAttribute($this->env, $this->source, ($context["appConfig"] ?? null), "quote_scope_enabled", [], "any", false, false, false, 307))) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
-            // line 308
+        // line 301
+        if ((($tmp =  !Twig\Extension\CoreExtension::testEmpty(CoreExtension::getAttribute($this->env, $this->source, ($context["appConfig"] ?? null), "quote_scope_enabled", [], "any", false, false, false, 301))) && $tmp instanceof Markup ? (string) $tmp : $tmp)) {
+            // line 302
             yield "\t\t\t<label>
 \t\t\t\t<div>Scope of Work</div>
 \t\t\t\t<textarea name=\"scope\" rows=\"4\" style=\"width:100%;padding:10px;border-radius:8px;border:1px solid #ddd\" placeholder=\"Optional: Describe the scope of work and deliverables...\"></textarea>
 \t\t\t</label>
 \t\t";
         }
-        // line 313
+        // line 307
         yield "
 \t\t<label>
 \t\t\t<div>Job Notes (shared across related docs)</div>
@@ -434,7 +431,7 @@ class __TwigTemplate_b994baad1224ecd154e411d65b35404e extends Template
      */
     public function getDebugInfo(): array
     {
-        return array (  365 => 313,  358 => 308,  356 => 307,  107 => 60,  105 => 59,  51 => 8,  42 => 1,);
+        return array (  362 => 307,  355 => 302,  353 => 301,  104 => 54,  102 => 53,  60 => 13,  58 => 12,  51 => 8,  42 => 1,);
     }
 
     public function getSourceContext(): Source

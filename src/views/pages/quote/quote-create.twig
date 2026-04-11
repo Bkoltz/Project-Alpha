@@ -9,13 +9,7 @@
 		<div
 			style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 
-			<!-- Client input -->
-			<label style="grid-column:1/2;position:relative">
-				<div>Client</div>
-				<input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-				<input id="clientId" type="hidden" name="client_id">
-				<div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
-			</label>
+			{% include 'partials/client_components/client-input-autocomplete.twig' with {documemt: null} %}
 
 			<!-- Tax input -->
 			<label style="grid-column:2/3">
@@ -56,7 +50,7 @@
 		</div>
 
 		<div id="customFieldsContainer">
-			{% include "partials/custom_fields/custom_field.twig" with {fields, columns, idSuffix} %}
+			{% include "partials/document_details/input/custom-field-input.twig" with {fields, columns, idSuffix} %}
 		</div>
 
 		<!-- Billing type -->

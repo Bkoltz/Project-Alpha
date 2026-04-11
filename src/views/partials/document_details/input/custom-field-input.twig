@@ -1,0 +1,5 @@
+<div id="customFields{{id_suffix}}" style="display:grid;gap:12px;grid-template-columns:repeat({{display_columns}}, 1fr)">
+	{% for field in custom_fields %}
+		{% include 'partials/custom_fields/custom_field_item.twig' with {field, id_suffix} %}
+	{% endfor %}
+</div>

@@ -3,7 +3,7 @@
 namespace App\record_transfer_objects;
 
 use App\data_transfer_objects\DepositValues;
-use App\data_transfer_objects\GetDepositValues;
+use App\data_transfer_objects\Traits\GetDepositValues;
 use App\data_transfer_objects\TransferObject;
 
 class ContractRecord extends TransferObject implements DepositValues
@@ -51,4 +51,19 @@ class ContractMetaRecord extends TransferObject
     public ?int $client_id = null;
     public ?string $notes = null;
     public ?string $terms = null;
+}
+
+class ContractListRecord extends TransferObject
+{
+    public ?int $id = null;
+    public ?string $doc_number = null;
+    public ?string $project_code = null;
+    public ?string $status = null;
+    public ?float $total = null;
+    public ?string $deposit_type = null;
+    public ?float $deposit_amount = null;
+    public ?float $deposit_paid = null;
+    public ?string $signed_pdf_path = null;
+    public ?string $client_name = null;
+    public ?int $client_id = null;
 }

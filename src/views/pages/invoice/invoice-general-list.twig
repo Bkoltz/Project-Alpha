@@ -1,0 +1,25 @@
+{% set rowTemplates = {
+		"regular": "partials/document_list/rows/invoice/regular-invoice-rows.twig",
+		"long_term": "partials/document_list/rows/invoice/long-term-invoice-rows.twig",
+		"on_demand": "partials/document_list/rows/invoice/on-demand-invoice-rows.twig",
+	} %}
+
+<section>
+	<h2>{{title}}</h2>
+    
+	{% if emailed is defined %}
+		<div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
+	{% elseif error is defined %}
+		<div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: {{error}}</div>
+	{% endif %}
+
+	<div style="overflow:auto">
+		<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+			{% set template = rowTemplates[document_type] %}
+
+			{% include template with rows %}
+		</table>
+	</div>
+
+	{% include "partials/document_list/page-number-control.twig" with page_number_view %}
+</section>

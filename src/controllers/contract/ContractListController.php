@@ -2,47 +2,26 @@
 
 namespace App\controllers\contract;
 
+use App\controllers\BaseListController;
 use App\services\contract\ContractListService;
-use App\services\contract\ContractService;
+use App\utils\enum\DocumentType;
 
-class ContractListController {
+class ContractListController extends BaseListController
+{
     private ContractListService $service;
-    private ContractService $contractService;
 
-    public function __construct(ContractListService $service, ContractService $contractService) {
+    public function __construct(ContractListService $service)
+    {
         $this->service = $service;
-        $this->contractService = $contractService;
     }
 
-    public function load() {
-        
+    public function load(DocumentType $documentType)
+    {
+        $filterData = $this->extractFilterData($_GET);
+        $countData = $this->extractDisplayCountData($_GET);
+
+        $output = $this->service->getRenderData($documentType, $filterData, $countData, $documentType);
+
+        return ['pages/contract/contracts-general-list.twig', $output->toArray()];
     }
-
-    public function pause() {
-        
-    }
-
-    public function resume() {
-        
-    }
-
-    public function activate() {
-        
-    }
-
-    public function terminate() {
-        
-    }
-
-    public function complete() : void {
-        $id = $_GET['id'] ?? 0;
-        $this->contractService->completeContract($id);
-    }
-
-    public function deny() : void {
-        $id = $_GET['id'] ?? 0;
-        $this->contractService->denyContract($id);
-    }
-
-
 }

@@ -1,23 +1,47 @@
 <?php
 
 namespace App\data_transfer_objects;
+
 use ReflectionClass;
 use ReflectionProperty;
 
 // This is a base class used for transfer objects
-class TransferObject {
+class TransferObject
+{
+    public function __construct(array $data = [])
+    {
+        foreach ($data as $key => $value) {
+            if (property_exists($this, $key)) {
+                $this->$key = $value;
+            }
+        }
+    }
+
     // Dynamically takes an array and maps them to public instance variables
     public static function fromArray(array $data): static
     {
         $dto = new static();
         $reflection = new ReflectionClass($dto);
+        
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
             $name = $prop->getName();
+
             if (isset($data[$name])) {
                 $value = $data[$name];
-                if ($prop->getType()?->getName() === 'array' && is_string($value)) {
+
+                $type = $prop->getType()?->getName();
+
+                if ($type === 'array' && is_string($value)) {
                     $value = json_decode($value, true);
+                    if (gettype($value) !== 'array') {
+                        $value = [$value];
+                    }
                 }
+
+                if ($type && class_exists($type) && is_a($type, TransferObject::class, true) && is_array($value)) {
+                    $value = $type::fromArray($value);
+                }
+
                 $prop->setValue($dto, $value);
             }
         }
@@ -32,28 +56,65 @@ class TransferObject {
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
             $name = $prop->getName();
             $value = $prop->getValue($this);
-            if (is_array($value)) {
-                $value = $value;
+
+            $type = $prop->getType()?->getName();
+            if ($type === 'array' && is_string($value)) {
+                $value = json_decode($value, true);
             }
+
+            // This handles transfer objects. If they are a transfer object, turn it to an array
+            if (is_a($value, TransferObject::class, true)) {
+                $value = $value->toArray();
+            }
+
             $array[$name] = $value;
         }
         return $array;
     }
 
-    public function update(array $data) : static {
+    public function toNumericArray(): array
+    {
+        $array = [];
         $reflection = new ReflectionClass($this);
-    
+        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
+            $value = $prop->getValue($this);
+            $type = $prop->getType()?->getName();
+
+            if ($type === 'array' && is_string($value)) {
+                $value = json_decode($value, true);
+            }
+
+            if (is_a($type, TransferObject::class, true)) {
+                $value = $value->toNumericArray();
+            }
+
+            $array[] = $value;
+        }
+        return $array;
+    }
+
+    //Updates a transfer object from and asso array
+    public function update(array $data): static
+    {
+        $reflection = new ReflectionClass($this);
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
             $name = $prop->getName();
             if (isset($data[$name])) {
+                $type = $prop->getType()?->getName();
                 $value = $data[$name];
-                if ($prop->getType()?->getName() === 'array' && is_string($value)) {
+
+                if ($type === 'array' && is_string($value)) {
                     $value = json_decode($value, true);
                 }
+
+                if ($type && class_exists($type) && is_a($type, TransferObject::class, true) && is_array($value)) {
+                    $value = $type::fromArray($value);
+                }
+
                 $prop->setValue($this, $value);
             }
         }
-        
+
         return $this;
     }
 }

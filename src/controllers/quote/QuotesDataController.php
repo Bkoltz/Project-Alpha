@@ -2,11 +2,8 @@
 
 namespace App\controllers\quote;
 
-use App\Config\Renderer;
-use APp\data_transfer_objects\ItemData;
+use App\data_transfer_objects\ItemData;
 use App\data_transfer_objects\QuoteData;
-use App\data_transfer_objects\QuoteItems;
-use App\data_transfer_objects\QuoteItemsData;
 use App\services\quotes\QuotesDataService;
 use App\services\quotes\QuoteService;
 

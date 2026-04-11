@@ -5,12 +5,15 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 $id = (int)($_POST['id'] ?? 0);
 $client_id = (int)($_POST['client_id'] ?? 0);
-$discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
+$discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none', 'percent', 'fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $due_date = $_POST['due_date'] ?? null;
 $fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
-if ($id<=0 || $client_id<=0) { header('Location: /?page=invoice/invoices-list&error=Invalid'); exit; }
+if ($id <= 0 || $client_id <= 0) {
+  header('Location: /?page=invoice/invoices-list&error=Invalid');
+  exit;
+}
 
 // Detect whether the DB has the is_extra_charge column (migration may not have been applied)
 $hasExtraChargeCol = false;
@@ -57,9 +60,9 @@ for ($i = 0; $i < count($extraItems); $i++) {
   $q = (float)($extraQtys[$i] ?? 0);
   $p = (float)($ExtraPrices[$i] ?? 0);
   $eid = (int)($extraIds[$i] ?? 0);
-  
+
   if ($itm === '' || $q <= 0 || $p < 0) continue;
-  
+
   $line = $q * $p;
   $subtotal += $line;
   $extraItemsArr[] = ['id' => $eid, 'i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
@@ -97,7 +100,7 @@ $pdo->beginTransaction();
 try {
   $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=?, custom_fields=? WHERE id=?')
     ->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $customFieldsJson, $id]);
-  
+
   $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');
   $row->execute([$id]);
   $pc = (string)$row->fetchColumn();
@@ -106,7 +109,7 @@ try {
     $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
     $up->execute([$pc, $client_id, $pn]);
   }
-  
+
   // Delete only extra charge items (if column exists), otherwise do not delete contract items
   if ($hasExtraChargeCol) {
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=? AND is_extra_charge=1')->execute([$id]);
@@ -123,7 +126,7 @@ try {
       $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
     }
   }
-  
+
   $pdo->commit();
 } catch (Throwable $e) {
   $pdo->rollBack();

@@ -1,7 +1,7 @@
 {% set rowTemplates = {
-		"regular": "partials/document_list/rows/regular-quote-rows.twig",
-		"longTerm": "partials/document_list/rows/long-term-quote-rows.twig",
-		"onDemand": "partials/document_list/rows/on-demand-quote-rows.twig",
+		"regular": "partials/document_list/rows/quote/regular-quote-rows.twig",
+		"long_term": "partials/document_list/rows/quote/long-term-quote-rows.twig",
+		"on_demand": "partials/document_list/rows/quote/on-demand-quote-rows.twig",
 	} %}
 
 <section>
@@ -22,7 +22,7 @@
 	<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
 		<div>
 			<form method="get" action="/">
-				<input type="hidden" name="page" value="quote/quote-list">
+				<input type="hidden" name="page" value="quote/regular-quote-list">
 				<label>Per page
 					<select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
 						<option value="50">50</option>
@@ -33,18 +33,6 @@
 		</div>
 
 		{# Page buttons #}
-		<div style="display:flex;gap:8px">
-			{% if page > 1 %}
-				<a href="{{previousPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a>
-			{% endif %}
-			<div style="padding:6px 10px;color:var(--muted)">Page
-				{{page}}
-				/
-				{{pageCount}}
-			</div>
-			{% if page < pageCount %}
-				<a href="{{nextPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a>
-			{% endif %}
-		</div>
+		{% include "partials/document_list/page-number-control.twig" with page_number_view %}
 	</div>
 </section>

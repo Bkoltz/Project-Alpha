@@ -2,37 +2,78 @@
 
 namespace App\config;
 
+use App\controllers\contract\ContractListController;
 use App\controllers\quote\QuotesDataController;
 use App\Controllers\Quote\QuotesDetailsController;
 use App\controllers\quote\QuotesListController;
+use App\utils\enum\DocumentType;
+use App\controllers\contract\ContractDataController;
+use App\controllers\contract\ContractDetailsController;
+use App\controllers\invoice\InvoiceDataController;
+use App\controllers\invoice\InvoiceDetailsController;
+use App\controllers\invoice\InvoiceListController;
 
 class Router
 {
     public static $routes = [
         'GET' => [
+            // Quote
             'quote/quote-details' => [QuotesDetailsController::class, 'load'],
             'quote/quote-create' => [QuotesDataController::class, 'load'],
             'quote/quote-edit' => [QuotesDataController::class, 'load'],
             'quote/quote-pdf' => [QuotesDetailsController::class, 'toPDF'],
-            'quote/regular-quote-list' => [QuotesListController::class, 'loadRegular'],
-            'quote/on-demand-quote-list' => [QuotesListController::class, 'loadOnDemand'],
-            'quote/long-term-quote-list' => [QuotesListController::class, 'loadLongTerm'],
+            'quote/regular-quote-list' => [QuotesListController::class, 'load', DocumentType::REGULAR],
+            'quote/on-demand-quote-list' => [QuotesListController::class, 'load', DocumentType::ON_DEMAND],
+            'quote/long-term-quote-list' => [QuotesListController::class, 'load', DocumentType::LONG_TERM],
+
+            // Contract
+            'contract/regular-contract-details' => [ContractDetailsController::class, 'load', DocumentType::REGULAR],
+            'contract/on-demand-contract-details' => [ContractDetailsController::class, 'load', DocumentType::ON_DEMAND],
+            'contract/long-term-contract-details' => [ContractDetailsController::class, 'load', DocumentType::LONG_TERM],
+            'contract/contract-create' => [ContractDataController::class, 'load'],
+            'contract/contract-edit' => [ContractDataController::class, 'load'],
+            'contract/contract-list' => [ContractListController::class, 'load', DocumentType::REGULAR],
+            'contract/on-demand-contract-list' => [ContractListController::class, 'load', DocumentType::ON_DEMAND],
+            'contract/long-term-contract-list' => [ContractListController::class, 'load', DocumentType::LONG_TERM],
+
+            // Invoice
+            'invoice/regular-invoice-details' => [InvoiceDetailsController::class, 'load', DocumentType::REGULAR],
+            'invoice/on-demand-invoice-details' => [InvoiceDetailsController::class, 'load', DocumentType::ON_DEMAND],
+            'invoice/long-term-invoice-details' => [InvoiceDetailsController::class, 'load', DocumentType::LONG_TERM],
+            'invoice/invoice-create' => [InvoiceDataController::class, 'load'],
+            'invoice/invoice-edit' => [InvoiceDataController::class, 'load'],
+            'invoice/invoice-list' => [InvoiceListController::class, 'load', DocumentType::REGULAR],
+            'invoice/on-demand-invoice-list' => [InvoiceListController::class, 'load', DocumentType::ON_DEMAND],
+            'invoice/long-term-invoice-list' => [InvoiceListController::class, 'load', DocumentType::LONG_TERM],
         ],
         'POST' => [
+            // Quote
             'quote/quote-create' => [QuotesDataController::class, 'create'],
             'quote/quote-edit' => [QuotesDataController::class, 'edit'],
             'quote/quote-reject' => [QuotesDetailsController::class, 'reject'],
-            'quote/quote-approve' => [QuotesDetailsController::class, 'approve']
+            'quote/quote-approve' => [QuotesDetailsController::class, 'approve'],
+
+            // Contract
+            'contracts-update' => [ContractDataController::class, 'update'],
+            'contract/contract-complete' => [ContractDetailsController::class, 'complete'],
+            'contract/contract-void' => [ContractDetailsController::class, 'terminate'],
+            'contract/contract-deny' => [ContractDetailsController::class, 'deny'],
+            'contract/contract-pdf' => [ContractDetailsController::class, ''],
+            'contract/contract-sign' => [ContractDetailsController::class, 'signContract'],
+            'contracts-create' => [ContractDataController::class, 'create', DocumentType::REGULAR],
+            'contract/long-term-contracts-create' => [ContractListController::class, 'create', DocumentType::LONG_TERM],
+            'contract/on-demand-contracts-create' => [ContractListController::class, 'create', DocumentType::ON_DEMAND],
+
+            // Invoice
+            'invoice/invoices-create' => [InvoiceDataController::class, 'create', DocumentType::REGULAR],
+            'invoice/invoices-update' => [InvoiceDataController::class, 'update'],
+            'invoice/invoices-mark-paid' => [InvoiceDataController::class, 'markInvoicePaid'],
+            'invoice/invoice-pdf' => [InvoiceDataController::class, ''],
         ]
     ];
 
-    public static $view_routes = [];
 
     public static $post_routes = [
-        'invoice/invoice-pdf' => '/src/controllers/invoice/invoice_pdf.php',
-        'invoice-pdf' => '/src/controllers/invoice/invoice_pdf.php',
-        'contract/contract-pdf' => '/src/controllers/contract/contract_pdf.php',
-        'contract-pdf' => '/src/controllers/contract/contract_pdf.php',
         'serve-upload' => '/src/controllers/serve_upload.php',
         'project-notes' => '/src/controllers/project_notes.php',
         'settings/document-custom-fields-handler' => '/src/controllers/settings/document-custom-fields-handler.php',
@@ -58,14 +99,9 @@ class Router
         'project/project-add-document' =>  '/src/controllers/project/project_add_document.php',
         'project/project-remove-document' => '/src/controllers/project/project_remove_document.php',
         'project/projects-update-status' => '/src/controllers/project/projects_update_status.php',
-        'contract/contract-sign' => '/src/controllers/contract/contract_sign.php',
-        'contract/contract-complete' => '/src/controllers/contract/contract_complete.php',
-        'contract/contract-void' => '/src/controllers/contract/contract_void.php',
         'contract/contract-deposit-received' => '/src/controllers/contract/contract_deposit_received.php',
         'document-reenable' => '/src/controllers/document_reenable_handler.php',
         'document-date-update' => '/src/controllers/document_date_update_handler.php',
-        'contract/contract-deny' => '/src/controllers/contract/contract_deny.php',
-        'invoice/invoices-mark-paid' => '/src/controllers/invoice/invoices_mark_paid.php',
         'payments/payments-create' => '/src/controllers/payments_create.php',
         'client/clients-update' => '/src/controllers/client/clients_update.php',
         'clients-update' => '/src/controllers/client/clients_update.php',
@@ -75,16 +111,6 @@ class Router
         'clients-restore' => '/src/controllers/client/clients_restore.php',
         'client/clients-purge' => '/src/controllers/client/clients_purge.php',
         'clients-purge' => '/src/controllers/client/clients_purge.php',
-        'contract/contracts-create' => '/src/controllers/contract/contracts_create.php',
-        'contracts-create' => '/src/controllers/contract/contracts_create.php',
-        'long-term-contracts-create' => '/src/controllers/contract/long_term_contracts_create.php',
-        'contract/long-term-contracts-create' => '/src/controllers/contract/long_term_contracts_create.php',
-        'contract/contracts-update' => '/src/controllers/contract/contracts_update.php',
-        'contracts-update' => '/src/controllers/contract/contracts_update.php',
-        'invoice/invoices-create' => '/src/controllers/invoice/invoices_create.php',
-        'invoices-create' => '/src/controllers/invoice/invoices_create.php',
-        'invoice/invoices-update' => '/src/controllers/invoice/invoices_update.php',
-        'invoices-update' => '/src/controllers/invoice/invoices_update.php',
         'quote/email-send' => '/src/controllers/email_send.php',
         'contract/email-send' => '/src/controllers/email_send.php',
         'invoice/email-send' => '/src/controllers/email_send.php',
@@ -142,20 +168,6 @@ class Router
         }
 
         return $page;
-    }
-
-    static function resolveViewPathTwig(string $page): string
-    {
-        $canidates = [];
-        $canidates[] = $page . '.twig';
-
-        foreach ($canidates as $canidate) {
-            $updated_canidate = '/pages/' . $canidate;
-            if (is_file(TWIG_PATH . $updated_canidate))
-                return $updated_canidate;
-        }
-
-        return '';
     }
 
     static function resolveViewPath(string $page): string

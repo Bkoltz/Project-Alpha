@@ -1,0 +1,146 @@
+<section>
+	<div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Contract</div>
+	<div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Valid for
+		{{app_config.documents_valid_days}}
+		days</div>
+	<div class="no-print" style="padding:12px 16px;background:{{colors.bg}};color:{{colors.text}};border-left:4px solid {{colors.border}};border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
+		Status:
+		{{contract.status}}
+	</div>
+	<div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+		<a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
+		<a href="/?page=contract/contract-pdf&id={{id}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+		<a href="/?page=contract/contract-pdf&id={{id}}" download="contract-{{contract.document_id}}.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+
+		{% if contract.status == 'pending' %}
+			<a href="/?page=contract/contracts-edit&id={{id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+		{% endif %}
+
+		{% if contract.status !== 'cancelled' %}
+			<form method="post" action="/?page=email-send" style="display:inline">
+				<input type="hidden" name="csrf" value="{{token}}">
+				<input type="hidden" name="type" value="contract">
+				<input type="hidden" name="id" value="{{id}}">
+				<input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+				<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+			</form>
+
+			<form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
+				<input type="hidden" name="csrf" value="{{token}}">
+				<input type="hidden" name="id" value="{{id}}">
+				<input id="upload-signed" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+				<button type="button" onclick="document.getElementById('upload-signed').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">
+					{{contract.signed_pdf_path ? 'Upload Signed PDF' : 'Replace Signed PDF'}}
+				</button>
+			</form>
+		{% endif %}
+
+		{% if contract.signed_pdf_path is defined %}
+			<a href="{{contract.signed_pdf_path}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
+		{% endif %}
+
+		{% if contract.needs_deposit and contract.status == 'pending' %}
+			<form method="post" action="/?page=contract/contract-deposit-received" style="display:inline" onsubmit="return confirm('Mark deposit as received (${{contract.received_deposit}})">
+				<input type="hidden" name="csrf" value="{{token}}">
+				<input type="hidden" name="id" value="{{id}}">
+				<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;">Deposit Received (${{contract.received_deposit}})</button>
+			</form>
+		{% endif %}
+
+		{% if contract.status != 'active' %}
+			<form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?');">
+				<input type="hidden" name="csrf" value="{{token}}">
+				<input type="hidden" name="id" value="{{id}}">
+				<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: medium;">Complete</button>
+			</form>
+		{% endif %}
+
+		{% if contract.status != 'cancelled' and contract.status != 'completed' %}
+			<form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
+				<input type="hidden" name="csrf" value="{{token}}">
+				<input type="hidden" name="id" value="{{id}}">
+				<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#6b7280;color:#fff; font-size: medium;">Void</button>
+			</form>
+		{% endif %}
+
+		{% if contract.status != 'cancelled' %}
+			<form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this contract? It will be set back to pending status and related invoices will be restored.');">
+				<input type="hidden" name="csrf" value="{{token}}">
+				<input type="hidden" name="type" value="contract">
+				<input type="hidden" name="id" value="{{id}}">
+				<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+			</form>
+		{% endif %}
+
+		<form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
+			<input type="hidden" name="csrf" value="{{token}}">
+			<input type="hidden" name="type" value="contract">
+			<input type="hidden" name="id" value="{{id}}">
+			<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+		</form>
+	</div>
+
+	{% if contract.reenabled is not empty %}
+		<div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Contract re-enabled successfully</div>
+	{% endif %}
+
+	{% if contract.updatedAt is not empty %}
+		<div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Document date updated successfully</div>
+	{% endif %}
+
+	{% include 'partials/document_details/display/date-details-display.twig' with {document: contract} %}
+
+	{% include 'partials/document_details/display/project-details-display.twig' with {document: contract, branding: branding} %}
+	
+	{% include 'partials/document_details/display/custom-field-display.twig' with {custom_fields} %}
+
+	{% include 'partials/document_details/display/contact-information-display.twig' with {contact_information} %}
+
+	{% include 'partials/document_details/display/scope-display.twig' with {document: contract} %}
+
+	{% include 'partials/document_details/display/items-table-display.twig' with {items} %}
+
+	{% include 'partials/document_details/display/total-details-display.twig' with {document: contract} %}
+
+	{% include 'partials/document_details/display/signature-display.twig' with {signatures} %}
+
+	{% include 'partials/document_details/display/terms-display.twig' with {document: contract} %}
+
+</section>
+<style>
+	.no-print {
+		display: flex
+	}
+
+	.print-footer {
+		display: none
+	}
+
+	@media print {
+		.no-print {
+			display: none !important
+		}
+
+		.side-nav,
+		.nav-footer {
+			display: none
+		}
+
+		.main-content {
+			margin-left: 0
+		}
+
+		body {
+			background: #fff
+		}
+
+		.print-footer {
+			display: block;
+			position: fixed;
+			bottom: 6px;
+			left: 12px;
+			color: #374151;
+			font-size: 12px
+		}
+	}
+</style>

@@ -1,0 +1,31 @@
+<div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
+	<strong>By signing below</strong>, I acknowledge that this is a multi-page document and that I have read and agree to the terms and conditions.
+</div>
+
+<table style="width:100%;border-collapse:collapse">
+	{% for signature_title in signatures.signature_titles %}
+		{% set is_required = signatures.signature_required[loop.index0] %}
+		<tr>
+			<td style="width:50%;vertical-align:top;padding:10px 16px 16px 10px">
+				<table style="width:100%;border-collapse:collapse;margin-top:20px">
+					<tr>
+						<td style="width:65%;vertical-align:bottom;padding-right:12px">
+							<div style="border-top:2px solid #111"></div>
+							<div style="margin-top:4px;color:#4b5563;font-size:12px">
+								{{signature_title}}
+
+								{% if is_required %}
+									<span style="color:#dc2626">*</span>
+								{% endif %}
+							</div>
+						</td>
+						<td style="width:35%;vertical-align:bottom">
+							<div style="border-top:2px solid #111"></div>
+							<div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
+						</td>
+					</tr>
+				</table>
+			</td>
+		</tr>
+	{% endfor %}
+</table>

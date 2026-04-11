@@ -1,0 +1,42 @@
+{# To and from #}
+<table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
+	<tr>
+		<td style="vertical-align:top;width:50%;padding-right:12px">
+			<div style="font-weight:600">From</div>
+			<div>
+				{% for line in contact_information.from_lines %}
+					<div>{{line}}</div>
+				{% endfor %}
+			</div>
+
+			<div style="margin-top:6px;color:#4b5563;font-size:13px">
+				{% if contact_information.from_phone is not empty %}
+					<div>{{contact_information.from_phone}}</div>
+				{% endif %}
+
+				{% if contact_information.from_email is not empty %}
+					<div>{{contact_information.from_email}}</div>
+				{% endif %}
+			</div>
+		</td>
+
+		<td style="vertical-align:top;width:50%;padding-left:12px">
+			<div style="font-weight:600">To</div>
+			<div>
+				{% for line in contact_information.to_lines %}
+					<div>{{line}}</div>
+				{% endfor %}
+			</div>
+
+			<div style="margin-top:6px;color:#4b5563;font-size:13px">
+				{% if contact_information.to_phone is not empty %}
+					<div>{{contact_information.to_phone}}</div>
+				{% endif %}
+
+				{% if contact_information.to_email is not empty %}
+					<div>{{contact_information.to_email}}</div>
+				{% endif %}
+			</div>
+		</td>
+	</tr>
+</table>

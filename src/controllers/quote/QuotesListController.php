@@ -3,6 +3,7 @@
 namespace App\controllers\quote;
 
 use App\services\quotes\QuotesListService;
+use App\utils\enum\DocumentType;
 
 class QuotesListController
 {
@@ -13,28 +14,13 @@ class QuotesListController
         $this->service = $service;
     }
 
-    private function load(string $documentType = 'regular') : array {
+    public function load(DocumentType $documentType = DocumentType::REGULAR) : array {
         $filterData = $this->extractFilterData();
         $countData = $this->extractDisplayCountData();
 
-        $output = $this->service->getRenderData($filterData, $countData, $documentType);
+        $output = $this->service->getRenderData($filterData, $countData, $documentType->value);
 
         return ['pages/quote/quote-general-list.twig', $output];
-    }
-
-    public function loadLongTerm(): array
-    {
-        return $this->load('longTerm');
-    }
-
-    public function loadRegular(): array
-    {
-        return $this->load('regular');
-    }
-
-    public function loadOnDemand(): array
-    {
-        return $this->load('onDemand');
     }
 
     private function extractFilterData(): array

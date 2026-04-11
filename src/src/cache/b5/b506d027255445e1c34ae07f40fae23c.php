@@ -39,7 +39,7 @@ class __TwigTemplate_9ccb424b519291752fed8de52d9930e1 extends Template
     {
         $macros = $this->macros;
         // line 1
-        $context["rowTemplates"] = ["regular" => "partials/document_list/rows/regular-quote-rows.twig", "longTerm" => "partials/document_list/rows/long-term-quote-rows.twig", "onDemand" => "partials/document_list/rows/on-demand-quote-rows.twig"];
+        $context["rowTemplates"] = ["regular" => "partials/document_list/rows/quote/regular-quote-rows.twig", "long_term" => "partials/document_list/rows/quote/long-term-quote-rows.twig", "on_demand" => "partials/document_list/rows/quote/on-demand-quote-rows.twig"];
         // line 6
         yield "
 <section>
@@ -74,7 +74,7 @@ class __TwigTemplate_9ccb424b519291752fed8de52d9930e1 extends Template
         yield "\t<div style=\"margin-top:12px;display:flex;justify-content:space-between;align-items:center\">
 \t\t<div>
 \t\t\t<form method=\"get\" action=\"/\">
-\t\t\t\t<input type=\"hidden\" name=\"page\" value=\"quote/quote-list\">
+\t\t\t\t<input type=\"hidden\" name=\"page\" value=\"quote/regular-quote-list\">
 \t\t\t\t<label>Per page
 \t\t\t\t\t<select name=\"per_page\" onchange=\"this.form.submit()\" style=\"padding:6px;border-radius:8px;border:1px solid #ddd\">
 \t\t\t\t\t\t<option value=\"50\">50</option>
@@ -86,40 +86,10 @@ class __TwigTemplate_9ccb424b519291752fed8de52d9930e1 extends Template
 
 \t\t";
         // line 36
-        yield "\t\t<div style=\"display:flex;gap:8px\">
-\t\t\t";
+        yield "\t\t";
+        yield from $this->load("partials/document_list/page-number-control.twig", 36)->unwrap()->yield(CoreExtension::merge($context, ($context["page_number_view"] ?? null)));
         // line 37
-        if ((($context["page"] ?? null) > 1)) {
-            // line 38
-            yield "\t\t\t\t<a href=\"";
-            yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(($context["previousPagePath"] ?? null), "html", null, true);
-            yield "\" style=\"padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff\">Prev</a>
-\t\t\t";
-        }
-        // line 40
-        yield "\t\t\t<div style=\"padding:6px 10px;color:var(--muted)\">Page
-\t\t\t\t";
-        // line 41
-        yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(($context["page"] ?? null), "html", null, true);
-        yield "
-\t\t\t\t/
-\t\t\t\t";
-        // line 43
-        yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(($context["pageCount"] ?? null), "html", null, true);
-        yield "
-\t\t\t</div>
-\t\t\t";
-        // line 45
-        if ((($context["page"] ?? null) < ($context["pageCount"] ?? null))) {
-            // line 46
-            yield "\t\t\t\t<a href=\"";
-            yield $this->env->getRuntime('Twig\Runtime\EscaperRuntime')->escape(($context["nextPagePath"] ?? null), "html", null, true);
-            yield "\" style=\"padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff\">Next</a>
-\t\t\t";
-        }
-        // line 48
-        yield "\t\t</div>
-\t</div>
+        yield "\t</div>
 </section>
 ";
         yield from [];
@@ -146,7 +116,7 @@ class __TwigTemplate_9ccb424b519291752fed8de52d9930e1 extends Template
      */
     public function getDebugInfo(): array
     {
-        return array (  121 => 48,  115 => 46,  113 => 45,  108 => 43,  103 => 41,  100 => 40,  94 => 38,  92 => 37,  89 => 36,  74 => 22,  69 => 18,  67 => 17,  64 => 16,  62 => 15,  58 => 13,  55 => 11,  52 => 10,  48 => 8,  44 => 6,  42 => 1,);
+        return array (  92 => 37,  89 => 36,  74 => 22,  69 => 18,  67 => 17,  64 => 16,  62 => 15,  58 => 13,  55 => 11,  52 => 10,  48 => 8,  44 => 6,  42 => 1,);
     }
 
     public function getSourceContext(): Source

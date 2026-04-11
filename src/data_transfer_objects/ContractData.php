@@ -32,7 +32,6 @@ class ContractData extends TransferObject
     public ?string $created_at = null;
     public ?string $document_date = null;
     public ?string $document_date_updated_at = null;
-    public ?array $items = null;
 }
 
 class ContractEditData extends TransferObject

@@ -115,8 +115,13 @@ $bodyView = null;
 if (isset(Router::$routes[$request][$page])) {
     $className = Router::$routes[$request][$page][0];
     $method = Router::$routes[$request][$page][1];
+    $param = Router::$routes[$request][$page][2] ?? null;
 
-    $bodyView = $container->get($className)->$method();
+    if ($param != null)
+        $bodyView = $container->get($className)->$method($param);
+    else
+        $bodyView = $container->get($className)->$method();
+
     $isTwig = true;
 } elseif (empty($twigFile)) {
     $bodyView = Router::resolveViewPath($page);

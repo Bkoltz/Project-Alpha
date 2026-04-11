@@ -4,6 +4,7 @@ namespace App\services\quotes;
 
 use App\repositories\quotes\QuotesDetailsRepository;
 use App\config\AppConfiguration;
+use App\data_transfer_objects\ItemData;
 use App\data_transfer_objects\QuoteData;
 use App\data_transfer_objects\QuoteItemsData;
 use App\utils\enum\DocumentType;
@@ -37,7 +38,7 @@ class QuotesDetailsService
         $quoteData = QuoteData::fromArray($data);
         $this->quoteService->validateQuoteData($quoteData);
 
-        $quoteItems = QuoteItemsData::fromArray($this->repository->getItemsById($id));
+        $quoteItems = ItemData::fromArray($this->repository->getItemsById($id));
         $this->quoteService->validateQuoteItems($quoteItems);
 
         $data = FinancialService::calculateFinancialData($quoteData, $quoteItems)->toArray();

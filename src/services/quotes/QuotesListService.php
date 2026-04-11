@@ -28,7 +28,6 @@ class QuotesListService
         $pageButtonData = $this->getPageButtonData($displayData['quotesCount'], $updatedCountData, $updatedFilterData);
         $filterConfig = $this->generateFilterConfig($updatedFilterData);
 
-
         return array_merge($displayData, $updatedCountData, $pageButtonData, ['filterConfig' => $filterConfig, 'documentType' => $documentType]);
     }
 

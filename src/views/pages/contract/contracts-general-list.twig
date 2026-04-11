@@ -1,7 +1,7 @@
 {% set rowTemplates = {
-		"regular": "partials/document_list/rows/regular-contract-rows.twig",
-		"longTerm": "partials/document_list/rows/long-term-contract-rows.twig",
-		"onDemand": "partials/document_list/rows/on-demand-contract-rows.twig",
+		"regular": "partials/document_list/rows/contract/regular-contract-rows.twig",
+		"long_term": "partials/document_list/rows/contract/long-term-contract-rows.twig",
+		"on_demand": "partials/document_list/rows/contract/on-demand-contract-rows.twig",
 	} %}
 
 <section>
@@ -11,7 +11,7 @@
 		<div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">On-demand contract created successfully.</div>
 	{% endif %}
 
-	{% if invoiceGenerated %}
+	{% if invoice_generated %}
 		<div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Invoice generated successfully.</div>
 	{% endif %}
 
@@ -23,43 +23,16 @@
 		<div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">{{error}}</div>
 	{% endif %}
 
-	{% include 'templates/components/document-filter.html.twig' with filterConfig %}
+	{% include 'templates/components/document-filter.html.twig' with filter_config %}
 
     {# Row data #}
 	<div style="overflow:auto">
 		<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
-			{% set template = rowTemplates[documentType] %}
+			{% set template = rowTemplates[document_type] %}
 
 			{% include template with rows %}
 		</table>
 	</div>
 
-	<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
-		<div>
-			<form method="get" action="/">
-				<input type="hidden" name="page" value="quote/quote-list">
-				<label>Per page
-					<select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
-						<option value="50">50</option>
-						<option value="100">100</option>
-					</select>
-				</label>
-			</form>
-		</div>
-
-		{# Page buttons #}
-		<div style="display:flex;gap:8px">
-			{% if page > 1 %}
-				<a href="{{previousPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a>
-			{% endif %}
-			<div style="padding:6px 10px;color:var(--muted)">Page
-				{{page}}
-				/
-				{{pageCount}}
-			</div>
-			{% if page < pageCount %}
-				<a href="{{nextPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a>
-			{% endif %}
-		</div>
-	</div>
+	{% include "partials/document_list/page-number-control.twig" with page_number_view %}
 </section>

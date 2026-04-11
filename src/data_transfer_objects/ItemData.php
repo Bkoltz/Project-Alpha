@@ -1,6 +1,6 @@
 <?php
 
-namespace APp\data_transfer_objects;
+namespace App\data_transfer_objects;
 
 use App\data_transfer_objects\TransferObject;
 
@@ -16,4 +16,5 @@ class ItemData extends TransferObject
     {
         return [$this->item[$row], $this->description[$row], $this->quantity[$row], $this->unit_price[$row], $this->line_total[$row]];
     }
+
 }

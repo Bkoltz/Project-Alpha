@@ -48,19 +48,19 @@
         <li class="nav-section">
             <div class="section-label">Contracts</div>
             <ul>
-                <li><a href="/?page=contract/contracts-list" data-page="contract/contracts-list">Contracts</a></li>
-                <li><a href="/?page=contract/long-term-contracts-list" data-page="contract/long-term-contracts-list">Long-term Contracts</a></li>
-                <li><a href="/?page=contract/on-demand-contracts-list" data-page="contract/on-demand-contracts-list">On-Demand Contracts</a></li>
-                <li><a href="/?page=contract/contracts-create" data-page="contract/contracts-create">Create Contract</a></li>
+                <li><a href="/?page=contract/contract-list" data-page="contract/contracts-list">Contracts</a></li>
+                <li><a href="/?page=contract/long-term-contract-list" data-page="contract/long-term-contracts-list">Long-term Contracts</a></li>
+                <li><a href="/?page=contract/on-demand-contract-list" data-page="contract/on-demand-contracts-list">On-Demand Contracts</a></li>
+                <li><a href="/?page=contract/contract-create" data-page="contract/contracts-create">Create Contract</a></li>
             </ul>
         </li>
         <li class="nav-section">
             <div class="section-label">Invoices</div>
             <ul>
-                <li><a href="/?page=invoice/invoices-list" data-page="invoice/invoices-list">Invoices</a></li>
-                <li><a href="/?page=invoice/recurring-invoices-list" data-page="invoice/recurring-invoices-list">Recurring Invoices</a></li>
-                <li><a href="/?page=invoice/on-demand-invoices-list" data-page="invoice/on-demand-invoices-list">On-Demand Invoices</a></li>
-                <li><a href="/?page=invoice/invoices-create" data-page="invoice/invoices-create">Create Invoice</a></li>
+                <li><a href="/?page=invoice/invoice-list" data-page="invoice/invoices-list">Invoices</a></li>
+                <li><a href="/?page=invoice/long-term-invoice-list" data-page="invoice/long-term-invoice-list">Recurring Invoices</a></li>
+                <li><a href="/?page=invoice/on-demand-invoice-list" data-page="invoice/on-demand-invoice-list">On-Demand Invoices</a></li>
+                <li><a href="/?page=invoice/invoice-create" data-page="invoice/invoice-create">Create Invoice</a></li>
             </ul>
         </li>
         <li class="nav-section">

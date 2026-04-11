@@ -33,5 +33,19 @@ class InvoiceData extends TransferObject
     public ?string $created_at = null;
     public ?string $document_date = null;
     public ?string $document_date_updated_at = null;
-    public ?array $items = null;
+}
+
+// $client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $estimated, $fulfillment_date, $weather, $scope,
+class InvoiceEditData extends TransferObject
+{
+    public ?int $client_id = null;
+    public ?string $discount_type = null;
+    public ?float $discount_value = null;
+    public ?float $tax_percent = null;
+    public ?float $subtotal = null;
+    public ?float $total = null;
+    public ?string $estimated_completion = null;
+    public ?string $fulfillment_date = null;
+    public ?bool $weather_pending = null;
+    public ?string $scope = null;
 }

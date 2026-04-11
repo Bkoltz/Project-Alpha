@@ -1,0 +1,27 @@
+<table style="width:100%;border-collapse:collapse;margin-top:12px">
+	<tr>
+		<td style="width:60%"></td>
+		<td style="width:40%">
+			<table style="width:100%;border-collapse:collapse">
+				<tr>
+					<td style="padding:8px 12px;text-align:right;color:#6b7280">Subtotal</td>
+					<td style="padding:8px 12px;text-align:right;width:120px">${{document.subtotal}}</td>
+				</tr>
+				<tr>
+					<td style="padding:8px 12px;text-align:right;color:#6b7280">Discount</td>
+					<td style="padding:8px 12px;text-align:right">
+						{{ document.discount_type == 'percent' ? document.discount_value|number_format(2) ~ '%' : document.discount_type == 'fixed' ? '$' ~ document.discount_value|number_format(2) : '$0.00' }}
+					</td>
+				</tr>
+				<tr>
+					<td style="padding:8px 12px;text-align:right;color:#6b7280">Tax</td>
+					<td style="padding:8px 12px;text-align:right">{{document.tax_percent|number_format(2)}}%</td>
+				</tr>
+				<tr style="border-top:2px solid #e5e7eb">
+					<td style="padding:8px 12px;text-align:right;font-weight:700">Total</td>
+					<td style="padding:8px 12px;text-align:right;font-weight:700;font-size:16px">${{document.total|number_format(2)}}</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+</table>

@@ -1,0 +1,12 @@
+<div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:8px;font-size:13px;color:#374151">
+	<strong>Created:</strong>
+	{{document.created_at}}
+	<span style="margin:0 8px">|</span>
+	<strong>Document Date:</strong>
+	{{document.document_date}}
+
+	{% if document.document_date_updated_at is not empty %}
+		<span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated:
+			{{document.document.document_date_updated_at}})</span>
+	{% endif %}
+</div>

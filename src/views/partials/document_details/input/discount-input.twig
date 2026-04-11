@@ -1,0 +1,23 @@
+{% set options = {
+	'none': 'None',
+	'percent': 'Percent',
+	'fixed': 'Fixed $'
+} %}
+
+<label>
+	<div>Discount Type</div>
+	<select id="discountTypeCo" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+
+		{% for value, label in options %}
+			<option value="{{ value }}" {{ document.discount_type == value ? 'selected' : '' }}>
+				{{ label }}
+			</option>
+		{% endfor %}
+
+	</select>
+</label>
+
+<label>
+	<div>Discount Value</div>
+	<input id="discountValueCo" type="number" step="0.01" name="discount_value" value="{{document.discount_value}}" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+</label>

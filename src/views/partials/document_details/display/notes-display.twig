@@ -1,0 +1,6 @@
+{% if document.notes is defined %}
+	<div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
+		<div style="font-weight:600;margin-bottom:6px">Job Notes</div>
+		<pre style="white-space:pre-wrap;margin:0">{{document.notes}}</pre>
+	</div>
+{% endif %}

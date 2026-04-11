@@ -1,0 +1,32 @@
+{# Totals section #}
+
+<div id="totalsCo" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
+	<div style="display:flex;gap:16px;justify-content:flex-end">
+		<div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
+		<div id="subtotalValCo" style="min-width:120px;text-align:right">$0.00</div>
+	</div>
+	<div style="display:flex;gap:16px;justify-content:flex-end">
+		<div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div>
+		<div id="discountValCo" style="min-width:120px;text-align:right">$0.00</div>
+	</div>
+	<div style="display:flex;gap:16px;justify-content:flex-end">
+		<div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div>
+		<div id="taxValCo" style="min-width:120px;text-align:right">$0.00</div>
+	</div>
+
+	{% if document.is_ongoing or document.is_ongoing is not defined %}
+		<div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700">
+			<div style="min-width:140px;text-align:right">Total</div>
+			<div id="totalValCo" style="min-width:120px;text-align:right">$0.00</div>
+		</div>
+	{% endif %}
+
+	{% if document.deposit_due is defined %}
+		<div id="depositRowCo" style="display:none;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:6px">
+			<div style="display:flex;gap:16px;justify-content:flex-end">
+				<div style="min-width:140px;text-align:right;color:#059669;font-weight:700;font-size:15px">Deposit Due</div>
+				<div id="depositValCo" style="min-width:120px;text-align:right;color:#059669;font-weight:700;font-size:15px">$0.00</div>
+			</div>
+		</div>
+	{% endif %}
+</div>

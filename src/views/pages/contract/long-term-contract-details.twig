@@ -1,0 +1,114 @@
+<section>
+	<div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Long-term Service Contract</div>
+	<div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Recurring Billing Agreement</div>
+
+	<div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+		<a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
+		<a href="/?page=contract/long-term-contract-pdf&id={{id}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+		<a href="/?page=contract/long-term-contract-pdf&id={{id}}" download="longterm-contract-{{contract.doc_number ?? id}}.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
+	</div>
+
+	{% include 'partials/document_details/project-details-display.twig' with {document: contract, branding: branding} %}
+
+	<!-- Contract Details Box -->
+	<table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb;background:#f9fafb">
+		<tr>
+			<td style="width:25%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">Start Date</div>
+				<div style="font-weight:600;color:#111">{{contract.start_date}}</div>
+			</td>
+			<td style="width:25%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">End Date</div>
+				<div style="font-weight:600;color:#111">{{contract.is_ongoing ? 'Ongoing' : contract.end_date}}</div>
+			</td>
+			<td style="width:25%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">Billing Frequency</div>
+				<div style="font-weight:600;color:#111">{{contract.billing_interval_count}} {{contract.billing_interval_unit}}</div>
+			</td>
+			<td style="width:25%;padding:8px;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">Status</div>
+				<div style="font-weight:600;color:#111;text-transform:capitalize">{{contract.status}}</div>
+			</td>
+		</tr>
+	</table>
+
+	{% if contract.is_deposit_required %}
+		<table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #a7f3d0;background:#ecfdf5">
+			<tr>
+				<td style="padding:8px;vertical-align:top">
+					<div style="font-size:11px;color:#065f46">Initial Deposit Due:
+						<span style="font-weight:700;font-size:14px">${{contract.required_deposit}}</span>
+					</div>
+				</td>
+			</tr>
+		</table>
+	{% endif %}
+
+	{% include 'partials/document_details/display/contact-information-display.twig' with {contact_information: contact_info} %}
+
+	{% include 'partials/document_details/display/scope-display.twig' with {document: contract} %}
+
+
+	<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06);margin-top:16px">
+		<thead>
+			<tr style="text-align:left;border-bottom:1px solid #eee;background:#f9fafb">
+				<th colspan="4" style="padding:12px;font-size:15px">{{contract.pricing_type == 'per_invoice' ? 'Recurring Amount (per invoice)' : 'Fixed Total (billed over time)'}}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% if contract.pricingType == perInvoice %}
+				<tr>
+					<td colspan="3" style="padding:12px">Recurring service fee (billed
+						{{contract.billing_interval_count}}
+						{{contract.billing_interval_unit}})</td>
+					<td style="padding:12px;text-align:right;font-weight:600">${{contract.price_per_invoice}}</td>
+				</tr>
+			{% else %}
+				{% include 'partials/document_details/display/items-table-display.twig' with {items: contract_items} %}
+
+				{% include 'partials/document_details/display/total-details-display.twig' with {document: contract} %}
+
+			{% endif %}
+			<tr style="background:#ecfdf5;border-top:2px solid #10b981">
+				<td colspan="3" style="padding:12px;font-weight:700;font-size:15px;color:#065f46">Amount Per Invoice</td>
+				<td style="padding:12px;font-weight:700;font-size:16px;color:#065f46;text-align:right">${{contract.invoice_amount}}</td>
+			</tr>
+
+			{% include 'partials/document_details/display/signature-display.twig' with {document_type: 'contract', signatures: signatures} %}
+
+		</tbody>
+	</table>
+	{# TODO custom fields??? #}
+	{% include 'partials/document_detials/display/terms-display.twig' with {document: contract} %}
+</section>
+<style>
+	.no-print {
+		display: flex
+	}
+	.print-footer {
+		display: none
+	}
+	@media print {
+		.no-print {
+			display: none !important
+		}
+		.side-nav,
+		.nav-footer {
+			display: none
+		}
+		.main-content {
+			margin-left: 0
+		}
+		body {
+			background: #fff
+		}
+		.print-footer {
+			display: block;
+			position: fixed;
+			bottom: 6px;
+			left: 12px;
+			color: #374151;
+			font-size: 12px
+		}
+	}
+</style>

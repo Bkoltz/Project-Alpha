@@ -36,13 +36,13 @@ class QuotesListRepository
     ];
 
     private const DOCUMENT_TYPE_FILTERS = [
-        'onDemand' => '(COALESCE(q.is_long_term, 0) = 0 AND q.is_on_demand = 1)',
-        'longTerm' => '(q.is_long_term = 1 AND COALESCE(q.is_on_demand, 0) = 0)',
+        'on_demand' => '(COALESCE(q.is_long_term, 0) = 0 AND q.is_on_demand = 1)',
+        'long_term' => '(q.is_long_term = 1 AND COALESCE(q.is_on_demand, 0) = 0)',
     ];
 
     private const DOCUMENT_TYPE_VALUES = [
-        'onDemand' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.start_date', 'q.end_date', 'q.price_per_invoice', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id'],
-        'longTerm' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.created_at', 'q.start_date', 'q.end_date', 'q.billing_interval_count', 'q.billing_interval_unit', 'c.name AS client_name', 'c.id AS client_id']
+        'on_demand' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.start_date', 'q.end_date', 'q.price_per_invoice', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id'],
+        'long_term' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.created_at', 'q.start_date', 'q.end_date', 'q.billing_interval_count', 'q.billing_interval_unit', 'c.name AS client_name', 'c.id AS client_id']
     ];
 
     public function __construct(PDO $pdo)

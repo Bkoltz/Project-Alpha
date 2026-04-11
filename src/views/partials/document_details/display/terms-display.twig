@@ -1,0 +1,11 @@
+<div style="page-break-after:always"></div>
+
+<h3>Terms and Conditions</h3>
+{% if document.terms %}
+	<div style="white-space:pre-wrap;padding:6px 0;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#222;">{{document.terms}}</div>
+{% else %}<!-- <p class="lead">By signing, the client agrees to the scope, timeline, and payment schedule indicated in this document. Additional terms can be customized later.</p> --><ul>
+		<li>Payment due NET 30 unless otherwise specified.</li>
+		<li>Cancellation requires written notice.</li>
+		<li>Work product ownership and usage rights per agreement.</li>
+	</ul>
+{% endif %}

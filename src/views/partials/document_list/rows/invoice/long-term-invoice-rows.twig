@@ -1,0 +1,48 @@
+<thead>
+	<tr style="text-align:left;border-bottom:1px solid #eee">
+		<th style="padding:10px">Contract</th>
+		<th style="padding:10px">Client</th>
+		<th style="padding:10px">Status</th>
+		<th style="padding:10px">Billing</th>
+		<th style="padding:10px">Amount/Invoice</th>
+		<th style="padding:10px">Last Invoice</th>
+		<th style="padding:10px">Next Invoice</th>
+		<th style="padding:10px">Progress</th>
+	</tr>
+</thead>
+
+<tbody>
+	{% if rows is not empty %}
+		<tr>
+			<td colspan="8" style="padding:20px;text-align:center;color:#6b7280">No recurring billing contracts found.</td>
+		</tr>
+	{% else %}
+		{% for row in rows %}
+			<tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
+				<td style="padding:10px">
+					<a href="/?page=row/long-term-row-details&id={{row.id}}" style="text-decoration:none;color:inherit;font-weight:600">
+						LTC-{{row.doc_number}}
+					</a>
+					<div style="font-size:13px;color:#6b7280">{{ row.project_code }}</div>
+				</td>
+				<td style="padding:10px">
+					<a href="/?page=client/clients-list&selected_client_id=client.id">
+						{{ row.client_name }}
+					</a>
+				</td>
+				<td style="padding:10px;text-transform:capitalize">{{ row.status }}</td>
+				<td style="padding:10px">{{ billingInterval }}</td>
+				<td style="padding:10px;font-weight:600">{{ amountText }}</td>
+				<td style="padding:10px">{{ lastDate }}</td>
+				<td style="padding:10px">
+					{% if row.status == 'active' and row.next_invoice_date %}
+						<span style="font-weight:600;color:#059669">{{ nextDate }}</span>
+					{% else %}
+						<span style="color:#6b7280">{{ nextDate }}</span>
+					{% endif %}
+				</td>
+				<td style="padding:10px">{{ progressText }}</td>
+			</tr>
+		{% endfor %}
+	{% endif %}
+</tbody>

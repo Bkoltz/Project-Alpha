@@ -1,0 +1,52 @@
+<section>
+	<h2>Edit Contract C-{{view.contract.doc_number}}
+		{% if view.contract.project_code is defined %}
+			Project
+			{{view.contract.project_code}}
+		{% endif %}
+	</h2>
+
+	<form id="coEditForm" method="post" action="/?page=contracts-update" style="display:grid;gap:16px;max-width:900px">
+		<input type="hidden" name="csrf" value="{{token}}">
+		<input type="hidden" name="id" value="{{id}}">
+		<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+			{% include 'partials/client_components/client-input-autocomplete.twig' with {document: view.contract} %}
+
+			<label>
+				<div>Tax (%)</div>
+				<input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="{{view.contract.tax_percent}}" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+			</label>
+
+			{% include 'partials/document_details/input/discount-input.twig' with {document: view.contract} %}
+		</div>
+
+		{% include 'partials/document_details/custom-field-input.twig' with {view.custom_fields} %}
+
+		<div>
+			<div style="font-weight:600;margin-bottom:8px">Items</div>
+
+			<div id="itemsCo" style="display:grid;gap:8px"></div>
+			<button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
+		</div>
+
+		{% include 'partials/document_details/input/scope-input.twig' with {app_config: view.app_config, document: view.contract} %}
+
+		{% include 'partials/document_details/input/notes-input.twig' with {document: view.contract} %}
+
+		{% include 'partials/document_details/input/terms-input.twig' with {document: view.contract} %}
+
+		{% include 'partials/document_details/input/total-input.twig' with {document: view.contract} %}
+
+		{# TODO does this need ***ADD SIGNATURES? #}
+		<div>
+			<button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Contract</button>
+		</div>
+	</form>
+</section>
+
+{# TODO fix this #}
+<div id="contract-items-data" type="application/json" style="display:none">
+	<?php echo json_encode($items) ?>
+</div>
+
+<script src="js/contracts-edit-logic.js" defer></script>

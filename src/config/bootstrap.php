@@ -28,7 +28,7 @@ session_set_cookie_params([
 const TWIG_PATH = BASE_PATH . '/src/views';
 $loader = new \Twig\Loader\FilesystemLoader(TWIG_PATH);
 $twig = new \Twig\Environment($loader, [
-    'cache' => __DIR__ . '/../src/cache',
+    'cache' => false,
     'auto_reload' => true
 ]);
 

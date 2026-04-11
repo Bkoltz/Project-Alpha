@@ -2,12 +2,13 @@
 
 namespace App\services\quotes;
 
-use APp\data_transfer_objects\ItemData;
+use App\data_transfer_objects\ItemData;
 use App\data_transfer_objects\QuoteData;
 use App\record_transfer_objects\ItemRecord;
-use App\record_transfer_objects\QuoteMetaRecord;
+use App\record_transfer_objects\MetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use App\repositories\quotes\QuotesRepository;
+use App\services\FinancialService;
 
 class QuoteService
 {
@@ -24,7 +25,7 @@ class QuoteService
         $this->updateQuoteItems($quoteItems);
 
         $record = QuoteRecord::fromArray($quoteData->toArray());
-        $recordMeta = QuoteMetaRecord::fromArray($quoteData->toArray());
+        $recordMeta = MetaRecord::fromArray($quoteData->toArray());
         $recordItems = ItemRecord::fromArray($quoteItems->toArray());
 
         $this->repository->createNewQuote($record, $recordMeta, $recordItems);

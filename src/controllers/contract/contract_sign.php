@@ -5,7 +5,10 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
-if ($contract_id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
+if ($contract_id <= 0) {
+  header('Location: /?page=contract/contracts-list&error=Invalid%20contract');
+  exit;
+}
 
 // Validate upload
 if (empty($_FILES['signed_pdf']) || !is_uploaded_file($_FILES['signed_pdf']['tmp_name'])) {
@@ -34,27 +37,29 @@ try {
   $c->execute([$contract_id]);
   $contract = $c->fetch(PDO::FETCH_ASSOC);
   if (!$contract) throw new Exception('Not found');
-  
+
   // Check if deposit is required and if it has been received
   $depositType = $contract['deposit_type'] ?? 'none';
   $depositValue = (float)($contract['deposit_amount'] ?? 0);
   $depositPaid = (float)($contract['deposit_paid'] ?? 0);
   $total = (float)($contract['total'] ?? 0);
   $depositCalc = 0;
-  
+
   if ($depositType === 'percent') {
     $depositCalc = max(0, min(100, $depositValue)) * $total / 100;
   } elseif ($depositType === 'fixed') {
     $depositCalc = $depositValue;
   }
-  
+
   if ($depositCalc > 0 && $depositPaid < $depositCalc) {
     throw new Exception('Cannot activate contract: deposit must be received first');
   }
 
   // Store signed PDF in src/uploads/signed_contracts for organization and separation
   $internal = __DIR__ . '/../../uploads/signed_contracts';
-  if (!is_dir($internal)) { @mkdir($internal, 0775, true); }
+  if (!is_dir($internal)) {
+    @mkdir($internal, 0775, true);
+  }
   // Log file upload metadata
   error_log('UPLOAD: tmp_name=' . ($f['tmp_name'] ?? '') . ' size=' . ($f['size'] ?? 0) . ' error=' . ($f['error'] ?? ''));
   error_log('UPLOAD: using src/uploads/signed_contracts dir ' . $internal);
@@ -80,7 +85,7 @@ try {
     error_log('UPLOAD: saved to ' . $internalDest);
   } else {
     // Log diagnostics about permissions and paths
-    error_log('UPLOAD: FAILED to store uploaded file. tmp_exists=' . (is_file($f['tmp_name']) ? '1' : '0') . ' internal_exists=' . (is_dir($internal)?'1':'0') . ' internal_writable=' . (is_writable($internal)?'1':'0') . ' cwd=' . getcwd());
+    error_log('UPLOAD: FAILED to store uploaded file. tmp_exists=' . (is_file($f['tmp_name']) ? '1' : '0') . ' internal_exists=' . (is_dir($internal) ? '1' : '0') . ' internal_writable=' . (is_writable($internal) ? '1' : '0') . ' cwd=' . getcwd());
     throw new Exception('Failed to store uploaded file');
   }
   $publicUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $name);
