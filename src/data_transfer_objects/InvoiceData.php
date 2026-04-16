@@ -33,6 +33,7 @@ class InvoiceData extends TransferObject
     public ?string $created_at = null;
     public ?string $document_date = null;
     public ?string $document_date_updated_at = null;
+    public ?string $notes = null;
 }
 
 // $client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $estimated, $fulfillment_date, $weather, $scope,

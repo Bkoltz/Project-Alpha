@@ -11,7 +11,21 @@ class MetaService {
         $this->repository = $repository;
     }
 
+    public function insertProjectMetaFromArray(array $data) : void {
+        $metaRecord = MetaRecord::fromArray($data);
+        $this->setProjectMeta($metaRecord);
+    }
+
     public function setProjectMeta(MetaRecord $meta) : void {
-        $this->repository->setMeta($meta);
+        $this->validate($meta);
+
+        $this->repository->insertMetaRecord($meta);
+    }
+
+    private function validate(MetaRecord $metaRecord) : void {
+        $metaRecord->notes ??= '';
+        $metaRecord->project_code ??= '';
+        $metaRecord->terms ??= '';
+        $metaRecord->client_id ??= 0;
     }
 }

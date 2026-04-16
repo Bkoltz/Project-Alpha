@@ -27,6 +27,7 @@ class ContractDataController
     public function load(): array
     {
         $output = $this->service->getCreateRenderData();
+        error_log(json_encode($output));
         return ['pages\contract\contract-create.twig', $output->toArray()];
     }
 
@@ -37,7 +38,7 @@ class ContractDataController
         $contractItems = ItemData::fromArray($_POST);
 
         $this->contractService->createContractWithSignatures(DocumentType::REGULAR, $contractData, $contractItems, $contractSignatures);
-        $this->documentService->createInvoiceFromContract($contractData, $contractItems);
+        $this->documentService->createInvoiceFromContract(DocumentType::REGULAR, $contractData, $contractItems);
     }
 
     public function updateContract()

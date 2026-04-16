@@ -22,7 +22,11 @@ class InvoiceDataService
     public function getCreateRenderData(): RenderOutput
     {
         $customFields = $this->customFieldService->getCustomFieldInputView(DocumentType::REGULAR);
-        return new InvoiceCreateView(['custom_field' => $customFields]);
+        $output =  new InvoiceCreateView(['custom_fields' => $customFields]);
+        
+        echo json_encode($output);
+
+        return $output;
     }
 
     public function getEditRenderData(int $id): RenderOutput

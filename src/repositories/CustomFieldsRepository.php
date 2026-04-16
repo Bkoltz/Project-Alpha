@@ -18,7 +18,7 @@ class CustomFieldsRepository
     {
         $stmt = $this->pdo->prepare('SELECT * FROM document_custom_fields WHERE document_type = ? AND is_enabled = 1 ORDER BY display_order, id');
         $stmt->execute([$documentType->value]);
-
+        
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

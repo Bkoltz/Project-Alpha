@@ -42,7 +42,7 @@ class QuotesDataController
             return ['pages/quote/quote-edit.twig', $output];
         } else {
             $output = $this->dataService->getCreateRenderData();
-
+            
             return ['pages/quote/quote-create.twig', $output];
         }
     }

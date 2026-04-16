@@ -45,9 +45,7 @@
 			</div>
 		</div>
 
-		<div id="customFieldsContainer">
-			{% include "partials/document_details/input/custom-field-input.twig" with {custom_fields} %}
-		</div>
+		{% include "partials/document_details/input/custom-field-input.twig" with custom_fields %}
 
 		<div style="margin:12px 0">
 			<div style="font-weight:600;margin-bottom:8px">Document Type</div>

@@ -6,5 +6,5 @@ use App\data_transfer_objects\render_outputs\DocumentDetails\CustomFieldInputVie
 use App\data_transfer_objects\render_outputs\RenderOutput;
 
 class InvoiceCreateView extends RenderOutput {
-    public ?CustomFieldInputView $custom_field = null;
+    public ?CustomFieldInputView $custom_fields = null;
 }

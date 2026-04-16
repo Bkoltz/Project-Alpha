@@ -22,7 +22,7 @@ class TransferObject
     {
         $dto = new static();
         $reflection = new ReflectionClass($dto);
-        
+
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
             $name = $prop->getName();
 
@@ -54,18 +54,18 @@ class TransferObject
         $array = [];
         $reflection = new ReflectionClass($this);
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $prop) {
+            if (!$prop->isInitialized($this))
+                continue;
+
             $name = $prop->getName();
             $value = $prop->getValue($this);
 
             $type = $prop->getType()?->getName();
-            if ($type === 'array' && is_string($value)) {
+            if ($type === 'array' && is_string($value))
                 $value = json_decode($value, true);
-            }
 
-            // This handles transfer objects. If they are a transfer object, turn it to an array
-            if (is_a($value, TransferObject::class, true)) {
+            if ($value instanceof TransferObject)
                 $value = $value->toArray();
-            }
 
             $array[$name] = $value;
         }

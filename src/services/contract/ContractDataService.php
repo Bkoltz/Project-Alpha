@@ -19,7 +19,7 @@ class ContractDataService
     public function getCreateRenderData(): RenderOutput
     {
         $customFields = $this->customFieldService->getCustomFieldInputView(DocumentType::REGULAR);
-        return new ContractCreateView(['custom_field' => $customFields]);
+        return new ContractCreateView(['custom_fields' => $customFields]);
     }
 
     public function getEditRenderData(int $id): RenderOutput

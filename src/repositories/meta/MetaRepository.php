@@ -13,9 +13,8 @@ class MetaRepository
         $this->pdo = $pdo;
     }
 
-    public function setMeta(MetaRecord $metaRecord): void
+    public function insertMetaRecord(MetaRecord $metaRecord): void
     {
-        echo json_encode($metaRecord);
         $up = $this->pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes, terms) VALUES (:project_code, :client_id, :notes, :terms) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes), terms=VALUES(terms)');
         $up->execute($metaRecord->toArray());
     }

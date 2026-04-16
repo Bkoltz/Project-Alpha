@@ -32,9 +32,7 @@
 			</label>
 		</div>
 
-		<div id="customFieldsContainer">
-			{% include "partials/document_details/input/custom-field-input.twig" with {fields, columns, idSuffix} %}
-		</div>
+		{% include "partials/document_details/input/custom-field-input.twig" with custom_fields %}
 
 		<div id="projectSectionInv" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
 			<h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>

@@ -7,7 +7,7 @@
 <section>
 	<h2>{{title}}</h2>
 
-	{# {% include 'templates/components/document-filter.html.twig' with filterConfig %} #}
+	{% include 'templates/components/document-filter.html.twig' with filter_config %}
     
 	{% if emailed is defined %}
 		<div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>

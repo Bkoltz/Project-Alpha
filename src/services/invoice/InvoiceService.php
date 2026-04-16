@@ -42,8 +42,8 @@ class InvoiceService
         $itemsRecord = ItemRecord::fromArray($invoiceItems->toArray());
 
         $this->repository->createInvoice($documentType, $record, $itemsRecord);
-        // $this->metaService->setProjectMeta(new MetaRecord()); // TODO fix this later
-        // $this->projectService->insertInvoiceProjectDoc(0, 0); //TODO this to
+        $this->metaService->insertProjectMetaFromArray($invoiceData->toArray()); 
+        $this->projectService->insertInvoiceProjectDoc($invoiceData->project_id, $invoiceData->id);
     }
 
     private function generateInsertRecord(DocumentType $documentType, array $data): BaseInvoiceRecord
