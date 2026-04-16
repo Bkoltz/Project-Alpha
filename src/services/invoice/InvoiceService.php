@@ -10,10 +10,16 @@ use App\repositories\invoice\InvoiceRepository;
 use App\data_transfer_objects\InvoiceEditData;
 
 use App\config\AppConfiguration;
+use App\record_transfer_objects\interfaces\InsertableRecord;
+use App\record_transfer_objects\invoice\create_record\LongTermInvoiceRecord;
+use App\record_transfer_objects\invoice\create_record\OnDemandInvoiceRecord;
+use App\record_transfer_objects\invoice\create_record\RegularInvoiceRecord;
 use App\record_transfer_objects\InvoiceEditRecord;
 use App\record_transfer_objects\MetaRecord;
 use App\services\MetaService;
 use App\services\ProjectService;
+use App\utils\enum\DocumentType;
+use Exception;
 
 class InvoiceService
 {
@@ -27,17 +33,27 @@ class InvoiceService
         $this->metaService = $metaService;
     }
 
-    public function createInvoice(InvoiceData $invoiceData, ItemData $invoiceItems)
+    public function createInvoice(DocumentType $documentType, InvoiceData $invoiceData, ItemData $invoiceItems)
     {
         $this->updateAndValidateInvoiceData($invoiceData);
         $this->validateInvoiceItems($invoiceItems);
 
-        $record = InvoiceRecord::fromArray($invoiceData->toArray());
+        $record = $this->generateInsertRecord($documentType, $invoiceData->toArray());
         $itemsRecord = ItemRecord::fromArray($invoiceItems->toArray());
 
-        $this->repository->createInvoice($record, $itemsRecord);
-        $this->metaService->setProjectMeta(new MetaRecord()); // TODO fix this later
-        $this->projectService->insertInvoiceProjectDoc(0,0); //TODO this to
+        $this->repository->createInvoice($documentType, $record, $itemsRecord);
+        // $this->metaService->setProjectMeta(new MetaRecord()); // TODO fix this later
+        // $this->projectService->insertInvoiceProjectDoc(0, 0); //TODO this to
+    }
+
+    private function generateInsertRecord(DocumentType $documentType, array $data): InsertableRecord
+    {
+        return match ($documentType) {
+            DocumentType::REGULAR => RegularInvoiceRecord::fromArray($data),
+            DocumentType::ON_DEMAND => OnDemandInvoiceRecord::fromArray($data),
+            DocumentType::LONG_TERM => LongTermInvoiceRecord::fromArray($data),
+            default => throw new Exception("Invalid document type")
+        };
     }
 
     public function updateInvoice(int $id, InvoiceEditData $invoiceData, ItemData $invoiceItems): void
@@ -88,12 +104,14 @@ class InvoiceService
         $this->repository->denyInvoice($id);
     }
 
-    public function getStoredInvoice(int $id) : InvoiceData {
+    public function getStoredInvoice(int $id): InvoiceData
+    {
         $storedInvoice = $this->repository->getStoredInvoice($id);
         return InvoiceData::fromArray($storedInvoice->toArray());
     }
 
-    public function getStoredInvoiceItems(int $id) : ItemData {
+    public function getStoredInvoiceItems(int $id): ItemData
+    {
         $storedItems = $this->repository->getStoredInvoiceItems($id);
         return ItemData::fromArray($storedItems->toArray());
     }

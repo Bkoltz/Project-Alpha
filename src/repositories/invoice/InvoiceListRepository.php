@@ -52,18 +52,17 @@ class InvoiceListRepository extends BaseListRepository
         ],
     ];
 
-    private const DOCUMENT_TYPE_FILTERS = [
-        'regular' => '',
-        'on_demand' => '(COALESCE(i.is_long_term, 0) = 0 AND i.is_on_demand = 1)',
-        'long_term' => '(i.is_long_term = 1 AND COALESCE(i.is_on_demand, 0) = 0)',
-    ];
-
     private const DOCUMENT_TYPE_STATEMENTS = [
-        'regular' => 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id',
-        'on_demand' => 'SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.on_demand_contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id',
-        'long_term' => 'SELECT i.id, i.doc_number, i.project_code, i.status, i.billing_interval_count, i.billing_interval_unit, i.pricing_type, i.price_per_invoice, i.total, i.total_invoiced, i.next_invoice_date, i.last_invoice_date, i.start_date, i.end_date, c.name client_name, c.id AS client_id FROM long_term_contracts i LEFT JOIN clients c ON c.id=i.client_id',
+        DocumentType::REGULAR->value => 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id',
+        DocumentType::LONG_TERM->value => 'SELECT i.id, i.doc_number, i.project_code, i.status, i.billing_interval_count, i.billing_interval_unit, i.pricing_type, i.price_per_invoice, i.total, i.total_invoiced, i.next_invoice_date, i.last_invoice_date, i.start_date, i.end_date, c.name client_name, c.id AS client_id FROM long_term_contracts i LEFT JOIN clients c ON c.id=i.client_id',
+        DocumentType::ON_DEMAND->value => 'SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.on_demand_contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id',
     ];
 
+    private const DOCUMENT_TYPE_TABLES = [
+        DocumentType::REGULAR->value => "invoices",
+        DocumentType::LONG_TERM->value => "long_term_invoices",
+        DocumentType::ON_DEMAND->value => "on_demand_invoices",
+    ];
 
     public function __construct(PDO $pdo)
     {
@@ -86,10 +85,11 @@ class InvoiceListRepository extends BaseListRepository
 
     public function getInvoiceCount(DocumentType $documentType, ListFilterData $filterData): int
     {
-        $filterConfig = new ListFilterConfig($this::FILTERS, $this::DOCUMENT_TYPE_FILTERS);
+        $filterConfig = new ListFilterConfig($this::FILTERS);
+        $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
         $filterStatement = $this->createFilteredStatement($documentType, $filterData, $filterConfig);
 
-        $sqlCount = 'SELECT COUNT(*) FROM invoices i' . $filterStatement->sql;
+        $sqlCount = 'SELECT COUNT(*) FROM ' . $table . ' i' . $filterStatement->sql;
         $stc = $this->pdo->prepare($sqlCount);
         $stc->execute($filterStatement->values);
 

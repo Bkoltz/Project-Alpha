@@ -32,20 +32,22 @@ class DocumentService
 
     public function acceptQuoteAndCreateFullDoc(int $id) {
         $this->quoteService->approveQuote($id);
-
+        
         $quoteData = $this->quoteService->getQuoteData($id);
         $itemData = $this->quoteService->getQuoteItems($id);
-        $this->createFullDocumentFromQuote($quoteData, $itemData);
+
+        $documentType = $this->quoteService->documentTypeFromData($quoteData);
+        $this->createFullDocumentFromQuote($documentType, $quoteData, $itemData);
     }
 
-    public function createFullDocumentFromQuote(QuoteData $quoteData, ItemData $itemData)
+    public function createFullDocumentFromQuote(DocumentType $documentType, QuoteData $quoteData, ItemData $itemData)
     {
-        $this->createContractFromTransferData($quoteData, $itemData);
-        $this->createInvoiceFromTransferData($quoteData, $itemData);
+        $this->createContractFromTransferData($documentType, $quoteData, $itemData);
+        $this->createInvoiceFromTransferData($documentType, $quoteData, $itemData);
     }
 
-    public function createInvoiceFromContract(ContractData $contractData, ItemData $items) : void {
-        $this->createInvoiceFromTransferData($contractData, $items);
+    public function createInvoiceFromContract(DocumentType $documentType, ContractData $contractData, ItemData $items) : void {
+        $this->createInvoiceFromTransferData($documentType, $contractData, $items);
     }
 
     // TODO: FIX this broken it shouldnt need documetn tyep
@@ -72,7 +74,9 @@ class DocumentService
     }
 
     public function payDepositFullDoc(int $id) : void {
-        $depositAmount = $this->contractService->payDeposit($id,);
+        $documentType = $this->quoteService->documentTypeFromId($id);
+
+        $depositAmount = $this->contractService->payFullDeposit($documentType, $id);
         $this->invoiceService->payDeposit($id, $depositAmount);
     }
 
@@ -87,15 +91,15 @@ class DocumentService
     }
 
     // TODO: FIX this soudlnt need stn;ad
-    private function createContractFromTransferData(TransferObject $object, ItemData $items)
+    private function createContractFromTransferData(DocumentType $documentType, TransferObject $object, ItemData $items)
     {
         $contractData = ContractData::fromArray($object->toArray());
-        $this->contractService->createContract(DocumentType::REGULAR, $contractData, $items);
+        $this->contractService->createContract($documentType, $contractData, $items);
     }
 
-    private function createInvoiceFromTransferData(TransferObject $object, ItemData $items)
+    private function createInvoiceFromTransferData(DocumentType $documentType, TransferObject $object, ItemData $items)
     {
         $invoiceData = InvoiceData::fromArray($object->toArray());
-        $this->invoiceService->createInvoice($invoiceData, $items);
+        $this->invoiceService->createInvoice($documentType, $invoiceData, $items);
     }
 }

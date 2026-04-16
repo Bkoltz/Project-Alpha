@@ -4,6 +4,12 @@ namespace App\repositories\contract;
 
 use PDO;
 use App\data_transfer_objects\ContractSignatures;
+use App\record_transfer_objects\contract\create_record\BaseContractRecord;
+use App\record_transfer_objects\interfaces\InsertableRecord;
+use App\record_transfer_objects\contract\create_record\LongTermContractRecord;
+use App\record_transfer_objects\contract\create_record\OnDemandContractRecord;
+use App\record_transfer_objects\contract\create_record\RegularContractRecord;
+use App\record_transfer_objects\interfaces\RetrievableRecord;
 use App\utils\enum\DocumentType;
 use App\record_transfer_objects\ContractRecord;
 use App\record_transfer_objects\ContractEditRecord;
@@ -42,9 +48,9 @@ class ContractRepository
         $this->pdo = $pdo;
     }
 
-    public function createContract(DocumentType $documentType, ContractRecord $contractData, ItemRecord $contractItems): int
+    public function createContract(DocumentType $documentType, InsertableRecord $record, ItemRecord $contractItems): int
     {
-        $id = $this->insertContract($contractData);
+        $id = $this->insertContract($documentType, $record);
         $this->insertContractItems($id, $documentType, $contractItems);
 
         return (int)$this->pdo->lastInsertId();
@@ -87,12 +93,12 @@ class ContractRepository
         return (string)$stmt->fetchColumn();
     }
 
-    private function insertContract(ContractRecord $contractData): int
+    private function insertContract(DocumentType $documentType, InsertableRecord $record): int
     {
-        $sql = $this::DOCUMENT_TYPE_INSERT_STATEMENTS['regular'];
+        $sql = $this::DOCUMENT_TYPE_INSERT_STATEMENTS[$documentType->value];
 
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($contractData->toNumericArray());
+        $stmt->execute($record->toInsertValues());
 
         return (int)$this->pdo->lastInsertId();
     }
@@ -116,12 +122,14 @@ class ContractRepository
         }
     }
 
-    public function payDeposit(int $id, float $depositPaid): void
+    public function payDeposit(int $id, DocumentType $documentType, float $depositPaid): void
     {
-        $this->pdo->prepare('UPDATE contracts SET deposit_paid=? WHERE id=?')->execute([$depositPaid, $id]);
+        $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
+        $this->pdo->prepare('UPDATE ' . $table . ' SET deposit_paid=? WHERE id=?')->execute([$depositPaid, $id]);
     }
 
-    public function getStoredContractItems(int $id) : ItemRecord {
+    public function getStoredContractItems(int $id): ItemRecord
+    {
         $stmt = $this->pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
         $stmt->execute([$id]);
 
@@ -136,11 +144,22 @@ class ContractRepository
         return ContractSignatures::fromArray($stmt->fetchAll(PDO::FETCH_ASSOC) ?? []);
     }
 
-    public function getStoredContract(int $id): ContractRecord
+    public function getStoredContract(int $id, DocumentType $documentType): BaseContractRecord
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM contracts WHERE id=? FOR UPDATE');
+        $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
+
+        $stmt = $this->pdo->prepare('SELECT * FROM ' . $table . ' WHERE id=? FOR UPDATE');
         $stmt->execute([$id]);
-        return ContractRecord::fromArray($stmt->fetch(PDO::FETCH_ASSOC) ?? []);
+        return $this->generateRetrievedRecord($documentType, $stmt->fetch(PDO::FETCH_ASSOC) ?? []);
+    }
+
+    private function generateRetrievedRecord(DocumentType $documentType, array $data): BaseContractRecord
+    {
+        return match ($documentType) {
+            DocumentType::REGULAR => RegularContractRecord::fromArray($data),
+            DocumentType::LONG_TERM => LongTermContractRecord::fromArray($data),
+            DocumentType::ON_DEMAND => OnDemandContractRecord::fromArray($data)
+        };
     }
 
     public function getCustomFields(DocumentType $documentType): array

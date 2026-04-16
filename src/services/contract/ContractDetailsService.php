@@ -31,7 +31,7 @@ class ContractDetailsService extends BaseDetailsService
 
     private function getRegularDetails(int $id): RenderOutput
     {
-        $contract = $this->contractService->getStoredContract($id);
+        $contract = $this->contractService->getStoredContract($id, DocumentType::REGULAR);
         $signatures = $this->contractService->getStoredSignatures($id);
         $items = $this->contractService->getStoredContractItems($id);
         $branding = $this->getBranding();
@@ -49,7 +49,7 @@ class ContractDetailsService extends BaseDetailsService
 
     private function getLongTermDetails(int $id): RenderOutput
     {
-        $contract = $this->contractService->getStoredContract($id);
+        $contract = $this->contractService->getStoredContract($id, DocumentType::LONG_TERM);
         $signatures = $this->contractService->getStoredSignatures($id);
         $branding = $this->getBranding();
         $contactInfo = $this->getContactInfo($contract->client_id);

@@ -33,6 +33,18 @@
 		</div>
 
 		{# Page buttons #}
-		{% include "partials/document_list/page-number-control.twig" with page_number_view %}
+		<div style="display:flex;gap:8px">
+			{% if page > 1 %}
+				<a href="{{previousPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a>
+			{% endif %}
+			<div style="padding:6px 10px;color:var(--muted)">Page
+				{{page}}
+				/
+				{{pageCount}}
+			</div>
+			{% if page < pageCount %}
+				<a href="{{nextPagePath}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a>
+			{% endif %}
+		</div>
 	</div>
 </section>

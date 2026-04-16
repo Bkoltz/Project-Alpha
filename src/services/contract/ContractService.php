@@ -5,13 +5,18 @@ namespace App\services\contract;
 use App\data_transfer_objects\ContractData;
 use App\data_transfer_objects\ContractEditData;
 use App\data_transfer_objects\ContractSignatures;
+use App\data_transfer_objects\DepositValues;
 use App\data_transfer_objects\ItemData;
+use App\record_transfer_objects\interfaces\InsertableRecord;
+use App\record_transfer_objects\contract\create_record\RegularContractRecord;
+use App\record_transfer_objects\contract\create_record\LongTermContractRecord;
+use App\record_transfer_objects\contract\create_record\OnDemandContractRecord;
 use App\record_transfer_objects\ContractEditRecord;
-use App\record_transfer_objects\ContractRecord;
 use App\record_transfer_objects\ItemRecord;
 use App\repositories\contract\ContractRepository;
-use App\services\quotes\FinancialService;
+use App\services\FinancialService;
 use App\utils\enum\DocumentType;
+use Exception;
 
 class ContractService
 {
@@ -27,10 +32,19 @@ class ContractService
         $this->updateAndValidateContractData($contractData);
         $this->validateContractItems($contractItems);
 
-        $record = ContractRecord::fromArray($contractData->toArray());
+        $record = $this->generateInsertRecord($documentType, $contractData->toArray());
         $recordItems = ItemRecord::fromArray($contractItems->toArray());
 
         return $this->repository->createContract($documentType, $record, $recordItems);
+    }
+
+    private function generateInsertRecord(DocumentType $documentType, array $data) : InsertableRecord {
+        return match ($documentType) {
+            DocumentType::REGULAR => RegularContractRecord::fromArray($data),
+            DocumentType::ON_DEMAND => OnDemandContractRecord::fromArray($data),
+            DocumentType::LONG_TERM => LongTermContractRecord::fromArray($data),
+            default => throw new Exception("Invalid document type")
+        };
     }
 
     public function updateContract(int $id, DocumentType $documentType, ContractEditData $contractData, ItemData $contractItems): void
@@ -72,8 +86,8 @@ class ContractService
         return ItemData::fromArray($items->toArray());
     }
 
-    public function getStoredContract(int $id) : ContractData {
-        $storedContract = $this->repository->getStoredContract($id);
+    public function getStoredContract(int $id, DocumentType $documentType) : ContractData {
+        $storedContract = $this->repository->getStoredContract($id, $documentType);
         return ContractData::fromArray($storedContract->toArray());
     }
 
@@ -81,13 +95,12 @@ class ContractService
         return $this->repository->getStoredSignatures($id);
     }
 
-    public function payDeposit(int $id): float
+    public function payFullDeposit(DocumentType $documentType, int $id): float
     {
-        $storedContract = $this->repository->getStoredContract($id);
-
+        $storedContract = $this->repository->getStoredContract($id, $documentType);
         $paidDeposit = FinancialService::calculateDepositValue($storedContract);
 
-        $this->repository->payDeposit($id, $paidDeposit);
+        $this->repository->payDeposit($id, $documentType, $paidDeposit);
         return $paidDeposit;
     }
 

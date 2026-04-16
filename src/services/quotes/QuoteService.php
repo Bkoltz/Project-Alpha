@@ -9,6 +9,7 @@ use App\record_transfer_objects\MetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use App\repositories\quotes\QuotesRepository;
 use App\services\FinancialService;
+use App\utils\enum\DocumentType;
 
 class QuoteService
 {
@@ -33,6 +34,25 @@ class QuoteService
 
     public function editQuote(int $id, QuoteData $quoteData) {}
 
+    public function documentTypeFromId(int $id): DocumentType
+    {
+        $data = $this->repository->getQuoteData($id);
+        $data = QuoteData::fromArray($data->toArray());
+
+        return $this->documentTypeFromData($data);
+    }
+
+    public function documentTypeFromData(QuoteData $data): DocumentType
+    {
+        if ($data->is_long_term == 1 && $data->is_on_demand == 0) {
+            return DocumentType::LONG_TERM;
+        } elseif ($data->is_long_term == 0 && $data->is_on_demand == 1) {
+            return DocumentType::ON_DEMAND;
+        }
+        
+        return DocumentType::REGULAR;
+    }
+
     public function approveQuote(int $id)
     {
         $this->repository->approveQuote($id);
@@ -50,7 +70,8 @@ class QuoteService
         return QuoteData::fromArray($data->toArray());
     }
 
-    public function getQuoteItems(int $id) : ItemData {
+    public function getQuoteItems(int $id): ItemData
+    {
         $data = $this->repository->getQuoteItems($id);
         return ItemData::fromArray($data->toArray());
     }

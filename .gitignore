@@ -8,7 +8,7 @@
 # /vendor/*/*/.github
 /vendor/
 /src/cache
-
+/src/src/cache
 
 # OS artifacts (Windows/macOS)
 Thumbs.db
@@ -17,5 +17,4 @@ Desktop.ini
 
 # Logs
 *.log
-public/error_log.txt
 public/error_log.txt
