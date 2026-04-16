@@ -7,8 +7,10 @@ use App\data_transfer_objects\DepositValues;
 use App\record_transfer_objects\interfaces\InsertableRecord;
 use App\record_transfer_objects\interfaces\RetrievableRecord;
 
-abstract class BaseContractRecord extends TransferObject implements RetrievableRecord, InsertableRecord, DepositValues {
-    public abstract function getDepositType(): string;
-    public abstract function getDepositAmount(): float;
-    public abstract function getTotal(): float;
+abstract class BaseContractRecord extends TransferObject implements RetrievableRecord, InsertableRecord, DepositValues
+{
+    public function toInsertValues(): array
+    {
+        return $this->toNumericArray();
+    }
 }

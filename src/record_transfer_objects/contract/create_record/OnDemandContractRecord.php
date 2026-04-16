@@ -39,9 +39,4 @@ class OnDemandContractRecord extends BaseContractRecord
     {
         return $this->deposit_type;
     }
-
-    public function toInsertValues(): array
-    {
-        return $this->toNumericArray();
-    }
 }

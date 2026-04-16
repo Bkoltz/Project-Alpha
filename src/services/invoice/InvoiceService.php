@@ -10,7 +10,7 @@ use App\repositories\invoice\InvoiceRepository;
 use App\data_transfer_objects\InvoiceEditData;
 
 use App\config\AppConfiguration;
-use App\record_transfer_objects\interfaces\InsertableRecord;
+use App\record_transfer_objects\invoice\create_record\BaseInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\LongTermInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\OnDemandInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\RegularInvoiceRecord;
@@ -46,7 +46,7 @@ class InvoiceService
         // $this->projectService->insertInvoiceProjectDoc(0, 0); //TODO this to
     }
 
-    private function generateInsertRecord(DocumentType $documentType, array $data): InsertableRecord
+    private function generateInsertRecord(DocumentType $documentType, array $data): BaseInvoiceRecord
     {
         return match ($documentType) {
             DocumentType::REGULAR => RegularInvoiceRecord::fromArray($data),

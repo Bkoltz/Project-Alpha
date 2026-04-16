@@ -2,11 +2,7 @@
 
 namespace App\record_transfer_objects\invoice\create_record;
 
-use App\data_transfer_objects\TransferObject;
-use App\record_transfer_objects\interfaces\InsertableRecord;
-use App\record_transfer_objects\interfaces\RetrievableRecord;
-
-class RegularInvoiceRecord extends TransferObject implements InsertableRecord, RetrievableRecord
+class RegularInvoiceRecord extends BaseInvoiceRecord
 {
     public ?int $contract_id = null;
     public ?int $quote_id = null;
@@ -21,9 +17,4 @@ class RegularInvoiceRecord extends TransferObject implements InsertableRecord, R
     public ?string $due_date = null;
     public ?string $project_code = null;
     public ?string $fulfillment_date = null;
-    
-    public function toInsertValues(): array
-    {
-        return $this->toNumericArray();
-    }
 }
