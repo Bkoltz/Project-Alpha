@@ -2,8 +2,8 @@
 
 namespace App\services;
 
-use App\data_transfer_objects\render_outputs\DocumentDetails\CustomFieldDisplayView;
-use App\data_transfer_objects\render_outputs\DocumentDetails\CustomFieldInputView;
+use App\render_outputs\document_details\CustomFieldDisplayView;
+use App\render_outputs\document_details\CustomFieldInputView;
 use App\repositories\CustomFieldsRepository;
 use App\utils\enum\DocumentType;
 

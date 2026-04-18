@@ -4,8 +4,8 @@ namespace App\services\contract;
 
 use App\data_transfer_objects\DisplayCountData;
 use App\data_transfer_objects\ListFilterData;
-use App\data_transfer_objects\render_outputs\Contact\ContractListView;
-use App\data_transfer_objects\render_outputs\PageNumberView;
+use App\render_outputs\contract\ContractListView;
+use App\render_outputs\PageNumberView;
 use App\repositories\contract\ContractListRepository;
 use App\services\BaseListService;
 use App\utils\enum\DocumentType;

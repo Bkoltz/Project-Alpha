@@ -3,9 +3,8 @@
 namespace App\services\quotes;
 
 use App\data_transfer_objects\ItemData;
-use App\data_transfer_objects\QuoteData;
+use App\data_transfer_objects\quote\QuoteData;
 use App\record_transfer_objects\ItemRecord;
-use App\record_transfer_objects\MetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use App\repositories\quotes\QuotesRepository;
 use App\services\FinancialService;
@@ -23,13 +22,12 @@ class QuoteService
     public function createQuote(QuoteData $quoteData, ItemData $quoteItems)
     {
         $this->updateQuoteData($quoteData, $quoteItems);
-        $this->updateQuoteItems($quoteItems);
+        $quoteItems?->validate();
 
         $record = QuoteRecord::fromArray($quoteData->toArray());
-        $recordMeta = MetaRecord::fromArray($quoteData->toArray());
-        $recordItems = ItemRecord::fromArray($quoteItems->toArray());
+        $recordItems = $quoteItems->isNull() ? null : ItemRecord::fromArray($quoteItems->toArray());
 
-        $this->repository->createNewQuote($record, $recordMeta, $recordItems);
+        $this->repository->createNewQuote($record, $recordItems);
     }
 
     public function editQuote(int $id, QuoteData $quoteData) {}
@@ -63,17 +61,20 @@ class QuoteService
         $this->repository->rejectQuote($id);
     }
 
-    //Returns quote data grabbed from the repository
-    public function getQuoteData(int $id): QuoteData
+    public function getStoredQuote(int $id): QuoteData
     {
         $data = $this->repository->getQuoteData($id);
         return QuoteData::fromArray($data->toArray());
     }
 
-    public function getQuoteItems(int $id): ItemData
+    public function getStoredQuoteItems(int $id): ?ItemData
     {
         $data = $this->repository->getQuoteItems($id);
-        return ItemData::fromArray($data->toArray());
+        return !$data ? null : ItemData::fromArray($data->toArray());
+    }
+
+    public function getQuoteDate(int $id) : array {
+        return $this->repository->getQuoteDate($id);
     }
 
     private function updateQuoteData(QuoteData $quoteData, ItemData $quoteItems): void
@@ -85,25 +86,9 @@ class QuoteService
         FinancialService::calculateFinancialData($quoteData, $quoteItems);
     }
 
-    private function updateQuoteItems(ItemData $quoteItems): void
-    {
-        $this->validateQuoteItems($quoteItems);
-        $this->calculateLineTotal($quoteItems);
-    }
-
     private function updateProjectCode(QuoteData $quoteData): void
     {
         $quoteData->project_code ??= $this->repository->getNextProjectCode($quoteData->client_id);
-    }
-
-    private function calculateLineTotal(ItemData $quoteItems): void
-    {
-        for ($i = 0; $i < count($quoteItems->item); $i++) {
-            $quantity = $quoteItems->quantity[$i];
-            $unitPrice = $quoteItems->unit_price[$i];
-
-            $quoteItems->line_total[$i] = $quantity * $unitPrice;
-        }
     }
 
     private function updateDocumentType(QuoteData $quoteData): void
@@ -130,19 +115,11 @@ class QuoteService
         $quoteData->start_date = !empty($quoteData->start_date) ? $quoteData->start_date : null;
         $quoteData->end_date = !empty($quoteData->end_date) ? $quoteData->end_date : null;
         $quoteData->billing_interval_count ??= 0;
-        $quoteData->billing_interval_unit ??= '';
-        $quoteData->pricing_type ??= '';
+        $quoteData->billing_interval_unit ??= 'month';
+        $quoteData->pricing_type ??= 'per_invoice';
         $quoteData->price_per_invoice ??= 0;
         $quoteData->scope ??= '';
         $quoteData->custom_fields ??= null;
         $quoteData->created_at = !empty($quoteData->created_at) ?  $quoteData->created_at : date('Y-m-d H:i:s');
-    }
-
-    public function validateQuoteItems(ItemData $quoteItems): void
-    {
-        $quoteItems->item ??= [];
-        $quoteItems->description ??= [];
-        $quoteItems->quantity ??= [];
-        $quoteItems->unit_price ??= [];
     }
 }

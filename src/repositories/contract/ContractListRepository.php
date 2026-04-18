@@ -8,7 +8,7 @@ use App\data_transfer_objects\ListFilterConfig;
 use App\data_transfer_objects\ListFilterData;
 use App\repositories\BaseListRepository;
 use App\utils\enum\DocumentType;
-use App\data_transfer_objects\render_outputs\Contact\ContractListView;
+use App\render_outputs\contract\ContractListView;
 use PDO;
 
 class ContractListRepository extends BaseListRepository

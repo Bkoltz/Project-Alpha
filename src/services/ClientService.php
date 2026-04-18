@@ -33,6 +33,6 @@ class ClientService
             $cityLine
         ]);
 
-        return ['toLines' => $toLines];
+        return ['to_lines' => $toLines];
     }
 }

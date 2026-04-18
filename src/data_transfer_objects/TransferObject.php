@@ -18,8 +18,11 @@ class TransferObject
     }
 
     // Dynamically takes an array and maps them to public instance variables
-    public static function fromArray(array $data): static
+    public static function fromArray(?array $data): ?static
     {
+        if ($data == null)
+            return null;
+
         $dto = new static();
         $reflection = new ReflectionClass($dto);
 
@@ -28,7 +31,6 @@ class TransferObject
 
             if (isset($data[$name])) {
                 $value = $data[$name];
-
                 $type = $prop->getType()?->getName();
 
                 if ($type === 'array' && is_string($value)) {
@@ -38,9 +40,16 @@ class TransferObject
                     }
                 }
 
-                if ($type && class_exists($type) && is_a($type, TransferObject::class, true) && is_array($value)) {
+                if ($type && class_exists($type) && is_subclass_of($type, TransferObject::class, true) && is_array($value)) 
                     $value = $type::fromArray($value);
-                }
+                
+                $value = match ($type) {
+                    'int' => (int)$value,
+                    'float' => (int)$value,
+                    'string' => (string)$value,
+                    'bool' => (bool)$value,
+                    default => $value
+                };
 
                 $prop->setValue($dto, $value);
             }

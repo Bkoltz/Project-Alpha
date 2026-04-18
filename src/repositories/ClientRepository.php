@@ -2,7 +2,7 @@
 
 namespace App\repositories;
 
-use App\data_transfer_objects\render_outputs\ContactInfoView;
+use App\render_outputs\ContactInfoView;
 use PDO;
 
 class ClientRepository

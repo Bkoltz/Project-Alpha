@@ -2,8 +2,8 @@
 
 namespace App\repositories\contract;
 
+use App\data_transfer_objects\contract\ContractSignatures;
 use PDO;
-use App\data_transfer_objects\ContractSignatures;
 use App\record_transfer_objects\contract\create_record\BaseContractRecord;
 use App\record_transfer_objects\interfaces\InsertableRecord;
 use App\record_transfer_objects\contract\create_record\LongTermContractRecord;
@@ -11,7 +11,6 @@ use App\record_transfer_objects\contract\create_record\OnDemandContractRecord;
 use App\record_transfer_objects\contract\create_record\RegularContractRecord;
 use App\record_transfer_objects\interfaces\RetrievableRecord;
 use App\utils\enum\DocumentType;
-use App\record_transfer_objects\ContractRecord;
 use App\record_transfer_objects\ContractEditRecord;
 use App\record_transfer_objects\ItemRecord;
 
@@ -48,7 +47,7 @@ class ContractRepository
         $this->pdo = $pdo;
     }
 
-    public function createContract(DocumentType $documentType, InsertableRecord $record, ItemRecord $contractItems): int
+    public function createContract(DocumentType $documentType, InsertableRecord $record, ?ItemRecord $contractItems): int
     {
         $id = $this->insertContract($documentType, $record);
         $this->insertContractItems($id, $documentType, $contractItems);
@@ -56,7 +55,7 @@ class ContractRepository
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function updateFullContract(int $id, DocumentType $documentType,  ContractEditRecord $contractData, ItemRecord $contractItems): void
+    public function updateFullContract(int $id, DocumentType $documentType,  ContractEditRecord $contractData, ?ItemRecord $contractItems): void
     {
         $this->updateContract($id, $contractData);
         $this->updateContractItems($id, $documentType, $contractItems);
@@ -103,7 +102,7 @@ class ContractRepository
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function updateContractItems(int $id, DocumentType $documentType, ItemRecord $contractItems): void
+    public function updateContractItems(int $id, DocumentType $documentType, ?ItemRecord $contractItems): void
     {
         $sql = $this::DOCUMENT_TYPE_ITEM_REMOVE_STATEMENTS[$documentType->value];
         $this->pdo->prepare($sql)->execute([$id]);
@@ -111,7 +110,7 @@ class ContractRepository
         $this->insertContractItems($id, $documentType, $contractItems);
     }
 
-    public function insertContractItems(int $id, DocumentType $documentType, ItemRecord $contractItems): void
+    public function insertContractItems(int $id, DocumentType $documentType, ?ItemRecord $contractItems): void
     {
         $sql = $this::DOCUMENT_TYPE_ITEM_INSERT_STATEMENTS[$documentType->value];
         $stmt = $this->pdo->prepare($sql);
@@ -128,7 +127,7 @@ class ContractRepository
         $this->pdo->prepare('UPDATE ' . $table . ' SET deposit_paid=? WHERE id=?')->execute([$depositPaid, $id]);
     }
 
-    public function getStoredContractItems(int $id): ItemRecord
+    public function getStoredContractItems(int $id): ?ItemRecord
     {
         $stmt = $this->pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
         $stmt->execute([$id]);
@@ -136,7 +135,7 @@ class ContractRepository
         return ItemRecord::fromArray($stmt->fetchAll(PDO::FETCH_ASSOC) ?? []);
     }
 
-    public function getStoredSignatures(int $id): ContractSignatures
+    public function getStoredSignatures(int $id): ?ContractSignatures
     {
         $stmt = $this->pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id=?');
         $stmt->execute([$id]);

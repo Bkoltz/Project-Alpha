@@ -3,12 +3,12 @@
 namespace App\services;
 
 use App\data_transfer_objects\DepositValues;
-use App\data_transfer_objects\QuoteData;
+use App\data_transfer_objects\quote\QuoteData;
 use App\data_transfer_objects\ItemData;
 
 class FinancialService
 {
-    public static function calculateFinancialData(QuoteData $quoteData, ItemData $quoteItems): QuoteData
+    public static function calculateFinancialData(QuoteData $quoteData, ?ItemData $quoteItems): QuoteData
     {
         $discount_type = $quoteData->discount_type;
         $discount_value =  $quoteData->discount_value;
@@ -27,7 +27,7 @@ class FinancialService
         return $quoteData;
     }
 
-    public static function calculateDepositValue(DepositValues $contractData) : float
+    public static function calculateDepositValue(DepositValues $contractData): float
     {
         $depositType = $contractData->getDepositType();
         $depositValue = $contractData->getDepositAmount();
@@ -67,10 +67,13 @@ class FinancialService
         return max(0.0, $tax_percent) * max(0.0, $subtotal - $discount_amount) / 100.0;
     }
 
-    private  static function getSubtotal(ItemData $quoteItems): float
+    private  static function getSubtotal(?ItemData $quoteItems): float
     {
-        $subtotal = 0;
+        if ($quoteItems == null || $quoteItems->isNull())
+            return 0;
 
+        $subtotal = 0;
+        
         for ($i = 0; $i < count($quoteItems->item); $i++) {
             $quantity = $quoteItems->quantity[$i];
             $unitPrice = $quoteItems->unit_price[$i];

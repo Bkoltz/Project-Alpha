@@ -7,6 +7,7 @@ use App\services\quotes\QuotesDetailsService;
 use App\utils\enum\DocumentType;
 use App\Config\Renderer;
 use App\services\DocumentService;
+use App\services\quotes\QuoteService;
 
 require_once BASE_PATH . '/src/utils/csrf.php';
 
@@ -14,69 +15,56 @@ class QuotesDetailsController
 {
   private QuotesDetailsService $service;
   private DocumentService $documentService;
+  private QuoteService $quoteService;
   private Renderer $renderer;
 
   private const DOCUMENT_PATHS = [
-    DocumentType::REGULAR->value => 'partials/document_list/details/regular-quote-details.twig',
-    DocumentType::LONG_TERM->value => 'partials/document_list/details/long-term-quote-details.twig',
-    DocumentType::ON_DEMAND->value => 'partials/document_list/details/on-demand-quote-details.twig'
+    DocumentType::REGULAR->value => 'pages/quote/regular-quote-details.twig',
+    DocumentType::LONG_TERM->value => 'pages/quote/details/long-term-quote-details.twig',
+    DocumentType::ON_DEMAND->value => 'pages/quote/details/on-demand-quote-details.twig'
   ];
 
-  public function __construct(QuotesDetailsService $service, DocumentService $documentService, Renderer $renderer)
+  public function __construct(QuotesDetailsService $service, DocumentService $documentService, QuoteService $quoteService, Renderer $renderer)
   {
     $this->service = $service;
     $this->documentService = $documentService;
+    $this->quoteService = $quoteService;
     $this->renderer = $renderer;
   }
 
   public function load(): array
   {
-    $output = $this->getRenderData();
-    $file = $this::DOCUMENT_PATHS[$output['documentType']->value ?? DocumentType::REGULAR->value];
+    (int)$id = $_GET['id'] ?? 0;
 
-    return [$file, $output];
+    $output = $this->service->getRenderData($id);
+    $file = $this::DOCUMENT_PATHS[$output->document_type->value];
+
+    return [$file, $output->toArray()];
   }
 
-  public function toPDF()
+  public function toPDF(): void
   {
-    $id = $_GET['id'] ?? 0;
+    (int)$id = $_GET['id'] ?? 0;
     $appConfig = AppConfiguration::$ConfigSettings;
 
-    $output = $this->getRenderData();
-    $content = $this->renderer->getRenderHTML('pages/quote/quote-pdf.twig', $output);
+    $output = $this->service->getRenderData($id);
+    $content = $this->renderer->getRenderHTML('pages/quote/quote-pdf.twig', $output->toArray());
     $this->service->createPDF($id, $content, $appConfig);
   }
 
-  private function getRenderData(): array
+  public function reject(): void
   {
-    $requestData = $this->getRequestData();
-    return $this->service->getPageData($requestData);
-  }
+    (int)$id = $_POST['id'];
 
-  private function getRequestData(): array
-  {
-    return [
-      'csrf_token' => csrf_token(),
-      'id' => $_GET['id'] ?? 0,
-      'requestURI' => $_SERVER['REQUEST_URI'] ?? '',
-      'dateUpdated' => $_GET['date_updated'] ?? false,
-      'reenabled' => $_GET['reenabled'] ?? false,
-    ];
-  }
-
-  public function reject()
-  {
-    $id = $_POST['id'];
-
-    $this->service->rejectQuote($id);
+    $this->quoteService->rejectQuote($id);
 
     header("Location:/?page=quote/quote-list");
     exit;
   }
 
-  public function approve()
+  public function approve(): void
   {
-    $id = $_POST['id'];
+    (int)$id = $_POST['id'];
 
     $this->documentService->acceptQuoteAndCreateFullDoc($id);
 

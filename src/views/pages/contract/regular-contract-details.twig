@@ -21,7 +21,7 @@
 				<input type="hidden" name="csrf" value="{{token}}">
 				<input type="hidden" name="type" value="contract">
 				<input type="hidden" name="id" value="{{id}}">
-				<input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+				<input type="hidden" name="redirect_to" value="{{request_uri}}">
 				<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
 			</form>
 
@@ -84,7 +84,7 @@
 		<div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Contract re-enabled successfully</div>
 	{% endif %}
 
-	{% if contract.updatedAt is not empty %}
+	{% if contract.updated_at is not empty %}
 		<div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Document date updated successfully</div>
 	{% endif %}
 
@@ -92,13 +92,17 @@
 
 	{% include 'partials/document_details/display/project-details-display.twig' with {document: contract, branding: branding} %}
 	
-	{% include 'partials/document_details/display/custom-field-display.twig' with {custom_fields} %}
+	{% include 'partials/document_details/display/custom-field-display.twig' with {document: contract} %}
 
-	{% include 'partials/document_details/display/contact-information-display.twig' with {contact_information} %}
+	{% include 'partials/document_details/display/contact-information-display.twig' with {contact_information: contact_info} %}
 
-	{% include 'partials/document_details/display/scope-display.twig' with {document: contract} %}
+	{% if app_config.scope_enabled %}
+		{% include 'partials/document_details/display/scope-display.twig' with {document: contract} %}
+	{% endif %}
 
-	{% include 'partials/document_details/display/items-table-display.twig' with {items} %}
+	{% if items is not empty %}
+		{% include 'partials/document_details/display/items-table-display.twig' with {items} %}
+	{% endif %}
 
 	{% include 'partials/document_details/display/total-details-display.twig' with {document: contract} %}
 

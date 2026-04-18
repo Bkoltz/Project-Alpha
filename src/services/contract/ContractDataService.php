@@ -2,8 +2,8 @@
 
 namespace App\services\contract;
 
-use App\data_transfer_objects\render_outputs\Contact\ContractCreateView;
-use App\data_transfer_objects\render_outputs\RenderOutput;
+use App\render_outputs\contract\ContractCreateView;
+use App\render_outputs\RenderOutput;
 use App\services\CustomFieldsService;
 use App\utils\enum\DocumentType;
 

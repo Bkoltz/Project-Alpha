@@ -2,6 +2,6 @@
 
 namespace App\record_transfer_objects\interfaces;
 
-interface InsertableRecord extends BaseRecord{
+interface InsertableRecord {
     public function toInsertValues() : array;
 }

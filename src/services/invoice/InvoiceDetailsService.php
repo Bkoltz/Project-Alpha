@@ -2,10 +2,10 @@
 
 namespace App\services\invoice;
 
-use App\data_transfer_objects\render_outputs\Invoice\LongTermInvoiceDetailsView;
-use App\data_transfer_objects\render_outputs\Invoice\OnDemandInvoiceDetails;
-use App\data_transfer_objects\render_outputs\Invoice\RegularInvoiceDetails;
-use App\data_transfer_objects\render_outputs\RenderOutput;
+use App\render_outputs\invoice\LongTermInvoiceDetailsView;
+use App\render_outputs\invoice\OnDemandInvoiceDetails;
+use App\render_outputs\invoice\RegularInvoiceDetails;
+use App\render_outputs\RenderOutput;
 use App\services\BaseDetailsService;
 use App\services\ClientService;
 use App\utils\enum\DocumentType;

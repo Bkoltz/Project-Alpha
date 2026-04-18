@@ -2,10 +2,10 @@
 
 namespace App\controllers\contract;
 
+use App\data_transfer_objects\contract\ContractEditData;
+use App\data_transfer_objects\contract\ContractSignatures;
 use App\data_transfer_objects\ContractData;
-use App\data_transfer_objects\ContractEditData;
-use App\data_transfer_objects\ContractSignatures;
-use APp\data_transfer_objects\ItemData;
+use App\data_transfer_objects\ItemData;
 use App\services\contract\ContractDataService;
 use App\services\contract\ContractService;
 use App\services\DocumentService;
@@ -27,7 +27,7 @@ class ContractDataController
     public function load(): array
     {
         $output = $this->service->getCreateRenderData();
-        error_log(json_encode($output));
+        
         return ['pages\contract\contract-create.twig', $output->toArray()];
     }
 

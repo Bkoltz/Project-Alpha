@@ -32,17 +32,24 @@ class InvoiceRepository
         $this->pdo = $pdo;
     }
 
-    public function createInvoice(DocumentType $documentType, InsertableRecord $invoiceData, ItemRecord $invoiceItems): void
+    public function createInvoice(DocumentType $documentType, InsertableRecord $invoiceData, ?ItemRecord $invoiceItems = null): int 
     {
         $id = $this->insertInvoice($documentType, $invoiceData);
-        $this->insertInvoiceItems($id, $invoiceItems);
+
+        if ($invoiceItems != null)
+            $this->insertInvoiceItems($id, $invoiceItems);
+
         $this->updateInvoiceDocNumber($id);
+
+        return $id;
     }
 
-    public function updateFullInvoice(int $id, InvoiceEditRecord $invoiceData, ItemRecord $invoiceItems): void
+    public function updateFullInvoice(int $id, InvoiceEditRecord $invoiceData, ?ItemRecord $invoiceItems = null): void
     {
         $this->updateInvoice($id, $invoiceData);
-        $this->updateInvoiceItems($id, $invoiceItems);
+
+        if ($invoiceItems != null)
+            $this->updateInvoiceItems($id, $invoiceItems);
     }
 
     public function updateInvoice(int $id, InvoiceEditRecord $invoiceData): void
@@ -60,7 +67,7 @@ class InvoiceRepository
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function voidInvoice(int $id): void
+    public function voidInvoiceByContractId(int $id): void
     {
         $this->pdo->prepare("UPDATE invoices SET status='void' WHERE contract_id=?")->execute([$id]);
     }

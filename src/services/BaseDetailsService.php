@@ -3,8 +3,8 @@
 namespace App\services;
 
 use App\config\AppConfiguration;
-use App\data_transfer_objects\render_outputs\DocumentDetails\BrandingView;
-use App\data_transfer_objects\render_outputs\DocumentDetails\ContactInfoView;
+use App\render_outputs\document_details\BrandingView;
+use App\render_outputs\document_details\ContactInfoView;
 use finfo;
 
 class BaseDetailsService
@@ -39,7 +39,7 @@ class BaseDetailsService
             $cityLine
         ]);
 
-        return ['fromLines' => $fromLines, 'fromName' => $fromName, 'fromPhone' => $fromPhone, 'fromEmail' => $fromEmail];
+        return ['from_lines' => $fromLines, 'from_name' => $fromName, 'from_phone' => $fromPhone, 'from_email' => $fromEmail];
     }
 
     protected function getContactInfo(int $clientId): ContactInfoView

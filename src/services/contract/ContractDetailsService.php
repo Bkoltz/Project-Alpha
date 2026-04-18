@@ -3,11 +3,12 @@
 namespace App\services\contract;
 
 use App\config\AppConfiguration;
-use App\data_transfer_objects\render_outputs\Contact\RegularContractDetailsView;
-use App\data_transfer_objects\render_outputs\RenderOutput;
+use App\render_outputs\Contact\LongTermContractDetailsView;
+use App\render_outputs\contract\RegularContractDetailsView;
 use App\services\BaseDetailsService;
 use App\services\ClientService;
 use App\utils\enum\DocumentType;
+use App\render_outputs\RenderOutput;
 
 class ContractDetailsService extends BaseDetailsService
 {
@@ -39,10 +40,10 @@ class ContractDetailsService extends BaseDetailsService
 
         return new RegularContractDetailsView([
             'contract' => $contract,
-            'app_config' => new AppConfiguration(),
+            'app_config' => AppConfiguration::$ConfigSettings,
             'items' => $items,
             'signatures' => $signatures,
-            'contract_info' => $contactInfo,
+            'contact_info' => $contactInfo,
             'branding' => $branding
         ]);
     }
@@ -54,7 +55,7 @@ class ContractDetailsService extends BaseDetailsService
         $branding = $this->getBranding();
         $contactInfo = $this->getContactInfo($contract->client_id);
 
-        return new RegularContractDetailsView([
+        return new LongTermContractDetailsView([
             'contract' => $contract,
             'signatures' => $signatures,
             'contract_info' => $contactInfo,

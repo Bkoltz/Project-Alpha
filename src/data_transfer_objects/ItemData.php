@@ -17,4 +17,29 @@ class ItemData extends TransferObject
         return [$this->item[$row], $this->description[$row], $this->quantity[$row], $this->unit_price[$row], $this->line_total[$row]];
     }
 
+    public function validate(): void
+    {
+        if ($this == null)
+            return; 
+
+        $this->item ??= [];
+        $this->description ??= [];
+        $this->quantity ??= [];
+        $this->unit_price ??= [];
+        $this->line_total ??= [];
+    }
+
+    public function isNull(): bool
+    {
+        if (empty($item))
+            return true;
+        
+        $index = 0;
+        foreach ($this->item as $item) {
+            if (empty($item))
+                $index++;
+        }
+
+        return $index == count($this->item);
+    }
 }

@@ -7,7 +7,7 @@ use App\record_transfer_objects\MetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use PDO;
 
-require_once BASE_PATH . '/src/utils/csrf.php';
+require_once BASE_PATH . '/src/utils/project_id.php';
 
 class QuotesRepository
 {
@@ -18,35 +18,34 @@ class QuotesRepository
         $this->pdo = $pdo;
     }
 
-    public function createNewQuote(QuoteRecord $quoteData, MetaRecord $quoteMeta, ItemRecord $quoteItems)
+    public function createNewQuote(QuoteRecord $quoteData, ?ItemRecord $quoteItems)
     {
         $id = $this->insertNewQuote($quoteData);
-        $this->setQuoteItems($id, $quoteItems);
+
+        if ($quoteItems != null)
+            $this->setQuoteItems($id, $quoteItems);
+
         $this->updateDocumentNumber($id, $quoteData);
-        $this->setQuoteNotes($quoteMeta);
     }
 
-    public function editStoredQuote(int $id, QuoteRecord $quoteData, MetaRecord $quoteMeta, ItemRecord $quoteItems)
+    public function editStoredQuote(int $id, QuoteRecord $quoteData, ItemRecord $quoteItems)
     {
-        // $this->updateStoredQuote($id, $quoteData);
+        $this->updateStoredQuote($id, $quoteData);
         $this->setQuoteItems($id, $quoteItems);
-        $this->setQuoteNotes($quoteMeta);
     }
 
     public function insertNewQuote(QuoteRecord $quoteData): int
     {
-        $stmt = $this->pdo->prepare("INSERT INTO quotes (client_id, project_id, doc_number, project_code, status,discount_type, discount_value, tax_percent, subtotal, total,deposit_type, deposit_amount, fulfillment_date,is_long_term, is_on_demand,start_date, end_date,billing_interval_count, billing_interval_unit,pricing_type, price_per_invoice,scope, custom_fields, created_at) VALUES (:client_id, :project_id, :doc_number, :project_code, :status,:discount_type, :discount_value, :tax_percent, :subtotal, :total,:deposit_type, :deposit_amount, :fulfillment_date,:is_long_term, :is_on_demand,:start_date, :end_date,:billing_interval_count, :billing_interval_unit,:pricing_type, :price_per_invoice,:scope, :custom_fields, :created_at)");
+        $stmt = $this->pdo->prepare("INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, discount_type, discount_value, tax_percent, subtotal, total,deposit_type, deposit_amount, fulfillment_date,is_long_term, is_on_demand,start_date, end_date,billing_interval_count, billing_interval_unit,pricing_type, price_per_invoice,scope, custom_fields, created_at) VALUES (:client_id, :project_id, :doc_number, :project_code, :status,:discount_type, :discount_value, :tax_percent, :subtotal, :total,:deposit_type, :deposit_amount, :fulfillment_date,:is_long_term, :is_on_demand,:start_date, :end_date,:billing_interval_count, :billing_interval_unit,:pricing_type, :price_per_invoice,:scope, :custom_fields, :created_at)");
         $stmt->execute($quoteData->toArray());
-        
+
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function updateStoredQuote(int $id, array $quoteData)
+    public function updateStoredQuote(int $id, QuoteRecord $quoteData)
     {
-        $quoteData[] = $id;
         $quote = $this->pdo->prepare('UPDATE quotes SET client_id = ?, discount_type = ?, discount_value = ?, tax_percent = ?, subtotal = ?, total = ?, deposit_type = ?, deposit_amount = ?, fulfillment_date = ?, scope = ?, custom_fields = ? WHERE id = ?');
-
-        $quote->execute($quoteData);
+        $quote->execute(array_merge($quoteData->toArray(), ['id' => $id]));
     }
 
     //This function is reusable for editing and creation of new quotes
@@ -57,14 +56,14 @@ class QuotesRepository
         $stmt->execute([$id]);
 
         $qi = $this->pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-
         for ($i = 0; $i < count($quoteItems->item); $i++) {
             $row = array_merge([$id], $quoteItems->getRow($i));
             $qi->execute($row);
         }
     }
 
-    private function updateDocumentNumber(int $id, QuoteRecord $quoteData) :void {
+    private function updateDocumentNumber(int $id, QuoteRecord $quoteData): void
+    {
         if ($quoteData->is_on_demand) {
             $qMax = (int)$this->pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_on_demand=1')->fetchColumn();
         } elseif ($quoteData->is_long_term) {
@@ -75,12 +74,6 @@ class QuotesRepository
 
         $stmt = $this->pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?');
         $stmt->execute([$qMax + 1, $id]);
-    }
-
-    private function setQuoteNotes(MetaRecord $metaRecord): void
-    {
-        $up = $this->pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes, terms) VALUES (:project_code, :client_id, :notes, :terms) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes), terms=VALUES(terms)');
-        $up->execute($metaRecord->toArray());
     }
 
     public function approveQuote(int $id): void
@@ -95,7 +88,7 @@ class QuotesRepository
         $st->execute([$id]);
     }
 
-    public function getQuoteData(int $id) : QuoteRecord
+    public function getQuoteData(int $id): QuoteRecord
     {
         $stmt = $this->pdo->prepare('SELECT * FROM quotes WHERE id = ?');
         $stmt->execute([$id]);
@@ -104,13 +97,21 @@ class QuotesRepository
         return QuoteRecord::fromArray($data);
     }
 
-    public function getQuoteItems(int $id) : ItemRecord {
+    public function getQuoteItems(int $id): ?ItemRecord
+    {
         $stmt = $this->pdo->prepare('SELECT * FROM quote_items WHERE quote_id = ?');
         $stmt->execute([$id]);
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $return = ItemRecord::fromArray($data);
+        $return = !$data ? null : ItemRecord::fromArray($data);
         return $return;
+    }
+
+    public function getQuoteDate(int $id): array
+    {
+        $stmt = $this->pdo->prepare('SELECT document_date FROM quotes WHERE id=?');
+        $stmt->execute([$id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     public function getNextProjectCode(int $clientId): string

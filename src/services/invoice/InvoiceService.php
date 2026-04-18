@@ -2,20 +2,18 @@
 
 namespace App\services\invoice;
 
-use App\data_transfer_objects\InvoiceData;
+use App\config\AppConfiguration;
+use App\data_transfer_objects\invoice\InvoiceEditData;
+use App\data_transfer_objects\invoice\InvoiceData;
 use APp\data_transfer_objects\ItemData;
 use App\record_transfer_objects\InvoiceRecord;
 use App\record_transfer_objects\ItemRecord;
 use App\repositories\invoice\InvoiceRepository;
-use App\data_transfer_objects\InvoiceEditData;
-
-use App\config\AppConfiguration;
 use App\record_transfer_objects\invoice\create_record\BaseInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\LongTermInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\OnDemandInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\RegularInvoiceRecord;
 use App\record_transfer_objects\InvoiceEditRecord;
-use App\record_transfer_objects\MetaRecord;
 use App\services\MetaService;
 use App\services\ProjectService;
 use App\utils\enum\DocumentType;
@@ -27,23 +25,24 @@ class InvoiceService
     private MetaService $metaService;
     private ProjectService $projectService;
 
-    public function __construct(InvoiceRepository $repository, MetaService $metaService)
+    public function __construct(InvoiceRepository $repository, MetaService $metaService, ProjectService $projectService)
     {
         $this->repository = $repository;
         $this->metaService = $metaService;
+        $this->projectService = $projectService;
     }
 
-    public function createInvoice(DocumentType $documentType, InvoiceData $invoiceData, ItemData $invoiceItems)
+    public function createInvoice(DocumentType $documentType, InvoiceData $invoiceData, ?ItemData $invoiceItems)
     {
         $this->updateAndValidateInvoiceData($invoiceData);
-        $this->validateInvoiceItems($invoiceItems);
+        $invoiceItems?->validate();
 
         $record = $this->generateInsertRecord($documentType, $invoiceData->toArray());
-        $itemsRecord = ItemRecord::fromArray($invoiceItems->toArray());
+        $itemsRecord = ItemRecord::fromArray($invoiceItems?->toArray());
 
-        $this->repository->createInvoice($documentType, $record, $itemsRecord);
+        $id = $this->repository->createInvoice($documentType, $record, $itemsRecord);
         $this->metaService->insertProjectMetaFromArray($invoiceData->toArray()); 
-        $this->projectService->insertInvoiceProjectDoc($invoiceData->project_id, $invoiceData->id);
+        $this->projectService->insertInvoiceProjectDoc($invoiceData->project_id, $id);
     }
 
     private function generateInsertRecord(DocumentType $documentType, array $data): BaseInvoiceRecord
@@ -56,12 +55,16 @@ class InvoiceService
         };
     }
 
-    public function updateInvoice(int $id, InvoiceEditData $invoiceData, ItemData $invoiceItems): void
+    public function updateInvoice(int $id, InvoiceEditData $invoiceData, ?ItemData $invoiceItems): void
     {
         $record = InvoiceEditRecord::fromArray($invoiceData->toArray());
-        $recordItems = ItemRecord::fromArray($invoiceItems->toArray());
+        $recordItems = ItemRecord::fromArray($invoiceItems?->toArray());
 
         $this->repository->updateFullInvoice($id, $record, $recordItems);
+    }
+
+    public function updateInvoiceWithItems() : void {
+        
     }
 
     public function getInvoiceIdsFromContract(int $contractId): array
@@ -76,7 +79,7 @@ class InvoiceService
 
     public function voidInvoice(int $id): void
     {
-        $this->repository->voidInvoice($id);
+        $this->repository->voidInvoiceByContractId($id);
     }
 
     public function payDeposit(int $id, float $paidDeposit): void
@@ -116,15 +119,6 @@ class InvoiceService
         return ItemData::fromArray($storedItems->toArray());
     }
 
-    private function validateInvoiceItems(ItemData $invoiceItems): void
-    {
-        $invoiceItems->item ??= [];
-        $invoiceItems->description ??= [];
-        $invoiceItems->quantity ??= [];
-        $invoiceItems->unit_price ??= [];
-    }
-
-    // contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date
     private function validateInvoiceData(InvoiceData $invoiceData): void
     {
         $invoiceData->contract_id ?: null;

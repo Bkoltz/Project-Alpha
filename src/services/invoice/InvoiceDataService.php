@@ -2,8 +2,8 @@
 
 namespace App\services\invoice;
 
-use App\data_transfer_objects\render_outputs\Invoice\InvoiceCreateView;
-use App\data_transfer_objects\render_outputs\RenderOutput;
+use App\render_outputs\invoice\InvoiceCreateView;
+use App\render_outputs\RenderOutput;
 use App\services\CustomFieldsService;
 use App\services\invoice\InvoiceService;
 use App\utils\enum\DocumentType;

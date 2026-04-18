@@ -2,11 +2,11 @@
 
 namespace App\services\invoice;
 
-use App\data_transfer_objects\render_outputs\Invoice\InvoiceListView;
+use App\render_outputs\invoice\InvoiceListView;
 use App\utils\enum\DocumentType;
 use App\data_transfer_objects\ListFilterData;
 use App\data_transfer_objects\DisplayCountData;
-use App\data_transfer_objects\render_outputs\PageNumberView;
+use App\render_outputs\PageNumberView;
 use App\repositories\invoice\InvoiceListRepository;
 use App\services\BaseListService;
 

@@ -1,20 +1,20 @@
 <table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb">
 	<tr>
-		{% if show_deposit_info %}
+		{% if document.deposit_type != 'none' %}
 			<td style="padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
 				<div style="font-size:11px;color:#6b7280">Deposit Due:
 					<span style="font-weight:600;color:#059669">${{ deposit_due|number_format(2) }}</span>
 				</div>
 			</td>
 		{% endif %}
-		{% if show_fulfillment_date %}
+		{% if document.fulfillment_date != null %}
 			<td style="padding:8px;{{ hasCustomFields ? 'border-right:1px solid #e5e7eb;' : '' }}vertical-align:top">
 				<div style="font-size:11px;color:#6b7280">Fulfillment Date:
 					<span style="font-weight:600;color:#2563eb">{{ fulfillment_date|date('M j, Y') }}</span>
 				</div>
 			</td>
 		{% endif %}
-		{% for idx, custom_field in custom_fields %}
+		{% for idx, custom_field in document.custom_fields %}
 			<td style="padding:8px;{{ idx < custom_field|length - 1 ? 'border-right:1px solid #e5e7eb;' : '' }}vertical-align:top">
 				<div style="font-size:11px;color:#6b7280">{{ custom_field.label|e }}:
 					<span style="font-weight:600;color:#374151">{{ custom_field.value|e }}</span>

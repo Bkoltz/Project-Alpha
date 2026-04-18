@@ -2,7 +2,7 @@
 
 namespace App\controllers\invoice;
 
-use App\data_transfer_objects\render_outputs\RenderStatement;
+use App\render_outputs\RenderStatement;
 use App\services\invoice\InvoiceDetailsService;
 use App\utils\enum\DocumentType;
 
