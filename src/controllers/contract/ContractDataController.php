@@ -4,7 +4,7 @@ namespace App\controllers\contract;
 
 use App\data_transfer_objects\contract\ContractEditData;
 use App\data_transfer_objects\contract\ContractSignatures;
-use App\data_transfer_objects\ContractData;
+use App\data_transfer_objects\contract\ContractData;
 use App\data_transfer_objects\ItemData;
 use App\services\contract\ContractDataService;
 use App\services\contract\ContractService;
@@ -31,17 +31,17 @@ class ContractDataController
         return ['pages\contract\contract-create.twig', $output->toArray()];
     }
 
-    public function createContract()
+    public function create(DocumentType $documentType = DocumentType::REGULAR)
     {
         $contractData = ContractData::fromArray($_POST);
         $contractSignatures = ContractSignatures::fromArray($_POST);
         $contractItems = ItemData::fromArray($_POST);
 
-        $this->contractService->createContractWithSignatures(DocumentType::REGULAR, $contractData, $contractItems, $contractSignatures);
-        $this->documentService->createInvoiceFromContract(DocumentType::REGULAR, $contractData, $contractItems);
+        $this->contractService->createContractWithSignatures($documentType, $contractData, $contractItems, $contractSignatures);
+        $this->documentService->createInvoiceFromContract($documentType, $contractData, $contractItems);
     }
 
-    public function updateContract()
+    public function update()
     {
         $id = $_POST['id'] ?? 0;
 

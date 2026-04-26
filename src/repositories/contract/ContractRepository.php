@@ -50,12 +50,14 @@ class ContractRepository
     public function createContract(DocumentType $documentType, InsertableRecord $record, ?ItemRecord $contractItems): int
     {
         $id = $this->insertContract($documentType, $record);
-        $this->insertContractItems($id, $documentType, $contractItems);
+
+        if (!empty($contractItems))
+            $this->insertContractItems($id, $documentType, $contractItems);
 
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function updateFullContract(int $id, DocumentType $documentType,  ContractEditRecord $contractData, ?ItemRecord $contractItems): void
+    public function updateFullContract(int $id, DocumentType $documentType, ContractEditRecord $contractData, ?ItemRecord $contractItems): void
     {
         $this->updateContract($id, $contractData);
         $this->updateContractItems($id, $documentType, $contractItems);
@@ -102,7 +104,7 @@ class ContractRepository
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function updateContractItems(int $id, DocumentType $documentType, ?ItemRecord $contractItems): void
+    public function updateContractItems(int $id, DocumentType $documentType, ItemRecord $contractItems): void
     {
         $sql = $this::DOCUMENT_TYPE_ITEM_REMOVE_STATEMENTS[$documentType->value];
         $this->pdo->prepare($sql)->execute([$id]);
@@ -110,12 +112,12 @@ class ContractRepository
         $this->insertContractItems($id, $documentType, $contractItems);
     }
 
-    public function insertContractItems(int $id, DocumentType $documentType, ?ItemRecord $contractItems): void
+    public function insertContractItems(int $id, DocumentType $documentType, ItemRecord $contractItems): void
     {
         $sql = $this::DOCUMENT_TYPE_ITEM_INSERT_STATEMENTS[$documentType->value];
         $stmt = $this->pdo->prepare($sql);
 
-        for ($i = 0; $i > 0; $i++) {
+        for ($i = 0; $i < count($contractItems->item); $i++) {
             $row = array_merge([$id], $contractItems->getRow($i));
             $stmt->execute($row);
         }
@@ -131,8 +133,8 @@ class ContractRepository
     {
         $stmt = $this->pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
         $stmt->execute([$id]);
-
-        return ItemRecord::fromArray($stmt->fetchAll(PDO::FETCH_ASSOC) ?? []);
+        
+        return ItemRecord::fromRepoArray($stmt->fetchAll(PDO::FETCH_ASSOC) ?? []);
     }
 
     public function getStoredSignatures(int $id): ?ContractSignatures

@@ -12,9 +12,9 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
     wrap.innerHTML = `
     <input id="${itemId}"  placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalc()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
-    <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalc()">${desc}</textarea>
-    <input  type="number" step="0.01" min="0" name="item_qty[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalc()">
-    <input id="${priceId}"  type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalc()">
+    <textarea id="${descId}" placeholder="Description (optional)" name="description[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalc()">${desc}</textarea>
+    <input  type="number" step="0.01" min="0" name="quantity[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalc()">
+    <input id="${priceId}"  type="number" step="0.01" min="0" name="unit_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalc()">
     <button type="button" onclick="this.parentElement.remove();recalc()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
     document.getElementById('items').appendChild(wrap);
@@ -57,16 +57,16 @@ function recalc() {
     if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
         subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
     } else {
-        var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
-        var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
+        var qtys = Array.from(document.querySelectorAll('[name=\"quantity[]\"]')).map(e => parseFloat(e.value) || 0);
+        var prices = Array.from(document.querySelectorAll('[name=\"price[]\"]')).map(e => parseFloat(e.value) || 0);
         for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
     }
 
     // For fixed_total pricing, calculate price per invoice
     if (isLongTerm && pricingType === 'fixed_total') {
         var invoiceCount = parseInt(document.getElementById('invoiceCountInput').value) || 1;
-        var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
-        var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
+        var qtys = Array.from(document.querySelectorAll('[name=\"quantity[]\"]')).map(e => parseFloat(e.value) || 0);
+        var prices = Array.from(document.querySelectorAll('[name=\"price[]\"]')).map(e => parseFloat(e.value) || 0);
         subtotal = 0;
         for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
     }

@@ -38,7 +38,7 @@ class QuotesDetailsController
 
     $output = $this->service->getRenderData($id);
     $file = $this::DOCUMENT_PATHS[$output->document_type->value];
-
+    
     return [$file, $output->toArray()];
   }
 

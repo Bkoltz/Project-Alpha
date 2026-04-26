@@ -7,7 +7,6 @@ use App\record_transfer_objects\MetaRecord;
 use App\record_transfer_objects\QuoteRecord;
 use PDO;
 
-require_once BASE_PATH . '/src/utils/project_id.php';
 
 class QuotesRepository
 {
@@ -18,7 +17,7 @@ class QuotesRepository
         $this->pdo = $pdo;
     }
 
-    public function createNewQuote(QuoteRecord $quoteData, ?ItemRecord $quoteItems)
+    public function createNewQuote(QuoteRecord $quoteData, ?ItemRecord $quoteItems = null)
     {
         $id = $this->insertNewQuote($quoteData);
 
@@ -101,10 +100,9 @@ class QuotesRepository
     {
         $stmt = $this->pdo->prepare('SELECT * FROM quote_items WHERE quote_id = ?');
         $stmt->execute([$id]);
-        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $return = !$data ? null : ItemRecord::fromArray($data);
-        return $return;
+        return ItemRecord::fromRepoArray(!$data ? null : $data);
     }
 
     public function getQuoteDate(int $id): array
@@ -112,10 +110,5 @@ class QuotesRepository
         $stmt = $this->pdo->prepare('SELECT document_date FROM quotes WHERE id=?');
         $stmt->execute([$id]);
         return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
-    public function getNextProjectCode(int $clientId): string
-    {
-        return project_next_code($this->pdo, $clientId);
     }
 }

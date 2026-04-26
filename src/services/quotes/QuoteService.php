@@ -7,23 +7,27 @@ use App\data_transfer_objects\quote\QuoteData;
 use App\record_transfer_objects\ItemRecord;
 use App\record_transfer_objects\QuoteRecord;
 use App\repositories\quotes\QuotesRepository;
+use App\services\DateValidator;
 use App\services\FinancialService;
+use App\services\ProjectService;
 use App\utils\enum\DocumentType;
 
 class QuoteService
 {
     private QuotesRepository $repository;
+    private ProjectService $projectService;
 
-    public function __construct(QuotesRepository $repository)
+    public function __construct(QuotesRepository $repository, ProjectService $projectService)
     {
         $this->repository = $repository;
+        $this->projectService = $projectService;
     }
 
     public function createQuote(QuoteData $quoteData, ItemData $quoteItems)
     {
-        $this->updateQuoteData($quoteData, $quoteItems);
+        $this->validateAndUpdateQuoteData($quoteData, $quoteItems);
         $quoteItems?->validate();
-
+        
         $record = QuoteRecord::fromArray($quoteData->toArray());
         $recordItems = $quoteItems->isNull() ? null : ItemRecord::fromArray($quoteItems->toArray());
 
@@ -70,25 +74,22 @@ class QuoteService
     public function getStoredQuoteItems(int $id): ?ItemData
     {
         $data = $this->repository->getQuoteItems($id);
-        return !$data ? null : ItemData::fromArray($data->toArray());
+        return ItemData::fromArray($data?->toArray());
     }
 
     public function getQuoteDate(int $id) : array {
         return $this->repository->getQuoteDate($id);
     }
 
-    private function updateQuoteData(QuoteData $quoteData, ItemData $quoteItems): void
+    private function validateAndUpdateQuoteData(QuoteData $quoteData, ItemData $quoteItems): void
     {
         $this->validateQuoteData($quoteData);
-        $this->updateProjectCode($quoteData);
         $this->updateDocumentType($quoteData);
 
-        FinancialService::calculateFinancialData($quoteData, $quoteItems);
-    }
+        $quoteData->project_code ??= $this->projectService->getNextProjectCode($quoteData->client_id);
+        $quoteData->created_at = date('Y-m-d H:i:s');
 
-    private function updateProjectCode(QuoteData $quoteData): void
-    {
-        $quoteData->project_code ??= $this->repository->getNextProjectCode($quoteData->client_id);
+        FinancialService::calculateFinancialData($quoteData, $quoteItems);
     }
 
     private function updateDocumentType(QuoteData $quoteData): void
@@ -109,17 +110,17 @@ class QuoteService
         $quoteData->total ??= 0;
         $quoteData->deposit_type ??= 'none';
         $quoteData->deposit_amount ??= 0;
-        $quoteData->fulfillment_date = !empty($quoteData->fulfillment_date) ?  $quoteData->fulfillment_date : null;
+        $quoteData->fulfillment_date = DateValidator::validateDate($quoteData->fulfillment_date);
         $quoteData->is_long_term = !empty($quoteData->is_long_term) ? 1 : 0;
         $quoteData->is_on_demand = !empty($quoteData->is_on_demand) ? 1 : 0;
-        $quoteData->start_date = !empty($quoteData->start_date) ? $quoteData->start_date : null;
-        $quoteData->end_date = !empty($quoteData->end_date) ? $quoteData->end_date : null;
+        $quoteData->start_date = DateValidator::validateDate($quoteData->start_date);
+        $quoteData->end_date = DateValidator::validateDate($quoteData->end_date);
         $quoteData->billing_interval_count ??= 0;
         $quoteData->billing_interval_unit ??= 'month';
         $quoteData->pricing_type ??= 'per_invoice';
         $quoteData->price_per_invoice ??= 0;
         $quoteData->scope ??= '';
         $quoteData->custom_fields ??= null;
-        $quoteData->created_at = !empty($quoteData->created_at) ?  $quoteData->created_at : date('Y-m-d H:i:s');
+        $quoteData->created_at = DateValidator::validateDate($quoteData->created_at);
     }
 }

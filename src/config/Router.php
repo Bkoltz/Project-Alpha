@@ -60,7 +60,7 @@ class Router
             'contract/contract-deny' => [ContractDetailsController::class, 'deny'],
             'contract/contract-pdf' => [ContractDetailsController::class, ''],
             'contract/contract-sign' => [ContractDetailsController::class, 'signContract'],
-            'contracts-create' => [ContractDataController::class, 'create', DocumentType::REGULAR],
+            'contract/contracts-create' => [ContractDataController::class, 'create', DocumentType::REGULAR],
             'contract/long-term-contracts-create' => [ContractListController::class, 'create', DocumentType::LONG_TERM],
             'contract/on-demand-contracts-create' => [ContractListController::class, 'create', DocumentType::ON_DEMAND],
 

@@ -3,9 +3,12 @@
 namespace App\data_transfer_objects\contract;
 
 use App\data_transfer_objects\TransferObject;
+use App\utils\enum\DocumentType;
 
 class ContractData extends TransferObject
 {
+    public ?DocumentType $documentType = null;
+    
     public ?int $id = null;
     public ?int $quote_id = null;
     public ?int $client_id = null;

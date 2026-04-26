@@ -4,7 +4,6 @@ namespace App\services\contract;
 
 use App\data_transfer_objects\contract\ContractEditData;
 use App\data_transfer_objects\contract\ContractSignatures;
-use App\data_transfer_objects\DepositValues;
 use App\data_transfer_objects\ItemData;
 use App\data_transfer_objects\contract\ContractData;
 use App\record_transfer_objects\interfaces\InsertableRecord;
@@ -14,17 +13,21 @@ use App\record_transfer_objects\contract\create_record\OnDemandContractRecord;
 use App\record_transfer_objects\ContractEditRecord;
 use App\record_transfer_objects\ItemRecord;
 use App\repositories\contract\ContractRepository;
+use App\services\DateValidator;
 use App\services\FinancialService;
+use App\services\ProjectService;
 use App\utils\enum\DocumentType;
 use Exception;
 
 class ContractService
 {
     private ContractRepository $repository;
+    private ProjectService $projectService;
 
-    public function __construct(ContractRepository $repository)
+    public function __construct(ContractRepository $repository, ProjectService $projectService)
     {
         $this->repository = $repository;
+        $this->projectService = $projectService;
     }
 
     public function createContract(DocumentType $documentType, ContractData $contractData, ?ItemData $contractItems): int
@@ -38,7 +41,8 @@ class ContractService
         return $this->repository->createContract($documentType, $record, $recordItems);
     }
 
-    private function generateInsertRecord(DocumentType $documentType, array $data) : InsertableRecord {
+    private function generateInsertRecord(DocumentType $documentType, array $data): InsertableRecord
+    {
         return match ($documentType) {
             DocumentType::REGULAR => RegularContractRecord::fromArray($data),
             DocumentType::ON_DEMAND => OnDemandContractRecord::fromArray($data),
@@ -81,17 +85,20 @@ class ContractService
         $this->repository->updateContractSignatures($id, $contractSignatures);
     }
 
-    public function getStoredContractItems(int $id) : ?ItemData {
+    public function getStoredContractItems(int $id): ?ItemData
+    {
         $items = $this->repository->getStoredContractItems($id);
         return ItemData::fromArray($items?->toArray());
     }
 
-    public function getStoredContract(int $id, DocumentType $documentType) : ContractData {
+    public function getStoredContract(int $id, DocumentType $documentType): ContractData
+    {
         $storedContract = $this->repository->getStoredContract($id, $documentType);
         return ContractData::fromArray($storedContract->toArray());
     }
 
-    public function getStoredSignatures(int $id) : ?ContractSignatures {
+    public function getStoredSignatures(int $id): ?ContractSignatures
+    {
         return $this->repository->getStoredSignatures($id);
     }
 
@@ -138,24 +145,31 @@ class ContractService
         $contractData->deposit_type ??= 'none';
         $contractData->deposit_amount ??= 0;
         $contractData->deposit_paid ??= 0;
+        $contractData->fulfillment_date = DateValidator::validateDate($contractData->fulfillment_date);
     }
 
-    private function updateAndValidateContractData(ContractData $contractData) :void {
+    private function updateAndValidateContractData(ContractData $contractData): void
+    {
         $this->validateContractData($contractData);
+        $this->updateContractData($contractData);
+    }
 
+    private function updateContractData(ContractData $contractData): void {
         $contractData->status = 'pending';
+        $contractData->created_at = date('Y-m-d H:i:s');
+        $contractData->project_code = $this->projectService->getNextProjectCode($contractData->client_id);
     }
 
     /* 
         Status related methods
     */
 
-    public function activateContract(int $id, DocumentType $documentType): void 
+    public function activateContract(int $id, DocumentType $documentType): void
     {
         $this->repository->activateContract($id, $documentType);
     }
 
-    public function pauseContract(int $id, DocumentType $documentType): void 
+    public function pauseContract(int $id, DocumentType $documentType): void
     {
         $this->repository->pauseContract($id, $documentType);
     }
