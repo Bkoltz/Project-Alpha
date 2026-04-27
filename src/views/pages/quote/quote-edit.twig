@@ -9,9 +9,7 @@
 		<input type="hidden" name="csrf" value="{{token}}">
 		<input type="hidden" name="id" value="{{quote.id}}">
 		<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-			<label>
-				{% include "partials/client_components/client_input_autocomplete.twig" with {client_name: quote.client_name, client_id: quote.client_id} %}
-			</label>
+			{% include 'partials/client_components/client-input-autocomplete.twig' with {document: quote} %}
 		</label>
 		<label>
 			<div>Tax (%)</div>
@@ -31,7 +29,7 @@
 		</label>
 	</div>
 
-	{% include "partials/custom_fields/custom_field.twig" with custom_fields %}
+	{% include "partials/document_details/input/custom-field-input.twig" with custom_fields %}
 
 	<div>
 		<div style="font-weight:600;margin-bottom:8px">Items</div>
@@ -39,17 +37,15 @@
 		<button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
 	</div>
 
-	{% include 'partials/document_detials/input/scope-input.twig' with {app_config: app_config, document: quote} %}
+	{% include 'partials/document_details/input/scope-input.twig' with {app_config: app_config, document: quote} %}
 
-	{% include 'partials/document_detials/input/notes-input.twig' with {document: quote} %}
+	{% include 'partials/document_details/input/notes-input.twig' with {document: quote} %}
 
-	{% include 'partials/document_detials/input/terms-input.twig' with {document: quote} %}
+	{% include 'partials/document_details/input/terms-input.twig' with {document: quote} %}
 
-	{% include 'partials/document_detials/input/total-input.twig' with {document: quote} %}
+	{% include 'partials/document_details/input/total-input.twig' with {document: quote} %}
 
-	<div>
-		<button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Quote</button>
-	</div>
+	<button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Quote</button>
 </section>
 
 <script src="js/quotes-edit-logic.js" defer></script>

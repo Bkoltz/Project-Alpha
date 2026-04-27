@@ -20,8 +20,8 @@ class QuotesDetailsController
 
   private const DOCUMENT_PATHS = [
     DocumentType::REGULAR->value => 'pages/quote/regular-quote-details.twig',
-    DocumentType::LONG_TERM->value => 'pages/quote/details/long-term-quote-details.twig',
-    DocumentType::ON_DEMAND->value => 'pages/quote/details/on-demand-quote-details.twig'
+    DocumentType::LONG_TERM->value => 'pages/quote/long-term-quote-details.twig',
+    DocumentType::ON_DEMAND->value => 'pages/quote/on-demand-quote-details.twig'
   ];
 
   public function __construct(QuotesDetailsService $service, DocumentService $documentService, QuoteService $quoteService, Renderer $renderer)
@@ -38,7 +38,7 @@ class QuotesDetailsController
 
     $output = $this->service->getRenderData($id);
     $file = $this::DOCUMENT_PATHS[$output->document_type->value];
-    
+
     return [$file, $output->toArray()];
   }
 
@@ -64,7 +64,7 @@ class QuotesDetailsController
 
   public function approve(): void
   {
-    (int)$id = $_POST['id'];
+    (int)$id = $_POST['id'] ?? 0;
 
     $this->documentService->acceptQuoteAndCreateFullDoc($id);
 

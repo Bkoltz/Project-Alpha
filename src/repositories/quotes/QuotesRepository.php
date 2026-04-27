@@ -20,7 +20,7 @@ class QuotesRepository
     public function createNewQuote(QuoteRecord $quoteData, ?ItemRecord $quoteItems = null)
     {
         $id = $this->insertNewQuote($quoteData);
-
+        
         if ($quoteItems != null)
             $this->setQuoteItems($id, $quoteItems);
 

@@ -29,13 +29,13 @@ class PageButtonData extends TransferObject
     public ?int $page_count = null;
 }
 
-class ListFilterConfig
+class ListFilterConfig extends TransferObject
 {
     public ?array $filters = null;
-    public ?array $documentTypeFilters = null;
+    public ?array $document_type_filters = null;
 }
 
-class ListFilterStatement
+class ListFilterStatement extends TransferObject
 {
     public string $sql = '';
     public array $values = [];

@@ -2,9 +2,14 @@
 
 namespace App\repositories\quotes;
 
+use App\data_transfer_objects\DisplayCountData;
+use App\data_transfer_objects\ListFilterConfig;
+use App\data_transfer_objects\ListFilterData;
+use App\repositories\BaseListRepository;
 use PDO;
+use App\utils\enum\DocumentType;
 
-class QuotesListRepository
+class QuotesListRepository extends BaseListRepository
 {
     private PDO $pdo;
 
@@ -36,13 +41,15 @@ class QuotesListRepository
     ];
 
     private const DOCUMENT_TYPE_FILTERS = [
-        'on_demand' => '(COALESCE(q.is_long_term, 0) = 0 AND q.is_on_demand = 1)',
-        'long_term' => '(q.is_long_term = 1 AND COALESCE(q.is_on_demand, 0) = 0)',
+        DocumentType::REGULAR->value => '(COALESCE(q.is_long_term, 0) = 0 AND COALESCE(q.is_on_demand, 0) = 0)',
+        DocumentType::ON_DEMAND->value => '(COALESCE(q.is_long_term, 0) = 0 AND q.is_on_demand = 1)',
+        DocumentType::LONG_TERM->value => '(q.is_long_term = 1 AND COALESCE(q.is_on_demand, 0) = 0)',
     ];
 
     private const DOCUMENT_TYPE_VALUES = [
-        'on_demand' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.start_date', 'q.end_date', 'q.price_per_invoice', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id'],
-        'long_term' => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.created_at', 'q.start_date', 'q.end_date', 'q.billing_interval_count', 'q.billing_interval_unit', 'c.name AS client_name', 'c.id AS client_id']
+        DocumentType::REGULAR->value =>['q.id', 'q.status', 'q.total', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id', 'q.doc_number', 'q.project_code'],
+        DocumentType::ON_DEMAND->value => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.start_date', 'q.end_date', 'q.price_per_invoice', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id'],
+        DocumentType::LONG_TERM->value => ['q.id', 'q.doc_number', 'q.project_code', 'q.status', 'q.total', 'q.created_at', 'q.start_date', 'q.end_date', 'q.billing_interval_count', 'q.billing_interval_unit', 'c.name AS client_name', 'c.id AS client_id']
     ];
 
     public function __construct(PDO $pdo)
@@ -50,68 +57,40 @@ class QuotesListRepository
         $this->pdo = $pdo;
     }
 
-    public function getDisplayData(string $documentType, array $filterValues, array $countData): array
+    public function getQuoteRows(DocumentType $documentType, ListFilterData $filterData, DisplayCountData $pageCountData): array
     {
-        $filter = $this->createFilteredStatement($documentType, $filterValues);
+        $filterConfig = new ListFilterConfig([
+            'filters' => self::FILTERS,
+            'document_type_filters' => self::DOCUMENT_TYPE_FILTERS
+        ]);
 
-        $quoteRows = $this->getRawQuotes($documentType, $filter, $countData['perPage'], $countData['offset']);
-        $totalQuotes = $this->getTotalQuotes($filter);
+        $filterStatement = $this->createFilteredStatement($documentType, $filterData, $filterConfig);
 
-        return ['rows' => $quoteRows, 'quotesCount' => $totalQuotes];
-    }
-
-    public function getClient(int $clientId): array
-    {
-        $stmt = $this->pdo->prepare('SELECT * FROM clients WHERE id = ?');
-        $stmt->execute([$clientId]);
-
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
-    private function createFilteredStatement(string $documentType, array $filterValues): array
-    {
-        $where[] = self::DOCUMENT_TYPE_FILTERS[$documentType] ?? '((q.is_long_term = 0 OR q.is_long_term IS NULL) AND (q.is_on_demand = 0 OR q.is_on_demand IS NULL))'; // Default to regular quotes becuase I dont know
-        $values = [];
-
-        foreach ($filterValues as $key => $value) {
-            if (!isset(self::FILTERS[$key]))
-                continue;
-
-            $filter = self::FILTERS[$key];
-
-            if ($value === $filter['ignore'] || empty($value))
-                continue;
-
-            $where[] = $filter['sql'];
-            $values[] = $value;
-        }
-
-        $where = ' WHERE ' . implode(' AND ', $where);
-
-        return ['statement' => $where, 'values' => $values];
-    }
-
-    private function getRawQuotes(string $documentType, array $filter, int $amount, int $offset): array
-    {
-        $columns = $this::DOCUMENT_TYPE_VALUES[$documentType] ?? ['q.id', 'q.status', 'q.total', 'q.created_at', 'c.name AS client_name', 'c.id AS client_id', 'q.doc_number', 'q.project_code']; // Same thing here, default to regular quotes if it aint found
+        $columns = $this::DOCUMENT_TYPE_VALUES[$documentType->value]; 
         $select = implode(', ', $columns);
 
         $sql = "SELECT $select FROM quotes q JOIN clients c ON c.id=q.client_id";
-        $sql .= $filter['statement'];
-        $sql .= " ORDER BY q.created_at DESC LIMIT $amount OFFSET $offset";
-        $st = $this->pdo->prepare($sql);
+        $sql .= $filterStatement->sql;
+        $sql .= " ORDER BY q.created_at DESC LIMIT $pageCountData->per_page OFFSET $pageCountData->offset";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($filterStatement->values);
 
-        $st->execute($filter['values']);
-
-        return $st->fetchAll();
+        return $stmt->fetchAll();
     }
 
-    private function getTotalQuotes(array $filter): int
+    public function getQuoteCount(DocumentType $documentType, ListFilterData $filterData): int
     {
-        $sqlCount = 'SELECT COUNT(*) FROM quotes q' . $filter['statement'];
+        $filterConfig = new ListFilterConfig([
+            'filters' => self::FILTERS,
+            'document_type_filters' => self::DOCUMENT_TYPE_FILTERS
+        ]);
 
+        $filterStatement = $this->createFilteredStatement($documentType, $filterData, $filterConfig);
+
+       
+        $sqlCount = 'SELECT COUNT(*) FROM quotes q' . $filterStatement->sql;
         $stc = $this->pdo->prepare($sqlCount);
-        $stc->execute($filter['values']);
+        $stc->execute($filterStatement->values);
 
         return (int)$stc->fetchColumn();
     }

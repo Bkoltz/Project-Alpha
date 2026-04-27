@@ -35,9 +35,8 @@ class CustomFieldsService
     private function decodeJsonOptions(array &$customFields): void
     {
         foreach ($customFields as &$field) {
-            if (isset($field['field_options'])) {
+            if (isset($field['field_options']))
                 $field['field_options'] = json_decode($field['field_options'], true);
-            }
         }
     }
 
@@ -45,7 +44,7 @@ class CustomFieldsService
     {
         $customFields = $this->getCustomFields($documentType);
 
-        return new CustomFieldDisplayView();
+        return new CustomFieldDisplayView(['custom_fields' => $customFields]);
     }
 
     public function getCustomFields(DocumentType $documentType): array

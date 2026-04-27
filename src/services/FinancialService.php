@@ -8,23 +8,12 @@ use App\data_transfer_objects\ItemData;
 
 class FinancialService
 {
-    public static function calculateFinancialData(QuoteData $quoteData, ?ItemData $quoteItems): QuoteData
+    public static function updateQuoteFinancialData(QuoteData $quoteData, ?ItemData $quoteItems): void
     {
-        $discount_type = $quoteData->discount_type;
-        $discount_value =  $quoteData->discount_value;
-        $tax_percent = $quoteData->tax_percent;
-
-        $subtotal = FinancialService::getSubtotal($quoteItems);
-        $discount_amount = FinancialService::getDiscountAmount($discount_type, $discount_value, $subtotal);
-        $tax_amount = FinancialService::getTaxAmount($subtotal, $discount_amount, $tax_percent);
-        $total = FinancialService::getTotal($subtotal, $discount_amount, $tax_amount);
-
-        $quoteData->subtotal = $subtotal;
-        $quoteData->discount_value = $discount_amount;
-        $quoteData->tax_percent = $tax_amount;
-        $quoteData->total = $total;
-
-        return $quoteData;
+        FinancialService::getSubtotal($quoteData, $quoteItems);
+        FinancialService::getDiscountAmount($quoteData);
+        FinancialService::getTaxAmount($quoteData);
+        FinancialService::getTotal($quoteData);
     }
 
     public static function calculateDepositValue(DepositValues $contractData): float
@@ -44,44 +33,55 @@ class FinancialService
         return $depositCalc;
     }
 
-    private static function getDiscountAmount(string $discount_type, float $discount_value, float $subtotal): float
+    private static function getDiscountAmount(QuoteData $quoteData): float
     {
-        $discount_amount = 0.0;
+        $value = match ($quoteData->discount_type) {
+            'percent' => min(100.0, $quoteData->discount_value) * $quoteData->subtotal / 100.0,
+            'fixed' => $quoteData->discount_value,
+            default => 0.0
+        };
 
-        if ($discount_type === 'percent') {
-            $discount_amount = max(0.0, min(100.0, $discount_value)) * $subtotal / 100.0;
-        } elseif ($discount_type === 'fixed') {
-            $discount_amount = max(0.0, $discount_value);
-        }
-
-        return $discount_amount;
+        $quoteData->discount_value = max(0.0, $value);
+        return $quoteData->discount_value;
     }
 
-    private static function getTotal(float $subtotal, float $discount_amount, float $tax_amount): float
+    private static function getTotal(QuoteData $quoteData): float
     {
-        return max(0.0, $subtotal - $discount_amount + $tax_amount);
+        $value = match ($quoteData->doc_type) {
+            'regular' => $quoteData->subtotal,
+            'long-term' => $quoteData->price_per_invoice,
+            'on-demand' => $quoteData->pricing_type === 'per_invoice' ? $quoteData->price_per_invoice : $quoteData->subtotal,
+            default => 0.0
+        };
+
+        $value -= $quoteData->discount_value + $quoteData->tax_percent;
+        $quoteData->total = max(0.0, $value);
+        return $quoteData->total;
     }
 
-    private static function getTaxAmount(float $subtotal, float $discount_amount, float $tax_percent): float
+    private static function getTaxAmount(QuoteData $quoteData): float
     {
-        return max(0.0, $tax_percent) * max(0.0, $subtotal - $discount_amount) / 100.0;
+        $quoteData->tax_percent = max(0.0, $quoteData->tax_percent) * max(0.0, $quoteData->subtotal - $quoteData->discount_value) / 100.0;
+        $quoteData->tax_percent = $quoteData->tax_percent;
+
+        return $quoteData->tax_percent;
     }
 
-    private  static function getSubtotal(?ItemData $quoteItems): float
+    private  static function getSubtotal(QuoteData $quoteData, ?ItemData $quoteItems): float
     {
-        if ($quoteItems == null || $quoteItems->isNull())
+        if ($quoteItems === null || $quoteItems->isNull())
             return 0;
 
-        $subtotal = 0;
+        $quoteData->subtotal = 0;
         
         for ($i = 0; $i < count($quoteItems->item); $i++) {
             $quantity = $quoteItems->quantity[$i];
             $unitPrice = $quoteItems->unit_price[$i];
 
-            $subtotal += $quantity * $unitPrice;
+            $quoteData->subtotal += $quantity * $unitPrice;
             $quoteItems->line_total[$i] = $quantity * $unitPrice;
         }
 
-        return $subtotal;
+        return $quoteData->subtotal;
     }
 }

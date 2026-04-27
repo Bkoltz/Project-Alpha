@@ -144,7 +144,8 @@ function toggleDocTypeFields() {
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
 
-    document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
+    document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
+    document.getElementById('onDemandFields').style.display = isOnDemand ? 'block' : 'none';
 
     if (isLongTerm || isOnDemand) {
         // Set start date to today when first enabling LT or On-Demand
@@ -212,7 +213,7 @@ function togglePricingFields() {
         return;
     }
 
-    var pricingType = document.querySelector('input[name="lt_pricing_type"]:checked').value;
+    var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
 
     if (pricingType === 'per_invoice') {
         // Recurring amount - hide deposit and fulfillment
@@ -220,9 +221,10 @@ function togglePricingFields() {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
         });
+
         document.getElementById('perInvoiceField').style.display = 'block';
         document.getElementById('fixedTotalFields').style.display = 'none';
-        document.getElementById('items').parentElement.style.display = 'none';
+        document.getElementById('items').parentElement.style.display = 'block';
         document.getElementById('billingIntervalFields').style.display = 'grid';
     } else if (pricingType === 'on_demand') {
         // On-demand - show deposits, hide fulfillment and billing interval
@@ -230,11 +232,14 @@ function togglePricingFields() {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
         });
+
         const fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
-        if (fulfillmentLabel) fulfillmentLabel.style.display = 'none';
+        if (fulfillmentLabel) 
+            fulfillmentLabel.style.display = 'none';
+
         document.getElementById('perInvoiceField').style.display = 'block';
         document.getElementById('fixedTotalFields').style.display = 'none';
-        document.getElementById('items').parentElement.style.display = 'none';
+        document.getElementById('items').parentElement.style.display = 'block';
         document.getElementById('billingIntervalFields').style.display = 'none';
     } else {
         // Fixed total - show deposit and fulfillment
@@ -250,6 +255,16 @@ function togglePricingFields() {
         document.getElementById('items').parentElement.style.display = 'block';
         document.getElementById('billingIntervalFields').style.display = 'grid';
     }
+
+    recalc();
+}
+
+function toggleOnDemandPricingMode() {
+   const mode = document.querySelector('input[name="pricing_mode"]:checked')?.value;
+    console.log("e");
+    document.getElementById('itemInput').style.display = mode === 'items' ? 'block' : 'none';
+    document.getElementById('onDemandFlatAmount').style.display = mode === 'flat' ? 'block' : 'none';
+
     recalc();
 }
 
@@ -340,5 +355,6 @@ document.getElementById('createProjectBtn').addEventListener('click', function (
             alert('Failed to create project.');
         });
 });
+
 
 document.getElementById('quoteForm').addEventListener('submit', function (e) { if (!cid.value) { e.preventDefault(); alert('Please select a client from suggestions.'); } });

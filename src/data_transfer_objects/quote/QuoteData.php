@@ -8,6 +8,7 @@ class QuoteData extends TransferObject
 {
     public ?int $id = null;
     public ?int $client_id = null;
+    public ?string $client_name = null;
     public ?int $project_id = null;
     public ?string $doc_number = null;
     public ?string $project_code = null;

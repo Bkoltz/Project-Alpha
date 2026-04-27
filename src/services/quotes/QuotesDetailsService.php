@@ -3,17 +3,13 @@
 namespace App\services\quotes;
 
 use App\config\AppConfiguration;
-use App\data_transfer_objects\ItemData;
-use App\utils\enum\DocumentType;
 use App\data_transfer_objects\quote\QuoteData;
 use App\render_outputs\quote\QuoteDetailsView;
 use App\services\BaseDetailsService;
 use App\services\ClientService;
 use App\services\CustomFieldsService;
-use App\services\FinancialService;
 use Dompdf\Dompdf;
 use Dompdf\Options;
-use finfo;
 
 class QuotesDetailsService extends BaseDetailsService
 {
@@ -43,9 +39,8 @@ class QuotesDetailsService extends BaseDetailsService
         $customFields = $this->customFieldsService->getCustomFieldDisplayView($documentType);
         $colors = $this->getStatusColors($quote);
 
-        FinancialService::calculateFinancialData($quote, $quoteItems);
-
         return new QuoteDetailsView([
+            'id' => $id,
             'quote' => $quote,
             'items' => $quoteItems,
             'document_type' => $documentType,

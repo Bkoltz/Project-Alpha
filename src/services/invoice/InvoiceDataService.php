@@ -24,8 +24,6 @@ class InvoiceDataService
         $customFields = $this->customFieldService->getCustomFieldInputView(DocumentType::REGULAR);
         $output =  new InvoiceCreateView(['custom_fields' => $customFields]);
         
-        echo json_encode($output);
-
         return $output;
     }
 

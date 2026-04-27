@@ -6,12 +6,12 @@ use DateTime;
 
 class DateValidator {
     // Returns a valid date or null
-    public static function validateDate(?string $date): ?string {
+    public static function validateDate(?string $date, string $format = 'Y-m-d H:i:s'): ?string {
         if (empty($date)) 
             return null;
 
-        $formattedDate = DateTime::createFromFormat('Y-m-d H:i:s', $date);
-        return ($formattedDate && $formattedDate->format('Y-m-d H:i:s') === $date) ? $formattedDate->format('Y-m-d H:i:s') : null;
+        $formattedDate = DateTime::createFromFormat($format, $date);
+        return ($formattedDate && $formattedDate->format($format) === $date) ? $formattedDate->format($format) : null;
     }
 
     public static function getNewDate() : string {

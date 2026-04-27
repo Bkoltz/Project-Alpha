@@ -1,0 +1,44 @@
+<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06);margin-top:16px">
+	<tr style="text-align:left;border-bottom:1px solid #eee;background:#f9fafb">
+		<th colspan="4" style="padding:12px;font-size:15px">{{ document.pricing_type == 'per_invoice' ? 'Recurring Amount (per invoice)' : 'Fixed Total (billed over time)'}}</th>
+	</tr>
+
+	{% if document.pricing_type == 'per_invoice' %}
+		<tr>
+			<td colspan="3" style="padding:12px">Recurring service fee (billed every
+				{{document.billing_interval_count}}
+				{{document.billing_interval_unit}})</td>
+			<td style="padding:12px;text-align:right;font-weight:600">${{document.price_per_invoice}}</td>
+		</tr>
+	{% else %}
+		{% include 'partials/document_details/display/items-table-display.twig' with {items} %}
+		<tr>
+			<td></td>
+			<td></td>
+			<td style="padding:10px;font-weight:600">Subtotal</td>
+			<td style="padding:10px">${{document.subtotal}}</td>
+		</tr>
+
+		<tr>
+			<td></td>
+			<td></td>
+			<td style="padding:10px;font-weight:600">Discount</td>
+			<td style="padding:10px">{{document.discount_value}}</td>
+		</tr>
+	{% endif %}
+
+	<tr>
+		<td colspan="3" style="padding:10px">Tax</td>
+		<td style="padding:10px;text-align:right">{{document.tax_percent}}%</td>
+	</tr>
+
+	<tr style="background:#ecfdf5;border-top:2px solid #10b981">
+		{% if document.pricing_type != 'per_invoice' %}
+			<td colspan="3" style="padding:12px;font-weight:700;font-size:15px;color:#065f46">Amount Per Invoice</td>
+		{% else %}
+			<td colspan="3" style="padding:10px;font-weight:700">Total</td>
+		{% endif %}
+
+		<td style="padding:12px;font-weight:700;font-size:16px;color:#065f46;text-align:right">${{document.total}}</td>
+	</tr>
+</table>

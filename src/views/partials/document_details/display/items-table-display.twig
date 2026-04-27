@@ -1,32 +1,34 @@
-<table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
-	<thead>
-		<tr style="text-align:left;border-bottom:1px solid #eee">
-			<th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
-			<th style="padding:10px;width:35%;vertical-align:top">Description</th>
-			<th style="padding:10px;width:10%;text-align:right;vertical-align:top">Quantity</th>
-			<th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
-			<th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
-		</tr>
-	</thead>
-	<tbody>
-		{% for row in items.item %}
-			<tr style="border-top:1px solid #f3f4f6">
-				<td style="padding:10px;font-weight:600;text-align:center">
-					{{ items.item[loop.index0] }}
-				</td>
-				<td style="padding:10px;color:#6b7280;font-size:13px">
-					{{ items.description[loop.index0] }}
-				</td>
-				<td style="padding:10px;text-align:right">
-					{{ items.quantity[loop.index0] }}
-				</td>
-				<td style="padding:10px;text-align:right">
-					{{ items.unit_price[loop.index0] }}
-				</td>
-				<td style="padding:10px;text-align:right">
-					{{ items.line_total[loop.index0] }}
-				</td>
+{% if items is not empty %}
+	<table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+		<thead>
+			<tr style="text-align:left;border-bottom:1px solid #eee">
+				<th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
+				<th style="padding:10px;width:35%;vertical-align:top">Description</th>
+				<th style="padding:10px;width:10%;text-align:right;vertical-align:top">Quantity</th>
+				<th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+				<th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
 			</tr>
-		{% endfor %}
-	</tbody>
-</table>
+		</thead>
+		<tbody>
+			{% for row in items.item %}
+				<tr style="border-top:1px solid #f3f4f6">
+					<td style="padding:10px;font-weight:600;text-align:center">
+						{{ items.item[loop.index0] }}
+					</td>
+					<td style="padding:10px;color:#6b7280;font-size:13px">
+						{{ items.description[loop.index0] }}
+					</td>
+					<td style="padding:10px;text-align:right">
+						{{ items.quantity[loop.index0] }}
+					</td>
+					<td style="padding:10px;text-align:right">
+						{{ items.unit_price[loop.index0] }}
+					</td>
+					<td style="padding:10px;text-align:right">
+						{{ items.line_total[loop.index0] }}
+					</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+{% endif %}

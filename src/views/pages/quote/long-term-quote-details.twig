@@ -2,7 +2,7 @@
 	<div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Long-term Service Quote</div>
 	<div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Recurring Billing Proposal</div>
 	<div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for
-		{{appConfig.documents_valid_days}}
+		{{app_config.documents_valid_days}}
 		days
 	</div>
 
@@ -21,29 +21,8 @@
 		{% endif %}
 	</div>
 
-	<table style="width:100%;table-layout:fixed;margin-bottom:8px;border-collapse:collapse">
-		<tr>
-			<td style="vertical-align:middle;width:70%">
-				<div style="font-weight:700;font-size:20px">{{brand}}</div>
-				<div style="color:#374151;font-size:13px;margin-top:2px">Long-term Quote Q-{{quote.doc_number}}</div>
-				{% if quote.project_code is not empty %}
-					<div style="color:#374151;font-size:13px;margin-top:2px">Job
-						{{quote.project_code}}
-					</div>
-				{% endif %}
-				{% if quote.project_id is not empty %}
-					<div style="color:#374151;font-size:13px;margin-top:2px">Project
-						{{quote.project_id}}
-					</div>
-				{% endif %}
-			</td>
-			<td style="vertical-align:middle;width:30%;text-align:right">
-				<img src="{{logoPath}}" alt="{{brand}}" style="height:80px;width:auto;object-fit:contain;border-radius:4px;background:#fff;padding:4px">
-			</td>
-		</tr>
-	</table>
+	{% include 'partials/document_details/display/project-details-display.twig' with {document: quote, branding: branding} %}
 
-	<!-- Quote Details Box -->
 	<table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb;background:#f9fafb">
 		<tr>
 			<td style="width:25%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
@@ -71,145 +50,18 @@
 			<tr>
 				<td style="padding:8px;vertical-align:top">
 					<div style="font-size:11px;color:#065f46">Initial Deposit Due:
-						<span style="font-weight:700;font-size:14px">${{quote.depositCalc}}</span>
+						<span style="font-weight:700;font-size:14px">${{quote.deposit}}</span>
 					</div>
 				</td>
 			</tr>
 		</table>
 	{% endif %}
 
-	<table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
-		<tr>
-			<td style="vertical-align:top;width:50%;padding-right:12px">
-				<div style="font-weight:600">From</div>
-				<div>
-					{% for line in fromLines %}
-						<div>{{line}}</div>
-					{% endfor %}
-				</div>
+	{% include 'partials/document_details/display/contact-information-display.twig' with {contact_information: contact_info} %}
 
-				<div style="margin-top:6px;color:#4b5563;font-size:13px">
-					{% if fromPhone is not empty %}
-						<div>{{fromPhone}}</div>
-					{% endif %}
+	{% include 'partials/document_details/display/scope-display.twig' with {app_config: app_config, document: quote} %}
 
-					{% if fromEmail is not empty %}
-						<div>{{fromEmail}}</div>
-					{% endif %}
-				</div>
-			</td>
+	{% include 'partials/document_details/display/recurring-total-display.twig' with {document: quote} %}
 
-			<td style="vertical-align:top;width:50%;padding-left:12px">
-				<div style="font-weight:600">To</div>
-				<div>
-					{% for line in toLines %}
-						<div>{{line}}</div>
-					{% endfor %}
-				</div>
-
-				<div style="margin-top:6px;color:#4b5563;font-size:13px">
-					{% if toPhone is not empty %}
-						<div>{{toPhone}}</div>
-					{% endif %}
-
-					{% if toEmail is not empty %}
-						<div>{{toEmail}}</div>
-					{% endif %}
-				</div>
-			</td>
-		</tr>
-
-	</table>
-
-	{% if quote.scope is not empty %}
-		<div style="margin:16px 0;padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px">
-			<div style="font-weight:600;margin-bottom:8px">Scope of Work</div>
-			<div style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:#374151">{{quote.scope}}</div>
-		</div>
-	{% endif %}
-
-	<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06);margin-top:16px">
-		<tr style="text-align:left;border-bottom:1px solid #eee;background:#f9fafb">
-			<th colspan="4" style="padding:12px;font-size:15px">{{ quote.pricing_type == 'per_invoice' ? 'Recurring Amount (per invoice)' : 'Fixed Total (billed over time)'}}</th>
-		</tr>
-
-		{% if quote.pricing_type == 'per_invoice' %}
-			<tr>
-				<td colspan="3" style="padding:12px">Recurring service fee (billed every
-					{{quote.billing_interval_count}}
-					{{quote.billing_interval_unit}})</td>
-				<td style="padding:12px;text-align:right;font-weight:600">${{quote.price_per_invoice}}</td>
-			</tr>
-		{% else %}
-			{% if items is defined %}
-				<tr style="border-bottom:1px solid #eee">
-					<th style="padding:10px">Description</th>
-					<th style="padding:10px">Qty</th>
-					<th style="padding:10px">Unit</th>
-					<th style="padding:10px">Line Total</th>
-				</tr>
-
-				{% for it in items  %}
-					<tr style="border-top:1px solid #f3f4f6">
-						<td style="padding:10px">{{it.description}}</td>
-						<td style="padding:10px">{{it.quantity}}</td>
-						<td style="padding:10px">${{it.unit_price}}</td>
-						<td style="padding:10px">${{it.line_total}}</td>
-					</tr>
-				{% endfor %}
-			{% endif %}
-			<tr>
-				<td></td>
-				<td></td>
-				<td style="padding:10px;font-weight:600">Subtotal</td>
-				<td style="padding:10px">${{quote.subtotal}}</td>
-			</tr>
-
-			<tr>
-				<td></td>
-				<td></td>
-				<td style="padding:10px;font-weight:600">Discount</td>
-				<td style="padding:10px">{{quote.discount_value}}</td>
-			</tr>
-		{% endif %}
-
-		<tr>
-			<td colspan="3" style="padding:10px">Tax</td>
-			<td style="padding:10px;text-align:right">{{quote.tax_percent}}%</td>
-		</tr>
-
-		{# TODO**** This shit doesnt load the right values but i cant be damned to fix it rn #}
-
-		<tr style="background:#ecfdf5;border-top:2px solid #10b981">
-			{% if quote.pricing_type != 'per_invoice' %}
-				<td colspan="3" style="padding:12px;font-weight:700;font-size:15px;color:#065f46">Amount Per Invoice</td>
-			{% else %}
-				<td colspan="3" style="padding:10px;font-weight:700">Quote Total</td>
-			{% endif %}
-
-			<td style="padding:12px;font-weight:700;font-size:16px;color:#065f46;text-align:right">${{quote.total}}</td>
-		</tr>
-	</table>
-
-	{% if appConfig.quotes_show_terms %}
-		<div style="page-break-after:always"></div>
-		<h3>Terms and Conditions</h3>
-
-		{% if terms is not empty %}
-			<div style="white-space:pre-wrap;padding:6px 0;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#222;">{{terms}}</div>
-		{% else %}
-			<ul>
-				<li>This is a recurring billing proposal. If approved, invoices will be generated automatically every
-					{{quote.billing_interval_count}}
-					{{quote.billing_interval_unit}}.</li>
-				<li>Service begins on
-					{{quote.start_date}}
-					and
-					{{isOngoing ? 'continues until terminated by either party' : 'ends on' ~ quote.end_date }}.</li>
-				<li>Payment due NET 30 unless otherwise specified.</li>
-				<li>Termination requires written notice.</li>
-				<li>Work product ownership and usage rights per agreement.</li>
-			</ul>
-		{% endif %}
-	{% endif %}
+	{% include 'partials/document_details/display/terms-display.twig' with {document: quote} %}
 </section>

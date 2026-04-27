@@ -32,7 +32,7 @@ class QuotesDataService
     public function getEditRenderData(int $id, DocumentType $documentType = DocumentType::REGULAR): QuoteEditView
     {
         $quote = $this->quoteService->getStoredQuote($id);
-        $fields = $this->customFieldService->getCustomFieldDisplayView($documentType) ?? [];
+        $fields = $this->customFieldService->getCustomFieldInputView($documentType) ?? [];
 
         return new QuoteEditView([
             'quote' => $quote,

@@ -40,12 +40,13 @@ class InvoiceListService extends BaseListService
             'title' => $this::TITLE[$documentType->value],
             'document_type' => $documentType->value,
             'filter_config' => $displayFilterConfig
-        ], $displayCountData->toArray(), $filterData->toArray()));
+        ], 
+        $displayCountData->toArray(), 
+        $filterData->toArray()));
     }
 
     private function getDisplayData(DocumentType $documentType, ListFilterData $filterData, DisplayCountData $displayCountData): PageNumberView
     {
-
         $displayCount = $this->repository->getInvoiceCount($documentType, $filterData);
         return new PageNumberView(array_merge($displayCountData->toArray(), ['display_count' => $displayCount]));
     }

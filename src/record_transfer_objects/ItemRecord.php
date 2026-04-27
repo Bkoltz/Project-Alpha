@@ -18,8 +18,11 @@ class ItemRecord extends TransferObject
         return [$this->item[$row], $this->description[$row], $this->quantity[$row], $this->unit_price[$row], $this->line_total[$row]];
     }
 
-    public static function fromRepoArray(array $array): static
+    public static function fromRepoArray(?array $array): ?static
     {
+        if ($array == null)
+            return null;
+
         $data = new static();
 
         $data->item = array_column($array, 'item');

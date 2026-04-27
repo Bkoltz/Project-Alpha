@@ -13,6 +13,7 @@ use App\utils\enum\DocumentType;
 class QuoteDetailsView extends RenderOutput {
     public ?DocumentType $document_type = null; 
 
+    public ?int $id = null;
     public ?QuoteData $quote = null;
     public ?ItemData $items = null;
     public ?array $app_config = null;

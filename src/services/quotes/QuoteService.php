@@ -27,7 +27,7 @@ class QuoteService
     {
         $this->validateAndUpdateQuoteData($quoteData, $quoteItems);
         $quoteItems?->validate();
-        
+
         $record = QuoteRecord::fromArray($quoteData->toArray());
         $recordItems = $quoteItems->isNull() ? null : ItemRecord::fromArray($quoteItems->toArray());
 
@@ -51,7 +51,7 @@ class QuoteService
         } elseif ($data->is_long_term == 0 && $data->is_on_demand == 1) {
             return DocumentType::ON_DEMAND;
         }
-        
+
         return DocumentType::REGULAR;
     }
 
@@ -68,7 +68,7 @@ class QuoteService
     public function getStoredQuote(int $id): QuoteData
     {
         $data = $this->repository->getQuoteData($id);
-        return QuoteData::fromArray($data->toArray());
+        return QuoteData::fromArray(array_merge(['id' => $id], $data->toArray()));
     }
 
     public function getStoredQuoteItems(int $id): ?ItemData
@@ -77,7 +77,8 @@ class QuoteService
         return ItemData::fromArray($data?->toArray());
     }
 
-    public function getQuoteDate(int $id) : array {
+    public function getQuoteDate(int $id): array
+    {
         return $this->repository->getQuoteDate($id);
     }
 
@@ -89,7 +90,7 @@ class QuoteService
         $quoteData->project_code ??= $this->projectService->getNextProjectCode($quoteData->client_id);
         $quoteData->created_at = date('Y-m-d H:i:s');
 
-        FinancialService::calculateFinancialData($quoteData, $quoteItems);
+        FinancialService::updateQuoteFinancialData($quoteData, $quoteItems);
     }
 
     private function updateDocumentType(QuoteData $quoteData): void
@@ -110,14 +111,14 @@ class QuoteService
         $quoteData->total ??= 0;
         $quoteData->deposit_type ??= 'none';
         $quoteData->deposit_amount ??= 0;
-        $quoteData->fulfillment_date = DateValidator::validateDate($quoteData->fulfillment_date);
+        $quoteData->fulfillment_date = DateValidator::validateDate($quoteData->fulfillment_date, 'Y-m-d');
         $quoteData->is_long_term = !empty($quoteData->is_long_term) ? 1 : 0;
         $quoteData->is_on_demand = !empty($quoteData->is_on_demand) ? 1 : 0;
-        $quoteData->start_date = DateValidator::validateDate($quoteData->start_date);
-        $quoteData->end_date = DateValidator::validateDate($quoteData->end_date);
+        $quoteData->start_date = DateValidator::validateDate($quoteData->start_date, 'Y-m-d');
+        $quoteData->end_date = DateValidator::validateDate($quoteData->end_date, 'Y-m-d');
         $quoteData->billing_interval_count ??= 0;
         $quoteData->billing_interval_unit ??= 'month';
-        $quoteData->pricing_type ??= 'per_invoice';
+        $quoteData->pricing_type ??= 'fixed_total';
         $quoteData->price_per_invoice ??= 0;
         $quoteData->scope ??= '';
         $quoteData->custom_fields ??= null;
