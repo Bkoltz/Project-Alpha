@@ -6,37 +6,17 @@
 	</div>
 	<form id="quoteForm" method="post" action="/?page=quote/quote-create" style="display:grid;gap:16px;max-width:900px">
 		<input type="hidden" name="csrf" value="{{csrfToken}}">
-		<div
-			style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+
+		<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 
 			{% include 'partials/client_components/client-input-autocomplete.twig' with {document: null} %}
 
-			<!-- Tax input -->
 			<label style="grid-column:2/3">
-
 				<div>Tax (%)</div>
 				<input id="taxPercent" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
 			</label>
-
-			<!-- Project selection -->
+			
 			<label>
-				<div id="projectSection" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
-					<h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
-					<div style="display:grid;gap:12px">
-						<label>
-							<div>Add to Existing Project</div>
-							<select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-								<option value="">-- Select Project --</option>
-							</select>
-						</label>
-						<div style="text-align:center;color:#6b7280;font-size:13px">or</div>
-						<div>
-							<button type="button" id="createProjectBtn" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
-						</div>
-					</div>
-				</div>
-
-				<!-- Discount inputs -->
 				<div>Discount Type</div>
 				<select id="discountType" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
 					<option value="none">None</option>
@@ -44,9 +24,24 @@
 					<option value="fixed">Fixed $</option>
 				</select>
 			</label>
+
 			<label>
 				<div>Discount Value</div>
 				<input id="discountValue" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+			</label>
+
+			<label>
+				<div>Deposit Type</div>
+				<select id="depositType" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+					<option value="none">None</option>
+					<option value="percent">Percent</option>
+					<option value="fixed">Fixed $</option>
+				</select>
+			</label>
+
+			<label>
+				<div>Deposit Value</div>
+				<input id="depositValue" type="number" step="0.01" name="deposit_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
 			</label>
 		</div>
 
@@ -232,12 +227,7 @@
 			</div>
 		</div>
 
-		<!-- Items input -->
-		<div id="itemInput" style="display:block">
-			<div style="font-weight:600;margin-bottom:8px">Items</div>
-			<div id="items" style="display:grid;gap:8px"></div>
-			<button type="button" onclick="addItem()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
-		</div>
+		{% include 'partials/document_details/input/item-input.twig' with {items: null} %}
 
 		{% include 'partials/document_details/input/scope-input.twig' with {app_config: app_config} %}
 

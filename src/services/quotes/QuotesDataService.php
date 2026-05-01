@@ -6,6 +6,7 @@ use App\config\AppConfiguration;
 use App\render_outputs\quote\QuoteCreateView;
 use App\render_outputs\quote\QuoteEditView;
 use App\services\CustomFieldsService;
+use App\services\FinancialService;
 use App\utils\enum\DocumentType;
 
 require_once BASE_PATH . '/src/utils/csrf.php';
@@ -32,10 +33,17 @@ class QuotesDataService
     public function getEditRenderData(int $id, DocumentType $documentType = DocumentType::REGULAR): QuoteEditView
     {
         $quote = $this->quoteService->getStoredQuote($id);
-        $fields = $this->customFieldService->getCustomFieldInputView($documentType) ?? [];
 
+        $items = $this->quoteService->getStoredQuoteItems($id);
+        $items?->validate();
+
+        FinancialService::updateQuoteFinancialData($quote, $items);
+
+        $fields = $this->customFieldService->getCustomFieldInputView($documentType) ?? [];
+        
         return new QuoteEditView([
             'quote' => $quote,
+            'items' => $items,
             'custom_fields' => $fields,
             'app_config' => AppConfiguration::$ConfigSettings
         ]);

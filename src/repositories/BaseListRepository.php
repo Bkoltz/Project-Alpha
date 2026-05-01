@@ -11,7 +11,11 @@ abstract class BaseListRepository
 {
     public function createFilteredStatement(DocumentType $documentType, ListFilterData $filterData, ListFilterConfig $filterConfig): ListFilterStatement
     {
-        $where[] = $filterConfig->document_type_filters[$documentType->value];
+        $filters = $filterConfig->document_type_filters ?? [];
+
+        if (isset($filters[$documentType->value]))
+            $where[] = $filters[$documentType->value];
+
         $values = [];
 
         foreach ($filterData->toArray() as $key => $value) {
@@ -27,7 +31,7 @@ abstract class BaseListRepository
             $values[] = $value;
         }
 
-        $where = ' WHERE ' . implode(' AND ', $where);
+        $where = empty($where) ? '' : ' WHERE ' . implode(' AND ', $where);
 
         return new ListFilterStatement([
             'sql' => $where,

@@ -2,6 +2,7 @@
 
 namespace App\repositories\quotes;
 
+use App\data_transfer_objects\quote\QuoteData;
 use App\record_transfer_objects\ItemRecord;
 use App\record_transfer_objects\MetaRecord;
 use App\record_transfer_objects\QuoteRecord;
@@ -27,15 +28,17 @@ class QuotesRepository
         $this->updateDocumentNumber($id, $quoteData);
     }
 
-    public function editStoredQuote(int $id, QuoteRecord $quoteData, ItemRecord $quoteItems)
+    public function editStoredQuote(int $id, QuoteRecord $quoteData, ?ItemRecord $quoteItems = null)
     {
         $this->updateStoredQuote($id, $quoteData);
-        $this->setQuoteItems($id, $quoteItems);
+
+        if ($quoteItems != null)
+            $this->setQuoteItems($id, $quoteItems);
     }
 
     public function insertNewQuote(QuoteRecord $quoteData): int
     {
-        $stmt = $this->pdo->prepare("INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, discount_type, discount_value, tax_percent, subtotal, total,deposit_type, deposit_amount, fulfillment_date,is_long_term, is_on_demand,start_date, end_date,billing_interval_count, billing_interval_unit,pricing_type, price_per_invoice,scope, custom_fields, created_at) VALUES (:client_id, :project_id, :doc_number, :project_code, :status,:discount_type, :discount_value, :tax_percent, :subtotal, :total,:deposit_type, :deposit_amount, :fulfillment_date,:is_long_term, :is_on_demand,:start_date, :end_date,:billing_interval_count, :billing_interval_unit,:pricing_type, :price_per_invoice,:scope, :custom_fields, :created_at)");
+        $stmt = $this->pdo->prepare("INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, discount_type, discount_value, tax_percent, subtotal, total,deposit_type, deposit_value, fulfillment_date,is_long_term, is_on_demand,start_date, end_date,billing_interval_count, billing_interval_unit,pricing_type, price_per_invoice,scope, custom_fields, created_at) VALUES (:client_id, :project_id, :doc_number, :project_code, :status,:discount_type, :discount_value, :tax_percent, :subtotal, :total,:deposit_type, :deposit_value, :fulfillment_date,:is_long_term, :is_on_demand,:start_date, :end_date,:billing_interval_count, :billing_interval_unit,:pricing_type, :price_per_invoice,:scope, :custom_fields, :created_at)");
         $stmt->execute($quoteData->toArray());
 
         return (int)$this->pdo->lastInsertId();
@@ -43,7 +46,8 @@ class QuotesRepository
 
     public function updateStoredQuote(int $id, QuoteRecord $quoteData)
     {
-        $quote = $this->pdo->prepare('UPDATE quotes SET client_id = ?, discount_type = ?, discount_value = ?, tax_percent = ?, subtotal = ?, total = ?, deposit_type = ?, deposit_amount = ?, fulfillment_date = ?, scope = ?, custom_fields = ? WHERE id = ?');
+        echo 4 . json_encode($quoteData->deposit_value);
+        $quote = $this->pdo->prepare(" UPDATE quotes SET client_id = :client_id, project_id = :project_id, doc_number = :doc_number, project_code = :project_code, status = :status, discount_type = :discount_type,discount_value = :discount_value, tax_percent = :tax_percent, subtotal = :subtotal,total = :total, deposit_type = :deposit_type, deposit_value = :deposit_value, fulfillment_date = :fulfillment_date, is_long_term = :is_long_term, is_on_demand = :is_on_demand, start_date = :start_date, end_date = :end_date, billing_interval_count = :billing_interval_count,billing_interval_unit = :billing_interval_unit, pricing_type = :pricing_type, price_per_invoice = :price_per_invoice,scope = :scope, custom_fields = :custom_fields, created_at = :created_at WHERE id = :id");
         $quote->execute(array_merge($quoteData->toArray(), ['id' => $id]));
     }
 
@@ -87,13 +91,13 @@ class QuotesRepository
         $st->execute([$id]);
     }
 
-    public function getQuoteData(int $id): QuoteRecord
+    public function getQuoteData(int $id): QuoteData
     {
         $stmt = $this->pdo->prepare('SELECT * FROM quotes WHERE id = ?');
         $stmt->execute([$id]);
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return QuoteRecord::fromArray($data);
+        return QuoteData::fromArray($data);
     }
 
     public function getQuoteItems(int $id): ?ItemRecord

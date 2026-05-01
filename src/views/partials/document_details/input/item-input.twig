@@ -1,0 +1,22 @@
+<div>
+	<div style="font-weight:600;margin-bottom:8px">Items</div>
+
+	<div id="items" style="display:grid;gap:8px">
+		{% for item in items.item %}
+			<div style="display: grid; grid-template-columns: 3fr 3fr 1fr 1fr auto; gap: 8px; position: relative;">
+				<input id="item" required="" placeholder="Item name..." value='{{ items.item[loop.index0] }}' name="item[]" data-item-autocomplete="" data-description-field="desc_1" data-price-field="price_1" style="padding: 10px; border-radius: 8px; border: 1px solid rgb(221, 221, 221); position: relative;">
+				<textarea id="desc_1" placeholder="Description (optional)" value='{{ items.description[loop.index0] }}' name="description[]" style="padding: 10px; border-radius: 8px; border: 1px solid rgb(221, 221, 221); resize: vertical; min-height: 42px;"></textarea>
+				<input required="" type="number" value='{{ items.quantity[loop.index0] }}' step="0.01" min="0" name="quantity[]" style="padding: 10px; border-radius: 8px; border: 1px solid rgb(221, 221, 221);">
+				<input id="price" required="" type="number" value='{{ items.unit_price[loop.index0] }}' step="0.01" min="0" name="unit_price[]" style="padding: 10px; border-radius: 8px; border: 1px solid rgb(221, 221, 221);">
+
+				<button type="button" style="border: 0px; background: rgb(254, 226, 226); color: rgb(153, 27, 27); border-radius: 8px; padding: 8px 10px;">
+					Remove
+				</button>
+
+				<div class="item-autocomplete-dropdown" style="position: absolute; background: white; border: 1px solid rgb(209, 213, 219); border-radius: 6px; box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 6px; max-height: 300px; overflow-y: auto; display: none; z-index: 1000; min-width: 300px;"></div>
+			</div>
+		{% endfor %}
+	</div>
+
+	<button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
+</div>

@@ -3,14 +3,14 @@
 		{% if document.deposit_type != 'none' %}
 			<td style="padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
 				<div style="font-size:11px;color:#6b7280">Deposit Due:
-					<span style="font-weight:600;color:#059669">${{ deposit_due|number_format(2) }}</span>
+					<span style="font-weight:600;color:#059669">${{ document.deposit_amount|number_format(2) }}</span>
 				</div>
 			</td>
 		{% endif %}
 		{% if document.fulfillment_date != null %}
 			<td style="padding:8px;{{ hasCustomFields ? 'border-right:1px solid #e5e7eb;' : '' }}vertical-align:top">
 				<div style="font-size:11px;color:#6b7280">Fulfillment Date:
-					<span style="font-weight:600;color:#2563eb">{{ fulfillment_date|date('M j, Y') }}</span>
+					<span style="font-weight:600;color:#2563eb">{{ document.fulfillment_date|date('M j, Y') }}</span>
 				</div>
 			</td>
 		{% endif %}

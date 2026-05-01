@@ -115,7 +115,8 @@ class QuotesListService extends BaseListService
         ];
     }
 
-    private function updateRowStyle(array $rows): array
+    // This uses references 
+    private function updateRowStyle(array &$rows): array
     {
         foreach ($rows as &$row) {
             switch ($row['status']) {

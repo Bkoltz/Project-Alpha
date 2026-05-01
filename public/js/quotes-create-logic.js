@@ -17,6 +17,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     <input id="${priceId}"  type="number" step="0.01" min="0" name="unit_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalc()">
     <button type="button" onclick="this.parentElement.remove();recalc()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
+
     document.getElementById('items').appendChild(wrap);
 
     // Re-initialize autocomplete for the new item input
@@ -114,12 +115,12 @@ function recalc() {
     }
 
     // Show/hide deposit row
-    if (depType !== 'none' && deposit > 0) {
-        document.getElementById('depositRow').style.display = 'block';
-        document.getElementById('depositVal').textContent = money(deposit);
-    } else {
-        document.getElementById('depositRow').style.display = 'none';
-    }
+    // if (depType !== 'none' && deposit > 0) {
+    //     document.getElementById('depositRow').style.display = 'block';
+    //     document.getElementById('depositVal').textContent = money(deposit);
+    // } else {
+    //     document.getElementById('depositRow').style.display = 'none';
+    // }
 
     updateDiscountWarning();
 }
@@ -202,7 +203,7 @@ function toggleEndDate() {
 
 function togglePricingFields() {
     var docType = document.querySelector('input[name="doc_type"]:checked').value;
-
+    var itemsInput = document.getElementById('itemInput');
     if (docType === 'regular') {
         // Regular quote - show custom fields
         ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
@@ -210,7 +211,10 @@ function togglePricingFields() {
             if (el) el.style.display = 'block';
         });
         document.getElementById('billingIntervalFields').style.display = 'grid';
+        itemsInput.style.display = 'block';
         return;
+    } else {
+        itemsInput.style.display = 'none';
     }
 
     var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
@@ -234,7 +238,7 @@ function togglePricingFields() {
         });
 
         const fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
-        if (fulfillmentLabel) 
+        if (fulfillmentLabel)
             fulfillmentLabel.style.display = 'none';
 
         document.getElementById('perInvoiceField').style.display = 'block';
@@ -260,7 +264,7 @@ function togglePricingFields() {
 }
 
 function toggleOnDemandPricingMode() {
-   const mode = document.querySelector('input[name="pricing_mode"]:checked')?.value;
+    const mode = document.querySelector('input[name="pricing_mode"]:checked')?.value;
     console.log("e");
     document.getElementById('itemInput').style.display = mode === 'items' ? 'block' : 'none';
     document.getElementById('onDemandFlatAmount').style.display = mode === 'flat' ? 'block' : 'none';
@@ -313,48 +317,48 @@ function loadProjectsForClient(clientId) {
         });
 }
 
-document.getElementById('createProjectBtn').addEventListener('click', function () {
-    const clientId = document.getElementById('clientId').value;
-    if (!clientId) {
-        alert('Please select a client first.');
-        return;
-    }
+// document.getElementById('createProjectBtn').addEventListener('click', function () {
+//     const clientId = document.getElementById('clientId').value;
+//     if (!clientId) {
+//         alert('Please select a client first.');
+//         return;
+//     }
 
-    const projectName = prompt('Enter project name:');
-    if (!projectName || !projectName.trim()) return;
+//     const projectName = prompt('Enter project name:');
+//     if (!projectName || !projectName.trim()) return;
 
-    fetch('/?page=project/projects-create-quick', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) +
-            '&name=' + encodeURIComponent(projectName.trim()) +
-            '&client_id=' + encodeURIComponent(clientId)
-    })
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                // Reload projects for this client
-                loadProjectsForClient(clientId);
-                // Select the new project
-                setTimeout(() => {
-                    const projectSelect = document.getElementById('projectSelect');
-                    for (let i = 0; i < projectSelect.options.length; i++) {
-                        if (projectSelect.options[i].value == result.project_id) {
-                            projectSelect.selectedIndex = i;
-                            break;
-                        }
-                    }
-                }, 100);
-            } else {
-                alert('Failed to create project: ' + (result.error || 'Unknown error'));
-            }
-        })
-        .catch(() => {
-            alert('Failed to create project.');
-        });
-});
+//     fetch('/?page=project/projects-create-quick', {
+//         method: 'POST',
+//         headers: {
+//             'Content-Type': 'application/x-www-form-urlencoded',
+//         },
+//         body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) +
+//             '&name=' + encodeURIComponent(projectName.trim()) +
+//             '&client_id=' + encodeURIComponent(clientId)
+//     })
+//         .then(r => r.json())
+//         .then(result => {
+//             if (result.success) {
+//                 // Reload projects for this client
+//                 loadProjectsForClient(clientId);
+//                 // Select the new project
+//                 setTimeout(() => {
+//                     const projectSelect = document.getElementById('projectSelect');
+//                     for (let i = 0; i < projectSelect.options.length; i++) {
+//                         if (projectSelect.options[i].value == result.project_id) {
+//                             projectSelect.selectedIndex = i;
+//                             break;
+//                         }
+//                     }
+//                 }, 100);
+//             } else {
+//                 alert('Failed to create project: ' + (result.error || 'Unknown error'));
+//             }
+//         })
+//         .catch(() => {
+//             alert('Failed to create project.');
+//         });
+// });
 
-
+document.getElementById("addItemBtn")?.addEventListener("click", (e) => addItem('', '', 1, 0));
 document.getElementById('quoteForm').addEventListener('submit', function (e) { if (!cid.value) { e.preventDefault(); alert('Please select a client from suggestions.'); } });

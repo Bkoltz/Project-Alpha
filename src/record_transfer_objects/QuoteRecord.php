@@ -12,12 +12,12 @@ class QuoteRecord extends TransferObject
     public ?string $project_code = null;
     public ?string $status = null;
     public ?string $discount_type = null;
-    public ?int $discount_value = null;
-    public ?int $tax_percent = null;
-    public ?int $subtotal = null;
-    public ?int $total = null;
+    public ?float $discount_value = null;
+    public ?float $tax_percent = null;
+    public ?float $subtotal = null;
+    public ?float $total = null;
     public ?string $deposit_type = null;
-    public ?int $deposit_amount = null;
+    public ?float $deposit_value = null;
     public ?string $fulfillment_date = null;
     public ?int $is_long_term = null;
     public ?int $is_on_demand = null;

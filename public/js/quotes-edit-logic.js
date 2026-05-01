@@ -47,7 +47,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     var descTextarea = document.createElement('textarea');
     descTextarea.id = descId;
     descTextarea.placeholder = 'Description (optional)';
-    descTextarea.name = 'item_desc[]';
+    descTextarea.name = 'description[]';
     descTextarea.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px';
     descTextarea.value = desc;
     descTextarea.oninput = recalc;
@@ -57,7 +57,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     qtyInput.type = 'number';
     qtyInput.step = '0.01';
     qtyInput.min = '0';
-    qtyInput.name = 'item_qty[]';
+    qtyInput.name = 'quantity[]';
     qtyInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
     qtyInput.value = qty;
     qtyInput.oninput = recalc;
@@ -68,7 +68,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     priceInput.type = 'number';
     priceInput.step = '0.01';
     priceInput.min = '0';
-    priceInput.name = 'item_price[]';
+    priceInput.name = 'unit_price[]';
     priceInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
     priceInput.value = price;
     priceInput.oninput = recalc;

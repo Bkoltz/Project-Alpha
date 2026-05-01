@@ -258,7 +258,7 @@ CREATE TABLE
     subtotal DECIMAL(12, 2) NOT NULL DEFAULT 0,
     total DECIMAL(12, 2) NOT NULL DEFAULT 0,
     deposit_type ENUM ('none', 'percent', 'fixed') NOT NULL DEFAULT 'none',
-    deposit_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    deposit_value DECIMAL(12, 2) NOT NULL DEFAULT 0,
     fulfillment_date DATE NULL,
     document_type ENUM ('regular', 'long_term', 'on_demand') NOT NULL,
     is_long_term TINYINT (1) NOT NULL DEFAULT 0,
@@ -964,103 +964,6 @@ CREATE TABLE
   ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- Seed built-in fields for all document types
--- Deposit field (composite: type + value, handled specially in UI)
-INSERT IGNORE INTO document_custom_fields (
-  document_type,
-  field_key,
-  field_name,
-  field_label,
-  field_type,
-  field_options,
-  is_required,
-  is_builtin,
-  is_enabled,
-  display_order
-)
-VALUES
-  (
-    'regular',
-    'depositType',
-    'deposit_type',
-    'Deposit Required',
-    'select',
-    '["None", "Percent", "Fixed"]',
-    0,
-    1,
-    1,
-    1
-  ),
-  (
-    'long_term',
-    'depositType',
-    'deposit_type',
-    'Deposit Required',
-    'select',
-     '["None", "Percent", "Fixed"]',
-    0,
-    1,
-    1,
-    1
-  ),
-  (
-    'on_demand',
-    'depositType',
-    'deposit_type',
-    'Deposit Required',
-    'select',
-     '["None", "Percent", "Fixed"]',
-    0,
-    1,
-    1,
-    1
-  );
-INSERT IGNORE INTO document_custom_fields (
-  document_type,
-  field_key,
-  field_name,
-  field_label,
-  field_type,
-  is_required,
-  is_builtin,
-  is_enabled,
-  display_order
-)
-
-VALUES
-  (
-    'regular',
-    'depositValue',
-    'deposit_value',
-    'Deposit Value',
-    'number',
-    0,
-    1,
-    1,
-    1
-  ),
-  (
-    'long_term',
-    'depositValue',
-    'deposit_value',
-    'Deposit Value',
-    'number',
-    0,
-    1,
-    1,
-    1
-  ),
-  (
-    'on_demand',
-    'depositValue',
-    'deposit_value',
-    'Deposit Value',
-    'number',
-    0,
-    1,
-    1,
-    1
-  );
-
 -- Fulfillment date field
 INSERT IGNORE INTO document_custom_fields (
   document_type,

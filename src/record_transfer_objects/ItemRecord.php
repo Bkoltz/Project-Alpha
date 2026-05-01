@@ -33,4 +33,29 @@ class ItemRecord extends TransferObject
 
         return $data;
     }
+
+    public static function fromArray(?array $data): ?static
+    {
+        if (self::isArrayEmpty($data))
+            return null;
+
+        return parent::fromArray($data);
+    }
+
+    private static function isArrayEmpty(?array $data): bool
+    {
+        if (!$data) 
+            return true;
+        
+        foreach ($data as $value) {
+            if (is_array($value)) {
+                if (!self::isArrayEmpty($value)) 
+                    return false;
+            } elseif ($value !== null && $value !== '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

@@ -27,7 +27,7 @@ class QuotesDataController
             return ['pages/quote/quote-edit.twig', $output->toArray()];
         } else {
             $output = $this->dataService->getCreateRenderData();
-
+            
             return ['pages/quote/quote-create.twig', $output->toArray()];
         }
     }
@@ -47,8 +47,9 @@ class QuotesDataController
     {
         $id = $_POST['id'] ?? 0;
         $quoteData = QuoteData::fromArray($_POST);
+        $quoteItems = ItemData::fromArray($_POST);
 
-        $this->quoteService->editQuote($id, $quoteData);
+        $this->quoteService->editQuote($id, $quoteData, $quoteItems);
 
         header('Location: /?page=quote/quote-list');
         exit;

@@ -87,7 +87,6 @@ class QuotesListRepository extends BaseListRepository
 
         $filterStatement = $this->createFilteredStatement($documentType, $filterData, $filterConfig);
 
-       
         $sqlCount = 'SELECT COUNT(*) FROM quotes q' . $filterStatement->sql;
         $stc = $this->pdo->prepare($sqlCount);
         $stc->execute($filterStatement->values);

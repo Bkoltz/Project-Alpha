@@ -11,7 +11,7 @@ trait GetDepositValues
 
     public function getDepositAmount(): float
     {
-        return $this->deposit_amount ?? 0;
+        return $this-> ?? 0;
     }
 
     public function getTotal(): float

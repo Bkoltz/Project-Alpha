@@ -45,7 +45,7 @@ class TransferObject
                 
                 $value = match ($type) {
                     'int' => (int)$value,
-                    'float' => (int)$value,
+                    'float' => (float)$value,
                     'string' => (string)$value,
                     'bool' => (bool)$value,
                     default => $value

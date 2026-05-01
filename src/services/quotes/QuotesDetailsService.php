@@ -8,6 +8,7 @@ use App\render_outputs\quote\QuoteDetailsView;
 use App\services\BaseDetailsService;
 use App\services\ClientService;
 use App\services\CustomFieldsService;
+use App\services\FinancialService;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
@@ -29,10 +30,12 @@ class QuotesDetailsService extends BaseDetailsService
         $documentType = $this->quoteService->documentTypeFromId($id);
 
         $quote = $this->quoteService->getStoredQuote($id);
-        $quoteItems = $this->quoteService->getStoredQuoteItems($id);
-
         $this->quoteService->validateQuoteData($quote);
+
+        $quoteItems = $this->quoteService->getStoredQuoteItems($id);
         $quoteItems?->validate();
+
+        FinancialService::updateQuoteFinancialData($quote, $quoteItems);
 
         $branding = $this->getBranding();
         $contactInfo = $this->getContactInfo($quote->client_id);

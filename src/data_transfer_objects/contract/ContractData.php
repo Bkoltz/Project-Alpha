@@ -37,4 +37,9 @@ class ContractData extends TransferObject
     public ?string $created_at = null;
     public ?string $document_date = null;
     public ?string $document_date_updated_at = null;
+    public ?float $price_per_invoice = null;
+    public ?string $start_date = null;
+    public ?string $end_date = null;
+    public ?int $billing_interval_count = null;
+    public ?string $billing_interval_unit = null;
 }

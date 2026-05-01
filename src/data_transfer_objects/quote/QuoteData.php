@@ -15,10 +15,13 @@ class QuoteData extends TransferObject
     public ?string $status = null;
     public ?string $discount_type = null;
     public ?float $discount_value = null;
+    public ?float $discount_amount = null;
     public ?float $tax_percent = null;
+    public ?float $tax_value = null;
     public ?float $subtotal = null;
     public ?float $total = null;
     public ?string $deposit_type = null;
+    public ?float $deposit_value = null;
     public ?float $deposit_amount = null;
     public ?string $fulfillment_date = null;
     public ?string $doc_type = null;

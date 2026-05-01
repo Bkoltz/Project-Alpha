@@ -29,12 +29,21 @@ class QuoteService
         $quoteItems?->validate();
 
         $record = QuoteRecord::fromArray($quoteData->toArray());
-        $recordItems = $quoteItems->isNull() ? null : ItemRecord::fromArray($quoteItems->toArray());
+        $recordItems = ItemRecord::fromArray($quoteItems->toArray());
 
         $this->repository->createNewQuote($record, $recordItems);
     }
 
-    public function editQuote(int $id, QuoteData $quoteData) {}
+    public function editQuote(int $id, QuoteData $quoteData, ItemData $quoteItems)
+    {
+        $this->validateAndUpdateQuoteData($quoteData, $quoteItems);
+        $quoteItems?->validate();
+
+        $record = QuoteRecord::fromArray($quoteData->toArray());
+        $recordItems = ItemRecord::fromArray($quoteItems->toArray());
+
+        $this->repository->editStoredQuote($id, $record, $recordItems);
+    }
 
     public function documentTypeFromId(int $id): DocumentType
     {
@@ -44,7 +53,7 @@ class QuoteService
         return $this->documentTypeFromData($data);
     }
 
-    public function documentTypeFromData(QuoteData $data): DocumentType
+    public static function documentTypeFromData(QuoteData $data): DocumentType
     {
         if ($data->is_long_term == 1 && $data->is_on_demand == 0) {
             return DocumentType::LONG_TERM;
@@ -68,7 +77,9 @@ class QuoteService
     public function getStoredQuote(int $id): QuoteData
     {
         $data = $this->repository->getQuoteData($id);
-        return QuoteData::fromArray(array_merge(['id' => $id], $data->toArray()));
+        $data->id = $id;
+
+        return $data;
     }
 
     public function getStoredQuoteItems(int $id): ?ItemData
@@ -110,7 +121,7 @@ class QuoteService
         $quoteData->subtotal ??= 0;
         $quoteData->total ??= 0;
         $quoteData->deposit_type ??= 'none';
-        $quoteData->deposit_amount ??= 0;
+        $quoteData->deposit_value ??= 0;
         $quoteData->fulfillment_date = DateValidator::validateDate($quoteData->fulfillment_date, 'Y-m-d');
         $quoteData->is_long_term = !empty($quoteData->is_long_term) ? 1 : 0;
         $quoteData->is_on_demand = !empty($quoteData->is_on_demand) ? 1 : 0;
