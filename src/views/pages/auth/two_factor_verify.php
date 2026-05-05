@@ -8,8 +8,8 @@ if (!isset($_SESSION['2fa_pending'])) {
     exit;
 }
 
-require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $csrf = csrf_sf_token('2fa_verify');
 $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
