@@ -20,7 +20,7 @@ $stmt = $pdo->prepare('
     LEFT JOIN form_documents fd ON fc.id = fd.category_id
     LEFT JOIN form_documents fd2 ON fc.id = fd2.category_id
     LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fc.org_id = ?
+    WHERE fc.organization_id = ?
     GROUP BY fc.id, fd.id, fd.file_path, fd.file_name, fd.mime_type, fd.uploaded_at, u.username
     ORDER BY fc.created_at DESC
 ');

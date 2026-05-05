@@ -1,13 +1,12 @@
 <?php
 // src/utils/notifications.php
-// Notification and activity logging functions for public link events
-
+// Updated: uses unified system_audit table instead of activity_log
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/smtp.php';
 
 /**
- * Log an activity event to the activity_log table
+ * Log an activity event to the unified system_audit table
  * @param PDO $pdo
  * @param string $eventType Event type (e.g., 'quote_approved', 'contract_signed', 'invoice_paid')
  * @param string|null $documentType Document type ('quote', 'contract', 'invoice')
@@ -22,8 +21,22 @@ function log_activity(PDO $pdo, string $eventType, ?string $documentType, ?int $
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
         $metaJson = !empty($metadata) ? json_encode($metadata) : null;
         
-        $stmt = $pdo->prepare('INSERT INTO activity_log (event_type, document_type, document_id, client_id, description, ip_address, user_agent, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$eventType, $documentType, $documentId, $clientId, $description, $ip, $ua, $metaJson]);
+        // Use unified system_audit table (activity_log was merged into it)
+        $stmt = $pdo->prepare('INSERT INTO system_audit (level, category, actor_type, actor_id, ip, message, payload, document_type, document_id, client_id, description, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([
+            'info',
+            $eventType,
+            'user',
+            null,
+            $ip,
+            $description,
+            $metaJson,
+            $documentType,
+            $documentId,
+            $clientId,
+            $description,
+            $ua
+        ]);
     } catch (Throwable $e) {
         @error_log('[log_activity] Failed to log: ' . $e->getMessage());
     }
@@ -127,7 +140,6 @@ function notify_admin_quote_change(PDO $pdo, array $appConfig, array $quote, str
         
         send_admin_notification($pdo, $appConfig, $subject, $html);
         
-        // Log the activity
         $eventType = $action === 'approve' ? 'quote_approved' : 'quote_denied';
         log_activity($pdo, $eventType, 'quote', (int)($quote['id'] ?? 0), (int)($quote['client_id'] ?? 0), 
             "Client $clientName $verb quote Q-$docnum via public link",
@@ -158,7 +170,6 @@ function notify_admin_contract_signed(PDO $pdo, array $appConfig, array $contrac
         
         send_admin_notification($pdo, $appConfig, $subject, $html);
         
-        // Log the activity
         log_activity($pdo, 'contract_signed', 'contract', (int)($contract['id'] ?? 0), (int)($contract['client_id'] ?? 0), 
             "Client $clientName signed contract C-$docnum via public link",
             ['project_code' => $project]
@@ -178,7 +189,6 @@ function notify_admin_contract_signed(PDO $pdo, array $appConfig, array $contrac
  */
 function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, float $amount, string $status): void {
     try {
-        // Get invoice and client info
         $stmt = $pdo->prepare('SELECT i.*, c.name as client_name FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.id = ?');
         $stmt->execute([$invoiceId]);
         $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -201,7 +211,6 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
         
         send_admin_notification($pdo, $appConfig, $subject, $html);
         
-        // Log the activity
         log_activity($pdo, 'invoice_paid', 'invoice', $invoiceId, (int)($invoice['client_id'] ?? 0), 
             "Invoice I-$docnum $statusText via public link (\$$amount)",
             ['project_code' => $project, 'amount' => $amount, 'status' => $status, 'total' => $total]
