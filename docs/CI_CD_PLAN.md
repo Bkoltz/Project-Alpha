@@ -93,9 +93,20 @@ For PRs to main:
 - Scan dependencies for vulnerabilities (Dependabot already enabled)
 - Code quality checks
 
+## Infrastructure (Confirmed)
+
+**Staging Server:** HPE Gen9 (192GB RAM) with Docker + Nginx reverse proxy
+- Also runs ZFS NAS for drone data (separate from staging)
+- Multiple containers already running on this host
+- Project Alpha currently on port 1627
+
+**Access Method:** Nginx reverse proxy with subdomain (e.g., `staging.project-alpha.example.com`)
+- SSL via Let's Encrypt or existing certificate
+- Contributors access via HTTPS, no VPN needed
+
 ## Questions to Resolve
 
-1. **Staging server:** Do you have a server available, or should we use something like Railway/Render for temporary staging?
+1. **Domain:** What domain/subdomain for staging? (e.g., `staging.ledgetopdroneservices.com` or separate)
 2. **Test database:** Should tests run against SQLite (fast) or MySQL (accurate)?
 3. **Notification:** Where should deployment notifications go? Discord channel?
 4. **Release cadence:** Deploy on every main merge, or scheduled releases?

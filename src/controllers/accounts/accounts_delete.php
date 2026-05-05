@@ -40,7 +40,7 @@ if ($user && $user['role'] === 'admin') {
     exit;
 }
 
-// Delete user
+// Delete user (user_organizations will cascade due to FK)
 try {
     $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
     $stmt->execute([$userId]);

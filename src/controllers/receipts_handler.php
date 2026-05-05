@@ -1,5 +1,6 @@
 <?php
 // src/controllers/receipts_handler.php
+// Updated: org_id -> organization_id
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
@@ -23,9 +24,9 @@ if (!csrf_validate()) {
 }
 
 try {
-    // Get current org_id (default to 1 for now, should come from session/user context)
-    $orgId = 1;
-    $userId = $_SESSION['user_id'] ?? null;
+    // Get current organization_id from session (default to 1 for now)
+    $orgId = $_SESSION['user']['organization_id'] ?? 1;
+    $userId = $_SESSION['user']['id'] ?? null;
     
     // Ensure we have a valid user ID or NULL
     if ($userId === null) {
@@ -52,7 +53,7 @@ try {
             
             // Add store to stores table if it doesn't exist and store_name is provided
             if (!empty($storeName)) {
-                $stmt = $pdo->prepare('INSERT IGNORE INTO receipt_stores (org_id, store_name) VALUES (?, ?)');
+                $stmt = $pdo->prepare('INSERT IGNORE INTO receipt_stores (organization_id, store_name) VALUES (?, ?)');
                 $stmt->execute([$orgId, $storeName]);
             }
 
@@ -114,7 +115,7 @@ try {
 
             // Insert into database
             $stmt = $pdo->prepare('
-                INSERT INTO receipts (org_id, title, store_name, receipt_date, amount, file_path, uploaded_by)
+                INSERT INTO receipts (organization_id, title, store_name, receipt_date, amount, file_path, uploaded_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([$orgId, $title, $storeName, $receiptDate, $amount, $dbPath, $userId]);
@@ -132,7 +133,7 @@ try {
             }
 
             // Get file path before deleting
-            $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ? AND org_id = ?');
+            $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ? AND organization_id = ?');
             $stmt->execute([$receiptId, $orgId]);
             $receipt = $stmt->fetch();
 
@@ -141,7 +142,7 @@ try {
             }
 
             // Delete database record
-            $stmt = $pdo->prepare('DELETE FROM receipts WHERE id = ? AND org_id = ?');
+            $stmt = $pdo->prepare('DELETE FROM receipts WHERE id = ? AND organization_id = ?');
             $stmt->execute([$receiptId, $orgId]);
 
             // Delete file
@@ -173,18 +174,18 @@ try {
             
             // Add new store to stores table if it doesn't exist and store_name is provided
             if (!empty($storeName)) {
-                $stmt = $pdo->prepare('INSERT IGNORE INTO receipt_stores (org_id, store_name) VALUES (?, ?)');
+                $stmt = $pdo->prepare('INSERT IGNORE INTO receipt_stores (organization_id, store_name) VALUES (?, ?)');
                 $stmt->execute([$orgId, $storeName]);
             }
             
             // Clean up old store if it's no longer used and different from new one
             if (!empty($oldStoreName) && $oldStoreName !== $storeName) {
-                $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM receipts WHERE store_name = ? AND org_id = ? AND id != ?');
+                $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM receipts WHERE store_name = ? AND organization_id = ? AND id != ?');
                 $stmt->execute([$oldStoreName, $orgId, $receiptId]);
                 $usageCount = $stmt->fetch()['count'];
                 
                 if ($usageCount == 0) {
-                    $stmt = $pdo->prepare('DELETE FROM receipt_stores WHERE store_name = ? AND org_id = ?');
+                    $stmt = $pdo->prepare('DELETE FROM receipt_stores WHERE store_name = ? AND organization_id = ?');
                     $stmt->execute([$oldStoreName, $orgId]);
                 }
             }
@@ -193,7 +194,7 @@ try {
             $stmt = $pdo->prepare('
                 UPDATE receipts 
                 SET title = ?, store_name = ?, receipt_date = ?, amount = ?
-                WHERE id = ? AND org_id = ?
+                WHERE id = ? AND organization_id = ?
             ');
             $stmt->execute([$title, $storeName, $receiptDate, $amount, $receiptId, $orgId]);
 

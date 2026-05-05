@@ -1,5 +1,6 @@
 <?php
 // src/controllers/contract/on_demand_contracts_create.php
+// Updated: uses unified contracts table with contract_type='on_demand'
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 
@@ -26,11 +27,11 @@ if ($client_id <= 0) {
     $client_name = trim((string)($_POST['client'] ?? ''));
     if ($client_name !== '') {
         try {
-            $st = $pdo->prepare('SELECT id FROM clients WHERE name = ? LIMIT 1');
+            $st = $pdo->prepare('SELECT id FROM clients WHERE name = ? AND deleted_at IS NULL LIMIT 1');
             $st->execute([$client_name]);
             $cid = (int)$st->fetchColumn();
             if ($cid <= 0) {
-                $st = $pdo->prepare('SELECT id FROM clients WHERE name LIKE ? ORDER BY name LIMIT 1');
+                $st = $pdo->prepare('SELECT id FROM clients WHERE name LIKE ? AND deleted_at IS NULL ORDER BY name LIMIT 1');
                 $st->execute(['%'.$client_name.'%']);
                 $cid = (int)$st->fetchColumn();
             }
@@ -55,7 +56,6 @@ if ($price_per_invoice <= 0) {
     exit;
 }
 
-// Calculate subtotal (same as price per invoice for on-demand)
 $subtotal = $price_per_invoice;
 
 $discount_amount = 0.0; 
@@ -68,7 +68,6 @@ if($discount_type === 'percent'){
 $tax = max(0, $tax_percent) * max(0, $subtotal - $discount_amount) / 100;
 $total = max(0, $subtotal - $discount_amount + $tax);
 
-// Calculate deposit amount
 $deposit_amount = 0.0;
 if($deposit_type === 'percent') { 
     $deposit_amount = max(0, min(100, $deposit_value)) * $total / 100; 
@@ -79,7 +78,6 @@ elseif($deposit_type === 'fixed') {
 
 $pdo->beginTransaction();
 try{
-    // Get project code
     $projectCode = 'PA-'.date('Y').'-001';
     try { 
         $projectCode = project_next_code($pdo, $client_id); 
@@ -87,18 +85,20 @@ try{
         @error_log('[on_demand_contracts_create] project_next_code failed: '.$e->getMessage(), 0); 
     }
 
-    // Insert on-demand contract
-    $sql = 'INSERT INTO on_demand_contracts (
-        client_id, project_id, project_code, status, start_date, end_date, 
-        billing_interval_count, billing_interval_unit, price_per_invoice,
+    // Insert into unified contracts table with contract_type='on_demand'
+    $sql = 'INSERT INTO contracts (
+        client_id, project_id, project_code, contract_type, status, 
+        start_date, end_date, billing_interval_count, billing_interval_unit, 
+        price_per_invoice, invoice_type,
         discount_type, discount_value, tax_percent, subtotal,
         deposit_type, deposit_amount, deposit_paid,
         total_invoiced, invoice_count, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'pending', $start_date, $end_date,
-        $billing_interval_count, $billing_interval_unit, $price_per_invoice,
+        $client_id, $project_id, $projectCode, 'on_demand', 'pending', 
+        $start_date, $end_date,
+        $billing_interval_count, $billing_interval_unit, $price_per_invoice, 'set_amount',
         $discount_type, $discount_value, $tax_percent, $subtotal,
         $deposit_type, $deposit_amount, 0,
         0, 0, $scope
@@ -107,8 +107,8 @@ try{
     $odc_id = (int)$pdo->lastInsertId();
 
     // Assign doc number
-    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM on_demand_contracts')->fetchColumn();
-    $pdo->prepare('UPDATE on_demand_contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $odc_id]);
+    $maxDoc = (int)$pdo->query("SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type='on_demand'")->fetchColumn();
+    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $odc_id]);
 
     // Save project notes
     $notes = trim((string)($_POST['project_notes'] ?? ''));
@@ -121,13 +121,13 @@ try{
         }
     }
 
-    // Save contract signatures
+    // Save contract signatures (unified table)
     $signatureTitles = $_POST['signature_titles'] ?? [];
     $signatureOrders = $_POST['signature_orders'] ?? [];
     $signatureRequired = $_POST['signature_required'] ?? [];
     
     if (!empty($signatureTitles)) {
-        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (on_demand_contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
         foreach ($signatureTitles as $idx => $title) {
             $title = trim($title);
             if (empty($title)) continue;
@@ -139,9 +139,9 @@ try{
         }
     }
 
-    // Add to project_documents if project_id is set
+    // Add to project_documents (type now just 'contract')
     if ($project_id) {
-        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "on_demand_contract", ?)')->execute([$project_id, $odc_id]);
+        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $odc_id]);
     }
 
     $pdo->commit();

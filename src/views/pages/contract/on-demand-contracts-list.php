@@ -1,15 +1,9 @@
 <?php
 // src/views/pages/contract/on-demand-contracts-list.php
+// Updated: uses unified contracts table with contract_type='on_demand'
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
-
-// Ensure the optional on_demand_contracts table exists before querying
-$has_on_demand_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='on_demand_contracts'")->fetchColumn();
-if (!$has_on_demand_table) {
-  echo '<section><h2>On-Demand Contracts</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">On-demand contracts are not available because the database table <code>on_demand_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
-  return;
-}
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
@@ -21,32 +15,29 @@ $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 
-$where=[];$p=[];
-if($client_id>0){$where[]='odc.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
-if($status!==''){ $where[]='odc.status=?'; $p[] = $status; }
-if($start!==''){$where[]='odc.created_at>=?';$p[]=$start.' 00:00:00';}
-if($end!==''){$where[]='odc.created_at<=?';$p[]=$end.' 23:59:59';}
-if($project_code!==''){ $where[]='odc.project_code LIKE ?'; $p[] = $project_code.'%'; }
-if($doc_no>0){ $where[]='odc.doc_number=?'; $p[] = $doc_no; }
-if($min_price !== null){ $where[]='odc.price_per_invoice>=?'; $p[] = $min_price; }
-if($max_price !== null){ $where[]='odc.price_per_invoice<=?'; $p[] = $max_price; }
+$where=['c.contract_type = "on_demand"'];$p=[];
+if($client_id>0){$where[]='c.client_id=?';$p[]=$client_id;}
+elseif($client_name!==''){ $where[]='cl.name LIKE ?'; $p[]='%'.$client_name.'%'; }
+if($status!==''){ $where[]='c.status=?';$p[] = $status; }
+if($start!==''){$where[]='c.created_at>=?';$p[]=$start.' 00:00:00';}
+if($end!==''){$where[]='c.created_at<=?';$p[]=$end.' 23:59:59';}
+if($project_code!==''){ $where[]='c.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($doc_no>0){ $where[]='c.doc_number=?'; $p[] = $doc_no; }
+if($min_price !== null){ $where[]='c.price_per_invoice>=?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='c.price_per_invoice<=?'; $p[] = $max_price; }
 
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM on_demand_contracts odc LEFT JOIN clients c ON c.id=odc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
+$sqlCount = 'SELECT COUNT(*) FROM contracts c LEFT JOIN clients cl ON cl.id=c.client_id WHERE '.implode(' AND ',$where);
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, c.name client, c.id AS client_id FROM on_demand_contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
-if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
-$sql.=" ORDER BY odc.created_at DESC LIMIT $per OFFSET $offset";
+$sql="SELECT c.id, c.doc_number, c.project_code, c.status, c.start_date, c.end_date, c.billing_interval_count, c.billing_interval_unit, c.price_per_invoice, c.total_invoiced, c.invoice_count, c.last_invoice_date, cl.name client, cl.id AS client_id FROM contracts c LEFT JOIN clients cl ON cl.id=c.client_id WHERE ".implode(' AND ',$where)." ORDER BY c.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 
-$hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
-$clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
+$clients=$pdo->query('SELECT id,name FROM clients WHERE deleted_at IS NULL ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>On-Demand Contracts</h2>
@@ -87,7 +78,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   ['value' => 'cancelled', 'label' => 'Cancelled']
               ]
           ],
-                    'start' => [
+          'start' => [
               'type' => 'date',
               'label' => 'Start',
               'value' => $start
@@ -123,7 +114,6 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       ]
   ];
   
-  // Render the filter using Twig template
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 
@@ -170,7 +160,6 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               <?php endif; ?>
               <?php if ($r['status'] === 'active'): ?>
                 <?php 
-                  // Check if contract has ended
                   $canGenerate = true;
                   if (!empty($r['end_date']) && $r['end_date'] < date('Y-m-d')) {
                     $canGenerate = false;
@@ -216,7 +205,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <form method="get" action="/">
-        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
+        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).">'; }
         ?>
         <input type="hidden" name="page" value="contract/on-demand-contracts-list">
         <label>Per page
