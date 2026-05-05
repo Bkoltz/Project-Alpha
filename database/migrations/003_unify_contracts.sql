@@ -178,7 +178,7 @@ INSERT INTO contracts_new (
 SELECT
   id + @regular_max + @ltc_max, 'on_demand', quote_id, NULL, client_id, project_id, NULL,
   doc_number, project_code, status,
-  discount_type, discount_value, tax_percent, NULL, NULL, subtotal, total,
+  discount_type, discount_value, tax_percent, NULL, NULL, subtotal, price_per_invoice,
   deposit_type, deposit_amount, deposit_paid,
   start_date, end_date, billing_interval_count, billing_interval_unit, NULL,
   price_per_invoice, total_invoiced, last_invoice_date, NULL, invoice_count, invoices_generated,

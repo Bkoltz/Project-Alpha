@@ -20,12 +20,13 @@ CREATE TABLE IF NOT EXISTS user_organizations (
   CONSTRAINT fk_uo_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Seed existing users into user_organizations (default org = 1)
+-- Seed existing users into user_organizations (default org = 1) — skip if already exists
 INSERT INTO user_organizations (user_id, organization_id, role, is_default)
-SELECT id, 1, 'owner', 1 FROM users;
+SELECT id, 1, 'owner', 1 FROM users
+WHERE id NOT IN (SELECT user_id FROM user_organizations WHERE organization_id = 1);
 
 -- ============================================================================
--- 2. Add organization_id to tenant-scoped tables
+-- 2. Add organization_id to tenant-scoped tables (safe against re-runs)
 -- ============================================================================
 
 -- Quotes
