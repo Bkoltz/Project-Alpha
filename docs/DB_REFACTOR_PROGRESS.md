@@ -87,8 +87,8 @@ The following items were **not** found during the grep sweep, but should be manu
 - [ ] Verify auto-termination cron job
 - [ ] Verify soft delete / restore client workflow
 - [ ] Verify archived clients list displays correctly
-- [ ] Verify recurring invoices list displays
-- [ ] Verify on-demand invoices list displays
+- [x] Verify recurring invoices list displays
+- [x] Verify on-demand invoices list displays
 
 ---
 
