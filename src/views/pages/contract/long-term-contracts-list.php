@@ -1,15 +1,9 @@
 <?php
 // src/views/pages/contract/long-term-contracts-list.php
+// Updated: uses unified contracts table with contract_type='long_term'
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
-
-// Ensure the optional long_term_contracts table exists before querying
-$has_long_term_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='long_term_contracts'")->fetchColumn();
-if (!$has_long_term_table) {
-  echo '<section><h2>Long-term Contracts</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">Long-term contracts are not available because the database table <code>long_term_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
-  return;
-}
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
@@ -21,32 +15,29 @@ $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 
-$where=[];$p=[];
-if($client_id>0){$where[]='ltc.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
-if($status!==''){ $where[]='ltc.status=?'; $p[] = $status; }
-if($start!==''){$where[]='ltc.created_at>=?';$p[]=$start.' 00:00:00';}
-if($end!==''){$where[]='ltc.created_at<=?';$p[]=$end.' 23:59:59';}
-if($project_code!==''){ $where[]='ltc.project_code LIKE ?'; $p[] = $project_code.'%'; }
-if($doc_no>0){ $where[]='ltc.doc_number=?'; $p[] = $doc_no; }
-if($min_price !== null){ $where[]='ltc.total>=?'; $p[] = $min_price; }
-if($max_price !== null){ $where[]='ltc.total<=?'; $p[] = $max_price; }
+$where=['c.contract_type = "long_term"'];$p=[];
+if($client_id>0){$where[]='c.client_id=?';$p[]=$client_id;}
+elseif($client_name!==''){ $where[]='cl.name LIKE ?'; $p[]='%'.$client_name.'%'; }
+if($status!==''){ $where[]='c.status=?';$p[] = $status; }
+if($start!==''){$where[]='c.created_at>=?';$p[]=$start.' 00:00:00';}
+if($end!==''){$where[]='c.created_at<=?';$p[]=$end.' 23:59:59';}
+if($project_code!==''){ $where[]='c.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($doc_no>0){ $where[]='c.doc_number=?'; $p[] = $doc_no; }
+if($min_price !== null){ $where[]='c.total>=?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='c.total<=?'; $p[] = $max_price; }
 
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM long_term_contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
+$sqlCount = 'SELECT COUNT(*) FROM contracts c LEFT JOIN clients cl ON cl.id=c.client_id WHERE '.implode(' AND ',$where);
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, c.name client, c.id AS client_id FROM long_term_contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
-if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
-$sql.=" ORDER BY ltc.created_at DESC LIMIT $per OFFSET $offset";
+$sql="SELECT c.id, c.doc_number, c.project_code, c.status, c.total, c.deposit_type, c.deposit_amount, c.deposit_paid, c.start_date, c.end_date, c.billing_interval_count, c.billing_interval_unit, c.pricing_type, c.price_per_invoice, c.total_invoiced, c.next_invoice_date, cl.name client, cl.id AS client_id FROM contracts c LEFT JOIN clients cl ON cl.id=c.client_id WHERE ".implode(' AND ',$where)." ORDER BY c.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 
-$hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
-$clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
+$clients=$pdo->query('SELECT id,name FROM clients WHERE deleted_at IS NULL ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>Long-term Contracts</h2>
@@ -57,11 +48,6 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
-
-  <!-- <div style="display:flex;gap:12px;margin:16px 0">
-    <a href="/?page=contract/contracts-list" style="padding:8px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">Regular Contracts</a>
-    <a href="/?page=contract/long-term-contracts-list" style="padding:8px 14px;border:0;border-radius:8px;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600">Long-term Contracts</a>
-  </div> -->
 
   <?php
   $filterConfig = [
@@ -86,7 +72,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   ['value' => 'cancelled', 'label' => 'Cancelled']
               ]
           ],
-                    'start' => [
+          'start' => [
               'type' => 'date',
               'label' => 'Start',
               'value' => $start
@@ -122,7 +108,6 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       ]
   ];
   
-  // Render the filter using Twig template
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 
@@ -206,7 +191,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <form method="get" action="/">
-        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'\" value="'.htmlspecialchars($v).'">'; }
+        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).">'; }
         ?>
         <input type="hidden" name="page" value="contract/long-term-contracts-list">
         <label>Per page

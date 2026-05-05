@@ -1,5 +1,6 @@
 <?php
 // src/controllers/contract/on_demand_contract_activate.php
+// Updated: uses unified contracts table
 require_once __DIR__ . '/../../config/db.php';
 
 $id = (int)($_POST['id'] ?? 0);
@@ -9,7 +10,7 @@ if ($id <= 0) {
 }
 
 try {
-    $pdo->prepare('UPDATE on_demand_contracts SET status=? WHERE id=?')->execute(['active', $id]);
+    $pdo->prepare('UPDATE contracts SET status=? WHERE id=? AND contract_type="on_demand"')->execute(['active', $id]);
     header('Location: /?page=contract/on-demand-contracts-list&activated=1');
 } catch (Throwable $e) {
     header('Location: /?page=contract/on-demand-contracts-list&error=' . urlencode($e->getMessage()));

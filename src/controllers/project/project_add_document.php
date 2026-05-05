@@ -17,8 +17,8 @@ if (!$project_id || !$document_type || !$document_id) {
 // Add mapping
 $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?,?,?)')->execute([$project_id, $document_type, $document_id]);
 // For convenience, update the document's project_id column where available
-if (in_array($document_type, ['quote','contract','invoice','recurring_invoice','long_term_contract'], true)) {
-  $map = ['quote'=>'quotes', 'contract'=>'contracts', 'invoice'=>'invoices', 'recurring_invoice'=>'recurring_invoices', 'long_term_contract'=>'long_term_contracts'];
+if (in_array($document_type, ['quote','contract','invoice','recurring_invoice'], true)) {
+  $map = ['quote'=>'quotes', 'contract'=>'contracts', 'invoice'=>'invoices', 'recurring_invoice'=>'invoices'];
   $table = $map[$document_type] ?? null;
   if ($table) {
     $pdo->prepare("UPDATE {$table} SET project_id=? WHERE id=?")->execute([$project_id, $document_id]);

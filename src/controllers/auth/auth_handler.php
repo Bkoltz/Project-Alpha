@@ -69,8 +69,18 @@ if ($action === 'register_first') {
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $st = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?,?,?)');
         $st->execute([$emailOrUsername, $hash, 'admin']);
+        $newUserId = (int)$pdo->lastInsertId();
+        
+        // Create default organization for first admin
+        $orgStmt = $pdo->prepare('INSERT INTO organizations (name) VALUES (?)');
+        $orgStmt->execute(['Default Organization']);
+        $defaultOrgId = (int)$pdo->lastInsertId();
+        
+        // Link user to organization as owner
+        $uoStmt = $pdo->prepare('INSERT INTO user_organizations (user_id, organization_id, role, is_default) VALUES (?,?,?,?)');
+        $uoStmt->execute([$newUserId, $defaultOrgId, 'owner', 1]);
+        
         // Do not auto-login the new admin; require explicit sign-in
-        // This ensures session/cookies are established via the normal login flow.
         header('Location: /?page=login&created=1');
         exit;
     } catch (Throwable $e) {
@@ -129,7 +139,37 @@ if ($action === 'login') {
         
         // on success (no 2FA), regenerate session and optionally clear attempts
         session_regenerate_id(true);
-        $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
+        
+        // Fetch user's organizations for multi-tenant support
+        $orgs = [];
+        $defaultOrgId = null;
+        try {
+            $orgStmt = $pdo->prepare('
+                SELECT o.id, o.name, uo.role, uo.is_default 
+                FROM organizations o 
+                JOIN user_organizations uo ON uo.organization_id = o.id 
+                WHERE uo.user_id = ?
+            ');
+            $orgStmt->execute([(int)$u['id']]);
+            $orgs = $orgStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($orgs as $org) {
+                if ($org['is_default']) {
+                    $defaultOrgId = (int)$org['id'];
+                    break;
+                }
+            }
+            if (!$defaultOrgId && count($orgs) > 0) {
+                $defaultOrgId = (int)$orgs[0]['id'];
+            }
+        } catch (Throwable $e) { /* ignore org fetch errors */ }
+        
+        $_SESSION['user'] = [
+            'id'=>(int)$u['id'], 
+            'email'=>$u['email'], 
+            'role'=>$u['role'],
+            'organization_id' => $defaultOrgId,
+            'organizations' => $orgs
+        ];
         try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}
         // Remember-me flow is intentionally disabled. Below is the implementation
         // kept as a comment for future use.
