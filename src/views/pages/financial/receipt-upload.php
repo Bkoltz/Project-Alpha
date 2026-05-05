@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 $orgId = 1;
 
 // Get all existing stores for autocomplete
-$stmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
+$stmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE organization_id = ? ORDER BY store_name');
 $stmt->execute([$orgId]);
 $stores = $stmt->fetchAll(PDO::FETCH_COLUMN);
 ?>

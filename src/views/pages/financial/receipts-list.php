@@ -14,7 +14,7 @@ $filterMinAmount = $_GET['min_amount'] ?? '';
 $filterMaxAmount = $_GET['max_amount'] ?? '';
 
 // Build WHERE clause
-$whereClauses = ['r.org_id = ?'];
+$whereClauses = ['r.organization_id = ?'];
 $params = [$orgId];
 
 if (!empty($filterStore)) {
@@ -55,12 +55,12 @@ $receipts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $totalAmount = array_sum(array_column($receipts, 'amount'));
 
 // Get all stores for filter dropdown
-$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE organization_id = ? ORDER BY store_name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Get available years
-$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM receipts WHERE org_id = ? ORDER BY year DESC');
+$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM receipts WHERE organization_id = ? ORDER BY year DESC');
 $yearStmt->execute([$orgId]);
 $years = $yearStmt->fetchAll(PDO::FETCH_COLUMN);
 

@@ -18,7 +18,7 @@ $belongsToOrg = false;
 $isReadOnly = false;
 if ($entityType === 'client') {
     try {
-        $stmt = $pdo->prepare("SELECT org_id FROM client WHERE client_id = ?");
+        $stmt = $pdo->prepare("SELECT organization_id FROM clients WHERE id = ?");
         $stmt->execute([$entityId]);
         $orgId = $stmt->fetchColumn();
         if ($orgId) {

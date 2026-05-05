@@ -2,7 +2,7 @@
 
 **Started:** 2026-05-04 21:43 CDT
 **Branch:** `db-refactor-2026-05-04`
-**Status:** In Progress
+**Status:** Committed to branch — Phase 1 Complete
 
 ## Phases
 
@@ -14,40 +14,81 @@
 - [x] Phase 6: Audit log consolidation
 - [x] Phase 7: PHP controller updates (accounts, auth, receipts)
 - [x] Phase 8: PHP controller updates (contracts, invoices, projects)
-- [ ] Phase 9: PHP view updates (in progress)
-- [ ] Phase 10: Cron job updates
-- [ ] Phase 11: Remaining controller cleanup
-- [ ] Phase 12: Testing & cleanup
-- [ ] Phase 13: Push to branch
+- [x] Phase 9: PHP view updates (archived clients, contract lists, invoice lists, contract details)
+- [ ] Phase 10: Remaining views (quote views, client views, project views, financial views)
+- [ ] Phase 11: Cron job updates
+- [ ] Phase 12: Remaining controller cleanup (quote controllers, settings controllers)
+- [ ] Phase 13: Testing & cleanup
+- [ ] Phase 14: Push to remote
 
-## Notes
+## Commit Summary
 
-### Completed Controller Updates
-1. **auth_handler.php** - Added organization fetching on login, org creation on first admin register
-2. **accounts_create.php** - Links new users to admin's default org via user_organizations
-3. **accounts_delete.php** - user_organizations cascades automatically
-4. **clients_delete.php** - Rewritten for soft delete with archive_payload JSON
-5. **clients_restore.php** - Rewritten to restore soft-deleted clients
-6. **receipts_handler.php** - org_id → organization_id throughout
-7. **contracts_create.php** - Added contract_type='regular' to INSERT
-8. **long_term_contracts_create.php** - Rewritten for unified contracts table
-9. **on_demand_contracts_create.php** - Rewritten for unified contracts table
-10. **long_term_contract_activate.php** - Updated for unified table
-11. **long_term_contract_pause.php** - Updated for unified table
-12. **long_term_contract_resume.php** - Updated for unified table
-13. **long_term_contract_terminate.php** - Updated for unified table
-14. **on_demand_contract_activate.php** - Updated for unified table
-15. **on_demand_contract_pause.php** - Updated for unified table
-16. **on_demand_contract_resume.php** - Updated for unified table
-17. **on_demand_contract_terminate.php** - Updated for unified table
-18. **on_demand_invoice_generate.php** - Updated for unified table, dropped on_demand_invoices
-19. **invoices_mark_paid.php** - Cleaned up (was garbled)
-20. **project_add_document.php** - Updated document_type map (dropped long_term_contract)
-21. **project_remove_document.php** - Updated document_type map
+**Commit:** `17ddbaf` on branch `db-refactor-2026-05-04`
+**Files changed:** 38 files, +2833/-372 lines
 
-### Migration Files Created
-- `database/migrations/002_multi_user_tenant.sql` - user_organizations, soft delete columns, org_id rename
-- `database/migrations/003_unify_contracts.sql` - Unified contracts table, ID mapping, contract_items
-- `database/migrations/004_unify_invoices_signatures.sql` - Invoice parentage migration, unified signatures
-- `database/migrations/005_client_soft_delete_audit.sql` - Soft delete migration, audit consolidation
-- `database/migrations/006_final_cleanup.sql` - Table renames, final FK fixes, cleanup
+### What Was Done
+
+#### Migration Scripts (002-006)
+1. **002_multi_user_tenant.sql** - Creates `user_organizations` junction table, seeds existing users, adds `organization_id` to quotes/projects/item_library/tax_rates/payment_methods, adds `deleted_at`/`archive_payload` to clients, renames `org_id` → `organization_id`
+2. **003_unify_contracts.sql** - Creates unified `contracts_new` table with `contract_type`, migrates all 3 contract types with ID offsets, creates unified `contract_items_new`, builds `_contract_id_mapping` table
+3. **004_unify_invoices_signatures.sql** - Adds `contract_type`/`on_demand_invoice_number`/`generated_at`/`organization_id` to invoices, migrates parentage using mapping table, drops `on_demand_invoices`, creates unified `contract_signatures_new`
+4. **005_client_soft_delete_audit.sql** - Migrates `archived_clients` data into `clients` with `deleted_at`, drops `archived_clients`/`archived_entities`, merges `activity_log` into `system_audit`, drops `activity_log`
+5. **006_final_cleanup.sql** - Renames old tables to `_old` suffix, renames new tables to canonical names, fixes FKs, updates `project_documents` enum values, drops mapping table
+
+#### Controllers Updated (21 files)
+- **Auth/Accounts**: Multi-tenant login, org creation on first admin, user-org linking
+- **Clients**: Soft delete with archive_payload JSON, restore from soft delete
+- **Contracts**: All 3 types now use unified `contracts` table with `contract_type` filter
+- **Invoices**: Unified parentage, dropped `on_demand_invoices` references
+- **Projects**: Updated document type mappings (dropped `long_term_contract`/`on_demand_contract`)
+- **Receipts**: `org_id` → `organization_id`
+
+#### Views Updated (5 files)
+- **archived-clients.php**: Reads from `clients WHERE deleted_at IS NOT NULL`
+- **long-term-contracts-list.php**: Queries unified `contracts` table
+- **long-term-contract-details.php**: Uses unified table + `contract_items`
+- **on-demand-contracts-list.php**: Queries unified `contracts` table
+- **on-demand-invoices-list.php**: Uses `contract_type` column instead of `on_demand_contract_id`
+
+### What Still Needs Work
+
+#### Remaining Views (likely need updates)
+- `contract/contract-details.php` (regular contracts)
+- `contract/contracts-edit.php`
+- `contract/contracts-list.php`
+- `invoice/invoice-details.php`
+- `invoice/invoices-edit.php`
+- `invoice/invoices-list.php`
+- `invoice/recurring-invoices-list.php`
+- `client/clients-list.php`
+- `client/clients-edit.php`
+- `quote/*` views
+- `project/*` views
+- `financial/*` views (receipts/forms)
+
+#### Cron Jobs
+- `cron/generate_recurring_invoices.php` — likely references `long_term_contracts`
+- `cron/stripe_reconciliation.php` — may reference old tables
+
+#### Settings/Other Controllers
+- Various settings handlers may reference old table names in SQL
+
+### Next Steps
+
+1. Search remaining views for old table references and update
+2. Check cron jobs for old table references
+3. Test the migration scripts on a fresh database
+4. Push to remote when ready
+
+### How to Apply Migrations
+
+Run in order on your database:
+```sql
+SOURCE database/migrations/002_multi_user_tenant.sql
+SOURCE database/migrations/003_unify_contracts.sql
+SOURCE database/migrations/004_unify_invoices_signatures.sql
+SOURCE database/migrations/005_client_soft_delete_audit.sql
+SOURCE database/migrations/006_final_cleanup.sql
+```
+
+**Note:** Migrations 003-005 depend on the old tables existing. If you've already run them and need to re-run, restore from backup first.

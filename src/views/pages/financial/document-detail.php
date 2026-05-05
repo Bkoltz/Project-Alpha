@@ -22,7 +22,7 @@ $stmt = $pdo->prepare('
     FROM form_documents fd
     JOIN form_categories fc ON fd.category_id = fc.id
     LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fd.id = ? AND fc.org_id = ?
+    WHERE fd.id = ? AND fc.organization_id = ?
 ');
 $stmt->execute([$documentId, $orgId]);
 $document = $stmt->fetch(PDO::FETCH_ASSOC);
