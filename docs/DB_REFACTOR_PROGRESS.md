@@ -1,89 +1,103 @@
 # Database Refactoring Progress
 
-**Started:** 2026-05-04 21:43 CDT
-**Branch:** `db-refactor-2026-05-04`
-**Status:** Committed to branch — Phase 1 Complete
+**Started:** 2026-05-04 21:43 CDT  
+**Branch:** `db-refactor-2026-05-04`  
+**Status:** Phase 2 Complete — All views and cron jobs updated
 
-## Phases
+---
 
-- [x] Phase 1: Create migration scripts (SQL files 002-006)
-- [x] Phase 2: Multi-user/tenant model (user_organizations, organization_id additions)
-- [x] Phase 3: Contract unification (3 tables → 1)
-- [x] Phase 4: Invoice unification (drop on_demand_invoices)
-- [x] Phase 5: Client soft deletes + archive consolidation
-- [x] Phase 6: Audit log consolidation
-- [x] Phase 7: PHP controller updates (accounts, auth, receipts)
-- [x] Phase 8: PHP controller updates (contracts, invoices, projects)
-- [x] Phase 9: PHP view updates (archived clients, contract lists, invoice lists, contract details)
-- [ ] Phase 10: Remaining views (quote views, client views, project views, financial views)
-- [ ] Phase 11: Cron job updates
-- [ ] Phase 12: Remaining controller cleanup (quote controllers, settings controllers)
-- [ ] Phase 13: Testing & cleanup
-- [ ] Phase 14: Push to remote
+## Commits
 
-## Commit Summary
+| Commit | Description | Files | +/- |
+|--------|-------------|-------|-----|
+| `17ddbaf` | Phase 1: Migration scripts + core controllers | 38 | +2,833 / -372 |
+| `753268b` | Phase 2: Remaining views, cron jobs, controllers | 16 | +232 / -381 |
 
-**Commit:** `17ddbaf` on branch `db-refactor-2026-05-04`
-**Files changed:** 38 files, +2833/-372 lines
+**Total:** 54 files changed, +3,065 / -753 lines
 
-### What Was Done
+---
 
-#### Migration Scripts (002-006)
-1. **002_multi_user_tenant.sql** - Creates `user_organizations` junction table, seeds existing users, adds `organization_id` to quotes/projects/item_library/tax_rates/payment_methods, adds `deleted_at`/`archive_payload` to clients, renames `org_id` → `organization_id`
-2. **003_unify_contracts.sql** - Creates unified `contracts_new` table with `contract_type`, migrates all 3 contract types with ID offsets, creates unified `contract_items_new`, builds `_contract_id_mapping` table
-3. **004_unify_invoices_signatures.sql** - Adds `contract_type`/`on_demand_invoice_number`/`generated_at`/`organization_id` to invoices, migrates parentage using mapping table, drops `on_demand_invoices`, creates unified `contract_signatures_new`
-4. **005_client_soft_delete_audit.sql** - Migrates `archived_clients` data into `clients` with `deleted_at`, drops `archived_clients`/`archived_entities`, merges `activity_log` into `system_audit`, drops `activity_log`
-5. **006_final_cleanup.sql** - Renames old tables to `_old` suffix, renames new tables to canonical names, fixes FKs, updates `project_documents` enum values, drops mapping table
+## What Was Done
 
-#### Controllers Updated (21 files)
-- **Auth/Accounts**: Multi-tenant login, org creation on first admin, user-org linking
-- **Clients**: Soft delete with archive_payload JSON, restore from soft delete
-- **Contracts**: All 3 types now use unified `contracts` table with `contract_type` filter
-- **Invoices**: Unified parentage, dropped `on_demand_invoices` references
-- **Projects**: Updated document type mappings (dropped `long_term_contract`/`on_demand_contract`)
+### Migration Scripts (002-006)
+1. **002_multi_user_tenant.sql** — Multi-tenant support (`user_organizations`, `organization_id` additions, soft delete columns)
+2. **003_unify_contracts.sql** — Contract unification (3 tables → 1 with `contract_type`)
+3. **004_unify_invoices_signatures.sql** — Invoice unification (merge `on_demand_invoices`), unified signatures
+4. **005_client_soft_delete_audit.sql** — Soft delete migration, merge `activity_log` into `system_audit`
+5. **006_final_cleanup.sql** — Table renames, FK fixes, drop old tables
+
+### Controllers Updated (23 files)
+- **Auth/Accounts**: Multi-tenant login, org creation, user-org linking
+- **Clients**: Soft delete with `archive_payload` JSON
+- **Contracts**: All types use unified `contracts` table with `contract_type`
+- **Invoices**: Unified parentage via `contract_id` + `contract_type`
+- **Quotes**: `quote_approve.php` creates contracts in unified table
 - **Receipts**: `org_id` → `organization_id`
+- **Document Re-enable**: Uses unified contracts with `contract_type` filter
 
-#### Views Updated (5 files)
-- **archived-clients.php**: Reads from `clients WHERE deleted_at IS NOT NULL`
-- **long-term-contracts-list.php**: Queries unified `contracts` table
-- **long-term-contract-details.php**: Uses unified table + `contract_items`
-- **on-demand-contracts-list.php**: Queries unified `contracts` table
-- **on-demand-invoices-list.php**: Uses `contract_type` column instead of `on_demand_contract_id`
+### Views Updated (12 files)
+- **archived-clients.php** — Reads from `clients WHERE deleted_at IS NOT NULL`
+- **long-term-contracts-list.php** — Uses unified `contracts` table
+- **long-term-contract-details.php** — Uses unified table + `contract_items`
+- **on-demand-contracts-list.php** — Uses unified `contracts` table
+- **on-demand-invoices-list.php** — Uses `contract_type='on_demand'` + joins `contracts`
+- **recurring-invoices-list.php** — Uses unified `contracts` with `contract_type='long_term'`
+- **links_section.php** — `org_id` → `organization_id` in client query
+- **financial/** — All financial views updated (`org_id` → `organization_id`)
 
-### What Still Needs Work
+### Cron Jobs Updated (2 files)
+- **auto_terminate_contracts.php** — Uses unified `contracts` table, checks `contract_type`
+- **generate_recurring_invoices.php** — Queries `contracts WHERE contract_type='long_term'`, uses `contract_items`
 
-#### Remaining Views (likely need updates)
-- `contract/contract-details.php` (regular contracts)
-- `contract/contracts-edit.php`
-- `contract/contracts-list.php`
-- `invoice/invoice-details.php`
-- `invoice/invoices-edit.php`
-- `invoice/invoices-list.php`
-- `invoice/recurring-invoices-list.php`
-- `client/clients-list.php`
-- `client/clients-edit.php`
-- `quote/*` views
-- `project/*` views
-- `financial/*` views (receipts/forms)
+### Utilities Updated
+- **notifications.php** — `log_activity()` now writes to `system_audit` instead of `activity_log`
 
-#### Cron Jobs
-- `cron/generate_recurring_invoices.php` — likely references `long_term_contracts`
-- `cron/stripe_reconciliation.php` — may reference old tables
+---
 
-#### Settings/Other Controllers
-- Various settings handlers may reference old table names in SQL
+## What Still Needs Work
 
-### Next Steps
+The following items were **not** found during the grep sweep, but should be manually verified:
 
-1. Search remaining views for old table references and update
-2. Check cron jobs for old table references
-3. Test the migration scripts on a fresh database
-4. Push to remote when ready
+### Remaining Views (to check)
+- `contract/contract-details.php` — May reference old item table names
+- `contract/contracts-edit.php` — May reference old tables
+- `contract/contracts-list.php` — May have contract type logic
+- `invoice/invoice-details.php` — May reference `long_term_contract_id` or `on_demand_contract_id`
+- `invoice/invoices-list.php` — May have filters for old contract types
+- `invoice/invoices-edit.php` — May reference old FK columns
+- `client/clients-list.php` — May have `archived` flag logic (should use `deleted_at`)
+- `client/clients-edit.php` — May have archive/restore logic
+- `quote/*` views — May display contract type info
+- `project/*` views — May reference old document types
 
-### How to Apply Migrations
+### Settings/Other Controllers
+- Various settings handlers may still reference old table names
+- `on_demand_invoice_generate.php` — Was marked as updated but should be verified
+- Any controller using `INFORMATION_SCHEMA.TABLES` to check for `long_term_contracts`
 
-Run in order on your database:
+### Testing Checklist
+- [ ] Run migration 002 on a backup database
+- [ ] Run migration 003 (requires old tables to exist)
+- [ ] Run migration 004 (requires mapping table from 003)
+- [ ] Run migration 005 (requires `archived_clients` and `activity_log`)
+- [ ] Run migration 006 (renames tables — irreversible without restore)
+- [ ] Verify login works with multi-tenant changes
+- [ ] Verify creating regular/on-demand/long-term contracts from quotes
+- [ ] Verify invoice generation cron job
+- [ ] Verify auto-termination cron job
+- [ ] Verify soft delete / restore client workflow
+- [ ] Verify archived clients list displays correctly
+- [ ] Verify recurring invoices list displays
+- [ ] Verify on-demand invoices list displays
+
+---
+
+## How to Apply Migrations
+
+**⚠️ BACKUP YOUR DATABASE FIRST**
+
 ```sql
+-- Run in order:
 SOURCE database/migrations/002_multi_user_tenant.sql
 SOURCE database/migrations/003_unify_contracts.sql
 SOURCE database/migrations/004_unify_invoices_signatures.sql
@@ -91,4 +105,32 @@ SOURCE database/migrations/005_client_soft_delete_audit.sql
 SOURCE database/migrations/006_final_cleanup.sql
 ```
 
-**Note:** Migrations 003-005 depend on the old tables existing. If you've already run them and need to re-run, restore from backup first.
+Or from shell:
+```bash
+mysql -u root -p project_alpha < database/migrations/002_multi_user_tenant.sql
+mysql -u root -p project_alpha < database/migrations/003_unify_contracts.sql
+mysql -u root -p project_alpha < database/migrations/004_unify_invoices_signatures.sql
+mysql -u root -p project_alpha < database/migrations/005_client_soft_delete_audit.sql
+mysql -u root -p project_alpha < database/migrations/006_final_cleanup.sql
+```
+
+**Note:** Migrations 003-005 depend on old tables existing. If you've already run them and need to re-run, restore from backup first.
+
+---
+
+## Next Steps
+
+1. **Test locally** — Apply migrations to a test database
+2. **Verify all views load** — Check contract, invoice, client, quote views
+3. **Test workflows** — Create quote → approve → contract → invoice
+4. **Push to remote** when satisfied
+
+---
+
+## Branch Status
+
+```
+Branch: db-refactor-2026-05-04
+Commits: 2 ahead of main
+Ready to push: Yes (after testing)
+```
