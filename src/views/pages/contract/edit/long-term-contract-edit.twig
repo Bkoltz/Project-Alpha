@@ -1,0 +1,36 @@
+<section>
+	<h2>Edit Contract LTC-{{contract.id}}
+		{% if contract.project_code is defined %}
+			Project
+			{{contract.project_code}}
+		{% endif %}
+	</h2>
+
+	<form id="coEditForm" method="post" action="/?page=contract/long-term-contracts-edit" style="display:grid;gap:16px;max-width:900px">
+		<input type="hidden" name="csrf" value="{{token}}">
+		<input type="hidden" name="id" value="{{id}}">
+		<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+			{% include 'partials/client_components/client-input-autocomplete.twig' with {document: contract} %}
+
+			{% include "partials/document_details/input/finance-input.twig" with {document: contract} %}
+		</div>
+
+		{% include 'partials/document_details/input/custom-field-input.twig' with {custom_fields} %}
+
+		{% include 'partials/document_details/input/item-input.twig' with {items: items} %}
+
+		{% include 'partials/document_details/input/scope-input.twig' with {app_config: app_config, document: contract} %}
+
+		{% include 'partials/document_details/input/notes-input.twig' with {document: contract} %}
+
+		{% include 'partials/document_details/input/terms-input.twig' with {document: contract} %}
+
+		{% include 'partials/document_details/input/total-input.twig' with {document: contract} %}
+
+		<div>
+			<button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Contract</button>
+		</div>
+	</form>
+</section>
+
+<script src="js/contracts-edit-logic.js" defer></script>

@@ -64,7 +64,7 @@
 					<td style="padding:12px;text-align:right;font-weight:600">${{contract.price_per_invoice}}</td>
 				</tr>
 			{% else %}
-				{% include 'partials/document_details/display/items-table-display.twig' with {items: contract_items} %}
+				{% include 'partials/document_details/display/item-display.twig' with {items: contract_items} %}
 
 				{% include 'partials/document_details/display/regular-total-display.twig' with {document: contract} %}
 

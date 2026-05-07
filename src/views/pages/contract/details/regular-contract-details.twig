@@ -13,7 +13,7 @@
 		<a href="/?page=contract/contract-pdf&id={{id}}" download="contract-{{contract.document_id}}.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
 
 		{% if contract.status == 'pending' %}
-			<a href="/?page=contract/contracts-edit&id={{id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+			<a href="/?page=contract/regular-contract-edit&id={{id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
 		{% endif %}
 
 		{% if contract.status !== 'cancelled' %}
@@ -101,7 +101,7 @@
 	{% endif %}
 
 	{% if items is not empty %}
-		{% include 'partials/document_details/display/items-table-display.twig' with {items} %}
+		{% include 'partials/document_details/display/item-display.twig' with {items} %}
 	{% endif %}
 
 	{% include 'partials/document_details/display/regular-total-display.twig' with {document: contract} %}

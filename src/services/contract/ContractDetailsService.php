@@ -4,11 +4,13 @@ namespace App\services\contract;
 
 use App\config\AppConfiguration;
 use App\render_outputs\Contact\LongTermContractDetailsView;
+use App\render_outputs\contact\OnDemandContractDetailsView;
 use App\render_outputs\contract\RegularContractDetailsView;
 use App\services\BaseDetailsService;
 use App\services\ClientService;
 use App\utils\enum\DocumentType;
 use App\render_outputs\RenderOutput;
+use App\services\FinancialService;
 
 class ContractDetailsService extends BaseDetailsService
 {
@@ -32,9 +34,12 @@ class ContractDetailsService extends BaseDetailsService
 
     private function getRegularDetails(int $id): RenderOutput
     {
-        $contract = $this->contractService->getStoredContract($id, DocumentType::REGULAR);
+        $contract = $this->contractService->getStoredContract($id, DocumentType::REGULAR, true);
+        $items = $this->contractService->getStoredContractItems($id, DocumentType::REGULAR);
+
+        FinancialService::updateContractFinancialData(DocumentType::REGULAR, $contract, $items);
+
         $signatures = $this->contractService->getStoredSignatures($id);
-        $items = $this->contractService->getStoredContractItems($id);
         $branding = $this->getBranding();
         $contactInfo = $this->getContactInfo($contract->client_id);
 
@@ -65,7 +70,7 @@ class ContractDetailsService extends BaseDetailsService
 
     private function getOnDemandDetails(int $id): RenderOutput
     {
-        return new RenderOutput();
+        return new OnDemandContractDetailsView();
     }
 
 }

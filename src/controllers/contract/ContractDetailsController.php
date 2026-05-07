@@ -12,9 +12,9 @@ class ContractDetailsController
     private ContractService $contractService;
 
     private const RENDER_PATHS = [
-        DocumentType::REGULAR->value => 'pages\contract\regular-contract-details.twig',
-        DocumentType::LONG_TERM->value => 'pages\contract\long-term-contract-details.twig',
-        DocumentType::ON_DEMAND->value => 'pages\contract\on-demand-contract-details.twig'
+        DocumentType::REGULAR->value => 'pages\contract\details\regular-contract-details.twig',
+        DocumentType::LONG_TERM->value => 'pages\contract\details\long-term-contract-details.twig',
+        DocumentType::ON_DEMAND->value => 'pages\contract\details\on-demand-contract-details.twig'
     ];
 
     public function __construct(ContractDetailsService $service, ContractService $contractService)

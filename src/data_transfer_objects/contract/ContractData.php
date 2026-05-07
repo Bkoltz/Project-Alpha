@@ -18,10 +18,13 @@ class ContractData extends TransferObject
     public ?string $status = null;
     public ?string $discount_type = null;
     public ?float $discount_value = null;
+    public ?float $discount_amount = null;
     public ?float $tax_percent = null;
+    public ?float $tax_value = null;
     public ?float $subtotal = null;
     public ?float $total = null;
     public ?string $deposit_type = null;
+    public ?float $deposit_value = null;
     public ?float $deposit_amount = null;
     public ?bool $deposit_paid = null;
     public ?string $signed_pdf_path = null;
@@ -37,6 +40,7 @@ class ContractData extends TransferObject
     public ?string $created_at = null;
     public ?string $document_date = null;
     public ?string $document_date_updated_at = null;
+    public ?string $pricing_type = null;
     public ?float $price_per_invoice = null;
     public ?string $start_date = null;
     public ?string $end_date = null;

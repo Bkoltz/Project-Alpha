@@ -48,10 +48,10 @@
         <li class="nav-section">
             <div class="section-label">Contracts</div>
             <ul>
-                <li><a href="/?page=contract/contract-list" data-page="contract/contracts-list">Contracts</a></li>
+                <li><a href="/?page=contract/regular-contract-list" data-page="contract/contracts-list">Contracts</a></li>
                 <li><a href="/?page=contract/long-term-contract-list" data-page="contract/long-term-contracts-list">Long-term Contracts</a></li>
                 <li><a href="/?page=contract/on-demand-contract-list" data-page="contract/on-demand-contracts-list">On-Demand Contracts</a></li>
-                <li><a href="/?page=contract/contract-create" data-page="contract/contracts-create">Create Contract</a></li>
+                <li><a href="/?page=contract/contract-create" data-page="contract/contract-create">Create Contract</a></li>
             </ul>
         </li>
         <li class="nav-section">

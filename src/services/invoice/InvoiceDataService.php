@@ -18,7 +18,6 @@ class InvoiceDataService
         $this->customFieldService = $customFieldService;
     }
 
-    // TODO make this accept more than just regular documetn type which is hella gay because this is rendered on load and we ened tom ake it dynamic 
     public function getCreateRenderData(): RenderOutput
     {
         $customFields = $this->customFieldService->getCustomFieldInputView(DocumentType::REGULAR);

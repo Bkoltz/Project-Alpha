@@ -26,19 +26,4 @@ class LongTermContractRecord extends BaseContractRecord
     public ?string $pricing_type = null;
     public ?float $price_per_invoice = null;
     public ?string $scope = null;
-
-    public function getTotal(): float
-    {
-        return $this->total;
-    }
-
-    public function getDepositAmount(): float
-    {
-        return $this->deposit_amount;
-    }
-
-    public function  getDepositType(): string
-    {
-        return $this->deposit_type;
-    }
 }

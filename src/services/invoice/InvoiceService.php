@@ -55,7 +55,7 @@ class InvoiceService
         };
     }
 
-    public function updateInvoice(int $id, InvoiceEditData $invoiceData, ?ItemData $invoiceItems): void
+    public function updateInvoice(int $id, InvoiceData $invoiceData, ?ItemData $invoiceItems): void
     {
         $record = InvoiceEditRecord::fromArray($invoiceData->toArray());
         $recordItems = ItemRecord::fromArray($invoiceItems?->toArray());

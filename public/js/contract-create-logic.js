@@ -4,18 +4,18 @@ function money(n) { return '$' + (Number(n) || 0).toFixed(2) }
 
 function addItemCo(item = '', desc = '', qty = 1, price = 0) {
     var wrap = document.createElement('div');
-    var itemId = 'itemCo_' + (itemCounterCo++);
-    var descId = 'descCo_' + itemCounterCo;
-    var priceId = 'priceCo_' + itemCounterCo;
+    var itemId = 'item_' + (itemCounterCo++);
+    var descId = 'desc_' + itemCounterCo;
+    var priceId = 'price_' + itemCounterCo;
     wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
     wrap.innerHTML = `
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalcCo()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
-    <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalcCo()">${desc}</textarea>
-    <input required type="number" step="0.01" min="0" name="item_qty[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcCo()">
-    <input id="${priceId}" required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalcCo()">
+    <textarea id="${descId}" placeholder="Description (optional)" name="description[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalcCo()">${desc}</textarea>
+    <input required type="number" step="0.01" min="0" name="quantity[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcCo()">
+    <input id="${priceId}" required type="number" step="0.01" min="0" name="unit_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalcCo()">
     <button type="button" onclick="this.parentElement.remove();recalcCo()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
-    document.getElementById('itemsCo').appendChild(wrap);
+    document.getElementById('items').appendChild(wrap);
 
     // Re-initialize autocomplete for the new item input
     if (window.ItemAutocomplete) {
@@ -30,86 +30,87 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
 
     recalcCo();
 }
+
 function recalcCo() {
-    var docType = document.querySelector('input[name="doc_type"]:checked').value;
-    var isLongTerm = (docType === 'long_term');
-    var isOnDemand = (docType === 'on_demand');
-    var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
-    var isOngoing = (isLongTerm || isOnDemand) && document.getElementById('endDateTypeCo').value === 'ongoing';
+    // var docType = document.querySelector('input[name="doc_type"]:checked').value;
+    // var isLongTerm = (docType === 'long_term');
+    // var isOnDemand = (docType === 'on_demand');
+    // var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
+    // var isOngoing = (isLongTerm || isOnDemand) && document.getElementById('endDateTypeCo').value === 'ongoing';
 
-    var subtotal = 0;
+    // var subtotal = 0;
 
-    // Calculate subtotal based on pricing type
-    if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
-        // Use price per invoice
-        subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
-    } else {
-        // Use line items
-        var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
-        var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
-        for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
-    }
+    // // Calculate subtotal based on pricing type
+    // if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
+    //     // Use price per invoice
+    //     subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
+    // } else {
+    //     // Use line items
+    //     var qtys = Array.from(document.querySelectorAll('[name=\"quantity[]\"]')).map(e => parseFloat(e.value) || 0);
+    //     var prices = Array.from(document.querySelectorAll('[name=\"unit_price[]\"]')).map(e => parseFloat(e.value) || 0);
+    //     for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
+    // }
 
-    // For fixed_total pricing, recalculate based on items
-    if (isLongTerm && pricingType === 'fixed_total') {
-        var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
-        var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
-        subtotal = 0;
-        for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
-    }
+    // // For fixed_total pricing, recalculate based on items
+    // if (isLongTerm && pricingType === 'fixed_total') {
+    //     var qtys = Array.from(document.querySelectorAll('[name=\"quantity[]\"]')).map(e => parseFloat(e.value) || 0);
+    //     var prices = Array.from(document.querySelectorAll('[name=\"unit_price[]\"]')).map(e => parseFloat(e.value) || 0);
+    //     subtotal = 0;
+    //     for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
+    // }
 
-    var dtype = document.getElementById('discountTypeCo').value;
-    var dval = parseFloat(document.getElementById('discountValueCo').value) || 0;
-    var taxp = parseFloat(document.getElementById('taxPercentCo').value) || 0;
-    var discount = 0;
-    if (dtype === 'percent') { discount = Math.max(0, Math.min(100, dval)) * subtotal / 100; }
-    else if (dtype === 'fixed') { discount = Math.max(0, dval); }
-    var taxable = Math.max(0, subtotal - discount);
-    var tax = Math.max(0, taxp) * taxable / 100;
-    var total = Math.max(0, taxable + tax);
+    // var dtype = document.getElementById('discountTypeCo').value;
+    // var dval = parseFloat(document.getElementById('discountValueCo').value) || 0;
+    // var taxp = parseFloat(document.getElementById('taxPercentCo').value) || 0;
+    // var discount = 0;
+    // if (dtype === 'percent') { discount = Math.max(0, Math.min(100, dval)) * subtotal / 100; }
+    // else if (dtype === 'fixed') { discount = Math.max(0, dval); }
+    // var taxable = Math.max(0, subtotal - discount);
+    // var tax = Math.max(0, taxp) * taxable / 100;
+    // var total = Math.max(0, taxable + tax);
 
-    // Calculate deposit
-    var depType = document.getElementById('depositTypeCo').value;
-    var depVal = parseFloat(document.getElementById('depositValueCo').value) || 0;
-    var deposit = 0;
-    if (depType === 'percent') { deposit = Math.max(0, Math.min(100, depVal)) * total / 100; }
-    else if (depType === 'fixed') { deposit = Math.max(0, depVal); }
+    // // Calculate deposit
+    // var depType = document.getElementById('depositTypeCo').value;
+    // var depVal = parseFloat(document.getElementById('depositValueCo').value) || 0;
+    // var deposit = 0;
+    // if (depType === 'percent') { deposit = Math.max(0, Math.min(100, depVal)) * total / 100; }
+    // else if (depType === 'fixed') { deposit = Math.max(0, depVal); }
 
-    document.getElementById('subtotalValCo').textContent = money(subtotal);
-    document.getElementById('discountValCo').textContent = money(discount);
-    document.getElementById('taxValCo').textContent = money(tax);
+    // document.getElementById('subtotalValCo').textContent = money(subtotal);
+    // document.getElementById('discountValCo').textContent = money(discount);
+    // document.getElementById('taxValCo').textContent = money(tax);
 
-    // For ongoing contracts, don't show total (unknown)
-    if (isOngoing) {
-        document.getElementById('totalValCo').parentElement.style.display = 'none';
-    } else {
-        document.getElementById('totalValCo').parentElement.style.display = 'flex';
-        document.getElementById('totalValCo').textContent = money(total);
-    }
+    // // For ongoing contracts, don't show total (unknown)
+    // if (isOngoing) {
+    //     document.getElementById('totalValCo').parentElement.style.display = 'none';
+    // } else {
+    //     document.getElementById('totalValCo').parentElement.style.display = 'flex';
+    //     document.getElementById('totalValCo').textContent = money(total);
+    // }
 
-    // Show calculated price per invoice for fixed_total
-    if (isLongTerm && pricingType === 'fixed_total') {
-        var invoiceCount = parseInt(document.getElementById('invoiceCountInputCo').value) || 1;
-        var pricePerInv = total / invoiceCount;
-        document.getElementById('calcPriceValCo').textContent = money(pricePerInv);
-        document.getElementById('invoiceAmountRow').style.display = 'none';
-    } else if (isLongTerm) {
-        document.getElementById('invoiceAmountRow').style.display = 'block';
-        document.getElementById('invoiceAmountVal').textContent = money(total);
-    } else {
-        document.getElementById('invoiceAmountRow').style.display = 'none';
-    }
+    // // Show calculated price per invoice for fixed_total
+    // if (isLongTerm && pricingType === 'fixed_total') {
+    //     var invoiceCount = parseInt(document.getElementById('invoiceCountInputCo').value) || 1;
+    //     var pricePerInv = total / invoiceCount;
+    //     document.getElementById('calcPriceValCo').textContent = money(pricePerInv);
+    //     document.getElementById('invoiceAmountRow').style.display = 'none';
+    // } else if (isLongTerm) {
+    //     document.getElementById('invoiceAmountRow').style.display = 'block';
+    //     document.getElementById('invoiceAmountVal').textContent = money(total);
+    // } else {
+    //     document.getElementById('invoiceAmountRow').style.display = 'none';
+    // }
 
-    // Show/hide deposit row
-    if (depType !== 'none' && deposit > 0) {
-        document.getElementById('depositRowCo').style.display = 'block';
-        document.getElementById('depositValCo').textContent = money(deposit);
-    } else {
-        document.getElementById('depositRowCo').style.display = 'none';
-    }
+    // // Show/hide deposit row
+    // if (depType !== 'none' && deposit > 0) {
+    //     document.getElementById('depositRowCo').style.display = 'block';
+    //     document.getElementById('depositValCo').textContent = money(deposit);
+    // } else {
+    //     document.getElementById('depositRowCo').style.display = 'none';
+    // }
 
-    // Update discount warning
-    updateDiscountWarning();
+    // // Update discount warning
+    // updateDiscountWarning();
 }
 // Safely add event listeners only if elements exist
 ['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => {
@@ -281,32 +282,6 @@ function updateDiscountWarning() {
 
 addItemCo();
 
-// Client typeahead
-var ci = document.getElementById('clientInputCo');
-var cid = document.getElementById('clientIdCo');
-var sug = document.getElementById('clientSuggestCo');
-var taxBanner = document.getElementById('taxExemptBannerCo');
-ci.addEventListener('input', function () {
-    cid.value = '';
-    var t = this.value.trim();
-    if (!t) { sug.style.display = 'none'; sug.innerHTML = ''; taxBanner.style.display = 'none'; return; }
-    fetch('/?page=clients-search&term=' + encodeURIComponent(t))
-        .then(r => r.json())
-        .then(list => {
-            if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
-            sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
-            Array.from(sug.children).forEach(el => {
-                el.addEventListener('click', function () {
-                    ci.value = this.dataset.name; cid.value = this.dataset.id;
-                    if (this.dataset.taxexempt) { taxBanner.style.display = 'block'; } else { taxBanner.style.display = 'none'; }
-                    loadProjectsForClientCo(this.dataset.id);
-                    sug.style.display = 'none';
-                });
-            });
-            sug.style.display = 'block';
-        }).catch(() => { sug.style.display = 'none' });
-});
-document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
 
 function loadProjectsForClientCo(clientId) {
     if (!clientId) {
@@ -389,11 +364,11 @@ document.getElementById('coCreateForm').addEventListener('submit', function (e) 
     // Set form action based on contract type
     var docType = document.querySelector('input[name="doc_type"]:checked').value;
     if (docType === 'long_term') {
-        this.action = '/?page=long-term-contracts-create';
+        this.action = '/?page=long-term-contract-create';
     } else if (docType === 'on_demand') {
-        this.action = '/?page=on-demand-contracts-create';
+        this.action = '/?page=on-demand-contract-create';
     } else {
-        this.action = '/?page=contracts-create';
+        this.action = '/?page=contract-create';
     }
 });
 
@@ -476,4 +451,6 @@ function removeSignature(sigId) {
 }
 
 // Add default signature on page load
+document.getElementById("addItemBtn")?.addEventListener("click", (e) => addItemCo('', '', 1, 0));
+
 addSignature();

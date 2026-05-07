@@ -24,19 +24,4 @@ class OnDemandContractRecord extends BaseContractRecord
     public ?int $billing_interval_count = null;
     public ?string $billing_interval_unit = null;
     public ?string $scope = null;
-
-    public function getTotal(): float
-    {
-        return $this->price_per_invoice;
-    }
-
-    public function getDepositAmount(): float
-    {
-        return $this->deposit_amount;
-    }
-
-    public function  getDepositType(): string
-    {
-        return $this->deposit_type;
-    }
 }

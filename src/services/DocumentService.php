@@ -2,12 +2,10 @@
 
 namespace App\services;
 
-use App\data_transfer_objects\contract\ContractEditData;
 use App\data_transfer_objects\contract\ContractSignatures;
 use App\data_transfer_objects\quote\QuoteData;
 use App\data_transfer_objects\contract\ContractData;
 use App\data_transfer_objects\invoice\InvoiceData;
-use App\data_transfer_objects\invoice\InvoiceEditData;
 use App\data_transfer_objects\ItemData;
 use App\record_transfer_objects\ItemRecord;
 use App\data_transfer_objects\TransferObject;
@@ -50,11 +48,10 @@ class DocumentService
         $this->createInvoiceFromTransferData($documentType, $contractData, $items);
     }
 
-    // TODO: FIX this broken it shouldnt need documetn tyep
-    public function updateContractAndInvoice(int $id, ContractEditData $contractData, ?ItemData $items, ContractSignatures $contractSignatures) : void {
-        $invoiceData = InvoiceEditData::fromArray($contractData->toArray());
+    public function updateContractAndInvoice(int $id, DocumentType $documentType, ContractData $contractData, ?ItemData $items, ContractSignatures $contractSignatures) : void {
+        $invoiceData = InvoiceData::fromArray($contractData->toArray());
         
-        $this->contractService->updateContractWithSignatures($id, DocumentType::REGULAR, $contractData, $items, $contractSignatures);
+        $this->contractService->updateContractWithSignatures($id, $documentType, $contractData, $items, $contractSignatures);
         $this->invoiceService->updateInvoice($id, $invoiceData, $items);
     }
   
@@ -63,9 +60,8 @@ class DocumentService
         $itemsRecord = ItemRecord::fromArray($invoiceItems->toArray());
         $ids = $this->invoiceService->getInvoiceIdsFromContract($contractId);
 
-        foreach ($ids as $id) {
+        foreach ($ids as $id) 
             $this->invoiceService->updateInvoiceItems($id, $itemsRecord);
-        }
     }
 
     public function voidContractAndFullDoc(int $id,  DocumentType $documentType) : void {

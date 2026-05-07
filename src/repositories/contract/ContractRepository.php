@@ -2,16 +2,14 @@
 
 namespace App\repositories\contract;
 
-use App\data_transfer_objects\contract\ContractSignatures;
 use PDO;
+use App\data_transfer_objects\contract\ContractSignatures;
 use App\record_transfer_objects\contract\create_record\BaseContractRecord;
 use App\record_transfer_objects\interfaces\InsertableRecord;
 use App\record_transfer_objects\contract\create_record\LongTermContractRecord;
 use App\record_transfer_objects\contract\create_record\OnDemandContractRecord;
 use App\record_transfer_objects\contract\create_record\RegularContractRecord;
-use App\record_transfer_objects\interfaces\RetrievableRecord;
 use App\utils\enum\DocumentType;
-use App\record_transfer_objects\ContractEditRecord;
 use App\record_transfer_objects\ItemRecord;
 
 class ContractRepository
@@ -19,9 +17,15 @@ class ContractRepository
     private PDO $pdo;
 
     private const DOCUMENT_TYPE_INSERT_STATEMENTS = [
-        DocumentType::REGULAR->value => 'INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        DocumentType::LONG_TERM->value => 'INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        DocumentType::ON_DEMAND->value => 'INSERT INTO on_demand_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_amount, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        DocumentType::REGULAR->value => 'INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_value, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        DocumentType::LONG_TERM->value => 'INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_value, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        DocumentType::ON_DEMAND->value => 'INSERT INTO on_demand_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_value, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    ];
+
+    private const DOCUMENT_TYPE_EDIT_STATEMENTS = [
+        DocumentType::REGULAR->value => 'UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, deposit_type=?, deposit_value=?, deposit_paid=?, fulfillment_date=?, scope=?, custom_fields=? WHERE id=?',
+        DocumentType::LONG_TERM->value => 'INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_value, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        DocumentType::ON_DEMAND->value => 'INSERT INTO on_demand_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_value, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     ];
 
     private const DOCUMENT_TYPE_TABLES = [
@@ -30,16 +34,10 @@ class ContractRepository
         DocumentType::ON_DEMAND->value => "on_demand_contracts",
     ];
 
-    private const DOCUMENT_TYPE_ITEM_REMOVE_STATEMENTS = [
-        DocumentType::REGULAR->value => 'DELETE FROM contract_items WHERE contract_id=?',
-        DocumentType::LONG_TERM->value => 'DELETE FROM long_term_contract_items WHERE long_term_contract_id=?',
-        DocumentType::ON_DEMAND->value => 'DELETE FROM on_demand_contract_items WHERE on_demand_contract_id=?',
-    ];
-
-    private const DOCUMENT_TYPE_ITEM_INSERT_STATEMENTS = [
-        DocumentType::REGULAR->value => 'INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)',
-        DocumentType::LONG_TERM->value => 'INSERT INTO long_term_contract_items (long_term_contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)',
-        DocumentType::ON_DEMAND->value => 'INSERT INTO on_demand_contract_items (long_term_contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)',
+    private const DOCUMENT_TYPE_ITEM_TABLES = [
+        DocumentType::REGULAR->value => "contract_items",
+        DocumentType::LONG_TERM->value => "long_term_contract_items",
+        DocumentType::ON_DEMAND->value => "on_demand_contract_items",
     ];
 
     public function __construct(PDO $pdo)
@@ -57,16 +55,18 @@ class ContractRepository
         return (int)$this->pdo->lastInsertId();
     }
 
-    public function updateFullContract(int $id, DocumentType $documentType, ContractEditRecord $contractData, ?ItemRecord $contractItems): void
+    public function updateFullContract(int $id, DocumentType $documentType, InsertableRecord $contractData, ?ItemRecord $contractItems): void
     {
-        $this->updateContract($id, $contractData);
+        $this->updateContract($id, $documentType, $contractData);
         $this->updateContractItems($id, $documentType, $contractItems);
     }
 
-    public function updateContract(int $id, ContractEditRecord $contractData): void
+    public function updateContract(int $id, DocumentType $documentType, InsertableRecord $contractData): void
     {
-        $stmt = $this->pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, custom_fields=? WHERE id=?');
-        $stmt->execute(array_merge($contractData->toArray(), [$id]));
+        $sql = self::DOCUMENT_TYPE_EDIT_STATEMENTS[$documentType->value];
+        $stmt = $this->pdo->prepare($sql);
+
+        $stmt->execute(array_merge($contractData->toInsertValues(), [$id]));
     }
 
     public function updateContractSignatures(int $id, ContractSignatures $contractSignatures): void
@@ -86,9 +86,10 @@ class ContractRepository
         }
     }
 
-    public function getProjectCodeFromId(int $id): string
+    public function getProjectCodeFromId(int $id, DocumentType $documentType): string
     {
-        $stmt = $this->pdo->prepare('SELECT project_code FROM contracts WHERE id=?');
+        $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
+        $stmt = $this->pdo->prepare('SELECT project_code FROM ' . $table . ' WHERE id=?');
         $stmt->execute([$id]);
 
         return (string)$stmt->fetchColumn();
@@ -106,16 +107,16 @@ class ContractRepository
 
     public function updateContractItems(int $id, DocumentType $documentType, ItemRecord $contractItems): void
     {
-        $sql = $this::DOCUMENT_TYPE_ITEM_REMOVE_STATEMENTS[$documentType->value];
-        $this->pdo->prepare($sql)->execute([$id]);
+        $table = $this::DOCUMENT_TYPE_ITEM_TABLES[$documentType->value];
+        $this->pdo->prepare('DELETE FROM ' . $table . ' WHERE contract_id=?')->execute([$id]);
 
         $this->insertContractItems($id, $documentType, $contractItems);
     }
 
     public function insertContractItems(int $id, DocumentType $documentType, ItemRecord $contractItems): void
     {
-        $sql = $this::DOCUMENT_TYPE_ITEM_INSERT_STATEMENTS[$documentType->value];
-        $stmt = $this->pdo->prepare($sql);
+        $table = $this::DOCUMENT_TYPE_ITEM_TABLES[$documentType->value];
+        $stmt = $this->pdo->prepare('INSERT INTO ' . $table . ' (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
 
         for ($i = 0; $i < count($contractItems->item); $i++) {
             $row = array_merge([$id], $contractItems->getRow($i));
@@ -126,14 +127,16 @@ class ContractRepository
     public function payDeposit(int $id, DocumentType $documentType, float $depositPaid): void
     {
         $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
-        $this->pdo->prepare('UPDATE ' . $table . ' SET deposit_paid=? WHERE id=?')->execute([$depositPaid, $id]);
+        $stmt = $this->pdo->prepare('UPDATE ' . $table . ' SET deposit_paid=? WHERE id=?');
+        $stmt->execute([$depositPaid, $id]);
     }
 
-    public function getStoredContractItems(int $id): ?ItemRecord
+    public function getStoredContractItems(int $id, DocumentType $documentType): ?ItemRecord
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
+        $table = $this::DOCUMENT_TYPE_ITEM_TABLES[$documentType->value];
+        $stmt = $this->pdo->prepare('SELECT * FROM ' . $table . ' WHERE contract_id=?');
         $stmt->execute([$id]);
-        
+
         return ItemRecord::fromRepoArray($stmt->fetchAll(PDO::FETCH_ASSOC) ?? []);
     }
 
@@ -149,8 +152,9 @@ class ContractRepository
     {
         $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
 
-        $stmt = $this->pdo->prepare('SELECT * FROM ' . $table . ' WHERE id=? FOR UPDATE');
+        $stmt = $this->pdo->prepare('SELECT * FROM ' . $table . ' WHERE id=?');
         $stmt->execute([$id]);
+
         return $this->generateRetrievedRecord($documentType, $stmt->fetch(PDO::FETCH_ASSOC) ?? []);
     }
 
@@ -163,12 +167,6 @@ class ContractRepository
         };
     }
 
-    public function getCustomFields(DocumentType $documentType): array
-    {
-        $stmt = $this->pdo->prepare('SELECT * FROM document_custom_fields WHERE document_type = ? AND is_enabled = 1 AND is_builtin = 0 ORDER BY display_order, id');
-        $stmt->execute([$documentType->value]);
-        return  $stmt->fetchAll(PDO::FETCH_ASSOC) ?? [];
-    }
     /* 
         Status related methods
     */

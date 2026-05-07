@@ -4,29 +4,14 @@
 		<strong>ℹ️ Tax Exempt Organization:</strong>
 		The selected client's organization has a tax-exempt form on file. You can still choose whether to charge taxes.
 	</div>
-	<form id="coCreateForm" method="post" action="/?page=contract/contracts-create" style="display:grid;gap:16px;max-width:900px">
-		<input type="hidden" name="_token" value="{{view.csrf}}">
-		<input type="hidden" name="csrf" value="{{view.token}}">
+	<form id="coCreateForm" method="post" action="/?page=contract/contract-create" style="display:grid;gap:16px;max-width:900px">
+		<input type="hidden" name="_token" value="{{csrf}}">
+		<input type="hidden" name="csrf" value="{{token}}">
 		<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 
 			{% include 'partials/client_components/client-input-autocomplete.twig' with {document: null} %}
 
-			<label>
-				<div>Tax (%)</div>
-				<input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-			</label>
-			<label>
-				<div>Discount Type</div>
-				<select id="discountTypeCo" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-					<option value="none">None</option>
-					<option value="percent">Percent</option>
-					<option value="fixed">Fixed $</option>
-				</select>
-			</label>
-			<label>
-				<div>Discount Value</div>
-				<input id="discountValueCo" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-			</label>
+			{% include "partials/document_details/input/finance-input.twig" with {document: contract} %}
 		</div>
 
 		<div id="projectSectionCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
@@ -225,11 +210,7 @@
 			</div>
 		</div>
 
-		<div>
-			<div style="font-weight:600;margin-bottom:8px">Items</div>
-			<div id="itemsCo" style="display:grid;gap:8px"></div>
-			<button type="button" onclick="addItemCo()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
-		</div>
+		{% include 'partials/document_details/input/item-input.twig' with {items: null} %}
 
 		{% include 'partials/document_details/input/scope-input.twig' with {app_config: app_config, document: null} %}
 
@@ -261,4 +242,4 @@
 		</div>
 	</form>
 </section>
-<script src="js/contracts-create-logic.js"></script>
+<script src="js/contract-create-logic.js"></script>

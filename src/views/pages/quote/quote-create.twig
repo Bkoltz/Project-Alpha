@@ -231,7 +231,7 @@
 
 		{% include 'partials/document_details/input/scope-input.twig' with {app_config: app_config} %}
 
-		{% include 'partials/document_details/input/notes-input.twig' %}
+		{% include 'partials/document_details/input/notes-input.twig' with {document: null} %}
 
 		<div id="invoiceAmountRow" style="display:none;margin-top:8px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
 			<div style="display:flex;justify-content:space-between;align-items:center">

@@ -46,7 +46,6 @@ class QuotesRepository
 
     public function updateStoredQuote(int $id, QuoteRecord $quoteData)
     {
-        echo 4 . json_encode($quoteData->deposit_value);
         $quote = $this->pdo->prepare(" UPDATE quotes SET client_id = :client_id, project_id = :project_id, doc_number = :doc_number, project_code = :project_code, status = :status, discount_type = :discount_type,discount_value = :discount_value, tax_percent = :tax_percent, subtotal = :subtotal,total = :total, deposit_type = :deposit_type, deposit_value = :deposit_value, fulfillment_date = :fulfillment_date, is_long_term = :is_long_term, is_on_demand = :is_on_demand, start_date = :start_date, end_date = :end_date, billing_interval_count = :billing_interval_count,billing_interval_unit = :billing_interval_unit, pricing_type = :pricing_type, price_per_invoice = :price_per_invoice,scope = :scope, custom_fields = :custom_fields, created_at = :created_at WHERE id = :id");
         $quote->execute(array_merge($quoteData->toArray(), ['id' => $id]));
     }

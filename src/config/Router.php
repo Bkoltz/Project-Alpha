@@ -27,12 +27,14 @@ class Router
             'quote/long-term-quote-list' => [QuotesListController::class, 'load', DocumentType::LONG_TERM],
 
             // Contract
+            'contract/regular-contract-edit' => [ContractDataController::class, 'load', DocumentType::REGULAR],
+            'contract/on-demand-contract-edit' => [ContractDataController::class, 'load', DocumentType::ON_DEMAND],
+            'contract/long-term-contract-edit' => [ContractDataController::class, 'load', DocumentType::LONG_TERM],
             'contract/regular-contract-details' => [ContractDetailsController::class, 'load', DocumentType::REGULAR],
             'contract/on-demand-contract-details' => [ContractDetailsController::class, 'load', DocumentType::ON_DEMAND],
             'contract/long-term-contract-details' => [ContractDetailsController::class, 'load', DocumentType::LONG_TERM],
             'contract/contract-create' => [ContractDataController::class, 'load'],
-            'contract/contract-edit' => [ContractDataController::class, 'load'],
-            'contract/contract-list' => [ContractListController::class, 'load', DocumentType::REGULAR],
+            'contract/regular-contract-list' => [ContractListController::class, 'load', DocumentType::REGULAR],
             'contract/on-demand-contract-list' => [ContractListController::class, 'load', DocumentType::ON_DEMAND],
             'contract/long-term-contract-list' => [ContractListController::class, 'load', DocumentType::LONG_TERM],
 
@@ -54,19 +56,21 @@ class Router
             'quote/quote-approve' => [QuotesDetailsController::class, 'approve'],
 
             // Contract
-            'contracts-update' => [ContractDataController::class, 'update'],
+            'contract/regular-contract-edit' => [ContractDataController::class, 'update', DocumentType::REGULAR],
+            'contract/on-demand-contract-edit' => [ContractDataController::class, 'update', DocumentType::ON_DEMAND],
+            'contract/long-term-contract-edit' => [ContractDataController::class, 'update', DocumentType::LONG_TERM],
             'contract/contract-complete' => [ContractDetailsController::class, 'complete'],
             'contract/contract-void' => [ContractDetailsController::class, 'terminate'],
             'contract/contract-deny' => [ContractDetailsController::class, 'deny'],
             'contract/contract-pdf' => [ContractDetailsController::class, ''],
             'contract/contract-sign' => [ContractDetailsController::class, 'signContract'],
-            'contract/contracts-create' => [ContractDataController::class, 'create', DocumentType::REGULAR],
-            'contract/long-term-contracts-create' => [ContractListController::class, 'create', DocumentType::LONG_TERM],
-            'contract/on-demand-contracts-create' => [ContractListController::class, 'create', DocumentType::ON_DEMAND],
+            'contract-create' => [ContractDataController::class, 'create', DocumentType::REGULAR],
+            'contract/long-term-contract-create' => [ContractListController::class, 'create', DocumentType::LONG_TERM],
+            'contract/on-demand-contract-create' => [ContractListController::class, 'create', DocumentType::ON_DEMAND],
 
             // Invoice
             'invoice/invoices-create' => [InvoiceDataController::class, 'create', DocumentType::REGULAR],
-            'invoice/invoices-update' => [InvoiceDataController::class, 'update'],
+            'invoice/invoices-edit' => [InvoiceDataController::class, 'update'],
             'invoice/invoices-mark-paid' => [InvoiceDataController::class, 'markInvoicePaid'],
             'invoice/invoice-pdf' => [InvoiceDataController::class, ''],
         ]

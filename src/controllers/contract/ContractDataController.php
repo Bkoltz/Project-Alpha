@@ -2,7 +2,6 @@
 
 namespace App\controllers\contract;
 
-use App\data_transfer_objects\contract\ContractEditData;
 use App\data_transfer_objects\contract\ContractSignatures;
 use App\data_transfer_objects\contract\ContractData;
 use App\data_transfer_objects\ItemData;
@@ -17,6 +16,12 @@ class ContractDataController
     private ContractService $contractService;
     private DocumentService $documentService;
 
+    private const CONTRACT_EDIT_PATH = [
+        DocumentType::REGULAR->value => 'pages\contract\edit\regular-contract-edit.twig',
+        DocumentType::LONG_TERM->value => 'pages\contract\edit\long-term-contract-edit.twig',
+        DocumentType::ON_DEMAND->value => 'pages\contract\edit\on-demand-contract-edit.twig',
+    ];
+
     public function __construct(ContractDataService $service, ContractService $contractService, DocumentService $documentService)
     {
         $this->service = $service;
@@ -24,11 +29,22 @@ class ContractDataController
         $this->documentService = $documentService;
     }
 
-    public function load(): array
+    public function load(DocumentType $documentType = DocumentType::REGULAR): array
     {
-        $output = $this->service->getCreateRenderData();
+        $output = null;
+
+        if (isset($_GET['id'])) {
+            $id = (int)$_GET['id'];
+            $output = $this->service->getEditRenderData($id, $documentType);
+            $path = self::CONTRACT_EDIT_PATH[$documentType->value];
+
+            return[$path, $output->toArray()];
+        } else {
+            $output = $this->service->getCreateRenderData();
+
+            return ['pages\contract\contract-create.twig', $output->toArray()];
+        }
         
-        return ['pages\contract\contract-create.twig', $output->toArray()];
     }
 
     public function create(DocumentType $documentType = DocumentType::REGULAR)
@@ -41,16 +57,17 @@ class ContractDataController
         $this->documentService->createInvoiceFromContract($documentType, $contractData, $contractItems);
     }
 
-    public function update()
+    public function update(DocumentType $documentType)
     {
-        $id = $_POST['id'] ?? 0;
+        $id = (int)$_POST['id'] ?? 0;
 
-        $contractData = ContractEditData::fromArray($_POST);
+        $contractData = ContractData::fromArray($_POST);
         $itemData = ItemData::fromArray($_POST);
         $signatures = ContractSignatures::fromArray($_POST);
 
-        $this->documentService->updateContractAndInvoice($id, $contractData, $itemData, $signatures);
-        $this->documentService->updateAllInvoicesItems($id, $itemData);
+        $this->contractService->updateContract($id, $documentType, $contractData, $itemData);
+        // $this->documentService->updateContractAndInvoice($id, $documentType, $contractData, $itemData, $signatures);
+        // $this->documentService->updateAllInvoicesItems($id, $itemData);
     }
 
     public function signContract()

@@ -43,7 +43,7 @@
 				{% if items is defined %}
 					<p style="color:#6b7280;margin:0">No items</p>
 				{% else %}
-					{% include 'partials/doucment_details/display/items-table-display.twig' with {items: items} %}
+					{% include 'partials/doucment_details/display/item-display.twig' with {items: items} %}
 				{% endif %}
 			</div>
 			<p style="color:#6b7280;font-size:0.875rem;margin-top:8px">To change items, modify the contract and apply a discount if needed.</p>

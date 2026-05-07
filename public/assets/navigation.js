@@ -211,7 +211,7 @@ function updatePageTitle(page) {
         'quote/quote-create': 'Create Quote',
         'quote/quote-edit': 'Edit Quote',
         'contract/contracts-list': 'List Contracts',
-        'contract/contracts-create': 'Create Contract',
+        'contract/contract-create': 'Create Contract',
         'contract/contracts-edit': 'Edit Contract',
         'invoice/invoices-list': 'List Invoices',
         'invoice/invoices-create': 'Create Invoice',

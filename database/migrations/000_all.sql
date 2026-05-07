@@ -320,7 +320,7 @@ CREATE TABLE
     subtotal DECIMAL(12, 2) NOT NULL DEFAULT 0,
     total DECIMAL(12, 2) NOT NULL DEFAULT 0,
     deposit_type ENUM ('none', 'percent', 'fixed') NOT NULL DEFAULT 'none',
-    deposit_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    deposit_value DECIMAL(12, 2) NOT NULL DEFAULT 0,
     deposit_paid DECIMAL(12, 2) NOT NULL DEFAULT 0,
     signed_pdf_path VARCHAR(255) NULL,
     completed_at TIMESTAMP NULL,
@@ -554,7 +554,7 @@ CREATE TABLE
     subtotal DECIMAL(12, 2) NOT NULL DEFAULT 0,
     total DECIMAL(12, 2) NOT NULL DEFAULT 0,
     deposit_type ENUM ('none', 'percent', 'fixed') NOT NULL DEFAULT 'none',
-    deposit_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    deposit_value DECIMAL(12, 2) NOT NULL DEFAULT 0,
     deposit_paid DECIMAL(12, 2) NOT NULL DEFAULT 0,
     total_invoiced DECIMAL(12, 2) NOT NULL DEFAULT 0,
     next_invoice_date DATE NULL,
@@ -586,14 +586,14 @@ CREATE TABLE
 CREATE TABLE
   IF NOT EXISTS long_term_contract_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    long_term_contract_id INT NOT NULL,
+    contract_id INT NOT NULL,
     item VARCHAR(255) NOT NULL,
     description TEXT NULL,
     quantity DECIMAL(10, 2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12, 2) NOT NULL DEFAULT 0,
-    CONSTRAINT fk_ltc_items_contract FOREIGN KEY (long_term_contract_id) REFERENCES long_term_contracts (id) ON DELETE CASCADE,
-    INDEX idx_ltc_items_contract (long_term_contract_id)
+    CONSTRAINT fk_ltc_items_contract FOREIGN KEY (contract_id) REFERENCES long_term_contracts (id) ON DELETE CASCADE,
+    INDEX idx_ltc_items_contract (contract_id)
   ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -625,7 +625,7 @@ CREATE TABLE
     subtotal DECIMAL(12, 2) NOT NULL DEFAULT 0,
     price_per_invoice DECIMAL(12, 2) NOT NULL DEFAULT 0,
     deposit_type ENUM ('none', 'percent', 'fixed') NOT NULL DEFAULT 'none',
-    deposit_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    deposit_value DECIMAL(12, 2) NOT NULL DEFAULT 0,
     deposit_paid DECIMAL(12, 2) NOT NULL DEFAULT 0,
     total_invoiced DECIMAL(12, 2) NOT NULL DEFAULT 0,
     invoice_count INT NOT NULL DEFAULT 0,
@@ -654,14 +654,14 @@ CREATE TABLE
 CREATE TABLE
   IF NOT EXISTS on_demand_contract_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    on_demand_contract_id INT NOT NULL,
+    contract_id INT NOT NULL,
     item VARCHAR(255) NOT NULL,
     description TEXT NULL,
     quantity DECIMAL(10, 2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12, 2) NOT NULL DEFAULT 0,
-    CONSTRAINT fk_odc_items_contract FOREIGN KEY (on_demand_contract_id) REFERENCES on_demand_contracts (id) ON DELETE CASCADE,
-    INDEX idx_odc_items_contract (on_demand_contract_id)
+    CONSTRAINT fk_odc_items_contract FOREIGN KEY (contract_id) REFERENCES on_demand_contracts (id) ON DELETE CASCADE,
+    INDEX idx_odc_items_contract (contract_id)
   ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ============================================================================

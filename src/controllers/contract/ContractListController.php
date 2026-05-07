@@ -20,7 +20,7 @@ class ContractListController extends BaseListController
         $filterData = $this->extractFilterData($_GET);
         $countData = $this->extractDisplayCountData($_GET);
 
-        $output = $this->service->getRenderData($documentType, $filterData, $countData, $documentType);
+        $output = $this->service->getRenderData($documentType, $filterData, $countData);
 
         return ['pages/contract/contracts-general-list.twig', $output->toArray()];
     }
