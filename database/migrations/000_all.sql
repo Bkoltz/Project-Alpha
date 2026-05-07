@@ -142,6 +142,21 @@ CREATE TABLE
   ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ============================================================================
+-- ORGANIZATIONS
+-- ============================================================================
+CREATE TABLE
+  IF NOT EXISTS organizations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    notes TEXT NULL,
+    tax_exempt_file VARCHAR(255) NULL,
+    tax_exempt_uploaded_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_organizations_name (name)
+  ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ============================================================================
 -- USER ORGANIZATIONS (Multi-tenant membership)
 -- ============================================================================
 CREATE TABLE
@@ -156,21 +171,6 @@ CREATE TABLE
     INDEX idx_uo_org (organization_id),
     CONSTRAINT fk_uo_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_uo_org FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
-  ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-
--- ============================================================================
--- ORGANIZATIONS
--- ============================================================================
-CREATE TABLE
-  IF NOT EXISTS organizations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
-    notes TEXT NULL,
-    tax_exempt_file VARCHAR(255) NULL,
-    tax_exempt_uploaded_at TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_organizations_name (name)
   ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- ============================================================================
