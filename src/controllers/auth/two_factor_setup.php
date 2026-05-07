@@ -147,6 +147,74 @@ try {
         exit;
     }
     
+    // Revoke a trusted device
+    if ($action === 'revoke_device') {
+        $deviceId = (int)($_POST['device_id'] ?? 0);
+        
+        try {
+            // Only allow revoking own devices
+            $st = $pdo->prepare('DELETE FROM trusted_devices WHERE id = ? AND user_id = ?');
+            $st->execute([$deviceId, $userId]);
+            
+            app_log('2fa', 'Trusted device revoked', ['user_id' => $userId, 'device_id' => $deviceId]);
+            header('Location: /?page=2fa-setup&success=device_revoked');
+            exit;
+        } catch (Throwable $e) {
+            header('Location: /?page=2fa-setup&error=' . urlencode('Failed to revoke device'));
+            exit;
+        }
+    }
+    
+    // Add trusted IP (admin only)
+    if ($action === 'add_trusted_ip') {
+        if (($_SESSION['user']['role'] ?? '') !== 'admin') {
+            header('Location: /?page=2fa-setup&error=' . urlencode('Admin access required'));
+            exit;
+        }
+        
+        $ipAddress = trim($_POST['ip_address'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+        
+        if (empty($ipAddress) || !filter_var($ipAddress, FILTER_VALIDATE_IP)) {
+            header('Location: /?page=2fa-setup&error=' . urlencode('Invalid IP address'));
+            exit;
+        }
+        
+        try {
+            $st = $pdo->prepare('INSERT INTO trusted_ips (ip_address, description, created_by) VALUES (?, ?, ?)');
+            $st->execute([$ipAddress, $description, $userId]);
+            
+            app_log('2fa', 'Trusted IP added', ['user_id' => $userId, 'ip' => $ipAddress]);
+            header('Location: /?page=2fa-setup&success=ip_added');
+            exit;
+        } catch (Throwable $e) {
+            header('Location: /?page=2fa-setup&error=' . urlencode('Failed to add trusted IP'));
+            exit;
+        }
+    }
+    
+    // Remove trusted IP (admin only)
+    if ($action === 'remove_trusted_ip') {
+        if (($_SESSION['user']['role'] ?? '') !== 'admin') {
+            header('Location: /?page=2fa-setup&error=' . urlencode('Admin access required'));
+            exit;
+        }
+        
+        $ipId = (int)($_POST['ip_id'] ?? 0);
+        
+        try {
+            $st = $pdo->prepare('DELETE FROM trusted_ips WHERE id = ?');
+            $st->execute([$ipId]);
+            
+            app_log('2fa', 'Trusted IP removed', ['user_id' => $userId, 'ip_id' => $ipId]);
+            header('Location: /?page=2fa-setup&success=ip_removed');
+            exit;
+        } catch (Throwable $e) {
+            header('Location: /?page=2fa-setup&error=' . urlencode('Failed to remove trusted IP'));
+            exit;
+        }
+    }
+    
 } catch (Throwable $e) {
     app_log('2fa', 'Setup error', ['error' => $e->getMessage(), 'user_id' => $userId]);
     header('Location: /?page=2fa-setup&error=' . urlencode('An error occurred'));

@@ -581,6 +581,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
         exit;
     }
+    if ($page === 'settings/dropbox-oauth') {
+        require_once __DIR__ . '/../src/controllers/settings/dropbox_oauth.php';
+        exit;
+    }
+    if ($page === '2fa-setup-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_setup.php';
+        exit;
+    }
+    if ($page === '2fa-verify-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_verify.php';
+        exit;
+    }
     if ($page === 'receipts-handler') {
         require_once __DIR__ . '/../src/controllers/receipts_handler.php';
         exit;

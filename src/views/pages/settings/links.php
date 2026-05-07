@@ -60,7 +60,14 @@ $providers = ['dropbox', 'gdrive', 's3'];
         window.csrfToken = "<?php echo htmlspecialchars($csrfToken); ?>";
     })();
     </script>
-    <h2 style="margin:0 0 8px 0">Link Resolver *Beta*</h2>
+
+    <!-- Beta Banner -->
+    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
+      <span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;text-transform:uppercase">Beta</span>
+      <span style="color:#92400e;font-size:14px">Link resolver features are currently in beta. Features may change or be removed.</span>
+    </div>
+
+    <h2 style="margin:0 0 8px 0">Link Resolver</h2>
     <p style="margin:0 0 24px 0;color:var(--muted)">Auto-generate and manage links for client/organization file storage</p>
 
     <!-- Stats Banner -->
@@ -138,16 +145,54 @@ $providers = ['dropbox', 'gdrive', 's3'];
 
             <div id="fields_<?php echo $provider; ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
                 <?php if ($provider === 'dropbox'): ?>
-                    <label>
-                        <div style="margin-bottom:4px;font-weight:600">Access Token</div>
-                        <input type="text" name="<?php echo $provider; ?>_access_token" 
-                               value="<?php echo htmlspecialchars($credentials['access_token'] ?? ''); ?>"
-                               placeholder="Enter Dropbox access token"
-                               style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
-                        <div style="margin-top:4px;font-size:12px;color:var(--muted)">
-                            Get token from <a href="https://www.dropbox.com/developers/apps" target="_blank" style="color:var(--nav-accent)">Dropbox App Console</a>
-                        </div>
-                    </label>
+                    <div style="display:grid;gap:12px">
+                        <?php if (!empty($credentials['refresh_token'])): ?>
+                            <!-- OAuth Connected State -->
+                            <div style="padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;display:flex;align-items:center;gap:12px">
+                                <span style="font-size:20px">✅</span>
+                                <div style="flex:1">
+                                    <div style="font-weight:600;color:#065f46">Dropbox Connected</div>
+                                    <div style="font-size:12px;color:#6b7280">
+                                        <?php if (!empty($credentials['token_expires_at'])): ?>
+                                            Token expires: <?php echo htmlspecialchars($credentials['token_expires_at']); ?>
+                                        <?php else: ?
+                                            Connection is active
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <a href="/?page=settings/dropbox-oauth&action=disconnect" 
+                                   style="padding:6px 12px;border-radius:6px;border:1px solid #dc2626;background:#fff;color:#dc2626;font-size:13px;text-decoration:none"
+                                   onclick="return confirm('Disconnect Dropbox? This will revoke the token.');">Disconnect</a>
+                            </div>
+                        <?php else: ?>
+                            <!-- OAuth Disconnected State -->
+                            <div style="padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;display:flex;align-items:center;gap:12px">
+                                <span style="font-size:20px">🔗</span>
+                                <div style="flex:1">
+                                    <div style="font-weight:600;color:#991b1b">Dropbox Not Connected</div>
+                                    <div style="font-size:12px;color:#6b7280">Connect via OAuth for a secure, permanent connection.</div>
+                                </div>
+                                <a href="/?page=settings/dropbox-oauth&action=start" 
+                                   style="padding:8px 16px;border-radius:6px;border:0;background:#2563eb;color:#fff;font-size:13px;text-decoration:none;font-weight:600">Connect Dropbox</a>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <!-- Show legacy access token field if no OAuth, for backward compatibility -->
+                        <?php if (empty($credentials['refresh_token'])): ?>
+                            <div style="margin-top:8px">
+                                <label style="font-size:13px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px">
+                                    <input type="checkbox" onchange="document.getElementById('legacy-dropbox-token').style.display=this.checked?'block':'none'">
+                                    <span>Use legacy access token instead (not recommended)</span>
+                                </label>
+                                <div id="legacy-dropbox-token" style="display:none;margin-top:8px">
+                                    <input type="text" name="<?php echo $provider; ?>_access_token" 
+                                           value="<?php echo htmlspecialchars($credentials['access_token'] ?? ''); ?>"
+                                           placeholder="Enter Dropbox access token"
+                                           style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
 
                 <?php elseif ($provider === 'gdrive'): ?>
                     <label>

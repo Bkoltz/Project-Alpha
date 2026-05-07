@@ -6,6 +6,25 @@ set -euo pipefail
 # to /etc/environment which each cron job sources before running.
 printenv | grep -E '^(MYSQL_|DB_|APP_|STRIPE_|SMTP_)' | sed 's/=\(.*\)/="\1"/' > /etc/environment
 
+# ── Create log directory if it doesn't exist ──
+LOG_DIR="/var/www/logs"
+if [ ! -d "$LOG_DIR" ]; then
+    mkdir -p "$LOG_DIR"
+    echo "[cron-entrypoint] Created log directory: $LOG_DIR"
+fi
+
+# Ensure log directory is writable
+chmod 775 "$LOG_DIR"
+
+# Create symlink for legacy cron log directory if needed
+LEGACY_LOG_DIR="/var/log/cron"
+if [ ! -d "$LEGACY_LOG_DIR" ]; then
+    mkdir -p "$LEGACY_LOG_DIR"
+fi
+
+# Set up log redirection: cron job output goes to both legacy location and unified log
+# This is handled in the crontab by redirecting output to the log file
+
 # ── Wait for the database to become available ──
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-3306}"

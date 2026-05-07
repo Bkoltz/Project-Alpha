@@ -8,19 +8,20 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
+require_once __DIR__ . '/../utils/cron_logger.php';
 
-$logPrefix = '[send_invoice_reminders]';
+$jobName = 'send_invoice_reminders';
 
 // Check if either reminder is enabled
 $due7Enabled = !empty($appConfig['invoice_auto_send_due_7days']);
 $overdueEnabled = !empty($appConfig['invoice_auto_send_overdue_weekly']);
 
 if (!$due7Enabled && !$overdueEnabled) {
-    @error_log("$logPrefix Both reminder types are disabled. Exiting.");
+    cron_log($jobName, 'Both reminder types are disabled. Exiting.', [], 'info');
     exit(0);
 }
 
-@error_log("$logPrefix Starting invoice reminder run at " . date('Y-m-d H:i:s'));
+cron_log_start($jobName);
 
 try {
     // Build SMTP config from app settings
@@ -188,19 +189,23 @@ try {
                     $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'overdue_weekly']);
                     $remindersSent++;
-                    @error_log("$logPrefix Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}");
+                    cron_log($jobName, "Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}", [], 'info');
                 } else {
                     $errors++;
-                    @error_log("$logPrefix Failed to send overdue-weekly reminder for invoice {$iid}: {$err}");
+                    cron_log_error($jobName, "Failed to send overdue-weekly reminder for invoice {$iid}: {$err}");
                 }
             } catch (Throwable $e) {
                 $errors++;
-                @error_log("$logPrefix Exception sending overdue-weekly reminder for invoice {$iid}: " . $e->getMessage());
+                cron_log_error($jobName, "Exception sending overdue-weekly reminder for invoice {$iid}: " . $e->getMessage());
             }
         }
     }
 
-    @error_log("$logPrefix Completed: {$remindersSent} reminders sent, {$remindersSkipped} skipped, {$errors} errors");
+    cron_log_end($jobName, [
+        'reminders_sent' => $remindersSent,
+        'reminders_skipped' => $remindersSkipped,
+        'errors' => $errors
+    ]);
 
     // Update last run timestamp in settings
     $configMount = '/var/www/config';
@@ -215,7 +220,7 @@ try {
     }
 
 } catch (Throwable $e) {
-    @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_log_error($jobName, 'Fatal error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
     exit(1);
 }
 

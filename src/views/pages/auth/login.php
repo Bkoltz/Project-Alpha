@@ -51,7 +51,10 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
         </label>
         <div style="color:var(--muted);font-size:12px">The first account will be created as an admin.</div>
       <?php else: ?>
-        <!-- Remember me temporarily disabled -->
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" name="remember_device" id="remember_device" value="1" style="width:18px;height:18px;cursor:pointer">
+          <label for="remember_device" style="margin:0;font-size:14px;cursor:pointer;color:var(--muted)">Remember this device for 30 days</label>
+        </div>
       <?php endif; ?>
       <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
         <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">
