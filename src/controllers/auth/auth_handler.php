@@ -1,6 +1,7 @@
 <?php
 // src/controllers/auth/auth_handler.php
 // Handles login and first-admin registration with CSRF verification
+// Now includes: trusted device checking, daily MFA window, trusted IP support
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -26,6 +27,118 @@ $password = (string)($_POST['password'] ?? '');
 $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
 function valid_email($e) { return filter_var($e, FILTER_VALIDATE_EMAIL) !== false; }
+
+/**
+ * Check if the current IP is in the trusted IPs whitelist
+ */
+function is_trusted_ip(PDO $pdo, string $ip): bool {
+    try {
+        $st = $pdo->prepare('SELECT COUNT(*) FROM trusted_ips WHERE ip_address = ?');
+        $st->execute([$ip]);
+        return (int)$st->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Check if user has a valid trusted device token
+ */
+function has_trusted_device(PDO $pdo, int $userId, string $ip): bool {
+    $deviceToken = $_COOKIE['device_trust'] ?? '';
+    if (empty($deviceToken) || strlen($deviceToken) !== 64) {
+        return false;
+    }
+    
+    try {
+        // Check if token exists, matches IP, and hasn't expired
+        $st = $pdo->prepare('
+            SELECT COUNT(*) FROM trusted_devices 
+            WHERE user_id = ? 
+            AND device_token = ? 
+            AND ip_address = ? 
+            AND expires_at > NOW()
+        ');
+        $st->execute([$userId, $deviceToken, $ip]);
+        return (int)$st->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Check if user has verified MFA within the last 24 hours on this device
+ */
+function has_daily_mfa_verification(PDO $pdo, int $userId): bool {
+    $deviceToken = $_COOKIE['device_trust'] ?? '';
+    if (empty($deviceToken) || strlen($deviceToken) !== 64) {
+        return false;
+    }
+    
+    try {
+        $st = $pdo->prepare('
+            SELECT COUNT(*) FROM trusted_devices 
+            WHERE user_id = ? 
+            AND device_token = ? 
+            AND last_verified_at >= NOW() - INTERVAL 1 DAY
+        ');
+        $st->execute([$userId, $deviceToken]);
+        return (int)$st->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Create or update a trusted device token
+ */
+function set_trusted_device(PDO $pdo, int $userId, string $ip): void {
+    // Generate a new secure token
+    $token = bin2hex(random_bytes(32)); // 64 chars hex
+    $deviceName = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown Device';
+    $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? '');
+    $expires = date('Y-m-d H:i:s', strtotime('+30 days'));
+    
+    try {
+        // Delete old tokens for this user+IP+UA combo
+        $st = $pdo->prepare('
+            DELETE FROM trusted_devices 
+            WHERE user_id = ? AND ip_address = ? AND user_agent_hash = ?
+        ');
+        $st->execute([$userId, $ip, $userAgentHash]);
+        
+        // Insert new token
+        $st = $pdo->prepare('
+            INSERT INTO trusted_devices (user_id, device_token, device_name, ip_address, user_agent_hash, last_verified_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, NOW(), ?)
+        ');
+        $st->execute([$userId, $token, $deviceName, $ip, $userAgentHash, $expires]);
+        
+        // Set cookie (30 days)
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https');
+        setcookie('device_trust', $token, [
+            'expires' => strtotime('+30 days'),
+            'path' => '/',
+            'domain' => '',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } catch (Throwable $e) {
+        // If DB table doesn't exist yet, just set the cookie
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https');
+        setcookie('device_trust', $token, [
+            'expires' => strtotime('+30 days'),
+            'path' => '/',
+            'domain' => '',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+}
 
 try {
     $count = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
@@ -117,27 +230,45 @@ if ($action === 'login') {
             header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
             exit;
         }
+        
+        $userId = (int)$u['id'];
+        
         // Check if user has 2FA enabled
         $twofa_enabled = false;
         try {
             $st2fa = $pdo->prepare('SELECT enabled FROM user_2fa WHERE user_id = ? AND enabled = 1');
-            $st2fa->execute([(int)$u['id']]);
+            $st2fa->execute([$userId]);
             $twofa_enabled = (bool)$st2fa->fetchColumn();
         } catch (Throwable $e) {}
         
         if ($twofa_enabled) {
-            // User has 2FA enabled, redirect to 2FA verification
-            session_regenerate_id(true);
-            $_SESSION['2fa_pending'] = [
-                'user_id' => (int)$u['id'],
-                'user_data' => ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']]
-            ];
-            app_log('auth', 'login requires 2FA', ['user_id'=>(int)$u['id'], 'ip'=>$ip]);
-            header('Location: /?page=2fa-verify');
-            exit;
+            // Check if user is coming from a trusted IP
+            $trustedIp = is_trusted_ip($pdo, $ip);
+            
+            // Check if user has a trusted device with daily MFA already verified
+            $trustedDevice = has_trusted_device($pdo, $userId, $ip);
+            $dailyMfa = has_daily_mfa_verification($pdo, $userId);
+            
+            if ($trustedIp) {
+                // Trusted IP - skip 2FA entirely
+                app_log('auth', 'login skip 2FA (trusted IP)', ['user_id'=>$userId, 'ip'=>$ip]);
+            } elseif ($trustedDevice && $dailyMfa) {
+                // Trusted device + verified MFA today - skip 2FA
+                app_log('auth', 'login skip 2FA (trusted device)', ['user_id'=>$userId, 'ip'=>$ip]);
+            } else {
+                // User has 2FA enabled, redirect to 2FA verification
+                session_regenerate_id(true);
+                $_SESSION['2fa_pending'] = [
+                    'user_id' => $userId,
+                    'user_data' => ['id'=>$userId, 'email'=>$u['email'], 'role'=>$u['role']]
+                ];
+                app_log('auth', 'login requires 2FA', ['user_id'=>$userId, 'ip'=>$ip]);
+                header('Location: /?page=2fa-verify');
+                exit;
+            }
         }
         
-        // on success (no 2FA), regenerate session and optionally clear attempts
+        // on success (no 2FA or 2FA skipped), regenerate session and optionally clear attempts
         session_regenerate_id(true);
         
         // Fetch user's organizations for multi-tenant support
@@ -150,7 +281,7 @@ if ($action === 'login') {
                 JOIN user_organizations uo ON uo.organization_id = o.id 
                 WHERE uo.user_id = ?
             ');
-            $orgStmt->execute([(int)$u['id']]);
+            $orgStmt->execute([$userId]);
             $orgs = $orgStmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($orgs as $org) {
                 if ($org['is_default']) {
@@ -164,42 +295,25 @@ if ($action === 'login') {
         } catch (Throwable $e) { /* ignore org fetch errors */ }
         
         $_SESSION['user'] = [
-            'id'=>(int)$u['id'], 
+            'id'=>$userId, 
             'email'=>$u['email'], 
             'role'=>$u['role'],
             'organization_id' => $defaultOrgId,
             'organizations' => $orgs
         ];
-        try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}
-        // Remember-me flow is intentionally disabled. Below is the implementation
-        // kept as a comment for future use.
-        /*
-        if (!empty($_POST['remember'])) {
-            $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
-            $uid = (int)$u['id'];
-            $exp = time() + 60*60*24*30;
-            $key = crypto_get_key();
-            if ($key !== '') {
-                $data = $uid . '|' . $exp;
-                $hmac = base64_encode(hash_hmac('sha256', $data, $key, true));
-                $val = $data . '|' . $hmac;
-                setcookie('remember', $val, [
-                    'expires' => $exp,
-                    'path' => '/',
-                    'domain' => '',
-                    'secure' => $secure,
-                    'httponly' => true,
-                    'samesite' => 'Lax',
-                ]);
-            }
+        
+        // Set trusted device if user checked "Remember this device"
+        if (!empty($_POST['remember_device'])) {
+            set_trusted_device($pdo, $userId, $ip);
         }
-        */
+        
+        try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}
         
         // Check if force password reset is required
         $forceReset = false;
         try {
             $st = $pdo->prepare('SELECT force_password_reset FROM users WHERE id = ?');
-            $st->execute([(int)$u['id']]);
+            $st->execute([$userId]);
             $forceReset = (bool)$st->fetchColumn();
         } catch (Throwable $e) {}
         
@@ -208,7 +322,7 @@ if ($action === 'login') {
             exit;
         }
         
-        app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
+        app_log('auth', 'login success', ['uid'=>$userId, 'ip'=>$ip]);
         header('Location: /');
         exit;
     } catch (Throwable $e) {

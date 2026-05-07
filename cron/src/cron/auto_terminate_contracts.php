@@ -5,16 +5,17 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/cron_logger.php';
 
-$logPrefix = '[auto_terminate_contracts]';
+$jobName = 'auto_terminate_contracts';
 
 // Check if cron is enabled in settings
 if (empty($appConfig['cron_enabled'])) {
-    @error_log("$logPrefix Cron is disabled in settings. Skipping auto-termination.");
+    cron_log($jobName, 'Cron is disabled in settings. Skipping auto-termination.', [], 'info');
     exit(0);
 }
 
-@error_log("$logPrefix Starting auto-termination check at " . date('Y-m-d H:i:s'));
+cron_log_start($jobName);
 
 $today = date('Y-m-d');
 $terminatedCount = 0;
@@ -35,9 +36,9 @@ try {
             $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL WHERE id=?')
                 ->execute(['completed', $contract['id']]);
             $terminatedCount++;
-            @error_log("$logPrefix Auto-terminated long-term contract LTC-{$contract['doc_number']} (end date: {$contract['end_date']})");
+            cron_log($jobName, "Auto-terminated long-term contract LTC-{$contract['doc_number']} (end date: {$contract['end_date']})", [], 'info');
         } catch (Throwable $e) {
-            @error_log("$logPrefix Error terminating LTC-{$contract['doc_number']}: " . $e->getMessage());
+            cron_log_error($jobName, "Error terminating LTC-{$contract['doc_number']}: " . $e->getMessage());
         }
     }
     
@@ -56,13 +57,13 @@ try {
             $pdo->prepare('UPDATE on_demand_contracts SET status=? WHERE id=?')
                 ->execute(['completed', $contract['id']]);
             $terminatedCount++;
-            @error_log("$logPrefix Auto-terminated on-demand contract ODC-{$contract['doc_number']} (end date: {$contract['end_date']})");
+            cron_log($jobName, "Auto-terminated on-demand contract ODC-{$contract['doc_number']} (end date: {$contract['end_date']})", [], 'info');
         } catch (Throwable $e) {
-            @error_log("$logPrefix Error terminating ODC-{$contract['doc_number']}: " . $e->getMessage());
+            cron_log_error($jobName, "Error terminating ODC-{$contract['doc_number']}: " . $e->getMessage());
         }
     }
     
-    @error_log("$logPrefix Completed: $terminatedCount contracts auto-terminated");
+    cron_log_end($jobName, ['terminated_count' => $terminatedCount]);
     
     // Update last run timestamp in settings
     $configMount = '/var/www/config';
@@ -77,7 +78,7 @@ try {
     }
     
 } catch (Throwable $e) {
-    @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_log_error($jobName, 'Fatal error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
     exit(1);
 }
 
