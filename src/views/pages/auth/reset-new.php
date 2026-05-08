@@ -2,7 +2,7 @@
 // src/views/pages/auth/reset-new.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../../config/app.php';
-require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $csrf = csrf_sf_token('reset_update');
 $email = isset($_GET['email']) ? (string)$_GET['email'] : '';

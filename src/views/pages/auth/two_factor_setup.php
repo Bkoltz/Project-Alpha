@@ -9,7 +9,7 @@ if (!isset($_SESSION['user'])) {
 }
 
 require_once __DIR__ . '/../../../config/app.php';
-require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
 
 use App\Utils\TwoFactorAuth;
