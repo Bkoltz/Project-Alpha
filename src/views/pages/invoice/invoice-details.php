@@ -40,6 +40,11 @@ if (!empty($inv['project_code'])) {
 }
 if ($termsText === '') { $termsText = trim((string)($inv['terms'] ?? '')); }
 if ($termsText === '' && !empty($inv['on_demand_contract_id'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+// Compute outstanding balance
+$total = (float) ($inv['total'] ?? 0);
+$paid = (float) ($inv['amount_paid'] ?? 0);
+$outstanding = max(0, $total - $paid);
+
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
 <section>
@@ -76,11 +81,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </form>
     <?php endif; ?>
     <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
-      <form method="post" action="/?page=invoice/invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;">Mark as Paid</button>
-      </form>
+      <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
+         style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;text-decoration:none;display:inline-block;margin-right:6px;">Mark as Paid</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
     <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">

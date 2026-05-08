@@ -42,10 +42,31 @@ if ($pref > 0) {
          $stripeConfigured = StripeService::isConfigured($appConfig);
     ?>
       <select name="method" id="paymentMethod" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <?php foreach ($methods as $m): ?>
-          <option value="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></option>
+        <?php
+          // Normalize method labels for display vs value
+          $methodMap = [
+            'Card' => ['card', '💳 Card'],
+            'Cash' => ['cash', '💵 Cash'],
+            'Bank Transfer' => ['bank_transfer', '🏦 Bank Transfer'],
+            'Check' => ['check', '📄 Check'],
+            'Stripe' => ['stripe', '💳 Credit Card (Stripe)'],
+          ];
+          $addedStripe = false;
+          foreach ($methods as $m):
+            $key = trim($m);
+            $lower = strtolower($key);
+            if ($lower === 'stripe') { $addedStripe = true; }
+            if (isset($methodMap[$key])):
+              $val = $methodMap[$key][0];
+              $label = $methodMap[$key][1];
+            else:
+              $val = $lower;
+              $label = htmlspecialchars($key);
+            endif;
+        ?>
+          <option value="<?php echo $val; ?>"><?php echo $label; ?></option>
         <?php endforeach; ?>
-        <?php if ($stripeConfigured): ?>
+        <?php if ($stripeConfigured && !$addedStripe): ?>
           <option value="stripe">💳 Credit Card (Stripe)</option>
         <?php endif; ?>
       </select>
