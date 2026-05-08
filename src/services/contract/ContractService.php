@@ -36,8 +36,6 @@ class ContractService
         $this->updateAndValidateContractData($contractData);
         $contractItems?->validate();
 
-
-
         FinancialService::updateContractFinancialData($documentType, $contractData, $contractItems);
 
         $record = $this->generateInsertRecord($documentType, $contractData->toArray());

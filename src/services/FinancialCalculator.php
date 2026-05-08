@@ -2,7 +2,6 @@
 
 namespace App\services;
 
-use App\data_transfer_objects\interfaces\DepositValues;
 use App\utils\enum\DocumentType;
 use App\data_transfer_objects\ItemData;
 use Exception;
@@ -50,18 +49,18 @@ class FinancialCalculator
         return max(0.0, $tax_percent) * max(0.0, $subtotal - $discount_value) / 100.0;
     }
 
-    public static function calculateSubtotal(?ItemData $quoteItems): float
+    public static function calculateSubtotal(?ItemData $items): float
     {
-        if ($quoteItems === null)
+        if ($items === null || $items->isNull());
             return 0;
 
         $subtotal = 0;
-        for ($i = 0; $i < count($quoteItems->item); $i++) {
-            $quantity = $quoteItems->quantity[$i];
-            $unitPrice = $quoteItems->unit_price[$i];
+        for ($i = 0; $i < count($items->item); $i++) {
+            $quantity = $items->quantity[$i];
+            $unitPrice = $items->unit_price[$i];
 
             $subtotal += $quantity * $unitPrice;
-            $quoteItems->line_total[$i] = $quantity * $unitPrice;
+            $items->line_total[$i] = $quantity * $unitPrice;
         }
 
         return $subtotal;

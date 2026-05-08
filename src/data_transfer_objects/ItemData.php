@@ -17,11 +17,12 @@ class ItemData extends TransferObject
         return [$this->item[$row], $this->description[$row], $this->quantity[$row], $this->unit_price[$row], $this->line_total[$row]];
     }
 
-    public function toRowsArray() : array {
+    public function toRowsArray(): array
+    {
         $output = [];
-        for($i = 0; $i < count($this->item); $i++) {
+        for ($i = 0; $i < count($this->item); $i++)
             $output[] = $this->getRow($i);
-        }
+
         return $output;
     }
 
@@ -32,6 +33,16 @@ class ItemData extends TransferObject
             $this->quantity[$i] = empty($this->quantity) ? 0 : $this->quantity[$i];
             $this->unit_price[$i] = empty($this->unit_price) ? 0 : $this->unit_price[$i];
             $this->line_total[$i] = empty($this->line_total) ? 0 : $this->line_total[$i];
-        } 
+        }
+    }
+
+    public function isNull(): bool 
+    {
+        foreach ($this->item as $item_title) {
+            if (!empty($item_title))
+                return false;
+        }
+
+        return true;
     }
 }

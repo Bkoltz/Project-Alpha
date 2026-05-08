@@ -32,7 +32,7 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
 }
 
 function recalcCo() {
-    // var docType = document.querySelector('input[name="doc_type"]:checked').value;
+    // var docType = document.querySelector('input[name="document_type"]:checked').value;
     // var isLongTerm = (docType === 'long_term');
     // var isOnDemand = (docType === 'on_demand');
     // var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
@@ -127,7 +127,7 @@ if (discountTypeElCo) discountTypeElCo.addEventListener('change', updateDiscount
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
 function toggleDocTypeFields() {
-    var docType = document.querySelector('input[name="doc_type"]:checked').value;
+    var docType = document.querySelector('input[name="document_type"]:checked').value;
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
 
@@ -171,7 +171,7 @@ function toggleEndDate() {
 
     // Hide fulfillment date when ongoing
     var fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
-    var docType = document.querySelector('input[name="doc_type"]:checked').value;
+    var docType = document.querySelector('input[name="document_type"]:checked').value;
     if (docType === 'long_term' && fulfillmentLabel) {
         fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
     }
@@ -192,7 +192,7 @@ function toggleEndDate() {
 }
 
 function togglePricingFields() {
-    var docType = document.querySelector('input[name="doc_type"]:checked').value;
+    var docType = document.querySelector('input[name="document_type"]:checked').value;
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
 
@@ -267,7 +267,7 @@ function togglePricingFields() {
 }
 
 function updateDiscountWarning() {
-    var docType = document.querySelector('input[name="doc_type"]:checked').value;
+    var docType = document.querySelector('input[name="document_type"]:checked').value;
     var isLongTerm = (docType === 'long_term');
     var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
     var discountType = document.getElementById('discountTypeCo').value;
@@ -312,48 +312,48 @@ function loadProjectsForClientCo(clientId) {
         });
 }
 
-document.getElementById('createProjectBtnCo').addEventListener('click', function () {
-    const clientId = document.getElementById('clientIdCo').value;
-    if (!clientId) {
-        alert('Please select a client first.');
-        return;
-    }
+// document.getElementById('createProjectBtnCo').addEventListener('click', function () {
+//     const clientId = document.getElementById('clientIdCo').value;
+//     if (!clientId) {
+//         alert('Please select a client first.');
+//         return;
+//     }
 
-    const projectName = prompt('Enter project name:');
-    if (!projectName || !projectName.trim()) return;
+//     const projectName = prompt('Enter project name:');
+//     if (!projectName || !projectName.trim()) return;
 
-    fetch('/?page=project/projects-create-quick', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) +
-            '&name=' + encodeURIComponent(projectName.trim()) +
-            '&client_id=' + encodeURIComponent(clientId)
-    })
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                // Reload projects for this client
-                loadProjectsForClientCo(clientId);
-                // Select the new project
-                setTimeout(() => {
-                    const projectSelect = document.getElementById('projectSelectCo');
-                    for (let i = 0; i < projectSelect.options.length; i++) {
-                        if (projectSelect.options[i].value == result.project_id) {
-                            projectSelect.selectedIndex = i;
-                            break;
-                        }
-                    }
-                }, 100);
-            } else {
-                alert('Failed to create project: ' + (result.error || 'Unknown error'));
-            }
-        })
-        .catch(() => {
-            alert('Failed to create project.');
-        });
-});
+//     fetch('/?page=project/projects-create-quick', {
+//         method: 'POST',
+//         headers: {
+//             'Content-Type': 'application/x-www-form-urlencoded',
+//         },
+//         body: 'csrf=' + encodeURIComponent(document.querySelector('input[name="csrf"]').value) +
+//             '&name=' + encodeURIComponent(projectName.trim()) +
+//             '&client_id=' + encodeURIComponent(clientId)
+//     })
+//         .then(r => r.json())
+//         .then(result => {
+//             if (result.success) {
+//                 // Reload projects for this client
+//                 loadProjectsForClientCo(clientId);
+//                 // Select the new project
+//                 setTimeout(() => {
+//                     const projectSelect = document.getElementById('projectSelectCo');
+//                     for (let i = 0; i < projectSelect.options.length; i++) {
+//                         if (projectSelect.options[i].value == result.project_id) {
+//                             projectSelect.selectedIndex = i;
+//                             break;
+//                         }
+//                     }
+//                 }, 100);
+//             } else {
+//                 alert('Failed to create project: ' + (result.error || 'Unknown error'));
+//             }
+//         })
+//         .catch(() => {
+//             alert('Failed to create project.');
+//         });
+// });
 
 document.getElementById('coCreateForm').addEventListener('submit', function (e) {
     if (!cid.value) {
@@ -362,7 +362,7 @@ document.getElementById('coCreateForm').addEventListener('submit', function (e) 
         return;
     }
     // Set form action based on contract type
-    var docType = document.querySelector('input[name="doc_type"]:checked').value;
+    var docType = document.querySelector('input[name="document_type"]:checked').value;
     if (docType === 'long_term') {
         this.action = '/?page=long-term-contract-create';
     } else if (docType === 'on_demand') {

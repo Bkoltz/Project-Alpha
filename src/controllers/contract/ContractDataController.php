@@ -31,8 +31,6 @@ class ContractDataController
 
     public function load(DocumentType $documentType = DocumentType::REGULAR): array
     {
-        $output = null;
-
         if (isset($_GET['id'])) {
             $id = (int)$_GET['id'];
             $output = $this->service->getEditRenderData($id, $documentType);
@@ -44,14 +42,15 @@ class ContractDataController
 
             return ['pages\contract\contract-create.twig', $output->toArray()];
         }
-        
     }
 
-    public function create(DocumentType $documentType = DocumentType::REGULAR)
+    public function create()
     {
         $contractData = ContractData::fromArray($_POST);
         $contractSignatures = ContractSignatures::fromArray($_POST);
         $contractItems = ItemData::fromArray($_POST);
+
+        $documentType = DocumentType::from($_POST['document_type']);
 
         $this->contractService->createContractWithSignatures($documentType, $contractData, $contractItems, $contractSignatures);
         $this->documentService->createInvoiceFromContract($documentType, $contractData, $contractItems);
