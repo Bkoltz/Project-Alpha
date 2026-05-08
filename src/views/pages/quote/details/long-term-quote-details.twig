@@ -1,0 +1,67 @@
+<section>
+	<div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Long-term Service Quote</div>
+	<div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Recurring Billing Proposal</div>
+	<div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for
+		{{app_config.documents_valid_days}}
+		days
+	</div>
+
+	<div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+		<a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
+		<a href="/?page=quote/long-term-quote-pdf&id={{id}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+		<a href="/?page=quote/long-term-quote-pdf&id={{id}}" download="longterm-quote-{{quote.doc_number}}.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
+		{% if quote.status !== 'rejected' %}
+			<form method="post" action="/?page=email-send" style="display:inline">
+				<input type="hidden" name="csrf" value="{{token}}">
+				<input type="hidden" name="type" value="long_term_quote">
+				<input type="hidden" name="id" value="{{id}}">
+				<input type="hidden" name="redirect_to" value="{{requestURI}}">
+				<button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+			</form>
+		{% endif %}
+	</div>
+
+	{% include 'partials/document_details/display/project-details-display.twig' with {document: quote, branding: branding} %}
+
+	<table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb;background:#f9fafb">
+		<tr>
+			<td style="width:25%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">Start Date</div>
+				<div style="font-weight:600;color:#111">{{quote.start_date}}</div>
+			</td>
+			<td style="width:25%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">End Date</div>
+				<div style="font-weight:600;color:#111">{{quote.end_date}}</div>
+			</td>
+			<td style="width:25%;padding:8px;border-right:1px solid #e5e7eb;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">Billing Frequency</div>
+				<div style="font-weight:600;color:#111">{{quote.billing_interval_count}}
+					{{quote.billing_interval_unit}}</div>
+			</td>
+			<td style="width:25%;padding:8px;vertical-align:top">
+				<div style="font-size:11px;color:#6b7280">Status</div>
+				<div style="font-weight:600;color:#111;text-transform:capitalize">{{quote.status}}</div>
+			</td>
+		</tr>
+	</table>
+
+	{% if showDepositInfo %}
+		<table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #a7f3d0;background:#ecfdf5">
+			<tr>
+				<td style="padding:8px;vertical-align:top">
+					<div style="font-size:11px;color:#065f46">Initial Deposit Due:
+						<span style="font-weight:700;font-size:14px">${{quote.deposit}}</span>
+					</div>
+				</td>
+			</tr>
+		</table>
+	{% endif %}
+
+	{% include 'partials/document_details/display/contact-information-display.twig' with {contact_information: contact_info} %}
+
+	{% include 'partials/document_details/display/scope-display.twig' with {app_config: app_config, document: quote} %}
+
+	{% include 'partials/document_details/display/recurring-total-display.twig' with {document: quote} %}
+
+	{% include 'partials/document_details/display/terms-display.twig' with {document: quote} %}
+</section>
