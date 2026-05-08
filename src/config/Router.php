@@ -43,7 +43,7 @@ class Router
             'invoice/on-demand-invoice-details' => [InvoiceDetailsController::class, 'load', DocumentType::ON_DEMAND],
             'invoice/long-term-invoice-details' => [InvoiceDetailsController::class, 'load', DocumentType::LONG_TERM],
             'invoice/invoice-create' => [InvoiceDataController::class, 'load'],
-            'invoice/invoice-edit' => [InvoiceDataController::class, 'load'],
+            'invoice/regular-invoice-edit' => [InvoiceDataController::class, 'load'],
             'invoice/invoice-list' => [InvoiceListController::class, 'load', DocumentType::REGULAR],
             'invoice/on-demand-invoice-list' => [InvoiceListController::class, 'load', DocumentType::ON_DEMAND],
             'invoice/long-term-invoice-list' => [InvoiceListController::class, 'load', DocumentType::LONG_TERM],
@@ -64,16 +64,14 @@ class Router
             'contract/contract-deny' => [ContractDetailsController::class, 'deny'],
             'contract/contract-pdf' => [ContractDetailsController::class, ''],
             'contract/contract-sign' => [ContractDetailsController::class, 'signContract'],
-            'contract-create' => [ContractDataController::class, 'create', DocumentType::REGULAR],
-            'contract/long-term-contract-create' => [ContractListController::class, 'create', DocumentType::LONG_TERM],
-            'contract/on-demand-contract-create' => [ContractListController::class, 'create', DocumentType::ON_DEMAND],
+            'contract-create' => [ContractDataController::class, 'create'],
 
             // Invoice
-            'invoice/invoices-create' => [InvoiceDataController::class, 'create', DocumentType::REGULAR],
             'invoice/invoices-edit' => [InvoiceDataController::class, 'update'],
             'invoice/invoices-mark-paid' => [InvoiceDataController::class, 'markInvoicePaid'],
             'invoice/invoice-pdf' => [InvoiceDataController::class, ''],
-        ]
+            'invoice/invoice-create' => [InvoiceDataController::class, 'create'],
+        ] 
     ];
 
 
