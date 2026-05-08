@@ -1,3 +1,17 @@
+-- ================================================================
+-- DEPRECATED: This file is no longer maintained.
+-- 
+-- Please use the individual migration files instead:
+--   008_documents_module.sql
+--   009_auth_users_module.sql  
+--   010_financial_module.sql
+--   011_projects_clients_module.sql
+--   012_audit_system_module.sql
+--   013_payments_stripe_update.sql
+--
+-- This file is kept for historical reference only.
+-- Last updated: 2026-05-07
+-- ================================================================
 -- database/migrations/000_all.sql
 -- Consolidated database schema for project_alpha
 -- This file contains all table definitions and structure in one place
@@ -511,11 +525,17 @@ CREATE TABLE
     invoice_id INT NOT NULL,
     amount DECIMAL(12, 2) NOT NULL,
     payment_date DATE NOT NULL,
-    payment_method ENUM ('cash', 'check', 'card', 'bank_transfer', 'other') NOT NULL DEFAULT 'cash',
+    method ENUM ('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
     reference_number VARCHAR(255) NULL,
     notes TEXT NULL,
+    stripe_session_id VARCHAR(255) NULL,
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    auto_pay_attempt TINYINT(1) NOT NULL DEFAULT 0,
+    status ENUM ('succeeded', 'failed', 'pending') NOT NULL DEFAULT 'succeeded',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_payments_invoice (invoice_id),
+    INDEX idx_payments_stripe_session (stripe_session_id),
+    INDEX idx_payments_stripe_pi (stripe_payment_intent_id),
     CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE
   ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 

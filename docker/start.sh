@@ -48,30 +48,37 @@ fi
 ADMIN_PASSWORD_HASH=$(php -r "echo password_hash('${ADMIN_PASSWORD}', PASSWORD_DEFAULT);")
 echo "Using admin password hash: ${ADMIN_PASSWORD_HASH}"
 
-# Replace placeholder in SQL file (use a non-/ delimiter to avoid issues with bcrypt hashes)
-sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" /usr/local/share/app-migrations/000_all.sql
+# Replace placeholder in SQL files (use a non-/ delimiter to avoid issues with bcrypt hashes)
+for sql_file in /usr/local/share/app-migrations/*.sql; do
+  if [ -f "$sql_file" ]; then
+    sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" "$sql_file"
+  fi
+done
 
 # If the DB already exists and contains the placeholder hash (from a previous run), update it
 mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e \
   "UPDATE users SET password_hash='${ADMIN_PASSWORD_HASH}' WHERE password_hash='{{ADMIN_PASSWORD_HASH}}';" || true
 
-# 1) Base schema: if key table (quotes) is missing, load 000_all.sql
-if [ -f "/usr/local/share/app-migrations/000_all.sql" ]; then
-  echo "Checking if base schema needs to be applied to '${DB_NAME}'..."
-  if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
-       "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
-    echo "Applying base schema (000_all.sql) to '${DB_NAME}'..."
-    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
-         "/usr/local/share/app-migrations/000_all.sql" > /dev/null 2>&1; then
-      echo "✅ Base schema applied."
-    else
-      echo "⚠️  Failed to apply base schema (000_all.sql). The application may not work until this succeeds."
+# 1) Base schema: if key table (quotes) is missing, load migration files
+if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
+     "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
+  echo "Applying base schema to '${DB_NAME}'..."
+  
+  # Run all migration files in order
+  for sql_file in /usr/local/share/app-migrations/*.sql; do
+    if [ -f "$sql_file" ]; then
+      echo "Applying migration: $(basename "$sql_file")"
+      if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
+        echo "✅ Applied: $(basename "$sql_file")"
+      else
+        echo "⚠️ Failed to apply: $(basename "$sql_file")"
+      fi
     fi
-  else
-    echo "Base schema already present (quotes table exists)."
-  fi
+  done
+  
+  echo "✅ Base schema applied."
 else
-  echo "ℹ️  No base schema file (000_all.sql) found in image; skipping."
+  echo "Base schema already present (quotes table exists)."
 fi
 
 # 2) Runtime, always safe to re-run

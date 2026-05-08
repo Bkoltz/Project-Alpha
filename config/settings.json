@@ -44,5 +44,7 @@
     "invoice_auto_send_due_7days": 0,
     "invoice_auto_send_overdue_weekly": 0,
     "stripe_publishable_key": "pk_test_51SCOIPEL6u77R4yHwv1kwIKSqaPE7TnviVhyObbqdZ9ueTKuDm7ORBilAirSTLF0c7mOlR8p05J6Xi55skxmoLMq00XCLkRe9M",
-    "stripe_secret_key_enc": "enc::Ba+/flKHfBdwkPhd:skjkrt+smIQ4pqrd/uPI/w==:qpC732sZKd7PHAqz8DQr5+w5HE6ypk1wSstq4R1VOr0JWEi+fiz30INOjU7S9MH3AD2bY3MhDn/dEllg3sH8upHvAyx909O0JZUpd/fkT+RosV0cW9/zBzcp/GCJawbT15tKnGdjAN0pW9Y="
+    "stripe_secret_key_enc": "enc::Ba+/flKHfBdwkPhd:skjkrt+smIQ4pqrd/uPI/w==:qpC732sZKd7PHAqz8DQr5+w5HE6ypk1wSstq4R1VOr0JWEi+fiz30INOjU7S9MH3AD2bY3MhDn/dEllg3sH8upHvAyx909O0JZUpd/fkT+RosV0cW9/zBzcp/GCJawbT15tKnGdjAN0pW9Y=",
+    "review_link": null,
+    "stripe_webhook_secret_enc": "enc::Fk4D4CAIlRHBU1G8:3prJDORcf8oF2OPQ5WS95Q==:6mknYlB6bAoLKHwYgiEvfWo592ymWIR1cx8QX9ubpEch+YKdY5o="
 }

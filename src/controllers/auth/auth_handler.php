@@ -12,11 +12,23 @@ require_once __DIR__ . '/../../utils/crypto.php';
 
 // Verbose error toggle: set APP_VERBOSE_ERRORS=true or AUTH_VERBOSE_ERRORS=true (or APP_DEBUG=true)
 $VERBOSE_AUTH = filter_var(getenv('APP_VERBOSE_ERRORS') ?: getenv('AUTH_VERBOSE_ERRORS') ?: getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN);
-
 // CSRF check (prefer Symfony token, fallback to legacy)
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 $submitted = $_POST['_token'] ?? ($_POST['csrf'] ?? '');
-if (!csrf_sf_is_valid('auth', is_string($submitted) ? $submitted : '')) {
+$csrfValid = false;
+if (is_string($submitted) && $submitted !== '') {
+    // Try Symfony token first
+    $csrfValid = csrf_sf_is_valid('auth', $submitted);
+    // Fallback to legacy token
+    if (!$csrfValid && !empty($_SESSION['csrf'])) {
+        $csrfValid = hash_equals((string)$_SESSION['csrf'], $submitted);
+    }
+    // Also check _csrf Symfony array format
+    if (!$csrfValid && !empty($_SESSION['_csrf']['auth'])) {
+        $csrfValid = hash_equals((string)$_SESSION['_csrf']['auth'], $submitted);
+    }
+}
+if (!$csrfValid) {
     header('Location: /?page=login&error=' . urlencode('Invalid request (CSRF)'));
     exit;
 }
@@ -257,7 +269,17 @@ if ($action === 'login') {
                 app_log('auth', 'login skip 2FA (trusted device)', ['user_id'=>$userId, 'ip'=>$ip]);
             } else {
                 // User has 2FA enabled, redirect to 2FA verification
+                // Preserve CSRF token before regeneration
+                $csrfToken = $_SESSION['_csrf'] ?? null;
+                $legacyCsrf = $_SESSION['csrf'] ?? null;
                 session_regenerate_id(true);
+                // Restore CSRF token in new session
+                if ($csrfToken !== null) {
+                    $_SESSION['_csrf'] = $csrfToken;
+                }
+                if ($legacyCsrf !== null) {
+                    $_SESSION['csrf'] = $legacyCsrf;
+                }
                 $_SESSION['2fa_pending'] = [
                     'user_id' => $userId,
                     'user_data' => ['id'=>$userId, 'email'=>$u['email'], 'role'=>$u['role']]
@@ -269,7 +291,17 @@ if ($action === 'login') {
         }
         
         // on success (no 2FA or 2FA skipped), regenerate session and optionally clear attempts
+        // Preserve CSRF token before regeneration
+        $csrfToken = $_SESSION['_csrf'] ?? null;
+        $legacyCsrf = $_SESSION['csrf'] ?? null;
         session_regenerate_id(true);
+        // Restore CSRF token in new session
+        if ($csrfToken !== null) {
+            $_SESSION['_csrf'] = $csrfToken;
+        }
+        if ($legacyCsrf !== null) {
+            $_SESSION['csrf'] = $legacyCsrf;
+        }
         
         // Fetch user's organizations for multi-tenant support
         $orgs = [];

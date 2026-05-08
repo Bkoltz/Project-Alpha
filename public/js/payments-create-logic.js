@@ -18,9 +18,10 @@ var stripeNotice = document.getElementById('stripeNotice');
 function togglePaymentFields() {
     var method = methodSelect.value.toLowerCase();
     // Check field
-    if (method === 'check') {
+    if (method === 'check' || method === 'bank_transfer') {
         checkField.style.display = 'block';
         checkInput.required = true;
+        checkInput.placeholder = method === 'check' ? 'Enter check number' : 'Enter reference / transaction number';
     } else {
         checkField.style.display = 'none';
         checkInput.required = false;

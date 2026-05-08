@@ -1,4 +1,3 @@
-<?php
 // src/controllers/payments_create.php
 require_once __DIR__ . '/../config/db.php';
 
@@ -14,7 +13,8 @@ if (strtolower($method) === 'stripe') {
     header('Location: /?page=payments/payments-create&error=Please%20select%20an%20invoice');
     exit;
   }
-  header('Location: /?page=stripe-charge&invoice_id=' . $invoice_id);
+  // Also pass the amount so Stripe can use it
+  header('Location: /?page=stripe-charge&invoice_id=' . $invoice_id . '&amount=' . $amount);
   exit;
 }
 
@@ -22,6 +22,16 @@ if ($invoice_id <= 0 || $amount <= 0) {
   header('Location: /?page=payments-create&error=Invalid%20input');
   exit;
 }
+
+// Fetch invoice details to get client_id and contract_id
+$invStmt = $pdo->prepare('SELECT client_id, contract_id, organization_id FROM invoices WHERE id = ?');
+$invStmt->execute([$invoice_id]);
+$invoice = $invStmt->fetch(PDO::FETCH_ASSOC);
+
+$client_id = (int)($invoice['client_id'] ?? 0);
+$contract_id = !empty($invoice['contract_id']) ? (int)$invoice['contract_id'] : null;
+$organization_id = !empty($invoice['organization_id']) ? (int)$invoice['organization_id'] : null;
+
 // Validate check number if method is check
 if (strtolower($method) === 'check' && empty($check_number)) {
   header('Location: /?page=payments/payments-create&error=Check%20number%20is%20required');
@@ -30,8 +40,8 @@ if (strtolower($method) === 'check' && empty($check_number)) {
 
 $pdo->beginTransaction();
 try {
-  $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, check_number, status) VALUES (?,?,?,?,?)')
-      ->execute([$invoice_id, $amount, $method ?: null, $check_number ?: null, 'succeeded']);
+  $pdo->prepare('INSERT INTO payments (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, status) VALUES (?,?,?,?,?,?,?,?)')
+      ->execute([$client_id, $invoice_id, $contract_id, $organization_id, $amount, $method ?: null, $check_number ?: null, 'succeeded']);
 
   // Update invoice status by total paid
   $sum = $pdo->prepare('SELECT COALESCE(SUM(amount),0) AS paid FROM payments WHERE invoice_id=? AND status="succeeded"');
@@ -44,8 +54,10 @@ try {
 
   $status = 'partial';
   if ($paid >= $total) $status = 'paid';
-  // Update both status and amount_paid on the invoice
-  $pdo->prepare('UPDATE invoices SET status=?, amount_paid=? WHERE id=?')->execute([$status, $paid, $invoice_id]);
+  // Update both status, amount_paid, and balance_due on the invoice
+  $balanceDue = max(0, $total - $paid);
+  $pdo->prepare('UPDATE invoices SET status=?, amount_paid=?, balance_due=? WHERE id=?')
+      ->execute([$status, $paid, $balanceDue, $invoice_id]);
   // If invoice status moved out of public-viewable states, revoke public links
   if (!in_array($status, ['unpaid','partial'], true)) {
     try {
@@ -58,15 +70,16 @@ try {
   if ($status === 'paid' && !$paid_in_advance) {
     $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id=?');
     $co->execute([$invoice_id]);
-    $contract_id = (int)$co->fetchColumn();
-    if ($contract_id > 0) {
-      $pdo->prepare('UPDATE contracts SET status=? WHERE id=?')->execute(['completed', $contract_id]);
+    $cid = (int)$co->fetchColumn();
+    if ($cid > 0) {
+      $pdo->prepare('UPDATE contracts SET status=? WHERE id=?')->execute(['completed', $cid]);
     }
   }
 
   $pdo->commit();
 } catch (Throwable $e) {
   $pdo->rollBack();
+  @error_log('[PaymentsCreate] Error: ' . $e->getMessage());
   header('Location: /?page=payments-create&error=Failed%20to%20save%20payment');
   exit;
 }

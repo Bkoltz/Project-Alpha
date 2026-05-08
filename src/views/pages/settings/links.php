@@ -155,7 +155,7 @@ $providers = ['dropbox', 'gdrive', 's3'];
                                     <div style="font-size:12px;color:#6b7280">
                                         <?php if (!empty($credentials['token_expires_at'])): ?>
                                             Token expires: <?php echo htmlspecialchars($credentials['token_expires_at']); ?>
-                                        <?php else: ?
+                                        <?php else: ?>
                                             Connection is active
                                         <?php endif; ?>
                                     </div>
