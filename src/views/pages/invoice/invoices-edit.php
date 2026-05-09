@@ -241,6 +241,6 @@ foreach ($clients as $c) {
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Update Invoice</button>
     </div>
   </form>
-</section>
 
-<script src="js/invoices-edit-logic.js" defer></script>
+  <script src="js/invoices-edit-logic.js" defer></script>
+</section>

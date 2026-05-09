@@ -354,7 +354,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Quote</button>
     </div>
   </form>
-</section>
 
-<script src="js/quotes-create-logic.js" defer></script>
-<script src="js/client-selection-dropdown-logic.js" defer></script>
+  <script src="js/quotes-create-logic.js" defer></script>
+  <script src="js/client-selection-dropdown-logic.js" defer></script>
+</section>
