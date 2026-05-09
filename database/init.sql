@@ -785,8 +785,9 @@ INSERT INTO organizations (name) VALUES ('Default Organization')
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 -- Seed default admin user (password: admin123)
+-- Hash generated with: password_hash('admin123', PASSWORD_BCRYPT)
 INSERT INTO users (email, password_hash, username, role, force_password_reset)
-VALUES ('admin@project-alpha.local', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'admin', 0)
+VALUES ('admin@project-alpha.local', '$2y$10$RKJAsMYgsL03dq/iABUJtOE8nGT4CmiowHjbSs8mvhxu2uGaOtbJm', 'admin', 'admin', 0)
 ON DUPLICATE KEY UPDATE email = VALUES(email);
 
 -- Link admin to default organization
