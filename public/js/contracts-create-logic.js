@@ -282,31 +282,41 @@ function updateDiscountWarning() {
 addItemCo();
 
 // Client typeahead
-var ci = document.getElementById('clientInputCo');
-var cid = document.getElementById('clientIdCo');
-var sug = document.getElementById('clientSuggestCo');
-var taxBanner = document.getElementById('taxExemptBannerCo');
-ci.addEventListener('input', function () {
-    cid.value = '';
-    var t = this.value.trim();
-    if (!t) { sug.style.display = 'none'; sug.innerHTML = ''; taxBanner.style.display = 'none'; return; }
-    fetch('/?page=clients-search&term=' + encodeURIComponent(t))
-        .then(r => r.json())
-        .then(list => {
-            if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
-            sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
-            Array.from(sug.children).forEach(el => {
-                el.addEventListener('click', function () {
-                    ci.value = this.dataset.name; cid.value = this.dataset.id;
-                    if (this.dataset.taxexempt) { taxBanner.style.display = 'block'; } else { taxBanner.style.display = 'none'; }
-                    loadProjectsForClientCo(this.dataset.id);
-                    sug.style.display = 'none';
+function initContractClientDropdown() {
+    var ci = document.getElementById('clientInputCo');
+    var cid = document.getElementById('clientIdCo');
+    var sug = document.getElementById('clientSuggestCo');
+    var taxBanner = document.getElementById('taxExemptBannerCo');
+    
+    if (!ci || !cid || !sug) return;
+    if (ci._clientDropdownInitialized) return;
+    ci._clientDropdownInitialized = true;
+    
+    ci.addEventListener('input', function () {
+        cid.value = '';
+        var t = this.value.trim();
+        if (!t) { sug.style.display = 'none'; sug.innerHTML = ''; if(taxBanner) taxBanner.style.display = 'none'; return; }
+        fetch('/?page=clients-search&term=' + encodeURIComponent(t))
+            .then(r => r.json())
+            .then(list => {
+                if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
+                sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+                Array.from(sug.children).forEach(el => {
+                    el.addEventListener('click', function () {
+                        ci.value = this.dataset.name; cid.value = this.dataset.id;
+                        if (this.dataset.taxexempt && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
+                        loadProjectsForClientCo(this.dataset.id);
+                        sug.style.display = 'none';
+                    });
                 });
-            });
-            sug.style.display = 'block';
-        }).catch(() => { sug.style.display = 'none' });
-});
-document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
+                sug.style.display = 'block';
+            }).catch(() => { sug.style.display = 'none' });
+    });
+    document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
+}
+
+initContractClientDropdown();
+document.addEventListener('pageLoaded', initContractClientDropdown);
 
 function loadProjectsForClientCo(clientId) {
     if (!clientId) {

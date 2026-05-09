@@ -50,31 +50,41 @@ function recalcInv() {
 addItemInv();
 
 // Client typeahead for invoice
-var ciI = document.getElementById('clientInputInv');
-var cidI = document.getElementById('clientIdInv');
-var sugI = document.getElementById('clientSuggestInv');
-var taxBannerInv = document.getElementById('taxExemptBannerInv');
-ciI.addEventListener('input', function () {
-    cidI.value = '';
-    var t = this.value.trim();
-    if (!t) { sugI.style.display = 'none'; sugI.innerHTML = ''; taxBannerInv.style.display = 'none'; return; }
-    fetch('/?page=clients-search&term=' + encodeURIComponent(t))
-        .then(r => r.json())
-        .then(list => {
-            if (!Array.isArray(list) || list.length === 0) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
-            sugI.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
-            Array.from(sugI.children).forEach(el => {
-                el.addEventListener('click', function () {
-                    ciI.value = this.dataset.name; cidI.value = this.dataset.id;
-                    if (this.dataset.taxexempt) { taxBannerInv.style.display = 'block'; } else { taxBannerInv.style.display = 'none'; }
-                    loadProjectsForClientInv(this.dataset.id);
-                    sugI.style.display = 'none';
+function initInvoiceClientDropdown() {
+    var ciI = document.getElementById('clientInputInv');
+    var cidI = document.getElementById('clientIdInv');
+    var sugI = document.getElementById('clientSuggestInv');
+    var taxBannerInv = document.getElementById('taxExemptBannerInv');
+    
+    if (!ciI || !cidI || !sugI) return;
+    if (ciI._clientDropdownInitialized) return;
+    ciI._clientDropdownInitialized = true;
+    
+    ciI.addEventListener('input', function () {
+        cidI.value = '';
+        var t = this.value.trim();
+        if (!t) { sugI.style.display = 'none'; sugI.innerHTML = ''; if(taxBannerInv) taxBannerInv.style.display = 'none'; return; }
+        fetch('/?page=clients-search&term=' + encodeURIComponent(t))
+            .then(r => r.json())
+            .then(list => {
+                if (!Array.isArray(list) || list.length === 0) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
+                sugI.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
+                Array.from(sugI.children).forEach(el => {
+                    el.addEventListener('click', function () {
+                        ciI.value = this.dataset.name; cidI.value = this.dataset.id;
+                        if (this.dataset.taxexempt && taxBannerInv) { taxBannerInv.style.display = 'block'; } else if(taxBannerInv) { taxBannerInv.style.display = 'none'; }
+                        loadProjectsForClientInv(this.dataset.id);
+                        sugI.style.display = 'none';
+                    });
                 });
-            });
-            sugI.style.display = 'block';
-        }).catch(() => { sugI.style.display = 'none' });
-});
-document.addEventListener('click', function (e) { if (!sugI.contains(e.target) && e.target !== ciI) { sugI.style.display = 'none'; } });
+                sugI.style.display = 'block';
+            }).catch(() => { sugI.style.display = 'none' });
+    });
+    document.addEventListener('click', function (e) { if (!sugI.contains(e.target) && e.target !== ciI) { sugI.style.display = 'none'; } });
+}
+
+initInvoiceClientDropdown();
+document.addEventListener('pageLoaded', initInvoiceClientDropdown);
 
 function loadProjectsForClientInv(clientId) {
     if (!clientId) {

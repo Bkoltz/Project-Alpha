@@ -55,6 +55,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
       <a href="/?page=project/projects-list" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;margin-left:8px;">Cancel</a>
     </div>
   </form>
-</section>
 
-<script src="js/client-selection-dropdown-logic.js" defer></script>
+  <script src="js/client-selection-dropdown-logic.js" defer></script>
+  <script src="js/projects-create-logic.js" defer></script>
+</section>
