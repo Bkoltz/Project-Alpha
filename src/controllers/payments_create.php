@@ -8,13 +8,26 @@ $method = trim((string)($_POST['method'] ?? 'card'));
 $check_number = trim((string)($_POST['check_number'] ?? ''));
 $paid_in_advance = !empty($_POST['paid_in_advance']);
 
-// If Stripe is selected, redirect to Stripe checkout
+// If Stripe is selected, open Stripe checkout in a new tab and redirect current page
 if (strtolower($method) === 'stripe') {
   if ($invoice_id <= 0) {
     header('Location: /?page=payments/payments-create&error=Please%20select%20an%20invoice');
     exit;
   }
-  header('Location: /?page=stripe-charge&invoice_id=' . $invoice_id . '&amount=' . $amount);
+  $stripeUrl = '/?page=stripe-charge&invoice_id=' . $invoice_id . '&amount=' . $amount;
+  ?>
+  <!DOCTYPE html>
+  <html>
+  <head><title>Redirecting to Stripe...</title></head>
+  <body>
+    <p>Opening Stripe checkout in a new tab...</p>
+    <script>
+      window.open('<?php echo $stripeUrl; ?>', '_blank');
+      window.location.href = '/?page=payments/payments-list';
+    </script>
+  </body>
+  </html>
+  <?php
   exit;
 }
 

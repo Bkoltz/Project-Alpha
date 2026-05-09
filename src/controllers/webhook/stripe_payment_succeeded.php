@@ -11,7 +11,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
     $piId = $paymentIntent['id'] ?? null;
     
     if (!$invoiceId || !$piId) {
-        @error_log('[StripeWebhook] PaymentIntent missing invoice_id or id in metadata');
+        @error_log('[StripeWebhook] PaymentIntent missing invoice_id or id in metadata. metadata=' . json_encode($metadata) . ' piId=' . $piId);
         return;
     }
     
