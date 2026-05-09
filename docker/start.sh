@@ -74,22 +74,44 @@ mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${
   END IF;
 " || true
 
-# 1) Base schema: if key table (quotes) is missing, load migration files
+# 1) Base schema: if key table (quotes) is missing, load the init schema
 if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
      "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
   echo "Applying base schema to '${DB_NAME}'..."
   
-  # Run all migration files in order
-  for sql_file in /usr/local/share/app-migrations/*.sql; do
-    if [ -f "$sql_file" ]; then
-      echo "Applying migration: $(basename "$sql_file")"
-      if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
-        echo "✅ Applied: $(basename "$sql_file")"
-      else
-        echo "⚠️ Failed to apply: $(basename "$sql_file")"
-      fi
+  # Run the unified init.sql which contains all modules
+  INIT_SQL="/docker-entrypoint-initdb.d/init.sql"
+  if [ -f "$INIT_SQL" ]; then
+    echo "Applying unified schema: $INIT_SQL"
+    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then
+      echo "✅ Base schema applied from init.sql"
+    else
+      echo "⚠️ Failed to apply init.sql, trying individual migrations..."
+      # Fallback to individual migration files
+      for sql_file in /usr/local/share/app-migrations/*.sql; do
+        if [ -f "$sql_file" ]; then
+          echo "Applying migration: $(basename "$sql_file")"
+          if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
+            echo "✅ Applied: $(basename "$sql_file")"
+          else
+            echo "⚠️ Failed to apply: $(basename "$sql_file")"
+          fi
+        fi
+      done
     fi
-  done
+  else
+    # Fallback to individual migration files if init.sql not available
+    for sql_file in /usr/local/share/app-migrations/*.sql; do
+      if [ -f "$sql_file" ]; then
+        echo "Applying migration: $(basename "$sql_file")"
+        if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
+          echo "✅ Applied: $(basename "$sql_file")"
+        else
+          echo "⚠️ Failed to apply: $(basename "$sql_file")"
+        fi
+      fi
+    done
+  fi
   
   echo "✅ Base schema applied."
 else

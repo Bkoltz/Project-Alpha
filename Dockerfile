@@ -57,8 +57,9 @@ COPY php.ini /usr/local/etc/php/conf.d/php.ini
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/
 
-# Copy all migration SQL files into the image (no host mounts needed on TrueNAS)
-COPY ./database/migrations/ /usr/local/share/app-migrations/
+# Copy database initialization and migration files into the image
+# The init.sql is the single source of truth with all modules concatenated
+COPY ./database/init.sql /usr/local/share/app-migrations/init.sql
 
 # Copy Composer vendor from the builder stage
 COPY --from=vendor /app/vendor /var/www/vendor
