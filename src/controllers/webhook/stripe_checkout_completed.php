@@ -35,6 +35,14 @@ function handleCheckoutSessionCompleted($pdo, $session) {
     
     $clientId = (int)($invoice['client_id'] ?? 0);
     
+    // Idempotency check - prevent duplicate processing
+    $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_session_id = ?');
+    $existsStmt->execute([$session['id']]);
+    if ($existsStmt->fetchColumn()) {
+        @error_log('[StripeWebhook] Session ' . $session['id'] . ' already processed - skipping');
+        return;
+    }
+    
     try {
         $pdo->beginTransaction();
         

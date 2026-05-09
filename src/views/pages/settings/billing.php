@@ -51,11 +51,6 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   </label>
 </fieldset>
 
-<div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:14px">
-  <strong>💡 Looking for Tax Rates?</strong>
-  <div style="margin-top:8px;color:#1e40af">Tax rate management has been moved to the <a href="/?page=settings&tab=taxes" style="color:var(--nav-accent);font-weight:600">Taxes</a> tab for better organization.</div>
-</div>
-
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
   <legend style="padding:0 6px;color:var(--muted)">Credit Card Surcharge</legend>
   <div style="color:#666;font-size:0.9em;margin-bottom:12px">Configure how Stripe processing fees are handled. When client pays a portion, it's added to their invoice total.</div>
