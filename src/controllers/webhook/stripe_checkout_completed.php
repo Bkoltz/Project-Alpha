@@ -37,7 +37,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         $pdo->beginTransaction();
         
         // Record the payment
-        $stmt = $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, CURDATE())');
+        $stmt = $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, CURDATE())');
         $stmt->execute([$invoiceId, $amountTotal, 'stripe', $session['id'], 'succeeded']);
         
         // Update invoice status

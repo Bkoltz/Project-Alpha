@@ -41,7 +41,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         
         // Record the payment
         $isAutoPay = !empty($metadata['auto_pay']) ? 1 : 0;
-        $stmt = $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
+        $stmt = $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
         $stmt->execute([$invoiceId, $amountTotal, 'stripe', $piId, $isAutoPay, 'succeeded']);
         
         // Update invoice status
