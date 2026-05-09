@@ -20,4 +20,5 @@ class RegularContractRecord extends BaseContractRecord
     public ?float $deposit_value = null;
     public ?float $deposit_paid = null;
     public ?string $fulfillment_date = null;
+    public ?string $created_at = null;
 }

@@ -51,7 +51,7 @@ class FinancialCalculator
 
     public static function calculateSubtotal(?ItemData $items): float
     {
-        if ($items === null || $items->isNull());
+        if ($items === null || $items->isNull())
             return 0;
 
         $subtotal = 0;

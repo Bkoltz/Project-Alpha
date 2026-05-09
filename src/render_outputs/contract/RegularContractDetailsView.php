@@ -11,6 +11,7 @@ use App\data_transfer_objects\ItemData;
 use App\data_transfer_objects\contract\ContractSignatures;
 
 class RegularContractDetailsView extends RenderOutput {
+    public ?int $id = null;
     public ?ContractData $contract = null;
     public ?array $app_config = null;
     public ?CustomFieldDisplayView $custom_fields = null;

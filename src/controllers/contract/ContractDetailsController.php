@@ -4,12 +4,14 @@ namespace App\controllers\contract;
 
 use App\services\contract\ContractDetailsService;
 use App\services\contract\ContractService;
+use App\services\SignatureService;
 use App\utils\enum\DocumentType;
 
 class ContractDetailsController
 {
     private ContractDetailsService $service;
     private ContractService $contractService;
+    private SignatureService $signatureService;
 
     private const RENDER_PATHS = [
         DocumentType::REGULAR->value => 'pages\contract\details\regular-contract-details.twig',
@@ -17,10 +19,11 @@ class ContractDetailsController
         DocumentType::ON_DEMAND->value => 'pages\contract\details\on-demand-contract-details.twig'
     ];
 
-    public function __construct(ContractDetailsService $service, ContractService $contractService)
+    public function __construct(ContractDetailsService $service, ContractService $contractService, SignatureService $signatureService)
     {
         $this->service = $service;
         $this->contractService = $contractService;
+        $this->signatureService = $signatureService;
     }
 
     public function load(DocumentType $documentType = DocumentType::REGULAR): array
@@ -32,6 +35,13 @@ class ContractDetailsController
         return [$path, $output->toArray()];
     }
 
+    public function sign(): void {
+        (int)$id = $_POST['id'] ?? 0;
+        $documentType = DocumentType::from($_POST['document_type']) ?? DocumentType::REGULAR;
+        $file = $_FILES['signed_pdf'];
+        $this->signatureService->addSignedDocument($id, $documentType, $file);    
+    }
+    
     public function pause(DocumentType $documentType = DocumentType::REGULAR): void
     {
         (int)$id = $_POST['id'] ?? 0;

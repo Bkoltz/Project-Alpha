@@ -101,6 +101,10 @@ class ContractService
         return $this->repository->getStoredSignatures($id);
     }
 
+    public function setContractSignaturePath(int $id, DocumentType $documentType, string $path): void {
+        $this->repository->setContractSignaturePath($id, $documentType, $path);
+    }
+
     public function payFullDeposit(DocumentType $documentType, int $id): float
     {
         $storedContract = $this->repository->getStoredContract($id, $documentType);

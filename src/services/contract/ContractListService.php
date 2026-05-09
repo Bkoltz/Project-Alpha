@@ -8,6 +8,7 @@ use App\render_outputs\contract\ContractListView;
 use App\render_outputs\PageNumberView;
 use App\repositories\contract\ContractListRepository;
 use App\services\BaseListService;
+use App\services\FinancialService;
 use App\utils\enum\DocumentType;
 
 class ContractListService extends BaseListService
@@ -32,6 +33,7 @@ class ContractListService extends BaseListService
 
         $displayFilterConfig = $this->getDisplayFilterConfig($filterData->toArray());
         $displayData = $this->getDisplayData($documentType, $filterData, $displayCountData);
+
         $rows = $this->repository->getContractRows($documentType, $filterData, $displayCountData);
 
         $output = new ContractListView(array_merge([

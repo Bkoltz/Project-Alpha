@@ -44,6 +44,7 @@ class ContractDetailsService extends BaseDetailsService
         $contactInfo = $this->getContactInfo($contract->client_id);
 
         return new RegularContractDetailsView([
+            'id' => $id,
             'contract' => $contract,
             'app_config' => AppConfiguration::$ConfigSettings,
             'items' => $items,

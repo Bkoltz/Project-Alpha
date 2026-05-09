@@ -83,7 +83,7 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
     wrap.appendChild(qtyInput);
     wrap.appendChild(priceInput);
     wrap.appendChild(removeBtn);
-    document.getElementById('itemsCo').appendChild(wrap);
+    document.getElementById('items').appendChild(wrap);
 
     // Initialize autocomplete for the new item input
     if (window.ItemAutocomplete) {
@@ -97,22 +97,22 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
 }
 
 function recalcCo() {
-    var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
-    var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
-    var subtotal = 0; for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
-    var dtype = document.getElementById('discountTypeCo').value;
-    var dval = parseFloat(document.getElementById('discountValueCo').value) || 0;
-    var taxp = parseFloat(document.getElementById('taxPercentCo').value) || 0;
-    var discount = 0; if (dtype === 'percent') { discount = Math.max(0, Math.min(100, dval)) * subtotal / 100; } else if (dtype === 'fixed') { discount = Math.max(0, dval); }
-    var taxable = Math.max(0, subtotal - discount);
-    var tax = Math.max(0, taxp) * taxable / 100;
-    var total = Math.max(0, taxable + tax);
-    document.getElementById('subtotalValCo').textContent = money(subtotal);
-    document.getElementById('discountValCo').textContent = money(discount);
-    document.getElementById('taxValCo').textContent = money(tax);
-    document.getElementById('totalValCo').textContent = money(total);
+    // var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
+    // var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
+    // var subtotal = 0; for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
+    // // var dtype = document.getElementById('discountTypeCo').value;
+    // var dval = parseFloat(document.getElementById('discountValueCo').value) || 0;
+    // var taxp = parseFloat(document.getElementById('taxPercentCo').value) || 0;
+    // var discount = 0; if (dtype === 'percent') { discount = Math.max(0, Math.min(100, dval)) * subtotal / 100; } else if (dtype === 'fixed') { discount = Math.max(0, dval); }
+    // var taxable = Math.max(0, subtotal - discount);
+    // var tax = Math.max(0, taxp) * taxable / 100;
+    // var total = Math.max(0, taxable + tax);
+    // document.getElementById('subtotalValCo').textContent = money(subtotal);
+    // document.getElementById('discountValCo').textContent = money(discount);
+    // document.getElementById('taxValCo').textContent = money(tax);
+    // document.getElementById('totalValCo').textContent = money(total);
 }
 
 document.getElementById("addItemBtn").addEventListener('click', function(e) {addItemCo();});
 
-['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => document.getElementById(id).addEventListener('input', recalcCo));
+// ['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => document.getElementById(id).addEventListener('input', recalcCo));

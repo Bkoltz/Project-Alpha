@@ -29,20 +29,15 @@ class ItemData extends TransferObject
     public function validate(): void
     {
         foreach ($this->item as $i => $singleItem) {
-            $this->description[$i] = empty($this->description) ? '' : $this->description[$i];
-            $this->quantity[$i] = empty($this->quantity) ? 0 : $this->quantity[$i];
-            $this->unit_price[$i] = empty($this->unit_price) ? 0 : $this->unit_price[$i];
-            $this->line_total[$i] = empty($this->line_total) ? 0 : $this->line_total[$i];
+            $this->description[$i] = empty($this->description[$i]) ? '' : $this->description[$i];
+            $this->quantity[$i] = empty($this->quantity[$i]) ? 0 : $this->quantity[$i];
+            $this->unit_price[$i] = empty($this->unit_price[$i]) ? 0 : $this->unit_price[$i];
+            $this->line_total[$i] = empty($this->line_total[$i]) ? 0 : $this->line_total[$i];
         }
     }
 
-    public function isNull(): bool 
+    public function isNull(): bool
     {
-        foreach ($this->item as $item_title) {
-            if (!empty($item_title))
-                return false;
-        }
-
-        return true;
+        return empty(array_filter($this->item));
     }
 }

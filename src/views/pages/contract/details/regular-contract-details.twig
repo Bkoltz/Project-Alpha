@@ -2,11 +2,14 @@
 	<div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Contract</div>
 	<div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Valid for
 		{{app_config.documents_valid_days}}
-		days</div>
+		days
+	</div>
+
 	<div class="no-print" style="padding:12px 16px;background:{{colors.bg}};color:{{colors.text}};border-left:4px solid {{colors.border}};border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
 		Status:
 		{{contract.status}}
 	</div>
+
 	<div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
 		<a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
 		<a href="/?page=contract/contract-pdf&id={{id}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
@@ -28,14 +31,15 @@
 			<form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
 				<input type="hidden" name="csrf" value="{{token}}">
 				<input type="hidden" name="id" value="{{id}}">
-				<input id="upload-signed" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
-				<button type="button" onclick="document.getElementById('upload-signed').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">
-					{{contract.signed_pdf_path ? 'Upload Signed PDF' : 'Replace Signed PDF'}}
-				</button>
+				<input type="hidden" name="document_type" value="regular">
+				<label style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">
+					{{ contract.signed_pdf_path is empty ? 'Upload Signed PDF' : 'Replace Signed PDF' }}
+					<input type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+				</label>
 			</form>
 		{% endif %}
 
-		{% if contract.signed_pdf_path is defined %}
+		{% if contract.signed_pdf_path is not empty %}
 			<a href="{{contract.signed_pdf_path}}" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
 		{% endif %}
 
@@ -47,7 +51,7 @@
 			</form>
 		{% endif %}
 
-		{% if contract.status != 'active' %}
+		{% if contract.status == 'active' %}
 			<form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?');">
 				<input type="hidden" name="csrf" value="{{token}}">
 				<input type="hidden" name="id" value="{{id}}">
@@ -55,7 +59,7 @@
 			</form>
 		{% endif %}
 
-		{% if contract.status != 'cancelled' and contract.status != 'completed' %}
+		{% if contract.status !== 'cancelled' and contract.status !== 'completed' %}
 			<form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
 				<input type="hidden" name="csrf" value="{{token}}">
 				<input type="hidden" name="id" value="{{id}}">
@@ -63,8 +67,8 @@
 			</form>
 		{% endif %}
 
-		{% if contract.status != 'cancelled' %}
-			<form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this contract? It will be set back to pending status and related invoices will be restored.');">
+		{% if contract.status == 'cancelled' %}
+			<form method="post" action="/?page=contract/contract-resume" style="display:inline" onsubmit="return confirm('Re-enable this contract? It will be set back to pending status and related invoices will be restored.');">
 				<input type="hidden" name="csrf" value="{{token}}">
 				<input type="hidden" name="type" value="contract">
 				<input type="hidden" name="id" value="{{id}}">
@@ -91,7 +95,7 @@
 	{% include 'partials/document_details/display/date-details-display.twig' with {document: contract} %}
 
 	{% include 'partials/document_details/display/project-details-display.twig' with {document: contract, branding: branding} %}
-	
+
 	{% include 'partials/document_details/display/custom-field-display.twig' with {document: contract} %}
 
 	{% include 'partials/document_details/display/contact-information-display.twig' with {contact_information: contact_info} %}
