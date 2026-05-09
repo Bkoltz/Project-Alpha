@@ -23,8 +23,8 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         return;
     }
     
-    // Verify invoice exists before processing
-    $invCheck = $pdo->prepare('SELECT id, total FROM invoices WHERE id = ?');
+    // Verify invoice exists and get client info before processing
+    $invCheck = $pdo->prepare('SELECT id, total, client_id FROM invoices WHERE id = ?');
     $invCheck->execute([$invoiceId]);
     $invoice = $invCheck->fetch(PDO::FETCH_ASSOC);
     
@@ -33,12 +33,14 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         return;
     }
     
+    $clientId = (int)($invoice['client_id'] ?? 0);
+    
     try {
         $pdo->beginTransaction();
         
         // Record the payment
-        $stmt = $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, CURDATE())');
-        $stmt->execute([$invoiceId, $amountTotal, 'stripe', $session['id'], 'succeeded']);
+        $stmt = $pdo->prepare('INSERT INTO payments (client_id, invoice_id, amount, payment_method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
+        $stmt->execute([$clientId, $invoiceId, $amountTotal, 'stripe', $session['id'], 'succeeded']);
         
         // Update invoice status
         $sum = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ? AND status = "succeeded"');
