@@ -118,7 +118,7 @@ try {
       if ($type === 'quote') {
         try {
           $idParam = (int)$rid;
-          $stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.organization client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
+          $stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.organization client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
           $stmt->execute([$idParam]);
           $quote = $stmt->fetch(PDO::FETCH_ASSOC);
           if ($quote) {

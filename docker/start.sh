@@ -55,9 +55,24 @@ for sql_file in /usr/local/share/app-migrations/*.sql; do
   fi
 done
 
-# If the DB already exists and contains the placeholder hash (from a previous run), update it
-mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e \
-  "UPDATE users SET password_hash='${ADMIN_PASSWORD_HASH}' WHERE password_hash='{{ADMIN_PASSWORD_HASH}}';" || true
+# Ensure admin user exists with current password hash (recovery mechanism)
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@project-alpha.local}"
+ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
+echo "Ensuring admin user exists with email: ${ADMIN_EMAIL}, username: ${ADMIN_USERNAME}"
+mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
+  INSERT INTO users (email, password_hash, username, role, force_password_reset)
+  VALUES ('${ADMIN_EMAIL}', '${ADMIN_PASSWORD_HASH}', '${ADMIN_USERNAME}', 'admin', 0)
+  ON DUPLICATE KEY UPDATE password_hash='${ADMIN_PASSWORD_HASH}', email='${ADMIN_EMAIL}', username='${ADMIN_USERNAME}', role='admin', force_password_reset=0, deleted_at=NULL;
+  
+  -- Ensure admin is linked to default organization
+  SET @admin_id = (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1);
+  SET @default_org = (SELECT id FROM organizations ORDER BY id ASC LIMIT 1);
+  IF @admin_id IS NOT NULL AND @default_org IS NOT NULL THEN
+    INSERT INTO user_organizations (user_id, organization_id, role, is_default)
+    VALUES (@admin_id, @default_org, 'owner', 1)
+    ON DUPLICATE KEY UPDATE role='owner', is_default=1;
+  END IF;
+" || true
 
 # 1) Base schema: if key table (quotes) is missing, load migration files
 if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \

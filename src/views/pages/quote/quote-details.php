@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 $id = (int)($_GET['id'] ?? 0);
-$stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
+$stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Quote not found</p>'; return; }
@@ -336,7 +336,7 @@ $isPdf = defined('PDF_MODE');
           if (!empty($quote['address_line2'])) { $toLines[] = (string)$quote['address_line2']; }
           $c = trim((string)($quote['city'] ?? ''));
           $s = trim((string)($quote['state'] ?? ''));
-          $p = trim((string)($quote['postal'] ?? ''));
+          $p = trim((string)($quote['postal_code'] ?? ''));
           $parts2 = [];
           if ($c !== '') { $parts2[] = $c; }
           if ($s !== '') { $parts2[] = $s; }
