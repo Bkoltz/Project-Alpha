@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$q = $pdo->prepare('SELECT q.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM quotes q JOIN clients cl ON cl.id=q.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE q.id=? AND q.is_long_term=1');
+$q = $pdo->prepare('SELECT q.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM quotes q JOIN clients cl ON cl.id=q.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE q.id=? AND q.quote_type="long_term"');
 $q->execute([$id]);
 $quote = $q->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Long-term quote not found</p>'; return; }

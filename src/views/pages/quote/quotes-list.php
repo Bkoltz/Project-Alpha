@@ -14,7 +14,7 @@ $hasDoc = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABL
 $hasProj = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='quotes' AND COLUMN_NAME='project_code'")->fetchColumn();
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
-$where=['(q.is_long_term IS NULL OR q.is_long_term=0)'];$p=[];
+$where=['q.quote_type != "long_term"'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}

@@ -14,7 +14,7 @@ $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
-$where=['q.is_on_demand=1'];$p=[];
+$where=['q.quote_type = "on_demand"'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='q.status=?'; $p[] = $status; }

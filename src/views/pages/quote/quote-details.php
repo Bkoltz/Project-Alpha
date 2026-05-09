@@ -29,7 +29,7 @@ if (!empty($quote['project_code'])) {
   } catch (Throwable $e) { /* ignore */ }
 }
 if ($termsText === '') { $termsText = trim((string)($quote['terms'] ?? '')); }
-if ($termsText === '' && !empty($quote['is_on_demand'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+if ($termsText === '' && ($quote['quote_type'] ?? '') === 'on_demand') { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 // Detect PDF mode for conditional page breaks
 $isPdf = defined('PDF_MODE');
@@ -240,9 +240,7 @@ $isPdf = defined('PDF_MODE');
     $showFulfillmentDate = !empty($fulfillmentDate);
     
     // Get custom fields for display
-    $documentType = 'regular';
-    if (!empty($quote['is_long_term'])) $documentType = 'long_term';
-    elseif (!empty($quote['is_on_demand'])) $documentType = 'on_demand';
+    $documentType = $quote['quote_type'] ?? 'regular';
     
     $customFieldValues = !empty($quote['custom_fields']) ? json_decode($quote['custom_fields'], true) : [];
     if (!is_array($customFieldValues)) $customFieldValues = [];
