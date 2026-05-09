@@ -6,6 +6,8 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
+require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
+require_once __DIR__ . '/../../utils/InvoiceSurcharge.php';
 
 $invoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
 $returnUrl = $_POST['return_url'] ?? $_GET['return_url'] ?? '';
@@ -52,6 +54,13 @@ try {
         throw new Exception('This invoice has already been paid in full.');
     }
     
+    // Calculate surcharge if applicable
+    $surchargeInfo = InvoiceSurcharge::getInfo($amountDue, $appConfig);
+    $surchargeAmount = $surchargeInfo['has_surcharge'] ? ($surchargeInfo['client_pays'] ?? 0) : 0;
+    $chargeDescription = $surchargeInfo['has_surcharge'] 
+        ? "Invoice I-{$docNumber} - {$invoice['client_name']} (includes $" . number_format($surchargeAmount, 2) . " processing fee)"
+        : "Invoice I-{$docNumber} - {$invoice['client_name']}";
+    
     // Build URLs
     $host = $_SERVER['HTTP_HOST'] ?? '';
     if ($host === '' && !empty($appConfig['app_host'])) {
@@ -76,17 +85,20 @@ try {
     $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
     $description = "Invoice I-{$docNumber} - {$invoice['client_name']}";
     
-    $session = $stripe->createCheckoutSession(
+    $session = $stripe->createCheckoutSessionWithSurcharge(
         $amountDue,
+        $surchargeAmount,
         'usd',
-        $description,
+        $chargeDescription,
         $successUrl,
         $cancelUrl,
         [
             'pa_invoice_id' => (string)$invoiceId,
-            'invoice_id' => (string)$invoiceId, // Legacy support
+            'invoice_id' => (string)$invoiceId,
             'doc_number' => $docNumber,
-            'charged_by' => 'admin'
+            'charged_by' => 'admin',
+            'surcharge_amount' => (string)$surchargeAmount,
+            'original_amount' => (string)$amountDue
         ]
     );
     
