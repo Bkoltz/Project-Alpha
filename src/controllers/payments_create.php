@@ -19,7 +19,7 @@ if (strtolower($method) === 'stripe') {
 }
 
 if ($invoice_id <= 0 || $amount <= 0) {
-  header('Location: /?page=payments-create&error=Invalid%20input');
+  header('Location: /?page=payments/payments-create&error=Invalid%20input');
   exit;
 }
 
@@ -80,9 +80,9 @@ try {
 } catch (Throwable $e) {
   $pdo->rollBack();
   @error_log('[PaymentsCreate] Error: ' . $e->getMessage());
-  header('Location: /?page=payments-create&error=Failed%20to%20save%20payment');
+  header('Location: /?page=payments/payments-create&error=Failed%20to%20save%20payment');
   exit;
 }
 
-header('Location: /?page=payments-list&saved=1');
+header('Location: /?page=payments/payments-list&saved=1');
 exit;
