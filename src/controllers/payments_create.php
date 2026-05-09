@@ -1,3 +1,4 @@
+<?php
 // src/controllers/payments_create.php
 require_once __DIR__ . '/../config/db.php';
 
