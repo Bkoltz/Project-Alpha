@@ -46,5 +46,9 @@
     "stripe_publishable_key": "pk_test_51SCOIPEL6u77R4yHwv1kwIKSqaPE7TnviVhyObbqdZ9ueTKuDm7ORBilAirSTLF0c7mOlR8p05J6Xi55skxmoLMq00XCLkRe9M",
     "stripe_secret_key_enc": "enc::ySyYuSPK8N2v5dgE:XV3ZthynwbwrwpNwQzanHg==:6TNECDut728bnBkGqjL3LYJSPwT94aN/K3/kCZwnasuTb/puyyi50IZUm4nOw4swaRL4pBkgx531YJD8k55lhD1tv85bQRewQPrHak91ZNqzGnZdMZ5q7oWXL4hNVyqQfSXlrSfrWKSdRBo=",
     "review_link": null,
-    "stripe_webhook_secret_enc": "enc::uVlU4K46fI0HlWgh:JG7xXrHMxyguM2Z8t/yHHw==:skyqicm7PPGWrKSc4QeptB4EAsoPG+Tnc3sUZX7uJr1kJ3QfSSQ="
+    "stripe_webhook_secret_enc": "enc::uVlU4K46fI0HlWgh:JG7xXrHMxyguM2Z8t/yHHw==:skyqicm7PPGWrKSc4QeptB4EAsoPG+Tnc3sUZX7uJr1kJ3QfSSQ=",
+    "stripe_surcharge_type": "split",
+    "stripe_surcharge_percent": 2.9,
+    "stripe_surcharge_fixed": 0.3,
+    "stripe_surcharge_split_percent": 50
 }

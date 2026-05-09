@@ -30,11 +30,13 @@ if ($linkExpireWhenPaid) {
 $invoiceData = null;
 $showPayButton = false;
 $calculatedAmountDue = 0;
+$surchargeInfo = null;
 if ($type === 'invoice') {
     require_once __DIR__ . '/../../services/StripeService.php';
+    require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
     $stripeConfigured = StripeService::isConfigured($appConfig);
     try {
-        $invSt = $pdo->prepare('SELECT status, total FROM invoices WHERE id = ?');
+        $invSt = $pdo->prepare('SELECT status, total, amount_paid, original_amount, surcharge_amount, surcharge_type FROM invoices WHERE id = ?');
         $invSt->execute([$rid]);
         $invoiceData = $invSt->fetch(PDO::FETCH_ASSOC);
         if ($invoiceData) {
@@ -47,6 +49,11 @@ if ($type === 'invoice') {
             $invStatus = strtolower($invoiceData['status'] ?? '');
             $calculatedAmountDue = (float)($invoiceData['total'] ?? 0) - $amountPaid;
             $showPayButton = $stripeConfigured && in_array($invStatus, ['unpaid', 'partial'], true) && $calculatedAmountDue > 0;
+            
+            // Calculate surcharge info
+            if ($showPayButton) {
+                $surchargeInfo = StripeFeeCalculator::calculateSurcharge($calculatedAmountDue, $appConfig);
+            }
         }
     } catch (Throwable $e) { 
         @error_log('[DocWrapper] Error checking invoice: ' . $e->getMessage());
@@ -251,14 +258,28 @@ if ($type === 'invoice') {
   ?>
   <div class="payment-banner">
     <h2>💳 Pay This Invoice</h2>
-    <div style="color:#3b82f6;margin-bottom:8px">Secure payment via credit or debit card</div>
+    
+    <?php if ($surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
+    <div style="margin-bottom:12px;padding:12px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:14px;color:#92400e">
+      <strong>Credit Card Surcharge:</strong> <?php echo htmlspecialchars($surchargeInfo['display_text']); ?>
+    </div>
+    <div style="color:#6b7280;margin-bottom:8px;font-size:14px">
+      Invoice Amount: $<?php echo number_format($calculatedAmountDue, 2); ?>
+      <?php if ($surchargeInfo['client_pays'] > 0): ?>
+      <br>Processing Fee: $<?php echo number_format($surchargeInfo['client_pays'], 2); ?>
+      <?php endif; ?>
+    </div>
+    <div class="amount-due">$<?php echo number_format($surchargeInfo['new_total'], 2); ?> due</div>
+    <?php else: ?>
     <div class="amount-due">$<?php echo number_format($amountDue, 2); ?> due</div>
+    <?php endif; ?>
+    
     <a href="/?page=stripe-checkout&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" class="pay-btn">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
         <line x1="1" y1="10" x2="23" y2="10"></line>
       </svg>
-      Pay Now
+      Pay by Credit Card
     </a>
     <div style="margin-top:12px;font-size:13px;color:#6b7280">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px">
@@ -267,6 +288,41 @@ if ($type === 'invoice') {
       </svg>
       Secure payment powered by Stripe
     </div>
+    
+    <?php
+    // Show other payment methods if configured
+    $paymentMethods = (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']);
+    $otherMethods = [];
+    
+    foreach ($paymentMethods as $pm) {
+      $pmLower = strtolower(trim($pm));
+      if ($pmLower === 'stripe' || $pmLower === 'card') continue;
+      
+      if ($pmLower === 'bank_transfer') {
+        $otherMethods[] = ['name' => 'Bank Transfer', 'icon' => '🏦', 'details' => 'Contact us for bank transfer details'];
+      } elseif ($pmLower === 'check') {
+        $payeeName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
+        $otherMethods[] = ['name' => 'Check', 'icon' => '📄', 'details' => 'Payable to: ' . $payeeName];
+      } elseif ($pmLower === 'cash') {
+        $otherMethods[] = ['name' => 'Cash', 'icon' => '💵', 'details' => 'Contact us to arrange payment'];
+      }
+    }
+    
+    if (!empty($otherMethods)):
+    ?>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #bfdbfe">
+      <div style="font-size:14px;font-weight:600;color:#1e40af;margin-bottom:12px">Other Payment Methods</div>
+      <?php foreach ($otherMethods as $method): ?>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 12px;background:#fff;border:1px solid #bfdbfe;border-radius:8px">
+        <span style="font-size:18px"><?php echo $method['icon']; ?></span>
+        <div style="text-align:left">
+          <div style="font-weight:600;color:#1e3a8a"><?php echo htmlspecialchars($method['name']); ?></div>
+          <div style="font-size:12px;color:#6b7280"><?php echo htmlspecialchars($method['details']); ?></div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
   </div>
   <?php endif; // showPayButton ?>
   <?php endif; // type === invoice ?>
