@@ -628,11 +628,11 @@ function copyLink() {
 }
 
 function revokeAndCreateNew() {
-  if (!confirm('This will revoke the existing link (it will no longer work). You can then create a new link with different settings. Continue?')) {
+  if (!confirm('This will revoke the existing link (it will no longer work). Continue?')) {
     return;
   }
   
-  // Just revoke the existing link, then reopen the modal
+  // Revoke the existing link
   const formData = new FormData();
   formData.append('type', 'invoice');
   formData.append('id', '<?php echo (int)$id; ?>');
@@ -648,12 +648,17 @@ function revokeAndCreateNew() {
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      // Clear the current link and reopen modal
+      // Reset to creation form view
+      document.getElementById('shareLinkContent').style.display = 'block';
+      document.getElementById('shareLinkResult').style.display = 'none';
       document.getElementById('generatedLink').value = '';
-      document.getElementById('linkStatus').textContent = 'Existing link revoked. Generate a new one below.';
+      document.getElementById('linkStatus').textContent = '✓ Link Generated!';
       document.getElementById('revokeBtn').style.display = 'none';
       document.getElementById('linkExpiry').textContent = '';
-      // Keep modal open so user can adjust settings and generate
+      // Reset to default days
+      document.getElementById('linkDays').value = '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>';
+      document.getElementById('expireWhenPaid').checked = false;
+      toggleDaysInput();
     } else {
       alert('Error: ' + (data.error || 'Failed to revoke link'));
     }
