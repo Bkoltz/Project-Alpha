@@ -183,6 +183,8 @@ class StripeService {
             
             if (!empty($metadata)) {
                 $sessionData['metadata'] = $metadata;
+                // Also copy metadata to the PaymentIntent so webhooks have access to it
+                $sessionData['payment_intent_data']['metadata'] = $metadata;
             }
             
             $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData);
