@@ -628,17 +628,16 @@ function copyLink() {
 }
 
 function revokeAndCreateNew() {
-  if (!confirm('This will revoke the existing link (it will no longer work) and create a new one. Continue?')) {
+  if (!confirm('This will revoke the existing link (it will no longer work). You can then create a new link with different settings. Continue?')) {
     return;
   }
   
-  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
-  const days = document.getElementById('linkDays').value || 14;
+  // Just revoke the existing link, then reopen the modal
   const formData = new FormData();
   formData.append('type', 'invoice');
   formData.append('id', '<?php echo (int)$id; ?>');
-  formData.append('days', days);
-  formData.append('expire_when_paid', expireWhenPaid ? '1' : '0');
+  formData.append('days', '0');
+  formData.append('expire_when_paid', '0');
   formData.append('force_new', '1');
   formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
   
@@ -649,17 +648,14 @@ function revokeAndCreateNew() {
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      document.getElementById('generatedLink').value = data.url;
-      document.getElementById('linkStatus').textContent = '✓ New Link Created!';
+      // Clear the current link and reopen modal
+      document.getElementById('generatedLink').value = '';
+      document.getElementById('linkStatus').textContent = 'Existing link revoked. Generate a new one below.';
       document.getElementById('revokeBtn').style.display = 'none';
-      
-      if (data.expire_when_paid) {
-        document.getElementById('linkExpiry').textContent = 'Expires when invoice is paid in full';
-      } else {
-        document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
-      }
+      document.getElementById('linkExpiry').textContent = '';
+      // Keep modal open so user can adjust settings and generate
     } else {
-      alert('Error: ' + (data.error || 'Failed to create link'));
+      alert('Error: ' + (data.error || 'Failed to revoke link'));
     }
   })
   .catch(err => {

@@ -22,12 +22,12 @@ try {
   
   // Try query with expire_when_paid column
   try {
-    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
   } catch (Throwable $e) {
     // Fallback query without expire_when_paid column
-    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if ($row) {
@@ -44,9 +44,9 @@ try {
   $expireWhenPaid = !empty($row['expire_when_paid']);
   if ($expireWhenPaid) {
     // For expire_when_paid links, check if the invoice is paid
-    if ($row['type'] === 'invoice') {
+    if ($row['document_type'] === 'invoice') {
       $invCheck = $pdo->prepare('SELECT status FROM invoices WHERE id = ?');
-      $invCheck->execute([(int)$row['record_id']]);
+      $invCheck->execute([(int)$row['document_id']]);
       $invStatus = strtolower($invCheck->fetchColumn() ?: '');
       if ($invStatus === 'paid' || $invStatus === 'void') {
         throw new Exception('expired');
@@ -59,8 +59,8 @@ try {
     }
   }
 
-  $type = (string)$row['type'];
-  $rid = (int)$row['record_id'];
+  $type = (string)$row['document_type'];
+  $rid = (int)$row['document_id'];
 
   if (!defined('PUBLIC_VIEW')) define('PUBLIC_VIEW', true);
   $_GET['id'] = (string)$rid;
