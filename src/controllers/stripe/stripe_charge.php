@@ -101,6 +101,7 @@ try {
     @error_log('[StripeCharge] Admin checkout session created for invoice ' . $invoiceId);
     
     // Redirect to Stripe Checkout
+    @error_log('[StripeCharge] Redirecting to: ' . $session['url']);
     header('Location: ' . $session['url']);
     exit;
     
