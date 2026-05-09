@@ -9,6 +9,7 @@ use App\controllers\quote\QuotesListController;
 use App\utils\enum\DocumentType;
 use App\controllers\contract\ContractDataController;
 use App\controllers\contract\ContractDetailsController;
+use App\controllers\FileController;
 use App\controllers\invoice\InvoiceDataController;
 use App\controllers\invoice\InvoiceDetailsController;
 use App\controllers\invoice\InvoiceListController;
@@ -17,6 +18,8 @@ class Router
 {
     public static $routes = [
         'GET' => [
+            'serve-upload' => [FileController::class, 'load'],
+
             // Quote
             'quote/quote-details' => [QuotesDetailsController::class, 'load'],
             'quote/quote-create' => [QuotesDataController::class, 'load'],
@@ -77,7 +80,6 @@ class Router
 
 
     public static $post_routes = [
-        'serve-upload' => '/src/controllers/serve_upload.php',
         'project-notes' => '/src/controllers/project_notes.php',
         'settings/document-custom-fields-handler' => '/src/controllers/settings/document-custom-fields-handler.php',
         'auth' => '/src/controllers/auth/auth_handler.php',

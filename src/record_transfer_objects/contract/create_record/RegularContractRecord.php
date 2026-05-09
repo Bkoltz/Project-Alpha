@@ -3,6 +3,7 @@
 namespace App\record_transfer_objects\contract\create_record;
 
 use App\record_transfer_objects\contract\create_record\BaseContractRecord;
+use Override;
 
 class RegularContractRecord extends BaseContractRecord
 {
@@ -21,4 +22,27 @@ class RegularContractRecord extends BaseContractRecord
     public ?float $deposit_paid = null;
     public ?string $fulfillment_date = null;
     public ?string $created_at = null;
+    public ?string $signed_pdf_path = null;
+
+
+    public function toInsertValues(): array
+    {
+        return [
+            $this->quote_id,
+            $this->client_id,
+            $this->project_id,
+            $this->status,
+            $this->discount_type,
+            $this->discount_value,
+            $this->tax_percent,
+            $this->subtotal,
+            $this->total,
+            $this->project_code,
+            $this->deposit_type,
+            $this->deposit_value,
+            $this->deposit_paid,
+            $this->fulfillment_date,
+            $this->created_at,
+        ];
+    }
 }

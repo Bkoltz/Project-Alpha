@@ -11,15 +11,18 @@ use App\services\ClientService;
 use App\utils\enum\DocumentType;
 use App\render_outputs\RenderOutput;
 use App\services\FinancialService;
+use App\services\SignatureService;
 
 class ContractDetailsService extends BaseDetailsService
 {
     private ContractService $contractService;
+    private SignatureService $signatureService;
 
-    public function __construct(ContractService $contractService, ClientService $clientService)
+    public function __construct(ContractService $contractService, SignatureService $signatureService, ClientService $clientService)
     {
         parent::__construct($clientService);
 
+        $this->signatureService = $signatureService;
         $this->contractService = $contractService;
     }
 
@@ -37,6 +40,7 @@ class ContractDetailsService extends BaseDetailsService
         $contract = $this->contractService->getStoredContract($id, DocumentType::REGULAR, true);
         $items = $this->contractService->getStoredContractItems($id, DocumentType::REGULAR);
 
+        $contract->signed_pdf_path = $contract->signed_pdf_path !== null ? $this->signatureService->getSignaturePath($contract->signed_pdf_path) : null;
         FinancialService::updateContractFinancialData(DocumentType::REGULAR, $contract, $items);
 
         $signatures = $this->contractService->getStoredSignatures($id);

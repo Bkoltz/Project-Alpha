@@ -8,27 +8,12 @@
 		<input type="hidden" name="_token" value="{{csrf}}">
 		<input type="hidden" name="csrf" value="{{token}}">
 		<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-
 			{% include 'partials/client_components/client-input-autocomplete.twig' with {document: null} %}
 
-			{% include "partials/document_details/input/finance-input.twig" with {document: contract} %}
+			{% include 'partials/document_details/input/finance-input.twig' with {document: null} %}
 		</div>
 
-		<div id="projectSectionCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
-			<h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
-			<div style="display:grid;gap:12px">
-				<label>
-					<div>Add to Existing Project</div>
-					<select id="projectSelectCo" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-						<option value="">-- Select Project --</option>
-					</select>
-				</label>
-				<div style="text-align:center;color:#6b7280;font-size:13px">or</div>
-				<div>
-					<button type="button" id="createProjectBtnCo" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
-				</div>
-			</div>
-		</div>
+		{% include 'partials/document_details/input/project-selection-input.twig' with {document: null} %}
 
 		{% include "partials/document_details/input/custom-field-input.twig" with custom_fields %}
 
@@ -36,21 +21,21 @@
 			<div style="font-weight:600;margin-bottom:8px">Document Type</div>
 			<div style="display:flex;gap:24px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
 				<label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-					<input type="radio" name="doc_type" value="regular" checked onchange="toggleDocTypeFields()">
+					<input type="radio" name="document_type" value="regular" checked onchange="toggleDocTypeFields()">
 					<div>
 						<div style="font-weight:600">Regular</div>
 						<div style="font-size:12px;color:#6b7280">One-time contract</div>
 					</div>
 				</label>
 				<label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-					<input type="radio" name="doc_type" value="long_term" onchange="toggleDocTypeFields()">
+					<input type="radio" name="document_type" value="long_term" onchange="toggleDocTypeFields()">
 					<div>
 						<div style="font-weight:600">Long Term</div>
 						<div style="font-size:12px;color:#6b7280">Recurring billing</div>
 					</div>
 				</label>
 				<label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-					<input type="radio" name="doc_type" value="on_demand" onchange="toggleDocTypeFields()">
+					<input type="radio" name="document_type" value="on_demand" onchange="toggleDocTypeFields()">
 					<div>
 						<div style="font-weight:600">On-Demand</div>
 						<div style="font-size:12px;color:#6b7280">Manual invoicing</div>
