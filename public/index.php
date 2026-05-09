@@ -609,6 +609,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/public_link_create.php';
         exit;
     }
+    if ($page === 'public-link-revoke') {
+        require_once __DIR__ . '/../src/controllers/public_link_revoke.php';
+        exit;
+    }
     if ($page === 'stripe-webhook') {
         // Route to new future-proof webhook handler
         require_once __DIR__ . '/../src/controllers/webhook/stripe_webhooks.php';

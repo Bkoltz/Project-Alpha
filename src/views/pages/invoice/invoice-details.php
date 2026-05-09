@@ -636,12 +636,9 @@ function revokeAndCreateNew() {
   const formData = new FormData();
   formData.append('type', 'invoice');
   formData.append('id', '<?php echo (int)$id; ?>');
-  formData.append('days', '0');
-  formData.append('expire_when_paid', '0');
-  formData.append('force_new', '1');
   formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
   
-  fetch('/?page=public-link-create', {
+  fetch('/?page=public-link-revoke', {
     method: 'POST',
     body: formData
   })
