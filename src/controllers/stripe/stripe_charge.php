@@ -10,7 +10,11 @@ require_once __DIR__ . '/../../services/StripeService.php';
 $invoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
 $returnUrl = $_POST['return_url'] ?? $_GET['return_url'] ?? '';
 
+// DEBUG
+@error_log('[StripeCharge] invoiceId=' . $invoiceId . ' method=' . $_SERVER['REQUEST_METHOD'] . ' GET=' . json_encode($_GET) . ' POST=' . json_encode($_POST));
+
 if ($invoiceId <= 0) {
+    @error_log('[StripeCharge] Invalid invoice_id, redirecting to home');
     header('Location: /?page=home&error=' . urlencode('Invalid invoice'));
     exit;
 }
