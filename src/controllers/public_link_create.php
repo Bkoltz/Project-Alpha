@@ -173,5 +173,6 @@ try {
     
 } catch (Throwable $e) {
     @error_log('[PublicLinkCreate] Error: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'error' => 'Failed to create link']);
+    @error_log('[PublicLinkCreate] Stack trace: ' . $e->getTraceAsString());
+    echo json_encode(['success' => false, 'error' => 'Failed to create link: ' . $e->getMessage()]);
 }
