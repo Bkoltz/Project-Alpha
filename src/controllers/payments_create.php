@@ -8,17 +8,12 @@ $method = trim((string)($_POST['method'] ?? 'card'));
 $check_number = trim((string)($_POST['check_number'] ?? ''));
 $paid_in_advance = !empty($_POST['paid_in_advance']);
 
-// DEBUG: log incoming request
-@error_log('[PaymentsCreate] method=' . $method . ' invoice_id=' . $invoice_id . ' amount=' . $amount);
-
 // If Stripe is selected, redirect to Stripe checkout
 if (strtolower($method) === 'stripe') {
-  @error_log('[PaymentsCreate] Stripe detected, redirecting...');
   if ($invoice_id <= 0) {
     header('Location: /?page=payments/payments-create&error=Please%20select%20an%20invoice');
     exit;
   }
-  // Also pass the amount so Stripe can use it
   header('Location: /?page=stripe-charge&invoice_id=' . $invoice_id . '&amount=' . $amount);
   exit;
 }

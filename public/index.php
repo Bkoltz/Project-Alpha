@@ -609,10 +609,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/public_link_create.php';
         exit;
     }
-    if ($page === 'stripe-charge') {
-        require_once __DIR__ . '/../src/controllers/stripe/stripe_charge.php';
-        exit;
-    }
     if ($page === 'stripe-webhook') {
         // Route to new future-proof webhook handler
         require_once __DIR__ . '/../src/controllers/webhook/stripe_webhooks.php';
@@ -623,6 +619,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/stripe/stripe_webhook.php';
         exit;
     }
+}
+
+// Stripe charge endpoint (supports both GET and POST)
+if ($page === 'stripe-charge') {
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_charge.php';
+    exit;
 }
 
 // Standalone login and reset pages use a minimal top header
