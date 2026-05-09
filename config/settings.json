@@ -44,7 +44,7 @@
     "invoice_auto_send_due_7days": 0,
     "invoice_auto_send_overdue_weekly": 0,
     "stripe_publishable_key": "pk_test_51SCOIPEL6u77R4yHwv1kwIKSqaPE7TnviVhyObbqdZ9ueTKuDm7ORBilAirSTLF0c7mOlR8p05J6Xi55skxmoLMq00XCLkRe9M",
-    "stripe_secret_key_enc": "enc::RTg41L2m9Mguazqj:AV29+CPX3ZgbIIuKx6F1RA==:/S7yvVXofEBRlbqpooEGdOiGaCX7lfxtqylRmv3hDTHnKikCTDAQlaid4VdQVmY+xQ8wa9tbBoUkdcxP9Vy1IsOdBrVG9vQd8caeYw0xC+j2YK1av41dbZNiPIRGhFfmrm3OgUEYWSZuSl8=",
+    "stripe_secret_key_enc": "enc::ySyYuSPK8N2v5dgE:XV3ZthynwbwrwpNwQzanHg==:6TNECDut728bnBkGqjL3LYJSPwT94aN/K3/kCZwnasuTb/puyyi50IZUm4nOw4swaRL4pBkgx531YJD8k55lhD1tv85bQRewQPrHak91ZNqzGnZdMZ5q7oWXL4hNVyqQfSXlrSfrWKSdRBo=",
     "review_link": null,
-    "stripe_webhook_secret_enc": "enc::Ds4nxzjXyXHdPL7Z:QOTebOiyrjiWuS3v2ZvCEA==:5cGbGUuT5z5PjvwNHpRjyAZx+z/96/7gypLKk5JFq70fQbrjJZs="
+    "stripe_webhook_secret_enc": "enc::uVlU4K46fI0HlWgh:JG7xXrHMxyguM2Z8t/yHHw==:skyqicm7PPGWrKSc4QeptB4EAsoPG+Tnc3sUZX7uJr1kJ3QfSSQ="
 }

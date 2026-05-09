@@ -47,8 +47,9 @@ try {
         throw new Exception('Invalid event payload');
     }
     
-    // Log the event
+    // Log the event with full payload for debugging
     @error_log('[StripeWebhook] Received event: ' . $event['type'] . ' - ' . ($event['id'] ?? 'no-id'));
+    @error_log('[StripeWebhook] Full payload: ' . $payload);
     
     // Route to appropriate handler based on event type
     $eventType = $event['type'];

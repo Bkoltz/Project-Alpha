@@ -10,16 +10,34 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
     $invoiceId = $metadata['pa_invoice_id'] ?? $metadata['invoice_id'] ?? null;
     $piId = $paymentIntent['id'] ?? null;
     
+    // If no metadata, try to find invoice from charges data
+    if (!$invoiceId) {
+        $charges = $paymentIntent['charges']['data'] ?? [];
+        if (!empty($charges)) {
+            $charge = $charges[0];
+            $chargeMetadata = $charge['metadata'] ?? [];
+            $invoiceId = $chargeMetadata['pa_invoice_id'] ?? $chargeMetadata['invoice_id'] ?? null;
+            
+            // Also check description for invoice reference
+            if (!$invoiceId) {
+                $description = $charge['description'] ?? '';
+                if (preg_match('/Invoice\s+I-(\d+)/i', $description, $matches)) {
+                    $invoiceId = $matches[1];
+                }
+            }
+        }
+    }
+    
     if (!$invoiceId || !$piId) {
-        @error_log('[StripeWebhook] PaymentIntent missing invoice_id or id in metadata. metadata=' . json_encode($metadata) . ' piId=' . $piId);
+        @error_log('[StripeWebhook] PaymentIntent missing invoice_id or id. metadata=' . json_encode($metadata) . ' piId=' . $piId);
         return;
     }
     
     $invoiceId = (int)$invoiceId;
     $amountTotal = ($paymentIntent['amount'] ?? 0) / 100; // Convert from cents
     
-    // Verify invoice exists before processing
-    $invCheck = $pdo->prepare('SELECT id, total FROM invoices WHERE id = ?');
+    // Verify invoice exists and get client info before processing
+    $invCheck = $pdo->prepare('SELECT id, total, client_id FROM invoices WHERE id = ?');
     $invCheck->execute([$invoiceId]);
     $invoice = $invCheck->fetch(PDO::FETCH_ASSOC);
     
@@ -27,6 +45,8 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         @error_log('[StripeWebhook] Invoice ' . $invoiceId . ' not found - skipping PaymentIntent recording');
         return;
     }
+    
+    $clientId = (int)($invoice['client_id'] ?? 0);
     
     // Check if already recorded (idempotency)
     $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id = ?');
@@ -41,8 +61,8 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         
         // Record the payment
         $isAutoPay = !empty($metadata['auto_pay']) ? 1 : 0;
-        $stmt = $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
-        $stmt->execute([$invoiceId, $amountTotal, 'stripe', $piId, $isAutoPay, 'succeeded']);
+        $stmt = $pdo->prepare('INSERT INTO payments (client_id, invoice_id, amount, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())');
+        $stmt->execute([$clientId, $invoiceId, $amountTotal, 'stripe', $piId, $isAutoPay, 'succeeded']);
         
         // Update invoice status
         $sum = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ? AND status = "succeeded"');
