@@ -205,7 +205,7 @@ $clients=$pdo->query('SELECT id,name FROM clients WHERE deleted_at IS NULL ORDER
   <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <form method="get" action="/">
-        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).">'; }
+        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
         ?>
         <input type="hidden" name="page" value="contract/on-demand-contracts-list">
         <label>Per page
