@@ -30,8 +30,12 @@ require_once __DIR__ . '/../../config/app.php';
   </style>
 </head>
 <body>
+  <?php
+  // Check if we're on a public page (public-doc or stripe pages)
+  $isPublicPage = isset($_GET['page']) && in_array($_GET['page'], ['public-doc', 'stripe-checkout', 'stripe-success']);
+  ?>
   <div class="auth-topbar">
-    <a class="auth-brand" href="/">
+    <a class="auth-brand" href="<?php echo $isPublicPage ? 'javascript:void(0)' : '/'; ?>">
       <?php if ($logo): ?>
         <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" class="auth-logo" loading="eager" fetchpriority="high" />
       <?php else: ?>
