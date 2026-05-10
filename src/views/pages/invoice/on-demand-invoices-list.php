@@ -12,7 +12,7 @@ $project_code = trim($_GET['project_code'] ?? '');
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
-$where=['c.contract_type = "on_demand"'];$p=[];
+$where=[];$p=[];
 if($client_id>0){$where[]='i.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='cl.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='i.status=?';$p[] = $status; }
@@ -25,7 +25,7 @@ if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM invoices i LEFT JOIN clients cl ON cl.id=i.client_id WHERE '.implode(' AND ',$where);
+$sqlCount = 'SELECT COUNT(*) FROM invoices i LEFT JOIN clients cl ON cl.id=i.client_id LEFT JOIN contracts c ON c.id=i.contract_id WHERE c.contract_type="on_demand"'.($where?' AND '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
 $sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.contract_id, i.created_at, cl.name client, cl.id AS client_id, c.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients cl ON cl.id=i.client_id LEFT JOIN contracts c ON c.id=i.contract_id WHERE c.contract_type='on_demand' AND ".implode(' AND ',$where)." ORDER BY i.created_at DESC LIMIT $per OFFSET $offset";

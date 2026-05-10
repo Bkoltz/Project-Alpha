@@ -42,9 +42,8 @@ $whereSQL = implode(' AND ', $whereClauses);
 
 // Fetch filtered receipts
 $stmt = $pdo->prepare("
-    SELECT r.*, u.username as uploaded_by_name
+    SELECT r.*
     FROM receipts r
-    LEFT JOIN users u ON r.uploaded_by = u.id
     WHERE {$whereSQL}
     ORDER BY r.receipt_date DESC, r.created_at DESC
 ");
