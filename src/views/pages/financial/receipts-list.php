@@ -18,7 +18,7 @@ $whereClauses = ['r.organization_id = ?'];
 $params = [$orgId];
 
 if (!empty($filterStore)) {
-    $whereClauses[] = 'r.store_name = ?';
+    $whereClauses[] = 'rs.name = ?';
     $params[] = $filterStore;
 }
 if (!empty($filterMonth) && !empty($filterYear)) {
@@ -42,8 +42,9 @@ $whereSQL = implode(' AND ', $whereClauses);
 
 // Fetch filtered receipts
 $stmt = $pdo->prepare("
-    SELECT r.*
+    SELECT r.*, rs.name as store_name
     FROM receipts r
+    LEFT JOIN receipt_stores rs ON rs.id = r.store_id
     WHERE {$whereSQL}
     ORDER BY r.receipt_date DESC, r.created_at DESC
 ");
@@ -54,7 +55,7 @@ $receipts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $totalAmount = array_sum(array_column($receipts, 'amount'));
 
 // Get all stores for filter dropdown
-$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE organization_id = ? ORDER BY store_name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM receipt_stores WHERE organization_id = ? ORDER BY name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
