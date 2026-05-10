@@ -44,13 +44,8 @@ try {
   // Get project_id from quote for inheritance
   $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
 
-  // Determine contract type from quote flags
-  $contractType = 'regular';
-  if (!empty($quote['is_on_demand'])) {
-    $contractType = 'on_demand';
-  } elseif (!empty($quote['is_long_term'])) {
-    $contractType = 'long_term';
-  }
+  // Determine contract type from quote_type
+  $contractType = $quote['quote_type'] ?? 'regular';
 
   if ($contractType === 'on_demand') {
     // Create on-demand contract in unified table
@@ -78,9 +73,18 @@ try {
         ]);
     $contract_id = (int)$pdo->lastInsertId();
 
-    // Assign doc_number
-    $cMax = (int)$pdo->query("SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type='on_demand'")->fetchColumn();
-    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+    // Create invoice for on-demand contract (deposit invoice)
+    $pdo->prepare('INSERT INTO invoices (contract_id, invoice_type, quote_id, client_id, project_id, parent_contract_type, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([$contract_id, 'on_demand', $id, (int)$quote['client_id'], $projectId, 'on_demand_contract', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['price_per_invoice'] ?? $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+    $invoice_id = (int)$pdo->lastInsertId();
+
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+    foreach ($qitems as $it) {
+      $ii->execute([$invoice_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+    }
+
+    $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
   } elseif ($contractType === 'long_term') {
     // Create long-term contract in unified table
@@ -118,9 +122,18 @@ try {
       }
     }
 
-    // Assign doc_number
-    $cMax = (int)$pdo->query("SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type='long_term'")->fetchColumn();
-    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+    // Create invoice for long-term contract (deposit invoice)
+    $pdo->prepare('INSERT INTO invoices (contract_id, invoice_type, quote_id, client_id, project_id, parent_contract_type, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([$contract_id, 'long_term', $id, (int)$quote['client_id'], $projectId, 'long_term_contract', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+    $invoice_id = (int)$pdo->lastInsertId();
+
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+    foreach ($qitems as $it) {
+      $ii->execute([$invoice_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+    }
+
+    $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
   } else {
     // Create regular contract in pending state
@@ -135,8 +148,8 @@ try {
     }
 
     // Create invoice
-    $pdo->prepare('INSERT INTO invoices (contract_id, contract_type, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([$contract_id, 'regular', $id, (int)$quote['client_id'], $projectId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+    $pdo->prepare('INSERT INTO invoices (contract_id, invoice_type, quote_id, client_id, project_id, parent_contract_type, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([$contract_id, 'regular', $id, (int)$quote['client_id'], $projectId, 'contract', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
     $invoice_id = (int)$pdo->lastInsertId();
 
     $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
