@@ -317,6 +317,8 @@ function initContractClientDropdown() {
 
 initContractClientDropdown();
 document.addEventListener('pageLoaded', initContractClientDropdown);
+// Fallback for SPA navigation timing issues
+setTimeout(initContractClientDropdown, 100);
 
 function loadProjectsForClientCo(clientId) {
     if (!clientId) {
@@ -391,7 +393,8 @@ document.getElementById('createProjectBtnCo').addEventListener('click', function
 });
 
 document.getElementById('coCreateForm').addEventListener('submit', function (e) {
-    if (!cid.value) {
+    var cid = document.getElementById('clientIdCo');
+    if (!cid || !cid.value) {
         e.preventDefault();
         alert('Please select a client from suggestions.');
         return;
