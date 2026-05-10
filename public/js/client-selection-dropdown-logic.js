@@ -4,12 +4,11 @@ function initClientDropdown() {
     var cid = document.getElementById('clientId');
     var sug = document.getElementById('clientSuggest');
 
-    // Only initialize if elements exist and haven't been initialized yet
+    // Only initialize if elements exist
     if (!ci || !cid || !sug) return;
-    if (ci._clientDropdownInitialized) return;
-    ci._clientDropdownInitialized = true;
-
-    ci.addEventListener('input', function () {
+    // Remove any existing input listener to avoid duplicates
+    ci.removeEventListener('input', ci._clientDropdownHandler);
+    ci._clientDropdownHandler = function () {
         cid.value = '';
         var t = this.value.trim();
 
@@ -46,7 +45,8 @@ function initClientDropdown() {
             }).catch(() => {
                 if (sug) sug.style.display = 'none';
             });
-    });
+    };
+    ci.addEventListener('input', ci._clientDropdownHandler);
 
     // Close dropdown on outside click
     document.addEventListener('click', function (e) {
