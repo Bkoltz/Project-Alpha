@@ -23,7 +23,7 @@ try {
     $enabled = $stmt->fetchColumn();
     
     if (!$enabled) {
-        echo "{$logPrefix} Link expiration checker is disabled. Exiting.\n";
+        echo $logPrefix . " Link expiration checker is disabled. Exiting.\n";
         exit(0);
     }
     
