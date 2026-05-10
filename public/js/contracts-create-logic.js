@@ -69,8 +69,10 @@ function recalcCo() {
     var total = Math.max(0, taxable + tax);
 
     // Calculate deposit
-    var depType = document.getElementById('depositTypeCo').value;
-    var depVal = parseFloat(document.getElementById('depositValueCo').value) || 0;
+    var depositTypeEl = document.getElementById('depositTypeCo');
+    var depositValueEl = document.getElementById('depositValueCo');
+    var depType = depositTypeEl ? depositTypeEl.value : 'none';
+    var depVal = depositValueEl ? parseFloat(depositValueEl.value) || 0 : 0;
     var deposit = 0;
     if (depType === 'percent') { deposit = Math.max(0, Math.min(100, depVal)) * total / 100; }
     else if (depType === 'fixed') { deposit = Math.max(0, depVal); }
@@ -101,11 +103,15 @@ function recalcCo() {
     }
 
     // Show/hide deposit row
-    if (depType !== 'none' && deposit > 0) {
-        document.getElementById('depositRowCo').style.display = 'block';
-        document.getElementById('depositValCo').textContent = money(deposit);
-    } else {
-        document.getElementById('depositRowCo').style.display = 'none';
+    var depositRowEl = document.getElementById('depositRowCo');
+    var depositValEl = document.getElementById('depositValCo');
+    if (depositRowEl) {
+        if (depType !== 'none' && deposit > 0) {
+            depositRowEl.style.display = 'block';
+            if (depositValEl) depositValEl.textContent = money(deposit);
+        } else {
+            depositRowEl.style.display = 'none';
+        }
     }
 
     // Update discount warning
