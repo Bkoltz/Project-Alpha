@@ -47,16 +47,23 @@ class StripeFeeCalculator {
             'display_text' => '',
         ];
         
+        // Get custom message from config
+        $customMessage = trim($config['stripe_surcharge_message'] ?? '');
+        
         switch ($type) {
             case 'merchant':
                 // Merchant absorbs full fee
                 $result['merchant_pays'] = $feeTotal;
                 $result['client_pays'] = 0;
                 $result['new_total'] = $amount;
-                $result['display_text'] = sprintf(
-                    'Credit card processing fee of $%.2f absorbed by merchant',
-                    $feeTotal
-                );
+                if ($customMessage) {
+                    $result['display_text'] = $customMessage;
+                } else {
+                    $result['display_text'] = sprintf(
+                        'Credit card processing fee of $%.2f absorbed by merchant',
+                        $feeTotal
+                    );
+                }
                 break;
                 
             case 'client':
@@ -64,10 +71,14 @@ class StripeFeeCalculator {
                 $result['client_pays'] = $feeTotal;
                 $result['merchant_pays'] = 0;
                 $result['new_total'] = $amount + $feeTotal;
-                $result['display_text'] = sprintf(
-                    'Credit card surcharge: $%.2f (processing fee)',
-                    $feeTotal
-                );
+                if ($customMessage) {
+                    $result['display_text'] = $customMessage;
+                } else {
+                    $result['display_text'] = sprintf(
+                        'Credit card surcharge: $%.2f (processing fee)',
+                        $feeTotal
+                    );
+                }
                 break;
                 
             case 'split':
@@ -79,12 +90,16 @@ class StripeFeeCalculator {
                 $result['client_pays'] = $clientPortion;
                 $result['merchant_pays'] = $merchantPortion;
                 $result['new_total'] = $amount + $clientPortion;
-                $result['display_text'] = sprintf(
-                    'Credit card surcharge: $%.2f (%d%% of $%.2f processing fee)',
-                    $clientPortion,
-                    $splitPercent,
-                    $feeTotal
-                );
+                if ($customMessage) {
+                    $result['display_text'] = $customMessage;
+                } else {
+                    $result['display_text'] = sprintf(
+                        'Credit card surcharge: $%.2f (%d%% of $%.2f processing fee)',
+                        $clientPortion,
+                        $splitPercent,
+                        $feeTotal
+                    );
+                }
                 break;
         }
         

@@ -83,6 +83,12 @@ require_once __DIR__ . '/../../../utils/csrf.php';
       <span style="margin-left:8px">%</span>
     </label>
     
+    <label style="display:block;margin-bottom:12px">
+      <div style="margin-bottom:4px;font-weight:500">Surcharge Message</div>
+      <textarea name="stripe_surcharge_message" rows="2" placeholder="Message shown to clients explaining the surcharge..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;font-family:inherit"><?php echo htmlspecialchars($appConfig['stripe_surcharge_message'] ?? ''); ?></textarea>
+      <div style="font-size:0.85em;color:#666;margin-top:4px">Shown on invoices when credit card surcharge applies. Leave blank for default.</div>
+    </label>
+    
     <div id="surchargePreview" style="padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:14px">
       <strong>Preview on $100 invoice:</strong>
       <div id="surchargePreviewText" style="margin-top:4px;color:#4b5563"></div>
