@@ -18,7 +18,7 @@
         "check",
         "stripe"
     ],
-    "timezone": "UTC",
+    "timezone": "America/Chicago",
     "smtp_host": null,
     "smtp_port": 587,
     "smtp_secure": "tls",
@@ -51,5 +51,5 @@
     "stripe_surcharge_percent": 2.9,
     "stripe_surcharge_fixed": 0.3,
     "stripe_surcharge_split_percent": 50,
-    "stripe_surcharge_message": ""
+    "stripe_surcharge_message": "Using a credit card is a privilege for both parties, so it is fair that we split the fee"
 }
