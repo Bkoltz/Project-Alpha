@@ -347,9 +347,10 @@ function initQuoteClientDropdown() {
     var sug = document.getElementById('clientSuggest');
     var taxBanner = document.getElementById('taxExemptBanner');
     
-    if (!ci || !cid || !sug) return;
-    if (ci._clientDropdownInitialized) return;
-    ci._clientDropdownInitialized = true;
+    if (!ci || !cid || !sug) {
+        console.log('Quote client dropdown elements not found');
+        return;
+    }
     
     ci.addEventListener('input', function () {
         cid.value = '';
@@ -374,8 +375,12 @@ function initQuoteClientDropdown() {
     document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
 }
 
+// Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)
 initQuoteClientDropdown();
 document.addEventListener('pageLoaded', initQuoteClientDropdown);
+// Fallbacks for SPA navigation timing issues
+setTimeout(initQuoteClientDropdown, 100);
+setTimeout(initQuoteClientDropdown, 500);
 
 document.getElementById('quoteForm').addEventListener('submit', function (e) {
     var cid = document.getElementById('clientId');
