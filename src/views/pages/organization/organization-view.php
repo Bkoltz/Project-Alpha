@@ -158,9 +158,9 @@ $availableClients = $availableStmt->fetchAll();
         <?php if (!empty($org['tax_exempt_file'])): ?>
           <?php $isPdf = strtolower(pathinfo($org['tax_exempt_file'], PATHINFO_EXTENSION)) === 'pdf'; ?>
           <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
-            <?php if ($isPdf): ?
+            <?php if ($isPdf): ?>
               <embed src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" type="application/pdf" width="100%" height="250px" />
-            <?php else: ?
+            <?php else: ?>
               <img src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" style="width:100%;height:auto" alt="Tax Exempt Form" />
             <?php endif; ?>
           </div>
@@ -168,10 +168,10 @@ $availableClients = $availableStmt->fetchAll();
             <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" target="_blank" style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;text-decoration:none;color:inherit">View</a>
             <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" download style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;text-decoration:none;color:inherit">Download</a>
           </div>
-          <?php if (!empty($org['tax_exempt_uploaded_at'])): ?
+          <?php if (!empty($org['tax_exempt_uploaded_at'])): ?>
             <div style="font-size:small;color:var(--muted);margin-top:4px">Uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['tax_exempt_uploaded_at']))); ?></div>
-          <?php endif; ?
-        <?php else: ?
+          <?php endif; ?>
+        <?php else: ?>
           <div style="padding:16px;text-align:center;color:#999;border:1px dashed #ddd;border-radius:8px;font-size:small">No tax exempt form uploaded</div>
         <?php endif; ?>
       </div>
@@ -193,9 +193,9 @@ $availableClients = $availableStmt->fetchAll();
         <?php if (!empty($org['coi_file'])): ?>
           <?php $isPdf = strtolower(pathinfo($org['coi_file'], PATHINFO_EXTENSION)) === 'pdf'; ?>
           <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
-            <?php if ($isPdf): ?
+            <?php if ($isPdf): ?>
               <embed src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['coi_file']); ?>" type="application/pdf" width="100%" height="250px" />
-            <?php else: ?
+            <?php else: ?>
               <img src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['coi_file']); ?>" style="width:100%;height:auto" alt="COI" />
             <?php endif; ?>
           </div>
@@ -203,10 +203,10 @@ $availableClients = $availableStmt->fetchAll();
             <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['coi_file']); ?>" target="_blank" style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;text-decoration:none;color:inherit">View</a>
             <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['coi_file']); ?>" download style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;text-decoration:none;color:inherit">Download</a>
           </div>
-          <?php if (!empty($org['coi_uploaded_at'])): ?
+          <?php if (!empty($org['coi_uploaded_at'])): ?>
             <div style="font-size:small;color:var(--muted);margin-top:4px">Uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['coi_uploaded_at']))); ?></div>
-          <?php endif; ?
-        <?php else: ?
+          <?php endif; ?>
+        <?php else: ?>
           <div style="padding:16px;text-align:center;color:#999;border:1px dashed #ddd;border-radius:8px;font-size:small">No COI uploaded</div>
         <?php endif; ?>
       </div>
@@ -228,9 +228,9 @@ $availableClients = $availableStmt->fetchAll();
         <?php if (!empty($org['w9_file'])): ?>
           <?php $isPdf = strtolower(pathinfo($org['w9_file'], PATHINFO_EXTENSION)) === 'pdf'; ?>
           <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
-            <?php if ($isPdf): ?
+            <?php if ($isPdf): ?>
               <embed src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['w9_file']); ?>" type="application/pdf" width="100%" height="250px" />
-            <?php else: ?
+            <?php else: ?>
               <img src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['w9_file']); ?>" style="width:100%;height:auto" alt="W-9" />
             <?php endif; ?>
           </div>
@@ -238,10 +238,10 @@ $availableClients = $availableStmt->fetchAll();
             <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['w9_file']); ?>" target="_blank" style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;text-decoration:none;color:inherit">View</a>
             <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['w9_file']); ?>" download style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;background:#fff;text-decoration:none;color:inherit">Download</a>
           </div>
-          <?php if (!empty($org['w9_uploaded_at'])): ?
+          <?php if (!empty($org['w9_uploaded_at'])): ?>
             <div style="font-size:small;color:var(--muted);margin-top:4px">Uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['w9_uploaded_at']))); ?></div>
-          <?php endif; ?
-        <?php else: ?
+          <?php endif; ?>
+        <?php else: ?>
           <div style="padding:16px;text-align:center;color:#999;border:1px dashed #ddd;border-radius:8px;font-size:small">No W-9 uploaded</div>
         <?php endif; ?>
       </div>

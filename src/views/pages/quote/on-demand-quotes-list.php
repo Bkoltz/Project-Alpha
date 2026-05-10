@@ -22,8 +22,8 @@ if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
 if($project_code!==''){ $where[]='q.project_code LIKE ?'; $p[] = $project_code.'%'; }
 if($doc_no>0){ $where[]='q.doc_number=?'; $p[] = $doc_no; }
-if($min_price !== null){ $where[]='q.price_per_invoice >= ?'; $p[] = $min_price; }
-if($max_price !== null){ $where[]='q.price_per_invoice <= ?'; $p[] = $max_price; }
+if($min_price !== null){ $where[]='q.total >= ?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='q.total <= ?'; $p[] = $max_price; }
 
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
@@ -33,7 +33,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM quotes q LEFT JOIN clients c ON c.id=q.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.fulfillment_date, q.price_per_invoice, q.created_at, c.name client, c.id AS client_id FROM quotes q LEFT JOIN clients c ON c.id=q.client_id";
+$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.fulfillment_date, q.created_at, c.name client, c.id AS client_id FROM quotes q LEFT JOIN clients c ON c.id=q.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY q.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
