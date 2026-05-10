@@ -360,6 +360,9 @@ if (isset($_POST['stripe_surcharge_fixed'])) {
 if (isset($_POST['stripe_surcharge_split_percent'])) {
     $settings['stripe_surcharge_split_percent'] = (float)$_POST['stripe_surcharge_split_percent'];
 }
+if (isset($_POST['stripe_surcharge_message'])) {
+    $settings['stripe_surcharge_message'] = trim((string)$_POST['stripe_surcharge_message']);
+}
 
 // Merge with existing file on target before writing to avoid overwriting unrelated fields
 $target = $settingsFile;
