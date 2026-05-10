@@ -195,5 +195,46 @@ chmod -R 775 "${UPLOADS_DIR}" || true
 # Note: Cron jobs are now handled by the separate 'cron' service in docker-compose.yml
 # This web service no longer manages scheduled tasks.
 
+# 7) Optional: harden Apache virtual host when APP_HOST is set
+APP_HOST="${APP_HOST:-}"
+if [ -n "$APP_HOST" ]; then
+  echo "🔒 Hardening Apache for domain: ${APP_HOST}"
+  cat > /etc/apache2/conf-available/security-hardening.conf <<EOF
+# Deny access by IP, require hostname match
+<VirtualHost *:80>
+    ServerName ${APP_HOST}
+    DocumentRoot /var/www/html
+    
+    # Security headers
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy no-referrer-when-downgrade
+    Header always set Content-Security-Policy "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+    
+    # Disable server signature
+    ServerTokens Prod
+    ServerSignature Off
+    
+    <Directory /var/www/html>
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+# Default: deny direct IP access (optional)
+<VirtualHost _default_:80>
+    DocumentRoot /var/www/html
+    <Location />
+        Require all denied
+    </Location>
+</VirtualHost>
+EOF
+  a2enmod headers
+  a2enconf security-hardening
+  echo "✅ Apache hardened for production domain."
+fi
+
 echo "✅ Setup complete."
 exec apache2-foreground

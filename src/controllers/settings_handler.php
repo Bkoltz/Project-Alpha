@@ -364,6 +364,17 @@ if (isset($_POST['stripe_surcharge_message'])) {
     $settings['stripe_surcharge_message'] = trim((string)$_POST['stripe_surcharge_message']);
 }
 
+// Domain & public access settings
+if (isset($_POST['app_host'])) {
+    $host = trim((string)$_POST['app_host']);
+    $settings['app_host'] = $host !== '' ? $host : null;
+}
+if (isset($_POST['public_links_in_email'])) {
+    $settings['public_links_in_email'] = true;
+} else {
+    $settings['public_links_in_email'] = false;
+}
+
 // Merge with existing file on target before writing to avoid overwriting unrelated fields
 $target = $settingsFile;
 $existing = [];
