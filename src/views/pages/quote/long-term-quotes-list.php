@@ -29,7 +29,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM quotes q'.($where? ' WHERE '.implode(' AND ', $where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$select = 'q.id, q.doc_number, q.project_code, q.status, q.total, q.created_at, q.start_date, q.end_date, q.billing_interval_count, q.billing_interval_unit, c.name AS client_name, c.id AS client_id';
+$select = 'q.id, q.doc_number, q.project_code, q.status, q.total, q.created_at, q.fulfillment_date, c.name AS client_name, c.id AS client_id';
 $sql = "SELECT $select FROM quotes q JOIN clients c ON c.id=q.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY q.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -124,15 +124,15 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
         <?php foreach ($rows as $r): ?>
           <?php 
             $rowStyle = $r['status']==='approved' ? 'background:#ecfdf5;' : ($r['status']==='pending' ? 'background:#fffbeb;' : ($r['status']==='rejected' ? 'background:#fef2f2;' : '')); 
-            $billingText = $r['billing_interval_count'] . ' ' . ucfirst((string)$r['billing_interval_unit']);
-            if ($r['billing_interval_count'] > 1) $billingText .= 's';
+            $billingText = isset($r['billing_interval_count']) ? $r['billing_interval_count'] . ' ' . ucfirst((string)$r['billing_interval_unit']) : '—';
+            if (isset($r['billing_interval_count']) && $r['billing_interval_count'] > 1) $billingText .= 's';
           ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">LQ-<?php echo (int)$r['doc_number']; ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client_name']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
-            <td style="padding:10px"><?php echo $r['start_date'] ? date('m/d/Y', strtotime($r['start_date'])) : '—'; ?></td>
+            <td style="padding:10px"><?php echo !empty($r['fulfillment_date']) ? date('m/d/Y', strtotime($r['fulfillment_date'])) : '—'; ?></td>
             <td style="padding:10px;font-size:12px"><?php echo htmlspecialchars($billingText); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
             <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
