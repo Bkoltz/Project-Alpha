@@ -288,9 +288,10 @@ function initContractClientDropdown() {
     var sug = document.getElementById('clientSuggestCo');
     var taxBanner = document.getElementById('taxExemptBannerCo');
     
-    if (!ci || !cid || !sug) return;
-    if (ci._clientDropdownInitialized) return;
-    ci._clientDropdownInitialized = true;
+    if (!ci || !cid || !sug) {
+        console.log('Contract client dropdown elements not found');
+        return;
+    }
     
     ci.addEventListener('input', function () {
         cid.value = '';
@@ -315,10 +316,12 @@ function initContractClientDropdown() {
     document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
 }
 
+// Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)
 initContractClientDropdown();
 document.addEventListener('pageLoaded', initContractClientDropdown);
-// Fallback for SPA navigation timing issues
+// Fallbacks for SPA navigation timing issues
 setTimeout(initContractClientDropdown, 100);
+setTimeout(initContractClientDropdown, 500);
 
 function loadProjectsForClientCo(clientId) {
     if (!clientId) {
