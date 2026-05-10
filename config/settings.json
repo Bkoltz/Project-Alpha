@@ -50,5 +50,6 @@
     "stripe_surcharge_type": "split",
     "stripe_surcharge_percent": 2.9,
     "stripe_surcharge_fixed": 0.3,
-    "stripe_surcharge_split_percent": 50
+    "stripe_surcharge_split_percent": 50,
+    "stripe_surcharge_message": ""
 }

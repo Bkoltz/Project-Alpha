@@ -278,7 +278,21 @@ if ($type === 'invoice') {
         <line x1="12" y1="8" x2="12" y2="12"></line>
         <line x1="12" y1="16" x2="12.01" y2="16"></line>
       </svg>
-      <div class="surcharge-text"><?php echo htmlspecialchars($surchargeInfo['display_text']); ?></div>
+      <div class="surcharge-text">
+        <?php 
+        // Show the calculation first, then custom message on new line
+        $displayLines = explode("\n", $surchargeInfo['display_text']);
+        foreach ($displayLines as $index => $line): 
+          if ($index === 0): 
+        ?>
+          <div style="font-weight:600;margin-bottom:4px"><?php echo htmlspecialchars($line); ?></div>
+        <?php else: ?>
+          <div style="margin-top:4px;font-style:italic"><?php echo htmlspecialchars($line); ?></div>
+        <?php 
+          endif;
+        endforeach; 
+        ?>
+      </div>
     </div>
     <?php endif; ?>
 
