@@ -1,0 +1,6 @@
+# Gitleaks ignore file
+# Format: Fingerprint (commit:file:ruleid:line)
+
+# Stripe publishable key - rotated on 2026-05-12
+# This is a publishable key (not secret) but gitleaks flags it
+e7fb5d9df832c292a84dcfe9effbf196389d198c:config/settings.json:generic-api-key:46
