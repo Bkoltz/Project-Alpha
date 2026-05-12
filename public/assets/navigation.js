@@ -43,9 +43,7 @@ function buildUrlFromPageString(page) {
         return u.href;
     }
 
-    const idx = page.indexOf('&');
-    const pagePart = idx === -1 ? page : page.substring(0, idx);
-    const rest = idx === -1 ? '' : page.substring(idx + 1);
+    const [pagePart, rest] = page.split('&', 2);
     u.searchParams.set('page', pagePart);
 
     if (rest) {
@@ -97,7 +95,14 @@ async function loadPageContent(page) {
         }
 
         if (newMainContent) {
+            console.log("main content found");
             const scripts = Array.from(newMainContent.querySelectorAll('script'));
+
+            // Debug: check if script exists in raw HTML
+            if (scripts.length === 0 && html.match(/<script\b[^>]*>/i)) {
+                console.warn('WARNING: Script tags exist in raw HTML but not found in parsed DOM!');
+                console.log('Script tag count in raw HTML:', (html.match(/<script\b[^>]*>/gi) || []).length);
+            }
             const inlineScripts = scripts.map(s => ({
                 src: s.src || null,
                 code: s.src ? null : s.textContent
@@ -110,9 +115,8 @@ async function loadPageContent(page) {
             contentCache.set(page, newMainContent.innerHTML);
             return { html: newMainContent.innerHTML, scripts: inlineScripts };
         } else {
-            // Response has no .main-content — this is an auth/public page (login, logout, etc.)
-            // Force a full page reload so the browser renders the correct layout
-            return null;
+            // If no main content found, use the full response (fallback)
+            return { html, scripts: [] };
         }
     } catch (error) {
         console.error('Failed to load page content:', error);
@@ -253,12 +257,10 @@ function handleNavigation(event) {
     const pageName = linkUrl.searchParams.get('page');
     if (!pageName) return; // nothing for client-side router to do
 
-    // Allow normal navigation for PDF/print/download/serve-upload/auth links
+    // Allow normal navigation for PDF/print/download/serve-upload links
     if (pageName.includes('-print') ||
         pageName.includes('-pdf') ||
         pageName.includes('serve-upload') ||
-        pageName === 'logout' ||
-        pageName === 'login' ||
         link.hasAttribute('data-skip-nav') ||
         link.hasAttribute('download')) {
         return;
