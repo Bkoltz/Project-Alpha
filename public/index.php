@@ -54,6 +54,12 @@ function resolve_view_path(string $page): string
     if ($page === 'accounts') {
         $candidates[] = $base . 'auth/accounts.php';
     }
+    if ($page === 'account') {
+        $candidates[] = $base . 'auth/account.php';
+    }
+    if ($page === 'account-edit') {
+        $candidates[] = $base . 'auth/account-edit.php';
+    }
 
     // As-provided
     $candidates[] = $base . $page . '.php';
@@ -369,6 +375,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/accounts/accounts_reset_password.php';
         exit;
     }
+    if ($page === '2fa-setup-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_setup.php';
+        exit;
+    }
+    if ($page === '2fa-verify-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_verify.php';
+        exit;
+    }
+    if ($page === '2fa-admin-disable') {
+        require_once __DIR__ . '/../src/controllers/auth/admin_2fa_disable.php';
+        exit;
+    }
     if ($page === 'reset-request') {
         require_once __DIR__ . '/../src/controllers/auth/reset_request.php';
         exit;
@@ -642,6 +660,17 @@ if ($page === 'stripe-checkout') {
 if ($page === 'stripe-success') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/controllers/stripe/stripe_success.php';
+    exit;
+}
+if ($page === '2fa-verify') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/auth/two_factor_verify.php';
+    exit;
+}
+if ($page === '2fa-setup') {
+    require_once __DIR__ . '/../src/views/partials/header.php';
+    require_once __DIR__ . '/../src/views/pages/auth/two_factor_setup.php';
+    require_once __DIR__ . '/../src/views/partials/footer.php';
     exit;
 }
 

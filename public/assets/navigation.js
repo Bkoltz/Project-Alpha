@@ -228,7 +228,9 @@ function updatePageTitle(page) {
         'api-keys': 'API Keys',
         'settings': 'Settings',
         'financial/financial-dashboard': 'Financial Dashboard',
-        'financial/audit': 'Audit'
+        'financial/audit': 'Audit',
+        'account': 'My Account',
+        'account-edit': 'Edit Account'
     };
 
     const pageTitle = pageTitles[page] || 'Project Alpha';
