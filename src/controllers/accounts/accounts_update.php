@@ -16,6 +16,7 @@ $email = trim($_POST['email'] ?? '');
 $username = trim($_POST['username'] ?? '');
 $role = trim($_POST['role'] ?? 'user');
 $forceReset = !empty($_POST['force_reset']);
+$isDisabled = !empty($_POST['is_disabled']);
 
 // Validation
 if ($userId <= 0) {
@@ -30,7 +31,7 @@ if ($userId === 1) {
 }
 
 if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    header('Location: /?page=accounts&action=edit&id=' . $userId . '&error=' . urlencode('Invalid email address'));
+    header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Invalid email address'));
     exit;
 }
 
@@ -42,18 +43,18 @@ if (!in_array($role, ['user', 'admin'])) {
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? AND id != ?');
 $stmt->execute([$email, $userId]);
 if ($stmt->fetch()) {
-    header('Location: /?page=accounts&action=edit&id=' . $userId . '&error=' . urlencode('Email already exists'));
+    header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Email already exists'));
     exit;
 }
 
 // Update user
 try {
-    $stmt = $pdo->prepare('UPDATE users SET email = ?, username = ?, role = ?, force_password_reset = ? WHERE id = ?');
-    $stmt->execute([$email, $username ?: null, $role, $forceReset ? 1 : 0, $userId]);
+    $stmt = $pdo->prepare('UPDATE users SET email = ?, username = ?, role = ?, is_disabled = ?, force_password_reset = ? WHERE id = ?');
+    $stmt->execute([$email, $username ?: null, $role, $isDisabled ? 1 : 0, $forceReset ? 1 : 0, $userId]);
     
-    header('Location: /?page=accounts&updated=1');
+    header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
 } catch (PDOException $e) {
     error_log('Failed to update user: ' . $e->getMessage());
-    header('Location: /?page=accounts&action=edit&id=' . $userId . '&error=' . urlencode('Failed to update user'));
+    header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Failed to update user'));
 }
 exit;

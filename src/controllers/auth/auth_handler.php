@@ -107,6 +107,12 @@ if ($action === 'login') {
             header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
             exit;
         }
+        // Check if account is disabled
+        if (!empty($u['is_disabled'])) {
+            app_log('auth', 'login denied - account disabled', ['ip'=>$ip, 'uid'=>(int)$u['id']]);
+            header('Location: /?page=login&error=' . urlencode('Account disabled. Contact an administrator.'));
+            exit;
+        }
         // Check if user has 2FA enabled
         $twofa_enabled = false;
         try {
