@@ -10,10 +10,9 @@ Desktop.ini
 public/error_log.txt
 public/error_log.txt
 
-# Config files containing secrets
+# Config files containing secrets - NEVER commit these!
 config/settings.json
 .env
-*.env
 .env.local
 .env.*.local
 
