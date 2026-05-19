@@ -316,21 +316,21 @@ if (isset($_POST['review_link'])) {
     $settings['review_link'] = $rl !== '' ? $rl : null;
 }
 
-// Stripe settings
+// Stripe settings — save to .env file, NOT to settings.json
+$envUpdates = [];
 if (isset($_POST['stripe_publishable_key'])) {
-    $settings['stripe_publishable_key'] = trim((string)$_POST['stripe_publishable_key']) ?: null;
+    $val = trim((string)$_POST['stripe_publishable_key']);
+    if ($val !== '') {
+        $envUpdates['stripe_publishable_key'] = $val;
+    }
 }
 if (isset($_POST['stripe_secret_key'])) {
     $sk = trim((string)$_POST['stripe_secret_key']);
     if ($sk !== '') {
-        // Encrypt the secret key for storage
         require_once __DIR__ . '/../utils/crypto.php';
         $enc = crypto_encrypt($sk);
         if ($enc) {
-            $settings['stripe_secret_key_enc'] = $enc;
-        } else {
-            // Fallback: store with prefix if encryption fails
-            $settings['stripe_secret_key_enc'] = 'plain::' . $sk;
+            $envUpdates['stripe_secret_key_enc'] = $enc;
         }
     }
 }
@@ -340,39 +340,69 @@ if (isset($_POST['stripe_webhook_secret'])) {
         require_once __DIR__ . '/../utils/crypto.php';
         $enc = crypto_encrypt($ws);
         if ($enc) {
-            $settings['stripe_webhook_secret_enc'] = $enc;
-        } else {
-            $settings['stripe_webhook_secret_enc'] = 'plain::' . $ws;
+            $envUpdates['stripe_webhook_secret_enc'] = $enc;
         }
     }
 }
 
-// Stripe surcharge settings
-if (isset($_POST['stripe_surcharge_type'])) {
-    $settings['stripe_surcharge_type'] = trim((string)$_POST['stripe_surcharge_type']);
-}
-if (isset($_POST['stripe_surcharge_percent'])) {
-    $settings['stripe_surcharge_percent'] = (float)$_POST['stripe_surcharge_percent'];
-}
-if (isset($_POST['stripe_surcharge_fixed'])) {
-    $settings['stripe_surcharge_fixed'] = (float)$_POST['stripe_surcharge_fixed'];
-}
-if (isset($_POST['stripe_surcharge_split_percent'])) {
-    $settings['stripe_surcharge_split_percent'] = (float)$_POST['stripe_surcharge_split_percent'];
-}
-if (isset($_POST['stripe_surcharge_message'])) {
-    $settings['stripe_surcharge_message'] = trim((string)$_POST['stripe_surcharge_message']);
+// Write secrets to .env file if any were submitted
+if (!empty($envUpdates)) {
+    $envPath = __DIR__ . '/../../.env';
+    $envContent = '';
+    $existingLines = [];
+    
+    if (is_readable($envPath)) {
+        $envContent = file_get_contents($envPath);
+        $existingLines = explode("\n", $envContent);
+    }
+    
+    // Build updated content
+    $updated = [];
+    $handledKeys = [];
+    foreach ($existingLines as $line) {
+        $trimmed = trim($line);
+        if (strpos($trimmed, '#') === 0 || strpos($trimmed, '=') === false) {
+            $updated[] = $line;
+            continue;
+        }
+        list($key,) = explode('=', $trimmed, 2);
+        $key = trim($key);
+        if (isset($envUpdates[$key])) {
+            $updated[] = $key . '="' . str_replace('"', '\"', $envUpdates[$key]) . '"';
+            $handledKeys[] = $key;
+        } else {
+            $updated[] = $line;
+        }
+    }
+    
+    // Add any new keys
+    foreach ($envUpdates as $key => $val) {
+        if (!in_array($key, $handledKeys, true)) {
+            $updated[] = $key . '="' . str_replace('"', '\"', $val) . '"';
+        }
+    }
+    
+    // Write .env file
+    $envDir = dirname($envPath);
+    if (!is_dir($envDir)) {
+        @mkdir($envDir, 0775, true);
+    }
+    if (is_writable($envDir) || !file_exists($envPath)) {
+        @file_put_contents($envPath, implode("\n", $updated) . "\n");
+        @chmod($envPath, 0600); // restrict permissions
+    }
+    
+    // Also set in current request so they're available immediately
+    foreach ($envUpdates as $key => $val) {
+        putenv("$key=$val");
+        $_ENV[$key] = $val;
+    }
 }
 
-// Domain & public access settings
-if (isset($_POST['app_host'])) {
-    $host = trim((string)$_POST['app_host']);
-    $settings['app_host'] = $host !== '' ? $host : null;
-}
-if (isset($_POST['public_links_in_email'])) {
-    $settings['public_links_in_email'] = true;
-} else {
-    $settings['public_links_in_email'] = false;
+// Also remove any stripe keys from settings so they don't get written to JSON
+foreach (['stripe_publishable_key','stripe_secret_key_enc','stripe_webhook_secret_enc'] as $k) {
+    unset($settings[$k]);
+    unset($existing[$k]);
 }
 
 // Merge with existing file on target before writing to avoid overwriting unrelated fields

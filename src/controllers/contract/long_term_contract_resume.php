@@ -1,6 +1,5 @@
 <?php
 // src/controllers/contract/long_term_contract_resume.php
-// Updated: uses unified contracts table
 require_once __DIR__ . '/../../config/db.php';
 
 $id = (int)($_POST['id'] ?? 0);
@@ -12,7 +11,8 @@ if ($id <= 0) {
 try {
     $pdo->beginTransaction();
     
-    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
+    // Get contract details
+    $stmt = $pdo->prepare('SELECT * FROM long_term_contracts WHERE id=?');
     $stmt->execute([$id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -24,7 +24,8 @@ try {
         throw new Exception('Only paused contracts can be resumed');
     }
     
-    $update = $pdo->prepare('UPDATE contracts SET status=? WHERE id=?');
+    // Update contract status to active
+    $update = $pdo->prepare('UPDATE long_term_contracts SET status=? WHERE id=?');
     $update->execute(['active', $id]);
     
     $pdo->commit();

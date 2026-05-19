@@ -14,11 +14,11 @@ $filterMinAmount = $_GET['min_amount'] ?? '';
 $filterMaxAmount = $_GET['max_amount'] ?? '';
 
 // Build WHERE clause
-$whereClauses = ['r.organization_id = ?'];
+$whereClauses = ['r.org_id = ?'];
 $params = [$orgId];
 
 if (!empty($filterStore)) {
-    $whereClauses[] = 'rs.name = ?';
+    $whereClauses[] = 'r.store_name = ?';
     $params[] = $filterStore;
 }
 if (!empty($filterMonth) && !empty($filterYear)) {
@@ -42,9 +42,9 @@ $whereSQL = implode(' AND ', $whereClauses);
 
 // Fetch filtered receipts
 $stmt = $pdo->prepare("
-    SELECT r.*, rs.name as store_name
+    SELECT r.*, u.username as uploaded_by_name
     FROM receipts r
-    LEFT JOIN receipt_stores rs ON rs.id = r.store_id
+    LEFT JOIN users u ON r.uploaded_by = u.id
     WHERE {$whereSQL}
     ORDER BY r.receipt_date DESC, r.created_at DESC
 ");
@@ -55,12 +55,12 @@ $receipts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $totalAmount = array_sum(array_column($receipts, 'amount'));
 
 // Get all stores for filter dropdown
-$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM receipt_stores WHERE organization_id = ? ORDER BY name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Get available years
-$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM receipts WHERE organization_id = ? ORDER BY year DESC');
+$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM receipts WHERE org_id = ? ORDER BY year DESC');
 $yearStmt->execute([$orgId]);
 $years = $yearStmt->fetchAll(PDO::FETCH_COLUMN);
 
