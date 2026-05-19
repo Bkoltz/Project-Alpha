@@ -143,15 +143,28 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // 
 
 // Handle logout early
 if ($page === 'logout') {
+    // Start session if not already started
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    
+    // Clear session data
     $_SESSION = [];
+    
+    // Delete session cookie
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
         setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', $params['secure'] ?? false, $params['httponly'] ?? true);
     }
+    
     // Clear remember-me cookie
     setcookie('remember', '', time() - 3600, '/', '', $secure, true);
+    
+    // Destroy the session
     session_destroy();
-    header('Location: /?page=login');
+    
+    // Redirect to logout confirmation (which will start a fresh session)
+    header('Location: /?page=logout-confirm');
     exit;
 }
 
@@ -200,6 +213,22 @@ if (false && empty($_SESSION['user']) && isset($_COOKIE['remember'])) {
 if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     header('Location: /?page=login');
     exit;
+}
+
+// Enforce force-password-reset: lock user to account page until they change it
+if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    $allowedForForceReset = ['account', 'account-update', 'logout'];
+    if (!in_array($page, $allowedForForceReset, true)) {
+        try {
+            require_once __DIR__ . '/../src/config/db.php';
+            $fpStmt = $pdo->prepare('SELECT force_password_reset FROM users WHERE id = ?');
+            $fpStmt->execute([(int)$_SESSION['user']['id']]);
+            if ((int)$fpStmt->fetchColumn() === 1) {
+                header('Location: /?page=account&force=1');
+                exit;
+            }
+        } catch (Throwable $e) { /* allow through if check fails */ }
+    }
 }
 
 // API/GET endpoints that should bypass layout (still require auth by default)
@@ -299,7 +328,7 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'stripe-webhook'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'stripe-webhook', 'settings/link-test-connection'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -310,6 +339,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/tax-rates-handler') {
         require_once __DIR__ . '/../src/controllers/settings/tax-rates-handler.php';
+        exit;
+    }
+    if ($page === 'settings/tax-import-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/tax-import-handler.php';
+        exit;
+    }
+    if ($page === 'settings/links-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/links_handler.php';
         exit;
     }
     if ($page === 'settings/custom-fields-handler') {
@@ -557,11 +594,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($page === 'stripe-charge') {
-        require_once __DIR__ . '/../src/controllers/stripe_charge.php';
+        require_once __DIR__ . '/../src/controllers/stripe/stripe_charge.php';
         exit;
     }
     if ($page === 'stripe-webhook') {
-        require_once __DIR__ . '/../src/controllers/stripe_webhook.php';
+        require_once __DIR__ . '/../src/controllers/stripe/stripe_webhook.php';
         exit;
     }
 }
@@ -587,18 +624,24 @@ if ($page === 'reset-new') {
     require_once __DIR__ . '/../src/views/pages/auth/reset-new.php';
     exit;
 }
+if ($page === 'logout-confirm') {
+    if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/auth/logout.php';
+    exit;
+}
 if ($page === 'public-doc') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/controllers/public_view/public_doc.php';
     exit;
 }
 if ($page === 'stripe-checkout') {
-    require_once __DIR__ . '/../src/controllers/public_view/stripe_checkout.php';
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_checkout.php';
     exit;
 }
 if ($page === 'stripe-success') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/controllers/public_view/stripe_success.php';
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_success.php';
     exit;
 }
 

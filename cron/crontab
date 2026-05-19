@@ -1,0 +1,22 @@
+# Project Alpha cron jobs
+# Environment variables are written to /etc/environment by entrypoint.sh
+# so they are available to cron jobs via the shell wrapper below.
+
+SHELL=/bin/bash
+
+# Generate recurring invoices – daily at 2:00 AM UTC
+0 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_invoices.php >> /var/log/cron/generate_recurring_invoices.log 2>&1
+
+# Send invoice reminders (due-7 and overdue-weekly) – daily at 8:00 AM UTC
+0 8 * * * root . /etc/environment && php /var/www/src/cron/send_invoice_reminders.php >> /var/log/cron/send_invoice_reminders.log 2>&1
+
+# Auto-terminate expired contracts – daily at 3:00 AM UTC
+0 3 * * * root . /etc/environment && php /var/www/src/cron/auto_terminate_contracts.php >> /var/log/cron/auto_terminate_contracts.log 2>&1
+
+# Check and expire links – daily at 4:00 AM UTC
+0 4 * * * root . /etc/environment && php /var/www/src/cron/link_expiration_checker.php >> /var/log/cron/link_expiration_checker.log 2>&1
+
+# Stripe payment reconciliation – every 6 hours
+0 */6 * * * root . /etc/environment && php /var/www/src/cron/stripe_reconciliation.php >> /var/log/cron/stripe_reconciliation.log 2>&1
+
+# Required blank line at end of crontab

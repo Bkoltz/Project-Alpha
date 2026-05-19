@@ -21,7 +21,7 @@ if (!csrf_sf_is_valid('auth', is_string($submitted) ? $submitted : '')) {
 }
 
 $action = $_POST['action'] ?? '';
-$email = trim((string)($_POST['email'] ?? ''));
+$emailOrUsername = trim((string)($_POST['email'] ?? ''));
 $password = (string)($_POST['password'] ?? '');
 $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
@@ -52,7 +52,7 @@ if ($action === 'register_first') {
         header('Location: /?page=login&error=' . urlencode('Setup already completed'));
         exit;
     }
-    if (!valid_email($email)) {
+    if (!valid_email($emailOrUsername)) {
         header('Location: /?page=login&error=' . urlencode('Enter a valid email'));
         exit;
     }
@@ -68,7 +68,7 @@ if ($action === 'register_first') {
     try {
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $st = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?,?,?)');
-        $st->execute([$email, $hash, 'admin']);
+        $st->execute([$emailOrUsername, $hash, 'admin']);
         // Do not auto-login the new admin; require explicit sign-in
         // This ensures session/cookies are established via the normal login flow.
         header('Location: /?page=login&created=1');
@@ -84,19 +84,26 @@ if ($action === 'register_first') {
 }
 
 if ($action === 'login') {
-    if (!valid_email($email)) {
+    if (empty($emailOrUsername)) {
         // record attempt
-        try { $pdo->prepare('INSERT INTO login_attempts (ip, email) VALUES (?,?)')->execute([$ip, $email ?: null]); } catch (Throwable $e) {}
+        try { $pdo->prepare('INSERT INTO login_attempts (ip, email) VALUES (?,?)')->execute([$ip, null]); } catch (Throwable $e) {}
         header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
         exit;
     }
     try {
-        $st = $pdo->prepare('SELECT id, email, password_hash, role FROM users WHERE email=?');
-        $st->execute([$email]);
+        $isEmail = valid_email($emailOrUsername);
+        if ($isEmail) {
+            $st = $pdo->prepare('SELECT id, email, password_hash, role FROM users WHERE email=?');
+            $st->execute([$emailOrUsername]);
+        } else {
+            // Accept either username or email when the input isn't a valid email
+            $st = $pdo->prepare('SELECT id, email, password_hash, role FROM users WHERE username=? OR email=?');
+            $st->execute([$emailOrUsername, $emailOrUsername]);
+        }
         $u = $st->fetch(PDO::FETCH_ASSOC);
         if (!$u || !password_verify($password, $u['password_hash'])) {
-            try { $pdo->prepare('INSERT INTO login_attempts (ip, email) VALUES (?,?)')->execute([$ip, $email ?: null]); } catch (Throwable $e) {}
-            app_log('auth', 'login failed', ['ip'=>$ip, 'email'=>$email]);
+            try { $pdo->prepare('INSERT INTO login_attempts (ip, email) VALUES (?,?)')->execute([$ip, $isEmail ? $emailOrUsername : null]); } catch (Throwable $e) {}
+            app_log('auth', 'login failed', ['ip'=>$ip, 'input'=>$emailOrUsername]);
             header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
             exit;
         }
@@ -147,6 +154,20 @@ if ($action === 'login') {
             }
         }
         */
+        
+        // Check if force password reset is required
+        $forceReset = false;
+        try {
+            $st = $pdo->prepare('SELECT force_password_reset FROM users WHERE id = ?');
+            $st->execute([(int)$u['id']]);
+            $forceReset = (bool)$st->fetchColumn();
+        } catch (Throwable $e) {}
+        
+        if ($forceReset) {
+            header('Location: /?page=account&force=1');
+            exit;
+        }
+        
         app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
         header('Location: /');
         exit;

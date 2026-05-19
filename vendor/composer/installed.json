@@ -2497,17 +2497,17 @@
         },
         {
             "name": "symfony/http-foundation",
-            "version": "v7.4.5",
-            "version_normalized": "7.4.5.0",
+            "version": "v7.4.7",
+            "version_normalized": "7.4.7.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/http-foundation.git",
-                "reference": "446d0db2b1f21575f1284b74533e425096abdfb6"
+                "reference": "f94b3e7b7dafd40e666f0c9ff2084133bae41e81"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/http-foundation/zipball/446d0db2b1f21575f1284b74533e425096abdfb6",
-                "reference": "446d0db2b1f21575f1284b74533e425096abdfb6",
+                "url": "https://api.github.com/repos/symfony/http-foundation/zipball/f94b3e7b7dafd40e666f0c9ff2084133bae41e81",
+                "reference": "f94b3e7b7dafd40e666f0c9ff2084133bae41e81",
                 "shasum": ""
             },
             "require": {
@@ -2530,7 +2530,7 @@
                 "symfony/mime": "^6.4|^7.0|^8.0",
                 "symfony/rate-limiter": "^6.4|^7.0|^8.0"
             },
-            "time": "2026-01-27T16:16:02+00:00",
+            "time": "2026-03-06T13:15:18+00:00",
             "type": "library",
             "installation-source": "source",
             "autoload": {
@@ -2558,7 +2558,7 @@
             "description": "Defines an object-oriented layer for the HTTP specification",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/http-foundation/tree/v7.4.5"
+                "source": "https://github.com/symfony/http-foundation/tree/v7.4.7"
             },
             "funding": [
                 {
@@ -2582,17 +2582,17 @@
         },
         {
             "name": "symfony/password-hasher",
-            "version": "v7.4.4",
-            "version_normalized": "7.4.4.0",
+            "version": "v7.4.6",
+            "version_normalized": "7.4.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/password-hasher.git",
-                "reference": "ab8e0ef42483f31c417c82ecfcf7be7b91d784fe"
+                "reference": "376755eb9c9857d78aedb68341ad2f46d1908b29"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/password-hasher/zipball/ab8e0ef42483f31c417c82ecfcf7be7b91d784fe",
-                "reference": "ab8e0ef42483f31c417c82ecfcf7be7b91d784fe",
+                "url": "https://api.github.com/repos/symfony/password-hasher/zipball/376755eb9c9857d78aedb68341ad2f46d1908b29",
+                "reference": "376755eb9c9857d78aedb68341ad2f46d1908b29",
                 "shasum": ""
             },
             "require": {
@@ -2605,7 +2605,7 @@
                 "symfony/console": "^6.4|^7.0|^8.0",
                 "symfony/security-core": "^6.4|^7.0|^8.0"
             },
-            "time": "2026-01-01T22:13:48+00:00",
+            "time": "2026-02-11T16:03:16+00:00",
             "type": "library",
             "installation-source": "source",
             "autoload": {
@@ -2637,7 +2637,7 @@
                 "password"
             ],
             "support": {
-                "source": "https://github.com/symfony/password-hasher/tree/v7.4.4"
+                "source": "https://github.com/symfony/password-hasher/tree/v7.4.6"
             },
             "funding": [
                 {
@@ -2929,17 +2929,17 @@
         },
         {
             "name": "symfony/security-csrf",
-            "version": "v7.4.4",
-            "version_normalized": "7.4.4.0",
+            "version": "v7.4.6",
+            "version_normalized": "7.4.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/security-csrf.git",
-                "reference": "06a2a2f90f355b8b4ec23685fa6ceff8d5dc41cc"
+                "reference": "d01adcd3141bec95e4cfd338f6b4482f1dd6a42b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/security-csrf/zipball/06a2a2f90f355b8b4ec23685fa6ceff8d5dc41cc",
-                "reference": "06a2a2f90f355b8b4ec23685fa6ceff8d5dc41cc",
+                "url": "https://api.github.com/repos/symfony/security-csrf/zipball/d01adcd3141bec95e4cfd338f6b4482f1dd6a42b",
+                "reference": "d01adcd3141bec95e4cfd338f6b4482f1dd6a42b",
                 "shasum": ""
             },
             "require": {
@@ -2954,7 +2954,7 @@
                 "symfony/http-foundation": "^6.4|^7.0|^8.0",
                 "symfony/http-kernel": "^6.4|^7.0|^8.0"
             },
-            "time": "2026-01-14T10:11:16+00:00",
+            "time": "2026-02-11T16:03:16+00:00",
             "type": "library",
             "installation-source": "source",
             "autoload": {
@@ -2982,7 +2982,7 @@
             "description": "Symfony Security Component - CSRF Library",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/security-csrf/tree/v7.4.4"
+                "source": "https://github.com/symfony/security-csrf/tree/v7.4.6"
             },
             "funding": [
                 {
