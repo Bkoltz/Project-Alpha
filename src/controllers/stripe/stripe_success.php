@@ -1,5 +1,5 @@
 <?php
-// src/controllers/public_view/stripe_success.php
+// src/controllers/stripe/stripe_success.php
 // Handles successful Stripe payment redirect
 
 require_once __DIR__ . '/../../config/db.php';

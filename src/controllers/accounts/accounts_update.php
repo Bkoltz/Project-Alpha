@@ -1,18 +1,31 @@
 <?php
 // src/controllers/accounts/accounts_update.php
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 
-csrf_verify_post_or_redirect('accounts');
+// Ensure user is logged in and is an admin
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
+    header('Location: /?page=login');
+    exit;
+}
+
 
 $userId = (int)($_POST['user_id'] ?? 0);
 $email = trim($_POST['email'] ?? '');
 $username = trim($_POST['username'] ?? '');
 $role = trim($_POST['role'] ?? 'user');
+$forceReset = !empty($_POST['force_reset']);
 
 // Validation
 if ($userId <= 0) {
     header('Location: /?page=accounts&error=' . urlencode('Invalid user ID'));
+    exit;
+}
+
+// Protect the seeded admin account (id=1)
+if ($userId === 1) {
+    header('Location: /?page=accounts&error=' . urlencode('The default admin account cannot be modified'));
     exit;
 }
 
@@ -35,8 +48,8 @@ if ($stmt->fetch()) {
 
 // Update user
 try {
-    $stmt = $pdo->prepare('UPDATE users SET email = ?, username = ?, role = ? WHERE id = ?');
-    $stmt->execute([$email, $username ?: null, $role, $userId]);
+    $stmt = $pdo->prepare('UPDATE users SET email = ?, username = ?, role = ?, force_password_reset = ? WHERE id = ?');
+    $stmt->execute([$email, $username ?: null, $role, $forceReset ? 1 : 0, $userId]);
     
     header('Location: /?page=accounts&updated=1');
 } catch (PDOException $e) {

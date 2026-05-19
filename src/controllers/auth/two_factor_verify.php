@@ -97,6 +97,19 @@ try {
             $_SESSION['user'] = $_SESSION['2fa_pending']['user_data'];
             unset($_SESSION['2fa_pending']);
             
+            // Check if force password reset is required
+            $forceReset = false;
+            try {
+                $st = $pdo->prepare('SELECT force_password_reset FROM users WHERE id = ?');
+                $st->execute([(int)$_SESSION['user']['id']]);
+                $forceReset = (bool)$st->fetchColumn();
+            } catch (Throwable $e) {}
+            
+            if ($forceReset) {
+                header('Location: /?page=account&force=1');
+                exit;
+            }
+            
             header('Location: /');
             exit;
         } else {

@@ -16,14 +16,15 @@ try {
         }
         
         // Test Dropbox connection by calling get_current_account endpoint
+        // Dropbox API v2 RPC endpoints require Content-Type: application/json and null body
         $ch = curl_init('https://api.dropboxapi.com/2/users/get_current_account');
         
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => 'null',
+            CURLOPT_POSTFIELDS => 'null',  // JSON null - required for RPC endpoints with no parameters
             CURLOPT_HTTPHEADER => [
                 'Authorization: Bearer ' . $accessToken,
-                'Content-Type: application/json'
+                'Content-Type: application/json'  // Required for Dropbox API v2 RPC calls
             ],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 15
@@ -32,7 +33,13 @@ try {
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
+        $redirectUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
         curl_close($ch);
+        
+        // Debug: log full response for troubleshooting
+        if ($httpCode !== 200) {
+            @error_log('[Dropbox] Response HTTP ' . $httpCode . ' URL: ' . $redirectUrl . ' Body: ' . substr($response, 0, 500));
+        }
         
         if ($curlError) {
             echo json_encode(['success' => false, 'error' => 'Connection error: ' . $curlError]);
@@ -46,9 +53,15 @@ try {
         } elseif ($httpCode === 401) {
             echo json_encode(['success' => false, 'error' => 'Invalid or expired access token']);
         } else {
-            $errorData = json_decode($response, true);
-            $errorMsg = $errorData['error_summary'] ?? "HTTP {$httpCode}";
-            echo json_encode(['success' => false, 'error' => $errorMsg]);
+            // If response is HTML, we need to handle it differently
+            if (stripos($response, '<!doctype') !== false || stripos($response, '<html') !== false) {
+                @error_log('[Dropbox] Received HTML instead of JSON: ' . substr($response, 0, 500));
+                echo json_encode(['success' => false, 'error' => "Received HTML response from Dropbox. HTTP {$httpCode}"]);
+            } else {
+                $errorData = json_decode($response, true);
+                $errorMsg = $errorData['error_summary'] ?? "HTTP {$httpCode}";
+                echo json_encode(['success' => false, 'error' => $errorMsg]);
+            }
         }
         
     } elseif ($provider === 'gdrive') {

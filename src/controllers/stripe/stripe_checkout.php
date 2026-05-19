@@ -1,5 +1,5 @@
 <?php
-// src/controllers/public_view/stripe_checkout.php
+// src/controllers/stripe/stripe_checkout.php
 // Initiates a Stripe Checkout Session for invoice payment via public token
 
 require_once __DIR__ . '/../../config/db.php';

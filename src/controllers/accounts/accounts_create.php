@@ -1,9 +1,15 @@
 <?php
 // src/controllers/accounts/accounts_create.php
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 
-csrf_verify_post_or_redirect('accounts');
+// Ensure user is logged in and is an admin
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
+    header('Location: /?page=login');
+    exit;
+}
+
 
 $email = trim($_POST['email'] ?? '');
 $username = trim($_POST['username'] ?? '');
@@ -39,11 +45,8 @@ $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
 // Insert user
 try {
-    $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role) VALUES (?, ?, ?, ?)');
-    $stmt->execute([$email, $username ?: null, $passwordHash, $role]);
-    
-    // TODO: If force_reset is true, set flag in database for forced password change
-    // This would require adding a force_password_reset column to users table
+    $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role, force_password_reset) VALUES (?, ?, ?, ?, ?)');
+    $stmt->execute([$email, $username ?: null, $passwordHash, $role, $forceReset ? 1 : 0]);
     
     header('Location: /?page=accounts&created=1');
 } catch (PDOException $e) {
