@@ -1,6 +1,14 @@
 <?php
 // src/controllers/quote_reject.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
+
+// CSRF verification
+require_once __DIR__ . '/../../utils/csrf.php';
+if (!csrf_validate()) {
+    header('Location: /?page=quote/quotes-list&error=' . urlencode('Invalid request (CSRF)'));
+    exit;
+}
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {

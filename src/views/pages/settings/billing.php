@@ -51,10 +51,50 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   </label>
 </fieldset>
 
-<div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:14px">
-  <strong>💡 Looking for Tax Rates?</strong>
-  <div style="margin-top:8px;color:#1e40af">Tax rate management has been moved to the <a href="/?page=settings&tab=taxes" style="color:var(--nav-accent);font-weight:600">Taxes</a> tab for better organization.</div>
-</div>
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">Credit Card Surcharge</legend>
+  <div style="color:#666;font-size:0.9em;margin-bottom:12px">Configure how Stripe processing fees are handled. When client pays a portion, it's added to their invoice total.</div>
+  
+  <label style="display:block;margin-bottom:12px">
+    <div style="margin-bottom:4px;font-weight:500">Surcharge Mode</div>
+    <select name="stripe_surcharge_type" id="surchargeType" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <option value="merchant" <?php echo ($appConfig['stripe_surcharge_type'] ?? 'merchant') === 'merchant' ? 'selected' : ''; ?>>Merchant Pays Full Fee</option>
+      <option value="split" <?php echo ($appConfig['stripe_surcharge_type'] ?? '') === 'split' ? 'selected' : ''; ?>>Split 50/50</option>
+      <option value="client" <?php echo ($appConfig['stripe_surcharge_type'] ?? '') === 'client' ? 'selected' : ''; ?>>Client Pays Full Fee</option>
+    </select>
+    <div style="font-size:0.85em;color:#666;margin-top:4px">Choose who pays the Stripe processing fee.</div>
+  </label>
+  
+  <div id="surchargeDetails" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <label>
+        <div style="margin-bottom:4px;font-weight:500">Processing Fee %</div>
+        <input type="number" step="0.01" name="stripe_surcharge_percent" value="<?php echo htmlspecialchars((string)($appConfig['stripe_surcharge_percent'] ?? 2.9)); ?>" placeholder="2.9" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div style="margin-bottom:4px;font-weight:500">Fixed Fee ($)</div>
+        <input type="number" step="0.01" name="stripe_surcharge_fixed" value="<?php echo htmlspecialchars((string)($appConfig['stripe_surcharge_fixed'] ?? 0.30)); ?>" placeholder="0.30" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+    </div>
+    
+    <label id="splitPercentField" style="display:block;margin-bottom:12px">
+      <div style="margin-bottom:4px;font-weight:500">Client Pays What % of Fee?</div>
+      <input type="number" step="1" min="0" max="100" name="stripe_surcharge_split_percent" value="<?php echo htmlspecialchars((string)($appConfig['stripe_surcharge_split_percent'] ?? 50)); ?>" placeholder="50" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <span style="margin-left:8px">%</span>
+    </label>
+    
+    <label style="display:block;margin-bottom:12px">
+      <div style="margin-bottom:4px;font-weight:500">Surcharge Message</div>
+      <textarea name="stripe_surcharge_message" rows="2" placeholder="Message shown to clients explaining the surcharge..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;font-family:inherit"><?php echo htmlspecialchars($appConfig['stripe_surcharge_message'] ?? ''); ?></textarea>
+      <div style="font-size:0.85em;color:#666;margin-top:4px">Shown on invoices when credit card surcharge applies. Leave blank for default.</div>
+    </label>
+    
+    <div id="surchargePreview" style="padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:14px">
+      <strong>Preview on $100 invoice:</strong>
+      <div id="surchargePreviewText" style="margin-top:4px;color:#4b5563"></div>
+    </div>
+  </div>
+</fieldset>
 
 <fieldset id="stripeConfig" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;display:none">
   <legend style="padding:0 6px;color:var(--muted)">Stripe Configuration</legend>

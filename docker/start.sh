@@ -48,30 +48,74 @@ fi
 ADMIN_PASSWORD_HASH=$(php -r "echo password_hash('${ADMIN_PASSWORD}', PASSWORD_DEFAULT);")
 echo "Using admin password hash: ${ADMIN_PASSWORD_HASH}"
 
-# Replace placeholder in SQL file (use a non-/ delimiter to avoid issues with bcrypt hashes)
-sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" /usr/local/share/app-migrations/000_all.sql
+# Replace placeholder in SQL files (use a non-/ delimiter to avoid issues with bcrypt hashes)
+for sql_file in /usr/local/share/app-migrations/*.sql; do
+  if [ -f "$sql_file" ]; then
+    sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" "$sql_file"
+  fi
+done
 
-# If the DB already exists and contains the placeholder hash (from a previous run), update it
-mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e \
-  "UPDATE users SET password_hash='${ADMIN_PASSWORD_HASH}' WHERE password_hash='{{ADMIN_PASSWORD_HASH}}';" || true
+# Ensure admin user exists with current password hash (recovery mechanism)
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@project-alpha.local}"
+ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
+echo "Ensuring admin user exists with email: ${ADMIN_EMAIL}, username: ${ADMIN_USERNAME}"
+mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
+  INSERT INTO users (email, password_hash, username, role, force_password_reset)
+  VALUES ('${ADMIN_EMAIL}', '${ADMIN_PASSWORD_HASH}', '${ADMIN_USERNAME}', 'admin', 0)
+  ON DUPLICATE KEY UPDATE password_hash='${ADMIN_PASSWORD_HASH}', email='${ADMIN_EMAIL}', username='${ADMIN_USERNAME}', role='admin', force_password_reset=0, deleted_at=NULL;
+  
+  -- Ensure admin is linked to default organization
+  SET @admin_id = (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1);
+  SET @default_org = (SELECT id FROM organizations ORDER BY id ASC LIMIT 1);
+  IF @admin_id IS NOT NULL AND @default_org IS NOT NULL THEN
+    INSERT INTO user_organizations (user_id, organization_id, role, is_default)
+    VALUES (@admin_id, @default_org, 'owner', 1)
+    ON DUPLICATE KEY UPDATE role='owner', is_default=1;
+  END IF;
+" || true
 
-# 1) Base schema: if key table (quotes) is missing, load 000_all.sql
-if [ -f "/usr/local/share/app-migrations/000_all.sql" ]; then
-  echo "Checking if base schema needs to be applied to '${DB_NAME}'..."
-  if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
-       "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
-    echo "Applying base schema (000_all.sql) to '${DB_NAME}'..."
-    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < \
-         "/usr/local/share/app-migrations/000_all.sql" > /dev/null 2>&1; then
-      echo "✅ Base schema applied."
+# 1) Base schema: if key table (quotes) is missing, load the init schema
+if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
+     "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
+  echo "Applying base schema to '${DB_NAME}'..."
+  
+  # Run the unified init.sql which contains all modules
+  INIT_SQL="/docker-entrypoint-initdb.d/init.sql"
+  if [ -f "$INIT_SQL" ]; then
+    echo "Applying unified schema: $INIT_SQL"
+    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then
+      echo "✅ Base schema applied from init.sql"
     else
-      echo "⚠️  Failed to apply base schema (000_all.sql). The application may not work until this succeeds."
+      echo "⚠️ Failed to apply init.sql, trying individual migrations..."
+      # Fallback to individual migration files
+      for sql_file in /usr/local/share/app-migrations/*.sql; do
+        if [ -f "$sql_file" ]; then
+          echo "Applying migration: $(basename "$sql_file")"
+          if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
+            echo "✅ Applied: $(basename "$sql_file")"
+          else
+            echo "⚠️ Failed to apply: $(basename "$sql_file")"
+          fi
+        fi
+      done
     fi
   else
-    echo "Base schema already present (quotes table exists)."
+    # Fallback to individual migration files if init.sql not available
+    for sql_file in /usr/local/share/app-migrations/*.sql; do
+      if [ -f "$sql_file" ]; then
+        echo "Applying migration: $(basename "$sql_file")"
+        if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
+          echo "✅ Applied: $(basename "$sql_file")"
+        else
+          echo "⚠️ Failed to apply: $(basename "$sql_file")"
+        fi
+      fi
+    done
   fi
+  
+  echo "✅ Base schema applied."
 else
-  echo "ℹ️  No base schema file (000_all.sql) found in image; skipping."
+  echo "Base schema already present (quotes table exists)."
 fi
 
 # 2) Runtime, always safe to re-run
@@ -150,6 +194,47 @@ chmod -R 775 "${UPLOADS_DIR}" || true
 # 6) Database and config setup complete
 # Note: Cron jobs are now handled by the separate 'cron' service in docker-compose.yml
 # This web service no longer manages scheduled tasks.
+
+# 7) Optional: harden Apache virtual host when APP_HOST is set
+APP_HOST="${APP_HOST:-}"
+if [ -n "$APP_HOST" ]; then
+  echo "🔒 Hardening Apache for domain: ${APP_HOST}"
+  cat > /etc/apache2/conf-available/security-hardening.conf <<EOF
+# Deny access by IP, require hostname match
+<VirtualHost *:80>
+    ServerName ${APP_HOST}
+    DocumentRoot /var/www/html
+    
+    # Security headers
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy no-referrer-when-downgrade
+    Header always set Content-Security-Policy "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+    
+    # Disable server signature
+    ServerTokens Prod
+    ServerSignature Off
+    
+    <Directory /var/www/html>
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+# Default: deny direct IP access (optional)
+<VirtualHost _default_:80>
+    DocumentRoot /var/www/html
+    <Location />
+        Require all denied
+    </Location>
+</VirtualHost>
+EOF
+  a2enmod headers
+  a2enconf security-hardening
+  echo "✅ Apache hardened for production domain."
+fi
 
 echo "✅ Setup complete."
 exec apache2-foreground

@@ -14,7 +14,7 @@ $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
-$where=['q.is_on_demand=1'];$p=[];
+$where=['q.quote_type = "on_demand"'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='q.status=?'; $p[] = $status; }
@@ -22,8 +22,8 @@ if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='q.created_at<=?';$p[]=$end.' 23:59:59';}
 if($project_code!==''){ $where[]='q.project_code LIKE ?'; $p[] = $project_code.'%'; }
 if($doc_no>0){ $where[]='q.doc_number=?'; $p[] = $doc_no; }
-if($min_price !== null){ $where[]='q.price_per_invoice >= ?'; $p[] = $min_price; }
-if($max_price !== null){ $where[]='q.price_per_invoice <= ?'; $p[] = $max_price; }
+if($min_price !== null){ $where[]='q.total >= ?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='q.total <= ?'; $p[] = $max_price; }
 
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
@@ -33,7 +33,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM quotes q LEFT JOIN clients c ON c.id=q.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.start_date, q.end_date, q.price_per_invoice, q.created_at, c.name client, c.id AS client_id FROM quotes q LEFT JOIN clients c ON c.id=q.client_id";
+$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.fulfillment_date, q.created_at, c.name client, c.id AS client_id FROM quotes q LEFT JOIN clients c ON c.id=q.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY q.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -134,7 +134,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['price_per_invoice'], 2); ?></td>
-            <td style="padding:10px"><?php echo $r['start_date'] ? date('M j, Y', strtotime($r['start_date'])) : '—'; ?></td>
+            <td style="padding:10px"><?php echo !empty($r['fulfillment_date']) ? date('M j, Y', strtotime($r['fulfillment_date'])) : '—'; ?></td>
             <td style="padding:10px"><?php echo date('M j, Y', strtotime($r['created_at'])); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>

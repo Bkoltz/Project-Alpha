@@ -69,8 +69,10 @@ function recalcCo() {
     var total = Math.max(0, taxable + tax);
 
     // Calculate deposit
-    var depType = document.getElementById('depositTypeCo').value;
-    var depVal = parseFloat(document.getElementById('depositValueCo').value) || 0;
+    var depositTypeEl = document.getElementById('depositTypeCo');
+    var depositValueEl = document.getElementById('depositValueCo');
+    var depType = depositTypeEl ? depositTypeEl.value : 'none';
+    var depVal = depositValueEl ? parseFloat(depositValueEl.value) || 0 : 0;
     var deposit = 0;
     if (depType === 'percent') { deposit = Math.max(0, Math.min(100, depVal)) * total / 100; }
     else if (depType === 'fixed') { deposit = Math.max(0, depVal); }
@@ -101,11 +103,15 @@ function recalcCo() {
     }
 
     // Show/hide deposit row
-    if (depType !== 'none' && deposit > 0) {
-        document.getElementById('depositRowCo').style.display = 'block';
-        document.getElementById('depositValCo').textContent = money(deposit);
-    } else {
-        document.getElementById('depositRowCo').style.display = 'none';
+    var depositRowEl = document.getElementById('depositRowCo');
+    var depositValEl = document.getElementById('depositValCo');
+    if (depositRowEl) {
+        if (depType !== 'none' && deposit > 0) {
+            depositRowEl.style.display = 'block';
+            if (depositValEl) depositValEl.textContent = money(deposit);
+        } else {
+            depositRowEl.style.display = 'none';
+        }
     }
 
     // Update discount warning
@@ -282,31 +288,46 @@ function updateDiscountWarning() {
 addItemCo();
 
 // Client typeahead
-var ci = document.getElementById('clientInputCo');
-var cid = document.getElementById('clientIdCo');
-var sug = document.getElementById('clientSuggestCo');
-var taxBanner = document.getElementById('taxExemptBannerCo');
-ci.addEventListener('input', function () {
-    cid.value = '';
-    var t = this.value.trim();
-    if (!t) { sug.style.display = 'none'; sug.innerHTML = ''; taxBanner.style.display = 'none'; return; }
-    fetch('/?page=clients-search&term=' + encodeURIComponent(t))
-        .then(r => r.json())
-        .then(list => {
-            if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
-            sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
-            Array.from(sug.children).forEach(el => {
-                el.addEventListener('click', function () {
-                    ci.value = this.dataset.name; cid.value = this.dataset.id;
-                    if (this.dataset.taxexempt) { taxBanner.style.display = 'block'; } else { taxBanner.style.display = 'none'; }
-                    loadProjectsForClientCo(this.dataset.id);
-                    sug.style.display = 'none';
+function initContractClientDropdown() {
+    var ci = document.getElementById('clientInputCo');
+    var cid = document.getElementById('clientIdCo');
+    var sug = document.getElementById('clientSuggestCo');
+    var taxBanner = document.getElementById('taxExemptBannerCo');
+    
+    if (!ci || !cid || !sug) {
+        console.log('Contract client dropdown elements not found');
+        return;
+    }
+    
+    ci.addEventListener('input', function () {
+        cid.value = '';
+        var t = this.value.trim();
+        if (!t) { sug.style.display = 'none'; sug.innerHTML = ''; if(taxBanner) taxBanner.style.display = 'none'; return; }
+        fetch('/?page=clients-search&term=' + encodeURIComponent(t))
+            .then(r => r.json())
+            .then(list => {
+                if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
+                sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+                Array.from(sug.children).forEach(el => {
+                    el.addEventListener('click', function () {
+                        ci.value = this.dataset.name; cid.value = this.dataset.id;
+                        if (this.dataset.taxexempt && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
+                        loadProjectsForClientCo(this.dataset.id);
+                        sug.style.display = 'none';
+                    });
                 });
-            });
-            sug.style.display = 'block';
-        }).catch(() => { sug.style.display = 'none' });
-});
-document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
+                sug.style.display = 'block';
+            }).catch(() => { sug.style.display = 'none' });
+    });
+    document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
+}
+
+// Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)
+initContractClientDropdown();
+document.addEventListener('pageLoaded', initContractClientDropdown);
+// Fallbacks for SPA navigation timing issues
+setTimeout(initContractClientDropdown, 100);
+setTimeout(initContractClientDropdown, 500);
 
 function loadProjectsForClientCo(clientId) {
     if (!clientId) {
@@ -381,7 +402,8 @@ document.getElementById('createProjectBtnCo').addEventListener('click', function
 });
 
 document.getElementById('coCreateForm').addEventListener('submit', function (e) {
-    if (!cid.value) {
+    var cid = document.getElementById('clientIdCo');
+    if (!cid || !cid.value) {
         e.preventDefault();
         alert('Please select a client from suggestions.');
         return;

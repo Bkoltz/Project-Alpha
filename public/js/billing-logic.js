@@ -70,6 +70,60 @@ function htmlEscape(s) {
     return s.replace(/"/g, '&quot;');
 }
 
+// Surcharge logic
+var surchargeType = document.getElementById('surchargeType');
+var surchargeDetails = document.getElementById('surchargeDetails');
+var splitPercentField = document.getElementById('splitPercentField');
+var surchargePreview = document.getElementById('surchargePreview');
+var surchargePreviewText = document.getElementById('surchargePreviewText');
+var surchargePercentInput = document.querySelector('input[name="stripe_surcharge_percent"]');
+var surchargeFixedInput = document.querySelector('input[name="stripe_surcharge_fixed"]');
+var splitPercentInput = document.querySelector('input[name="stripe_surcharge_split_percent"]');
+
+function updateSurchargeUI() {
+    var type = surchargeType.value;
+    if (type === 'merchant') {
+        surchargeDetails.style.display = 'none';
+    } else {
+        surchargeDetails.style.display = 'block';
+        splitPercentField.style.display = type === 'split' ? 'block' : 'none';
+    }
+    updateSurchargePreview();
+}
+
+function updateSurchargePreview() {
+    var type = surchargeType.value;
+    var percent = parseFloat(surchargePercentInput.value) || 0;
+    var fixed = parseFloat(surchargeFixedInput.value) || 0;
+    var splitPercent = parseFloat(splitPercentInput.value) || 50;
+    
+    var invoiceAmount = 100;
+    var feeTotal = (invoiceAmount * percent / 100) + fixed;
+    var text = '';
+    
+    if (type === 'merchant') {
+        text = 'Client pays $' + invoiceAmount.toFixed(2) + '. You absorb $' + feeTotal.toFixed(2) + ' fee. Net: $' + (invoiceAmount - feeTotal).toFixed(2);
+    } else if (type === 'client') {
+        var newTotal = invoiceAmount + feeTotal;
+        text = 'Client pays $' + newTotal.toFixed(2) + ' (includes $' + feeTotal.toFixed(2) + ' fee). You receive $' + invoiceAmount.toFixed(2) + '.';
+    } else if (type === 'split') {
+        var clientFee = feeTotal * (splitPercent / 100);
+        var merchantFee = feeTotal - clientFee;
+        var clientTotal = invoiceAmount + clientFee;
+        text = 'Client pays $' + clientTotal.toFixed(2) + ' (includes $' + clientFee.toFixed(2) + ' of fee). You absorb $' + merchantFee.toFixed(2) + '. Net: $' + (invoiceAmount - merchantFee).toFixed(2);
+    }
+    
+    surchargePreviewText.textContent = text;
+}
+
+if (surchargeType) {
+    surchargeType.addEventListener('change', updateSurchargeUI);
+    surchargePercentInput.addEventListener('input', updateSurchargePreview);
+    surchargeFixedInput.addEventListener('input', updateSurchargePreview);
+    splitPercentInput.addEventListener('input', updateSurchargePreview);
+    updateSurchargeUI();
+}
+
 // wire existing remove buttons
 Array.from(document.querySelectorAll('.pm-remove')).forEach(function (b) {
     b.addEventListener('click', removeHandler);

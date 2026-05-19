@@ -7,7 +7,7 @@ $receiptId = (int)($_GET['id'] ?? 0);
 $orgId = 1; // Should come from session/user context
 
 // Get existing stores for edit modal
-$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE organization_id = ? ORDER BY store_name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -21,7 +21,7 @@ $stmt = $pdo->prepare('
     SELECT r.*, u.username as uploaded_by_name
     FROM receipts r
     LEFT JOIN users u ON r.uploaded_by = u.id
-    WHERE r.id = ? AND r.org_id = ?
+    WHERE r.id = ? AND r.organization_id = ?
 ');
 $stmt->execute([$receiptId, $orgId]);
 $receipt = $stmt->fetch(PDO::FETCH_ASSOC);

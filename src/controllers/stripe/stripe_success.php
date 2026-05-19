@@ -172,4 +172,10 @@ try {
         </div>
     </div>
 </body>
+<script>
+    // Attempt to close the Stripe checkout tab if the browser allows it
+    if (window.opener && window.opener !== window) {
+        window.close();
+    }
+</script>
 </html>

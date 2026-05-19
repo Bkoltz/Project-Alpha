@@ -63,7 +63,7 @@ $organizations = $orgStmt->fetchAll();
           <div>State</div><input name="state" value="<?php echo htmlspecialchars($client['state'] ?? 'WI'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
-          <div>Postal (zip)</div><input name="postal" value="<?php echo htmlspecialchars($client['postal'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <div>Postal (zip)</div><input name="postal" value="<?php echo htmlspecialchars($client['postal_code'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
       </div>
     </fieldset>

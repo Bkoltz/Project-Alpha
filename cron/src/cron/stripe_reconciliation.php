@@ -10,23 +10,23 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../services/StripeService.php';
+require_once __DIR__ . '/../utils/cron_logger.php';
 
-$logPrefix = '[stripe_reconciliation]';
 $jobName = 'stripe_reconciliation';
 
 // Check if cron is enabled
 if (empty($appConfig['cron_enabled'])) {
-    @error_log("$logPrefix Cron is disabled in settings. Skipping.");
+    cron_log($jobName, 'Cron is disabled in settings. Skipping.', [], 'info');
     exit(0);
 }
 
 // Check if Stripe is configured
 if (!StripeService::isConfigured($appConfig)) {
-    @error_log("$logPrefix Stripe is not configured. Skipping.");
+    cron_log($jobName, 'Stripe is not configured. Skipping.', [], 'info');
     exit(0);
 }
 
-@error_log("$logPrefix Starting reconciliation at " . date('Y-m-d H:i:s'));
+cron_log_start($jobName);
 
 try {
     $stripe = StripeService::fromAppConfig($appConfig);
@@ -39,130 +39,91 @@ try {
     $lastRunStmt->execute([$jobName]);
     $lastRun = $lastRunStmt->fetchColumn();
     
-    // Default to 7 days ago if never run
-    $since = $lastRun ? strtotime($lastRun) : strtotime('-7 days');
-    $since = max($since, strtotime('-30 days')); // Never look back more than 30 days
+    if (!$lastRun) {
+        cron_log($jobName, 'First run - no previous timestamp. Starting from 24 hours ago.', [], 'info');
+        $lastRun = date('Y-m-d H:i:s', strtotime('-24 hours'));
+    }
     
-    @error_log("$logPrefix Fetching Payment Intents since " . date('Y-m-d H:i:s', $since));
+    // Get recent payment intents from Stripe (last 7 days or since last run)
+    $lookback = max(strtotime($lastRun), strtotime('-7 days'));
+    $lookbackDate = date('Y-m-d H:i:s', $lookback);
     
-    // Fetch Payment Intents from Stripe
-    $paymentIntents = $stripe->listPaymentIntents($since);
+    cron_log($jobName, "Fetching payments since {$lookbackDate}", [], 'info');
+    
+    $payments = $stripe->getPaymentsSince($lookbackDate);
     
     $reconciled = 0;
-    $skipped = 0;
+    $alreadyMatched = 0;
     $errors = 0;
     
-    foreach ($paymentIntents as $pi) {
+    foreach ($payments as $payment) {
         try {
-            // Only process succeeded payments
-            if ($pi['status'] !== 'succeeded') {
-                $skipped++;
+            $paymentIntentId = $payment['id'];
+            $amount = $payment['amount'] / 100; // Convert from cents
+            $status = $payment['status'];
+            $createdAt = date('Y-m-d H:i:s', $payment['created']);
+            
+            // Check if we already have this payment
+            $checkStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id = ?');
+            $checkStmt->execute([$paymentIntentId]);
+            
+            if ($checkStmt->fetch()) {
+                $alreadyMatched++;
                 continue;
             }
             
-            // Get invoice ID from metadata
-            $invoiceId = $pi['metadata']['pa_invoice_id'] ?? $pi['metadata']['invoice_id'] ?? null;
-            if (!$invoiceId) {
-                $skipped++;
-                continue;
-            }
-            
-            $invoiceId = (int)$invoiceId;
-            $piId = $pi['id'];
-            $amount = ($pi['amount'] ?? 0) / 100; // Convert cents to dollars
-            
-            // Check if this payment is already recorded
-            $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id = ?');
-            $existsStmt->execute([$piId]);
-            if ($existsStmt->fetchColumn()) {
-                $skipped++;
-                continue;
-            }
-            
-            // Check if invoice exists
-            $invStmt = $pdo->prepare('SELECT id, total, status FROM invoices WHERE id = ?');
-            $invStmt->execute([$invoiceId]);
-            $invoice = $invStmt->fetch(PDO::FETCH_ASSOC);
+            // Find invoice by payment intent ID
+            $invoiceStmt = $pdo->prepare('
+                SELECT i.id, i.client_id, i.total 
+                FROM invoices i 
+                WHERE i.stripe_payment_intent_id = ? 
+                OR i.id IN (
+                    SELECT invoice_id FROM payment_intents 
+                    WHERE stripe_payment_intent_id = ?
+                )
+            ');
+            $invoiceStmt->execute([$paymentIntentId, $paymentIntentId]);
+            $invoice = $invoiceStmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$invoice) {
-                @error_log("$logPrefix Invoice $invoiceId not found for PI $piId");
-                $skipped++;
-                continue;
-            }
-            
-            // Skip if already paid
-            if ($invoice['status'] === 'paid') {
-                $skipped++;
+                cron_log($jobName, "No matching invoice for payment intent: {$paymentIntentId}", [], 'warning');
                 continue;
             }
             
             // Record the payment
-            $pdo->beginTransaction();
+            $insertStmt = $pdo->prepare('
+                INSERT INTO payments (invoice_id, amount, payment_method, stripe_payment_intent_id, paid_at, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
+            ');
+            $insertStmt->execute([
+                $invoice['id'],
+                $amount,
+                'Card',
+                $paymentIntentId,
+                $createdAt
+            ]);
             
-            $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, stripe_payment_intent_id, status, created_at) VALUES (?, ?, ?, ?, ?, NOW())')
-                ->execute([$invoiceId, $amount, 'stripe', $piId, 'succeeded']);
+            // Mark invoice as paid
+            $updateStmt = $pdo->prepare('UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?');
+            $updateStmt->execute(['paid', $createdAt, $invoice['id']]);
             
-            // Update invoice status
-            $sumStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
-            $sumStmt->execute([$invoiceId]);
-            $totalPaid = (float)$sumStmt->fetchColumn();
-            
-            $invoiceTotal = (float)$invoice['total'];
-            $newStatus = ($totalPaid >= $invoiceTotal) ? 'paid' : 'partial';
-            
-            // Update invoice (with graceful handling of amount_paid column)
-            try {
-                $pdo->prepare('UPDATE invoices SET status = ?, amount_paid = ? WHERE id = ?')
-                    ->execute([$newStatus, $totalPaid, $invoiceId]);
-            } catch (Throwable $e) {
-                $pdo->prepare('UPDATE invoices SET status = ? WHERE id = ?')
-                    ->execute([$newStatus, $invoiceId]);
-            }
-            
-            // If fully paid, handle contract completion and public link revocation
-            if ($newStatus === 'paid') {
-                // Revoke public links
-                try {
-                    $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE type = "invoice" AND record_id = ? AND revoked = 0')
-                        ->execute(['/?page=public-redirect&type=invoice&reason=paid', $invoiceId]);
-                } catch (Throwable $e) { /* ignore */ }
-                
-                // Mark linked contract as completed
-                $coStmt = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
-                $coStmt->execute([$invoiceId]);
-                $contractId = (int)$coStmt->fetchColumn();
-                if ($contractId > 0) {
-                    $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')->execute(['completed', $contractId]);
-                }
-            }
-            
-            $pdo->commit();
             $reconciled++;
             
-            @error_log("$logPrefix Reconciled payment $piId for invoice $invoiceId: \$$amount");
-            
         } catch (Throwable $e) {
-            if ($pdo->inTransaction()) $pdo->rollBack();
             $errors++;
-            @error_log("$logPrefix Error processing PI {$pi['id']}: " . $e->getMessage());
+            cron_log_error($jobName, "Error processing payment {$payment['id']}: " . $e->getMessage());
         }
     }
     
-    // Update cron_job_runs
-    $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status) VALUES (?, NOW(), "success") ON DUPLICATE KEY UPDATE last_run = NOW(), status = "success", error_message = NULL')
-        ->execute([$jobName]);
-    
-    @error_log("$logPrefix Completed: $reconciled reconciled, $skipped skipped, $errors errors");
+    cron_log_end($jobName, [
+        'reconciled' => $reconciled,
+        'already_matched' => $alreadyMatched,
+        'errors' => $errors,
+        'total_checked' => count($payments)
+    ]);
     
 } catch (Throwable $e) {
-    @error_log("$logPrefix Fatal error: " . $e->getMessage());
-    
-    // Record failure
-    try {
-        $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status, error_message) VALUES (?, NOW(), "failed", ?) ON DUPLICATE KEY UPDATE last_run = NOW(), status = "failed", error_message = ?')
-            ->execute([$jobName, $e->getMessage(), $e->getMessage()]);
-    } catch (Throwable $e2) { /* ignore */ }
-    
+    cron_log_error($jobName, 'Fatal error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
     exit(1);
 }
 

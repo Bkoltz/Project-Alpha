@@ -1,8 +1,8 @@
 <?php
 // src/views/pages/auth/reset-password.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $csrf = csrf_sf_token('reset_request');
 $notice = isset($_GET['sent']) && $_GET['sent']==='1';

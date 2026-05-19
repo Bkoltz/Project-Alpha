@@ -210,10 +210,8 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
               </form>
               <?php endif; ?>
               <?php if ($r['status'] !== 'paid' && $r['status'] !== 'void'): ?>
-                <form method="post" action="/?page=invoice/invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
-                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Paid</button>
-                </form>
+                <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$r['id']; ?>&amount=<?php echo urlencode(number_format(max(0, (float)$r['total'] - (float)$r['paid']), 2, '.', '')); ?>" 
+                   style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;text-decoration:none;display:inline-block;margin-right:6px;">Paid</a>
               <?php endif; ?>
             </td>
             <td style="padding:10px">

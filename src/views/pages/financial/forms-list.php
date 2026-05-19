@@ -9,23 +9,29 @@ $orgId = 1; // Should come from session/user context
 $stmt = $pdo->prepare('
     SELECT 
         fc.*,
-        fd.id as doc_id,
-        fd.file_path,
-        fd.file_name,
-        fd.mime_type,
-        fd.uploaded_at,
-        u.username as uploaded_by_name,
-        COUNT(DISTINCT fd2.id) as doc_count
+        COUNT(DISTINCT fd.id) as doc_count
     FROM form_categories fc
     LEFT JOIN form_documents fd ON fc.id = fd.category_id
-    LEFT JOIN form_documents fd2 ON fc.id = fd2.category_id
-    LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fc.org_id = ?
-    GROUP BY fc.id, fd.id, fd.file_path, fd.file_name, fd.mime_type, fd.uploaded_at, u.username
+    WHERE fc.organization_id = ?
+    GROUP BY fc.id
     ORDER BY fc.created_at DESC
 ');
 $stmt->execute([$orgId]);
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch documents for each category
+foreach ($categories as &$cat) {
+    $docStmt = $pdo->prepare('
+        SELECT fd.*, u.username as uploaded_by_name
+        FROM form_documents fd
+        LEFT JOIN users u ON fd.created_by = u.id
+        WHERE fd.category_id = ?
+        ORDER BY fd.created_at DESC
+    ');
+    $docStmt->execute([$cat['id']]);
+    $cat['documents'] = $docStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+unset($cat);
 ?>
 
 <div style="max-width:1400px;margin:0 auto;padding:24px">
@@ -73,34 +79,40 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;display:flex;flex-direction:column">
                     <!-- Document Preview -->
                     <div style="height:220px;background:#f9fafb;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+                        <?php $docs = $category['documents'] ?? [];
+                        $latestDoc = !empty($docs) ? $docs[0] : null;
+                        $hasDocument = !empty($latestDoc['file_path']);
+                        $fileExt = $hasDocument ? strtolower(pathinfo($latestDoc['file_path'], PATHINFO_EXTENSION)) : '';
+                        $isPdf = $fileExt === 'pdf';
+                        ?>
                         <?php if ($hasDocument): ?>
                             <?php if ($isPdf): ?>
                                 <div style="text-align:center;color:var(--muted)">
                                     <div style="font-size:64px;margin-bottom:12px">📄</div>
-                                    <div style="font-size:14px;font-weight:600"><?php echo htmlspecialchars($category['file_name']); ?></div>
+                                    <div style="font-size:14px;font-weight:600"><?php echo htmlspecialchars($latestDoc['name']); ?></div>
                                 </div>
                             <?php else: ?>
                                 <?php 
-                                $fileParam = str_replace('/src/uploads/', '', $category['file_path']);
+                                $fileParam = str_replace('/src/uploads/', '', $latestDoc['file_path']);
                                 ?>
                                 <img src="/?page=serve-upload&file=<?php echo urlencode($fileParam); ?>" 
-                                     alt="<?php echo htmlspecialchars($category['title']); ?>" 
+                                     alt="<?php echo htmlspecialchars($category['name']); ?>" 
                                      style="max-width:100%;max-height:100%;object-fit:contain"
                                      loading="lazy">
                             <?php endif; ?>
                             
                             <!-- View Badge -->
                             <?php 
-                            $detailPage = $category['type'] === 'folder' ? 'folder-detail' : 'form-detail';
+                            $detailPage = 'form-detail';
                             ?>
                             <a href="/?page=financial/<?php echo $detailPage; ?>&id=<?php echo $category['id']; ?>" 
                                style="position:absolute;top:12px;right:12px;padding:6px 12px;background:var(--nav-accent);color:#fff;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600">
-                                View
+                                View (<?php echo count($docs); ?>)
                             </a>
                         <?php else: ?>
                             <div style="text-align:center;color:var(--muted)">
                                 <div style="font-size:48px;margin-bottom:8px">📂</div>
-                                <div style="font-size:14px">No document uploaded</div>
+                                <div style="font-size:14px">No documents</div>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -109,24 +121,18 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div style="padding:16px;flex:1;display:flex;flex-direction:column">
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                             <h3 style="margin:0;font-size:18px;font-weight:600">
-                                <?php echo htmlspecialchars($category['title']); ?>
+                                <?php echo htmlspecialchars($category['name']); ?>
                             </h3>
-                            <?php if ($category['type'] === 'folder'): ?>
-                                <span style="padding:2px 8px;background:#dbeafe;color:#1e40af;border-radius:4px;font-size:11px;font-weight:600">
-                                    📁 FOLDER
-                                </span>
-                            <?php else: ?>
-                                <span style="padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px;font-weight:600">
-                                    📄 FILE
-                                </span>
-                            <?php endif; ?>
+                            <span style="padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px;font-weight:600">
+                                📄 Category
+                            </span>
                         </div>
 
                         <?php if ($hasDocument): ?>
                             <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
-                                Uploaded <?php echo date('M j, Y', strtotime($category['uploaded_at'])); ?>
-                                <?php if ($category['uploaded_by_name']): ?>
-                                    <br>by <?php echo htmlspecialchars($category['uploaded_by_name']); ?>
+                                Uploaded <?php echo date('M j, Y', strtotime($latestDoc['created_at'])); ?>
+                                <?php if (!empty($latestDoc['uploaded_by_name'])): ?>
+                                    <br>by <?php echo htmlspecialchars($latestDoc['uploaded_by_name']); ?>
                                 <?php endif; ?>
                             </div>
                         <?php else: ?>
@@ -138,10 +144,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <!-- Action Buttons -->
                         <div style="margin-top:auto;display:grid;gap:8px">
                             <?php if ($hasDocument): ?>
-                                <?php 
-                                $detailPage = $category['type'] === 'folder' ? 'folder-detail' : 'form-detail';
-                                ?>
-                                <a href="/?page=financial/<?php echo $detailPage; ?>&id=<?php echo $category['id']; ?>" 
+                                <a href="/?page=financial/form-detail&id=<?php echo $category['id']; ?>" 
                                    style="padding:10px;border-radius:6px;background:var(--nav-accent);color:#fff;text-align:center;text-decoration:none;font-weight:600">
                                     View Details
                                 </a>

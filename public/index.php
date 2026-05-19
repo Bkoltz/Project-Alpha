@@ -169,7 +169,7 @@ if ($page === 'logout') {
 }
 
 // Allow unauthenticated access only to explicit public pages
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook'];
+$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -328,7 +328,7 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'stripe-webhook', 'settings/link-test-connection'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -557,6 +557,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/organization/organization_add_client.php';
         exit;
     }
+    if ($page === 'organization/organization-update-notes' || $page === 'organization-update-notes') {
+        require_once __DIR__ . '/../src/controllers/organization/organization-update-notes.php';
+        exit;
+    }
     if ($page === 'organization/organization-remove-client') {
         require_once __DIR__ . '/../src/controllers/organization/organization_remove_client.php';
         exit;
@@ -581,6 +585,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
         exit;
     }
+    if ($page === 'settings/dropbox-oauth') {
+        require_once __DIR__ . '/../src/controllers/settings/dropbox_oauth.php';
+        exit;
+    }
+    if ($page === '2fa-setup-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_setup.php';
+        exit;
+    }
+    if ($page === '2fa-verify-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_verify.php';
+        exit;
+    }
     if ($page === 'receipts-handler') {
         require_once __DIR__ . '/../src/controllers/receipts_handler.php';
         exit;
@@ -593,14 +609,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/public_link_create.php';
         exit;
     }
-    if ($page === 'stripe-charge') {
-        require_once __DIR__ . '/../src/controllers/stripe/stripe_charge.php';
+    if ($page === 'public-link-revoke') {
+        require_once __DIR__ . '/../src/controllers/public_link_revoke.php';
         exit;
     }
     if ($page === 'stripe-webhook') {
+        // Route to new future-proof webhook handler
+        require_once __DIR__ . '/../src/controllers/webhook/stripe_webhooks.php';
+        exit;
+    }
+    // Legacy webhook endpoint (kept for backward compatibility)
+    if ($page === 'stripe-webhook-legacy') {
         require_once __DIR__ . '/../src/controllers/stripe/stripe_webhook.php';
         exit;
     }
+}
+
+// Stripe charge endpoint (supports both GET and POST)
+if ($page === 'stripe-charge') {
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_charge.php';
+    exit;
 }
 
 // Standalone login and reset pages use a minimal top header

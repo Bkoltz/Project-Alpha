@@ -1,5 +1,6 @@
 <?php
 // src/controllers/contract/long_term_contract_terminate.php
+// Updated: uses unified contracts table
 require_once __DIR__ . '/../../config/db.php';
 
 $id = (int)($_POST['id'] ?? 0);
@@ -11,8 +12,7 @@ if ($id <= 0) {
 try {
     $pdo->beginTransaction();
     
-    // Get contract details
-    $stmt = $pdo->prepare('SELECT * FROM long_term_contracts WHERE id=?');
+    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
     $stmt->execute([$id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -24,9 +24,8 @@ try {
         throw new Exception('Contract is already terminated');
     }
     
-    // Update contract status to completed and set end_date to today if not set
     $endDate = $contract['end_date'] ?: date('Y-m-d');
-    $update = $pdo->prepare('UPDATE long_term_contracts SET status=?, end_date=?, next_invoice_date=NULL WHERE id=?');
+    $update = $pdo->prepare('UPDATE contracts SET status=?, end_date=?, next_invoice_date=NULL WHERE id=?');
     $update->execute(['completed', $endDate, $id]);
     
     $pdo->commit();

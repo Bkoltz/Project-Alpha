@@ -1,6 +1,6 @@
 <?php
 // src/controllers/auth/two_factor_verify.php
-// Handles 2FA verification during login
+// Handles 2FA verification during login with "Remember this device" support
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -34,6 +34,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $action = $_POST['action'] ?? '';
 $code = trim($_POST['code'] ?? '');
 
+/**
+ * Create or update a trusted device token
+ */
+function set_trusted_device(PDO $pdo, int $userId, string $ip): void {
+    $token = bin2hex(random_bytes(32));
+    $deviceName = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown Device';
+    $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? '');
+    $expires = date('Y-m-d H:i:s', strtotime('+30 days'));
+    
+    try {
+        $st = $pdo->prepare('
+            DELETE FROM trusted_devices 
+            WHERE user_id = ? AND ip_address = ? AND user_agent_hash = ?
+        ');
+        $st->execute([$userId, $ip, $userAgentHash]);
+        
+        $st = $pdo->prepare('
+            INSERT INTO trusted_devices (user_id, device_token, device_name, ip_address, user_agent_hash, last_verified_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, NOW(), ?)
+        ');
+        $st->execute([$userId, $token, $deviceName, $ip, $userAgentHash, $expires]);
+        
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https');
+        setcookie('device_trust', $token, [
+            'expires' => strtotime('+30 days'),
+            'path' => '/',
+            'domain' => '',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } catch (Throwable $e) {
+        // If DB table doesn't exist yet, just set the cookie
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https');
+        setcookie('device_trust', $token, [
+            'expires' => strtotime('+30 days'),
+            'path' => '/',
+            'domain' => '',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+}
+
 try {
     // Get user's 2FA settings
     $st = $pdo->prepare('SELECT * FROM user_2fa WHERE user_id = ? AND enabled = 1');
@@ -63,6 +110,7 @@ try {
     
     if ($action === 'verify') {
         $useBackup = !empty($_POST['use_backup']);
+        $rememberDevice = !empty($_POST['remember_device']);
         $verified = false;
         
         if ($useBackup) {
@@ -96,6 +144,11 @@ try {
             session_regenerate_id(true);
             $_SESSION['user'] = $_SESSION['2fa_pending']['user_data'];
             unset($_SESSION['2fa_pending']);
+            
+            // If user checked "Remember this device", create a trusted device token
+            if ($rememberDevice) {
+                set_trusted_device($pdo, $userId, $ip);
+            }
             
             // Check if force password reset is required
             $forceReset = false;

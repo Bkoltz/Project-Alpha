@@ -1,12 +1,13 @@
 <?php
 // src/views/pages/invoice/recurring-invoices-list.php
+// Updated: uses unified contracts table instead of long_term_contracts
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 
-// Ensure the optional long_term_contracts table exists before querying
-$has_long_term_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='long_term_contracts'")->fetchColumn();
-if (!$has_long_term_table) {
-  echo '<section><h2>Recurring Billing Schedule</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">Recurring billing is not available because the database table <code>long_term_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
+// Unified contracts table replaces long_term_contracts
+$has_contracts_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='contracts'")->fetchColumn();
+if (!$has_contracts_table) {
+  echo '<section><h2>Recurring Billing Schedule</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">Recurring billing is not available because the database table <code>contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
   return;
 }
 
@@ -17,28 +18,28 @@ $project_code = trim($_GET['project_code'] ?? '');
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
-$where = [];
-$p = [];
+$where = ['ct.contract_type = ?'];
+$p = ['long_term'];
 
-if($client_id>0){$where[]='ltc.client_id=?';$p[]=$client_id;}
+if($client_id>0){$where[]='ct.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if ($status !== '' && $status !== 'all') {
-    $where[] = 'ltc.status=?';
+    $where[] = 'ct.status=?';
     $p[] = $status;
 }
-if($project_code!==''){ $where[]='ltc.project_code LIKE ?'; $p[] = $project_code.'%'; }
-if($min_price !== null){ $where[]='ltc.price_per_invoice >= ?'; $p[] = $min_price; }
-if($max_price !== null){ $where[]='ltc.price_per_invoice <= ?'; $p[] = $max_price; }
+if($project_code!==''){ $where[]='ct.project_code LIKE ?'; $p[] = $project_code.'%'; }
+if($min_price !== null){ $where[]='ct.price_per_invoice >= ?'; $p[] = $min_price; }
+if($max_price !== null){ $where[]='ct.price_per_invoice <= ?'; $p[] = $max_price; }
 
-$sql = "SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.start_date, ltc.end_date, c.name client_name, c.id AS client_id 
-        FROM long_term_contracts ltc 
-        LEFT JOIN clients c ON c.id=ltc.client_id";
+$sql = "SELECT ct.id, ct.doc_number, ct.project_code, ct.status, ct.billing_interval_count, ct.billing_interval_unit, ct.pricing_type, ct.price_per_invoice, ct.total, ct.total_invoiced, ct.next_invoice_date, ct.last_invoice_date, ct.start_date, ct.end_date, c.name client_name, c.id AS client_id 
+        FROM contracts ct 
+        LEFT JOIN clients c ON c.id=ct.client_id";
 
 if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
 }
 
-$sql .= ' ORDER BY ltc.next_invoice_date ASC, ltc.id DESC';
+$sql .= ' ORDER BY ct.next_invoice_date ASC, ct.id DESC';
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($p);
@@ -46,11 +47,6 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <section>
   <h2>Recurring Billing Schedule</h2>
-  
-  <!-- <div style="margin:16px 0;padding:12px;background:#fef3c7;border:1px solid #fbbf24;border-radius:8px">
-    <div style="font-weight:600;margin-bottom:4px;color:#92400e">Automatic Invoice Generation</div>
-    <div style="font-size:14px;color:#78350f">Invoices are automatically generated based on the billing schedule below. Active contracts will create new invoices on their next invoice date.</div>
-  </div> -->
 
   <?php
   $filterConfig = [
@@ -96,7 +92,6 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
       ]
   ];
   
-  // Render the filter using Twig template
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 
@@ -120,27 +115,26 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <td colspan="8" style="padding:20px;text-align:center;color:#6b7280">No recurring billing contracts found.</td>
           </tr>
         <?php else: ?>
-          <?php foreach ($contracts as $ltc): ?>
+          <?php foreach ($contracts as $ct): ?>
             <?php
-              $billingInterval = $ltc['billing_interval_count'] . ' ' . ucfirst($ltc['billing_interval_unit']);
-              if ($ltc['billing_interval_count'] > 1) $billingInterval .= 's';
+              $billingInterval = $ct['billing_interval_count'] . ' ' . ucfirst($ct['billing_interval_unit']);
+              if ($ct['billing_interval_count'] > 1) $billingInterval .= 's';
               
               $amountText = '';
-              if ($ltc['pricing_type'] === 'per_invoice') {
-                $amountText = '$' . number_format((float)$ltc['price_per_invoice'], 2);
+              if ($ct['pricing_type'] === 'per_invoice') {
+                $amountText = '$' . number_format((float)$ct['price_per_invoice'], 2);
               } else {
-                $amountText = '$' . number_format((float)$ltc['total'], 2) . ' total';
+                $amountText = '$' . number_format((float)$ct['total'], 2) . ' total';
               }
               
-              $isOngoing = empty($ltc['end_date']);
-              $nextDate = $ltc['next_invoice_date'] ? date('M j, Y', strtotime($ltc['next_invoice_date'])) : '—';
-              $lastDate = $ltc['last_invoice_date'] ? date('M j, Y', strtotime($ltc['last_invoice_date'])) : 'Not yet';
+              $isOngoing = empty($ct['end_date']);
+              $nextDate = $ct['next_invoice_date'] ? date('M j, Y', strtotime($ct['next_invoice_date'])) : '—';
+              $lastDate = $ct['last_invoice_date'] ? date('M j, Y', strtotime($ct['last_invoice_date'])) : 'Not yet';
               
-              // Calculate progress for fixed_total contracts
               $progressText = '—';
-              if ($ltc['pricing_type'] === 'fixed_total' && !$isOngoing) {
-                $total = (float)$ltc['total'];
-                $invoiced = (float)$ltc['total_invoiced'];
+              if ($ct['pricing_type'] === 'fixed_total' && !$isOngoing) {
+                $total = (float)$ct['total'];
+                $invoiced = (float)$ct['total_invoiced'];
                 if ($total > 0) {
                   $percent = min(100, ($invoiced / $total) * 100);
                   $progressText = number_format($percent, 1) . '%';
@@ -148,32 +142,32 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
               }
               
               $rowStyle = '';
-              if ($ltc['status'] === 'active') {
+              if ($ct['status'] === 'active') {
                 $rowStyle = 'background:#fffbeb;';
-              } elseif ($ltc['status'] === 'paused') {
+              } elseif ($ct['status'] === 'paused') {
                 $rowStyle = 'background:#fef2f2;';
-              } elseif ($ltc['status'] === 'completed') {
+              } elseif ($ct['status'] === 'completed') {
                 $rowStyle = 'background:#ecfdf5;';
               }
             ?>
             <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
               <td style="padding:10px">
-                <a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$ltc['id']; ?>" style="text-decoration:none;color:inherit;font-weight:600">
-                  LTC-<?php echo (int)($ltc['doc_number'] ?? $ltc['id']); ?>
+                <a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$ct['id']; ?>" style="text-decoration:none;color:inherit;font-weight:600">
+                  LTC-<?php echo (int)($ct['doc_number'] ?? $ct['id']); ?>
                 </a>
-                <div style="font-size:13px;color:#6b7280"><?php echo htmlspecialchars($ltc['project_code'] ?? ''); ?></div>
+                <div style="font-size:13px;color:#6b7280"><?php echo htmlspecialchars($ct['project_code'] ?? ''); ?></div>
               </td>
               <td style="padding:10px">
-                <a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$ltc['client_id']; ?>">
-                  <?php echo htmlspecialchars($ltc['client_name']); ?>
+                <a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$ct['client_id']; ?>">
+                  <?php echo htmlspecialchars($ct['client_name']); ?>
                 </a>
               </td>
-              <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($ltc['status']); ?></td>
+              <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($ct['status']); ?></td>
               <td style="padding:10px"><?php echo htmlspecialchars($billingInterval); ?></td>
               <td style="padding:10px;font-weight:600"><?php echo htmlspecialchars($amountText); ?></td>
               <td style="padding:10px"><?php echo $lastDate; ?></td>
               <td style="padding:10px">
-                <?php if ($ltc['status'] === 'active' && $ltc['next_invoice_date']): ?>
+                <?php if ($ct['status'] === 'active' && $ct['next_invoice_date']): ?>
                   <span style="font-weight:600;color:#059669"><?php echo $nextDate; ?></span>
                 <?php else: ?>
                   <span style="color:#6b7280"><?php echo $nextDate; ?></span>

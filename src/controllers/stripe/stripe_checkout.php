@@ -20,12 +20,12 @@ try {
     // Validate the token and get invoice info
     // Try to get expire_when_paid column
     try {
-        $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
+        $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
         $st->execute([$token]);
         $linkRow = $st->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         // Fallback without expire_when_paid
-        $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+        $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
         $st->execute([$token]);
         $linkRow = $st->fetch(PDO::FETCH_ASSOC);
         if ($linkRow) {
@@ -54,11 +54,11 @@ try {
         }
     }
     
-    if ($linkRow['type'] !== 'invoice') {
+    if ($linkRow['document_type'] !== 'invoice') {
         throw new Exception('Payment is only available for invoices');
     }
     
-    $invoiceId = (int)$linkRow['record_id'];
+    $invoiceId = (int)$linkRow['document_id'];
     
     // Check if Stripe is configured
     if (!StripeService::isConfigured($appConfig)) {

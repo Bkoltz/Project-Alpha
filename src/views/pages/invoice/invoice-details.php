@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
+$st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
@@ -40,6 +40,11 @@ if (!empty($inv['project_code'])) {
 }
 if ($termsText === '') { $termsText = trim((string)($inv['terms'] ?? '')); }
 if ($termsText === '' && !empty($inv['on_demand_contract_id'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+// Compute outstanding balance
+$total = (float) ($inv['total'] ?? 0);
+$paid = (float) ($inv['amount_paid'] ?? 0);
+$outstanding = max(0, $total - $paid);
+
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
 <section>
@@ -76,11 +81,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </form>
     <?php endif; ?>
     <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
-      <form method="post" action="/?page=invoice/invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;">Mark as Paid</button>
-      </form>
+      <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
+         style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;text-decoration:none;display:inline-block;margin-right:6px;">Mark as Paid</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
     <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">
@@ -626,38 +628,36 @@ function copyLink() {
 }
 
 function revokeAndCreateNew() {
-  if (!confirm('This will revoke the existing link (it will no longer work) and create a new one. Continue?')) {
+  if (!confirm('This will revoke the existing link (it will no longer work). Continue?')) {
     return;
   }
   
-  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
-  const days = document.getElementById('linkDays').value || 14;
+  // Revoke the existing link
   const formData = new FormData();
   formData.append('type', 'invoice');
   formData.append('id', '<?php echo (int)$id; ?>');
-  formData.append('days', days);
-  formData.append('expire_when_paid', expireWhenPaid ? '1' : '0');
-  formData.append('force_new', '1');
   formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
   
-  fetch('/?page=public-link-create', {
+  fetch('/?page=public-link-revoke', {
     method: 'POST',
     body: formData
   })
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      document.getElementById('generatedLink').value = data.url;
-      document.getElementById('linkStatus').textContent = '✓ New Link Created!';
+      // Reset to creation form view
+      document.getElementById('shareLinkContent').style.display = 'block';
+      document.getElementById('shareLinkResult').style.display = 'none';
+      document.getElementById('generatedLink').value = '';
+      document.getElementById('linkStatus').textContent = '✓ Link Generated!';
       document.getElementById('revokeBtn').style.display = 'none';
-      
-      if (data.expire_when_paid) {
-        document.getElementById('linkExpiry').textContent = 'Expires when invoice is paid in full';
-      } else {
-        document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
-      }
+      document.getElementById('linkExpiry').textContent = '';
+      // Reset to default days
+      document.getElementById('linkDays').value = '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>';
+      document.getElementById('expireWhenPaid').checked = false;
+      toggleDaysInput();
     } else {
-      alert('Error: ' + (data.error || 'Failed to create link'));
+      alert('Error: ' + (data.error || 'Failed to revoke link'));
     }
   })
   .catch(err => {

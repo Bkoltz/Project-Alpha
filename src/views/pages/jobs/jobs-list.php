@@ -18,7 +18,7 @@ if ($prefix !== '') {
 }
 
 // Collect distinct project codes with owning client (from any table)
-$sql = "SELECT pc.project_code, pc.client_id, c.name AS client_name, 
+$sql = "SELECT pc.project_code, pc.client_id, c.name AS client_name, p.id AS project_id, p.notes,
   (SELECT COUNT(*) FROM quotes q WHERE q.project_code=pc.project_code) AS quotes_count,
   (SELECT COUNT(*) FROM contracts co WHERE co.project_code=pc.project_code) AS contracts_count,
   (SELECT COUNT(*) FROM invoices i WHERE i.project_code=pc.project_code) AS invoices_count
@@ -26,7 +26,7 @@ FROM (
   SELECT project_code, client_id FROM quotes WHERE project_code IS NOT NULL
   UNION SELECT project_code, client_id FROM contracts WHERE project_code IS NOT NULL
   UNION SELECT project_code, client_id FROM invoices WHERE project_code IS NOT NULL
-) pc JOIN clients c ON c.id=pc.client_id";
+) pc JOIN clients c ON c.id=pc.client_id LEFT JOIN projects p ON p.client_id=pc.client_id AND p.name=pc.project_code";
 if ($where) {
   $sql .= ' WHERE ' . implode(' AND ', $where);
 }
@@ -90,9 +90,7 @@ if ($selected !== '') {
               </div>
               <div style="display:flex;gap:12px;align-items:center">
                 <?php
-                $pn = $pdo->prepare('SELECT notes FROM project_meta WHERE project_code=?');
-                $pn->execute([$p['project_code']]);
-                $notes = (string)$pn->fetchColumn();
+                $notes = isset($p['notes']) ? (string)$p['notes'] : '';
                 $preview = '';
                 if ($notes !== null && trim($notes) !== '') {
                   $oneLine = preg_replace('/\s+/', ' ', trim($notes));

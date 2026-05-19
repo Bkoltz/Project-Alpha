@@ -1,0 +1,208 @@
+-- ============================================================================
+-- Module 005: Financial Module
+-- ============================================================================
+-- Payments, payment methods, tax rates, receipts, item library, forms
+-- ============================================================================
+
+USE project_alpha;
+
+-- ============================================================================
+-- PAYMENTS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    invoice_id INT NULL,
+    contract_id INT NULL,
+    organization_id INT NULL,
+    amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
+    payment_date DATE NOT NULL,
+    reference_number VARCHAR(255) NULL,
+    notes TEXT NULL,
+    stripe_session_id VARCHAR(255) NULL,
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    auto_pay_attempt TINYINT(1) NOT NULL DEFAULT 0,
+    status ENUM('succeeded', 'failed', 'pending') NOT NULL DEFAULT 'succeeded',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_payments_client (client_id),
+    INDEX idx_payments_invoice (invoice_id),
+    INDEX idx_payments_contract (contract_id),
+    INDEX idx_payments_date (payment_date),
+    INDEX idx_payments_stripe_session (stripe_session_id),
+    INDEX idx_payments_stripe_pi (stripe_payment_intent_id),
+    CONSTRAINT fk_payments_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES documents(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES documents(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- PAYMENT METHODS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS payment_methods (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    organization_id INT NULL,
+    name VARCHAR(100) NOT NULL,
+    type ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
+    last_four VARCHAR(4) NULL,
+    exp_month INT NULL,
+    exp_year INT NULL,
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    stripe_payment_method_id VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_pm_user (user_id),
+    INDEX idx_pm_org (organization_id),
+    CONSTRAINT fk_pm_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- TAX RATES
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS tax_rates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL,
+    name VARCHAR(100) NOT NULL,
+    rate DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    county VARCHAR(100) NULL,
+    state VARCHAR(2) NULL,
+    zip_code VARCHAR(10) NULL,
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_tax_org (organization_id),
+    INDEX idx_tax_county (county),
+    INDEX idx_tax_state (state),
+    INDEX idx_tax_zip (zip_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- ITEM LIBRARY (Reusable service/product catalog)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS item_library (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    category VARCHAR(100) NULL,
+    sku VARCHAR(100) NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_item_lib_org (organization_id),
+    INDEX idx_item_lib_name (name),
+    INDEX idx_item_lib_sku (sku)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- RECEIPT STORES
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS receipt_stores (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    address TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_store_org (organization_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- RECEIPTS (Business expense receipts)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS receipts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    store_id INT NULL,
+    client_id INT NULL,
+    project_id INT NULL,
+    amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    receipt_date DATE NOT NULL,
+    description TEXT NULL,
+    file_path VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_receipt_org (organization_id),
+    INDEX idx_receipt_store (store_id),
+    INDEX idx_receipt_client (client_id),
+    INDEX idx_receipt_date (receipt_date),
+    CONSTRAINT fk_receipts_store FOREIGN KEY (store_id) REFERENCES receipt_stores(id) ON DELETE SET NULL,
+    CONSTRAINT fk_receipts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- FORM CATEGORIES
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS form_categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_form_cat_org (organization_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- FORM DOCUMENTS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS form_documents (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    category_id INT NULL,
+    client_id INT NULL,
+    project_id INT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    file_path VARCHAR(255) NULL,
+    status ENUM('draft', 'active', 'archived') NOT NULL DEFAULT 'draft',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_form_doc_org (organization_id),
+    INDEX idx_form_doc_category (category_id),
+    INDEX idx_form_doc_client (client_id),
+    CONSTRAINT fk_form_docs_category FOREIGN KEY (category_id) REFERENCES form_categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_form_docs_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- DISCOUNTS (Organization-level discount rules)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS discounts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL,
+    name VARCHAR(100) NOT NULL,
+    discount_type ENUM('percent', 'fixed') NOT NULL DEFAULT 'percent',
+    discount_value DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    start_date DATE NULL,
+    end_date DATE NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_discounts_org (organization_id),
+    INDEX idx_discounts_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- FINANCIAL RECORDS (General financial transactions)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS financial_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL,
+    client_id INT NULL,
+    project_id INT NULL,
+    record_type ENUM('income', 'expense', 'refund', 'adjustment') NOT NULL DEFAULT 'income',
+    amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    description TEXT NULL,
+    transaction_date DATE NULL,
+    payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'other') NULL,
+    reference_number VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_financial_org (organization_id),
+    INDEX idx_financial_client (client_id),
+    INDEX idx_financial_type (record_type),
+    INDEX idx_financial_date (transaction_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
