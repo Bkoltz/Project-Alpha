@@ -1,26 +1,45 @@
 <?php
-// src/controllers/client/clients_restore.php
-// Updated: restores soft-deleted clients from archive_payload
+// src/controllers/clients_restore.php
 require_once __DIR__ . '/../../config/db.php';
 
-$id = (int)($_POST['id'] ?? 0); // clients.id
+$id = (int)($_POST['id'] ?? 0); // archived_clients.id
 if ($id <= 0) {
   header('Location: /?page=client/archived-clients&error=Invalid%20request');
   exit;
 }
 
-// Fetch soft-deleted client
-$st = $pdo->prepare('SELECT * FROM clients WHERE id=? AND deleted_at IS NOT NULL');
-$st->execute([$id]);
-$client = $st->fetch(PDO::FETCH_ASSOC);
-if (!$client) {
+$ac = $pdo->prepare('SELECT * FROM archived_clients WHERE id=?');
+$ac->execute([$id]);
+$row = $ac->fetch(PDO::FETCH_ASSOC);
+if (!$row) {
   header('Location: /?page=client/archived-clients&error=Not%20found');
   exit;
 }
 
-// Restore: clear deleted_at and archive_payload
-$upd = $pdo->prepare('UPDATE clients SET deleted_at = NULL, archive_payload = NULL WHERE id = ?');
-$upd->execute([$id]);
+$pdo->beginTransaction();
+try {
+  // Attempt to restore the client row. If original client_id is free, use it; otherwise create new.
+  $origId = (int)$row['client_id'];
+  $exists = $pdo->prepare('SELECT COUNT(*) FROM clients WHERE id=?');
+  $exists->execute([$origId]);
+  $useOrig = $origId > 0 && (int)$exists->fetchColumn() === 0;
 
-header('Location: /?page=client/clients-list&restored=1');
-exit;
+  if ($useOrig) {
+    $ins = $pdo->prepare('INSERT INTO clients (id,name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $ins->execute([$origId, $row['name'], $row['email'], $row['phone'], $row['organization_id'], $row['notes'], $row['address_line1'], $row['address_line2'], $row['city'], $row['state'], $row['postal'], $row['country'], $row['created_at']]);
+  } else {
+    $ins = $pdo->prepare('INSERT INTO clients (name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+    $ins->execute([$row['name'], $row['email'], $row['phone'], $row['organization_id'], $row['notes'], $row['address_line1'], $row['address_line2'], $row['city'], $row['state'], $row['postal'], $row['country'], $row['created_at']]);
+  }
+
+  // Remove archive record (keep archived_entities for historical record)
+  $pdo->prepare('DELETE FROM archived_clients WHERE id=?')->execute([$id]);
+
+  $pdo->commit();
+  header('Location: /?page=client/clients-list&restored=1');
+  exit;
+} catch (Throwable $e) {
+  $pdo->rollBack();
+  header('Location: /?page=client/archived-clients&error=Restore%20failed');
+  exit;
+}

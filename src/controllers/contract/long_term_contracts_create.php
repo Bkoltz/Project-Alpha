@@ -1,6 +1,5 @@
 <?php
 // src/controllers/contract/long_term_contracts_create.php
-// Updated: uses unified contracts table with contract_type='long_term'
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 
@@ -29,11 +28,11 @@ if ($client_id <= 0) {
     $client_name = trim((string)($_POST['client'] ?? ''));
     if ($client_name !== '') {
         try {
-            $st = $pdo->prepare('SELECT id FROM clients WHERE name = ? AND deleted_at IS NULL LIMIT 1');
+            $st = $pdo->prepare('SELECT id FROM clients WHERE name = ? LIMIT 1');
             $st->execute([$client_name]);
             $cid = (int)$st->fetchColumn();
             if ($cid <= 0) {
-                $st = $pdo->prepare('SELECT id FROM clients WHERE name LIKE ? AND deleted_at IS NULL ORDER BY name LIMIT 1');
+                $st = $pdo->prepare('SELECT id FROM clients WHERE name LIKE ? ORDER BY name LIMIT 1');
                 $st->execute(['%'.$client_name.'%']);
                 $cid = (int)$st->fetchColumn();
             }
@@ -62,6 +61,7 @@ $items = [];
 $subtotal = 0.0;
 
 if ($pricing_type === 'fixed_total') {
+    // Use line items
     for($i=0; $i<count($desc); $i++){
         $d = trim((string)($desc[$i]??'')); 
         $q = (float)($qty[$i]??0); 
@@ -76,6 +76,7 @@ if ($pricing_type === 'fixed_total') {
         exit;
     }
 } else {
+    // Per invoice pricing - use price_per_invoice as subtotal
     if ($price_per_invoice <= 0) {
         header('Location: /?page=contract/contracts-create&error=Price%20per%20invoice%20must%20be%20greater%20than%200');
         exit;
@@ -93,6 +94,7 @@ if($discount_type === 'percent'){
 $tax = max(0, $tax_percent) * max(0, $subtotal - $discount_amount) / 100; 
 $total = max(0, $subtotal - $discount_amount + $tax);
 
+// Calculate deposit amount based on type
 $deposit_amount = 0.0;
 if($deposit_type === 'percent') { 
     $deposit_amount = max(0, min(100, $deposit_value)) * $total / 100; 
@@ -106,6 +108,7 @@ $next_invoice_date = $start_date;
 
 $pdo->beginTransaction();
 try{
+    // Get project code
     $projectCode = 'PA-'.date('Y').'-001';
     try { 
         $projectCode = project_next_code($pdo, $client_id); 
@@ -113,19 +116,17 @@ try{
         @error_log('[long_term_contracts_create] project_next_code failed: '.$e->getMessage(), 0); 
     }
 
-    // Insert into unified contracts table with contract_type='long_term'
-    $sql = 'INSERT INTO contracts (
-        client_id, project_id, project_code, contract_type, status, 
-        start_date, end_date, billing_interval_count, billing_interval_unit, 
-        pricing_type, price_per_invoice,
+    // Insert long-term contract
+    $sql = 'INSERT INTO long_term_contracts (
+        client_id, project_id, project_code, status, start_date, end_date, 
+        billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid, total_invoiced,
         next_invoice_date, invoice_count, invoices_generated, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'long_term', 'pending', 
-        $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'pending', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0, 0,
@@ -135,12 +136,12 @@ try{
     $ltc_id = (int)$pdo->lastInsertId();
 
     // Assign doc number
-    $maxDoc = (int)$pdo->query("SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type='long_term'")->fetchColumn();
-    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $ltc_id]);
+    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM long_term_contracts')->fetchColumn();
+    $pdo->prepare('UPDATE long_term_contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $ltc_id]);
 
-    // Save items if fixed_total pricing (into unified contract_items)
+    // Save items if fixed_total pricing
     if ($pricing_type === 'fixed_total' && $items) {
-        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
+        $ins = $pdo->prepare('INSERT INTO long_term_contract_items (long_term_contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
         foreach($items as $it){ 
             $ins->execute([$ltc_id, $it['d'], $it['q'], $it['p'], $it['t']]); 
         }
@@ -157,13 +158,13 @@ try{
         }
     }
 
-    // Save contract signatures (unified table)
+    // Save contract signatures
     $signatureTitles = $_POST['signature_titles'] ?? [];
     $signatureOrders = $_POST['signature_orders'] ?? [];
     $signatureRequired = $_POST['signature_required'] ?? [];
     
     if (!empty($signatureTitles)) {
-        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (long_term_contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
         foreach ($signatureTitles as $idx => $title) {
             $title = trim($title);
             if (empty($title)) continue;
@@ -175,9 +176,9 @@ try{
         }
     }
 
-    // Add to project_documents (type now just 'contract')
+    // Add to project_documents if project_id is set
     if ($project_id) {
-        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $ltc_id]);
+        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "long_term_contract", ?)')->execute([$project_id, $ltc_id]);
     }
 
     $pdo->commit();

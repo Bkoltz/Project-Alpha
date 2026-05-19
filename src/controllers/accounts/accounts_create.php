@@ -43,18 +43,10 @@ if ($stmt->fetch()) {
 // Hash password
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-// Insert user and link to organization
+// Insert user
 try {
     $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role, force_password_reset) VALUES (?, ?, ?, ?, ?)');
     $stmt->execute([$email, $username ?: null, $passwordHash, $role, $forceReset ? 1 : 0]);
-    $newUserId = (int)$pdo->lastInsertId();
-    
-    // Link to current admin's default organization
-    $defaultOrgId = $_SESSION['user']['organization_id'] ?? null;
-    if ($defaultOrgId) {
-        $uoStmt = $pdo->prepare('INSERT INTO user_organizations (user_id, organization_id, role, is_default) VALUES (?, ?, ?, ?)');
-        $uoStmt->execute([$newUserId, $defaultOrgId, $role === 'admin' ? 'admin' : 'member', 1]);
-    }
     
     header('Location: /?page=accounts&created=1');
 } catch (PDOException $e) {
