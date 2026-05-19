@@ -22,7 +22,7 @@ if ($userId <= 0) {
 }
 
 if (empty($newPassword) || strlen($newPassword) < 8) {
-    header('Location: /?page=accounts&action=edit&id=' . $userId . '&error=' . urlencode('Password must be at least 8 characters'));
+    header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Password must be at least 8 characters'));
     exit;
 }
 
@@ -34,7 +34,7 @@ try {
     $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, force_password_reset = ? WHERE id = ?');
     $stmt->execute([$passwordHash, $forceReset ? 1 : 0, $userId]);
     
-    header('Location: /?page=accounts&action=edit&id=' . $userId . '&pwd_reset=1');
+    header('Location: /?page=account-edit&id=' . $userId . '&success=pwd_reset');
 } catch (PDOException $e) {
     error_log('Failed to reset password: ' . $e->getMessage());
     header('Location: /?page=accounts&action=edit&id=' . $userId . '&error=' . urlencode('Failed to reset password'));

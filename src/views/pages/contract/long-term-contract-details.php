@@ -1,19 +1,18 @@
 <?php
-// src/views/pages/contract/long-term-contract-details.php
-// Updated: uses unified contracts table
+// src/views/pages/contract/long-term-contract-print.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$c = $pdo->prepare('SELECT c.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM contracts c JOIN clients cl ON cl.id=c.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE c.id=? AND c.contract_type="long_term"');
+$c = $pdo->prepare('SELECT ltc.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM long_term_contracts ltc JOIN clients cl ON cl.id=ltc.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE ltc.id=?');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
 
-// Get items if fixed_total pricing (from unified contract_items)
+// Get items if fixed_total pricing
 $items = [];
 if ($contract['pricing_type'] === 'fixed_total') {
-    $itemsQuery = $pdo->prepare('SELECT description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
+    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM long_term_contract_items WHERE long_term_contract_id=?');
     $itemsQuery->execute([$id]);
     $items = $itemsQuery->fetchAll();
 }
@@ -48,6 +47,7 @@ if ($contract['pricing_type'] === 'per_invoice') {
     $invoiceAmount = (float)$contract['price_per_invoice'];
 } else {
     $pricingLabel = 'Fixed Total (billed over time)';
+    // Calculate invoice amount with tax and discount
     $subtotal = (float)$contract['subtotal'];
     $discountType = $contract['discount_type'] ?? 'none';
     $discountValue = (float)($contract['discount_value'] ?? 0);
@@ -74,53 +74,11 @@ if ($depositType === 'percent') {
 
 $showDepositInfo = $depositType !== 'none' && $depositCalc > 0;
 $isOngoing = empty($contract['end_date']);
-
-// Logo setup
-$brand = $appConfig['brand_name'] ?? 'Project Alpha';
-$logoConf = trim((string)($appConfig['logo_path'] ?? ''));
-$projectRoot = realpath(__DIR__ . '/../../../../');
-$defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
-$logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
-$isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
-
-if (preg_match('/page=serve-upload/i', $logoPath)) {
-  $parsed = parse_url($logoPath);
-  if (!empty($parsed['query'])) {
-    parse_str($parsed['query'], $q);
-    if (!empty($q['file'])) {
-      $fname = basename($q['file']);
-      $bases = ['/var/www/config/uploads'];
-      foreach ($bases as $b) {
-        $candidate = @realpath(rtrim($b, '/\\') . DIRECTORY_SEPARATOR . $fname);
-        if ($candidate !== false && is_file($candidate)) { $logoPath = $candidate; $isUrl = false; break; }
-      }
-    }
-  }
-}
-
-if (!$isUrl) {
-  $root = $projectRoot ?: realpath(__DIR__ . '/../../../../');
-  if ($logoPath !== '' && ($logoPath[0] === '/' || $logoPath[0] === '\\')) {
-    if ($root) {
-      $candidate = @realpath($root . $logoPath);
-      if ($candidate) { $logoPath = $candidate; }
-    }
-  }
-}
-$canShowLogo = $isUrl || @is_file($logoPath);
-$logoSrc = $logoPath;
-if ($canShowLogo && !$isUrl) {
-  $imgContents = @file_get_contents($logoPath);
-  if ($imgContents !== false) {
-    $mime = preg_match('/\.svg$/i', $logoPath) ? 'image/svg+xml' : 'image/png';
-    $logoSrc = 'data:' . $mime . ';base64,' . base64_encode($imgContents);
-  }
-}
 ?>
 <section>
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Long-term Service Contract</div>
   <div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Recurring Billing Agreement</div>
-
+  
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
     <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
@@ -129,6 +87,49 @@ if ($canShowLogo && !$isUrl) {
   </div>
   <?php endif; ?>
 
+  <?php
+  $brand = $appConfig['brand_name'] ?? 'Project Alpha';
+  $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
+  $projectRoot = realpath(__DIR__ . '/../../../../');
+  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+  $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
+  $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
+  
+  if (preg_match('/page=serve-upload/i', $logoPath)) {
+    $parsed = parse_url($logoPath);
+    if (!empty($parsed['query'])) {
+      parse_str($parsed['query'], $q);
+      if (!empty($q['file'])) {
+        $fname = basename($q['file']);
+        $bases = ['/var/www/config/uploads'];
+        foreach ($bases as $b) {
+          $candidate = @realpath(rtrim($b, '/\\') . DIRECTORY_SEPARATOR . $fname);
+          if ($candidate !== false && is_file($candidate)) { $logoPath = $candidate; $isUrl = false; break; }
+        }
+      }
+    }
+  }
+  
+  if (!$isUrl) {
+    $root = $projectRoot ?: realpath(__DIR__ . '/../../../../');
+    if ($logoPath !== '' && ($logoPath[0] === '/' || $logoPath[0] === '\\')) {
+      if ($root) {
+        $candidate = @realpath($root . $logoPath);
+        if ($candidate) { $logoPath = $candidate; }
+      }
+    }
+  }
+  $canShowLogo = $isUrl || @is_file($logoPath);
+  $logoSrc = $logoPath;
+  if ($canShowLogo && !$isUrl) {
+    $imgContents = @file_get_contents($logoPath);
+    if ($imgContents !== false) {
+      $mime = preg_match('/\.svg$/i', $logoPath) ? 'image/svg+xml' : 'image/png';
+      $logoSrc = 'data:' . $mime . ';base64,' . base64_encode($imgContents);
+    }
+  }
+  ?>
+  
   <table style="width:100%;table-layout:fixed;margin-bottom:8px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:middle;width:70%">
@@ -180,7 +181,7 @@ if ($canShowLogo && !$isUrl) {
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div style="font-weight:600">Service Provider</div>
-        <?php
+        <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
           $fromLines = [];
@@ -210,7 +211,7 @@ if ($canShowLogo && !$isUrl) {
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
         <div style="font-weight:600">Client</div>
-        <?php
+        <?php 
           $toLines = [];
           if (!empty($contract['client_name'])) { $toLines[] = (string)$contract['client_name']; }
           if (!empty($contract['client_org'])) { $toLines[] = (string)$contract['client_org']; }

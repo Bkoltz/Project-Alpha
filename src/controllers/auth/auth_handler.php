@@ -194,18 +194,8 @@ if ($action === 'register_first') {
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $st = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?,?,?)');
         $st->execute([$emailOrUsername, $hash, 'admin']);
-        $newUserId = (int)$pdo->lastInsertId();
-        
-        // Create default organization for first admin
-        $orgStmt = $pdo->prepare('INSERT INTO organizations (name) VALUES (?)');
-        $orgStmt->execute(['Default Organization']);
-        $defaultOrgId = (int)$pdo->lastInsertId();
-        
-        // Link user to organization as owner
-        $uoStmt = $pdo->prepare('INSERT INTO user_organizations (user_id, organization_id, role, is_default) VALUES (?,?,?,?)');
-        $uoStmt->execute([$newUserId, $defaultOrgId, 'owner', 1]);
-        
         // Do not auto-login the new admin; require explicit sign-in
+        // This ensures session/cookies are established via the normal login flow.
         header('Location: /?page=login&created=1');
         exit;
     } catch (Throwable $e) {
@@ -242,9 +232,12 @@ if ($action === 'login') {
             header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
             exit;
         }
-        
-        $userId = (int)$u['id'];
-        
+        // Check if account is disabled
+        if (!empty($u['is_disabled'])) {
+            app_log('auth', 'login denied - account disabled', ['ip'=>$ip, 'uid'=>(int)$u['id']]);
+            header('Location: /?page=login&error=' . urlencode('Account disabled. Contact an administrator.'));
+            exit;
+        }
         // Check if user has 2FA enabled
         $twofa_enabled = false;
         try {
@@ -339,6 +332,7 @@ if ($action === 'login') {
             set_trusted_device($pdo, $userId, $ip);
         }
         
+        $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
         try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}
         
         // Check if force password reset is required

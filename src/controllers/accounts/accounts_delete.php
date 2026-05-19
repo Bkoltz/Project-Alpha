@@ -40,11 +40,23 @@ if ($user && $user['role'] === 'admin') {
     exit;
 }
 
-// Delete user (user_organizations will cascade due to FK)
+// Delete user (explicit cleanup to avoid surprise cascades)
 try {
+    // Remove user-specific auth data first
+    $pdo->prepare('DELETE FROM user_2fa WHERE user_id = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM login_2fa_attempts WHERE user_id = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM user_organizations WHERE user_id = ?')->execute([$userId]);
+
+    // Set creator references to NULL so business records remain intact
+    $pdo->prepare('UPDATE receipts SET uploaded_by = NULL WHERE uploaded_by = ?')->execute([$userId]);
+    $pdo->prepare('UPDATE form_documents SET uploaded_by = NULL WHERE uploaded_by = ?')->execute([$userId]);
+    $pdo->prepare('UPDATE form_categories SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
+
+    // Delete the user account
     $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
     $stmt->execute([$userId]);
-    
+
     header('Location: /?page=accounts&deleted=1');
 } catch (PDOException $e) {
     error_log('Failed to delete user: ' . $e->getMessage());

@@ -12,8 +12,15 @@ $stmt = $pdo->prepare('
         COUNT(DISTINCT fd.id) as doc_count
     FROM form_categories fc
     LEFT JOIN form_documents fd ON fc.id = fd.category_id
+<<<<<<< HEAD
     WHERE fc.organization_id = ?
     GROUP BY fc.id
+=======
+    LEFT JOIN form_documents fd2 ON fc.id = fd2.category_id
+    LEFT JOIN users u ON fd.uploaded_by = u.id
+    WHERE fc.org_id = ?
+    GROUP BY fc.id, fd.id, fd.file_path, fd.file_name, fd.mime_type, fd.uploaded_at, u.username
+>>>>>>> dev
     ORDER BY fc.created_at DESC
 ');
 $stmt->execute([$orgId]);

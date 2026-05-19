@@ -1,7 +1,11 @@
 <?php
 // src/controllers/document_reenable_handler.php
-// Updated: uses unified contracts table for all contract types
+// Re-enable (un-void) voided/cancelled documents and restore related documents
+
 require_once __DIR__ . '/../config/db.php';
+
+// CSRF is already verified by the router (index.php)
+// No need to verify again here
 
 $type = $_POST['type'] ?? '';
 $id = (int)($_POST['id'] ?? 0);
@@ -15,15 +19,18 @@ $pdo->beginTransaction();
 try {
     switch ($type) {
         case 'quote':
+            // Re-enable quote (change from rejected back to pending)
             $st = $pdo->prepare('SELECT * FROM quotes WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('Quote not found');
             
+            // Only allow re-enabling rejected quotes
             if ($doc['status'] !== 'rejected') {
                 throw new Exception('Only rejected quotes can be re-enabled');
             }
             
+            // Update status to pending and refresh document_date
             $pdo->prepare("UPDATE quotes SET status='pending', document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$id]);
             
@@ -31,21 +38,29 @@ try {
             break;
 
         case 'contract':
+            // Re-enable contract (change from cancelled/denied/void back to pending)
             $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('Contract not found');
             
+            // Only allow re-enabling cancelled/denied contracts
             if (!in_array($doc['status'], ['cancelled', 'denied', 'void'])) {
                 throw new Exception('Only cancelled/denied/void contracts can be re-enabled');
             }
             
+            // Store previous status to potentially restore related docs
+            $previousStatus = $doc['status'];
+            
+            // Update status to pending, clear voided_at, and refresh document_date
             $pdo->prepare("UPDATE contracts SET status='pending', voided_at=NULL, document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$id]);
             
+            // Re-enable related invoices that were voided when contract was voided
             $pdo->prepare("UPDATE invoices SET status='unpaid', document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE contract_id=? AND status='void'")
                 ->execute([$id]);
             
+            // Un-revoke public links for those invoices
             try {
                 $pdo->prepare('UPDATE public_links SET revoked=0, redirect=NULL WHERE type="invoice" AND record_id IN (SELECT id FROM invoices WHERE contract_id=?) AND revoked=1')
                     ->execute([$id]);
@@ -55,18 +70,22 @@ try {
             break;
 
         case 'invoice':
+            // Re-enable invoice (change from void back to unpaid)
             $st = $pdo->prepare('SELECT * FROM invoices WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('Invoice not found');
             
+            // Only allow re-enabling void invoices
             if ($doc['status'] !== 'void') {
                 throw new Exception('Only void invoices can be re-enabled');
             }
             
+            // Update status to unpaid and refresh document_date
             $pdo->prepare("UPDATE invoices SET status='unpaid', document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$id]);
             
+            // Un-revoke public links
             try {
                 $pdo->prepare('UPDATE public_links SET revoked=0, redirect=NULL WHERE type="invoice" AND record_id=? AND revoked=1')
                     ->execute([$id]);
@@ -76,32 +95,38 @@ try {
             break;
 
         case 'long_term_contract':
-            $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term" FOR UPDATE');
+            // Re-enable long-term contract
+            $st = $pdo->prepare('SELECT * FROM long_term_contracts WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('Long-term contract not found');
             
+            // Only allow re-enabling cancelled contracts
             if ($doc['status'] !== 'cancelled') {
                 throw new Exception('Only cancelled long-term contracts can be re-enabled');
             }
             
-            $pdo->prepare("UPDATE contracts SET status='draft' WHERE id=?")
+            // Update status to draft
+            $pdo->prepare("UPDATE long_term_contracts SET status='draft' WHERE id=?")
                 ->execute([$id]);
             
             $redirectPage = 'contract/long-term-contract-details';
             break;
 
         case 'on_demand_contract':
-            $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="on_demand" FOR UPDATE');
+            // Re-enable on-demand contract
+            $st = $pdo->prepare('SELECT * FROM on_demand_contracts WHERE id=? FOR UPDATE');
             $st->execute([$id]);
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('On-demand contract not found');
             
+            // Only allow re-enabling cancelled contracts
             if ($doc['status'] !== 'cancelled') {
                 throw new Exception('Only cancelled on-demand contracts can be re-enabled');
             }
             
-            $pdo->prepare("UPDATE contracts SET status='draft' WHERE id=?")
+            // Update status to draft
+            $pdo->prepare("UPDATE on_demand_contracts SET status='draft' WHERE id=?")
                 ->execute([$id]);
             
             $redirectPage = 'contract/on-demand-contract-details';

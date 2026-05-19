@@ -10,7 +10,11 @@ if (!isset($_SESSION['user'])) {
 
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
+<<<<<<< HEAD
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
+=======
+require_once __DIR__ . '/../../../utils/two_factor_auth.php';
+>>>>>>> dev
 
 use App\Utils\TwoFactorAuth;
 
@@ -55,7 +59,7 @@ try {
 ?>
 
 <style>
-  .settings-container { max-width: 700px; margin: 40px auto; padding: 20px; }
+  .settings-container { max-width: 700px; margin: 0 auto; padding: 20px; }
   .status-badge { display: inline-block; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
   .status-enabled { background: #d1fae5; color: #065f46; }
   .status-disabled { background: #fee2e2; color: #991b1b; }
@@ -77,7 +81,7 @@ try {
   .secret-code { font-family: monospace; font-size: 18px; font-weight: 600; letter-spacing: 2px; text-align: center; padding: 12px; background: #fff; border-radius: 6px; word-break: break-all; }
 </style>
 
-<main class="settings-container">
+<section class="settings-container">
   <h1>Two-Factor Authentication</h1>
   
   <?php if ($error): ?>
@@ -309,7 +313,4 @@ try {
       </div>
     </div>
   <?php endif; ?>
-</main>
-
-</body>
-</html>
+</section>
