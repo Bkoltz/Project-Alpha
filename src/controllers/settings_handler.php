@@ -347,6 +347,34 @@ if (isset($_POST['stripe_webhook_secret'])) {
     }
 }
 
+// Stripe surcharge settings
+if (isset($_POST['stripe_surcharge_type'])) {
+    $settings['stripe_surcharge_type'] = trim((string)$_POST['stripe_surcharge_type']);
+}
+if (isset($_POST['stripe_surcharge_percent'])) {
+    $settings['stripe_surcharge_percent'] = (float)$_POST['stripe_surcharge_percent'];
+}
+if (isset($_POST['stripe_surcharge_fixed'])) {
+    $settings['stripe_surcharge_fixed'] = (float)$_POST['stripe_surcharge_fixed'];
+}
+if (isset($_POST['stripe_surcharge_split_percent'])) {
+    $settings['stripe_surcharge_split_percent'] = (float)$_POST['stripe_surcharge_split_percent'];
+}
+if (isset($_POST['stripe_surcharge_message'])) {
+    $settings['stripe_surcharge_message'] = trim((string)$_POST['stripe_surcharge_message']);
+}
+
+// Domain & public access settings
+if (isset($_POST['app_host'])) {
+    $host = trim((string)$_POST['app_host']);
+    $settings['app_host'] = $host !== '' ? $host : null;
+}
+if (isset($_POST['public_links_in_email'])) {
+    $settings['public_links_in_email'] = true;
+} else {
+    $settings['public_links_in_email'] = false;
+}
+
 // Merge with existing file on target before writing to avoid overwriting unrelated fields
 $target = $settingsFile;
 $existing = [];

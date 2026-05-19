@@ -2,6 +2,30 @@
 // src/views/pages/settings/system.php
 ?>
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+  <legend style="padding:0 6px;color:var(--muted)">Domain &amp; Public Access</legend>
+  
+  <label style="display:block;margin-bottom:12px">
+    <div style="margin-bottom:4px;font-weight:500">Application Domain <span style="color:#666;font-weight:normal">(Optional)</span></div>
+    <input type="text" name="app_host" value="<?php echo htmlspecialchars($appConfig['app_host'] ?? ''); ?>" placeholder="invoices.example.com" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <div style="font-size:0.85em;color:#666;margin-top:4px">If set, public links and emails will use this domain. Must be a valid domain that points to this server.</div>
+  </label>
+  
+  <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:8px">
+    <input type="checkbox" name="public_links_in_email" value="1" <?php echo !empty($appConfig['public_links_in_email']) ? 'checked' : ''; ?> style="margin-top:3px;width:18px;height:18px">
+    <div>
+      <div style="font-weight:500">Include public payment links in emails</div>
+      <div style="font-size:0.85em;color:#666">When enabled, invoice emails will include a secure link for clients to view and pay online. Only works when a valid domain is configured above.</div>
+    </div>
+  </label>
+  
+  <?php if (empty($appConfig['app_host'])): ?>
+  <div style="margin-top:12px;padding:12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;font-size:13px;color:#92400e">
+    <strong>⚠️ Domain Required:</strong> Public links are disabled until you configure a domain. Set up a domain pointing to this server, then enter it above.
+  </div>
+  <?php endif; ?>
+</fieldset>
+
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
   <legend style="padding:0 6px;color:var(--muted)">Brand</legend>
   <label>
     <div>Brand Name</div>

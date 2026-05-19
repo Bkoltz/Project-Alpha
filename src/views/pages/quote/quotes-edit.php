@@ -66,9 +66,7 @@
 
     <?php
     // Determine document type and render custom fields
-    $documentType = 'regular';
-    if (!empty($quote['is_long_term'])) $documentType = 'long_term';
-    elseif (!empty($quote['is_on_demand'])) $documentType = 'on_demand';
+    $documentType = $quote['quote_type'] ?? 'regular';
 
     // Get existing custom field values
     $existingCustomFields = !empty($quote['custom_fields']) ? json_decode($quote['custom_fields'], true) : [];

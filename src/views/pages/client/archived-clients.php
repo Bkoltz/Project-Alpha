@@ -1,5 +1,6 @@
 <?php
-// src/views/pages/archived-clients.php
+// src/views/pages/client/archived-clients.php
+// Updated: reads from clients with deleted_at IS NOT NULL instead of archived_clients table
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
@@ -8,31 +9,29 @@ if (!in_array($per, [50, 100], true)) $per = 50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 $q = trim($_GET['q'] ?? '');
-$params=[]; $where='';
-if ($q !== '') { $where = 'WHERE ac.name LIKE ?'; $params[] = '%'.$q.'%'; }
+$params=[]; $where='deleted_at IS NOT NULL';
+if ($q !== '') { $where .= ' AND name LIKE ?'; $params[] = '%'.$q.'%'; }
 
-$stc = $pdo->prepare('SELECT COUNT(*) FROM archived_clients ac '.($where));
+$stc = $pdo->prepare('SELECT COUNT(*) FROM clients WHERE ' . $where);
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = "SELECT ac.id, ac.client_id, ac.name, ac.email, ac.phone, org.name AS organization, ac.archived_at FROM archived_clients ac LEFT JOIN organizations org ON ac.organization_id = org.id ".($where)." ORDER BY ac.archived_at DESC LIMIT $per OFFSET $offset";
-$params = [];
-$where = '';
-
-if ($q !== '') {
-  $where = 'WHERE name LIKE ?';
-  $params[] = '%' . $q . '%';
-}
-
-$stc = $pdo->prepare('SELECT COUNT(*) FROM archived_clients ' . ($where));
-$stc->execute($params);
-$total = (int)$stc->fetchColumn();
-
-$sql = "SELECT id, client_id, name, email, phone, organization_id, archived_at FROM archived_clients " . ($where) . " ORDER BY archived_at DESC LIMIT $per OFFSET $offset";
+$sql = "SELECT id, name, email, phone, organization_id, deleted_at AS archived_at FROM clients WHERE {$where} ORDER BY deleted_at DESC LIMIT {$per} OFFSET {$offset}";
 
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch organization names in batch
+$orgIds = array_filter(array_column($rows, 'organization_id'));
+$orgMap = [];
+if ($orgIds) {
+    $orgStmt = $pdo->prepare('SELECT id, name FROM organizations WHERE id IN (' . implode(',', array_map('intval', $orgIds)) . ')');
+    $orgStmt->execute();
+    foreach ($orgStmt->fetchAll(PDO::FETCH_ASSOC) as $org) {
+        $orgMap[$org['id']] = $org['name'];
+    }
+}
 ?>
 <section>
   <h2>Archived Clients</h2>
@@ -60,11 +59,11 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
       <tbody>
         <?php foreach ($rows as $r): ?>
           <tr style="border-top:1px solid #f3f4f6">
-            <td style="padding:10px">#<?php echo (int)$r['client_id']; ?></td>
+            <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['name']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['email'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['phone'] ?? ''); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['organization'] ?? ''); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($orgMap[$r['organization_id'] ?? 0] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['archived_at']); ?></td>
           </tr>
           <tr>

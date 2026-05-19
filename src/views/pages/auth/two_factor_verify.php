@@ -8,8 +8,8 @@ if (!isset($_SESSION['2fa_pending'])) {
     exit;
 }
 
-require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $csrf = csrf_sf_token('2fa_verify');
 $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
@@ -55,6 +55,11 @@ $showBackup = isset($_GET['backup']);
           autofocus
         >
       </label>
+
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" name="remember_device" id="remember_device" value="1" style="width:18px;height:18px;cursor:pointer">
+        <label for="remember_device" style="margin:0;font-size:14px;cursor:pointer;color:var(--muted)">Remember this device for 30 days</label>
+      </div>
 
       <div style="display:flex;gap:8px;flex-direction:column">
         <button type="submit" style="padding:12px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">

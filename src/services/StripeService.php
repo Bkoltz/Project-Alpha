@@ -151,7 +151,75 @@ class StripeService {
     }
     
     /**
-     * Create a Stripe Checkout Session for one-time payment
+     * Create a Stripe Checkout Session with surcharge line items
+     * @param float $amount Base invoice amount
+     * @param float $surchargeAmount Surcharge to add (0 if none)
+     * @param string $currency Currency code (e.g. 'usd')
+     * @param string $description Description for the payment
+     * @param string $successUrl URL to redirect after successful payment
+     * @param string $cancelUrl URL to redirect if payment is cancelled
+     * @param array $metadata Optional metadata to attach to the session
+     * @param string|null $customerId Optional Stripe customer ID for saved cards
+     * @return array Checkout session data including 'url' for redirect
+     */
+    public function createCheckoutSessionWithSurcharge($amount, $surchargeAmount, $currency, $description, $successUrl, $cancelUrl, $metadata = [], $customerId = null) {
+        try {
+            $lineItems = [
+                [
+                    'price_data' => [
+                        'currency' => strtolower($currency ?? 'usd'),
+                        'unit_amount' => (int)round($amount * 100), // Convert to cents
+                        'product_data' => [
+                            'name' => $description
+                        ]
+                    ],
+                    'quantity' => 1
+                ]
+            ];
+            
+            // Add surcharge as separate line item if applicable
+            if ($surchargeAmount > 0) {
+                $lineItems[] = [
+                    'price_data' => [
+                        'currency' => strtolower($currency ?? 'usd'),
+                        'unit_amount' => (int)round($surchargeAmount * 100),
+                        'product_data' => [
+                            'name' => 'Credit Card Processing Fee'
+                        ]
+                    ],
+                    'quantity' => 1
+                ];
+            }
+            
+            $sessionData = [
+                'payment_method_types' => ['card'],
+                'mode' => 'payment',
+                'success_url' => $successUrl,
+                'cancel_url' => $cancelUrl,
+                'line_items' => $lineItems
+            ];
+            
+            if (!empty($metadata)) {
+                $sessionData['metadata'] = $metadata;
+                $sessionData['payment_intent_data']['metadata'] = $metadata;
+            }
+            
+            if ($customerId) {
+                $sessionData['customer'] = $customerId;
+            }
+            
+            $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData);
+            
+            return $session;
+            
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error creating checkout session: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Create a Stripe Checkout Session for one-time payment (legacy, no surcharge)
      * @param float $amount Amount to charge
      * @param string $currency Currency code (e.g. 'usd')
      * @param string $description Description for the payment
@@ -183,6 +251,8 @@ class StripeService {
             
             if (!empty($metadata)) {
                 $sessionData['metadata'] = $metadata;
+                // Also copy metadata to the PaymentIntent so webhooks have access to it
+                $sessionData['payment_intent_data']['metadata'] = $metadata;
             }
             
             $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData);

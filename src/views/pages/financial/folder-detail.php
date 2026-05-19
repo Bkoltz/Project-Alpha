@@ -14,7 +14,7 @@ if (!$folderId) {
 // Fetch folder details
 $stmt = $pdo->prepare('
     SELECT * FROM form_categories 
-    WHERE id = ? AND org_id = ? AND type = "folder"
+    WHERE id = ? AND organization_id = ? AND type = "folder"
 ');
 $stmt->execute([$folderId, $orgId]);
 $folder = $stmt->fetch(PDO::FETCH_ASSOC);

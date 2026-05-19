@@ -1,16 +1,9 @@
 <?php
 // src/views/pages/invoice/on-demand-invoices-list.php
-// Dedicated view for ALL on-demand invoices (ODI prefix)
+// Updated: uses unified contracts table, drops on_demand_contracts join
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/twig.php';
-
-// Ensure the optional on_demand_contracts table exists before querying
-$has_on_demand_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='on_demand_contracts'")->fetchColumn();
-if (!$has_on_demand_table) {
-  echo '<section><h2>On-Demand Invoices</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">On-demand invoices are not available because the database table <code>on_demand_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
-  return;
-}
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
@@ -19,10 +12,10 @@ $project_code = trim($_GET['project_code'] ?? '');
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
-$where=['i.on_demand_contract_id IS NOT NULL'];$p=[];
+$where=[];$p=[];
 if($client_id>0){$where[]='i.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
-if($status!==''){ $where[]='i.status=?'; $p[] = $status; }
+elseif($client_name!==''){ $where[]='cl.name LIKE ?'; $p[]='%'.$client_name.'%'; }
+if($status!==''){ $where[]='i.status=?';$p[] = $status; }
 if($project_code!==''){ $where[]='i.project_code LIKE ?'; $p[] = $project_code.'%'; }
 if($min_price !== null){ $where[]='i.total >= ?'; $p[] = $min_price; }
 if($max_price !== null){ $where[]='i.total <= ?'; $p[] = $max_price; }
@@ -32,12 +25,12 @@ if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM invoices i LEFT JOIN clients c ON c.id=i.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
+$sqlCount = 'SELECT COUNT(*) FROM invoices i LEFT JOIN clients cl ON cl.id=i.client_id LEFT JOIN contracts c ON c.id=i.contract_id WHERE c.contract_type="on_demand"'.($where?' AND '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.on_demand_contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id";
-if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
-$sql.=" ORDER BY i.created_at DESC LIMIT $per OFFSET $offset";
+$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.contract_id, i.created_at, cl.name client, cl.id AS client_id, c.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients cl ON cl.id=i.client_id LEFT JOIN contracts c ON c.id=i.contract_id WHERE c.contract_type='on_demand'";
+if ($where) { $sql .= ' AND '.implode(' AND ',$where); }
+$sql .= " ORDER BY i.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 ?>
 <section>
@@ -90,7 +83,6 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
       ]
   ];
   
-  // Render the filter using Twig template
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 

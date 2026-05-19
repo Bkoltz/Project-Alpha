@@ -4,17 +4,18 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/cron_logger.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
 
 // Check if cron is enabled in settings
 if (empty($appConfig['cron_enabled'])) {
-    @error_log("$logPrefix Cron is disabled in settings. Skipping invoice generation.");
+    cron_log($jobName, 'Cron is disabled in settings. Skipping invoice generation.', [], 'info');
     exit(0);
 }
 
-@error_log("$logPrefix Starting invoice generation run at " . date('Y-m-d H:i:s'));
+cron_log_start($jobName);
 
 try {
     // Find all active long-term contracts that need invoicing
@@ -350,7 +351,7 @@ try {
         $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status) VALUES (?, NOW(), "success") ON DUPLICATE KEY UPDATE last_run = NOW(), status = "success", error_message = NULL')
             ->execute([$jobName]);
     } catch (Throwable $e) {
-        @error_log("$logPrefix Failed to update cron_job_runs: " . $e->getMessage());
+        cron_log_error($jobName, 'Failed to update cron_job_runs: ' . $e->getMessage());
     }
     
     // Update last run timestamp in settings (legacy support)
@@ -365,8 +366,10 @@ try {
         @file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
     
+    cron_log_end($jobName, ['invoices_generated' => $invoicesGenerated]);
+    
 } catch (Throwable $e) {
-    @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_log_error($jobName, 'Fatal error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
     exit(1);
 }
 

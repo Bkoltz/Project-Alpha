@@ -12,6 +12,8 @@ services:
       MYSQL_ROOT_PASSWORD: rootpass
       ADMIN_PASSWORD: admin123
       # APP_AUTH_DISABLED: true
+      # APP_HOST: your-domain.com
+      # SECURITY_HEADERS: true
     depends_on:
       - db
     healthcheck:
@@ -56,7 +58,7 @@ services:
       MYSQL_PASSWORD: apppassword
     volumes:
       - db_data:/var/lib/mysql
-      - ./database/migrations:/docker-entrypoint-initdb.d
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test:
         - CMD-SHELL

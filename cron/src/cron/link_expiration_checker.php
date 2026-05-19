@@ -2,6 +2,9 @@
 // src/cron/link_expiration_checker.php
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/cron_logger.php';
+
+$jobName = 'link_expiration_checker';
 
 /**
  * Link Expiration Checker Cron Job
@@ -15,7 +18,7 @@ require_once __DIR__ . '/../config/db.php';
  */
 
 try {
-    $logPrefix = '[LinkExpirationChecker]';
+    cron_log_start($jobName);
     
     // Check if link expiration checker is enabled
     $stmt = $pdo->prepare("SELECT config_value FROM app_config WHERE config_key = 'link_expiration_checker'");
@@ -135,10 +138,11 @@ try {
     echo "{$logPrefix} Link expiration check completed successfully.\n";
     
 } catch (Throwable $e) {
-    echo "{$logPrefix} ERROR: " . $e->getMessage() . "\n";
-    error_log("{$logPrefix} Error: " . $e->getMessage());
+    cron_log_error($jobName, 'Error: ' . $e->getMessage());
     exit(1);
 }
+
+cron_log_end($jobName);
 
 /**
  * Helper function to get entity name

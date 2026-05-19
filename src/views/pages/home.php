@@ -5,9 +5,9 @@ try {
   $pending_quotes = (int)$pdo->query("SELECT COUNT(*) FROM quotes WHERE status='pending'")->fetchColumn();
   $active_contracts = (int)$pdo->query("SELECT COUNT(*) FROM contracts WHERE status IN ('draft','active')")->fetchColumn();
   $unpaid_invoices = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial')")->fetchColumn();
-  $income_30 = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='succeeded' AND created_at >= NOW() - INTERVAL 30 DAY")->fetchColumn();
+  $income_30 = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at >= NOW() - INTERVAL 30 DAY")->fetchColumn();
   $clients_recent = $pdo->query("SELECT id,name,created_at FROM clients ORDER BY created_at DESC LIMIT 5")->fetchAll();
-  $payments_recent = $pdo->query("SELECT p.id, p.amount, p.created_at, i.id AS invoice_id FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.status='succeeded' ORDER BY p.created_at DESC LIMIT 5")->fetchAll();
+  $payments_recent = $pdo->query("SELECT p.id, p.amount, p.created_at, i.id AS invoice_id FROM payments p JOIN invoices i ON i.id=p.invoice_id ORDER BY p.created_at DESC LIMIT 5")->fetchAll();
 } catch (PDOException $e) {
   // Database tables don't exist yet - show setup message
   $db_error = true;

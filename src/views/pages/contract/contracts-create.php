@@ -307,5 +307,6 @@ $csrf = csrf_sf_token('contracts-create');
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Contract</button>
     </div>
   </form>
+
+  <script src="js/contracts-create-logic.js" defer></script>
 </section>
-<script src="js/contracts-create-logic.js"></script>

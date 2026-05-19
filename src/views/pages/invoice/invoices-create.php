@@ -88,6 +88,6 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Invoice</button>
     </div>
   </form>
-</section>
 
-<script src="js/invoices-create-logic.js" defer></script>
+  <script src="js/invoices-create-logic.js" defer></script>
+</section>

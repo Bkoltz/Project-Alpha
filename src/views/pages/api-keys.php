@@ -11,6 +11,12 @@ $keys = $pdo->query("SELECT id, name, key_prefix, scopes, allowed_ips, created_a
 $flash = $_SESSION['flash_api_key'] ?? null; unset($_SESSION['flash_api_key']);
 ?>
 <section>
+  <!-- Beta Banner -->
+  <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
+    <span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;text-transform:uppercase">Beta</span>
+    <span style="color:#92400e;font-size:14px">API keys management is currently in beta. Features may change or be removed.</span>
+  </div>
+
   <h2>API Keys</h2>
   <?php if ($flash): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfeff;color:#164e63;border:1px solid #a5f3fc">
