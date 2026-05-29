@@ -107,7 +107,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         } catch (Throwable $e) { /* column exists */ }
         
         // Record the payment
-        $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, stripe_session_id, status) VALUES (?, ?, ?, ?, ?)')
+        $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, CURDATE())')
             ->execute([$invoiceId, $amountTotal, 'stripe', $session['id'], 'succeeded']);
         
         // Update invoice status
@@ -130,7 +130,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         if ($status === 'paid') {
             try {
                 $redir = '/?page=public-redirect&type=invoice&reason=paid';
-                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE type = "invoice" AND record_id = ? AND revoked = 0');
+                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0');
                 $rv->execute([$redir, $invoiceId]);
             } catch (Throwable $e) { /* ignore */ }
             
@@ -190,7 +190,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         
         // Record the payment
         $isAutoPay = !empty($metadata['auto_pay']) ? 1 : 0;
-        $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, stripe_payment_intent_id, auto_pay_attempt, status) VALUES (?, ?, ?, ?, ?, ?)')
+        $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())')
             ->execute([$invoiceId, $amountTotal, 'stripe', $piId, $isAutoPay, 'succeeded']);
         
         // Update invoice status
@@ -214,7 +214,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         if ($status === 'paid') {
             try {
                 $redir = '/?page=public-redirect&type=invoice&reason=paid';
-                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE type = "invoice" AND record_id = ? AND revoked = 0');
+                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0');
                 $rv->execute([$redir, $invoiceId]);
             } catch (Throwable $e) { /* ignore */ }
             

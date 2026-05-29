@@ -123,7 +123,7 @@ try {
                 i.created_at,
                 i.due_date,
                 COALESCE(SUM(CASE WHEN p.status = 'succeeded' THEN p.amount ELSE 0 END), 0) as amount_paid,
-                GROUP_CONCAT(DISTINCT p.method SEPARATOR ', ') as payment_methods
+                GROUP_CONCAT(DISTINCT p.payment_method SEPARATOR ', ') as payment_methods
             FROM invoices i
             LEFT JOIN clients c ON i.client_id = c.id
             LEFT JOIN payments p ON i.id = p.invoice_id

@@ -62,7 +62,7 @@ try {
             
             // Un-revoke public links for those invoices
             try {
-                $pdo->prepare('UPDATE public_links SET revoked=0, redirect=NULL WHERE type="invoice" AND record_id IN (SELECT id FROM invoices WHERE contract_id=?) AND revoked=1')
+                $pdo->prepare('UPDATE public_links SET revoked=0, redirect=NULL WHERE document_type="invoice" AND document_id IN (SELECT id FROM invoices WHERE contract_id=?) AND revoked=1')
                     ->execute([$id]);
             } catch (Throwable $_e) { /* ignore */ }
             
@@ -87,7 +87,7 @@ try {
             
             // Un-revoke public links
             try {
-                $pdo->prepare('UPDATE public_links SET revoked=0, redirect=NULL WHERE type="invoice" AND record_id=? AND revoked=1')
+                $pdo->prepare('UPDATE public_links SET revoked=0, redirect=NULL WHERE document_type="invoice" AND document_id=? AND revoked=1')
                     ->execute([$id]);
             } catch (Throwable $_e) { /* ignore */ }
             
@@ -96,7 +96,7 @@ try {
 
         case 'long_term_contract':
             // Re-enable long-term contract
-            $st = $pdo->prepare('SELECT * FROM long_term_contracts WHERE id=? FOR UPDATE');
+            $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term" FOR UPDATE');
             $st->execute([$id]);
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('Long-term contract not found');
@@ -107,7 +107,7 @@ try {
             }
             
             // Update status to draft
-            $pdo->prepare("UPDATE long_term_contracts SET status='draft' WHERE id=?")
+            $pdo->prepare("UPDATE contracts SET status='draft' WHERE id=? AND contract_type='long_term'")
                 ->execute([$id]);
             
             $redirectPage = 'contract/long-term-contract-details';
@@ -115,7 +115,7 @@ try {
 
         case 'on_demand_contract':
             // Re-enable on-demand contract
-            $st = $pdo->prepare('SELECT * FROM on_demand_contracts WHERE id=? FOR UPDATE');
+            $st = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="on_demand" FOR UPDATE');
             $st->execute([$id]);
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('On-demand contract not found');
@@ -126,7 +126,7 @@ try {
             }
             
             // Update status to draft
-            $pdo->prepare("UPDATE on_demand_contracts SET status='draft' WHERE id=?")
+            $pdo->prepare("UPDATE contracts SET status='draft' WHERE id=? AND contract_type='on_demand'")
                 ->execute([$id]);
             
             $redirectPage = 'contract/on-demand-contract-details';

@@ -8,8 +8,8 @@ $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
 
-$where=['i.on_demand_contract_id IS NOT NULL'];$p=[];
-if($contract_id>0){$where[]='i.on_demand_contract_id=?';$p[]=$contract_id;}
+$where=['i.invoice_type="on_demand"'];$p=[];
+if($contract_id>0){$where[]='i.contract_id=?';$p[]=$contract_id;}
 if($client_id>0){$where[]='i.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='i.status=?'; $p[] = $status; }
@@ -22,7 +22,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM invoices i LEFT JOIN clients c ON c.id=i.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.on_demand_contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id";
+$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN contracts odc ON odc.id=i.contract_id AND odc.contract_type='on_demand'";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY i.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -33,7 +33,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
   <?php if ($contract_id > 0): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">
       Showing invoices for contract ODC-<?php 
-        $stmt = $pdo->prepare('SELECT doc_number FROM on_demand_contracts WHERE id=?');
+        $stmt = $pdo->prepare('SELECT doc_number FROM contracts WHERE id=? AND contract_type="on_demand"');
         $stmt->execute([$contract_id]);
         echo (int)$stmt->fetchColumn();
       ?>

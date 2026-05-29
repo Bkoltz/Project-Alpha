@@ -39,7 +39,7 @@ if (!empty($inv['project_code'])) {
   }
 }
 if ($termsText === '') { $termsText = trim((string)($inv['terms'] ?? '')); }
-if ($termsText === '' && !empty($inv['on_demand_contract_id'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+if ($termsText === '' && ($inv['invoice_type'] ?? '') === 'on_demand') { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
 // Compute outstanding balance
 $total = (float) ($inv['total'] ?? 0);
 $paid = (float) ($inv['amount_paid'] ?? 0);

@@ -8,20 +8,19 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
-require_once __DIR__ . '/../utils/cron_logger.php';
 
-$jobName = 'send_invoice_reminders';
+$logPrefix = '[send_invoice_reminders]';
 
 // Check if either reminder is enabled
 $due7Enabled = !empty($appConfig['invoice_auto_send_due_7days']);
 $overdueEnabled = !empty($appConfig['invoice_auto_send_overdue_weekly']);
 
 if (!$due7Enabled && !$overdueEnabled) {
-    cron_log($jobName, 'Both reminder types are disabled. Exiting.', [], 'info');
+    @error_log("$logPrefix Both reminder types are disabled. Exiting.");
     exit(0);
 }
 
-cron_log_start($jobName);
+@error_log("$logPrefix Starting invoice reminder run at " . date('Y-m-d H:i:s'));
 
 try {
     // Build SMTP config from app settings
@@ -54,7 +53,7 @@ try {
         $token = bin2hex(random_bytes(16));
         $days = (int)($appConfig['documents_valid_days'] ?? 14);
         $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
-        $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
+        $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
         $ins->execute(['invoice', $invoiceId, $token, $expiresAt]);
         return $token;
     };
@@ -189,23 +188,19 @@ try {
                     $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'overdue_weekly']);
                     $remindersSent++;
-                    cron_log($jobName, "Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}", [], 'info');
+                    @error_log("$logPrefix Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}");
                 } else {
                     $errors++;
-                    cron_log_error($jobName, "Failed to send overdue-weekly reminder for invoice {$iid}: {$err}");
+                    @error_log("$logPrefix Failed to send overdue-weekly reminder for invoice {$iid}: {$err}");
                 }
             } catch (Throwable $e) {
                 $errors++;
-                cron_log_error($jobName, "Exception sending overdue-weekly reminder for invoice {$iid}: " . $e->getMessage());
+                @error_log("$logPrefix Exception sending overdue-weekly reminder for invoice {$iid}: " . $e->getMessage());
             }
         }
     }
 
-    cron_log_end($jobName, [
-        'reminders_sent' => $remindersSent,
-        'reminders_skipped' => $remindersSkipped,
-        'errors' => $errors
-    ]);
+    @error_log("$logPrefix Completed: {$remindersSent} reminders sent, {$remindersSkipped} skipped, {$errors} errors");
 
     // Update last run timestamp in settings
     $configMount = '/var/www/config';
@@ -220,7 +215,7 @@ try {
     }
 
 } catch (Throwable $e) {
-    cron_log_error($jobName, 'Fatal error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+    @error_log("$logPrefix Fatal error: " . $e->getMessage());
     exit(1);
 }
 

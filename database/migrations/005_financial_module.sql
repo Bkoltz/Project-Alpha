@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS payments (
     contract_id INT NULL,
     organization_id INT NULL,
     amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    surcharge_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
     payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
     payment_date DATE NOT NULL,
     reference_number VARCHAR(255) NULL,
@@ -33,8 +34,43 @@ CREATE TABLE IF NOT EXISTS payments (
     INDEX idx_payments_stripe_session (stripe_session_id),
     INDEX idx_payments_stripe_pi (stripe_payment_intent_id),
     CONSTRAINT fk_payments_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
-    CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES documents(id) ON DELETE SET NULL,
-    CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES documents(id) ON DELETE SET NULL
+    CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- AUTO PAY LOG
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS auto_pay_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NULL,
+    invoice_id INT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    status ENUM('succeeded','failed','pending') NOT NULL DEFAULT 'pending',
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    error_message TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_auto_pay_client (client_id),
+    INDEX idx_auto_pay_invoice (invoice_id),
+    INDEX idx_auto_pay_status (status),
+    CONSTRAINT fk_auto_pay_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_auto_pay_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- PAYMENT INTENTS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS payment_intents (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    invoice_id INT NOT NULL,
+    stripe_payment_intent_id VARCHAR(255) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_payment_intent_stripe (stripe_payment_intent_id),
+    INDEX idx_payment_intents_invoice (invoice_id),
+    CONSTRAINT fk_payment_intents_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -45,16 +81,20 @@ CREATE TABLE IF NOT EXISTS payment_methods (
     user_id INT NULL,
     organization_id INT NULL,
     name VARCHAR(100) NOT NULL,
+    provider VARCHAR(100) NULL,
     type ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
+    config JSON NULL,
     last_four VARCHAR(4) NULL,
     exp_month INT NULL,
     exp_year INT NULL,
     is_default TINYINT(1) NOT NULL DEFAULT 0,
     stripe_payment_method_id VARCHAR(255) NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_pm_user (user_id),
     INDEX idx_pm_org (organization_id),
+    INDEX idx_pm_provider (provider),
     CONSTRAINT fk_pm_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

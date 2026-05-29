@@ -49,7 +49,7 @@ try {
         $invoiceTotal = (float)$linkedInvoice['total'];
         
         // Record deposit as a succeeded payment so it counts toward amount paid
-        $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, status, reference_number) VALUES (?, ?, ?, ?, ?)')
+        $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, status, reference_number, payment_date) VALUES (?, ?, ?, ?, ?, CURDATE())')
             ->execute([$linkedInvoiceId, $depositCalc, 'deposit', 'succeeded', 'Contract Deposit']);
         
         // Calculate total paid on this invoice

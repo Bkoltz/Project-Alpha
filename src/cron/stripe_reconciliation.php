@@ -99,7 +99,7 @@ try {
             // Record the payment
             $pdo->beginTransaction();
             
-            $pdo->prepare('INSERT INTO payments (invoice_id, amount, method, stripe_payment_intent_id, status, created_at) VALUES (?, ?, ?, ?, ?, NOW())')
+            $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_payment_intent_id, status, payment_date, created_at) VALUES (?, ?, ?, ?, ?, CURDATE(), NOW())')
                 ->execute([$invoiceId, $amount, 'stripe', $piId, 'succeeded']);
             
             // Update invoice status
@@ -123,7 +123,7 @@ try {
             if ($newStatus === 'paid') {
                 // Revoke public links
                 try {
-                    $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE type = "invoice" AND record_id = ? AND revoked = 0')
+                    $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0')
                         ->execute(['/?page=public-redirect&type=invoice&reason=paid', $invoiceId]);
                 } catch (Throwable $e) { /* ignore */ }
                 

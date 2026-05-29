@@ -12,7 +12,7 @@ try {
     $pdo->beginTransaction();
     
     // Get contract details
-    $stmt = $pdo->prepare('SELECT * FROM long_term_contracts WHERE id=?');
+    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
     $stmt->execute([$id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -26,7 +26,7 @@ try {
     
     // Update contract status to completed and set end_date to today if not set
     $endDate = $contract['end_date'] ?: date('Y-m-d');
-    $update = $pdo->prepare('UPDATE long_term_contracts SET status=?, end_date=?, next_invoice_date=NULL WHERE id=?');
+    $update = $pdo->prepare('UPDATE contracts SET status=?, end_date=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"');
     $update->execute(['completed', $endDate, $id]);
     
     $pdo->commit();

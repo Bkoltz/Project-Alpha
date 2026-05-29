@@ -45,7 +45,7 @@ try {
     }
     
     // Load and validate public link
-    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     
@@ -61,11 +61,11 @@ try {
         throw new Exception('Link has expired');
     }
     
-    if ($row['type'] !== 'contract') {
+    if ($row['document_type'] !== 'contract') {
         throw new Exception('Invalid link type');
     }
     
-    $contractId = (int)$row['record_id'];
+    $contractId = (int)$row['document_id'];
     
     // Get contract and client info
     $contractStmt = $pdo->prepare('SELECT co.*, c.name as client_name, c.id as client_id FROM contracts co JOIN clients c ON c.id = co.client_id WHERE co.id = ?');

@@ -40,7 +40,7 @@ if (strtolower($method) === 'check' && empty($check_number)) {
 
 $pdo->beginTransaction();
 try {
-  $pdo->prepare('INSERT INTO payments (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, status) VALUES (?,?,?,?,?,?,?,?)')
+  $pdo->prepare('INSERT INTO payments (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, status, payment_date) VALUES (?,?,?,?,?,?,?,?,CURDATE())')
       ->execute([$client_id, $invoice_id, $contract_id, $organization_id, $amount, $method ?: null, $check_number ?: null, 'succeeded']);
 
   // Update invoice status by total paid
@@ -62,7 +62,7 @@ try {
   if (!in_array($status, ['unpaid','partial'], true)) {
     try {
       $redir = '/?page=public-redirect&type=invoice&reason=' . rawurlencode($status);
-      $rv = $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE type="invoice" AND record_id=? AND revoked=0');
+      $rv = $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE document_type="invoice" AND document_id=? AND revoked=0');
       $rv->execute([$redir, $invoice_id]);
     } catch (Throwable $_e) { /* ignore revocation failures */ }
   }

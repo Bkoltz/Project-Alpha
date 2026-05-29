@@ -12,7 +12,7 @@ try {
     $pdo->beginTransaction();
     
     // Get contract details
-    $stmt = $pdo->prepare('SELECT * FROM long_term_contracts WHERE id=?');
+    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
     $stmt->execute([$id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -25,7 +25,7 @@ try {
     }
     
     // Update contract status to paused
-    $update = $pdo->prepare('UPDATE long_term_contracts SET status=? WHERE id=?');
+    $update = $pdo->prepare('UPDATE contracts SET status=? WHERE id=? AND contract_type="long_term"');
     $update->execute(['paused', $id]);
     
     $pdo->commit();

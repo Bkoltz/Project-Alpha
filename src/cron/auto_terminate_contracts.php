@@ -21,8 +21,9 @@ $terminatedCount = 0;
 
 try {
     // Auto-terminate long-term contracts past their end date
-    $query = 'SELECT id, doc_number, end_date FROM long_term_contracts 
+    $query = 'SELECT id, doc_number, end_date FROM contracts
               WHERE status IN (?, ?) 
+              AND contract_type = "long_term"
               AND end_date IS NOT NULL 
               AND end_date < ?';
     
@@ -32,7 +33,7 @@ try {
     
     foreach ($ltContracts as $contract) {
         try {
-            $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL WHERE id=?')
+            $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"')
                 ->execute(['completed', $contract['id']]);
             $terminatedCount++;
             @error_log("$logPrefix Auto-terminated long-term contract LTC-{$contract['doc_number']} (end date: {$contract['end_date']})");
@@ -42,8 +43,9 @@ try {
     }
     
     // Auto-terminate on-demand contracts past their end date
-    $query = 'SELECT id, doc_number, end_date FROM on_demand_contracts 
+    $query = 'SELECT id, doc_number, end_date FROM contracts
               WHERE status IN (?, ?) 
+              AND contract_type = "on_demand"
               AND end_date IS NOT NULL 
               AND end_date < ?';
     
@@ -53,7 +55,7 @@ try {
     
     foreach ($odContracts as $contract) {
         try {
-            $pdo->prepare('UPDATE on_demand_contracts SET status=? WHERE id=?')
+            $pdo->prepare('UPDATE contracts SET status=? WHERE id=? AND contract_type="on_demand"')
                 ->execute(['completed', $contract['id']]);
             $terminatedCount++;
             @error_log("$logPrefix Auto-terminated on-demand contract ODC-{$contract['doc_number']} (end date: {$contract['end_date']})");

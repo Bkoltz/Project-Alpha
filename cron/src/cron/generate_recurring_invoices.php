@@ -4,25 +4,25 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../utils/cron_logger.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
 
 // Check if cron is enabled in settings
 if (empty($appConfig['cron_enabled'])) {
-    cron_log($jobName, 'Cron is disabled in settings. Skipping invoice generation.', [], 'info');
+    @error_log("$logPrefix Cron is disabled in settings. Skipping invoice generation.");
     exit(0);
 }
 
-cron_log_start($jobName);
+@error_log("$logPrefix Starting invoice generation run at " . date('Y-m-d H:i:s'));
 
 try {
     // Find all active long-term contracts that need invoicing
     $today = date('Y-m-d');
     
-    $query = 'SELECT * FROM long_term_contracts 
+    $query = 'SELECT * FROM contracts
               WHERE status = ? 
+              AND contract_type = "long_term"
               AND next_invoice_date IS NOT NULL 
               AND next_invoice_date <= ?
               ORDER BY next_invoice_date ASC';
@@ -62,7 +62,7 @@ try {
                 $subtotal = $amountToInvoice;
                 
                 // Load items for display (will be shown proportionally)
-                $itemsQuery = $pdo->prepare('SELECT * FROM long_term_contract_items WHERE long_term_contract_id=?');
+                $itemsQuery = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
                 $itemsQuery->execute([$contractId]);
                 $items = $itemsQuery->fetchAll(PDO::FETCH_ASSOC);
             }
@@ -96,7 +96,7 @@ try {
                 
                 if ($invoicesGenerated >= $invoiceCount) {
                     // All invoices generated - mark as completed
-                    $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL WHERE id=?')
+                    $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"')
                         ->execute(['completed', $contractId]);
                     @error_log("$logPrefix Contract LTC-{$contract['doc_number']} all {$invoiceCount} invoices generated, marked as completed");
                     $pdo->commit();
@@ -109,10 +109,10 @@ try {
             
             $insertInvoice = $pdo->prepare('
                 INSERT INTO invoices (
-                    long_term_contract_id, client_id, project_id, project_code, 
+                    contract_id, client_id, project_id, project_code, invoice_type,
                     discount_type, discount_value, tax_percent, 
                     subtotal, total, status, due_date, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
             
             $insertInvoice->execute([
@@ -120,6 +120,7 @@ try {
                 $clientId,
                 $projectId,
                 $projectCode,
+                'long_term',
                 $discountType,
                 $discountValue,
                 $contract['tax_percent'],
@@ -132,7 +133,7 @@ try {
             $invoiceId = (int)$pdo->lastInsertId();
             
             // Assign doc number
-            $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+            $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "long_term"')->fetchColumn();
             $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $invoiceId]);
             
             // Add invoice items
@@ -193,10 +194,10 @@ try {
             $newInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0) + 1;
             
             if ($shouldContinue) {
-                $pdo->prepare('UPDATE long_term_contracts SET next_invoice_date=?, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=?')
+                $pdo->prepare('UPDATE contracts SET next_invoice_date=?, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=? AND contract_type="long_term"')
                     ->execute([$nextDate, $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
             } else {
-                $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=?')
+                $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=? AND contract_type="long_term"')
                     ->execute(['completed', $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
             }
             
@@ -245,7 +246,7 @@ try {
             $token = bin2hex(random_bytes(16));
             $days = (int)($appConfig['documents_valid_days'] ?? 14);
             $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0,$days) . ' days'));
-            $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
+            $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
             $ins->execute(['invoice', $invoiceId, $token, $expiresAt]);
             return $token;
         };
@@ -351,7 +352,7 @@ try {
         $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status) VALUES (?, NOW(), "success") ON DUPLICATE KEY UPDATE last_run = NOW(), status = "success", error_message = NULL')
             ->execute([$jobName]);
     } catch (Throwable $e) {
-        cron_log_error($jobName, 'Failed to update cron_job_runs: ' . $e->getMessage());
+        @error_log("$logPrefix Failed to update cron_job_runs: " . $e->getMessage());
     }
     
     // Update last run timestamp in settings (legacy support)
@@ -366,10 +367,8 @@ try {
         @file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
     
-    cron_log_end($jobName, ['invoices_generated' => $invoicesGenerated]);
-    
 } catch (Throwable $e) {
-    cron_log_error($jobName, 'Fatal error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+    @error_log("$logPrefix Fatal error: " . $e->getMessage());
     exit(1);
 }
 

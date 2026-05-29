@@ -14,7 +14,7 @@ try {
   // Revoke public links for affected invoices
   try {
     $redir = '/?page=public-redirect&type=invoice&reason=denied';
-    $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE type="invoice" AND record_id IN (SELECT id FROM invoices WHERE contract_id=? ) AND revoked=0')->execute([$redir, $id]);
+    $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE document_type="invoice" AND document_id IN (SELECT id FROM invoices WHERE contract_id=? ) AND revoked=0')->execute([$redir, $id]);
   } catch (Throwable $_e) { /* ignore */ }
   $pdo->commit();
 } catch (Throwable $e) {

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$c = $pdo->prepare('SELECT ltc.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM long_term_contracts ltc JOIN clients cl ON cl.id=ltc.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE ltc.id=?');
+$c = $pdo->prepare('SELECT ltc.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts ltc JOIN clients cl ON cl.id=ltc.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE ltc.id=? AND ltc.contract_type="long_term"');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
@@ -12,7 +12,7 @@ if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
 // Get items if fixed_total pricing
 $items = [];
 if ($contract['pricing_type'] === 'fixed_total') {
-    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM long_term_contract_items WHERE long_term_contract_id=?');
+    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
     $itemsQuery->execute([$id]);
     $items = $itemsQuery->fetchAll();
 }
@@ -219,7 +219,7 @@ $isOngoing = empty($contract['end_date']);
           if (!empty($contract['address_line2'])) { $toLines[] = (string)$contract['address_line2']; }
           $c = trim((string)($contract['city'] ?? ''));
           $s = trim((string)($contract['state'] ?? ''));
-          $p = trim((string)($contract['postal'] ?? ''));
+          $p = trim((string)($contract['postal_code'] ?? ''));
           $parts2 = [];
           if ($c !== '') { $parts2[] = $c; }
           if ($s !== '') { $parts2[] = $s; }

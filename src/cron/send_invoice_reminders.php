@@ -53,7 +53,7 @@ try {
         $token = bin2hex(random_bytes(16));
         $days = (int)($appConfig['documents_valid_days'] ?? 14);
         $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
-        $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
+        $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
         $ins->execute(['invoice', $invoiceId, $token, $expiresAt]);
         return $token;
     };

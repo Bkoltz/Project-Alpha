@@ -18,8 +18,9 @@ $fulfillment_date = !empty($fulfillment_date) ? $fulfillment_date : null;
 
 // Document type from radio buttons
 $doc_type = $_POST['doc_type'] ?? 'regular';
-$is_long_term = ($doc_type === 'long_term') ? 1 : 0;
-$is_on_demand = ($doc_type === 'on_demand') ? 1 : 0;
+$quote_type = in_array($doc_type, ['regular', 'long_term', 'on_demand'], true) ? $doc_type : 'regular';
+$is_long_term = ($quote_type === 'long_term') ? 1 : 0;
+$is_on_demand = ($quote_type === 'on_demand') ? 1 : 0;
 
 // Only process long-term/on-demand fields if not regular
 if ($is_long_term || $is_on_demand) {
@@ -31,6 +32,7 @@ if ($is_long_term || $is_on_demand) {
     // Check if this is an on-demand quote
     if ($pricing_type === 'on_demand') {
         $is_on_demand = 1;
+        $quote_type = 'on_demand';
         $billing_interval_count = 1;
         $billing_interval_unit = 'month';
     } else {
@@ -109,8 +111,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, is_long_term, is_on_demand, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, null, null, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $is_long_term, $is_on_demand, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, date("Y-m-d H:i:s")]);
+    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, null, null, 'pending', $quote_type, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, date("Y-m-d H:i:s")]);
     $quote_id = (int)$pdo->lastInsertId();
 
     // Assign a new Project ID for this quote
@@ -125,13 +127,9 @@ try {
     }
 
     // Assign per-type doc_number for quotes (separate sequences for regular, long-term, and on-demand)
-    if ($is_on_demand) {
-        $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_on_demand=1')->fetchColumn();
-    } elseif ($is_long_term) {
-        $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_long_term=1 AND is_on_demand=0')->fetchColumn();
-    } else {
-        $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_long_term=0 AND is_on_demand=0')->fetchColumn();
-    }
+    $qMaxStmt = $pdo->prepare('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE quote_type = ?');
+    $qMaxStmt->execute([$quote_type]);
+    $qMax = (int)$qMaxStmt->fetchColumn();
 
     $stmt = $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?');
     $stmt->execute([$qMax + 1, $quote_id]);

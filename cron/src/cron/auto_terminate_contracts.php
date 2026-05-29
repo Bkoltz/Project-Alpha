@@ -5,25 +5,25 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../utils/cron_logger.php';
 
-$jobName = 'auto_terminate_contracts';
+$logPrefix = '[auto_terminate_contracts]';
 
 // Check if cron is enabled in settings
 if (empty($appConfig['cron_enabled'])) {
-    cron_log($jobName, 'Cron is disabled in settings. Skipping auto-termination.', [], 'info');
+    @error_log("$logPrefix Cron is disabled in settings. Skipping auto-termination.");
     exit(0);
 }
 
-cron_log_start($jobName);
+@error_log("$logPrefix Starting auto-termination check at " . date('Y-m-d H:i:s'));
 
 $today = date('Y-m-d');
 $terminatedCount = 0;
 
 try {
     // Auto-terminate long-term contracts past their end date
-    $query = 'SELECT id, doc_number, end_date FROM long_term_contracts 
+    $query = 'SELECT id, doc_number, end_date FROM contracts
               WHERE status IN (?, ?) 
+              AND contract_type = "long_term"
               AND end_date IS NOT NULL 
               AND end_date < ?';
     
@@ -33,18 +33,19 @@ try {
     
     foreach ($ltContracts as $contract) {
         try {
-            $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL WHERE id=?')
+            $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"')
                 ->execute(['completed', $contract['id']]);
             $terminatedCount++;
-            cron_log($jobName, "Auto-terminated long-term contract LTC-{$contract['doc_number']} (end date: {$contract['end_date']})", [], 'info');
+            @error_log("$logPrefix Auto-terminated long-term contract LTC-{$contract['doc_number']} (end date: {$contract['end_date']})");
         } catch (Throwable $e) {
-            cron_log_error($jobName, "Error terminating LTC-{$contract['doc_number']}: " . $e->getMessage());
+            @error_log("$logPrefix Error terminating LTC-{$contract['doc_number']}: " . $e->getMessage());
         }
     }
     
     // Auto-terminate on-demand contracts past their end date
-    $query = 'SELECT id, doc_number, end_date FROM on_demand_contracts 
+    $query = 'SELECT id, doc_number, end_date FROM contracts
               WHERE status IN (?, ?) 
+              AND contract_type = "on_demand"
               AND end_date IS NOT NULL 
               AND end_date < ?';
     
@@ -54,16 +55,16 @@ try {
     
     foreach ($odContracts as $contract) {
         try {
-            $pdo->prepare('UPDATE on_demand_contracts SET status=? WHERE id=?')
+            $pdo->prepare('UPDATE contracts SET status=? WHERE id=? AND contract_type="on_demand"')
                 ->execute(['completed', $contract['id']]);
             $terminatedCount++;
-            cron_log($jobName, "Auto-terminated on-demand contract ODC-{$contract['doc_number']} (end date: {$contract['end_date']})", [], 'info');
+            @error_log("$logPrefix Auto-terminated on-demand contract ODC-{$contract['doc_number']} (end date: {$contract['end_date']})");
         } catch (Throwable $e) {
-            cron_log_error($jobName, "Error terminating ODC-{$contract['doc_number']}: " . $e->getMessage());
+            @error_log("$logPrefix Error terminating ODC-{$contract['doc_number']}: " . $e->getMessage());
         }
     }
     
-    cron_log_end($jobName, ['terminated_count' => $terminatedCount]);
+    @error_log("$logPrefix Completed: $terminatedCount contracts auto-terminated");
     
     // Update last run timestamp in settings
     $configMount = '/var/www/config';
@@ -78,7 +79,7 @@ try {
     }
     
 } catch (Throwable $e) {
-    cron_log_error($jobName, 'Fatal error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+    @error_log("$logPrefix Fatal error: " . $e->getMessage());
     exit(1);
 }
 

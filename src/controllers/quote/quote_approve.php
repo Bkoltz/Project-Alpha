@@ -35,73 +35,45 @@ try {
   // Get project_id from quote for inheritance
   $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
 
-  // Check if this is an on-demand quote
-  if (!empty($quote['is_on_demand'])) {
-    // Create on-demand contract with project_id
-    $pdo->prepare('INSERT INTO on_demand_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_amount, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  $quoteType = $quote['quote_type'] ?? 'regular';
+  if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
+    $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         ->execute([
-          $id, 
+          $id,
           (int)$quote['client_id'],
           $projectId,
-          'pending', 
-          $quote['discount_type'], 
-          $quote['discount_value'], 
-          $quote['tax_percent'], 
-          $quote['subtotal'], 
-          $quote['price_per_invoice'],
+          'pending',
+          $quoteType,
+          $quote['discount_type'],
+          $quote['discount_value'],
+          $quote['tax_percent'],
+          $quote['subtotal'],
+          $quote['total'],
+          $projectCode,
           $quote['deposit_type'] ?? 'none',
           $quote['deposit_amount'] ?? 0,
           0,
-          $projectCode, 
-          $quote['start_date'],
-          $quote['end_date'],
-          $quote['billing_interval_count'],
-          $quote['billing_interval_unit'],
-          $quote['scope']
+          $quote['start_date'] ?? null,
+          $quote['end_date'] ?? null,
+          $quote['billing_interval_count'] ?? 1,
+          $quote['billing_interval_unit'] ?? 'month',
+          $quote['pricing_type'] ?? ($quoteType === 'on_demand' ? 'on_demand' : null),
+          $quote['price_per_invoice'] ?? null,
+          $quote['scope'] ?? null
         ]);
     $contract_id = (int)$pdo->lastInsertId();
 
-    // Assign doc_number to on-demand contract
-    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM on_demand_contracts')->fetchColumn();
-    $pdo->prepare('UPDATE on_demand_contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
-  } elseif (!empty($quote['is_long_term'])) {
-    // Create long-term contract with project_id
-    $pdo->prepare('INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-          $id, 
-          (int)$quote['client_id'],
-          $projectId,
-          'pending', 
-          $quote['discount_type'], 
-          $quote['discount_value'], 
-          $quote['tax_percent'], 
-          $quote['subtotal'], 
-          $quote['total'], 
-          $projectCode, 
-          $quote['deposit_type'] ?? 'none', 
-          $quote['deposit_amount'] ?? 0, 
-          0,
-          $quote['start_date'],
-          $quote['end_date'],
-          $quote['billing_interval_count'],
-          $quote['billing_interval_unit'],
-          $quote['pricing_type'],
-          $quote['price_per_invoice'],
-          $quote['scope']
-        ]);
-    $contract_id = (int)$pdo->lastInsertId();
-
-    // Long-term contract items from quote items (only if we have items)
     if (!empty($qitems)) {
       $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
       foreach ($qitems as $it) {
-        $ci->execute([$contract_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+        $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
       }
     }
 
-    // Assign doc_number to long-term contract
-    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM long_term_contracts')->fetchColumn();
-    $pdo->prepare('UPDATE long_term_contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+    $cMaxStmt = $pdo->prepare('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = ?');
+    $cMaxStmt->execute([$quoteType]);
+    $cMax = (int)$cMaxStmt->fetchColumn();
+    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
   } else {
     // Create regular contract in pending state with project_id (transfer deposit info from quote)
     $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -125,9 +97,9 @@ try {
     }
 
     // Assign per-type doc_numbers: do not change quote doc_number here
-    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts')->fetchColumn();
+    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "regular"')->fetchColumn();
     $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
-    $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+    $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "regular"')->fetchColumn();
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
   }
 

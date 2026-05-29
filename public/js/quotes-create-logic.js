@@ -48,8 +48,11 @@ function recalc() {
     var docType = document.querySelector('input[name="doc_type"]:checked').value;
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
-    var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="lt_pricing_type"]:checked')?.value : null;
-    var isOngoing = (isLongTerm || isOnDemand) && document.getElementById('endDateType').value === 'ongoing';
+    // Get pricing type from radio (long-term) or hidden field (on-demand)
+    var pricingTypeEl = document.querySelector('input[name="lt_pricing_type"]:checked') || document.querySelector('input[name="lt_pricing_type"][type="hidden"]');
+    var pricingType = (isLongTerm || isOnDemand) ? (pricingTypeEl?.value || null) : null;
+    var endDateEl = document.getElementById('endDateType');
+    var isOngoing = (isLongTerm || isOnDemand) && endDateEl && endDateEl.value === 'ongoing';
 
     var subtotal = 0;
 
@@ -150,22 +153,24 @@ function toggleDocTypeFields() {
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
 
-    document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
+    // Show/hide the appropriate settings section
+    document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
+    var onDemandSection = document.getElementById('onDemandFields');
+    if (onDemandSection) onDemandSection.style.display = isOnDemand ? 'block' : 'none';
 
-    if (isLongTerm || isOnDemand) {
-        // Set start date to today when first enabling LT or On-Demand
+    if (isLongTerm) {
+        // Set start date to today when first enabling long-term
         var startField = document.getElementById('startDateField');
-        if (!startField.value) {
+        if (startField && !startField.value) {
             startField.value = new Date().toISOString().split('T')[0];
         }
-
-        // Hide/show billing intervals based on type
-        document.getElementById('billingIntervalFields').style.display = isOnDemand ? 'none' : 'grid';
-
-        // Trigger toggleEndDate to set initial state correctly
         toggleEndDate();
         togglePricingFields();
         updateDiscountWarning();
+    } else if (isOnDemand) {
+        // On-demand: always show items for line-item billing
+        document.getElementById('items').parentElement.style.display = 'block';
+        document.getElementById('invoiceAmountRow').style.display = 'none';
     } else {
         // Regular quote
         document.getElementById('items').parentElement.style.display = 'block';
