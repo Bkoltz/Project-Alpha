@@ -78,7 +78,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         if ($status === 'paid') {
             try {
                 $redir = '/?page=public-redirect&type=invoice&reason=paid';
-                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE type = "invoice" AND record_id = ? AND revoked = 0');
+                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0');
                 $rv->execute([$redir, $invoiceId]);
             } catch (Throwable $e) { /* ignore */ }
             

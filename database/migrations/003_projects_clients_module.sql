@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS clients (
     postal_code VARCHAR(20) NULL,
     country VARCHAR(100) NULL DEFAULT 'US',
     organization_id INT NULL,
+    config JSON NULL,
+    stripe_customer_id VARCHAR(255) NULL,
+    stripe_payment_method_id VARCHAR(255) NULL,
+    auto_pay_enabled TINYINT(1) NOT NULL DEFAULT 0,
     archived TINYINT(1) NOT NULL DEFAULT 0,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     archive_payload JSON NULL,
@@ -31,6 +35,7 @@ CREATE TABLE IF NOT EXISTS clients (
     INDEX idx_clients_name (name),
     INDEX idx_clients_email (email),
     INDEX idx_clients_org (organization_id),
+    INDEX idx_clients_stripe_customer (stripe_customer_id),
     INDEX idx_clients_archived (archived),
     INDEX idx_clients_deleted (deleted_at),
     CONSTRAINT fk_clients_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
@@ -65,17 +70,24 @@ CREATE TABLE IF NOT EXISTS projects (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
--- PROJECT METADATA (Key-Value store for extensibility)
+-- PROJECT METADATA
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS project_meta (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    project_id INT NOT NULL,
-    meta_key VARCHAR(100) NOT NULL,
+    project_id INT NULL,
+    project_code VARCHAR(64) NULL,
+    client_id INT NULL,
+    meta_key VARCHAR(100) NULL,
     meta_value TEXT NULL,
+    notes TEXT NULL,
+    terms TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_project_meta (project_id, meta_key),
-    CONSTRAINT fk_project_meta_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    UNIQUE KEY uq_project_meta_key (project_id, meta_key),
+    UNIQUE KEY uq_project_meta_code (project_code),
+    INDEX idx_project_meta_client (client_id),
+    CONSTRAINT fk_project_meta_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_meta_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -130,4 +142,26 @@ CREATE TABLE IF NOT EXISTS entity_links (
     INDEX idx_link_expired (is_expired),
     INDEX idx_link_expiration (expiration_date),
     INDEX idx_link_ignore (ignore_auto_generation)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- LINK RESOLVER LINKS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS link (
+    link_id INT AUTO_INCREMENT PRIMARY KEY,
+    entity_type ENUM('client', 'organization', 'project') NOT NULL,
+    entity_id INT NOT NULL,
+    title VARCHAR(255) NULL,
+    url VARCHAR(500) NOT NULL,
+    type ENUM('manual', 'auto_dropbox', 'auto_gdrive', 'auto_s3') NOT NULL DEFAULT 'manual',
+    expiration_date DATE NULL,
+    is_expired TINYINT(1) NOT NULL DEFAULT 0,
+    ignore_auto_generation TINYINT(1) NOT NULL DEFAULT 0,
+    last_verified TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_link_entity (entity_type, entity_id),
+    INDEX idx_link_type (type),
+    INDEX idx_link_expired (is_expired),
+    INDEX idx_link_expiration (expiration_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

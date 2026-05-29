@@ -14,18 +14,18 @@ if (!$categoryId) {
 // Fetch category and document details
 $stmt = $pdo->prepare('
     SELECT 
-        fc.*,
+        fc.id,
+        fc.organization_id,
+        fc.name as title,
+        fc.description,
+        fc.created_at,
         fd.id as doc_id,
         fd.file_path,
-        fd.file_name,
-        fd.file_size,
-        fd.mime_type,
-        fd.uploaded_at,
-        u.username as uploaded_by_name
+        fd.name as file_name,
+        fd.created_at as uploaded_at
     FROM form_categories fc
     LEFT JOIN form_documents fd ON fc.id = fd.category_id
-    LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fc.id = ? AND fc.org_id = ?
+    WHERE fc.id = ? AND fc.organization_id = ?
 ');
 $stmt->execute([$categoryId, $orgId]);
 $category = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -117,26 +117,13 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                         </div>
 
-                        <?php if ($category['file_size']): ?>
-                        <div>
-                            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">File Size</div>
-                            <div style="font-weight:600">
-                                <?php echo number_format($category['file_size'] / 1024 / 1024, 2); ?> MB
-                            </div>
-                        </div>
-                        <?php endif; ?>
 
-                        <div>
-                            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
-                            <div style="font-weight:600">
-                                <?php echo date('F j, Y', strtotime($category['uploaded_at'])); ?>
-                            </div>
-                            <?php if ($category['uploaded_by_name']): ?>
-                                <div style="font-size:13px;color:var(--muted);margin-top:2px">
-                                    by <?php echo htmlspecialchars($category['uploaded_by_name']); ?>
-                                </div>
-                            <?php endif; ?>
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
+                        <div style="font-weight:600">
+                            <?php echo $category['uploaded_at'] ? date('F j, Y', strtotime($category['uploaded_at'])) : 'N/A'; ?>
                         </div>
+                    </div>
                     </div>
                 </div>
 

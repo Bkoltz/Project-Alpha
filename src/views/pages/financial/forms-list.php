@@ -8,20 +8,22 @@ $orgId = 1; // Should come from session/user context
 // Fetch all form categories with their documents and counts
 $stmt = $pdo->prepare('
     SELECT 
-        fc.*,
+        fc.id,
+        fc.organization_id,
+        fc.name as title,
+        fc.description,
+        fc.created_at,
+        "file" as type,
         fd.id as doc_id,
         fd.file_path,
-        fd.file_name,
-        fd.mime_type,
-        fd.uploaded_at,
-        u.username as uploaded_by_name,
+        fd.name as file_name,
+        fd.created_at as uploaded_at,
         COUNT(DISTINCT fd2.id) as doc_count
     FROM form_categories fc
     LEFT JOIN form_documents fd ON fc.id = fd.category_id
     LEFT JOIN form_documents fd2 ON fc.id = fd2.category_id
-    LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fc.org_id = ?
-    GROUP BY fc.id, fd.id, fd.file_path, fd.file_name, fd.mime_type, fd.uploaded_at, u.username
+    WHERE fc.organization_id = ?
+    GROUP BY fc.id, fc.organization_id, fc.name, fc.description, fc.created_at, fd.id, fd.file_path, fd.name, fd.created_at
     ORDER BY fc.created_at DESC
 ');
 $stmt->execute([$orgId]);
@@ -125,9 +127,6 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php if ($hasDocument): ?>
                             <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
                                 Uploaded <?php echo date('M j, Y', strtotime($category['uploaded_at'])); ?>
-                                <?php if ($category['uploaded_by_name']): ?>
-                                    <br>by <?php echo htmlspecialchars($category['uploaded_by_name']); ?>
-                                <?php endif; ?>
                             </div>
                         <?php else: ?>
                             <div style="font-size:13px;color:var(--muted);margin-bottom:12px">

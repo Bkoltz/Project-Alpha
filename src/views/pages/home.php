@@ -29,7 +29,7 @@ try {
 <?php if (isset($db_error) && $db_error): ?>
   <div style="margin:24px 0;padding:16px;border-radius:10px;background:#fef3c7;border:2px solid #f59e0b;color:#92400e">
     <h3 style="margin:0 0 8px">⚠️ Database Not Initialized</h3>
-    <p style="margin:0">The database tables haven't been created yet. Please run the migration script located at <code>database/migrations/000_all.sql</code> to initialize your database.</p>
+    <p style="margin:0">The database tables haven't been created yet. Please initialize the database with <code>database/init.sql</code> or run the active module files in <code>database/migrations</code>.</p>
   </div>
 <?php endif; ?>
 

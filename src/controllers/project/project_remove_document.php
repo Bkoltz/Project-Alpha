@@ -15,7 +15,7 @@ $row->execute([$id]);
 $d = $row->fetch(PDO::FETCH_ASSOC);
 if ($d) {
 	$pdo->prepare('DELETE FROM project_documents WHERE id=?')->execute([$id]);
-	$map = ['quote'=>'quotes', 'contract'=>'contracts', 'invoice'=>'invoices', 'recurring_invoice'=>'recurring_invoices', 'long_term_contract'=>'long_term_contracts'];
+	$map = ['quote'=>'quotes', 'contract'=>'contracts', 'invoice'=>'invoices', 'recurring_invoice'=>'recurring_invoices', 'long_term_contract'=>'contracts', 'on_demand_contract'=>'contracts'];
 	$table = $map[$d['document_type']] ?? null;
 	if ($table) {
 		$pdo->prepare("UPDATE {$table} SET project_id=NULL WHERE id=? AND project_id=?")->execute([$d['document_id'], $d['project_id']]);

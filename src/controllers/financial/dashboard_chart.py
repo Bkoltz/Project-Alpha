@@ -19,19 +19,17 @@ def get_income_data():
     end_date = datetime.now()
     start_date = end_date - timedelta(days=30*months_to_show)
 
-    conn = mysql.connect("your_database.db")
     cursor = conn.cursor()
 
     query = """
-        SELECT strftime('%Y-%m', invoiceDate) as month, SUM(total) as income
-        FROM documents
-        WHERE status = 'paid' AND invoiceDate BETWEEN ? AND ?
-        GROUP BY strftime('%Y-%m', invoiceDate)
+        SELECT DATE_FORMAT(document_date, '%Y-%m') as month, SUM(total) as income
+        FROM invoices
+        WHERE status = 'paid' AND document_date BETWEEN %s AND %s
+        GROUP BY DATE_FORMAT(document_date, '%Y-%m')
         ORDER BY month ASC
     """
     cursor.execute(query, (start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")))
     rows = cursor.fetchall()
-    conn.close()
 
     # Format for frontend
     return [{"month": r[0], "income": r[1]} for r in rows]

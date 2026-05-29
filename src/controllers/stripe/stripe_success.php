@@ -19,15 +19,15 @@ if ($token === '' || $sessionId === '') {
 
 try {
     // Validate token
-    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $linkRow = $st->fetch(PDO::FETCH_ASSOC);
     
-    if (!$linkRow || $linkRow['type'] !== 'invoice') {
+    if (!$linkRow || $linkRow['document_type'] !== 'invoice') {
         throw new Exception('Invalid payment link');
     }
     
-    $invoiceId = (int)$linkRow['record_id'];
+    $invoiceId = (int)$linkRow['document_id'];
     
     // Get invoice details
     $invSt = $pdo->prepare('SELECT * FROM invoices WHERE id = ?');

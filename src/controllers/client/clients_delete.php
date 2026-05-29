@@ -24,7 +24,7 @@ try {
   $insC->execute([
     $client['id'], $client['name'], $client['email'] ?? null, $client['phone'] ?? null, $client['organization_id'] ?? null,
     $client['notes'] ?? null, $client['address_line1'] ?? null, $client['address_line2'] ?? null, $client['city'] ?? null,
-    $client['state'] ?? null, $client['postal'] ?? null, $client['country'] ?? null, $client['created_at'] ?? null
+    $client['state'] ?? null, $client['postal_code'] ?? null, $client['country'] ?? null, $client['created_at'] ?? null
   ]);
 
   // Helper to archive a set

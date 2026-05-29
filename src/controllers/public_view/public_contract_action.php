@@ -19,13 +19,13 @@ try {
   if ($token === '') { throw new Exception('notoken'); }
 
   // Validate public link
-  $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+  $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
   $st->execute([$token]);
   $row = $st->fetch(PDO::FETCH_ASSOC);
   if (!$row) { throw new Exception('notfound'); }
   if ((int)$row['revoked'] === 1 || strtotime((string)$row['expires_at']) < time()) { throw new Exception('expired'); }
-  if ($row['type'] !== 'contract') { throw new Exception('badtype'); }
-  $cid = (int)$row['record_id'];
+  if ($row['document_type'] !== 'contract') { throw new Exception('badtype'); }
+  $cid = (int)$row['document_id'];
 
   // Validate file
   if (empty($_FILES['signed_pdf']) || !is_uploaded_file($_FILES['signed_pdf']['tmp_name'])) {

@@ -4,8 +4,19 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 
-// Simple debug log to help diagnose if this endpoint is being hit
-@error_log('[contracts_create] POST received', 0);
+// Route to appropriate handler based on document type
+$doc_type = $_POST['doc_type'] ?? 'regular';
+if ($doc_type === 'long_term') {
+    require __DIR__ . '/long_term_contracts_create.php';
+    exit;
+}
+if ($doc_type === 'on_demand') {
+    require __DIR__ . '/on_demand_contracts_create.php';
+    exit;
+}
+
+// Regular contract creation continues below
+@error_log('[contracts_create] POST received - regular contract', 0);
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;

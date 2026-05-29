@@ -34,8 +34,11 @@ function recalcCo() {
     var docType = document.querySelector('input[name="doc_type"]:checked').value;
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
-    var pricingType = (isLongTerm || isOnDemand) ? document.querySelector('input[name="pricing_type"]:checked')?.value : null;
-    var isOngoing = (isLongTerm || isOnDemand) && document.getElementById('endDateTypeCo').value === 'ongoing';
+    // Get pricing type from radio (long-term) or default for on-demand
+    var pricingTypeEl = document.querySelector('input[name="pricing_type"]:checked');
+    var pricingType = isLongTerm ? (pricingTypeEl?.value || null) : (isOnDemand ? 'on_demand' : null);
+    var endDateEl = document.getElementById('endDateTypeCo');
+    var isOngoing = isLongTerm && endDateEl && endDateEl.value === 'ongoing';
 
     var subtotal = 0;
 
@@ -136,25 +139,24 @@ function toggleDocTypeFields() {
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
 
-    document.getElementById('longTermFields').style.display = (isLongTerm || isOnDemand) ? 'block' : 'none';
+    // Show/hide the appropriate settings section
+    document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
+    var onDemandSection = document.getElementById('onDemandFieldsCo');
+    if (onDemandSection) onDemandSection.style.display = isOnDemand ? 'block' : 'none';
 
-    if (isLongTerm || isOnDemand) {
-        // Set start date to today when first enabling LT or On-Demand
+    if (isLongTerm) {
+        // Set start date to today when first enabling long-term
         var startField = document.getElementById('startDateFieldCo');
-        if (!startField.value) {
+        if (startField && !startField.value) {
             startField.value = new Date().toISOString().split('T')[0];
         }
-
-        // Hide/show billing intervals based on type
-        var billingFields = document.querySelector('#longTermFields > div:nth-of-type(3)');
-        if (billingFields) {
-            billingFields.style.display = isOnDemand ? 'none' : 'grid';
-        }
-
-        // Trigger toggleEndDate to set initial state correctly
         toggleEndDate();
         togglePricingFields();
         updateDiscountWarning();
+    } else if (isOnDemand) {
+        // On-demand: always show items for line-item billing
+        document.getElementById('itemsCo').parentElement.style.display = 'block';
+        document.getElementById('invoiceAmountRow').style.display = 'none';
     } else {
         // Regular contract - always show items
         document.getElementById('itemsCo').parentElement.style.display = 'block';
@@ -406,17 +408,8 @@ document.getElementById('coCreateForm').addEventListener('submit', function (e) 
     if (!cid || !cid.value) {
         e.preventDefault();
         alert('Please select a client from suggestions.');
-        return;
     }
-    // Set form action based on contract type
-    var docType = document.querySelector('input[name="doc_type"]:checked').value;
-    if (docType === 'long_term') {
-        this.action = '/?page=long-term-contracts-create';
-    } else if (docType === 'on_demand') {
-        this.action = '/?page=on-demand-contracts-create';
-    } else {
-        this.action = '/?page=contracts-create';
-    }
+    // Form action stays as contracts-create - the controller routes based on doc_type
 });
 
 // Signature Management

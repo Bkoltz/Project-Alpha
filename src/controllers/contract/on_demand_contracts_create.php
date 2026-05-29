@@ -13,13 +13,14 @@ $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_value = (float)($_POST['deposit_value'] ?? 0);
 
-// On-demand contract specific fields
-$start_date = !empty($_POST['start_date']) ? $_POST['start_date'] : null;
-$end_date_type = $_POST['end_date_type'] ?? 'ongoing';
-$end_date = ($end_date_type === 'fixed' && !empty($_POST['end_date'])) ? $_POST['end_date'] : null;
-$billing_interval_count = max(1, (int)($_POST['billing_interval_count'] ?? 1));
-$billing_interval_unit = in_array(($_POST['billing_interval_unit'] ?? 'month'), ['day','week','month','year']) ? $_POST['billing_interval_unit'] : 'month';
-$price_per_invoice = (float)($_POST['price_per_invoice'] ?? 0);
+// On-demand contract specific fields - accepts both prefixed (od_) and non-prefixed field names
+$start_date = !empty($_POST['start_date']) ? $_POST['start_date'] : (!empty($_POST['od_start_date']) ? $_POST['od_start_date'] : date('Y-m-d'));
+$end_date = null; // On-demand contracts are always ongoing until terminated
+$billing_interval_count = 1;
+$billing_interval_unit = 'month';
+
+// Price can come from flat amount or line items
+$price_per_invoice = (float)($_POST['price_per_invoice'] ?? $_POST['od_flat_amount'] ?? 0);
 $scope = trim((string)($_POST['scope'] ?? ''));
 
 if ($client_id <= 0) {
@@ -45,18 +46,36 @@ if ($client_id <= 0) {
     exit;
 }
 
-if (!$start_date) {
-    header('Location: /?page=contract/contracts-create&error=Start%20date%20is%20required%20for%20on-demand%20contracts');
+// On-demand contracts can have line items OR a flat price - check if we have either
+$hasLineItems = !empty($_POST['item']) && is_array($_POST['item']) && count(array_filter($_POST['item'], 'trim')) > 0;
+if (!$hasLineItems && $price_per_invoice <= 0) {
+    header('Location: /?page=contract/contracts-create&error=Please%20add%20items%20or%20enter%20a%20flat%20amount');
     exit;
 }
 
-if ($price_per_invoice <= 0) {
-    header('Location: /?page=contract/contracts-create&error=Price%20per%20invoice%20must%20be%20greater%20than%200');
-    exit;
-}
+// Calculate subtotal from line items or flat price
+$items = [];
+$subtotal = 0.0;
 
-// Calculate subtotal (same as price per invoice for on-demand)
-$subtotal = $price_per_invoice;
+if ($hasLineItems) {
+    $item = $_POST['item'] ?? [];
+    $desc = $_POST['item_desc'] ?? [];
+    $qty = $_POST['item_qty'] ?? [];
+    $price = $_POST['item_price'] ?? [];
+    
+    for ($i = 0; $i < count($item); $i++) {
+        $itm = trim((string)($item[$i] ?? ''));
+        $d = trim((string)($desc[$i] ?? ''));
+        $q = (float)($qty[$i] ?? 0);
+        $p = (float)($price[$i] ?? 0);
+        if ($itm === '' || $q <= 0) continue;
+        $line = $q * $p;
+        $subtotal += $line;
+        $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
+    }
+} else {
+    $subtotal = $price_per_invoice;
+}
 
 $discount_amount = 0.0; 
 if($discount_type === 'percent'){ 
@@ -87,28 +106,36 @@ try{
         @error_log('[on_demand_contracts_create] project_next_code failed: '.$e->getMessage(), 0); 
     }
 
-    // Insert on-demand contract
-    $sql = 'INSERT INTO on_demand_contracts (
-        client_id, project_id, project_code, status, start_date, end_date, 
+    // Insert on-demand contract into the unified contracts table
+    $sql = 'INSERT INTO contracts (
+        client_id, project_id, project_code, status, contract_type, start_date, end_date, 
         billing_interval_count, billing_interval_unit, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal,
         deposit_type, deposit_amount, deposit_paid,
         total_invoiced, invoice_count, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'pending', $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'pending', 'on_demand', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal,
         $deposit_type, $deposit_amount, 0,
         0, 0, $scope
     ]);
     
-    $odc_id = (int)$pdo->lastInsertId();
+    $contract_id = (int)$pdo->lastInsertId();
 
     // Assign doc number
-    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM on_demand_contracts')->fetchColumn();
-    $pdo->prepare('UPDATE on_demand_contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $odc_id]);
+    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "on_demand"')->fetchColumn();
+    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $contract_id]);
+
+    // Save line items if we have them
+    if (!empty($items)) {
+        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        foreach ($items as $it) {
+            $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
+        }
+    }
 
     // Save project notes
     $notes = trim((string)($_POST['project_notes'] ?? ''));
@@ -127,21 +154,18 @@ try{
     $signatureRequired = $_POST['signature_required'] ?? [];
     
     if (!empty($signatureTitles)) {
-        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (on_demand_contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
         foreach ($signatureTitles as $idx => $title) {
             $title = trim($title);
             if (empty($title)) continue;
-            
-            $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
-            $isRequired = in_array('sig_' . $idx, $signatureRequired) ? 1 : 0;
-            
-            $sigStmt->execute([$odc_id, $title, $order, $isRequired]);
+
+            $sigStmt->execute([$contract_id, $idx === 0 ? 'client' : 'witness']);
         }
     }
 
     // Add to project_documents if project_id is set
     if ($project_id) {
-        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "on_demand_contract", ?)')->execute([$project_id, $odc_id]);
+        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $contract_id]);
     }
 
     $pdo->commit();

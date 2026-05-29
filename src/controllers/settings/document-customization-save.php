@@ -41,8 +41,8 @@ try {
         $settingsJson = json_encode($settings);
         
         $stmt = $pdo->prepare('
-            INSERT INTO document_settings (document_type, settings, updated_at) 
-            VALUES (?, ?, NOW())
+            INSERT INTO document_settings (document_type, setting_key, settings, updated_at) 
+            VALUES (?, "__settings", ?, NOW())
             ON DUPLICATE KEY UPDATE settings = VALUES(settings), updated_at = NOW()
         ');
         $stmt->execute([$type, $settingsJson]);

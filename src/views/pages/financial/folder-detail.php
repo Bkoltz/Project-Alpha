@@ -13,8 +13,9 @@ if (!$folderId) {
 
 // Fetch folder details
 $stmt = $pdo->prepare('
-    SELECT * FROM form_categories 
-    WHERE id = ? AND org_id = ? AND type = "folder"
+    SELECT id, organization_id, name as title, description, created_at
+    FROM form_categories 
+    WHERE id = ? AND organization_id = ?
 ');
 $stmt->execute([$folderId, $orgId]);
 $folder = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -27,12 +28,15 @@ if (!$folder) {
 // Fetch all documents in this folder
 $stmt = $pdo->prepare('
     SELECT 
-        fd.*,
-        u.username as uploaded_by_name
+        fd.id,
+        fd.organization_id,
+        fd.category_id,
+        fd.name as file_name,
+        fd.file_path,
+        fd.created_at as uploaded_at
     FROM form_documents fd
-    LEFT JOIN users u ON fd.uploaded_by = u.id
     WHERE fd.category_id = ?
-    ORDER BY fd.uploaded_at DESC
+    ORDER BY fd.created_at DESC
 ');
 $stmt->execute([$folderId]);
 $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -146,9 +150,6 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </div>
                         <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
                             Uploaded <?php echo date('M j, Y', strtotime($doc['uploaded_at'])); ?>
-                            <?php if ($doc['uploaded_by_name']): ?>
-                                <br>by <?php echo htmlspecialchars($doc['uploaded_by_name']); ?>
-                            <?php endif; ?>
                         </div>
                         
                         <!-- Action Buttons -->

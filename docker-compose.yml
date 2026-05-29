@@ -11,7 +11,7 @@ services:
       MYSQL_PASSWORD: apppassword
       MYSQL_ROOT_PASSWORD: rootpass
       ADMIN_PASSWORD: admin123
-      # APP_AUTH_DISABLED: true
+      APP_AUTH_DISABLED: true
       # APP_HOST: your-domain.com
       # SECURITY_HEADERS: true
     depends_on:

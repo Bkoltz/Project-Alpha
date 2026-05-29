@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) NULL,
     role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
     force_password_reset TINYINT(1) NOT NULL DEFAULT 0,
+    is_disabled TINYINT(1) NOT NULL DEFAULT 0,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -116,7 +117,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     tax_exempt_uploaded_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_organizations_name (name)
+    UNIQUE KEY uq_organizations_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- USER-ORGANIZATION MEMBERSHIP
@@ -209,6 +210,10 @@ CREATE TABLE IF NOT EXISTS clients (
     postal_code VARCHAR(20) NULL,
     country VARCHAR(100) NULL DEFAULT 'US',
     organization_id INT NULL,
+    config JSON NULL,
+    stripe_customer_id VARCHAR(255) NULL,
+    stripe_payment_method_id VARCHAR(255) NULL,
+    auto_pay_enabled TINYINT(1) NOT NULL DEFAULT 0,
     archived TINYINT(1) NOT NULL DEFAULT 0,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     archive_payload JSON NULL,
@@ -219,6 +224,7 @@ CREATE TABLE IF NOT EXISTS clients (
     INDEX idx_clients_name (name),
     INDEX idx_clients_email (email),
     INDEX idx_clients_org (organization_id),
+    INDEX idx_clients_stripe_customer (stripe_customer_id),
     INDEX idx_clients_archived (archived),
     INDEX idx_clients_deleted (deleted_at),
     CONSTRAINT fk_clients_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
@@ -253,13 +259,20 @@ CREATE TABLE IF NOT EXISTS projects (
 -- PROJECT META
 CREATE TABLE IF NOT EXISTS project_meta (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    project_id INT NOT NULL,
-    meta_key VARCHAR(100) NOT NULL,
+    project_id INT NULL,
+    project_code VARCHAR(64) NULL,
+    client_id INT NULL,
+    meta_key VARCHAR(100) NULL,
     meta_value TEXT NULL,
+    notes TEXT NULL,
+    terms TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_project_meta (project_id, meta_key),
-    CONSTRAINT fk_project_meta_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    UNIQUE KEY uq_project_meta_key (project_id, meta_key),
+    UNIQUE KEY uq_project_meta_code (project_code),
+    INDEX idx_project_meta_client (client_id),
+    CONSTRAINT fk_project_meta_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_meta_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PROJECT COUNTERS
@@ -322,7 +335,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     organization_id INT NULL,
     doc_number INT NULL,
     project_code VARCHAR(64) NULL,
-    status ENUM('draft','pending','approved','denied','expired') NOT NULL DEFAULT 'draft',
+    status ENUM('draft','pending','approved','denied','rejected','expired') NOT NULL DEFAULT 'draft',
     quote_type ENUM('regular','long_term','on_demand') NOT NULL DEFAULT 'regular',
     discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
     discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -333,6 +346,13 @@ CREATE TABLE IF NOT EXISTS quotes (
     total DECIMAL(12,2) NOT NULL DEFAULT 0,
     deposit_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
     deposit_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    start_date DATE NULL,
+    end_date DATE NULL,
+    billing_interval_count INT NOT NULL DEFAULT 1,
+    billing_interval_unit ENUM('day','week','month','year') NOT NULL DEFAULT 'month',
+    pricing_type ENUM('per_invoice','fixed_total','on_demand') NULL,
+    price_per_invoice DECIMAL(12,2) NULL,
+    invoice_count INT NULL,
     scope TEXT NULL,
     terms TEXT NULL,
     fulfillment_date DATE NULL,
@@ -510,6 +530,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
     balance_due DECIMAL(12,2) NOT NULL DEFAULT 0,
     due_date DATE NULL,
+    fulfillment_date DATE NULL,
     paid_at TIMESTAMP NULL,
     sent_at TIMESTAMP NULL,
     terms TEXT NULL,
@@ -518,6 +539,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     custom_fields JSON NULL,
     stripe_session_id VARCHAR(255) NULL,
     stripe_payment_intent_id VARCHAR(255) NULL,
+    last_auto_pay_attempt TIMESTAMP NULL,
     document_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     document_date_updated_at TIMESTAMP NULL DEFAULT NULL,
     generated_at TIMESTAMP NULL,
@@ -533,6 +555,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     INDEX idx_invoices_doc_number (doc_number),
     INDEX idx_invoices_project_code (project_code),
     INDEX idx_invoices_due_date (due_date),
+    INDEX idx_invoices_auto_pay_attempt (last_auto_pay_attempt),
     CONSTRAINT fk_invoices_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
     CONSTRAINT fk_invoices_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
     CONSTRAINT fk_invoices_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
@@ -562,6 +585,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
 CREATE TABLE IF NOT EXISTS invoice_notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     invoice_id INT NOT NULL,
+    type ENUM('reminder','overdue','paid','sent') NOT NULL DEFAULT 'reminder',
     notification_type ENUM('reminder','overdue','paid','sent') NOT NULL DEFAULT 'reminder',
     sent_at TIMESTAMP NULL,
     email_to VARCHAR(255) NULL,
@@ -688,6 +712,7 @@ CREATE TABLE IF NOT EXISTS payments (
     contract_id INT NULL,
     organization_id INT NULL,
     amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    surcharge_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
     payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
     payment_date DATE NOT NULL,
     reference_number VARCHAR(255) NULL,
@@ -709,22 +734,77 @@ CREATE TABLE IF NOT EXISTS payments (
     CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- LINK RESOLVER LINKS
+CREATE TABLE IF NOT EXISTS link (
+    link_id INT AUTO_INCREMENT PRIMARY KEY,
+    entity_type ENUM('client', 'organization', 'project') NOT NULL,
+    entity_id INT NOT NULL,
+    title VARCHAR(255) NULL,
+    url VARCHAR(500) NOT NULL,
+    type ENUM('manual', 'auto_dropbox', 'auto_gdrive', 'auto_s3') NOT NULL DEFAULT 'manual',
+    expiration_date DATE NULL,
+    is_expired TINYINT(1) NOT NULL DEFAULT 0,
+    ignore_auto_generation TINYINT(1) NOT NULL DEFAULT 0,
+    last_verified TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_link_entity (entity_type, entity_id),
+    INDEX idx_link_type (type),
+    INDEX idx_link_expired (is_expired),
+    INDEX idx_link_expiration (expiration_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PAYMENT INTENTS
+CREATE TABLE IF NOT EXISTS payment_intents (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    invoice_id INT NOT NULL,
+    stripe_payment_intent_id VARCHAR(255) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_payment_intent_stripe (stripe_payment_intent_id),
+    INDEX idx_payment_intents_invoice (invoice_id),
+    CONSTRAINT fk_payment_intents_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- AUTO PAY LOG
+CREATE TABLE IF NOT EXISTS auto_pay_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NULL,
+    invoice_id INT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    status ENUM('succeeded','failed','pending') NOT NULL DEFAULT 'pending',
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    error_message TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_auto_pay_client (client_id),
+    INDEX idx_auto_pay_invoice (invoice_id),
+    INDEX idx_auto_pay_status (status),
+    CONSTRAINT fk_auto_pay_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_auto_pay_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- PAYMENT METHODS
 CREATE TABLE IF NOT EXISTS payment_methods (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
     organization_id INT NULL,
     name VARCHAR(100) NOT NULL,
+    provider VARCHAR(100) NULL,
     type ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
+    config JSON NULL,
     last_four VARCHAR(4) NULL,
     exp_month INT NULL,
     exp_year INT NULL,
     is_default TINYINT(1) NOT NULL DEFAULT 0,
     stripe_payment_method_id VARCHAR(255) NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_pm_user (user_id),
     INDEX idx_pm_org (organization_id),
+    INDEX idx_pm_provider (provider),
     CONSTRAINT fk_pm_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -974,19 +1054,20 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS cron_job_runs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     job_name VARCHAR(100) NOT NULL,
-    status ENUM('running', 'completed', 'failed') NOT NULL DEFAULT 'running',
+    last_run DATETIME NULL,
+    status ENUM('running', 'completed', 'failed', 'success') NOT NULL DEFAULT 'running',
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP NULL,
     result TEXT NULL,
     error_message TEXT NULL,
-    INDEX idx_cron_name (job_name),
+    UNIQUE KEY uq_cron_job_name (job_name),
     INDEX idx_cron_started (started_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- APP CONFIG
 CREATE TABLE IF NOT EXISTS app_config (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NULL,
+    organization_id INT NOT NULL DEFAULT 0,
     config_key VARCHAR(100) NOT NULL,
     config_value TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1019,8 +1100,11 @@ CREATE TABLE IF NOT EXISTS public_links (
 CREATE TABLE IF NOT EXISTS link_resolver_config (
     id INT AUTO_INCREMENT PRIMARY KEY,
     provider VARCHAR(100) NOT NULL,
-    config_key VARCHAR(100) NOT NULL,
+    config_key VARCHAR(100) NULL,
     config_value TEXT NULL,
+    is_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    credentials JSON NULL,
+    default_expiration_days INT NULL,
     is_encrypted TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1033,11 +1117,15 @@ CREATE TABLE IF NOT EXISTS document_custom_fields (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NULL,
     document_type VARCHAR(50) NOT NULL DEFAULT 'quote',
-    field_name VARCHAR(100) NOT NULL,
+    field_name VARCHAR(100) NULL,
     field_key VARCHAR(100) NULL,
     field_label VARCHAR(100) NULL,
+    field_data_type VARCHAR(50) NULL,
     field_type ENUM('text', 'number', 'date', 'boolean', 'select', 'textarea') NOT NULL DEFAULT 'text',
     field_options JSON NULL,
+    default_value TEXT NULL,
+    min_value DECIMAL(12,2) NULL,
+    max_value DECIMAL(12,2) NULL,
     is_required TINYINT(1) NOT NULL DEFAULT 0,
     is_builtin TINYINT(1) NOT NULL DEFAULT 0,
     is_enabled TINYINT(1) NOT NULL DEFAULT 1,
@@ -1051,9 +1139,10 @@ CREATE TABLE IF NOT EXISTS document_custom_fields (
 -- DOCUMENT SETTINGS
 CREATE TABLE IF NOT EXISTS document_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NULL,
+    organization_id INT NOT NULL DEFAULT 0,
     document_type VARCHAR(50) NOT NULL,
-    setting_key VARCHAR(100) NOT NULL,
+    settings JSON NULL,
+    setting_key VARCHAR(100) NULL,
     setting_value TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1087,6 +1176,28 @@ CREATE TABLE IF NOT EXISTS archived_entities (
     INDEX idx_arch_entities_client (client_id),
     INDEX idx_arch_entities_org (organization_id),
     INDEX idx_arch_entities_type (entity_type, entity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ARCHIVED CLIENTS
+CREATE TABLE IF NOT EXISTS archived_clients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NULL,
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(255) NULL,
+    phone VARCHAR(50) NULL,
+    organization_id INT NULL,
+    notes TEXT NULL,
+    address_line1 VARCHAR(255) NULL,
+    address_line2 VARCHAR(255) NULL,
+    city VARCHAR(100) NULL,
+    state VARCHAR(2) NULL,
+    postal VARCHAR(20) NULL,
+    country VARCHAR(100) NULL DEFAULT 'US',
+    created_at TIMESTAMP NULL,
+    archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_archived_clients_client (client_id),
+    INDEX idx_archived_clients_org (organization_id),
+    INDEX idx_archived_clients_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================

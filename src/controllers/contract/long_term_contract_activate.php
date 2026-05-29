@@ -12,7 +12,7 @@ try {
     $pdo->beginTransaction();
     
     // Get contract details
-    $stmt = $pdo->prepare('SELECT * FROM long_term_contracts WHERE id=?');
+    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
     $stmt->execute([$id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -28,7 +28,7 @@ try {
     $nextInvoiceDate = $contract['next_invoice_date'] ?: $contract['start_date'];
     
     // Update contract status to active
-    $update = $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=? WHERE id=?');
+    $update = $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=? WHERE id=? AND contract_type="long_term"');
     $update->execute(['active', $nextInvoiceDate, $id]);
     
     $pdo->commit();

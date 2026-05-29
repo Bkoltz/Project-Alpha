@@ -36,13 +36,15 @@ try {
             break;
 
         case 'long_term_contract':
-            // Long-term contracts don't have document_date columns yet, skip for now
+            $pdo->prepare("UPDATE contracts SET document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=? AND contract_type='long_term'")
+                ->execute([$id]);
             $redirectPage = 'contract/long-term-contract-details';
             break;
 
         case 'on_demand_contract':
-            // On-demand contracts don't have document_date columns yet, skip for now
-            $redirectPage = 'contract/on-demand-contract-details';
+            $pdo->prepare("UPDATE contracts SET document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=? AND contract_type='on_demand'")
+                ->execute([$id]);
+            $redirectPage = 'contract/on-demand-contracts-list';
             break;
 
         default:

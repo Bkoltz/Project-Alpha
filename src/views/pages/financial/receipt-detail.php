@@ -7,7 +7,7 @@ $receiptId = (int)($_GET['id'] ?? 0);
 $orgId = 1; // Should come from session/user context
 
 // Get existing stores for edit modal
-$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM receipt_stores WHERE organization_id = ? ORDER BY name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -18,10 +18,10 @@ if (!$receiptId) {
 
 // Fetch receipt details
 $stmt = $pdo->prepare('
-    SELECT r.*, u.username as uploaded_by_name
+    SELECT r.*, rs.name as store_name
     FROM receipts r
-    LEFT JOIN users u ON r.uploaded_by = u.id
-    WHERE r.id = ? AND r.org_id = ?
+    LEFT JOIN receipt_stores rs ON r.store_id = rs.id
+    WHERE r.id = ? AND r.organization_id = ?
 ');
 $stmt->execute([$receiptId, $orgId]);
 $receipt = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -66,7 +66,7 @@ $isPdf = $fileExt === 'pdf';
         <!-- Receipt Info & Actions -->
         <div style="width:400px;max-width:400px;min-width:400px">
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px">
-                <h1 style="margin:0 0 16px 0;font-size:24px"><?php echo htmlspecialchars($receipt['title']); ?></h1>
+                <h1 style="margin:0 0 16px 0;font-size:24px"><?php echo htmlspecialchars($receipt['description'] ?? 'Receipt'); ?></h1>
                 
                 <div style="display:grid;gap:16px">
                     <div>
@@ -97,11 +97,6 @@ $isPdf = $fileExt === 'pdf';
                         <div style="font-weight:600">
                             <?php echo date('F j, Y', strtotime($receipt['created_at'])); ?>
                         </div>
-                        <?php if ($receipt['uploaded_by_name']): ?>
-                            <div style="font-size:13px;color:var(--muted);margin-top:2px">
-                                by <?php echo htmlspecialchars($receipt['uploaded_by_name']); ?>
-                            </div>
-                        <?php endif; ?>
                     </div>
 
                     <div>
@@ -173,8 +168,8 @@ $isPdf = $fileExt === 'pdf';
                 </div>
 
                 <div>
-                    <label style="display:block;margin-bottom:4px;font-weight:600">Title *</label>
-                    <input type="text" name="title" value="<?php echo htmlspecialchars($receipt['title']); ?>" required
+                    <label style="display:block;margin-bottom:4px;font-weight:600">Description *</label>
+                    <input type="text" name="description" value="<?php echo htmlspecialchars($receipt['description'] ?? ''); ?>" required
                            style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
                 </div>
 

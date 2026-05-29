@@ -20,13 +20,13 @@ try {
   if (!in_array($action, ['approve','deny'], true)) { throw new Exception('badaction'); }
 
   // Load and validate public link
-  $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+  $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
   $st->execute([$token]);
   $row = $st->fetch(PDO::FETCH_ASSOC);
   if (!$row) { throw new Exception('notfound'); }
   if ((int)$row['revoked'] === 1 || strtotime((string)$row['expires_at']) < time()) { throw new Exception('expired'); }
-  if ($row['type'] !== 'quote') { throw new Exception('notquote'); }
-  $qid = (int)$row['record_id'];
+  if ($row['document_type'] !== 'quote') { throw new Exception('notquote'); }
+  $qid = (int)$row['document_id'];
 
   // Load quote, client, etc.
   $q = $pdo->prepare('SELECT q.*, c.name AS client_name, c.email AS client_email FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
@@ -60,27 +60,56 @@ try {
         // Mark approved
         $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$qid]);
 
+        $quoteType = $quote['quote_type'] ?? 'regular';
+
         // Create contract (pending)
-        $pdo->prepare('INSERT INTO contracts (quote_id, client_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code) VALUES (?,?,?,?,?,?,?,?,?)')
-           ->execute([$qid, (int)$quote['client_id'], 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode]);
+        $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+           ->execute([
+             $qid,
+             (int)$quote['client_id'],
+             !empty($quote['project_id']) ? (int)$quote['project_id'] : null,
+             'pending',
+             $quoteType,
+             $quote['discount_type'],
+             $quote['discount_value'],
+             $quote['tax_percent'],
+             $quote['subtotal'],
+             $quote['total'],
+             $projectCode,
+             $quote['deposit_type'] ?? 'none',
+             $quote['deposit_amount'] ?? 0,
+             $quote['start_date'] ?? null,
+             $quote['end_date'] ?? null,
+             $quote['billing_interval_count'] ?? 1,
+             $quote['billing_interval_unit'] ?? 'month',
+             $quote['pricing_type'] ?? ($quoteType === 'on_demand' ? 'on_demand' : null),
+             $quote['price_per_invoice'] ?? null,
+             $quote['scope'] ?? null
+           ]);
         $contract_id = (int)$pdo->lastInsertId();
 
         $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
         foreach ($qitems as $it) { $ci->execute([$contract_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
 
-        // Create invoice (unpaid)
-        $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-           ->execute([$contract_id, $qid, (int)$quote['client_id'], $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode]);
-        $invoice_id = (int)$pdo->lastInsertId();
+        if ($quoteType === 'regular') {
+          // Create invoice (unpaid)
+          $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+          $invoice_id = (int)$pdo->lastInsertId();
 
-        $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
-        foreach ($qitems as $it) { $ii->execute([$invoice_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
+          $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+          foreach ($qitems as $it) { $ii->execute([$invoice_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
+        }
 
         // Assign doc_numbers
-        $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts')->fetchColumn();
+        $cMaxStmt = $pdo->prepare('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = ?');
+        $cMaxStmt->execute([$quoteType]);
+        $cMax = (int)$cMaxStmt->fetchColumn();
         $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
-        $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
-        $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
+        if (!empty($invoice_id)) {
+          $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "regular"')->fetchColumn();
+          $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
+        }
 
         $pdo->commit();
         $changed = true;

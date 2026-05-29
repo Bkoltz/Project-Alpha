@@ -189,54 +189,13 @@ $csrf = csrf_sf_token('contracts-create');
     <div id="onDemandFieldsCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
       <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Contract Settings</h3>
       
-      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-        <label>
-          <div>Start Date</div>
-          <input id="onDemandStartDateCo" type="date" name="od_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        </label>
-        <label>
-          <div>Contract Duration</div>
-          <select id="onDemandEndDateTypeCo" name="od_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleOnDemandEndDateCo()">
-            <option value="ongoing">Ongoing (Until Terminated)</option>
-            <option value="fixed">Fixed End Date</option>
-          </select>
-        </label>
-      </div>
-      
-      <div id="onDemandEndDateFieldCo" style="display:none;margin-top:12px">
-        <label>
-          <div>End Date</div>
-          <input type="date" name="od_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        </label>
-      </div>
+      <label>
+        <div>Start Date</div>
+        <input id="onDemandStartDateCo" type="date" name="od_start_date" value="<?php echo date('Y-m-d'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
 
-      <div style="margin-top:16px;padding:12px;background:#e0f2fe;border-radius:8px;border:1px solid #7dd3fc">
-        <div style="font-weight:600;margin-bottom:8px;color:#0369a1">How do you want to specify pricing?</div>
-        <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
-          <input type="radio" name="od_pricing_mode" value="items" checked onchange="toggleOnDemandPricingModeCo()" style="margin-top:3px">
-          <div>
-            <div style="font-weight:600;color:#374151">Use Line Items</div>
-            <div style="font-size:13px;color:#6b7280">Add individual items with quantities and prices</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
-          <input type="radio" name="od_pricing_mode" value="flat" onchange="toggleOnDemandPricingModeCo()" style="margin-top:3px">
-          <div>
-            <div style="font-weight:600;color:#374151">Flat Amount</div>
-            <div style="font-size:13px;color:#6b7280">Enter a single amount without itemized details</div>
-          </div>
-        </label>
-      </div>
-
-      <div id="onDemandFlatAmountCo" style="display:none;margin-top:12px">
-        <label>
-          <div>Contract Amount * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
-          <input id="onDemandAmountInputCo" type="number" step="0.01" name="od_flat_amount" placeholder="0.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalcCo()">
-        </label>
-      </div>
-
-      <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:13px">
-        <strong>ℹ️ Note:</strong> On-demand contracts allow you to generate invoices manually as needed. No recurring billing schedule is set.
+      <div style="margin-top:12px;padding:10px;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;font-size:13px">
+        <strong>ℹ️ On-Demand:</strong> This contract runs until you mark it complete. Generate invoices manually whenever work is done.
       </div>
     </div>
 
