@@ -13,14 +13,18 @@ $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_value = (float)($_POST['deposit_value'] ?? 0);
 
-// Long-term contract specific fields
-$start_date = !empty($_POST['start_date']) ? $_POST['start_date'] : null;
-$end_date_type = $_POST['end_date_type'] ?? 'on_termination';
-$end_date = ($end_date_type === 'specific_date' && !empty($_POST['end_date'])) ? $_POST['end_date'] : null;
-$billing_interval_count = max(1, (int)($_POST['billing_interval_count'] ?? 1));
-$billing_interval_unit = in_array(($_POST['billing_interval_unit'] ?? 'month'), ['day','week','month','year']) ? $_POST['billing_interval_unit'] : 'month';
-$pricing_type = in_array(($_POST['pricing_type'] ?? 'per_invoice'), ['fixed_total','per_invoice']) ? $_POST['pricing_type'] : 'per_invoice';
-$price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['price_per_invoice'] ?? 0) : null;
+// Long-term contract specific fields - accept both prefixed and non-prefixed field names
+$start_date = !empty($_POST['start_date']) ? $_POST['start_date'] : (!empty($_POST['lt_start_date']) ? $_POST['lt_start_date'] : null);
+$end_date_type = $_POST['end_date_type'] ?? $_POST['lt_end_date_type'] ?? 'ongoing';
+// Accept both 'fixed' and 'specific_date' as indicators for a specific end date
+$has_end_date = in_array($end_date_type, ['fixed', 'specific_date']);
+$end_date = ($has_end_date && !empty($_POST['end_date'])) ? $_POST['end_date'] : (($has_end_date && !empty($_POST['lt_end_date'])) ? $_POST['lt_end_date'] : null);
+$billing_interval_count = max(1, (int)($_POST['billing_interval_count'] ?? $_POST['lt_billing_interval_count'] ?? 1));
+$billing_interval_unit_val = $_POST['billing_interval_unit'] ?? $_POST['lt_billing_interval_unit'] ?? 'month';
+$billing_interval_unit = in_array($billing_interval_unit_val, ['day','week','month','year']) ? $billing_interval_unit_val : 'month';
+$pricing_type_val = $_POST['pricing_type'] ?? $_POST['lt_pricing_type'] ?? 'per_invoice';
+$pricing_type = in_array($pricing_type_val, ['fixed_total','per_invoice']) ? $pricing_type_val : 'per_invoice';
+$price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['price_per_invoice'] ?? $_POST['lt_price_per_invoice'] ?? 0) : null;
 $invoice_count = ($pricing_type === 'fixed_total') ? max(1, (int)($_POST['invoice_count'] ?? 1)) : null;
 $scope = trim((string)($_POST['scope'] ?? ''));
 

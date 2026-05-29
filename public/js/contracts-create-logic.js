@@ -141,8 +141,6 @@ function toggleDocTypeFields() {
 
     // Show/hide the appropriate settings section
     document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
-    var onDemandSection = document.getElementById('onDemandFieldsCo');
-    if (onDemandSection) onDemandSection.style.display = isOnDemand ? 'block' : 'none';
 
     if (isLongTerm) {
         // Set start date to today when first enabling long-term
@@ -204,32 +202,42 @@ function togglePricingFields() {
     var isOnDemand = (docType === 'on_demand');
 
     if (docType === 'regular') {
-        // Regular contract - show custom fields
+        // Regular contract - show custom fields and items
         ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
         });
+        document.getElementById('itemsCo').parentElement.style.display = 'block';
+        setItemsRequiredCo(true);
+        recalcCo();
         return;
     }
 
-    var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
+    if (isOnDemand) {
+        // On-demand contract - show items for line-item billing
+        document.getElementById('itemsCo').parentElement.style.display = 'block';
+        setItemsRequiredCo(true);
+        recalcCo();
+        return;
+    }
+
+    // Long-term contract - check pricing type
+    var pricingTypeEl = document.querySelector('input[name="pricing_type"]:checked');
+    var pricingType = pricingTypeEl ? pricingTypeEl.value : 'per_invoice';
 
     if (pricingType === 'per_invoice') {
-        // Recurring amount - hide custom fields
+        // Recurring amount - hide deposit and fulfillment, hide items
         ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
         });
-    } else if (pricingType === 'on_demand') {
-        // On-demand - show deposits, hide fulfillment
-        ['depositTypeLabelCo', 'depositValueLabelCo'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'block';
-        });
-        const fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
-        if (fulfillmentLabel) fulfillmentLabel.style.display = 'none';
+        document.getElementById('perInvoiceField').style.display = 'block';
+        document.getElementById('fixedTotalFieldsCo').style.display = 'none';
+        document.getElementById('itemsCo').parentElement.style.display = 'none';
+        // Disable required attributes on hidden items so form can submit
+        setItemsRequiredCo(false);
     } else {
-        // Fixed total - show deposit and fulfillment
+        // Fixed total - show deposit and fulfillment, show items
         ['depositTypeLabelCo', 'depositValueLabelCo'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
@@ -237,40 +245,38 @@ function togglePricingFields() {
         var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
         const fulfillmentLabel = document.getElementById('fulfillmentDateLabelCo');
         if (fulfillmentLabel) fulfillmentLabel.style.display = isOngoing ? 'none' : 'block';
-        document.getElementById('depositValueLabelCo').style.display = 'block';
-        document.getElementById('fulfillmentDateLabelCo').style.display = 'block';
-        return;
-    }
-
-    var pricingType = document.querySelector('input[name="pricing_type"]:checked').value;
-
-    if (pricingType === 'per_invoice') {
-        // Recurring amount - hide deposit and fulfillment
-        document.getElementById('depositTypeLabelCo').style.display = 'none';
-        document.getElementById('depositValueLabelCo').style.display = 'none';
-        document.getElementById('fulfillmentDateLabelCo').style.display = 'none';
-        document.getElementById('perInvoiceField').style.display = 'block';
-        document.getElementById('fixedTotalFieldsCo').style.display = 'none';
-        document.getElementById('itemsCo').parentElement.style.display = 'none';
-    } else if (pricingType === 'on_demand') {
-        // On-demand - show deposits, hide fulfillment, show price per invoice
-        document.getElementById('depositTypeLabelCo').style.display = 'block';
-        document.getElementById('depositValueLabelCo').style.display = 'block';
-        document.getElementById('fulfillmentDateLabelCo').style.display = 'none';
-        document.getElementById('perInvoiceField').style.display = 'block';
-        document.getElementById('fixedTotalFieldsCo').style.display = 'none';
-        document.getElementById('itemsCo').parentElement.style.display = 'none';
-    } else {
-        // Fixed total - show deposit and fulfillment
-        document.getElementById('depositTypeLabelCo').style.display = 'block';
-        document.getElementById('depositValueLabelCo').style.display = 'block';
-        var isOngoing = document.getElementById('endDateTypeCo').value === 'ongoing';
-        document.getElementById('fulfillmentDateLabelCo').style.display = isOngoing ? 'none' : 'block';
         document.getElementById('perInvoiceField').style.display = 'none';
         document.getElementById('fixedTotalFieldsCo').style.display = 'block';
         document.getElementById('itemsCo').parentElement.style.display = 'block';
+        // Re-enable required attributes on items
+        setItemsRequiredCo(true);
     }
     recalcCo();
+}
+
+// Helper to enable/disable required attribute on contract item inputs
+function setItemsRequiredCo(required) {
+    document.querySelectorAll('#itemsCo input[name="item[]"]').forEach(el => {
+        if (required) {
+            el.setAttribute('required', '');
+        } else {
+            el.removeAttribute('required');
+        }
+    });
+    document.querySelectorAll('#itemsCo input[name="item_qty[]"]').forEach(el => {
+        if (required) {
+            el.setAttribute('required', '');
+        } else {
+            el.removeAttribute('required');
+        }
+    });
+    document.querySelectorAll('#itemsCo input[name="item_price[]"]').forEach(el => {
+        if (required) {
+            el.setAttribute('required', '');
+        } else {
+            el.removeAttribute('required');
+        }
+    });
 }
 
 function updateDiscountWarning() {
