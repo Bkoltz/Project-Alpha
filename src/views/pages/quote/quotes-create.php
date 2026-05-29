@@ -189,17 +189,17 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </div>
     </div>
 
+    <!-- On-demand settings -->
     <div id="onDemandFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
       <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Quote Settings</h3>
       
       <label>
         <div>Start Date</div>
-        <input id="onDemandStartDate" type="date" name="lt_start_date" value="<?php echo date('Y-m-d'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="onDemandStartDate" type="date" name="od_start_date" value="<?php echo date('Y-m-d'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
-      <input type="hidden" name="lt_pricing_type" value="on_demand">
 
       <div style="margin-top:12px;padding:10px;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;font-size:13px">
-        <strong>ℹ️ On-Demand:</strong> This quote runs until you mark it complete. Generate invoices manually whenever work is done.
+        <strong>ℹ️ On-Demand:</strong> This quote runs until you mark it complete. Add items below to specify what work will be done.
       </div>
     </div>
 

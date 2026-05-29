@@ -10,6 +10,21 @@ $stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.e
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Quote not found</p>'; return; }
+
+// Determine quote type for back link and display
+$quoteType = $quote['quote_type'] ?? 'regular';
+$backPage = 'quote/quotes-list';
+$quoteTypeLabel = 'Quote';
+$approveConfirm = 'Approve this quote and generate contract + invoice?';
+if ($quoteType === 'long_term') {
+    $backPage = 'quote/long-term-quotes-list';
+    $quoteTypeLabel = 'Long-Term Quote';
+    $approveConfirm = 'Approve this long-term quote and generate contract?';
+} elseif ($quoteType === 'on_demand') {
+    $backPage = 'quote/on-demand-quotes-list';
+    $quoteTypeLabel = 'On-Demand Quote';
+    $approveConfirm = 'Approve this on-demand quote and generate contract?';
+}
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
@@ -35,7 +50,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 $isPdf = defined('PDF_MODE');
 ?>
 <section>
-  <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Quote</div>
+  <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px"><?php echo htmlspecialchars($quoteTypeLabel); ?></div>
   <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <?php 
@@ -52,7 +67,7 @@ $isPdf = defined('PDF_MODE');
     Status: <?php echo htmlspecialchars($quote['status']); ?>
   </div>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
+    <a href="/?page=<?php echo htmlspecialchars($backPage); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
     <?php if ($quote['status'] === 'pending'): ?>
@@ -68,7 +83,7 @@ $isPdf = defined('PDF_MODE');
     </form>
     <?php endif; ?>
     <?php if ($quote['status'] === 'pending'): ?>
-      <form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('Approve this quote and generate contract + invoice?');">
+      <form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('<?php echo htmlspecialchars($approveConfirm); ?>');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
         <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: medium;">Approve</button>

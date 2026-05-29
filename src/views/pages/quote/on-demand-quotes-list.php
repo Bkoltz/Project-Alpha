@@ -33,7 +33,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM quotes q LEFT JOIN clients c ON c.id=q.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.fulfillment_date, q.created_at, c.name client, c.id AS client_id FROM quotes q LEFT JOIN clients c ON c.id=q.client_id";
+$sql="SELECT q.id, q.doc_number, q.project_code, q.status, q.total, q.price_per_invoice, q.start_date, q.fulfillment_date, q.created_at, c.name client, c.id AS client_id FROM quotes q LEFT JOIN clients c ON c.id=q.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY q.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -129,15 +129,16 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
   $rowStyle = ($r['status']==='approved') ? 'background:#ecfdf5;' : (($r['status']==='rejected') ? 'background:#fef2f2;' : '');
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px"><a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">ODQ-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">ODQ-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
-            <td style="padding:10px">$<?php echo number_format((float)$r['price_per_invoice'], 2); ?></td>
-            <td style="padding:10px"><?php echo !empty($r['fulfillment_date']) ? date('M j, Y', strtotime($r['fulfillment_date'])) : '—'; ?></td>
+            <td style="padding:10px">$<?php echo number_format((float)($r['total'] ?? $r['price_per_invoice'] ?? 0), 2); ?></td>
+            <td style="padding:10px"><?php echo !empty($r['start_date']) ? date('M j, Y', strtotime($r['start_date'])) : '—'; ?></td>
             <td style="padding:10px"><?php echo date('M j, Y', strtotime($r['created_at'])); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-              <a href="/?page=quote/quote-print&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+              <a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+              <a href="/?page=quote/quote-pdf&id=<?php echo (int)$r['id']; ?>" target="_blank" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">PDF</a>
               <?php if ($r['status'] === 'pending'): ?>
               <form method="post" action="/?page=email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -145,6 +146,16 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
+              </form>
+              <form method="post" action="/?page=quote/quote-approve" onsubmit="return confirm('Approve this on-demand quote and generate contract?')">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: small;">Approve</button>
+              </form>
+              <form method="post" action="/?page=quote/quote-reject" onsubmit="return confirm('Deny this quote?')">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
               </form>
               <?php endif; ?>
             </td>

@@ -186,18 +186,6 @@ $csrf = csrf_sf_token('contracts-create');
       </div>
     </div>
 
-    <div id="onDemandFieldsCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
-      <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Contract Settings</h3>
-      
-      <label>
-        <div>Start Date</div>
-        <input id="onDemandStartDateCo" type="date" name="od_start_date" value="<?php echo date('Y-m-d'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
-
-      <div style="margin-top:12px;padding:10px;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;font-size:13px">
-        <strong>ℹ️ On-Demand:</strong> This contract runs until you mark it complete. Generate invoices manually whenever work is done.
-      </div>
-    </div>
 
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>

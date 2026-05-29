@@ -107,9 +107,28 @@ try {
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) { $pdo->rollBack(); }
   error_log('[quote_approve] Failed: ' . $e->getMessage());
-  header('Location: /?page=quote/quotes-list&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
+  
+  // Determine redirect page based on quote type
+  $redirectPage = 'quote/quotes-list';
+  if (isset($quoteType)) {
+    if ($quoteType === 'long_term') {
+      $redirectPage = 'quote/long-term-quotes-list';
+    } elseif ($quoteType === 'on_demand') {
+      $redirectPage = 'quote/on-demand-quotes-list';
+    }
+  }
+  
+  header('Location: /?page=' . $redirectPage . '&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
   exit;
 }
 
-header('Location: /?page=quote/quotes-list&approved=1');
+// Determine redirect page based on quote type
+$redirectPage = 'quote/quotes-list';
+if ($quoteType === 'long_term') {
+  $redirectPage = 'quote/long-term-quotes-list';
+} elseif ($quoteType === 'on_demand') {
+  $redirectPage = 'quote/on-demand-quotes-list';
+}
+
+header('Location: /?page=' . $redirectPage . '&approved=1');
 exit;

@@ -153,10 +153,14 @@ function toggleDocTypeFields() {
     var isLongTerm = (docType === 'long_term');
     var isOnDemand = (docType === 'on_demand');
 
-    // Show/hide the appropriate settings section
+    // Show/hide the appropriate settings sections
     document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
     var onDemandSection = document.getElementById('onDemandFields');
     if (onDemandSection) onDemandSection.style.display = isOnDemand ? 'block' : 'none';
+
+    // Always show items section (all quote types use items, except long-term per_invoice)
+    document.getElementById('items').parentElement.style.display = 'block';
+    document.getElementById('invoiceAmountRow').style.display = 'none';
 
     if (isLongTerm) {
         // Set start date to today when first enabling long-term
@@ -167,15 +171,8 @@ function toggleDocTypeFields() {
         toggleEndDate();
         togglePricingFields();
         updateDiscountWarning();
-    } else if (isOnDemand) {
-        // On-demand: always show items for line-item billing
-        document.getElementById('items').parentElement.style.display = 'block';
-        document.getElementById('invoiceAmountRow').style.display = 'none';
     } else {
-        // Regular quote
-        document.getElementById('items').parentElement.style.display = 'block';
-        document.getElementById('invoiceAmountRow').style.display = 'none';
-        // Show custom fields for regular quotes (if they exist)
+        // Regular or on-demand quote - show custom fields if they exist
         ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
@@ -213,20 +210,24 @@ function toggleEndDate() {
 function togglePricingFields() {
     var docType = document.querySelector('input[name="doc_type"]:checked').value;
 
-    if (docType === 'regular') {
-        // Regular quote - show custom fields
+    if (docType !== 'long_term') {
+        // Regular or on-demand quote - show custom fields, items always visible
         ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
         });
-        document.getElementById('billingIntervalFields').style.display = 'grid';
+        document.getElementById('items').parentElement.style.display = 'block';
+        // Re-enable required attributes on items
+        setItemsRequired(true);
         return;
     }
 
-    var pricingType = document.querySelector('input[name="lt_pricing_type"]:checked').value;
+    // Long-term quote - check pricing type
+    var pricingTypeEl = document.querySelector('input[name="lt_pricing_type"]:checked');
+    var pricingType = pricingTypeEl ? pricingTypeEl.value : 'per_invoice';
 
     if (pricingType === 'per_invoice') {
-        // Recurring amount - hide deposit and fulfillment
+        // Recurring amount - hide deposit and fulfillment, hide items
         ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
@@ -235,20 +236,10 @@ function togglePricingFields() {
         document.getElementById('fixedTotalFields').style.display = 'none';
         document.getElementById('items').parentElement.style.display = 'none';
         document.getElementById('billingIntervalFields').style.display = 'grid';
-    } else if (pricingType === 'on_demand') {
-        // On-demand - show deposits, hide fulfillment and billing interval
-        ['depositTypeLabel', 'depositValueLabel'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'block';
-        });
-        const fulfillmentLabel = document.getElementById('fulfillmentDateLabel');
-        if (fulfillmentLabel) fulfillmentLabel.style.display = 'none';
-        document.getElementById('perInvoiceField').style.display = 'block';
-        document.getElementById('fixedTotalFields').style.display = 'none';
-        document.getElementById('items').parentElement.style.display = 'none';
-        document.getElementById('billingIntervalFields').style.display = 'none';
+        // Disable required attributes on hidden items so form can submit
+        setItemsRequired(false);
     } else {
-        // Fixed total - show deposit and fulfillment
+        // Fixed total - show deposit and fulfillment, show items
         ['depositTypeLabel', 'depositValueLabel'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
@@ -260,8 +251,35 @@ function togglePricingFields() {
         document.getElementById('fixedTotalFields').style.display = 'block';
         document.getElementById('items').parentElement.style.display = 'block';
         document.getElementById('billingIntervalFields').style.display = 'grid';
+        // Re-enable required attributes on items
+        setItemsRequired(true);
     }
     recalc();
+}
+
+// Helper to enable/disable required attribute on item inputs
+function setItemsRequired(required) {
+    document.querySelectorAll('#items input[name="item[]"]').forEach(el => {
+        if (required) {
+            el.setAttribute('required', '');
+        } else {
+            el.removeAttribute('required');
+        }
+    });
+    document.querySelectorAll('#items input[name="item_qty[]"]').forEach(el => {
+        if (required) {
+            el.setAttribute('required', '');
+        } else {
+            el.removeAttribute('required');
+        }
+    });
+    document.querySelectorAll('#items input[name="item_price[]"]').forEach(el => {
+        if (required) {
+            el.setAttribute('required', '');
+        } else {
+            el.removeAttribute('required');
+        }
+    });
 }
 
 function updateDiscountWarning() {
