@@ -312,7 +312,7 @@ $isOngoing = empty($contract['end_date']);
       <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
       <tr>
         <td colspan="4" style="padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
-          <strong>By signing below</strong>, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.
+          <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.'); ?>
         </td>
       </tr>
       <tr>

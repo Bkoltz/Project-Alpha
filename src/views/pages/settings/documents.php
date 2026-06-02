@@ -80,27 +80,69 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
   </fieldset>
   
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
-    <legend style="padding:0 6px;color:var(--muted)">Advanced: Custom Contract Sections</legend>
-    <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Define custom sections that appear on all contracts. Drag to reorder. Leave blank to exclude from PDF.</p>
-    <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px;margin-bottom:12px">
-      ⚠️ <strong>Coming Soon:</strong> Custom section builder with drag-and-drop ordering will be available in a future update.
-    </div>
-    <div style="opacity:0.5;pointer-events:none">
-      <div style="padding:10px;border:1px solid #e5e7eb;border-radius:6px;background:#f9fafb;margin-bottom:8px">
+    <legend style="padding:0 6px;color:var(--muted)">Custom Contract Sections</legend>
+    <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Define custom sections that appear on all contracts. Enabled sections render on contract detail/PDF views between items and terms.</p>
+    
+    <?php
+    $customSections = $appConfig['contract_custom_sections'] ?? [];
+    if (!is_array($customSections)) $customSections = [];
+    ?>
+    
+    <div id="customSectionsListCo" style="display:grid;gap:8px;margin-bottom:12px">
+      <!-- Built-in (read-only) -->
+      <div style="padding:10px;border:1px solid #e5e7eb;border-radius:6px;background:#f9fafb">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="cursor:move">⋮⋮</span>
+          <span style="color:#9ca3af">⋮⋮</span>
           <strong>Scope of Work</strong>
           <span style="margin-left:auto;font-size:12px;color:var(--muted)">Built-in</span>
         </div>
       </div>
-      <div style="padding:10px;border:1px solid #e5e7eb;border-radius:6px;background:#f9fafb;margin-bottom:8px">
+      <div style="padding:10px;border:1px solid #e5e7eb;border-radius:6px;background:#f9fafb">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="cursor:move">⋮⋮</span>
+          <span style="color:#9ca3af">⋮⋮</span>
           <strong>Terms & Conditions</strong>
           <span style="margin-left:auto;font-size:12px;color:var(--muted)">Built-in</span>
         </div>
       </div>
+      
+      <!-- User-defined sections -->
+      <?php foreach ($customSections as $idx => $sec): ?>
+        <div class="custom-section-row" style="padding:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff">
+          <div style="display:grid;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="display:flex;align-items:center;gap:6px">
+                <input type="checkbox" name="section_enabled[<?php echo $idx; ?>]" value="1" <?php echo !empty($sec['is_enabled']) ? 'checked' : ''; ?>>
+                <span style="font-size:13px">Enabled</span>
+              </label>
+              <button type="button" onclick="this.closest('.custom-section-row').remove()" style="margin-left:auto;padding:4px 10px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;border-radius:4px;font-size:12px;cursor:pointer">Remove</button>
+            </div>
+            <input type="text" name="section_title[]" value="<?php echo htmlspecialchars($sec['title'] ?? ''); ?>" placeholder="Section Title" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-weight:600">
+            <textarea name="section_content[]" rows="3" placeholder="Section content..." style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-size:13px"><?php echo htmlspecialchars($sec['content'] ?? ''); ?></textarea>
+          </div>
+        </div>
+      <?php endforeach; ?>
     </div>
+    
+    <button type="button" onclick="addCustomSection()" style="padding:8px 14px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:13px">+ Add Section</button>
+    
+    <script>
+    function addCustomSection() {
+      var list = document.getElementById('customSectionsListCo');
+      var idx = list.querySelectorAll('.custom-section-row').length;
+      var div = document.createElement('div');
+      div.className = 'custom-section-row';
+      div.style.cssText = 'padding:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff';
+      div.innerHTML = '<div style="display:grid;gap:8px">'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="section_enabled['+idx+']" value="1" checked><span style="font-size:13px">Enabled</span></label>'+
+          '<button type="button" onclick="this.closest(\'.custom-section-row\').remove()" style="margin-left:auto;padding:4px 10px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;border-radius:4px;font-size:12px;cursor:pointer">Remove</button>'+
+        '</div>'+
+        '<input type="text" name="section_title[]" placeholder="Section Title" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-weight:600">'+
+        '<textarea name="section_content[]" rows="3" placeholder="Section content..." style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-size:13px"></textarea>'+
+      '</div>';
+      list.appendChild(div);
+    }
+    </script>
   </fieldset>
 <?php endif; ?>
 

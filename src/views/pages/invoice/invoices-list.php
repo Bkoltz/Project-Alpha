@@ -16,7 +16,7 @@ $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 
-$where = [];
+$where = ['(i.invoice_type IS NULL OR i.invoice_type = "regular")'];
 $params = [];
 if ($client_id > 0) {
   $where[] = 'i.client_id=?';

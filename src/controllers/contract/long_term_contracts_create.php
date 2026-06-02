@@ -25,8 +25,30 @@ $billing_interval_unit = in_array($billing_interval_unit_val, ['day','week','mon
 $pricing_type_val = $_POST['pricing_type'] ?? $_POST['lt_pricing_type'] ?? 'per_invoice';
 $pricing_type = in_array($pricing_type_val, ['fixed_total','per_invoice']) ? $pricing_type_val : 'per_invoice';
 $price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['price_per_invoice'] ?? $_POST['lt_price_per_invoice'] ?? 0) : null;
-$invoice_count = ($pricing_type === 'fixed_total') ? max(1, (int)($_POST['invoice_count'] ?? 1)) : null;
+$invoice_count_posted = ($pricing_type === 'fixed_total') ? max(1, (int)($_POST['invoice_count'] ?? 1)) : null;
 $scope = trim((string)($_POST['scope'] ?? ''));
+
+// Auto-calculate invoice count when fixed_total + fixed end date
+if ($pricing_type === 'fixed_total' && $end_date && $start_date) {
+    $s = new DateTime($start_date);
+    $e = new DateTime($end_date);
+    if ($e > $s) {
+        $periods = 0;
+        $cursor = clone $s;
+        while ($cursor < $e) {
+            if ($billing_interval_unit === 'day') $cursor->modify("+{$billing_interval_count} day");
+            elseif ($billing_interval_unit === 'week') $cursor->modify("+" . ($billing_interval_count * 7) . " day");
+            elseif ($billing_interval_unit === 'month') $cursor->modify("+{$billing_interval_count} month");
+            elseif ($billing_interval_unit === 'year') $cursor->modify("+{$billing_interval_count} year");
+            if ($cursor <= $e) $periods++;
+        }
+        $invoice_count = max(1, $periods);
+    } else {
+        $invoice_count = $invoice_count_posted;
+    }
+} else {
+    $invoice_count = $invoice_count_posted;
+}
 
 if ($client_id <= 0) {
     $client_name = trim((string)($_POST['client'] ?? ''));

@@ -77,6 +77,54 @@ try {
   }
 
   $pdo->commit();
+
+  // Send payment received confirmation email if enabled
+  try {
+    require_once __DIR__ . '/../config/app.php';
+    if (!empty($appConfig['payment_received_notification'])) {
+      // Get client email and invoice details
+      $clientStmt = $pdo->prepare('SELECT c.email, c.name, i.doc_number, i.total FROM clients c JOIN invoices i ON i.client_id = c.id WHERE i.id = ?');
+      $clientStmt->execute([$invoice_id]);
+      $clientInfo = $clientStmt->fetch(PDO::FETCH_ASSOC);
+      
+      if ($clientInfo && !empty($clientInfo['email']) && filter_var($clientInfo['email'], FILTER_VALIDATE_EMAIL)) {
+        require_once __DIR__ . '/../utils/mailer.php';
+        require_once __DIR__ . '/../utils/crypto.php';
+        $smtpPass = '';
+        if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
+          $encVal = $appConfig['smtp_password_enc'];
+          if (strpos($encVal, 'plain::') === 0) { $smtpPass = substr($encVal, 7); }
+          else { $pt = crypto_decrypt($encVal); if (is_string($pt)) { $smtpPass = $pt; } }
+        }
+        $mailCfg = [
+          'host' => (string)($appConfig['smtp_host'] ?? ''),
+          'port' => (int)($appConfig['smtp_port'] ?? 587),
+          'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
+          'username' => (string)($appConfig['smtp_username'] ?? ''),
+          'password' => $smtpPass,
+        ];
+        $mFromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
+        $mFromName = (string)($appConfig['from_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+        
+        $subject = 'Payment Received - Invoice I-' . ($clientInfo['doc_number'] ?? $invoice_id);
+        $body = '<p>Dear ' . htmlspecialchars($clientInfo['name'] ?? 'Valued Client') . ',</p>';
+        $body .= '<p>We have received your payment of <strong>$' . number_format($amount, 2) . '</strong> ';
+        $body .= 'for invoice <strong>I-' . htmlspecialchars($clientInfo['doc_number'] ?? $invoice_id) . '</strong>.</p>';
+        if ($status === 'paid') {
+          $body .= '<p>This invoice is now <strong>paid in full</strong>. Thank you!</p>';
+        } else {
+          $body .= '<p>Remaining balance: <strong>$' . number_format($balanceDue, 2) . '</strong>.</p>';
+        }
+        $body .= '<p>Thank you for your payment!</p>';
+        
+        mailer_send($mailCfg, $clientInfo['email'], $subject, $body, $mFromEmail, $mFromName, ($mailCfg['username'] ?: $mFromEmail));
+      }
+    }
+  } catch (Throwable $e) {
+    @error_log('[PaymentsCreate] Payment confirmation email error: ' . $e->getMessage());
+    // Don't fail the payment because of email
+  }
+
 } catch (Throwable $e) {
   $pdo->rollBack();
   @error_log('[PaymentsCreate] Error: ' . $e->getMessage());

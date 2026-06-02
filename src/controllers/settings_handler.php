@@ -297,6 +297,27 @@ if (isset($_POST['cron_custom'])) {
 $settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
 $settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
 
+// System automation settings
+$settings['auto_terminate_contracts'] = !empty($_POST['auto_terminate_contracts']) ? 1 : 0;
+$settings['link_expiration_checker'] = !empty($_POST['link_expiration_checker']) ? 1 : 0;
+
+// Contract notification settings
+$settings['contract_expiring_warning'] = !empty($_POST['contract_expiring_warning']) ? 1 : 0;
+if (isset($_POST['contract_expiring_days'])) {
+    $settings['contract_expiring_days'] = max(1, min(90, (int)$_POST['contract_expiring_days']));
+}
+$settings['contract_expired_alert'] = !empty($_POST['contract_expired_alert']) ? 1 : 0;
+
+// Payment notification settings
+$settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
+$settings['payment_received_notification'] = !empty($_POST['payment_received_notification']) ? 1 : 0;
+
+// Link expiration warning settings
+$settings['link_expiration_warning'] = !empty($_POST['link_expiration_warning']) ? 1 : 0;
+if (isset($_POST['link_expiration_warning_days'])) {
+    $settings['link_expiration_warning_days'] = max(1, min(90, (int)$_POST['link_expiration_warning_days']));
+}
+
 // Quote settings
 $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
 $settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
@@ -308,6 +329,25 @@ $settings['contract_memo_enabled'] = !empty($_POST['contract_memo_enabled']) ? 1
 if (isset($_POST['signature_agreement'])) {
     $sig = trim((string)$_POST['signature_agreement']);
     $settings['signature_agreement'] = $sig !== '' ? mb_substr($sig, 0, 500) : 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.';
+}
+
+// Custom contract sections
+if (isset($_POST['section_title']) && is_array($_POST['section_title'])) {
+    $sections = [];
+    $titles = $_POST['section_title'];
+    $contents = $_POST['section_content'] ?? [];
+    $enabledMap = $_POST['section_enabled'] ?? [];
+    foreach ($titles as $idx => $title) {
+        $t = trim((string)$title);
+        $c = trim((string)($contents[$idx] ?? ''));
+        if ($t === '' && $c === '') continue;
+        $sections[] = [
+            'title' => mb_substr($t, 0, 200),
+            'content' => mb_substr($c, 0, 10000),
+            'is_enabled' => !empty($enabledMap[$idx]) ? 1 : 0,
+        ];
+    }
+    $settings['contract_custom_sections'] = $sections;
 }
 
 // Review link for invoices

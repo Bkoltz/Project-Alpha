@@ -334,7 +334,7 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'links/link-management', 'links/manual-link-handler'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -465,6 +465,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'contract/contract-deposit-received') {
         require_once __DIR__ . '/../src/controllers/contract/contract_deposit_received.php';
+        exit;
+    }
+    if ($page === 'long-term-contract-activate') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_activate.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-activate') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_activate.php';
+        exit;
+    }
+    if ($page === 'on-demand-invoice-generate') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_invoice_generate.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-pause') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_pause.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-resume') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_resume.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-terminate') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_terminate.php';
+        exit;
+    }
+    if ($page === 'long-term-contract-pause') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_pause.php';
+        exit;
+    }
+    if ($page === 'long-term-contract-resume') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_resume.php';
+        exit;
+    }
+    if ($page === 'long-term-contract-terminate') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_terminate.php';
         exit;
     }
     if ($page === 'document-reenable') {
@@ -601,6 +637,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/link-test-connection') {
         require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
+        exit;
+    }
+    if ($page === 'links/link-management') {
+        require_once __DIR__ . '/../src/controllers/links/link_management.php';
+        exit;
+    }
+    if ($page === 'links/manual-link-handler') {
+        require_once __DIR__ . '/../src/controllers/links/manual_link_handler.php';
         exit;
     }
     if ($page === 'settings/dropbox-oauth') {
