@@ -540,7 +540,7 @@ if ($termsText === '') {
 
   <!-- Signature section -->
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
-    <strong>By signing below</strong>, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.
+    <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?>
   </div>
   <table style="width:100%;border-collapse:collapse">
     <?php

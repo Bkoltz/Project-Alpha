@@ -44,6 +44,24 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     recalc();
 }
 
+// Calculate number of billing periods between two dates
+function calcInvoiceCountFromDates(startDate, endDate, intervalCount, intervalUnit) {
+    if (!startDate || !endDate) return 0;
+    var start = new Date(startDate);
+    var end = new Date(endDate);
+    if (isNaN(start) || isNaN(end) || end <= start) return 0;
+    var periods = 0;
+    var cursor = new Date(start);
+    while (cursor < end) {
+        if (intervalUnit === 'day') cursor.setDate(cursor.getDate() + intervalCount);
+        else if (intervalUnit === 'week') cursor.setDate(cursor.getDate() + 7 * intervalCount);
+        else if (intervalUnit === 'month') cursor.setMonth(cursor.getMonth() + intervalCount);
+        else if (intervalUnit === 'year') cursor.setFullYear(cursor.getFullYear() + intervalCount);
+        if (cursor <= end) periods++;
+    }
+    return Math.max(1, periods);
+}
+
 function recalc() {
     var docType = document.querySelector('input[name="doc_type"]:checked').value;
     var isLongTerm = (docType === 'long_term');
@@ -53,6 +71,28 @@ function recalc() {
     var pricingType = (isLongTerm || isOnDemand) ? (pricingTypeEl?.value || null) : null;
     var endDateEl = document.getElementById('endDateType');
     var isOngoing = (isLongTerm || isOnDemand) && endDateEl && endDateEl.value === 'ongoing';
+    var hasFixedEnd = endDateEl && endDateEl.value === 'fixed';
+
+    // Auto-calculate invoice count when Fixed End Date + Fixed Total
+    if (isLongTerm && pricingType === 'fixed_total' && hasFixedEnd) {
+        var startVal = document.getElementById('startDateField').value;
+        var endVal = document.querySelector('input[name="lt_end_date"]').value;
+        var intCount = parseInt(document.getElementById('billingIntervalCount').value) || 1;
+        var intUnit = document.getElementById('billingIntervalUnit').value;
+        var autoCount = calcInvoiceCountFromDates(startVal, endVal, intCount, intUnit);
+        var invoiceInput = document.getElementById('invoiceCountInput');
+        if (invoiceInput) {
+            invoiceInput.value = autoCount;
+            invoiceInput.readOnly = true;
+            invoiceInput.style.backgroundColor = '#f3f4f6';
+        }
+    } else {
+        var invoiceInput = document.getElementById('invoiceCountInput');
+        if (invoiceInput) {
+            invoiceInput.readOnly = false;
+            invoiceInput.style.backgroundColor = '';
+        }
+    }
 
     var subtotal = 0;
 
@@ -206,6 +246,17 @@ function toggleEndDate() {
     updateDiscountWarning();
     recalc();
 }
+
+// Recalc when date/interval inputs change
+['startDateField'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', recalc);
+});
+document.querySelectorAll('input[name="lt_end_date"]').forEach(el => el.addEventListener('change', recalc));
+['billingIntervalCount', 'billingIntervalUnit'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', recalc);
+});
 
 function togglePricingFields() {
     var docType = document.querySelector('input[name="doc_type"]:checked').value;

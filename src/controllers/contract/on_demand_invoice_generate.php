@@ -112,7 +112,7 @@ try {
     
     @error_log("[on_demand_invoice_generate] Generated invoice I-$maxDoc for contract ODC-{$contract['doc_number']} (\${$total})");
     
-    header('Location: /?page=contract/on-demand-contracts-list&invoice_generated=1');
+    header('Location: /?page=contract/on-demand-invoices-list&contract_id=' . $contract_id . '&invoice_generated=1');
     exit;
     
 } catch (Throwable $e) {

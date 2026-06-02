@@ -58,7 +58,7 @@ class LinkResolverService {
         
         try {
             // Get client info
-            $stmt = $this->pdo->prepare("SELECT client_name, org_id FROM client WHERE client_id = ?");
+            $stmt = $this->pdo->prepare("SELECT name, organization_id FROM clients WHERE id = ?");
             $stmt->execute([$clientId]);
             $client = $stmt->fetch(PDO::FETCH_ASSOC);
             
@@ -67,7 +67,7 @@ class LinkResolverService {
             }
             
             // Check if org-level only and client has org
-            if ($this->config['org_level_only'] && $client['org_id']) {
+            if ($this->config['org_level_only'] && $client['organization_id']) {
                 return ['success' => false, 'message' => 'Client belongs to organization - manage links at org level'];
             }
             
@@ -83,7 +83,7 @@ class LinkResolverService {
             $errors = [];
             
             foreach ($this->config['providers'] as $provider => $providerConfig) {
-                $result = $this->generateLinkForProvider($provider, 'client', $clientId, $client['client_name'], $providerConfig);
+                $result = $this->generateLinkForProvider($provider, 'client', $clientId, $client['name'], $providerConfig);
                 if ($result['success']) {
                     $generated[] = $provider;
                 } else {
@@ -113,7 +113,7 @@ class LinkResolverService {
         
         try {
             // Get org info
-            $stmt = $this->pdo->prepare("SELECT org_name FROM organization WHERE org_id = ?");
+            $stmt = $this->pdo->prepare("SELECT name FROM organizations WHERE id = ?");
             $stmt->execute([$orgId]);
             $org = $stmt->fetch(PDO::FETCH_ASSOC);
             
@@ -133,7 +133,7 @@ class LinkResolverService {
             $errors = [];
             
             foreach ($this->config['providers'] as $provider => $providerConfig) {
-                $result = $this->generateLinkForProvider($provider, 'organization', $orgId, $org['org_name'], $providerConfig);
+                $result = $this->generateLinkForProvider($provider, 'organization', $orgId, $org['name'], $providerConfig);
                 if ($result['success']) {
                     $generated[] = $provider;
                 } else {
