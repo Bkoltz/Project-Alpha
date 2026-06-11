@@ -296,6 +296,49 @@ function initialize() {
     // Set initial state
     history.replaceState({ page: currentPage }, '', window.location.href);
     updateActiveNavigation(currentPage);
+
+    initMobileNav();
+}
+
+// ---------------------------------------------------------------------
+// Mobile drawer navigation (hamburger toggle + overlay)
+// ---------------------------------------------------------------------
+function setNavOpen(open) {
+    document.body.classList.toggle('nav-open', open);
+    const toggle = document.querySelector('.nav-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function initMobileNav() {
+    const toggle = document.querySelector('.nav-toggle');
+    const overlay = document.querySelector('.nav-overlay');
+    if (!toggle) return;
+
+    toggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setNavOpen(!document.body.classList.contains('nav-open'));
+    });
+
+    if (overlay) {
+        overlay.addEventListener('click', function () { setNavOpen(false); });
+    }
+
+    // Close the drawer after a nav link is tapped
+    document.querySelectorAll('.side-nav a').forEach(function (link) {
+        link.addEventListener('click', function () { setNavOpen(false); });
+    });
+
+    // Escape closes the drawer
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && document.body.classList.contains('nav-open')) {
+            setNavOpen(false);
+        }
+    });
+
+    // Reset state when resizing up to desktop
+    window.addEventListener('resize', function () {
+        if (window.innerWidth > 900) setNavOpen(false);
+    });
 }
 
 // Initialize when DOM is ready

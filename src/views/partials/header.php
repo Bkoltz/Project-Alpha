@@ -35,8 +35,26 @@
 </head>
 
 <body>
+  <div class="mobile-topbar">
+    <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="primary-sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+    <a class="topbar-brand" href="/">
+      <?php $brandTop = $appConfig['brand_name'] ?? 'Project Alpha';
+      $logoTop = $appConfig['logo_path'] ?? null; ?>
+      <?php if ($logoTop): ?>
+        <img src="<?php echo htmlspecialchars($logoTop); ?>" alt="" />
+      <?php endif; ?>
+      <span><?php echo htmlspecialchars($brandTop); ?></span>
+    </a>
+  </div>
+  <div class="nav-overlay" aria-hidden="true"></div>
   <header class="site-shell">
-    <aside class="side-nav" role="navigation" aria-label="Primary">
+    <aside class="side-nav" id="primary-sidebar" role="navigation" aria-label="Primary">
       <div class="nav-inner">
         <a class="brand" href="/">
           <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha';
