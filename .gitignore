@@ -18,3 +18,4 @@ config/settings.json
 
 # Upload directories
 src/uploads/
+backups/
