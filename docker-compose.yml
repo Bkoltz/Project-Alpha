@@ -1,4 +1,5 @@
-# TODO: Set ADMIN_PASSWORD environment variable before running docker-compose up
+# TODO: Copy .env.example to .env and fill in real values before docker compose up
+# All credentials live in .env (gitignored) — nothing sensitive is committed.
 services:
   web:
     build: .
@@ -6,12 +7,13 @@ services:
     ports:
       - "1627:80"
     environment:
-      MYSQL_DATABASE: project_alpha
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
-      MYSQL_ROOT_PASSWORD: rootpass
-      ADMIN_PASSWORD: admin123
-      APP_AUTH_DISABLED: true
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      # Dev convenience ONLY — never set to true in production
+      APP_AUTH_DISABLED: ${APP_AUTH_DISABLED:-false}
       # APP_HOST: your-domain.com
       # SECURITY_HEADERS: true
     depends_on:
@@ -33,10 +35,10 @@ services:
       dockerfile: Dockerfile
     image: "bkoltz/project-alpha:cron"
     environment:
-      MYSQL_DATABASE: project_alpha
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
       DB_HOST: db
       DB_PORT: 3306
     depends_on:
@@ -52,10 +54,10 @@ services:
     restart: unless-stopped
     command: --log-error-verbosity=1
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: project_alpha
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
     volumes:
       - db_data:/var/lib/mysql
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -67,8 +69,11 @@ services:
       timeout: 5s
       start_period: 40s
       retries: 10
-    ports:
-      - 3307:3306
+    # NOTE: no host port mapping — the DB is reachable only on the internal
+    # docker network (web/cron connect via db:3306). For local DB inspection,
+    # uncomment temporarily or use: docker compose exec db mysql -u appuser -p
+    # ports:
+    #   - "127.0.0.1:3307:3306"
 volumes:
   db_data: {}
   cron_logs: {}
