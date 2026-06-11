@@ -466,6 +466,13 @@ if (is_readable($target)) {
 $merged = array_merge($existing, $settings);
 $payload = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 $ok = @file_put_contents($target, $payload);
+
+// Audit the settings change
+try {
+    require_once __DIR__ . '/../config/db.php';
+    require_once __DIR__ . '/../utils/audit.php';
+    audit_log($pdo, 'settings.update', 'settings', null, ['tab' => (string)($_POST['tab'] ?? ''), 'keys_changed' => count($settings)]);
+} catch (Throwable $e) { /* never block settings save */ }
 if ($ok === false) {
     // attempt permission fix (best-effort)
     if (is_dir(dirname($settingsFile))) {

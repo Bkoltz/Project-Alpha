@@ -3,6 +3,7 @@
 // Pure PHP audit generation - no Python dependency
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/audit.php';
 
 // Get form parameters
 $startDate = $_POST['start_date'] ?? date('Y-m-d', strtotime('January 1 ' . date('Y')));
@@ -339,6 +340,14 @@ try {
         $zip->addFile($path, $name);
     }
     $zip->close();
+
+    // Audit the data export
+    audit_log($pdo, 'data.export', 'audit_report', null, [
+        'period' => $startDate . ' to ' . $endDate,
+        'invoices' => count($invoices),
+        'contracts' => count($contracts),
+        'quotes' => count($quotes),
+    ]);
 
     // Send file for download
     header('Content-Type: application/zip');

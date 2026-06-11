@@ -157,6 +157,7 @@ foreach ($links as $link) {
     <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%">
         <h3 style="margin:0 0 16px 0">Add Manual Link</h3>
         <form id="manualLinkForm" style="display:grid;gap:16px">
+            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
             <input type="hidden" id="manualLinkEntityType" name="entity_type">
             <input type="hidden" id="manualLinkEntityId" name="entity_id">
             <label>
@@ -191,6 +192,8 @@ foreach ($links as $link) {
 </div>
 
 <script>
+var linksSectionCsrf = '<?php echo htmlspecialchars(csrf_token()); ?>';
+
 function generateLinks(entityType, entityId) {
     if (!confirm('Generate storage links for this ' + entityType + '?')) return;
     
@@ -204,7 +207,8 @@ function generateLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'generate',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())
@@ -238,7 +242,8 @@ function refreshLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'refresh',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())
@@ -268,7 +273,8 @@ function ignoreLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'ignore',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())
@@ -294,7 +300,8 @@ function unignoreLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'unignore',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())

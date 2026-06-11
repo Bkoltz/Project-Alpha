@@ -3,6 +3,8 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/password_policy.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -23,8 +25,9 @@ if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-if (empty($password) || strlen($password) < 8) {
-    header('Location: /?page=accounts&error=' . urlencode('Password must be at least 8 characters'));
+$pwdErr = password_policy_error((string)$password);
+if ($pwdErr !== null) {
+    header('Location: /?page=accounts&error=' . urlencode($pwdErr));
     exit;
 }
 
@@ -48,6 +51,7 @@ try {
     $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role, force_password_reset) VALUES (?, ?, ?, ?, ?)');
     $stmt->execute([$email, $username ?: null, $passwordHash, $role, $forceReset ? 1 : 0]);
     
+    audit_log($pdo, 'user.create', 'user', (int)$pdo->lastInsertId(), ['email' => $email, 'role' => $role]);
     header('Location: /?page=accounts&created=1');
 } catch (PDOException $e) {
     error_log('Failed to create user: ' . $e->getMessage());
