@@ -1,6 +1,7 @@
 <?php
 // src/controllers/payments_create.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/audit.php';
 
 $invoice_id = (int)($_POST['invoice_id'] ?? 0);
 $amount = (float)($_POST['amount'] ?? 0);
@@ -77,6 +78,8 @@ try {
   }
 
   $pdo->commit();
+
+  audit_log($pdo, 'payment.recorded', 'invoice', $invoice_id, ['amount' => $amount, 'method' => $method, 'status' => $status]);
 
   // Send payment received confirmation email if enabled
   try {

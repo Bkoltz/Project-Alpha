@@ -3,6 +3,8 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/password_policy.php';
 
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
@@ -73,8 +75,13 @@ if ($uid <= 0) {
 }
 
 // Validate passwords
-if ($uid <= 0 || strlen($new) < 8 || $new !== $confirm) {
+if ($uid <= 0 || $new !== $confirm) {
   header('Location: /?page=reset-new&email=' . urlencode($email) . '&error=' . urlencode('Invalid input'));
+  exit;
+}
+$pwdErr = password_policy_error($new);
+if ($pwdErr !== null) {
+  header('Location: /?page=reset-new&email=' . urlencode($email) . '&error=' . urlencode($pwdErr));
   exit;
 }
 
@@ -82,6 +89,7 @@ try {
   $hash = password_hash($new, PASSWORD_DEFAULT);
   $st = $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?');
   $st->execute([$hash, $uid]);
+  audit_log($pdo, 'user.password_reset_via_token', 'user', $uid, [], $uid);
   unset($_SESSION['reset_user_id']);
   header('Location: /?page=login&pwd_reset=1');
   exit;

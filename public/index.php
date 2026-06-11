@@ -15,11 +15,15 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
-// Basic security headers (safe defaults for current app)
+// Security headers
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
-header('Referrer-Policy: no-referrer-when-downgrade');
-header("Content-Security-Policy: script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;");
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+if ($secure) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
+header("Content-Security-Policy: script-src 'self' https://cdn.jsdelivr.net https://js.stripe.com 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com;");
 
 // Resolve requested page (allow letters, numbers, dashes, and slashes)
 // Be defensive: some clients may accidentally URL-encode the entire query
@@ -89,14 +93,20 @@ function resolve_view_path(string $page): string
     return $base . 'home.php';
 }
 
-// Error logging into error log file stored in /var/log/error_log.txt
+// Error logging — NEVER display errors to end users in production
 error_reporting(E_ALL);
-ini_set("display_errors", 1);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
+// Log to a file OUTSIDE the public web root
+$errorLogDir = __DIR__ . '/../logs';
+if (!is_dir($errorLogDir)) { @mkdir($errorLogDir, 0750, true); }
+ini_set('error_log', $errorLogDir . '/error_log.txt');
 
 function error_handler($errorno, $errorstr, $errorfile, $errorline)
 {
     $errorMessage = "Error[$errorno]: $errorstr ($errorfile:$errorline)";
-    error_log($errorMessage . PHP_EOL, 3,  __DIR__ . "/error_log.txt");
+    error_log($errorMessage);
     return true;
 }
 
@@ -154,6 +164,15 @@ if ($page === 'logout') {
         session_start();
     }
     
+    // Audit the logout before clearing session
+    if (!empty($_SESSION['user']['id'])) {
+        try {
+            require_once __DIR__ . '/../src/config/db.php';
+            require_once __DIR__ . '/../src/utils/audit.php';
+            audit_log($pdo, 'auth.logout', 'user', (int)$_SESSION['user']['id']);
+        } catch (Throwable $e) { /* never block logout */ }
+    }
+    
     // Clear session data
     $_SESSION = [];
     
@@ -175,6 +194,7 @@ if ($page === 'logout') {
 }
 
 // Allow unauthenticated access only to explicit public pages
+// NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
 $publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy'];
 
 // Toggle to disable auth checks in development/testing
@@ -219,6 +239,18 @@ if (false && empty($_SESSION['user']) && isset($_COOKIE['remember'])) {
 if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     header('Location: /?page=login');
     exit;
+}
+
+// Session timeout: expire sessions after 8 hours of inactivity
+if (!empty($_SESSION['user'])) {
+    $sessionTimeout = 8 * 60 * 60; // 8 hours
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $sessionTimeout) {
+        $_SESSION = [];
+        session_destroy();
+        header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
 }
 
 // Enforce force-password-reset: lock user to account page until they change it
@@ -334,7 +366,7 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'links/link-management', 'links/manual-link-handler'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }

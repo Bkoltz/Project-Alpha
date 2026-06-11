@@ -2,7 +2,23 @@
 // src/controllers/settings/link_test_connection.php
 // Tests connection to storage providers (Dropbox, Google Drive, S3)
 
+require_once __DIR__ . '/../../utils/csrf.php';
+
 header('Content-Type: application/json');
+
+// Require authenticated session (this endpoint can probe credentials)
+if (empty($_SESSION['user'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Authentication required']);
+    exit;
+}
+
+// CSRF check (JSON-friendly)
+if (!csrf_validate()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
+    exit;
+}
 
 $provider = $_POST['provider'] ?? '';
 

@@ -8,6 +8,8 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/crypto.php';
+require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/password_policy.php';
 
 // Verbose error toggle: set APP_VERBOSE_ERRORS=true or AUTH_VERBOSE_ERRORS=true (or APP_DEBUG=true)
 $VERBOSE_AUTH = filter_var(getenv('APP_VERBOSE_ERRORS') ?: getenv('AUTH_VERBOSE_ERRORS') ?: getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN);
@@ -44,6 +46,19 @@ if ($action === 'login') {
             exit;
         }
     } catch (Throwable $e) { /* ignore throttle errors */ }
+
+    // Per-account lockout: 5 failed attempts for this identifier in 15 minutes
+    if ($emailOrUsername !== '') {
+        try {
+            $stA = $pdo->prepare("SELECT COUNT(*) FROM login_attempts WHERE email=? AND attempted_at >= NOW() - INTERVAL 15 MINUTE");
+            $stA->execute([$emailOrUsername]);
+            if ((int)$stA->fetchColumn() >= 5) {
+                audit_log($pdo, 'auth.account_locked', null, null, ['identifier' => $emailOrUsername, 'ip' => $ip]);
+                header('Location: /?page=login&error=' . urlencode('Account temporarily locked. Try again in 15 minutes.'));
+                exit;
+            }
+        } catch (Throwable $e) { /* ignore */ }
+    }
 }
 
 if ($action === 'register_first') {
@@ -56,8 +71,9 @@ if ($action === 'register_first') {
         header('Location: /?page=login&error=' . urlencode('Enter a valid email'));
         exit;
     }
-    if (strlen($password) < 8) {
-        header('Location: /?page=login&error=' . urlencode('Password must be at least 8 characters'));
+    $pwdErr = password_policy_error($password);
+    if ($pwdErr !== null) {
+        header('Location: /?page=login&error=' . urlencode($pwdErr));
         exit;
     }
     $password2 = (string)($_POST['password2'] ?? '');
@@ -69,6 +85,7 @@ if ($action === 'register_first') {
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $st = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?,?,?)');
         $st->execute([$emailOrUsername, $hash, 'admin']);
+        audit_log($pdo, 'user.first_admin_created', 'user', (int)$pdo->lastInsertId(), ['email' => $emailOrUsername]);
         // Do not auto-login the new admin; require explicit sign-in
         // This ensures session/cookies are established via the normal login flow.
         header('Location: /?page=login&created=1');
@@ -102,8 +119,8 @@ if ($action === 'login') {
         }
         $u = $st->fetch(PDO::FETCH_ASSOC);
         if (!$u || !password_verify($password, $u['password_hash'])) {
-            try { $pdo->prepare('INSERT INTO login_attempts (ip, email) VALUES (?,?)')->execute([$ip, $isEmail ? $emailOrUsername : null]); } catch (Throwable $e) {}
-            app_log('auth', 'login failed', ['ip'=>$ip, 'input'=>$emailOrUsername]);
+            try { $pdo->prepare('INSERT INTO login_attempts (ip, email) VALUES (?,?)')->execute([$ip, $emailOrUsername]); } catch (Throwable $e) {}
+            audit_log($pdo, 'auth.login_failed', 'user', $u ? (int)$u['id'] : null, ['ip' => $ip, 'input' => $emailOrUsername]);
             header('Location: /?page=login&error=' . urlencode('Invalid credentials'));
             exit;
         }
@@ -136,7 +153,12 @@ if ($action === 'login') {
         // on success (no 2FA), regenerate session and optionally clear attempts
         session_regenerate_id(true);
         $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
-        try { $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]); } catch (Throwable $e) {}
+        // Clear old login attempts on success
+        try {
+            $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]);
+            $pdo->prepare('DELETE FROM login_attempts WHERE email=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$u['email']]);
+        } catch (Throwable $e) {}
+        audit_log($pdo, 'auth.login_success', 'user', (int)$u['id'], ['ip' => $ip]);
         // Remember-me flow is intentionally disabled. Below is the implementation
         // kept as a comment for future use.
         /*

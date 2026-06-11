@@ -3,6 +3,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/audit.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -52,6 +53,7 @@ try {
     $stmt = $pdo->prepare('UPDATE users SET email = ?, username = ?, role = ?, is_disabled = ?, force_password_reset = ? WHERE id = ?');
     $stmt->execute([$email, $username ?: null, $role, $isDisabled ? 1 : 0, $forceReset ? 1 : 0, $userId]);
     
+    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'is_disabled' => $isDisabled ? 1 : 0]);
     header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
 } catch (PDOException $e) {
     error_log('Failed to update user: ' . $e->getMessage());
