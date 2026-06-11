@@ -23,7 +23,7 @@ header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 if ($secure) {
     header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 }
-header("Content-Security-Policy: script-src 'self' https://cdn.jsdelivr.net https://js.stripe.com 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com;");
+header("Content-Security-Policy: script-src 'self' https://cdn.jsdelivr.net https://js.stripe.com 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none';");
 
 // Resolve requested page (allow letters, numbers, dashes, and slashes)
 // Be defensive: some clients may accidentally URL-encode the entire query
