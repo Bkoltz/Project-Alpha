@@ -269,6 +269,17 @@ if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     }
 }
 
+// Audit middleware: guarantees baseline audit rows for sensitive actions
+// (payments, 2FA changes, API keys, exports, deletes) even when the routed
+// controller doesn't call audit_log() itself. See src/utils/audit_middleware.php.
+try {
+    require_once __DIR__ . '/../src/config/db.php';
+    require_once __DIR__ . '/../src/utils/audit_middleware.php';
+    audit_middleware($pdo, $page);
+} catch (Throwable $e) {
+    @error_log('[audit] middleware init failed: ' . $e->getMessage());
+}
+
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
