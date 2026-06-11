@@ -111,17 +111,15 @@ $existing = [];
 if (is_readable($target)) {
     $existing = json_decode(@file_get_contents($target), true) ?: [];
 }
-
-// Ensure we have a persistent encryption key for secrets before attempting encryption
-if (empty($existing['encryption_key'])) {
-    // generate a new base64-encoded 32 byte key and attempt to persist it so crypto helpers can use it immediately
-    $newKey = base64_encode(random_bytes(32));
-    $existing['encryption_key'] = $newKey;
-    // best-effort: write the existing file back with the new encryption key so crypto_get_key/crypto_load_persistent_key
-    // can find it during this request. We'll write the file if the directory is writable.
-    if (is_dir(dirname($target)) && is_writable(dirname($target))) {
-        @file_put_contents($target, json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    }
+// Encryption key is sourced exclusively from the APP_ENCRYPTION_KEY env var
+// (see src/utils/crypto.php). We no longer generate or persist a plaintext
+// key inside settings.json — the repo is public and that pattern leaked a key.
+if (getenv('APP_ENCRYPTION_KEY') === false || getenv('APP_ENCRYPTION_KEY') === '') {
+    @error_log('[settings] APP_ENCRYPTION_KEY not set — secret fields cannot be encrypted/saved');
+}
+// Drop any legacy plaintext key still sitting in the file.
+if (isset($existing['encryption_key'])) {
+    unset($existing['encryption_key']);
 }
 
 if (isset($_POST['brand_name'])) {
@@ -464,6 +462,8 @@ if (is_readable($target)) {
 }
 
 $merged = array_merge($existing, $settings);
+// Never persist a plaintext encryption key in settings.json (env-var only).
+unset($merged['encryption_key']);
 $payload = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 $ok = @file_put_contents($target, $payload);
 

@@ -1,45 +1,25 @@
 <?php
 // src/utils/crypto.php
-// AES-256-GCM encryption helpers. Uses a persistent key if available.
-
-function crypto_load_persistent_key(): string {
-    // Try primary config settings.json field 'encryption_key' (base64)
-    $paths = [
-        '/var/www/config/settings.json',
-        __DIR__ . '/../config/settings.json',
-        __DIR__ . '/../config/../../config/settings.json', // project config/settings.json
-    ];
-    foreach ($paths as $p) {
-        if (@is_readable($p)) {
-            $j = @file_get_contents($p);
-            if ($j !== false) {
-                $data = json_decode($j, true);
-                if (is_array($data) && !empty($data['encryption_key'])) {
-                    $ek = (string)$data['encryption_key'];
-                    $raw = base64_decode($ek, true);
-                    if ($raw !== false && strlen($raw) === 32) { return $ek; }
-                    // if not base64, derive
-                    return base64_encode(hash('sha256', $ek, true));
-                }
-            }
-        }
-    }
-    return '';
-}
+// AES-256-GCM encryption helpers.
+//
+// SECURITY: The encryption key is loaded ONLY from the APP_ENCRYPTION_KEY
+// environment variable. The legacy plaintext-key-in-settings.json fallback
+// was removed (the repo is public; a committed key must be treated as burned).
+// To rotate from the legacy key, run: php tools/rotate_encryption_key.php
 
 function crypto_get_key(): string {
-    // Prefer env var for power users
     $k = getenv('APP_ENCRYPTION_KEY') ?: '';
-    if ($k !== '') {
-        return hash('sha256', $k, true);
+    if ($k === '') {
+        @error_log('[crypto] APP_ENCRYPTION_KEY is not set; encryption/decryption unavailable');
+        return '';
     }
-    // Else load persistent key from settings.json
-    $ekB64 = crypto_load_persistent_key();
-    if ($ekB64 !== '') {
-        $raw = base64_decode($ekB64, true);
-        if ($raw !== false && strlen($raw) === 32) return $raw;
+    // Accept a base64-encoded 32-byte key directly; otherwise derive via SHA-256
+    // (matches the legacy env-var behaviour so existing env-based deployments keep working).
+    $raw = base64_decode($k, true);
+    if ($raw !== false && strlen($raw) === 32 && base64_encode($raw) === $k) {
+        return $raw;
     }
-    return '';
+    return hash('sha256', $k, true);
 }
 
 function crypto_encrypt(string $plaintext): ?string {
