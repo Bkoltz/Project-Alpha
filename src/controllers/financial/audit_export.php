@@ -4,9 +4,6 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 
-// Verify CSRF token
-csrf_verify_post_or_redirect('financial/audit-export');
-
 // Get form parameters
 $startDate = $_POST['start_date'] ?? date('Y-m-d', strtotime('January 1 ' . date('Y')));
 $endDate = $_POST['end_date'] ?? date('Y-m-d');
@@ -147,10 +144,15 @@ try {
                 c.client_id,
                 cl.name as client_name,
                 c.project_code,
-                c.total as total,
+                c.contract_type,
+                c.total,
                 c.status,
                 c.created_at,
-                c.expiration_date
+                c.start_date,
+                c.end_date,
+                c.discount_type,
+                c.discount_value,
+                c.tax_percent
             FROM contracts c
             LEFT JOIN clients cl ON c.client_id = cl.id
             WHERE c.created_at BETWEEN ? AND ?
@@ -171,10 +173,13 @@ try {
                 q.client_id,
                 cl.name as client_name,
                 q.project_code,
+                q.quote_type,
                 q.total,
                 q.status,
                 q.created_at,
-                q.valid_until
+                q.discount_type,
+                q.discount_value,
+                q.tax_percent
             FROM quotes q
             LEFT JOIN clients cl ON q.client_id = cl.id
             WHERE q.created_at BETWEEN ? AND ?

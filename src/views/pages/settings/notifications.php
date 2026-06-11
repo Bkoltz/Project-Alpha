@@ -3,12 +3,6 @@
 ?>
 
 <div style="max-width:900px">
-  <!-- Beta Banner -->
-  <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
-    <span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;text-transform:uppercase">Beta</span>
-    <span style="color:#92400e;font-size:14px">Notifications and automation features are currently in beta. Features may change or be removed.</span>
-  </div>
-
   <h2 style="margin:0 0 8px 0">Notifications & Automation</h2>
   <p style="margin:0 0 24px 0;color:var(--muted)">Configure automated emails, reminders, and system tasks</p>
 
