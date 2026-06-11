@@ -52,7 +52,14 @@ services:
   db:
     image: "mysql:8"
     restart: unless-stopped
-    command: --log-error-verbosity=1
+    # Encryption at rest (MySQL 8.4: component_keyring_file via manifest,
+    # the legacy keyring_file.so plugin was removed). New tables, redo and
+    # undo logs encrypted by default. See docs/ENCRYPTION_AT_REST.md.
+    command: >
+      --log-error-verbosity=1
+      --default-table-encryption=ON
+      --innodb-redo-log-encrypt=ON
+      --innodb-undo-log-encrypt=ON
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
@@ -60,6 +67,9 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
     volumes:
       - db_data:/var/lib/mysql
+      - db_keyring:/var/lib/mysql-keyring
+      - ./database/mysql/mysqld.my:/usr/sbin/mysqld.my:ro
+      - ./database/mysql/component_keyring_file.cnf:/usr/lib64/mysql/plugin/component_keyring_file.cnf:ro
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test:
@@ -76,4 +86,5 @@ services:
     #   - "127.0.0.1:3307:3306"
 volumes:
   db_data: {}
+  db_keyring: {}
   cron_logs: {}
