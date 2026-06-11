@@ -1,6 +1,40 @@
 # Encryption at Rest — InnoDB Tablespace Encryption
 
-Status: DOCUMENTED, NOT YET APPLIED (requires a maintenance window).
+Status: APPLIED June 2026 (MySQL 8.4, component_keyring_file).
+
+## Current setup
+- `database/mysql/mysqld.my` — manifest, bind-mounted to `/usr/sbin/mysqld.my`
+- `database/mysql/component_keyring_file.cnf` — bind-mounted to
+  `/usr/lib64/mysql/plugin/component_keyring_file.cnf`
+- Keyring data lives in the `db_keyring` named volume
+  (`/var/lib/mysql-keyring/component_keyring_file`)
+- `default_table_encryption=ON`, `innodb-redo-log-encrypt=ON`,
+  `innodb-undo-log-encrypt=ON` in the db service command
+- Schema default: `ALTER SCHEMA project_alpha DEFAULT ENCRYPTION='Y'`
+- All 61 existing tablespaces altered to `ENCRYPTION='Y'`
+
+## Verify
+```sql
+SELECT * FROM performance_schema.keyring_component_status;     -- Active
+SELECT COUNT(*) FROM information_schema.innodb_tablespaces
+WHERE name LIKE 'project_alpha/%' AND encryption='Y';          -- = table count
+```
+
+## Operational gotchas (learned the hard way)
+- MySQL 8.4 removed the legacy `keyring_file.so` plugin
+  (`--early-plugin-load` does NOT work). Use the component + manifest.
+- The bind-mounted manifest/config files must be world-readable (644) —
+  mysqld runs as the `mysql` user.
+- The keyring file must exist and be owned `mysql:mysql` BEFORE first
+  start. The entrypoint creates it root-owned otherwise and mysqld
+  crash-loops with "Failed to read keyring file". Fix:
+  `docker run --rm -v project-alpha_db_keyring:/k mysql:8 sh -c \
+   "touch /k/component_keyring_file && chown -R mysql:mysql /k"`
+- **BACK UP THE `db_keyring` VOLUME.** Without it, the data files are
+  unrecoverable. Note `tools/db_backup.sh` mysqldump output is plaintext
+  SQL (that's the point — restorable anywhere); store dumps securely.
+- This protects against stolen disks/volumes, NOT against root on the
+  host. Revisit a KMS-backed keyring at launch scale.
 
 ## What this covers
 Encrypting the MySQL data files on disk so a stolen disk/volume does not
