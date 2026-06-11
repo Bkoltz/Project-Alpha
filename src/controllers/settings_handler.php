@@ -318,6 +318,17 @@ if (isset($_POST['link_expiration_warning_days'])) {
     $settings['link_expiration_warning_days'] = max(1, min(90, (int)$_POST['link_expiration_warning_days']));
 }
 
+// Invoice document settings
+if (isset($_POST['invoice_show_terms'])) {
+    $settings['invoice_show_terms'] = !empty($_POST['invoice_show_terms']) ? 1 : 0;
+}
+if (isset($_POST['invoice_show_project_code'])) {
+    $settings['invoice_show_project_code'] = !empty($_POST['invoice_show_project_code']) ? 1 : 0;
+}
+if (isset($_POST['invoice_show_due_date'])) {
+    $settings['invoice_show_due_date'] = !empty($_POST['invoice_show_due_date']) ? 1 : 0;
+}
+
 // Quote settings
 $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
 $settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;

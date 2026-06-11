@@ -61,12 +61,6 @@ $providers = ['dropbox', 'gdrive', 's3'];
     })();
     </script>
 
-    <!-- Beta Banner -->
-    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
-      <span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;text-transform:uppercase">Beta</span>
-      <span style="color:#92400e;font-size:14px">Link resolver features are currently in beta. Features may change or be removed.</span>
-    </div>
-
     <h2 style="margin:0 0 8px 0">Link Resolver</h2>
     <p style="margin:0 0 24px 0;color:var(--muted)">Auto-generate and manage links for client/organization file storage</p>
 
@@ -259,26 +253,14 @@ $providers = ['dropbox', 'gdrive', 's3'];
     
     <?php endforeach; ?>
 
-    <!-- Link Expiration Checker -->
+    <!-- Link Expiration Reference -->
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-top:20px">
         <legend style="padding:0 8px;font-weight:600">Link Expiration Management</legend>
-        
-        <div style="display:grid;gap:16px">
-            <label style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" name="link_expiration_checker_enabled" value="1" 
-                       <?php echo !empty($appConfig['link_expiration_checker']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Enable automatic expiration checking (daily cron)</span>
-            </label>
-
-            <label style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" name="link_expiration_email_enabled" value="1" 
-                       <?php echo !empty($appConfig['link_expiration_email_enabled']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Email notifications for expiring links</span>
-            </label>
-
-            <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
-                <strong>ℹ️ Note:</strong> Expired links will be marked automatically but not deleted. You can manually refresh or regenerate them as needed.
-            </div>
+        <div style="padding:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:13px">
+            ℹ️ <strong>Link expiration automation and warnings</strong> are managed on the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab under "System Automation" and "Link Expiration Warnings".
+        </div>
+        <div style="margin-top:12px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
+            <strong>ℹ️ Note:</strong> Expired links will be marked automatically but not deleted. You can manually refresh or regenerate them as needed.
         </div>
     </fieldset>
     

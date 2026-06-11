@@ -61,7 +61,7 @@ try {
             break;
             
         case 'payment_intent.payment_failed':
-            @error_log('[StripeWebhook] Payment failed: ' . json_encode($event['data']['object']['id'] ?? 'unknown'));
+            handlePaymentFailed($pdo, $appConfig, $event['data']['object']);
             break;
             
         default:
@@ -75,6 +75,71 @@ try {
     @error_log('[StripeWebhook] Error: ' . $e->getMessage());
     http_response_code(400);
     echo json_encode(['error' => $e->getMessage()]);
+}
+
+/**
+ * Handle payment failure - send alert email if enabled
+ */
+function handlePaymentFailed($pdo, $appConfig, $paymentIntent) {
+    $piId = $paymentIntent['id'] ?? 'unknown';
+    $metadata = $paymentIntent['metadata'] ?? [];
+    $invoiceId = $metadata['pa_invoice_id'] ?? $metadata['invoice_id'] ?? null;
+    $errorMsg = $paymentIntent['last_payment_error']['message'] ?? 'Unknown error';
+    
+    @error_log('[StripeWebhook] Payment failed: ' . $piId . ' - ' . $errorMsg);
+    
+    // Log to auto_pay_log if invoice linked
+    if ($invoiceId) {
+        try {
+            $invStmt = $pdo->prepare('SELECT client_id FROM invoices WHERE id = ?');
+            $invStmt->execute([(int)$invoiceId]);
+            $clientId = (int)$invStmt->fetchColumn();
+            $pdo->prepare('INSERT INTO auto_pay_log (client_id, invoice_id, amount, status, stripe_payment_intent_id, error_message) VALUES (?, ?, ?, ?, ?, ?)')
+                ->execute([$clientId ?: null, (int)$invoiceId, ($paymentIntent['amount'] ?? 0) / 100, 'failed', $piId, $errorMsg]);
+        } catch (Throwable $e) { @error_log('[StripeWebhook] Failed to log payment failure: ' . $e->getMessage()); }
+    }
+    
+    // Send failure alert email if enabled
+    if (!empty($appConfig['payment_failure_alert']) && !empty($appConfig['from_email'])) {
+        try {
+            require_once __DIR__ . '/../../utils/mailer.php';
+            require_once __DIR__ . '/../../utils/crypto.php';
+            $smtpPass = '';
+            if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
+                $encVal = $appConfig['smtp_password_enc'];
+                if (strpos($encVal, 'plain::') === 0) { $smtpPass = substr($encVal, 7); }
+                else { $pt = crypto_decrypt($encVal); if (is_string($pt)) { $smtpPass = $pt; } }
+            }
+            $mailCfg = [
+                'host' => (string)($appConfig['smtp_host'] ?? ''),
+                'port' => (int)($appConfig['smtp_port'] ?? 587),
+                'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
+                'username' => (string)($appConfig['smtp_username'] ?? ''),
+                'password' => $smtpPass,
+            ];
+            $fromEmail = (string)$appConfig['from_email'];
+            $fromName = (string)($appConfig['from_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+            
+            // Get client/invoice details
+            $details = '';
+            if ($invoiceId) {
+                $dStmt = $pdo->prepare('SELECT i.doc_number, c.name FROM invoices i LEFT JOIN clients c ON c.id = i.client_id WHERE i.id = ?');
+                $dStmt->execute([(int)$invoiceId]);
+                $d = $dStmt->fetch(PDO::FETCH_ASSOC);
+                if ($d) $details = 'Invoice I-' . ($d['doc_number'] ?? $invoiceId) . ' for ' . ($d['name'] ?? 'Unknown');
+            }
+            
+            $subject = 'Payment Failed' . ($details ? " — $details" : '');
+            $body = '<h2>Auto-Pay Failure Alert</h2>';
+            $body .= '<p>' . ($details ? "<strong>{$details}</strong><br>" : '') . 'Amount: $' . number_format(($paymentIntent['amount'] ?? 0) / 100, 2) . '</p>';
+            $body .= '<p><strong>Error:</strong> ' . htmlspecialchars($errorMsg) . '</p>';
+            $body .= '<p>Payment Intent: ' . htmlspecialchars($piId) . '</p>';
+            
+            mailer_send($mailCfg, $fromEmail, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
+        } catch (Throwable $e) {
+            @error_log('[StripeWebhook] Failed to send payment failure alert: ' . $e->getMessage());
+        }
+    }
 }
 
 /**

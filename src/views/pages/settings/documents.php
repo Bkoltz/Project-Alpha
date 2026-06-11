@@ -11,11 +11,6 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
   <a href="/?page=settings&tab=documents&doc_tab=customization" data-skip-nav style="padding:10px 16px;font-weight:<?php echo $docTab === 'customization' ? '600' : '400'; ?>;color:<?php echo $docTab === 'customization' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $docTab === 'customization' ? '2px solid var(--nav-accent)' : '2px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">Customization</a>
 </div>
 
-<!-- Beta Banner -->
-<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
-  <span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;text-transform:uppercase">Beta</span>
-  <span style="color:#92400e;font-size:14px">Document settings are currently in beta. Features may change or be removed.</span>
-</div>
 
 <?php if ($docTab !== 'customization'): ?>
 <form method="post" action="/?page=settings&tab=documents&doc_tab=<?php echo htmlspecialchars($docTab); ?>" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:800px">
@@ -148,11 +143,40 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
 
 <?php if ($docTab === 'invoices'): ?>
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-    <legend style="padding:0 6px;color:var(--muted)">Invoice Options</legend>
-    <p style="margin:0;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
-      ⚙️ <strong>Invoice automation and notifications</strong> have been moved to the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab for easier management.
-    </p>
+    <legend style="padding:0 6px;color:var(--muted)">Invoice Display Options</legend>
+    <div style="display:grid;gap:12px">
+      <label>
+        <input type="checkbox" name="invoice_show_terms" value="1" <?php echo (!isset($appConfig['invoice_show_terms']) || !empty($appConfig['invoice_show_terms'])) ? 'checked' : ''; ?>>
+        <span style="font-weight:600">Show terms on Invoices</span>
+        <div style="margin-top:4px;color:var(--muted);font-size:12px">When enabled, the standard terms will appear on invoice PDFs.</div>
+      </label>
+      <label>
+        <input type="checkbox" name="invoice_show_project_code" value="1" <?php echo (!isset($appConfig['invoice_show_project_code']) || !empty($appConfig['invoice_show_project_code'])) ? 'checked' : ''; ?>>
+        <span style="font-weight:600">Show project code on Invoices</span>
+        <div style="margin-top:4px;color:var(--muted);font-size:12px">Display the project/job code on invoice detail and PDF views.</div>
+      </label>
+      <label>
+        <input type="checkbox" name="invoice_show_due_date" value="1" <?php echo (!isset($appConfig['invoice_show_due_date']) || !empty($appConfig['invoice_show_due_date'])) ? 'checked' : ''; ?>>
+        <span style="font-weight:600">Show due date on Invoices</span>
+        <div style="margin-top:4px;color:var(--muted);font-size:12px">Display the payment due date prominently on invoice views.</div>
+      </label>
+    </div>
   </fieldset>
+
+  <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+    <legend style="padding:0 6px;color:var(--muted)">Invoice Defaults</legend>
+    <div style="display:grid;gap:12px">
+      <label>
+        <div style="margin-bottom:4px;font-weight:600">Default Payment Terms (NET days)</div>
+        <input type="number" name="net_terms_days" value="<?php echo (int)($appConfig['net_terms_days'] ?? 30); ?>" min="0" max="365" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div style="margin-top:4px;color:var(--muted);font-size:12px">Number of days until an invoice is considered overdue (e.g., NET 30).</div>
+      </label>
+    </div>
+  </fieldset>
+
+  <div style="margin-top:16px;padding:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:13px">
+    ℹ️ <strong>Invoice automation and email reminders</strong> are managed on the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab.
+  </div>
 <?php endif; ?>
 
 <?php if ($docTab !== 'customization'): ?>
