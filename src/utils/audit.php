@@ -43,6 +43,9 @@ function audit_log(
             $ip,
             $ua,
         ]);
+        // Tell the router-level audit middleware a row was already written
+        // for this request, so it skips its baseline entry.
+        $GLOBALS['__audit_logged'] = true;
     } catch (Throwable $e) {
         // Never let audit logging break the primary operation
         @error_log('[audit] Failed to write audit log: ' . $e->getMessage());
