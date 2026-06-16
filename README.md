@@ -213,27 +213,31 @@ auto_pay_attempt, payment_method_id, status, created_at
 
 ## Environment Variables
 
-Configure in `config/settings.json` or via Settings UI:
+Required variables in `.env` (copy from `.env.example`):
 
-| Setting | Description |
-|---------|-------------|
-| `stripe_publishable_key` | Stripe publishable key |
-| `stripe_secret_key_enc` | Encrypted Stripe secret key |
-| `stripe_webhook_secret_enc` | Encrypted webhook signing secret |
-| `cron_enabled` | Enable/disable cron jobs |
-| `smtp_host`, `smtp_port`, etc. | Email configuration |
-| `net_terms_days` | Default payment terms (days) |
-| `documents_valid_days` | Public link expiration days |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ADMIN_PASSWORD` | **Yes** | Initial admin password. Hashed on container start and used to create/reset the admin account |
+| `ADMIN_EMAIL` | No | Admin email address (default: `admin@project-alpha.local`) |
+| `ADMIN_USERNAME` | No | Admin username for login (default: `admin`) |
+| `APP_ENCRYPTION_KEY` | **Yes** | Base64-encoded 32-byte key for AES-256-GCM secret encryption. Generate with `php -r "echo base64_encode(random_bytes(32));"` |
+| `MYSQL_ROOT_PASSWORD` | **Yes** | MySQL root password |
+| `MYSQL_PASSWORD` | **Yes** | MySQL app user password |
+| `stripe_publishable_key` | No | Stripe publishable key (entered via Settings UI) |
+| `stripe_secret_key_enc` | No | Encrypted Stripe secret key (entered via Settings UI) |
+| `stripe_webhook_secret_enc` | No | Encrypted webhook signing secret (entered via Settings UI) |
 
-Environment variables (Docker):
+Docker-specific environment variables:
 
 | Variable | Purpose |
 |----------|---------|
 | `DB_HOST` | MySQL host (default: `db`) |
 | `MYSQL_DATABASE` | Database name (default: `project_alpha`) |
-| `MYSQL_USER` / `MYSQL_PASSWORD` | DB credentials |
-| `APP_AUTH_DISABLED` | Set `true` to bypass authentication |
+| `MYSQL_USER` | DB app user (default: `appuser`) |
+| `APP_AUTH_DISABLED` | Set `true` to bypass authentication (dev only) |
 | `APP_API_ENABLED` | Enable/disable API endpoints (default: `true`) |
+| `APP_HOST` | Production domain for Apache hardening headers |
+| `APP_VERBOSE_ERRORS` | Show detailed error messages (dev only) |
 
 ---
 
@@ -401,7 +405,68 @@ vendor/bin/phpunit --colors=always
 
 ## Security
 
+### Reporting Vulnerabilities
+
 To report any security vulnerabilities, send an email to bkoltz1627@gmail.com with as much details as possible. Please avoid creating any public issues before notifying us of any vulnerabilities. All vulnerabilities will be treated as highest priority with fixes provided within a couple of days of receiving all required information.
+
+### Secret Management
+
+Sensitive values (Stripe keys, SMTP password, encryption key) are **never stored in committed files**. They live exclusively in the `.env` file (gitignored) and are encrypted at the application layer before being written to the database.
+
+| What | Where | Notes |
+|------|-------|-------|
+| Stripe keys | `.env` + encrypted in DB | Removed from `settings.json` (May 2026) |
+| Encryption key | `APP_ENCRYPTION_KEY` env var only | Removed from `settings.json`; `config/settings.json` is untracked |
+| SMTP password | `.env` + encrypted in DB | Never plaintext in repo |
+| MySQL passwords | `.env` | Docker Compose `:?err` validation — startup fails if missing |
+
+- `.env.example` is tracked as a template; copy it to `.env` and fill in secrets.
+- `.gitignore` blocks `config/settings.json`, `.env`, and upload directories.
+- `.gitleaksignore` prevents previously-rotated secrets from flagging CI.
+
+### Authentication & Authorization
+
+- **Session-based login** with CSRF protection (Symfony token, legacy fallback).
+- **First-admin registration**: When the `users` table is empty, the login page shows a "Create First Admin" form (no manual DB inserts needed). The Docker startup path seeds the admin from `ADMIN_PASSWORD` in `.env`.
+- **Password policy**: Minimum 8 characters, mixed case, digit, and special character required; enforced on register, reset, and account update.
+- **Rate limiting**: IP-based (15 attempts / 10 min) and per-account (5 attempts / 15 min) lockout on failed logins.
+- **Role-based access**: `admin` vs `user` roles on all sensitive pages and controllers.
+- **2FA (TOTP)**: Optional two-factor authentication via authenticator app; backup codes provided.
+- **Audit middleware**: Router-level logging of all sensitive actions (payments, password resets, 2FA changes, API key create/revoke, deletes, contract sign/complete, email send, PDF export, Stripe webhooks).
+
+### Database Encryption
+
+- **Encryption at rest** (InnoDB tablespace encryption via MySQL 8.4 `component_keyring_file`).
+  - Manifest + component config bind-mounted read-only; keyring data in a dedicated named volume.
+  - `default_table_encryption=ON`, redo + undo log encryption enabled.
+  - All 61 tablespaces verified encrypted.
+  - See `docs/ENCRYPTION_AT_REST.md` for operational gotchas and backup requirements.
+- **Application-level encryption**: Secrets are encrypted with AES-256-GCM before DB storage using the `APP_ENCRYPTION_KEY`.
+
+### Container & Network Hardening
+
+- **Docker Compose**: No hardcoded passwords; all credentials come from `.env` with `:?err` validation.
+- **Network segmentation**: MySQL port is NOT mapped to the host by default — DB is reachable only inside the Docker internal network.
+- **Apache hardening** (always on, not conditional):
+  - `ServerTokens Prod` + `ServerSignature Off` — no version leakage.
+  - `expose_php=Off` — removes `X-Powered-By` header.
+  - Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Strict-Transport-Security` (when HTTPS), and CSP.
+- **ZAP baseline scan**: Run against the compose network; HTML report archived in `docs/zap_baseline_2026-06-11.html`. Remaining findings are informational (session cookies, COEP, non-storable content) — acceptable for an authenticated app.
+
+### Backup & Recovery
+
+- `tools/db_backup.sh` — mysqldump to timestamped `.sql.gz` with automatic rotation (keeps last 7 days).
+- `tools/db_restore.sh` — restore from a backup dump.
+- The **keyring volume MUST be backed up separately** — without it, encrypted data files are unrecoverable.
+
+### Security Documentation in `docs/`
+
+| File | Topic |
+|------|-------|
+| `ENCRYPTION_AT_REST.md` | InnoDB tablespace encryption setup & gotchas |
+| `AUTH_MIGRATION.md` | Auth folder reorganization (controllers + views) |
+| `SECURITY.md` | Security contact info |
+| `zap_baseline_2026-06-11.html` | ZAP baseline scan report |
 
 ---
 
@@ -412,6 +477,8 @@ Proprietary - All rights reserved.
 ---
 
 ## Recent Updates (2025-2026)
+
+### Feature Updates
 
 - ✅ Re-enabled document re-enablement (un-void) for voided contracts/invoices
 - ✅ Fixed document date display to show creation date instead of current date
@@ -429,13 +496,31 @@ Proprietary - All rights reserved.
 - ✅ Fixed invoice public view and Stripe connection issues
 - ✅ Moved document settings to consolidated Documents tab with sub-tabs
 
+### Security & Infrastructure (2026)
+
+- ✅ **Removed committed encryption key** — `APP_ENCRYPTION_KEY` now env-var only; `config/settings.json` is untracked (burned old key)
+- ✅ **Moved Stripe secrets to `.env`** — no longer stored in committed `settings.json`; encrypted before DB storage
+- ✅ **Docker Compose hardening** — all passwords from `.env` with `:?err` validation; DB port removed from host mapping (internal network only)
+- ✅ **Router-level audit middleware** — logs all sensitive actions (payments, 2FA, API keys, deletes, contract sign, email, PDF export, webhooks)
+- ✅ **Password policy enforcement** — 8+ chars, mixed case, digit, special char on register/reset/update
+- ✅ **Login rate limiting** — IP (15/10min) and per-account (5/15min) lockouts
+- ✅ **Two-Factor Authentication (TOTP)** — optional 2FA with backup codes
+- ✅ **InnoDB encryption at rest** — MySQL 8.4 `component_keyring_file`; all 61 tablespaces encrypted
+- ✅ **Apache hardening** — `ServerTokens Prod`, `ServerSignature Off`, `expose_php=Off`, security headers, CSP
+- ✅ **ZAP baseline scan** — 0 failures, 9 low-sev warnings (informational only); report in `docs/zap_baseline_2026-06-11.html`
+- ✅ **Backup & restore tooling** — `tools/db_backup.sh` and `tools/db_restore.sh` with 7-day rotation
+- ✅ **Auth folder migration** — controllers and views moved to `src/controllers/auth/` and `src/views/pages/auth/` for consistency
+
 ---
 
 *For detailed technical documentation, see the `docs/` folder including:*
 - `AGENTS.md` - Development guidance for AI assistants
+- `AUTH_MIGRATION.md` - Auth folder reorganization summary
+- `ENCRYPTION_AT_REST.md` - InnoDB tablespace encryption setup & gotchas
 - `IMPLEMENTATION_ORDER.md` - Feature implementation sequence
 - `PROGRESS_SUMMARY.md` - Completed tasks and status
 - `RECURRING_INVOICES_SETUP.md` - Recurring billing guide
 - `ON_DEMAND_CONTRACTS_README.md` - On-demand features
 - `FILTER_MIGRATION_SUMMARY.md` - Template migration notes
 - `SECURITY.md` - Security contact info
+- `zap_baseline_2026-06-11.html` - OWASP ZAP baseline scan report
