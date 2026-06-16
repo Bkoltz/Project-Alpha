@@ -65,9 +65,9 @@ echo "----------------------------------------\n";
 $requiredTables = [
     'users', 'clients', 'projects', 'quotes', 'contracts', 'invoices', 
     'payments', 'tax_rates', 'organizations', 'project_documents',
-    'long_term_contracts', 'on_demand_contracts', 'recurring_invoices',
-    'financial_records', 'audit_logs', 'notifications', 'api_keys',
-    'custom_fields', 'document_settings', 'webhooks', 'app_config'
+    'contracts', 'contracts', 'invoices',
+    'financial_records', 'system_audit', 'notifications', 'api_keys',
+    'document_custom_fields', 'document_settings', 'webhooks', 'app_config'
 ];
 
 foreach ($requiredTables as $table) {
@@ -115,21 +115,21 @@ $requiredColumns = [
     ['invoices', 'doc_number'],
     ['payments', 'invoice_id'],
     ['payments', 'amount'],
-    ['payments', 'method'],
+    ['payments', 'payment_method'],
     ['payments', 'stripe_session_id'],
     ['payments', 'stripe_payment_intent_id'],
     ['payments', 'auto_pay_attempt'],
     ['payments', 'status'],
-    ['long_term_contracts', 'client_id'],
-    ['long_term_contracts', 'billing_interval_count'],
-    ['long_term_contracts', 'billing_interval_unit'],
-    ['long_term_contracts', 'next_invoice_date'],
-    ['long_term_contracts', 'stripe_subscription_id'],
-    ['long_term_contracts', 'auto_pay_enabled'],
-    ['recurring_invoices', 'long_term_contract_id'],
-    ['recurring_invoices', 'status'],
-    ['recurring_invoices', 'sent_at'],
-    ['recurring_invoices', 'paid_at'],
+    ['contracts', 'client_id'],
+    ['contracts', 'billing_interval_count'],
+    ['contracts', 'billing_interval_unit'],
+    ['contracts', 'next_invoice_date'],
+    ['contracts', 'stripe_subscription_id'],
+    ['contracts', 'auto_pay_enabled'],
+    ['invoices', 'contract_id'],
+    ['invoices', 'status'],
+    ['invoices', 'sent_at'],
+    ['invoices', 'paid_at'],
     ['tax_rates', 'name'],
     ['tax_rates', 'rate'],
     ['tax_rates', 'county'],
@@ -139,10 +139,10 @@ $requiredColumns = [
     ['api_keys', 'key_hash'],
     ['api_keys', 'scopes'],
     ['api_keys', 'revoked_at'],
-    ['audit_logs', 'user_id'],
-    ['audit_logs', 'action'],
-    ['audit_logs', 'entity_type'],
-    ['audit_logs', 'entity_id'],
+    ['system_audit', 'user_id'],
+    ['system_audit', 'action'],
+    ['system_audit', 'entity_type'],
+    ['system_audit', 'entity_id'],
     ['webhooks', 'name'],
     ['webhooks', 'url'],
     ['webhooks', 'events'],
@@ -326,18 +326,18 @@ test("Can create long term contract with billing interval", function() use ($pdo
         ->execute(['LTC Test', 'ltc@test.com', 'WI']);
     $clientId = (int)$pdo->lastInsertId();
     
-    $pdo->prepare("INSERT INTO long_term_contracts 
+    $pdo->prepare("INSERT INTO contracts 
         (client_id, status, total, billing_interval_count, billing_interval_unit, next_invoice_date) 
         VALUES (?, ?, ?, ?, ?, DATE_ADD(CURDATE(), INTERVAL 1 MONTH))")
         ->execute([$clientId, 'active', 1000.00, 1, 'month']);
     $ltcId = (int)$pdo->lastInsertId();
     
-    $stmt = $pdo->prepare("SELECT billing_interval_unit, next_invoice_date FROM long_term_contracts WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT billing_interval_unit, next_invoice_date FROM contracts WHERE id = ?");
     $stmt->execute([$ltcId]);
     $ltc = $stmt->fetch(PDO::FETCH_ASSOC);
     
     // Cleanup
-    $pdo->prepare("DELETE FROM long_term_contracts WHERE id = ?")->execute([$ltcId]);
+    $pdo->prepare("DELETE FROM contracts WHERE id = ?")->execute([$ltcId]);
     $pdo->prepare("DELETE FROM clients WHERE id = ?")->execute([$clientId]);
     
     return $ltc['billing_interval_unit'] === 'month' && $ltc['next_invoice_date'] !== null;
@@ -409,15 +409,15 @@ echo "\n📋 PHASE 8: Audit Log Tests\n";
 echo "----------------------------------------\n";
 
 test("Can create audit log entry", function() use ($pdo) {
-    $pdo->prepare("INSERT INTO audit_logs (action, entity_type, entity_id, details) VALUES (?, ?, ?, ?)")
+    $pdo->prepare("INSERT INTO system_audit (action, entity_type, entity_id, details) VALUES (?, ?, ?, ?)")
         ->execute(['test_action', 'client', 1, json_encode(['test' => true])]);
     $logId = (int)$pdo->lastInsertId();
     
-    $stmt = $pdo->prepare("SELECT action FROM audit_logs WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT action FROM system_audit WHERE id = ?");
     $stmt->execute([$logId]);
     $action = $stmt->fetchColumn();
     
-    $pdo->prepare("DELETE FROM audit_logs WHERE id = ?")->execute([$logId]);
+    $pdo->prepare("DELETE FROM system_audit WHERE id = ?")->execute([$logId]);
     
     return $action === 'test_action';
 });
@@ -429,15 +429,15 @@ echo "\n📋 PHASE 9: Custom Fields Tests\n";
 echo "----------------------------------------\n";
 
 test("Can create custom field definition", function() use ($pdo) {
-    $pdo->prepare("INSERT INTO custom_fields (entity_type, field_name, field_type, is_required) VALUES (?, ?, ?, ?)")
+    $pdo->prepare("INSERT INTO document_custom_fields (entity_type, field_name, field_type, is_required) VALUES (?, ?, ?, ?)")
         ->execute(['client', 'custom_test', 'text', 1]);
     $fieldId = (int)$pdo->lastInsertId();
     
-    $stmt = $pdo->prepare("SELECT field_type FROM custom_fields WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT field_type FROM document_custom_fields WHERE id = ?");
     $stmt->execute([$fieldId]);
     $type = $stmt->fetchColumn();
     
-    $pdo->prepare("DELETE FROM custom_fields WHERE id = ?")->execute([$fieldId]);
+    $pdo->prepare("DELETE FROM document_custom_fields WHERE id = ?")->execute([$fieldId]);
     
     return $type === 'text';
 });
