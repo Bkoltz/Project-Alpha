@@ -321,7 +321,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
           if (!empty($inv['address_line2'])) { $toLines[] = (string)$inv['address_line2']; }
           $c = trim((string)($inv['city'] ?? ''));
           $s = trim((string)($inv['state'] ?? ''));
-          $p = trim((string)($inv['postal'] ?? ''));
+          $p = trim((string)($inv['postal_code'] ?? ''));
           $parts2 = [];
           if ($c !== '') { $parts2[] = $c; }
           if ($s !== '') { $parts2[] = $s; }

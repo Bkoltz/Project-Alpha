@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS document_custom_fields (
 CREATE TABLE IF NOT EXISTS invoice_notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     invoice_id INT NOT NULL,
-    notification_type ENUM('reminder', 'overdue', 'paid', 'sent') NOT NULL DEFAULT 'reminder',
+    notification_type VARCHAR(50) NOT NULL DEFAULT 'reminder',
     sent_at TIMESTAMP NULL,
     email_to VARCHAR(255) NULL,
     email_subject VARCHAR(255) NULL,

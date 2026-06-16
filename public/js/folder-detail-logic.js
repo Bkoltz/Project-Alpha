@@ -241,7 +241,7 @@ async function deleteDocument(docId) {
     }
 
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', window.formCsrfToken || '');
     formData.append('action', 'delete_document');
     formData.append('document_id', docId);
 
@@ -269,9 +269,9 @@ async function deleteFolder() {
     }
 
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', window.formCsrfToken || '');
     formData.append('action', 'delete_category');
-    formData.append('category_id', '<? php echo $folderId; ?>');
+    formData.append('category_id', String(window.formFolderId || ''));
 
     try {
         const response = await fetch('/?page=forms-handler', {

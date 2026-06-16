@@ -16,13 +16,14 @@ $stmt = $pdo->prepare('
     SELECT 
         fc.id,
         fc.organization_id,
-        fc.name as title,
+        fc.title,
+        fc.type,
         fc.description,
         fc.created_at,
         fd.id as doc_id,
         fd.file_path,
-        fd.name as file_name,
-        fd.created_at as uploaded_at
+        fd.file_name,
+        fd.uploaded_at
     FROM form_categories fc
     LEFT JOIN form_documents fd ON fc.id = fd.category_id
     WHERE fc.id = ? AND fc.organization_id = ?
@@ -329,6 +330,8 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <script>
     const hasDocument = <?php echo $hasDocument ? 'true' : 'false'; ?>;
+    window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
+    window.formDocumentId = <?php echo (int)($category['doc_id'] ?? 0); ?>;
 </script>
 
-<script src="form-detail-logic.js" defer></script>
+<script src="js/form-detail-logic.js" defer></script>

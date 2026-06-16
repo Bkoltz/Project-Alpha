@@ -10,20 +10,23 @@ $stmt = $pdo->prepare('
     SELECT 
         fc.id,
         fc.organization_id,
-        fc.name as title,
+        fc.title,
         fc.description,
         fc.created_at,
-        "file" as type,
+        fc.type,
         fd.id as doc_id,
         fd.file_path,
-        fd.name as file_name,
-        fd.created_at as uploaded_at,
-        COUNT(DISTINCT fd2.id) as doc_count
+        fd.file_name,
+        fd.uploaded_at,
+        COALESCE(fdc.doc_count, 0) as doc_count
     FROM form_categories fc
-    LEFT JOIN form_documents fd ON fc.id = fd.category_id
-    LEFT JOIN form_documents fd2 ON fc.id = fd2.category_id
+    LEFT JOIN (
+        SELECT category_id, MAX(id) AS latest_doc_id, COUNT(*) AS doc_count
+        FROM form_documents
+        GROUP BY category_id
+    ) fdc ON fdc.category_id = fc.id
+    LEFT JOIN form_documents fd ON fd.id = fdc.latest_doc_id
     WHERE fc.organization_id = ?
-    GROUP BY fc.id, fc.organization_id, fc.name, fc.description, fc.created_at, fd.id, fd.file_path, fd.name, fd.created_at
     ORDER BY fc.created_at DESC
 ');
 $stmt->execute([$orgId]);
@@ -349,4 +352,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
+<script>
+    window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
+</script>
 <script src="js/forms-list-logic.js" defer></script>

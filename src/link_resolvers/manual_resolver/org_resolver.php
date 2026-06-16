@@ -16,10 +16,10 @@ class OrgLinkResolver
         try {
             // Get manually entered links for this organization
             $stmt = $this->pdo->prepare("
-                SELECT url FROM link 
+                SELECT url FROM entity_links 
                 WHERE entity_type = 'organization' 
                   AND entity_id = ? 
-                  AND type = 'manual'
+                  AND link_type = 'manual'
                   AND is_expired = 0
                 LIMIT 1
             ");

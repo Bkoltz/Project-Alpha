@@ -48,9 +48,9 @@ async function confirmDelete() {
     }
 
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', window.receiptCsrfToken || '');
     formData.append('action', 'delete');
-    formData.append('receipt_id', '<?php echo $receiptId; ?>');
+    formData.append('receipt_id', String(window.receiptId || ''));
 
     try {
         const response = await fetch('/?page=receipts-handler', {

@@ -39,20 +39,13 @@ class StripeService {
      */
     public function createOrGetCustomer($pdo, $clientId) {
         try {
-            // Check if customer already exists in DB
-            $stmt = $pdo->prepare("SELECT config FROM clients WHERE id = ?");
-            $stmt->execute([$clientId]);
-            $client = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$client) {
-                throw new \Exception('Client not found');
-            }
-            
-            // Check if stripe_customer_id exists in client metadata
-            // Note: You may need to add a stripe_customer_id column to clients table
-            $stmt = $pdo->prepare("SELECT stripe_customer_id, client_name, email FROM client WHERE client_id = ?");
+            $stmt = $pdo->prepare("SELECT stripe_customer_id, name, email FROM clients WHERE id = ?");
             $stmt->execute([$clientId]);
             $clientData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$clientData) {
+                throw new \Exception('Client not found');
+            }
             
             if ($clientData && !empty($clientData['stripe_customer_id'])) {
                 return $clientData['stripe_customer_id'];
@@ -60,7 +53,7 @@ class StripeService {
             
             // Create new Stripe customer
             $customerData = [
-                'name' => $clientData['client_name'] ?? 'Unknown',
+                'name' => $clientData['name'] ?? 'Unknown',
                 'email' => $clientData['email'] ?? null,
                 'metadata' => ['client_id' => $clientId]
             ];
@@ -68,7 +61,7 @@ class StripeService {
             $customer = $this->apiRequest('POST', 'customers', $customerData);
             
             // Store customer ID in database
-            $pdo->prepare("UPDATE client SET stripe_customer_id = ? WHERE client_id = ?")->execute([
+            $pdo->prepare("UPDATE clients SET stripe_customer_id = ? WHERE id = ?")->execute([
                 $customer['id'],
                 $clientId
             ]);

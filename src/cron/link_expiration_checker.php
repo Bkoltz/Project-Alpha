@@ -34,8 +34,8 @@ try {
     
     // Find all links that should be expired but aren't marked as such
     $stmt = $pdo->prepare("
-        SELECT link_id, entity_type, entity_id, type, url, expiration_date
-        FROM link
+        SELECT id, entity_type, entity_id, link_type, url, expiration_date
+        FROM entity_links
         WHERE expiration_date IS NOT NULL 
           AND expiration_date < ?
           AND is_expired = 0
@@ -52,13 +52,13 @@ try {
         echo "{$logPrefix} Found {$expiredCount} expired link(s).\n";
         
         // Mark links as expired
-        $linkIds = array_column($expiredLinks, 'link_id');
+        $linkIds = array_column($expiredLinks, 'id');
         $placeholders = str_repeat('?,', count($linkIds) - 1) . '?';
         
         $stmt = $pdo->prepare("
-            UPDATE link
+            UPDATE entity_links
             SET is_expired = 1
-            WHERE link_id IN ({$placeholders})
+            WHERE id IN ({$placeholders})
         ");
         $stmt->execute($linkIds);
         
@@ -95,7 +95,7 @@ try {
                     $message = "The following links for {$entity['type']} '{$entityName}' have expired:\n\n";
                     
                     foreach ($entity['links'] as $link) {
-                        $message .= "- " . $link['type'] . ": " . $link['url'] . " (expired: " . $link['expiration_date'] . ")\n";
+                        $message .= "- " . $link['link_type'] . ": " . $link['url'] . " (expired: " . $link['expiration_date'] . ")\n";
                     }
                     
                     $message .= "\nPlease refresh or regenerate these links as needed.\n";
@@ -119,7 +119,7 @@ try {
     // Also check for links expiring soon (within 7 days) for early warning
     $stmt = $pdo->prepare("
         SELECT COUNT(*) 
-        FROM link
+        FROM entity_links
         WHERE expiration_date IS NOT NULL
           AND expiration_date BETWEEN ? AND DATE_ADD(?, INTERVAL 7 DAY)
           AND is_expired = 0
@@ -145,11 +145,11 @@ try {
  */
 function getEntityName($pdo, $entityType, $entityId) {
     if ($entityType === 'client') {
-        $stmt = $pdo->prepare("SELECT client_name FROM client WHERE client_id = ?");
+        $stmt = $pdo->prepare("SELECT name FROM clients WHERE id = ?");
         $stmt->execute([$entityId]);
         return $stmt->fetchColumn() ?: "Client #{$entityId}";
     } elseif ($entityType === 'organization') {
-        $stmt = $pdo->prepare("SELECT org_name FROM organization WHERE org_id = ?");
+        $stmt = $pdo->prepare("SELECT name FROM organizations WHERE id = ?");
         $stmt->execute([$entityId]);
         return $stmt->fetchColumn() ?: "Organization #{$entityId}";
     }

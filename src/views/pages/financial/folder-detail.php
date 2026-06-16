@@ -13,9 +13,9 @@ if (!$folderId) {
 
 // Fetch folder details
 $stmt = $pdo->prepare('
-    SELECT id, organization_id, name as title, description, created_at
+    SELECT id, organization_id, title, description, created_at
     FROM form_categories 
-    WHERE id = ? AND organization_id = ?
+    WHERE id = ? AND organization_id = ? AND type = "folder"
 ');
 $stmt->execute([$folderId, $orgId]);
 $folder = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -31,9 +31,9 @@ $stmt = $pdo->prepare('
         fd.id,
         fd.organization_id,
         fd.category_id,
-        fd.name as file_name,
+        fd.file_name,
         fd.file_path,
-        fd.created_at as uploaded_at
+        fd.uploaded_at
     FROM form_documents fd
     WHERE fd.category_id = ?
     ORDER BY fd.created_at DESC
@@ -343,4 +343,8 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
+<script>
+    window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
+    window.formFolderId = <?php echo (int)$folderId; ?>;
+</script>
 <script src="js/folder-detail-logic.js" defer></script>

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS payments (
     contract_id INT NULL,
     organization_id INT NULL,
     amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-    payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'other') NOT NULL DEFAULT 'cash',
+    payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
     payment_date DATE NOT NULL,
     reference_number VARCHAR(255) NULL,
     notes TEXT NULL,
@@ -100,7 +100,9 @@ CREATE TABLE IF NOT EXISTS receipt_stores (
     address TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_store_org (organization_id)
+    UNIQUE KEY uq_receipt_store_org_name (organization_id, name),
+    INDEX idx_store_org (organization_id),
+    CONSTRAINT fk_receipt_stores_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -116,14 +118,22 @@ CREATE TABLE IF NOT EXISTS receipts (
     receipt_date DATE NOT NULL,
     description TEXT NULL,
     file_path VARCHAR(255) NULL,
+    file_name VARCHAR(255) NULL,
+    file_size BIGINT UNSIGNED NULL,
+    mime_type VARCHAR(150) NULL,
+    uploaded_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_receipt_org (organization_id),
     INDEX idx_receipt_store (store_id),
     INDEX idx_receipt_client (client_id),
+    INDEX idx_receipt_project (project_id),
     INDEX idx_receipt_date (receipt_date),
+    CONSTRAINT fk_receipts_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
     CONSTRAINT fk_receipts_store FOREIGN KEY (store_id) REFERENCES receipt_stores(id) ON DELETE SET NULL,
-    CONSTRAINT fk_receipts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+    CONSTRAINT fk_receipts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_receipts_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_receipts_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -132,11 +142,16 @@ CREATE TABLE IF NOT EXISTS receipts (
 CREATE TABLE IF NOT EXISTS form_categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NOT NULL,
-    name VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    type ENUM('file', 'folder') NOT NULL DEFAULT 'folder',
     description TEXT NULL,
+    created_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_form_cat_org (organization_id)
+    INDEX idx_form_cat_org (organization_id),
+    INDEX idx_form_cat_type (type),
+    CONSTRAINT fk_form_cat_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_form_cat_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -148,15 +163,23 @@ CREATE TABLE IF NOT EXISTS form_documents (
     category_id INT NULL,
     client_id INT NULL,
     project_id INT NULL,
-    name VARCHAR(255) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_size BIGINT UNSIGNED NULL,
+    mime_type VARCHAR(150) NULL,
     description TEXT NULL,
     file_path VARCHAR(255) NULL,
     status ENUM('draft', 'active', 'archived') NOT NULL DEFAULT 'draft',
+    uploaded_by INT NULL,
+    uploaded_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_form_doc_org (organization_id),
     INDEX idx_form_doc_category (category_id),
     INDEX idx_form_doc_client (client_id),
-    CONSTRAINT fk_form_docs_category FOREIGN KEY (category_id) REFERENCES form_categories(id) ON DELETE SET NULL,
-    CONSTRAINT fk_form_docs_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+    INDEX idx_form_doc_project (project_id),
+    CONSTRAINT fk_form_docs_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_form_docs_category FOREIGN KEY (category_id) REFERENCES form_categories(id) ON DELETE CASCADE,
+    CONSTRAINT fk_form_docs_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_form_docs_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_form_docs_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

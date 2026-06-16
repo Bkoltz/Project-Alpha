@@ -44,7 +44,7 @@ $stores = $stmt->fetchAll(PDO::FETCH_COLUMN);
             </div>
 
             <!-- Preview Area -->
-            <div id="preview Area" style="display:none;margin-top:8px">
+            <div id="previewArea" style="display:none;margin-top:8px">
                 <div style="font-weight:600;margin-bottom:8px">Preview:</div>
                 <div id="imagePreview" style="max-width:400px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"></div>
             </div>
@@ -75,7 +75,7 @@ $stores = $stmt->fetchAll(PDO::FETCH_COLUMN);
                     Receipt Title/Description *
                 </label>
                 <input type="text" 
-                       name="title" 
+                       name="description" 
                        required 
                        placeholder="e.g., Roofing Materials, Office Supplies"
                        style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">

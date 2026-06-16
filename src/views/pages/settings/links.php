@@ -33,10 +33,10 @@ $linkStats = [
 ];
 
 try {
-    $linkStats['total_links'] = (int)$pdo->query('SELECT COUNT(*) FROM link')->fetchColumn();
-    $linkStats['expired_links'] = (int)$pdo->query('SELECT COUNT(*) FROM link WHERE is_expired = 1')->fetchColumn();
-    $linkStats['ignored_clients'] = (int)$pdo->query('SELECT COUNT(*) FROM link WHERE ignore_auto_generation = 1')->fetchColumn();
-    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM link WHERE type IN ('auto_dropbox','auto_gdrive','auto_s3')")->fetchColumn();
+    $linkStats['total_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links')->fetchColumn();
+    $linkStats['expired_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE is_expired = 1')->fetchColumn();
+    $linkStats['ignored_clients'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE ignore_auto_generation = 1')->fetchColumn();
+    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM entity_links WHERE link_type IN ('auto_dropbox','auto_gdrive','auto_s3')")->fetchColumn();
 } catch (Throwable $e) {
     @error_log('[links] Error fetching link stats: ' . $e->getMessage());
 }

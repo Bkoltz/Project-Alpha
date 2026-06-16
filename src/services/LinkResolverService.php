@@ -72,7 +72,7 @@ class LinkResolverService {
             }
             
             // Check if client is ignored
-            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM link WHERE entity_type = 'client' AND entity_id = ? LIMIT 1");
+            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM entity_links WHERE entity_type = 'client' AND entity_id = ? LIMIT 1");
             $stmt->execute([$clientId]);
             $link = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($link && $link['ignore_auto_generation']) {
@@ -122,7 +122,7 @@ class LinkResolverService {
             }
             
             // Check if org is ignored
-            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM link WHERE entity_type = 'organization' AND entity_id = ? LIMIT 1");
+            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM entity_links WHERE entity_type = 'organization' AND entity_id = ? LIMIT 1");
             $stmt->execute([$orgId]);
             $link = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($link && $link['ignore_auto_generation']) {
@@ -197,22 +197,22 @@ class LinkResolverService {
             $expirationDate = date('Y-m-d', strtotime("+{$expirationDays} days"));
             
             // Check if link already exists
-            $stmt = $this->pdo->prepare("SELECT link_id FROM link WHERE entity_type = ? AND entity_id = ? AND type = ?");
+            $stmt = $this->pdo->prepare("SELECT id FROM entity_links WHERE entity_type = ? AND entity_id = ? AND link_type = ?");
             $stmt->execute([$entityType, $entityId, $linkType]);
             $existing = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($existing) {
                 // Update existing link
                 $stmt = $this->pdo->prepare("
-                    UPDATE link 
+                    UPDATE entity_links 
                     SET url = ?, expiration_date = ?, is_expired = 0, last_verified = NOW()
-                    WHERE link_id = ?
+                    WHERE id = ?
                 ");
-                $stmt->execute([$publicLink, $expirationDate, $existing['link_id']]);
+                $stmt->execute([$publicLink, $expirationDate, $existing['id']]);
             } else {
                 // Insert new link
                 $stmt = $this->pdo->prepare("
-                    INSERT INTO link (entity_type, entity_id, type, url, expiration_date, is_expired, last_verified)
+                    INSERT INTO entity_links (entity_type, entity_id, link_type, url, expiration_date, is_expired, last_verified)
                     VALUES (?, ?, ?, ?, ?, 0, NOW())
                 ");
                 $stmt->execute([$entityType, $entityId, $linkType, $publicLink, $expirationDate]);
@@ -232,7 +232,7 @@ class LinkResolverService {
     public function markAsIgnored($entityType, $entityId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE link 
+                UPDATE entity_links 
                 SET ignore_auto_generation = 1
                 WHERE entity_type = ? AND entity_id = ?
             ");
@@ -251,7 +251,7 @@ class LinkResolverService {
     public function unmarkAsIgnored($entityType, $entityId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE link 
+                UPDATE entity_links 
                 SET ignore_auto_generation = 0
                 WHERE entity_type = ? AND entity_id = ?
             ");
@@ -270,7 +270,7 @@ class LinkResolverService {
     public function expireLinks($entityType, $entityId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE link 
+                UPDATE entity_links 
                 SET is_expired = 1
                 WHERE entity_type = ? AND entity_id = ?
             ");

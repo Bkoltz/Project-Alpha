@@ -78,7 +78,7 @@ try {
             $iid = (int)$inv['id'];
             
             // Check if already sent
-            $chk = $pdo->prepare('SELECT COUNT(*) FROM invoice_notifications WHERE invoice_id = ? AND type = ?');
+            $chk = $pdo->prepare('SELECT COUNT(*) FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
             $chk->execute([$iid, 'due_7']);
             if ((int)$chk->fetchColumn() > 0) {
                 $remindersSkipped++;
@@ -110,7 +110,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'due_7']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent due-7 reminder for invoice I-{$inv['doc_number']} to {$to}");
@@ -141,7 +141,7 @@ try {
             $iid = (int)$inv['id'];
             
             // Check last sent timestamp
-            $chk = $pdo->prepare('SELECT MAX(sent_at) AS last_sent FROM invoice_notifications WHERE invoice_id = ? AND type = ?');
+            $chk = $pdo->prepare('SELECT MAX(sent_at) AS last_sent FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
             $chk->execute([$iid, 'overdue_weekly']);
             $last = $chk->fetchColumn();
             
@@ -185,7 +185,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'overdue_weekly']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}");

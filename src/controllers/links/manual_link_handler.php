@@ -46,7 +46,7 @@ try {
         throw new Exception('Invalid entity ID');
     }
     
-    $stmt = $pdo->prepare('INSERT INTO link (entity_type, entity_id, title, url, type, expiration_date, is_expired, ignore_auto_generation) VALUES (?, ?, ?, ?, "manual", ?, 0, 0)');
+    $stmt = $pdo->prepare('INSERT INTO entity_links (entity_type, entity_id, title, url, link_type, expiration_date, is_expired, ignore_auto_generation) VALUES (?, ?, ?, ?, "manual", ?, 0, 0)');
     $stmt->execute([$entityType, $entityId, $title, $url, $expirationDate]);
     
     echo json_encode([

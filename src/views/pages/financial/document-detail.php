@@ -18,10 +18,10 @@ $stmt = $pdo->prepare('
         fd.id,
         fd.organization_id,
         fd.category_id,
-        fd.name as file_name,
+        fd.file_name,
         fd.file_path,
-        fd.created_at as uploaded_at,
-        fc.name as folder_title
+        fd.uploaded_at,
+        fc.title as folder_title
     FROM form_documents fd
     JOIN form_categories fc ON fd.category_id = fc.id
     WHERE fd.id = ? AND fc.organization_id = ?
@@ -134,7 +134,7 @@ async function confirmDelete() {
     }
     
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', <?php echo json_encode(csrf_token()); ?>);
     formData.append('action', 'delete_document');
     formData.append('document_id', <?php echo $documentId; ?>);
     

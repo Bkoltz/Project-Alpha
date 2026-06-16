@@ -33,10 +33,10 @@ if ($entityType === 'client') {
 // Fetch links for this entity
 try {
     $stmt = $pdo->prepare("
-        SELECT link_id, type, url, expiration_date, is_expired, ignore_auto_generation, last_verified
-        FROM link
+        SELECT id, link_type, url, expiration_date, is_expired, ignore_auto_generation, last_verified
+        FROM entity_links
         WHERE entity_type = ? AND entity_id = ?
-        ORDER BY type ASC
+        ORDER BY link_type ASC
     ");
     $stmt->execute([$entityType, $entityId]);
     $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -109,7 +109,7 @@ foreach ($links as $link) {
             </div>
         <?php else: ?>
             <?php foreach ($links as $link): 
-                $typeLabel = str_replace(['auto_', '_'], ['', ' '], $link['type']);
+                $typeLabel = str_replace(['auto_', '_'], ['', ' '], $link['link_type']);
                 $typeLabel = ucwords($typeLabel);
                 
                 $statusClass = '';

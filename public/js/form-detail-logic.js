@@ -178,9 +178,9 @@ async function confirmDelete() {
     }
     
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', window.formCsrfToken || '');
     formData.append('action', 'delete_document');
-    formData.append('document_id', '<?php echo $category["doc_id"]; ?>');
+    formData.append('document_id', String(window.formDocumentId || ''));
     
     try {
         const response = await fetch('/?page=forms-handler', {
