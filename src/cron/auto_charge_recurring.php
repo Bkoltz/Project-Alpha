@@ -32,7 +32,6 @@ try {
             i.amount_paid,
             i.due_date,
             i.status,
-            i.recurring_schedule,
             c.id AS client_id,
             c.name AS client_name,
             c.email,

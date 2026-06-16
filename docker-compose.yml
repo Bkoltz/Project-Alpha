@@ -46,6 +46,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     volumes:
+      - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
       - cron_logs:/var/log/cron

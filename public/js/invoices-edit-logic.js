@@ -78,16 +78,16 @@ function recalcInv() {
   var dval = parseFloat(document.getElementById('discountValueInv').value) || 0;
   var taxp = parseFloat(document.getElementById('taxPercentInv').value) || 0;
 
-  var taxable = Math.max(0, extraSubtotal - discount);
-  var tax = Math.max(0, taxp) * taxable / 100;
-  var total = Math.max(0, taxable + tax);
-
   var discount = 0;
   if (dtype === 'percent') {
-    discount = Math.max(0, Math.min(100, dval)) * subtotal / 100;
+    discount = Math.max(0, Math.min(100, dval)) * extraSubtotal / 100;
   } else if (dtype === 'fixed') {
     discount = Math.max(0, dval);
   }
+
+  var taxable = Math.max(0, extraSubtotal - discount);
+  var tax = Math.max(0, taxp) * taxable / 100;
+  var total = Math.max(0, taxable + tax);
 
   document.getElementById('subtotalValInv').textContent = money(extraSubtotal);
   document.getElementById('discountValInv').textContent = money(discount);
