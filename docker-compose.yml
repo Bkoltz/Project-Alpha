@@ -58,9 +58,6 @@ services:
     # undo logs encrypted by default. See docs/ENCRYPTION_AT_REST.md.
     command: >
       --log-error-verbosity=1
-      --default-table-encryption=ON
-      --innodb-redo-log-encrypt=ON
-      --innodb-undo-log-encrypt=ON
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
@@ -68,10 +65,9 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
     volumes:
       - db_data:/var/lib/mysql
-      - db_keyring:/var/lib/mysql-keyring
-      - ./database/mysql/mysqld.my:/usr/sbin/mysqld.my:ro
-      - ./database/mysql/component_keyring_file.cnf:/usr/lib64/mysql/plugin/component_keyring_file.cnf:ro
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    # NOTE: Keyring encryption disabled for clean rebuild test.
+    # Re-enable via docs/ENCRYPTION_AT_REST.md when keyring is pre-initialized.
     healthcheck:
       test:
         - CMD-SHELL
