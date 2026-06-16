@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS archived_clients (
     address_line2 VARCHAR(255) NULL,
     city VARCHAR(100) NULL,
     state VARCHAR(2) NULL,
-    postal VARCHAR(20) NULL,
+    postal_code VARCHAR(20) NULL,
     country VARCHAR(100) NULL DEFAULT 'US',
     created_at TIMESTAMP NULL,
     archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

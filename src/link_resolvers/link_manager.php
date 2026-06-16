@@ -18,10 +18,10 @@ class LinkResolverManager
     {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT type, url, expiration_date, is_expired 
-                FROM link 
+                SELECT link_type, url, expiration_date, is_expired 
+                FROM entity_links 
                 WHERE entity_type = 'organization' AND entity_id = ?
-                ORDER BY type
+                ORDER BY link_type
             ");
             $stmt->execute([$orgId]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -38,10 +38,10 @@ class LinkResolverManager
     {
         try {
             $stmt = $this->pdo->prepare("
-                SELECT type, url, expiration_date, is_expired 
-                FROM link 
+                SELECT link_type, url, expiration_date, is_expired 
+                FROM entity_links 
                 WHERE entity_type = 'client' AND entity_id = ?
-                ORDER BY type
+                ORDER BY link_type
             ");
             $stmt->execute([$clientId]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);

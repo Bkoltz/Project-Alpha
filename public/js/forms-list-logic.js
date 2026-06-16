@@ -191,7 +191,7 @@ async function deleteCategory(id) {
     }
 
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', window.formCsrfToken || '');
     formData.append('action', 'delete_category');
     formData.append('category_id', id);
 

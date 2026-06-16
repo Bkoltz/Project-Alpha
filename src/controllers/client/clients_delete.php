@@ -20,7 +20,7 @@ if (!$client) {
 $pdo->beginTransaction();
 try {
   // 1) Archive client basic row
-  $insC = $pdo->prepare('INSERT INTO archived_clients (client_id,name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  $insC = $pdo->prepare('INSERT INTO archived_clients (client_id,name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal_code,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
   $insC->execute([
     $client['id'], $client['name'], $client['email'] ?? null, $client['phone'] ?? null, $client['organization_id'] ?? null,
     $client['notes'] ?? null, $client['address_line1'] ?? null, $client['address_line2'] ?? null, $client['city'] ?? null,

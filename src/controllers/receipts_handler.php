@@ -38,23 +38,35 @@ try {
         // Otherwise $userId remains NULL which is acceptable for uploaded_by
     }
 
+    $resolveStoreId = static function (PDO $pdo, int $orgId, string $storeName): ?int {
+        $storeName = trim($storeName);
+        if ($storeName === '') {
+            return null;
+        }
+
+        $stmt = $pdo->prepare('INSERT INTO receipt_stores (organization_id, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)');
+        $stmt->execute([$orgId, $storeName]);
+
+        $stmt = $pdo->prepare('SELECT id FROM receipt_stores WHERE organization_id = ? AND name = ?');
+        $stmt->execute([$orgId, $storeName]);
+        $storeId = $stmt->fetchColumn();
+
+        return $storeId ? (int)$storeId : null;
+    };
+
     switch ($action) {
         case 'create':
             // Validate required fields
-            $title = trim($_POST['title'] ?? '');
+            $description = trim($_POST['description'] ?? ($_POST['title'] ?? ''));
             $storeName = trim($_POST['store_name'] ?? '');
             $receiptDate = $_POST['receipt_date'] ?? '';
             $amount = $_POST['amount'] ?? '';
 
-            if (empty($title) || empty($receiptDate) || empty($amount)) {
-                throw new Exception('Title, date, and amount are required');
+            if (empty($description) || empty($receiptDate) || empty($amount)) {
+                throw new Exception('Description, date, and amount are required');
             }
-            
-            // Add store to stores table if it doesn't exist and store_name is provided
-            if (!empty($storeName)) {
-                $stmt = $pdo->prepare('INSERT IGNORE INTO receipt_stores (org_id, store_name) VALUES (?, ?)');
-                $stmt->execute([$orgId, $storeName]);
-            }
+
+            $storeId = $resolveStoreId($pdo, $orgId, $storeName);
 
             // Handle file upload
             if (!isset($_FILES['receipt_file']) || $_FILES['receipt_file']['error'] !== UPLOAD_ERR_OK) {
@@ -114,10 +126,10 @@ try {
 
             // Insert into database
             $stmt = $pdo->prepare('
-                INSERT INTO receipts (org_id, title, store_name, receipt_date, amount, file_path, uploaded_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO receipts (organization_id, store_id, receipt_date, amount, description, file_path, file_name, file_size, mime_type, uploaded_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
-            $stmt->execute([$orgId, $title, $storeName, $receiptDate, $amount, $dbPath, $userId]);
+            $stmt->execute([$orgId, $storeId, $receiptDate, $amount, $description, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
 
             $response['success'] = true;
             $response['message'] = 'Receipt uploaded successfully';
@@ -132,7 +144,7 @@ try {
             }
 
             // Get file path before deleting
-            $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ? AND org_id = ?');
+            $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ? AND organization_id = ?');
             $stmt->execute([$receiptId, $orgId]);
             $receipt = $stmt->fetch();
 
@@ -141,7 +153,7 @@ try {
             }
 
             // Delete database record
-            $stmt = $pdo->prepare('DELETE FROM receipts WHERE id = ? AND org_id = ?');
+            $stmt = $pdo->prepare('DELETE FROM receipts WHERE id = ? AND organization_id = ?');
             $stmt->execute([$receiptId, $orgId]);
 
             // Delete file
@@ -156,46 +168,24 @@ try {
 
         case 'update':
             $receiptId = (int)($_POST['receipt_id'] ?? 0);
-            $title = trim($_POST['title'] ?? '');
+            $description = trim($_POST['description'] ?? ($_POST['title'] ?? ''));
             $storeName = trim($_POST['store_name'] ?? '');
             $receiptDate = $_POST['receipt_date'] ?? '';
             $amount = $_POST['amount'] ?? '';
 
-            if (!$receiptId || empty($title) || empty($receiptDate) || empty($amount)) {
+            if (!$receiptId || empty($description) || empty($receiptDate) || empty($amount)) {
                 throw new Exception('All fields are required');
             }
-            
-            // Get old store name
-            $stmt = $pdo->prepare('SELECT store_name FROM receipts WHERE id = ?');
-            $stmt->execute([$receiptId]);
-            $oldReceipt = $stmt->fetch();
-            $oldStoreName = $oldReceipt['store_name'] ?? '';
-            
-            // Add new store to stores table if it doesn't exist and store_name is provided
-            if (!empty($storeName)) {
-                $stmt = $pdo->prepare('INSERT IGNORE INTO receipt_stores (org_id, store_name) VALUES (?, ?)');
-                $stmt->execute([$orgId, $storeName]);
-            }
-            
-            // Clean up old store if it's no longer used and different from new one
-            if (!empty($oldStoreName) && $oldStoreName !== $storeName) {
-                $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM receipts WHERE store_name = ? AND org_id = ? AND id != ?');
-                $stmt->execute([$oldStoreName, $orgId, $receiptId]);
-                $usageCount = $stmt->fetch()['count'];
-                
-                if ($usageCount == 0) {
-                    $stmt = $pdo->prepare('DELETE FROM receipt_stores WHERE store_name = ? AND org_id = ?');
-                    $stmt->execute([$oldStoreName, $orgId]);
-                }
-            }
+
+            $storeId = $resolveStoreId($pdo, $orgId, $storeName);
 
             // Update database
             $stmt = $pdo->prepare('
                 UPDATE receipts 
-                SET title = ?, store_name = ?, receipt_date = ?, amount = ?
-                WHERE id = ? AND org_id = ?
+                SET description = ?, store_id = ?, receipt_date = ?, amount = ?
+                WHERE id = ? AND organization_id = ?
             ');
-            $stmt->execute([$title, $storeName, $receiptDate, $amount, $receiptId, $orgId]);
+            $stmt->execute([$description, $storeId, $receiptDate, $amount, $receiptId, $orgId]);
 
             // Handle new file upload if provided
             if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['error'] === UPLOAD_ERR_OK) {
@@ -211,8 +201,8 @@ try {
                 }
 
                 // Get old file path
-                $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ?');
-                $stmt->execute([$receiptId]);
+                $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ? AND organization_id = ?');
+                $stmt->execute([$receiptId, $orgId]);
                 $oldReceipt = $stmt->fetch();
 
                 // Upload new file with year/month structure
@@ -255,8 +245,8 @@ try {
                 }
 
                 // Update file path in database
-                $stmt = $pdo->prepare('UPDATE receipts SET file_path = ? WHERE id = ?');
-                $stmt->execute([$dbPath, $receiptId]);
+                $stmt = $pdo->prepare('UPDATE receipts SET file_path = ?, file_name = ?, file_size = ?, mime_type = ?, uploaded_by = ? WHERE id = ? AND organization_id = ?');
+                $stmt->execute([$dbPath, $file['name'], $file['size'], $file['type'], $userId, $receiptId, $orgId]);
 
                 // Delete old file
                 if ($oldReceipt) {

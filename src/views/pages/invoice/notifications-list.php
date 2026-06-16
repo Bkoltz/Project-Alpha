@@ -120,9 +120,9 @@
                             </td>
                             <td>
                                 <span class="badge bg-<?php 
-                                    echo $n['type'] === 'due_7' ? 'info' : 'warning';
+                                    echo $n['notification_type'] === 'due_7' ? 'info' : 'warning';
                                 ?>">
-                                    <?php echo $n['type'] === 'due_7' ? 'Due in 7 Days' : 'Overdue Weekly'; ?>
+                                    <?php echo $n['notification_type'] === 'due_7' ? 'Due in 7 Days' : 'Overdue Weekly'; ?>
                                 </span>
                             </td>
                             <td>

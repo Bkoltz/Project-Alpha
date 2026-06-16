@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS entity_links (
     id INT AUTO_INCREMENT PRIMARY KEY,
     entity_type ENUM('client', 'organization', 'project') NOT NULL,
     entity_id INT NOT NULL,
-    title VARCHAR(255) NOT NULL,
+    title VARCHAR(255) NULL,
     url VARCHAR(500) NOT NULL,
     link_type ENUM('manual', 'auto_dropbox', 'auto_gdrive', 'auto_s3') NOT NULL DEFAULT 'manual',
     expiration_date DATE NULL,
@@ -138,30 +138,10 @@ CREATE TABLE IF NOT EXISTS entity_links (
     ignore_auto_generation TINYINT(1) NOT NULL DEFAULT 0,
     last_verified TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_link_entity (entity_type, entity_id),
+    INDEX idx_link_type (link_type),
     INDEX idx_link_expired (is_expired),
     INDEX idx_link_expiration (expiration_date),
     INDEX idx_link_ignore (ignore_auto_generation)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================================
--- LINK RESOLVER LINKS
--- ============================================================================
-CREATE TABLE IF NOT EXISTS link (
-    link_id INT AUTO_INCREMENT PRIMARY KEY,
-    entity_type ENUM('client', 'organization', 'project') NOT NULL,
-    entity_id INT NOT NULL,
-    title VARCHAR(255) NULL,
-    url VARCHAR(500) NOT NULL,
-    type ENUM('manual', 'auto_dropbox', 'auto_gdrive', 'auto_s3') NOT NULL DEFAULT 'manual',
-    expiration_date DATE NULL,
-    is_expired TINYINT(1) NOT NULL DEFAULT 0,
-    ignore_auto_generation TINYINT(1) NOT NULL DEFAULT 0,
-    last_verified TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_link_entity (entity_type, entity_id),
-    INDEX idx_link_type (type),
-    INDEX idx_link_expired (is_expired),
-    INDEX idx_link_expiration (expiration_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
