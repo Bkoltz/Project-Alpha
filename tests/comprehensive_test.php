@@ -429,8 +429,8 @@ echo "\n📋 PHASE 9: Custom Fields Tests\n";
 echo "----------------------------------------\n";
 
 test("Can create custom field definition", function() use ($pdo) {
-    $pdo->prepare("INSERT INTO document_custom_fields (entity_type, field_name, field_type, is_required) VALUES (?, ?, ?, ?)")
-        ->execute(['client', 'custom_test', 'text', 1]);
+    $pdo->prepare("INSERT INTO document_custom_fields (document_type, field_key, field_label, field_type, is_required) VALUES (?, ?, ?, ?, ?)")
+        ->execute(['client', 'custom_test', 'Custom Test', 'text', 1]);
     $fieldId = (int)$pdo->lastInsertId();
     
     $stmt = $pdo->prepare("SELECT field_type FROM document_custom_fields WHERE id = ?");
