@@ -31,8 +31,10 @@ RUN docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli
 
 WORKDIR /var/www
 
-# Copy application source
-COPY ./src/ /var/www/src/
+# NOTE: Application source is provided via volume mount from docker-compose.yml:
+#   - ./src:/var/www/src
+# This eliminates cron/src/ duplication — the cron container shares the same
+# src/ tree as the web container. Do NOT COPY source files here.
 
 # Copy Composer vendor from the builder stage
 COPY --from=vendor /app/vendor /var/www/vendor

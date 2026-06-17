@@ -22,4 +22,7 @@ CRON_LOG=/var/www/logs/cron.log
 # Stripe payment reconciliation – every 6 hours
 0 */6 * * * root . /etc/environment && php /var/www/src/cron/stripe_reconciliation.php >> $CRON_LOG 2>&1
 
+# Process audit schedules – daily at 6:00 AM UTC
+0 6 * * * root . /etc/environment && php /var/www/src/cron/process_audit_schedules.php >> $CRON_LOG 2>&1
+
 # Required blank line at end of crontab
