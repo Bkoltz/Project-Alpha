@@ -6,18 +6,26 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
+require_once __DIR__ . '/../../utils/webhook_logger.php';
 
-// Get raw POST body for signature verification
+$endpointName = 'stripe-webhook';
 $payload = file_get_contents('php://input');
 $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
+$clientIp = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
+$logId = webhook_log_insert($pdo, $endpointName, $payload, $sigHeader, $clientIp);
 
 header('Content-Type: application/json');
 
 if (!$payload) {
     http_response_code(400);
+    webhook_log_update($pdo, $logId, false, 400, 'No payload');
     echo json_encode(['error' => 'No payload']);
     exit;
 }
+
+$signatureValid = null;
+$responseCode = 200;
+$errorMessage = null;
 
 try {
     // Initialize Stripe service
@@ -66,6 +74,7 @@ try {
         if (!hash_equals($expected, $sig)) {
             throw new Exception('Webhook signature verification failed');
         }
+        $signatureValid = true;
     } elseif ($webhookSecret) {
         // Secret configured but no signature header = reject
         throw new Exception('Missing webhook signature');
@@ -174,6 +183,11 @@ try {
     
 } catch (Throwable $e) {
     @error_log('[StripeWebhook] Error: ' . $e->getMessage());
-    http_response_code(400);
+    $responseCode = 400;
+    $errorMessage = $e->getMessage();
+    http_response_code($responseCode);
+    webhook_log_update($pdo, $logId, $signatureValid, $responseCode, $errorMessage);
     echo json_encode(['error' => $e->getMessage()]);
 }
+
+webhook_log_update($pdo, $logId, $signatureValid, $responseCode, $errorMessage);
