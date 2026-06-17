@@ -1,29 +1,25 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
 // Secure session cookies and start session
-$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
+$isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+    || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+    || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
     'domain' => '',
-    'secure' => $secure,
+    'secure' => $isSecure,
     'httponly' => true,
-    'samesite' => 'Lax',
+    'samesite' => 'Strict',
 ]);
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
 // Security headers
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: SAMEORIGIN');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-if ($secure) {
-    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
-}
-header("Content-Security-Policy: script-src 'self' https://cdn.jsdelivr.net https://js.stripe.com 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none';");
+require_once __DIR__ . '/../src/utils/security_headers.php';
+send_security_headers();
 
 // Resolve requested page (allow letters, numbers, dashes, and slashes)
 // Be defensive: some clients may accidentally URL-encode the entire query
@@ -183,7 +179,14 @@ if ($page === 'logout') {
     }
     
     // Clear remember-me cookie
-    setcookie('remember', '', time() - 3600, '/', '', $secure, true);
+    setcookie('remember', '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'domain' => '',
+        'secure' => $isSecure,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
     
     // Destroy the session
     session_destroy();
