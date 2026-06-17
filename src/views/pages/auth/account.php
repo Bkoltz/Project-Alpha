@@ -19,6 +19,16 @@ try {
     $st->execute([$uid]);
     $twofaEnabled = (bool)$st->fetchColumn();
 } catch (Throwable $e) {}
+
+// Get active trusted devices
+$devices = [];
+try {
+    $st = $pdo->prepare('SELECT id, device_name, ip_address, last_verified_at, expires_at FROM trusted_devices WHERE user_id = ? AND expires_at > NOW() ORDER BY last_verified_at DESC');
+    $st->execute([$uid]);
+    $devices = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    $devices = [];
+}
 ?>
 <section>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
@@ -81,6 +91,28 @@ try {
         <p style="margin:4px 0;color:#6b7280;font-size:14px;">Email: <strong style="color:#111;"><?php echo htmlspecialchars($myEmail); ?></strong></p>
         <p style="margin:4px 0;color:#6b7280;font-size:14px;">Role: <strong style="color:#111;"><?php echo htmlspecialchars(ucfirst($myRole)); ?></strong></p>
       </div>
+
+      <?php if (!empty($devices)): ?>
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
+        <h3 style="margin-top:0">Trusted Devices</h3>
+        <p style="margin:0 0 12px;color:#6b7280;font-size:13px;">These devices can skip 2FA for this account. Revoke any you do not recognize.</p>
+        <div style="display:grid;gap:10px;">
+          <?php foreach ($devices as $d): ?>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid #e5e7eb;border-radius:6px;">
+              <div>
+                <div style="font-weight:600;font-size:14px;"><?php echo htmlspecialchars((string)($d['device_name'] ?? 'Unknown device'), ENT_QUOTES, 'UTF-8'); ?></div>
+                <div style="font-size:12px;color:#6b7280;">IP: <?php echo htmlspecialchars((string)($d['ip_address'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?> · Last verified: <?php echo htmlspecialchars((string)($d['last_verified_at'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></div>
+              </div>
+              <form method="post" action="/?page=account-revoke-device" style="margin:0;">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                <input type="hidden" name="device_id" value="<?php echo (int)$d['id']; ?>">
+                <button type="submit" style="padding:6px 12px;border-radius:6px;border:0;background:#dc2626;color:#fff;font-weight:600;cursor:pointer;font-size:13px;">Revoke</button>
+              </form>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      <?php endif; ?>
     </div>
   </div>
 </section>
