@@ -386,6 +386,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
         exit;
     }
+    if ($page === 'settings-backup') {
+        require_once __DIR__ . '/../src/controllers/backup_handler.php';
+        exit;
+    }
     if ($page === 'settings/tax-rates-handler') {
         require_once __DIR__ . '/../src/controllers/settings/tax-rates-handler.php';
         exit;
