@@ -196,14 +196,25 @@ function handleCheckoutSessionCompleted($pdo, $session) {
     try {
         $pdo->beginTransaction();
         
+        // Get client_id from the invoice
+        $invStmt = $pdo->prepare('SELECT client_id FROM invoices WHERE id = ?');
+        $invStmt->execute([$invoiceId]);
+        $clientId = (int)$invStmt->fetchColumn();
+        
+        if ($clientId <= 0) {
+            @error_log('[StripeWebhook] Invoice ' . $invoiceId . ' not found or has no client - skipping');
+            $pdo->rollBack();
+            return;
+        }
+        
         // Ensure stripe_session_id column exists
         try {
             $pdo->exec('ALTER TABLE payments ADD COLUMN stripe_session_id VARCHAR(255) NULL');
         } catch (Throwable $e) { /* column exists */ }
         
         // Record the payment
-        $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, CURDATE())')
-            ->execute([$invoiceId, $amountTotal, 'stripe', $session['id'], 'succeeded']);
+        $pdo->prepare('INSERT INTO payments (client_id, invoice_id, amount, payment_method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())')
+            ->execute([$clientId, $invoiceId, $amountTotal, 'stripe', $session['id'], 'succeeded']);
         
         // Update invoice status
         $sum = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ? AND status = "succeeded"');
