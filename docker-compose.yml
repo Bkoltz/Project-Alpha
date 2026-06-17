@@ -12,6 +12,10 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      # Stripe (passed from host .env, not baked into image)
+      stripe_publishable_key: ${stripe_publishable_key:-}
+      stripe_secret_key_enc: ${stripe_secret_key_enc:-}
+      stripe_webhook_secret_enc: ${stripe_webhook_secret_enc:-}
       # Dev convenience ONLY — never set to true in production
       APP_AUTH_DISABLED: ${APP_AUTH_DISABLED:-false}
       # APP_HOST: your-domain.com
@@ -29,6 +33,7 @@ services:
       - ./src:/var/www/src 
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
+      - ./.env:/var/www/.env:ro
   cron:
     build:
       context: ./cron
@@ -49,6 +54,7 @@ services:
       - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
+      - ./.env:/var/www/.env:ro
       - cron_logs:/var/log/cron
   db:
     image: "mysql:8"
