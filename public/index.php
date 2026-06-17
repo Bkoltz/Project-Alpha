@@ -134,6 +134,26 @@ csrf_init();
 // First, bootstrap database structures required for auth
 require_once __DIR__ . '/../src/config/bootstrap.php';
 
+// CORS for API endpoints. Note: stateless API routes use the 'api-' prefix
+// (e.g. api-clients-search); 'api-keys' is a UI page, not an API endpoint.
+// Slash-prefixed 'settings/' routes are AJAX/JSON handlers.
+$isApiEndpoint = (str_starts_with($page, 'api-') && $page !== 'api-keys')
+    || str_starts_with($page, 'settings/');
+if ($isApiEndpoint) {
+    $allowedOrigins = getenv('ALLOWED_ORIGINS') ? explode(',', getenv('ALLOWED_ORIGINS')) : [];
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Access-Control-Allow-Credentials: true');
+        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRF-Token');
+    }
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+        http_response_code(204);
+        exit;
+    }
+}
+
 // API routing (stateless, header auth)
 $apiEnabled = filter_var(getenv('APP_API_ENABLED') !== false ? getenv('APP_API_ENABLED') : 'true', FILTER_VALIDATE_BOOLEAN);
 if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // exclude UI page 'api-keys'

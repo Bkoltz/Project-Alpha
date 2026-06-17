@@ -10,6 +10,7 @@ ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/csrf.php';
+require_once __DIR__ . '/../utils/upload_validator.php';
 
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
@@ -56,15 +57,10 @@ try {
             }
 
             $file = $_FILES['document_file'];
-            $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-
-            if (!in_array($file['type'], $allowedTypes)) {
-                throw new Exception('Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed');
-            }
-
-            // Check file size (20MB max)
-            if ($file['size'] > 20 * 1024 * 1024) {
-                throw new Exception('File size must be less than 20MB');
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+            $err = validate_upload($file, $allowedMimes, 20 * 1024 * 1024);
+            if ($err !== null) {
+                throw new Exception($err);
             }
 
             // Create category for this file (type='file')
@@ -204,15 +200,10 @@ try {
             }
 
             $file = $_FILES['document_file'];
-            $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-
-            if (!in_array($file['type'], $allowedTypes)) {
-                throw new Exception('Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed');
-            }
-
-            // Check file size (20MB max)
-            if ($file['size'] > 20 * 1024 * 1024) {
-                throw new Exception('File size must be less than 20MB');
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+            $err = validate_upload($file, $allowedMimes, 20 * 1024 * 1024);
+            if ($err !== null) {
+                throw new Exception($err);
             }
 
 
