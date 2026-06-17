@@ -45,6 +45,8 @@ if (!empty($_POST['change_password']) && $uid > 0) {
         exit;
     }
 }
+require_once __DIR__ . '/../utils/upload_validator.php';
+
 $configMount = '/var/www/config';
 $projectConfig = __DIR__ . '/../../config';
 $configDir = is_dir($configMount) ? $configMount : $projectConfig;
@@ -173,23 +175,24 @@ if (isset($_POST['net_terms_days'])) {
 
 if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
     $f = $_FILES['logo'];
-    // Max 5 MB
-    if (!empty($f['size']) && $f['size'] > 5 * 1024 * 1024) {
-        // too large; ignore upload
-    } else {
-        $allowed = [
-'image/png'       => '.png',
-            'image/jpeg'      => '.jpg',
-            'image/webp'      => '.webp',
-            'image/svg+xml'   => '.svg',
-        ];
-        $mime = @mime_content_type($f['tmp_name']);
-        if (isset($allowed[$mime])) {
-            try {
-                $ext = $allowed[$mime];
+    $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    $err = validate_upload($f, $allowedMimes, 5 * 1024 * 1024);
+    if ($err === null) {
+        try {
+            $extMap = [
+                'image/png'       => '.png',
+                'image/jpeg'      => '.jpg',
+                'image/gif'       => '.gif',
+                'image/webp'      => '.webp',
+                'image/svg+xml'   => '.svg',
+            ];
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->file($f['tmp_name']);
+            $ext = $extMap[$mime] ?? '';
+            if ($ext !== '') {
                 $name = 'logo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . $ext;
                 $dest = $uploadsDir . '/' . $name;
-if (@move_uploaded_file($f['tmp_name'], $dest)) {
+                if (@move_uploaded_file($f['tmp_name'], $dest)) {
                     // Serve via controller since this is stored in config/uploads
                     $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
                 } else {
@@ -206,11 +209,12 @@ if (@move_uploaded_file($f['tmp_name'], $dest)) {
                         $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
                     }
                 }
-            } catch (Throwable $e) {
-                // ignore upload errors; keep prior settings
             }
+        } catch (Throwable $e) {
+            // ignore upload errors; keep prior settings
         }
     }
+    // on validation failure, silently ignore upload to preserve existing behavior
 }
 
 // Billing defaults
