@@ -20,3 +20,4 @@ config/settings.json
 src/uploads/
 backups/
 .hermes/
+.env.staging

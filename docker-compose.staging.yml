@@ -1,0 +1,94 @@
+# Staging Environment for Project Alpha
+# Port: 1628 (production uses 1627)
+# Database: project_alpha_staging
+# Usage: docker compose -f docker-compose.staging.yml up -d
+# Prerequisites: .env.staging file exists with test credentials
+
+name: project-alpha-staging
+
+services:
+  web-staging:
+    build: .
+    image: "bkoltz/project-alpha:staging"
+    ports:
+      - "1628:80"
+    environment:
+      MYSQL_DATABASE: project_alpha_staging
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.staging}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env.staging}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.staging}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env.staging}
+      DB_HOST: db-staging
+      DB_PORT: 3306
+      # Stripe test keys only on staging
+      stripe_publishable_key: ${stripe_publishable_key:-}
+      stripe_secret_key_enc: ${stripe_secret_key_enc:-}
+      stripe_webhook_secret_enc: ${stripe_webhook_secret_enc:-}
+      # Environment marker for app UI banner
+      APP_ENV: staging
+      APP_AUTH_DISABLED: ${APP_AUTH_DISABLED:-false}
+    depends_on:
+      - db-staging
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/\")!==false?0:1);'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - ./src:/var/www/src
+      - staging-uploads:/var/www/src/uploads
+      - ./config:/var/www/config
+      - ./.env.staging:/var/www/.env:ro
+
+  cron-staging:
+    build:
+      context: ./cron
+      dockerfile: Dockerfile
+    image: "bkoltz/project-alpha:cron-staging"
+    environment:
+      MYSQL_DATABASE: project_alpha_staging
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.staging}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env.staging}
+      DB_HOST: db-staging
+      DB_PORT: 3306
+    depends_on:
+      db-staging:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./src:/var/www/src
+      - staging-uploads:/var/www/src/uploads
+      - ./config:/var/www/config
+      - ./.env.staging:/var/www/.env:ro
+      - cron_staging_logs:/var/log/cron
+
+  db-staging:
+    image: "mysql:8"
+    restart: unless-stopped
+    command: >
+      --log-error-verbosity=1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env.staging}
+      MYSQL_DATABASE: project_alpha_staging
+      MYSQL_USER: ${MYSQL_USER:-appuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.staging}
+    volumes:
+      - db_staging_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 10
+
+volumes:
+  db_staging_data:
+  staging-uploads:
+  cron_staging_logs:
