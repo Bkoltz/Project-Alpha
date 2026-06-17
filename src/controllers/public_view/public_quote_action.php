@@ -4,6 +4,13 @@ if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
 // Verify CSRF (we skipped global preflight intentionally)
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/rate_limiter.php';
+if (!rate_limit_check($pdo, 'public_quote_action', 30, 60)) {
+  http_response_code(429);
+  header('Content-Type: text/html; charset=utf-8');
+  echo '<!DOCTYPE html><html><head><title>Rate limited</title></head><body><h1>Rate limited</h1></body></html>';
+  exit;
+}
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/mailer.php';

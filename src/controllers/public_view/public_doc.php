@@ -4,6 +4,13 @@
 // TODO: We need to add more public views. One for contract, so a client can upload a signed contract via link/portal on public_contract_action. Use a mix of PHP and twig for page views.
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/rate_limiter.php';
+if (!rate_limit_check($pdo, 'public_doc', 30, 60)) {
+  http_response_code(429);
+  header('Content-Type: text/html; charset=utf-8');
+  echo '<!DOCTYPE html><html><head><title>Rate limited</title></head><body><h1>Rate limited</h1></body></html>';
+  exit;
+}
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 
