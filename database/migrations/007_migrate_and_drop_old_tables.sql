@@ -10,25 +10,32 @@ USE project_alpha;
 -- Old table has: contract_id, long_term_contract_id, on_demand_contract_id, signer_title, signer_name, signer_email, signature_data, signed_at, display_order, is_required
 -- New table has: contract_id, contract_type, client_signature, admin_signature, client_signed_at, admin_signed_at
 
-INSERT INTO contract_signatures (contract_id, contract_type, client_signature, admin_signature, client_signed_at, admin_signed_at)
-SELECT 
-    COALESCE(cs_old.contract_id, cs_old.long_term_contract_id, cs_old.on_demand_contract_id) as contract_id,
-    CASE 
-        WHEN cs_old.contract_id IS NOT NULL THEN 'regular'
-        WHEN cs_old.long_term_contract_id IS NOT NULL THEN 'long_term'
-        WHEN cs_old.on_demand_contract_id IS NOT NULL THEN 'on_demand'
-        ELSE 'regular'
-    END as contract_type,
-    cs_old.signature_data as client_signature,
-    NULL as admin_signature,
-    cs_old.signed_at as client_signed_at,
-    NULL as admin_signed_at
-FROM contract_signatures_old cs_old
-WHERE COALESCE(cs_old.contract_id, cs_old.long_term_contract_id, cs_old.on_demand_contract_id) IS NOT NULL
-  AND NOT EXISTS (
-      SELECT 1 FROM contract_signatures cs 
-      WHERE cs.contract_id = COALESCE(cs_old.contract_id, cs_old.long_term_contract_id, cs_old.on_demand_contract_id)
-  );
+-- Only migrate if the legacy table exists (fresh installs have no legacy data).
+SET @old_table_exists = (SELECT COUNT(*) FROM information_schema.tables
+    WHERE table_schema = DATABASE() AND table_name = 'contract_signatures_old');
+SET @migrate_sql = IF(@old_table_exists = 0, 'SELECT 1',
+    'INSERT INTO contract_signatures (contract_id, contract_type, client_signature, admin_signature, client_signed_at, admin_signed_at)
+     SELECT
+         COALESCE(cs_old.contract_id, cs_old.long_term_contract_id, cs_old.on_demand_contract_id) as contract_id,
+         CASE
+             WHEN cs_old.contract_id IS NOT NULL THEN \'regular\'
+             WHEN cs_old.long_term_contract_id IS NOT NULL THEN \'long_term\'
+             WHEN cs_old.on_demand_contract_id IS NOT NULL THEN \'on_demand\'
+             ELSE \'regular\'
+         END as contract_type,
+         cs_old.signature_data as client_signature,
+         NULL as admin_signature,
+         cs_old.signed_at as client_signed_at,
+         NULL as admin_signed_at
+     FROM contract_signatures_old cs_old
+     WHERE COALESCE(cs_old.contract_id, cs_old.long_term_contract_id, cs_old.on_demand_contract_id) IS NOT NULL
+       AND NOT EXISTS (
+           SELECT 1 FROM contract_signatures cs
+           WHERE cs.contract_id = COALESCE(cs_old.contract_id, cs_old.long_term_contract_id, cs_old.on_demand_contract_id)
+       )');
+PREPARE migrate_stmt FROM @migrate_sql;
+EXECUTE migrate_stmt;
+DEALLOCATE PREPARE migrate_stmt;
 
 -- ============================================================================
 -- STEP 2: Drop all legacy tables
