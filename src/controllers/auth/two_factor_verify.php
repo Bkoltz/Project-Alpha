@@ -35,6 +35,16 @@ $action = $_POST['action'] ?? '';
 $code = trim($_POST['code'] ?? '');
 
 /**
+ * Detect whether the connection is HTTPS, including reverse-proxy headers.
+ */
+function is_cookie_secure(): bool {
+    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https')
+        || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+        || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
+}
+
+/**
  * Create or update a trusted device token
  */
 function set_trusted_device(PDO $pdo, int $userId, string $ip): void {
@@ -42,6 +52,15 @@ function set_trusted_device(PDO $pdo, int $userId, string $ip): void {
     $deviceName = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown Device';
     $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? '');
     $expires = date('Y-m-d H:i:s', strtotime('+30 days'));
+    
+    $cookieOptions = [
+        'expires' => strtotime('+30 days'),
+        'path' => '/',
+        'domain' => '',
+        'secure' => is_cookie_secure(),
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ];
     
     try {
         $st = $pdo->prepare('
@@ -56,28 +75,10 @@ function set_trusted_device(PDO $pdo, int $userId, string $ip): void {
         ');
         $st->execute([$userId, $token, $deviceName, $ip, $userAgentHash, $expires]);
         
-        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https');
-        setcookie('device_trust', $token, [
-            'expires' => strtotime('+30 days'),
-            'path' => '/',
-            'domain' => '',
-            'secure' => $secure,
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+        setcookie('device_trust', $token, $cookieOptions);
     } catch (Throwable $e) {
         // If DB table doesn't exist yet, just set the cookie
-        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https');
-        setcookie('device_trust', $token, [
-            'expires' => strtotime('+30 days'),
-            'path' => '/',
-            'domain' => '',
-            'secure' => $secure,
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
+        setcookie('device_trust', $token, $cookieOptions);
     }
 }
 

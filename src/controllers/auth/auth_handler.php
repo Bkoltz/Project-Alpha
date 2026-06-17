@@ -163,7 +163,10 @@ if ($action === 'login') {
         // kept as a comment for future use.
         /*
         if (!empty($_POST['remember'])) {
-            $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
+            $cookieSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+                || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https')
+                || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+                || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
             $uid = (int)$u['id'];
             $exp = time() + 60*60*24*30;
             $key = crypto_get_key();
@@ -175,9 +178,9 @@ if ($action === 'login') {
                     'expires' => $exp,
                     'path' => '/',
                     'domain' => '',
-                    'secure' => $secure,
+                    'secure' => $cookieSecure,
                     'httponly' => true,
-                    'samesite' => 'Lax',
+                    'samesite' => 'Strict',
                 ]);
             }
         }
