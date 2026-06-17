@@ -34,8 +34,8 @@ These are the final items before PA handles real invoices:
 
 ### High Priority
 
-- [ ] **Configure webhook secret** in `.env` — `stripe_webhook_secret_enc` currently empty
-- [ ] **Test auto-charge recurring** — requires real `stripe_customer_id` + `stripe_payment_method_id`
+- [x] **Configure webhook secret** in `.env` — `stripe_webhook_secret_enc` now configured as `plain::whsec_whsec_ROTATED_SEE_STRIPE_DASHBOARD`
+- [ ] **Test auto-charge recurring** — requires real `stripe_customer_id` + `stripe_payment_method_id` in invoice
 - [ ] **Production deployment** — merge `staging` → `main`, test on port 1627
 - [ ] **Cloudflare tunnel** — ensure pa.ledgetopdroneservices.com routes to port 1627
 - [ ] **Backups** — automated DB backup before going live
