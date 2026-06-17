@@ -25,4 +25,7 @@ CRON_LOG=/var/www/logs/cron.log
 # Process audit schedules – daily at 6:00 AM UTC
 0 6 * * * root . /etc/environment && php /var/www/src/cron/process_audit_schedules.php >> $CRON_LOG 2>&1
 
+# Daily database backup – at 2:30 AM UTC (after recurring invoices)
+30 2 * * * root . /etc/environment && php /var/www/src/cron/backup_database.php >> $CRON_LOG 2>&1
+
 # Required blank line at end of crontab
