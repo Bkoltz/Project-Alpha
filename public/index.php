@@ -634,6 +634,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/auth/account_update.php';
         exit;
     }
+    if ($page === 'account-revoke-device') {
+        require_once __DIR__ . '/../src/controllers/account_revoke_device.php';
+        exit;
+    }
     if ($page === 'financial/audit-export') {
         require_once __DIR__ . '/../src/controllers/financial/audit_export.php';
         exit;
