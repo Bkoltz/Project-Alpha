@@ -33,7 +33,12 @@ if (!$expireWhenPaid && $days <= 0) {
 
 try {
     // Verify the document exists
-    $table = $type . 's'; // quotes, contracts, invoices
+    $validTables = ['quote' => 'quotes', 'contract' => 'contracts', 'invoice' => 'invoices'];
+    if (!isset($validTables[$type])) {
+        echo json_encode(['success' => false, 'error' => 'Invalid document type']);
+        exit;
+    }
+    $table = $validTables[$type];
     $stmt = $pdo->prepare("SELECT id, status FROM {$table} WHERE id = ?");
     $stmt->execute([$id]);
     $doc = $stmt->fetch(PDO::FETCH_ASSOC);
