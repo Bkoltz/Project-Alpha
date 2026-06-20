@@ -369,86 +369,54 @@ if (isset($_POST['review_link'])) {
     $settings['review_link'] = $rl !== '' ? $rl : null;
 }
 
-// Stripe settings — save to .env file, NOT to settings.json
-$envUpdates = [];
+// Stripe settings — save encrypted to app_config DB table (NOT to .env file)
+// This allows users to enter Stripe keys via the UI without needing to edit .env
+// The .env file is mounted read-only in Docker, so we can't write to it
+$stripeConfigKeys = [];
 if (isset($_POST['stripe_publishable_key'])) {
     $val = trim((string)$_POST['stripe_publishable_key']);
-    if ($val !== '') {
-        $envUpdates['stripe_publishable_key'] = $val;
-    }
+    // Always save publishable key (it's public, can be blank to clear)
+    $stripeConfigKeys['stripe_publishable_key'] = $val;
 }
 if (isset($_POST['stripe_secret_key'])) {
     $sk = trim((string)$_POST['stripe_secret_key']);
     if ($sk !== '') {
+        // Only update if a new key was entered (don't blank out existing)
         require_once __DIR__ . '/../utils/crypto.php';
         $enc = crypto_encrypt($sk);
         if ($enc) {
-            $envUpdates['stripe_secret_key_enc'] = $enc;
+            $stripeConfigKeys['stripe_secret_key_enc'] = $enc;
         }
     }
 }
 if (isset($_POST['stripe_webhook_secret'])) {
     $ws = trim((string)$_POST['stripe_webhook_secret']);
     if ($ws !== '') {
+        // Only update if a new secret was entered (don't blank out existing)
         require_once __DIR__ . '/../utils/crypto.php';
         $enc = crypto_encrypt($ws);
         if ($enc) {
-            $envUpdates['stripe_webhook_secret_enc'] = $enc;
+            $stripeConfigKeys['stripe_webhook_secret_enc'] = $enc;
         }
     }
 }
 
-// Write secrets to .env file if any were submitted
-if (!empty($envUpdates)) {
-    $envPath = __DIR__ . '/../../.env';
-    $envContent = '';
-    $existingLines = [];
-    
-    if (is_readable($envPath)) {
-        $envContent = file_get_contents($envPath);
-        $existingLines = explode("\n", $envContent);
+// Write Stripe keys to app_config table (encrypted where needed)
+if (!empty($stripeConfigKeys)) {
+    $stmtConfig = $pdo->prepare(
+        'INSERT INTO app_config (organization_id, config_key, config_value)
+         VALUES (0, ?, ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+    );
+    foreach ($stripeConfigKeys as $key => $val) {
+        $stmtConfig->execute([$key, $val]);
     }
-    
-    // Build updated content
-    $updated = [];
-    $handledKeys = [];
-    foreach ($existingLines as $line) {
-        $trimmed = trim($line);
-        if (strpos($trimmed, '#') === 0 || strpos($trimmed, '=') === false) {
-            $updated[] = $line;
-            continue;
-        }
-        list($key,) = explode('=', $trimmed, 2);
-        $key = trim($key);
-        if (isset($envUpdates[$key])) {
-            $updated[] = $key . '="' . str_replace('"', '\"', $envUpdates[$key]) . '"';
-            $handledKeys[] = $key;
-        } else {
-            $updated[] = $line;
-        }
-    }
-    
-    // Add any new keys
-    foreach ($envUpdates as $key => $val) {
-        if (!in_array($key, $handledKeys, true)) {
-            $updated[] = $key . '="' . str_replace('"', '\"', $val) . '"';
-        }
-    }
-    
-    // Write .env file
-    $envDir = dirname($envPath);
-    if (!is_dir($envDir)) {
-        @mkdir($envDir, 0775, true);
-    }
-    if (is_writable($envDir) || !file_exists($envPath)) {
-        @file_put_contents($envPath, implode("\n", $updated) . "\n");
-        @chmod($envPath, 0600); // restrict permissions
-    }
-    
+
     // Also set in current request so they're available immediately
-    foreach ($envUpdates as $key => $val) {
+    foreach ($stripeConfigKeys as $key => $val) {
         putenv("$key=$val");
         $_ENV[$key] = $val;
+        $appConfig[$key] = $val;
     }
 }
 

@@ -98,22 +98,34 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 
 <fieldset id="stripeConfig" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;display:none">
   <legend style="padding:0 6px;color:var(--muted)">Stripe Configuration</legend>
-  <div style="color:#666;font-size:0.9em;margin-bottom:12px">Configure your Stripe API keys to enable automatic payment processing. Get your keys from the Stripe dashboard.</div>
-  
+  <div style="color:#666;font-size:0.9em;margin-bottom:12px">Configure your Stripe API keys to enable automatic payment processing. Get your keys from the <a href="https://dashboard.stripe.com/apikeys" target="_blank">Stripe dashboard</a>.</div>
+
+  <?php
+  $hasPub = !empty($appConfig['stripe_publishable_key']);
+  $hasSecret = !empty($appConfig['stripe_secret_key_enc']);
+  $hasWebhook = !empty($appConfig['stripe_webhook_secret_enc']);
+  ?>
+
+  <?php if ($hasSecret): ?>
+  <div class="alert alert-success" style="margin-bottom:12px;padding:8px 12px;font-size:0.9em">
+    Stripe secret key is configured. Enter a new key below to replace it (leave blank to keep current).
+  </div>
+  <?php endif; ?>
+
   <label style="display:block;margin-bottom:12px">
-    <div style="margin-bottom:4px;font-weight:500">Publishable Key</div>
-    <input type="text" name="stripe_publishable_key" value="<?php echo htmlspecialchars($appConfig['stripe_publishable_key'] ?? ''); ?>" placeholder="pk_live_..." class="input">
+    <div style="margin-bottom:4px;font-weight:500">Publishable Key <?php echo $hasPub ? '<span style="color:#10b981;font-size:0.8em">(configured)</span>' : ''; ?></div>
+    <input type="text" name="stripe_publishable_key" value="<?php echo htmlspecialchars($appConfig['stripe_publishable_key'] ?? ''); ?>" placeholder="pk_live_... or pk_test_..." class="input">
   </label>
-  
+
   <label style="display:block;margin-bottom:12px">
-    <div style="margin-bottom:4px;font-weight:500">Secret Key</div>
-    <input type="password" name="stripe_secret_key" value="<?php echo htmlspecialchars($appConfig['stripe_secret_key'] ?? ''); ?>" placeholder="sk_live_..." class="input">
+    <div style="margin-bottom:4px;font-weight:500">Secret Key <?php echo $hasSecret ? '<span style="color:#10b981;font-size:0.8em">(configured)</span>' : ''; ?></div>
+    <input type="password" name="stripe_secret_key" placeholder="<?php echo $hasSecret ? 'Enter new key to replace (encrypted)' : 'sk_live_... or sk_test_...'; ?>" class="input">
   </label>
-  
+
   <label style="display:block">
-    <div style="margin-bottom:4px;font-weight:500">Webhook Secret <span style="font-weight:normal;color:#666">(Optional)</span></div>
-    <input type="password" name="stripe_webhook_secret" value="<?php echo htmlspecialchars($appConfig['stripe_webhook_secret'] ?? ''); ?>" placeholder="whsec_..." class="input">
-    <div style="font-size:0.85em;color:#666;margin-top:4px">Required only if you want to receive webhook events from Stripe</div>
+    <div style="margin-bottom:4px;font-weight:500">Webhook Secret <?php echo $hasWebhook ? '<span style="color:#10b981;font-size:0.8em">(configured)</span>' : ''; ?> <span style="font-weight:normal;color:#666">(Optional)</span></div>
+    <input type="password" name="stripe_webhook_secret" placeholder="<?php echo $hasWebhook ? 'Enter new secret to replace (encrypted)' : 'whsec_...'; ?>" class="input">
+    <div style="font-size:0.85em;color:#666;margin-top:4px">Required only if you want to receive webhook events from Stripe. Keys are encrypted with AES-256-GCM before storage.</div>
   </label>
 </fieldset>
 

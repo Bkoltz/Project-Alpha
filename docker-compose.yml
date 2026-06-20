@@ -12,7 +12,8 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
-      # Stripe (passed from host .env, not baked into image)
+      # Stripe keys are now entered via the Settings > Billing UI and stored
+      # encrypted in the app_config DB table. Env-vars below are optional fallbacks.
       stripe_publishable_key: ${stripe_publishable_key:-}
       stripe_secret_key_enc: ${stripe_secret_key_enc:-}
       stripe_webhook_secret_enc: ${stripe_webhook_secret_enc:-}

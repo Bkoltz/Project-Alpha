@@ -123,3 +123,27 @@ if ($tz !== '') {
         date_default_timezone_set('UTC');
     }
 }
+
+// Load Stripe keys from app_config DB table (UI-entered keys, encrypted)
+// This takes precedence over env-vars and settings.json so that keys entered
+// via the Settings > Billing UI are used. Env-vars still work as a fallback
+// for deployments that prefer .env-based configuration.
+try {
+    if (!isset($pdo)) {
+        require_once __DIR__ . '/db.php';
+    }
+    if (isset($pdo)) {
+        $cfgStmt = $pdo->query("SELECT config_key, config_value FROM app_config WHERE config_key IN ('stripe_publishable_key','stripe_secret_key_enc','stripe_webhook_secret_enc','smtp_password_enc')");
+        if ($cfgStmt) {
+            while ($row = $cfgStmt->fetch(PDO::FETCH_ASSOC)) {
+                $key = $row['config_key'];
+                $val = $row['config_value'];
+                if ($val !== '' && $val !== null) {
+                    $appConfig[$key] = $val;
+                }
+            }
+        }
+    }
+} catch (Throwable $e) {
+    // DB not available yet or table doesn't exist — fall through to env vars
+}
