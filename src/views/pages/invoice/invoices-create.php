@@ -17,21 +17,21 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label style="position:relative">
         <div>Client</div>
-        <input id="clientInputInv" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientInputInv" type="text" placeholder="Type client name..." autocomplete="off" class="input">
         <input id="clientIdInv" type="hidden" name="client_id">
         <div id="clientSuggestInv" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
       <label>
         <div>Due Date</div>
-        <input type="date" name="due_date" value="<?php echo htmlspecialchars($defaultDue); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="date" name="due_date" value="<?php echo htmlspecialchars($defaultDue); ?>" class="input">
       </label>
       <label>
         <div>Tax (%)</div>
-        <input id="taxPercentInv" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="taxPercentInv" type="number" step="0.01" name="tax_percent" value="0" class="input">
       </label>
       <label>
         <div>Discount Type</div>
-        <select id="discountTypeInv" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select id="discountTypeInv" name="discount_type" class="input">
           <option value="none">None</option>
           <option value="percent">Percent</option>
           <option value="fixed">Fixed $</option>
@@ -39,7 +39,7 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
       </label>
       <label>
         <div>Discount Value</div>
-        <input id="discountValueInv" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="discountValueInv" type="number" step="0.01" name="discount_value" value="0" class="input">
       </label>
     </div>
 
@@ -52,10 +52,10 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
 
     <div id="projectSectionInv" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
       <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
-      <div style="display:grid;gap:12px">
+      <div class="grid">
         <label>
           <div>Add to Existing Project</div>
-          <select id="projectSelectInv" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <select id="projectSelectInv" name="project_id" class="input">
             <option value="">-- Select Project --</option>
           </select>
         </label>
@@ -68,20 +68,20 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
 
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
-      <div id="itemsInv" style="display:grid;gap:8px"></div>
+      <div id="itemsInv" class="grid"></div>
       <button type="button" onclick="addItemInv()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
     <label>
       <div>Job Notes (shared across related docs)</div>
-      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"></textarea>
+      <textarea name="project_notes" rows="3" class="input" placeholder="Notes visible to you (not the client PDF)"></textarea>
     </label>
 
     <div id="totalsInv" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div><div id="subtotalValInv" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div><div id="discountValInv" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div><div id="taxValInv" style="min-width:120px;text-align:right">$0.00</div></div>
-      <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalValInv" style="min-width:120px;text-align:right">$0.00</div></div>
+      <div class="flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div><div id="subtotalValInv" class="text-right" style="min-width:120px">$0.00</div></div>
+      <div class="flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div><div id="discountValInv" class="text-right" style="min-width:120px">$0.00</div></div>
+      <div class="flex-end"><div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div><div id="taxValInv" class="text-right" style="min-width:120px">$0.00</div></div>
+      <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div class="text-right" style="min-width:140px">Total</div><div id="totalValInv" class="text-right" style="min-width:120px">$0.00</div></div>
     </div>
 
     <div>

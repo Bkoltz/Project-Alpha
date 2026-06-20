@@ -121,7 +121,7 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php echo $category['uploaded_at'] ? date('F j, Y', strtotime($category['uploaded_at'])) : 'N/A'; ?>
                         </div>
                     </div>
@@ -132,7 +132,7 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
                     <div style="font-weight:600;margin-bottom:12px">Actions</div>
                     
-                    <div style="display:grid;gap:8px">
+                    <div class="grid">
                         <!-- Download -->
                         <a href="<?php echo htmlspecialchars($fileUrl . '&download=1'); ?>" 
                            download
@@ -283,7 +283,7 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                    style="margin-right:8px">
                             <?php echo htmlspecialchars($client['name']); ?>
                             <?php if ($client['email']): ?>
-                                <span style="color:var(--muted);font-size:13px">
+                                <span class="muted text-sm">
                                     (<?php echo htmlspecialchars($client['email']); ?>)
                                 </span>
                             <?php endif; ?>

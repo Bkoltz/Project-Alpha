@@ -21,15 +21,15 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
 <?php if ($docTab === 'quotes'): ?>
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
     <legend style="padding:0 6px;color:var(--muted)">Quote Options</legend>
-    <div style="display:grid;gap:12px">
+    <div class="grid">
       <label>
         <input type="checkbox" name="quote_scope_enabled" value="1" <?php echo !empty($appConfig['quote_scope_enabled']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Enable "Scope of Project" field on quotes</span>
+        <span class="font-600">Enable "Scope of Project" field on quotes</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">If enabled, quotes will have a scope field. If left blank, it will be excluded from PDF.</div>
       </label>
       <label style="display:block;margin-top:4px">
         <input type="checkbox" name="quotes_show_terms" value="1" <?php echo (!isset($appConfig['quotes_show_terms']) || (int)($appConfig['quotes_show_terms']) === 1) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Show terms on Quotes</span>
+        <span class="font-600">Show terms on Quotes</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">When enabled, the standard terms will be included on quote PDFs.</div>
       </label>
     </div>
@@ -38,14 +38,14 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
     <legend style="padding:0 6px;color:var(--muted)">Auto-generation on Quote Approval</legend>
     <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Configure what gets automatically created when a quote is approved</p>
-    <div style="display:grid;gap:12px">
+    <div class="grid">
       <label>
         <input type="checkbox" name="quote_auto_create_contract" value="1" <?php echo !empty($appConfig['quote_auto_create_contract']) || !isset($appConfig['quote_auto_create_contract']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Auto-create Contract on approval</span>
+        <span class="font-600">Auto-create Contract on approval</span>
       </label>
       <label>
         <input type="checkbox" name="quote_auto_create_invoice" value="1" <?php echo !empty($appConfig['quote_auto_create_invoice']) || !isset($appConfig['quote_auto_create_invoice']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Auto-create Invoice on approval</span>
+        <span class="font-600">Auto-create Invoice on approval</span>
       </label>
     </div>
   </fieldset>
@@ -54,15 +54,15 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
 <?php if ($docTab === 'contracts'): ?>
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
     <legend style="padding:0 6px;color:var(--muted)">Contract Options</legend>
-    <div style="display:grid;gap:12px">
+    <div class="grid">
       <label>
         <input type="checkbox" name="contract_scope_enabled" value="1" <?php echo !empty($appConfig['contract_scope_enabled']) || !isset($appConfig['contract_scope_enabled']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Enable "Scope of Contract" field</span>
+        <span class="font-600">Enable "Scope of Contract" field</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">Available for both regular and long-term contracts. If left blank, excluded from PDF.</div>
       </label>
       <label>
         <input type="checkbox" name="contract_memo_enabled" value="1" <?php echo !empty($appConfig['contract_memo_enabled']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Enable "Memo" field</span>
+        <span class="font-600">Enable "Memo" field</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">Add a memo/notes section to contracts for additional context.</div>
       </label>
     </div>
@@ -71,7 +71,7 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
     <legend style="padding:0 6px;color:var(--muted)">Signature Agreement Text</legend>
     <p style="margin:0 0 8px;color:var(--muted);font-size:13px">This text appears above the signature line on all contracts</p>
-    <textarea name="signature_agreement" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Enter signature agreement text..."><?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?></textarea>
+    <textarea name="signature_agreement" rows="3" class="input" placeholder="Enter signature agreement text..."><?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?></textarea>
   </fieldset>
   
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
@@ -103,7 +103,7 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
       <!-- User-defined sections -->
       <?php foreach ($customSections as $idx => $sec): ?>
         <div class="custom-section-row" style="padding:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff">
-          <div style="display:grid;gap:8px">
+          <div class="grid">
             <div style="display:flex;align-items:center;gap:8px">
               <label style="display:flex;align-items:center;gap:6px">
                 <input type="checkbox" name="section_enabled[<?php echo $idx; ?>]" value="1" <?php echo !empty($sec['is_enabled']) ? 'checked' : ''; ?>>
@@ -127,7 +127,7 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
       var div = document.createElement('div');
       div.className = 'custom-section-row';
       div.style.cssText = 'padding:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff';
-      div.innerHTML = '<div style="display:grid;gap:8px">'+
+      div.innerHTML = '<div class="grid">'+
         '<div style="display:flex;align-items:center;gap:8px">'+
           '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="section_enabled['+idx+']" value="1" checked><span style="font-size:13px">Enabled</span></label>'+
           '<button type="button" onclick="this.closest(\'.custom-section-row\').remove()" style="margin-left:auto;padding:4px 10px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;border-radius:4px;font-size:12px;cursor:pointer">Remove</button>'+
@@ -144,20 +144,20 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
 <?php if ($docTab === 'invoices'): ?>
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
     <legend style="padding:0 6px;color:var(--muted)">Invoice Display Options</legend>
-    <div style="display:grid;gap:12px">
+    <div class="grid">
       <label>
         <input type="checkbox" name="invoice_show_terms" value="1" <?php echo (!isset($appConfig['invoice_show_terms']) || !empty($appConfig['invoice_show_terms'])) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Show terms on Invoices</span>
+        <span class="font-600">Show terms on Invoices</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">When enabled, the standard terms will appear on invoice PDFs.</div>
       </label>
       <label>
         <input type="checkbox" name="invoice_show_project_code" value="1" <?php echo (!isset($appConfig['invoice_show_project_code']) || !empty($appConfig['invoice_show_project_code'])) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Show project code on Invoices</span>
+        <span class="font-600">Show project code on Invoices</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">Display the project/job code on invoice detail and PDF views.</div>
       </label>
       <label>
         <input type="checkbox" name="invoice_show_due_date" value="1" <?php echo (!isset($appConfig['invoice_show_due_date']) || !empty($appConfig['invoice_show_due_date'])) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Show due date on Invoices</span>
+        <span class="font-600">Show due date on Invoices</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">Display the payment due date prominently on invoice views.</div>
       </label>
     </div>
@@ -165,7 +165,7 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
 
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
     <legend style="padding:0 6px;color:var(--muted)">Invoice Defaults</legend>
-    <div style="display:grid;gap:12px">
+    <div class="grid">
       <label>
         <div style="margin-bottom:4px;font-weight:600">Default Payment Terms (NET days)</div>
         <input type="number" name="net_terms_days" value="<?php echo (int)($appConfig['net_terms_days'] ?? 30); ?>" min="0" max="365" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">

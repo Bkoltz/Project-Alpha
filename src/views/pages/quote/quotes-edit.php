@@ -24,7 +24,7 @@
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label>
         <div>Client</div>
-        <select required name="client_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select required name="client_id" class="input">
           <?php foreach ($clients as $c): ?>
             <option value="<?php echo (int)$c['id']; ?>" <?php echo (int)$quote['client_id'] === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
           <?php endforeach; ?>
@@ -32,11 +32,11 @@
       </label>
       <label>
         <div>Tax (%)</div>
-        <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($quote['tax_percent']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($quote['tax_percent']); ?>" class="input">
       </label>
       <label>
         <div>Discount Type</div>
-        <select id="discountType" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select id="discountType" name="discount_type" class="input">
           <option value="none" <?php echo $quote['discount_type'] === 'none' ? 'selected' : ''; ?>>None</option>
           <option value="percent" <?php echo $quote['discount_type'] === 'percent' ? 'selected' : ''; ?>>Percent</option>
           <option value="fixed" <?php echo $quote['discount_type'] === 'fixed' ? 'selected' : ''; ?>>Fixed $</option>
@@ -44,11 +44,11 @@
       </label>
       <label>
         <div>Discount Value</div>
-        <input id="discountValue" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($quote['discount_value']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="discountValue" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($quote['discount_value']); ?>" class="input">
       </label>
       <label>
         <div>Deposit Type</div>
-        <select id="depositType" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select id="depositType" name="deposit_type" class="input">
           <option value="none" <?php echo ($quote['deposit_type'] ?? 'none') === 'none' ? 'selected' : ''; ?>>None</option>
           <option value="percent" <?php echo ($quote['deposit_type'] ?? '') === 'percent' ? 'selected' : ''; ?>>Percent</option>
           <option value="fixed" <?php echo ($quote['deposit_type'] ?? '') === 'fixed' ? 'selected' : ''; ?>>Fixed $</option>
@@ -56,11 +56,11 @@
       </label>
       <label>
         <div>Deposit Value</div>
-        <input id="depositValue" type="number" step="0.01" name="deposit_value" value="<?php echo htmlspecialchars($quote['deposit_amount'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="depositValue" type="number" step="0.01" name="deposit_value" value="<?php echo htmlspecialchars($quote['deposit_amount'] ?? 0); ?>" class="input">
       </label>
       <label>
         <div>Fulfillment Date</div>
-        <input type="date" name="fulfillment_date" value="<?php echo htmlspecialchars($quote['fulfillment_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="date" name="fulfillment_date" value="<?php echo htmlspecialchars($quote['fulfillment_date'] ?? ''); ?>" class="input">
       </label>
     </div>
 
@@ -93,21 +93,21 @@
             <label>
               <div><?php echo htmlspecialchars($field['field_label']); ?><?php if ($field['is_required']): ?> <span style="color:#dc2626">*</span><?php endif; ?></div>
               <?php if ($field['field_type'] === 'date'): ?>
-                <input type="date" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <input type="date" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
               <?php elseif ($field['field_type'] === 'number'): ?>
-                <input type="number" step="0.01" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <input type="number" step="0.01" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
               <?php elseif ($field['field_type'] === 'textarea'): ?>
-                <textarea name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" rows="3" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($fieldValue); ?></textarea>
+                <textarea name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" rows="3" <?php if ($field['is_required']) echo 'required'; ?> class="input"><?php echo htmlspecialchars($fieldValue); ?></textarea>
               <?php elseif ($field['field_type'] === 'select'): ?>
                 <?php $options = json_decode($field['field_options'] ?? '[]', true); ?>
-                <select name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <select name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
                   <option value="">-- Select --</option>
                   <?php foreach ($options as $opt): ?>
                     <option value="<?php echo htmlspecialchars($opt); ?>" <?php echo $fieldValue === $opt ? 'selected' : ''; ?>><?php echo htmlspecialchars($opt); ?></option>
                   <?php endforeach; ?>
                 </select>
               <?php else: ?>
-                <input type="text" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <input type="text" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
               <?php endif; ?>
             </label>
           <?php endforeach; ?>
@@ -117,7 +117,7 @@
 
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
-      <div id="items" style="display:grid;gap:8px"></div>
+      <div id="items" class="grid"></div>
       <button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
@@ -149,34 +149,34 @@
     <?php if (!isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled'])): ?>
       <label>
         <div>Scope of Work</div>
-        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."><?php echo htmlspecialchars($quote['scope'] ?? ''); ?></textarea>
+        <textarea name="scope" rows="4" class="input" placeholder="Optional: Describe the scope of work and deliverables..."><?php echo htmlspecialchars($quote['scope'] ?? ''); ?></textarea>
       </label>
     <?php endif; ?>
     <label>
       <div>Job Notes</div>
-      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
+      <textarea name="project_notes" rows="3" class="input" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
     </label>
     <label>
       <div>Job Terms (override default terms for this job)</div>
-      <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
+      <textarea name="project_terms" rows="6" class="input" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
     </label>
 
     <div id="totals" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
-        <div id="subtotalVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="subtotalVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div>
-        <div id="discountVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="discountVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div>
-        <div id="taxVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="taxVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700">
-        <div style="min-width:140px;text-align:right">Total</div>
-        <div id="totalVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div class="text-right" style="min-width:140px">Total</div>
+        <div id="totalVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
     </div>
 

@@ -23,7 +23,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+  <div class="page-head">
     <h3 style="margin:0">Item Library</h3>
     <button onclick="showCreateModal()" style="padding:10px 20px;background:#3b82f6;color:#fff;border:0;border-radius:8px;cursor:pointer;font-size:14px">
       + Add New Item
@@ -43,7 +43,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
   <?php endif; ?>
 
   <div style="background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);overflow:hidden">
-    <table style="width:100%;border-collapse:collapse">
+    <table class="pa-table">
       <thead>
         <tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb">
           <th style="padding:12px;text-align:left;font-weight:600">Item Name</th>

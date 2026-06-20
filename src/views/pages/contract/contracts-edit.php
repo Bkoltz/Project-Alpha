@@ -29,7 +29,7 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label>
         <div>Client</div>
-        <select required name="client_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select required name="client_id" class="input">
           <?php foreach ($clients as $c): ?>
             <option value="<?php echo (int)$c['id']; ?>" <?php echo (int)$contract['client_id'] === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
           <?php endforeach; ?>
@@ -37,11 +37,11 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
       </label>
       <label>
         <div>Tax (%)</div>
-        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($contract['tax_percent'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($contract['tax_percent'] ?? 0); ?>" class="input">
       </label>
       <label>
         <div>Discount Type</div>
-        <select id="discountTypeCo" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select id="discountTypeCo" name="discount_type" class="input">
           <option value="none" <?php echo ($contract['discount_type'] ?? 'none') === 'none' ? 'selected' : ''; ?>>None</option>
           <option value="percent" <?php echo ($contract['discount_type'] ?? '') === 'percent' ? 'selected' : ''; ?>>Percent</option>
           <option value="fixed" <?php echo ($contract['discount_type'] ?? '') === 'fixed' ? 'selected' : ''; ?>>Fixed $</option>
@@ -49,11 +49,11 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
       </label>
       <label>
         <div>Discount Value</div>
-        <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($contract['discount_value'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="<?php echo htmlspecialchars($contract['discount_value'] ?? 0); ?>" class="input">
       </label>
       <label>
         <div>Deposit Type</div>
-        <select id="depositTypeCo" name="deposit_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select id="depositTypeCo" name="deposit_type" class="input">
           <option value="none" <?php echo ($contract['deposit_type'] ?? 'none') === 'none' ? 'selected' : ''; ?>>None</option>
           <option value="percent" <?php echo ($contract['deposit_type'] ?? '') === 'percent' ? 'selected' : ''; ?>>Percent</option>
           <option value="fixed" <?php echo ($contract['deposit_type'] ?? '') === 'fixed' ? 'selected' : ''; ?>>Fixed $</option>
@@ -61,15 +61,15 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
       </label>
       <label>
         <div>Deposit Amount</div>
-        <input id="depositValueCo" type="number" step="0.01" name="deposit_amount" value="<?php echo htmlspecialchars($contract['deposit_amount'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="depositValueCo" type="number" step="0.01" name="deposit_amount" value="<?php echo htmlspecialchars($contract['deposit_amount'] ?? 0); ?>" class="input">
       </label>
       <label>
         <div>Deposit Paid</div>
-        <input id="depositPaidCo" type="number" step="0.01" name="deposit_paid" value="<?php echo htmlspecialchars($contract['deposit_paid'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="depositPaidCo" type="number" step="0.01" name="deposit_paid" value="<?php echo htmlspecialchars($contract['deposit_paid'] ?? 0); ?>" class="input">
       </label>
       <label>
         <div>Fulfillment Date</div>
-        <input type="date" name="fulfillment_date" value="<?php echo htmlspecialchars($contract['fulfillment_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="date" name="fulfillment_date" value="<?php echo htmlspecialchars($contract['fulfillment_date'] ?? ''); ?>" class="input">
       </label>
     </div>
 
@@ -102,21 +102,21 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
             <label>
               <div><?php echo htmlspecialchars($field['field_label']); ?><?php if ($field['is_required']): ?> <span style="color:#dc2626">*</span><?php endif; ?></div>
               <?php if ($field['field_type'] === 'date'): ?>
-                <input type="date" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <input type="date" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
               <?php elseif ($field['field_type'] === 'number'): ?>
-                <input type="number" step="0.01" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <input type="number" step="0.01" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
               <?php elseif ($field['field_type'] === 'textarea'): ?>
-                <textarea name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" rows="3" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($fieldValue); ?></textarea>
+                <textarea name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" rows="3" <?php if ($field['is_required']) echo 'required'; ?> class="input"><?php echo htmlspecialchars($fieldValue); ?></textarea>
               <?php elseif ($field['field_type'] === 'select'): ?>
                 <?php $options = json_decode($field['field_options'] ?? '[]', true); ?>
-                <select name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <select name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
                   <option value="">-- Select --</option>
                   <?php foreach ($options as $opt): ?>
                     <option value="<?php echo htmlspecialchars($opt); ?>" <?php echo $fieldValue === $opt ? 'selected' : ''; ?>><?php echo htmlspecialchars($opt); ?></option>
                   <?php endforeach; ?>
                 </select>
               <?php else: ?>
-                <input type="text" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                <input type="text" name="custom_field_<?php echo htmlspecialchars($fieldKey); ?>" value="<?php echo htmlspecialchars($fieldValue); ?>" <?php if ($field['is_required']) echo 'required'; ?> class="input">
               <?php endif; ?>
             </label>
           <?php endforeach; ?>
@@ -127,7 +127,7 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
 
-      <div id="itemsCo" style="display:grid;gap:8px"></div>
+      <div id="itemsCo" class="grid"></div>
       <button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
@@ -160,34 +160,34 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
     <?php if (!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])): ?>
       <label>
         <div>Scope of Work</div>
-        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables for this contract..."><?php echo htmlspecialchars($contract['scope'] ?? ''); ?></textarea>
+        <textarea name="scope" rows="4" class="input" placeholder="Optional: Describe the scope of work and deliverables for this contract..."><?php echo htmlspecialchars($contract['scope'] ?? ''); ?></textarea>
       </label>
     <?php endif; ?>
     <label>
       <div>Job Notes</div>
-      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
+      <textarea name="project_notes" rows="3" class="input" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
     </label>
     <label>
       <div>Job Terms (override default terms for this job)</div>
-      <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
+      <textarea name="project_terms" rows="6" class="input" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
     </label>
 
     <div id="totalsCo" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
-        <div id="subtotalValCo" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="subtotalValCo" class="text-right" style="min-width:120px">$0.00</div>
       </div>
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div>
-        <div id="discountValCo" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="discountValCo" class="text-right" style="min-width:120px">$0.00</div>
       </div>
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div>
-        <div id="taxValCo" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="taxValCo" class="text-right" style="min-width:120px">$0.00</div>
       </div>
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700">
-        <div style="min-width:140px;text-align:right">Total</div>
-        <div id="totalValCo" style="min-width:120px;text-align:right">$0.00</div>
+        <div class="text-right" style="min-width:140px">Total</div>
+        <div id="totalValCo" class="text-right" style="min-width:120px">$0.00</div>
       </div>
     </div>
 

@@ -18,7 +18,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <!-- Client input -->
       <label style="grid-column:1/2;position:relative">
         <div>Client</div>
-        <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" class="input">
         <input id="clientId" type="hidden" name="client_id">
         <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
@@ -26,17 +26,17 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <!-- Tax input -->
       <label style="grid-column:2/3">
         <div>Tax (%)</div>
-        <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="0" class="input">
       </label>
 
       <!-- Project selection -->
       <label>
         <div id="projectSection" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
           <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
-          <div style="display:grid;gap:12px">
+          <div class="grid">
             <label>
               <div>Add to Existing Project</div>
-              <select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              <select id="projectSelect" name="project_id" class="input">
                 <option value="">-- Select Project --</option>
               </select>
             </label>
@@ -49,7 +49,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 
         <!-- Discount inputs -->
         <div>Discount Type</div>
-        <select id="discountType" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select id="discountType" name="discount_type" class="input">
           <option value="none">None</option>
           <option value="percent">Percent</option>
           <option value="fixed">Fixed $</option>
@@ -57,7 +57,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </label>
       <label>
         <div>Discount Value</div>
-        <input id="discountValue" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="discountValue" type="number" step="0.01" name="discount_value" value="0" class="input">
       </label>
 
 
@@ -78,21 +78,21 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="doc_type" value="regular" checked onchange="toggleDocTypeFields()">
           <div>
-            <div style="font-weight:600">Regular</div>
+            <div class="font-600">Regular</div>
             <div style="font-size:12px;color:#6b7280">One-time quote</div>
           </div>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="doc_type" value="long_term" onchange="toggleDocTypeFields()">
           <div>
-            <div style="font-weight:600">Long Term</div>
+            <div class="font-600">Long Term</div>
             <div style="font-size:12px;color:#6b7280">Recurring billing</div>
           </div>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="doc_type" value="on_demand" onchange="toggleDocTypeFields()">
           <div>
-            <div style="font-weight:600">On-Demand</div>
+            <div class="font-600">On-Demand</div>
             <div style="font-size:12px;color:#6b7280">Manual invoicing</div>
           </div>
         </label>
@@ -106,11 +106,11 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
         <label>
           <div>Start Date *</div>
-          <input id="startDateField" type="date" name="lt_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <input id="startDateField" type="date" name="lt_start_date" class="input">
         </label>
         <label>
           <div>Contract Duration *</div>
-          <select id="endDateType" name="lt_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
+          <select id="endDateType" name="lt_end_date_type" class="input" onchange="toggleEndDate()">
             <option value="ongoing">Ongoing (Until Terminated)</option>
             <option value="fixed">Fixed End Date</option>
           </select>
@@ -120,14 +120,14 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div id="endDateField" style="display:none;margin-top:12px">
         <label>
           <div>End Date *</div>
-          <input type="date" name="lt_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <input type="date" name="lt_end_date" class="input">
         </label>
       </div>
 
       <div id="billingIntervalFields" style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:12px">
         <label>
           <div>Bill Every *</div>
-          <select id="billingIntervalCount" name="lt_billing_interval_count" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <select id="billingIntervalCount" name="lt_billing_interval_count" class="input">
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -137,7 +137,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         </label>
         <label>
           <div>Period *</div>
-          <select id="billingIntervalUnit" name="lt_billing_interval_unit" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <select id="billingIntervalUnit" name="lt_billing_interval_unit" class="input">
             <option value="day">Day(s)</option>
             <option value="week">Week(s)</option>
             <option value="month" selected>Month(s)</option>
@@ -167,14 +167,14 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <div id="perInvoiceField" style="margin-top:12px">
         <label>
           <div>Amount Per Invoice * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
-          <input id="pricePerInvoiceInput" type="number" step="0.01" name="lt_price_per_invoice" placeholder="20.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+          <input id="pricePerInvoiceInput" type="number" step="0.01" name="lt_price_per_invoice" placeholder="20.00" class="input" oninput="recalc()">
         </label>
       </div>
 
       <div id="fixedTotalFields" style="display:none;margin-top:12px">
         <label>
           <div>Number of Invoices * <span style="font-size:13px;color:#6b7280;font-weight:normal">(how many invoices to divide the total across)</span></div>
-          <input id="invoiceCountInput" type="number" step="1" min="1" name="invoice_count" placeholder="4" value="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+          <input id="invoiceCountInput" type="number" step="1" min="1" name="invoice_count" placeholder="4" value="4" class="input" oninput="recalc()">
         </label>
         <div id="calculatedPricePerInvoice" style="margin-top:8px;padding:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
           <div style="display:flex;justify-content:space-between;align-items:center">
@@ -195,7 +195,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       
       <label>
         <div>Start Date</div>
-        <input id="onDemandStartDate" type="date" name="od_start_date" value="<?php echo date('Y-m-d'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="onDemandStartDate" type="date" name="od_start_date" value="<?php echo date('Y-m-d'); ?>" class="input">
       </label>
 
       <div style="margin-top:12px;padding:10px;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;font-size:13px">
@@ -206,7 +206,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     <!-- Items input -->
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
-      <div id="items" style="display:grid;gap:8px"></div>
+      <div id="items" class="grid"></div>
       <button type="button" onclick="addItem()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
@@ -214,13 +214,13 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     <?php if (!isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled'])): ?>
       <label>
         <div>Scope of Work</div>
-        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
+        <textarea name="scope" rows="4" class="input" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
       </label>
     <?php endif; ?>
 
     <label>
       <div>Job Notes (shared across related docs)</div>
-      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"></textarea>
+      <textarea name="project_notes" rows="3" class="input" placeholder="Notes visible to you (not the client PDF)"></textarea>
     </label>
 
     <div id="invoiceAmountRow" style="display:none;margin-top:8px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
@@ -232,24 +232,24 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 
     <!-- Totals -->
     <div id="totals" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
-        <div id="subtotalVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="subtotalVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div>
-        <div id="discountVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="discountVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
-      <div style="display:flex;gap:16px;justify-content:flex-end">
+      <div class="flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div>
-        <div id="taxVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div id="taxVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700">
-        <div style="min-width:140px;text-align:right">Total</div>
-        <div id="totalVal" style="min-width:120px;text-align:right">$0.00</div>
+        <div class="text-right" style="min-width:140px">Total</div>
+        <div id="totalVal" class="text-right" style="min-width:120px">$0.00</div>
       </div>
       <div id="depositRow" style="display:flex;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:6px">
-        <div style="display:flex;gap:16px;justify-content:flex-end">
+        <div class="flex-end">
           <div style="min-width:140px;text-align:right;color:#059669;font-weight:700;font-size:15px">Deposit Due</div>
           <div id="depositVal" style="min-width:120px;text-align:right;color:#059669;font-weight:700;font-size:15px">$0.00</div>
         </div>

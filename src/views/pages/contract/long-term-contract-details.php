@@ -81,8 +81,8 @@ $isOngoing = empty($contract['end_date']);
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
-    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="javascript:history.back()" class="btn btn-sm">Back</a>
+    <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
   </div>
   <?php endif; ?>
@@ -180,7 +180,7 @@ $isOngoing = empty($contract['end_date']);
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">Service Provider</div>
+        <div class="font-600">Service Provider</div>
         <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
@@ -210,7 +210,7 @@ $isOngoing = empty($contract['end_date']);
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">Client</div>
+        <div class="font-600">Client</div>
         <?php 
           $toLines = [];
           if (!empty($contract['client_name'])) { $toLines[] = (string)$contract['client_name']; }

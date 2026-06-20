@@ -94,12 +94,12 @@ $providers = ['dropbox', 'gdrive', 's3'];
         <div style="display:grid;gap:16px">
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="link_resolver_enabled" value="1" <?php echo !empty($appConfig['link_resolver_enabled']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Enable Link Resolver System</span>
+                <span class="font-600">Enable Link Resolver System</span>
             </label>
 
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="org_level_links_only" value="1" <?php echo !empty($appConfig['org_level_links_only']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Organization-level links only</span>
+                <span class="font-600">Organization-level links only</span>
                 <span style="font-size:13px;color:var(--muted);margin-left:4px">(If client belongs to organization, manage links at org level)</span>
             </label>
             
@@ -134,12 +134,12 @@ $providers = ['dropbox', 'gdrive', 's3'];
                 <input type="checkbox" name="provider_enabled_<?php echo $provider; ?>" value="1" 
                        <?php echo $isEnabled ? 'checked' : ''; ?>
                        onchange="toggleProviderFields('<?php echo $provider; ?>')">
-                <span style="font-weight:600">Enable <?php echo $providerName; ?> Auto-Generation</span>
+                <span class="font-600">Enable <?php echo $providerName; ?> Auto-Generation</span>
             </label>
 
             <div id="fields_<?php echo $provider; ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
                 <?php if ($provider === 'dropbox'): ?>
-                    <div style="display:grid;gap:12px">
+                    <div class="grid">
                         <?php if (!empty($credentials['refresh_token'])): ?>
                             <!-- OAuth Connected State -->
                             <div style="padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;display:flex;align-items:center;gap:12px">

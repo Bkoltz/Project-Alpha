@@ -22,11 +22,11 @@ if (!$org) {
     <input type="hidden" name="id" value="<?php echo $id; ?>">
     <label>
       <div>Organization Name</div>
-      <input required type="text" name="name" value="<?php echo htmlspecialchars($org['name']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <input required type="text" name="name" value="<?php echo htmlspecialchars($org['name']); ?>" class="input">
     </label>
     <label>
       <div>Notes</div>
-      <textarea name="notes" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>
+      <textarea name="notes" rows="4" class="input"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>
     </label>
     <label>
       <div>Tax Exempt Form (PDF, JPG, PNG)</div>
@@ -39,7 +39,7 @@ if (!$org) {
       <input type="file" name="tax_exempt_file" accept="application/pdf,image/jpeg,image/png">
       <div style="font-size:small;color:var(--muted);margin-top:4px">Upload a PDF, JPG, or PNG to attach a tax-exempt document to this organization.</div>
     </label>
-    <div style="display:flex;gap:8px">
+    <div class="flex">
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Changes</button>
       <a href="/?page=organization/organization-view&id=<?php echo $id; ?>" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;text-decoration:none">Cancel</a>
       <button type="button" id="deleteOrgBtn" style="padding:10px 14px;border-radius:8px;border:0;background:#fee2e2;color:#991b1b;cursor:pointer">Delete Organization</button>

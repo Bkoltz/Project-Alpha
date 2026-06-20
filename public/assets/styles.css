@@ -314,6 +314,78 @@ table tbody tr:hover{background:var(--surface-2)}
 /* utility */
 .mt-24{margin-top:24px}
 
+/* ---------------------------------------------------------------- form inputs */
+.input{
+  padding:10px;border-radius:var(--radius-sm);border:1px solid #ddd;
+  width:100%;font-family:inherit;font-size:14px;background:var(--surface);color:var(--text);
+}
+.input:focus{outline:2px solid var(--nav-accent);outline-offset:1px;border-color:var(--nav-accent)}
+.input-sm{padding:6px 10px;border-radius:var(--radius-sm);border:1px solid #ddd;font-size:14px;background:var(--surface)}
+.input-sm:focus{outline:2px solid var(--nav-accent);outline-offset:1px}
+textarea.input{resize:vertical;min-height:80px}
+select.input{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+
+/* labels */
+.label{font-weight:600;font-size:14px;margin-bottom:4px;display:block;color:var(--text)}
+.label-muted{color:var(--muted);font-size:13px;font-weight:600;margin-bottom:4px;display:block}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.field-row{display:grid;gap:12px;margin-bottom:12px}
+
+/* ---------------------------------------------------------------- buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);font-weight:600;font-size:14px;font-family:inherit;cursor:pointer;text-decoration:none;color:var(--text);background:var(--surface);transition:background .12s,transform .08s}
+.btn:hover{background:var(--surface-2)}
+.btn:active{transform:translateY(1px)}
+.btn-sm{padding:6px 10px;font-size:13px}
+.btn-lg{padding:12px 24px;font-size:15px}
+
+/* ---------------------------------------------------------------- cards */
+.card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:20px;box-shadow:var(--shadow-sm);min-width:0}
+.card-tight{padding:12px}
+.card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+.card-title{margin:0;font-size:16px;font-weight:700;color:var(--text)}
+
+/* ---------------------------------------------------------------- tables */
+.pa-table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--shadow-sm);overflow:hidden}
+.pa-table th{padding:12px;text-align:left;border-bottom:2px solid var(--border);font-weight:600;font-size:13px;color:var(--muted)}
+.pa-table td{padding:12px;border-top:1px solid #f3f4f6;font-size:14px}
+.pa-table tr:hover td{background:var(--surface-2)}
+.pa-table-wrap{overflow-x:auto;border-radius:var(--radius-sm)}
+
+/* ---------------------------------------------------------------- badges/status */
+.status-pill{display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600}
+.status-pill--pending,.status-pill--unpaid,.status-pill--partial{background:var(--amber-bg);color:var(--amber-text)}
+.status-pill--approved,.status-pill--active,.status-pill--paid,.status-pill--completed{background:var(--green-bg);color:var(--green-text)}
+.status-pill--rejected,.status-pill--overdue,.status-pill--void,.status-pill--cancelled{background:var(--red-bg);color:var(--red-text)}
+.status-pill--denied{background:var(--red-bg);color:var(--red-text)}
+
+/* ---------------------------------------------------------------- grid helpers */
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid-4{grid-template-columns:repeat(4,1fr)}
+.flex{display:flex;gap:8px}
+.flex-end{display:flex;justify-content:flex-end;gap:16px}
+.flex-between{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.flex-wrap{flex-wrap:wrap}
+.gap-16{gap:16px}
+.muted{color:var(--muted)}
+.text-sm{font-size:13px}
+.text-right{text-align:right}
+.font-600{font-weight:600}
+.mt-4{margin-top:4px}
+.mb-0{margin-bottom:0}
+.pb-2{padding-bottom:8px}
+
+/* ---------------------------------------------------------------- page header */
+.page-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px;flex-wrap:wrap}
+.page-head h2{margin:0;font-size:22px;font-weight:700;color:var(--text)}
+.page-head .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ---------------------------------------------------------------- misc */
+.muted-note{color:var(--muted);font-size:13px;margin-top:4px}
+.divider{border:0;border-top:1px solid var(--border);margin:16px 0}
+.tag-row{display:flex;gap:6px;flex-wrap:wrap}
+
 /* ---------------------------------------------------------- responsive */
 @media (max-width:1400px){
   .dash-stats{grid-template-columns:repeat(3,1fr)}

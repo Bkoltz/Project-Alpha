@@ -42,7 +42,7 @@ try {
         <span style="font-size:12px;color:#6b7280">Scroll to view all</span>
       </div>
       <div style="max-height:400px;overflow-y:auto">
-        <table style="width:100%;border-collapse:collapse">
+        <table class="pa-table">
           <thead style="position:sticky;top:0;background:#f9fafb;z-index:1">
             <tr style="text-align:left;border-bottom:2px solid #e5e7eb">
               <th style="padding:12px">Name</th>
@@ -80,7 +80,7 @@ try {
               </td>
               <?php endif; ?>
               <td style="padding:12px">
-                <div style="display:flex;gap:8px">
+                <div class="flex">
                   <a href="/?page=settings&tab=taxes&edit_tax_id=<?php echo (int)$tr['id']; ?>" 
                      style="padding:6px 12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;text-decoration:none;color:inherit;font-size:13px">
                     Edit
@@ -126,7 +126,7 @@ try {
       <input type="hidden" name="id" value="<?php echo (int)($editRow['id'] ?? 0); ?>">
       
       <label>
-        <div style="margin-bottom:6px;font-weight:600">Tax Rate Name *</div>
+        <div class="label">Tax Rate Name *</div>
         <input type="text" name="name" value="<?php echo htmlspecialchars($editRow['name'] ?? ''); ?>" required 
                placeholder="e.g., California State Tax, NYC Sales Tax"
                style="padding:10px 12px;border-radius:8px;border:1px solid #d1d5db;width:100%;font-size:14px">
@@ -135,19 +135,19 @@ try {
       
       <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px">
         <label>
-          <div style="margin-bottom:6px;font-weight:600">Country</div>
+          <div class="label">Country</div>
           <input type="text" name="country" value="<?php echo htmlspecialchars($editRow['country'] ?? 'USA'); ?>" 
                  placeholder="USA"
                  style="padding:10px 12px;border-radius:8px;border:1px solid #d1d5db;width:100%;font-size:14px">
         </label>
         <label>
-          <div style="margin-bottom:6px;font-weight:600">State/Province</div>
+          <div class="label">State/Province</div>
           <input type="text" name="state" value="<?php echo htmlspecialchars($editRow['state'] ?? ''); ?>" 
                  placeholder="e.g., CA, NY"
                  style="padding:10px 12px;border-radius:8px;border:1px solid #d1d5db;width:100%;font-size:14px">
         </label>
         <label>
-          <div style="margin-bottom:6px;font-weight:600">County</div>
+          <div class="label">County</div>
           <input type="text" name="county" value="<?php echo htmlspecialchars($editRow['county'] ?? ''); ?>" 
                  placeholder="Optional"
                  style="padding:10px 12px;border-radius:8px;border:1px solid #d1d5db;width:100%;font-size:14px">
@@ -155,7 +155,7 @@ try {
       </div>
       
       <label>
-        <div style="margin-bottom:6px;font-weight:600">Tax Rate (%) *</div>
+        <div class="label">Tax Rate (%) *</div>
         <input type="number" step="0.01" min="0" max="100" name="rate" 
                value="<?php echo htmlspecialchars($editRow['rate'] ?? '0.00'); ?>" 
                required
@@ -169,7 +169,7 @@ try {
           <input type="checkbox" name="is_active" value="1" 
                  <?php echo (!isset($editRow) || ($editRow['is_active'] ?? 1)) ? 'checked' : ''; ?>>
           <div>
-            <div style="font-weight:600">Active</div>
+            <div class="font-600">Active</div>
             <div style="font-size:12px;color:var(--muted)">Available for selection in documents</div>
           </div>
         </label>
@@ -178,7 +178,7 @@ try {
           <input type="checkbox" name="is_default" value="1" 
                  <?php echo ($editRow['is_default'] ?? 0) ? 'checked' : ''; ?>>
           <div>
-            <div style="font-weight:600">Set as Default</div>
+            <div class="font-600">Set as Default</div>
             <div style="font-size:12px;color:var(--muted)">Auto-fill this rate when creating documents</div>
           </div>
         </label>
@@ -232,7 +232,7 @@ try {
     <form method="post" action="/?page=settings/tax-import-handler" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:600px">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       
-      <div style="display:grid;gap:12px">
+      <div class="grid">
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">📍 FIPS County File (TXT) *</label>
           <input type="file" name="fips_file" accept=".txt" required

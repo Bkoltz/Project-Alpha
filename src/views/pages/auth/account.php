@@ -37,9 +37,9 @@ try {
   </div>
 
   <?php if (!empty($_GET['pwd']) && $_GET['pwd']==='1'): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Password updated.</div>
+    <div class="alert alert-success">Password updated.</div>
   <?php elseif (!empty($_GET['pwd_error'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($_GET['pwd_error']); ?></div>
+    <div class="alert alert-danger"><?php echo htmlspecialchars($_GET['pwd_error']); ?></div>
   <?php elseif ($isForceReset): ?>
     <div style="margin:10px 0;padding:16px 20px;border-radius:8px;background:#fef3c7;color:#92400e;border:2px solid #f59e0b;font-weight:600;font-size:16px">
       You must change your password before you can use the application.

@@ -66,12 +66,12 @@ $isPdf = defined('PDF_MODE');
   <div class="no-print" style="padding:12px 16px;background:<?php echo $colors['bg']; ?>;color:<?php echo $colors['text']; ?>;border-left:4px solid <?php echo $colors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($quote['status']); ?>
   </div>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-    <a href="/?page=<?php echo htmlspecialchars($backPage); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
-    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+  <div class="no-print" class="flex flex-wrap">
+    <a href="/?page=<?php echo htmlspecialchars($backPage); ?>" class="btn btn-sm">Back</a>
+    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
+    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php if ($quote['status'] === 'pending'): ?>
-      <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+      <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
@@ -79,7 +79,7 @@ $isPdf = defined('PDF_MODE');
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+      <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
     <?php if ($quote['status'] === 'pending'): ?>
@@ -310,7 +310,7 @@ $isPdf = defined('PDF_MODE');
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">From</div>
+        <div class="font-600">From</div>
         <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
@@ -340,7 +340,7 @@ $isPdf = defined('PDF_MODE');
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">To</div>
+        <div class="font-600">To</div>
         <?php 
           $toLines = [];
           if (!empty($quote['client_name'])) { $toLines[] = (string)$quote['client_name']; }

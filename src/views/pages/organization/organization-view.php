@@ -68,7 +68,7 @@ $availableClients = $availableStmt->fetchAll();
   <?php if (!empty($_GET['client_added'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Client added to organization.</div>
   <?php elseif (!empty($_GET['client_removed'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Client removed from organization.</div>
+    <div class="alert alert-danger">Client removed from organization.</div>
   <?php elseif (!empty($_GET['notes_updated'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Notes updated successfully.</div>
   <?php elseif (!empty($_GET['uploaded'])): ?>
@@ -81,7 +81,7 @@ $availableClients = $availableStmt->fetchAll();
     <div style="display:grid;grid-template-columns:<?php echo !empty($org['tax_exempt_file']) ? '1fr 300px' : '1fr'; ?>;gap:20px">
       <div>
         <h3 style="margin-top:0">Organization Details</h3>
-        <div style="display:grid;gap:12px">
+        <div class="grid">
           <div>
             <strong>Name:</strong> <?php echo htmlspecialchars($org['name']); ?>
           </div>
@@ -264,7 +264,7 @@ $availableClients = $availableStmt->fetchAll();
       </div>
     <?php else: ?>
       <div style="overflow:auto">
-        <table style="width:100%;border-collapse:collapse">
+        <table class="pa-table">
           <thead>
             <tr style="text-align:left;border-bottom:1px solid #eee">
               <th style="padding:10px">Name</th>

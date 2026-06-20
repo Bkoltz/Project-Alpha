@@ -37,7 +37,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
   <?php elseif (isset($_GET['enabled']) && $_GET['enabled'] === '1'): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">User enabled successfully.</div>
   <?php elseif (!empty($_GET['error'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($_GET['error']); ?></div>
+    <div class="alert alert-danger"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0">
@@ -49,22 +49,22 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Create User Form -->
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:16px 0;max-width:600px">
       <h3 style="margin-top:0">Create New User</h3>
-      <form method="post" action="/?page=accounts-create" style="display:grid;gap:12px">
+      <form method="post" action="/?page=accounts-create" class="grid">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
 
         <label>
           <div style="margin-bottom:4px;font-weight:600">Email *</div>
-          <input required type="email" name="email" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="user@example.com">
+          <input required type="email" name="email" class="input" placeholder="user@example.com">
         </label>
 
         <label>
           <div style="margin-bottom:4px;font-weight:600">Username</div>
-          <input type="text" name="username" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional">
+          <input type="text" name="username" class="input" placeholder="Optional">
         </label>
 
         <label>
           <div style="margin-bottom:4px;font-weight:600">Role *</div>
-          <select required name="role" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <select required name="role" class="input">
             <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
@@ -72,7 +72,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         <label>
           <div style="margin-bottom:4px;font-weight:600">Password *</div>
-          <input required minlength="8" type="password" name="password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Min 8 characters">
+          <input required minlength="8" type="password" name="password" class="input" placeholder="Min 8 characters">
         </label>
 
         <label>
@@ -89,7 +89,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
   <?php else: ?>
     <!-- Users List -->
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-      <table style="width:100%;border-collapse:collapse">
+      <table class="pa-table">
         <thead>
           <tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb">
             <th style="padding:12px;text-align:left;font-weight:600">Email</th>

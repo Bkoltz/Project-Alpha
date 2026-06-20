@@ -267,7 +267,7 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                    style="margin-right:8px">
                             <?php echo htmlspecialchars($client['name']); ?>
                             <?php if ($client['email']): ?>
-                                <span style="color:var(--muted);font-size:13px">
+                                <span class="muted text-sm">
                                     (<?php echo htmlspecialchars($client['email']); ?>)
                                 </span>
                             <?php endif; ?>

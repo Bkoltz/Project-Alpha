@@ -20,7 +20,7 @@
       
       <label style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <input type="checkbox" name="cron_enabled" value="1" <?php echo !empty($appConfig['cron_enabled']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Enable Automatic Invoice Generation</span>
+        <span class="font-600">Enable Automatic Invoice Generation</span>
       </label>
 
       <div id="cronScheduleSection" style="<?php echo empty($appConfig['cron_enabled']) ? 'display:none' : ''; ?>">
@@ -73,7 +73,7 @@
       
       <label style="display:flex;align-items:center;gap:10px">
         <input type="checkbox" name="auto_terminate_contracts" value="1" <?php echo !empty($appConfig['auto_terminate_contracts']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Enable Auto-Termination</span>
+        <span class="font-600">Enable Auto-Termination</span>
       </label>
     </div>
 
@@ -84,7 +84,7 @@
       
       <label style="display:flex;align-items:center;gap:10px">
         <input type="checkbox" name="link_expiration_checker" value="1" <?php echo !empty($appConfig['link_expiration_checker']) ? 'checked' : ''; ?>>
-        <span style="font-weight:600">Enable Link Expiration Checker</span>
+        <span class="font-600">Enable Link Expiration Checker</span>
       </label>
     </div>
   </fieldset>
@@ -103,7 +103,7 @@
       <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
         <input type="checkbox" name="invoice_auto_send_due_7days" value="1" <?php echo !empty($appConfig['invoice_auto_send_due_7days']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div>
-          <div style="font-weight:600">Send reminder 7 days before due</div>
+          <div class="font-600">Send reminder 7 days before due</div>
           <div style="font-size:13px;color:var(--muted)">Email clients one week before an invoice is due</div>
         </div>
       </label>
@@ -111,7 +111,7 @@
       <label style="display:flex;align-items:start;gap:10px">
         <input type="checkbox" name="invoice_auto_send_overdue_weekly" value="1" <?php echo !empty($appConfig['invoice_auto_send_overdue_weekly']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div>
-          <div style="font-weight:600">Send weekly reminders for overdue invoices</div>
+          <div class="font-600">Send weekly reminders for overdue invoices</div>
           <div style="font-size:13px;color:var(--muted)">Email clients for overdue invoices at most once every 7 days</div>
         </div>
       </label>
@@ -124,7 +124,7 @@
       <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
         <input type="checkbox" name="contract_expiring_warning" value="1" <?php echo !empty($appConfig['contract_expiring_warning']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div style="flex:1">
-          <div style="font-weight:600">Contract expiration warning</div>
+          <div class="font-600">Contract expiration warning</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Notify when contracts are approaching end date</div>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:13px">Send warning</span>
@@ -137,7 +137,7 @@
       <label style="display:flex;align-items:start;gap:10px">
         <input type="checkbox" name="contract_expired_alert" value="1" <?php echo !empty($appConfig['contract_expired_alert']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div>
-          <div style="font-weight:600">Contract expired alert</div>
+          <div class="font-600">Contract expired alert</div>
           <div style="font-size:13px;color:var(--muted)">Send notification when contract has expired</div>
         </div>
       </label>
@@ -150,7 +150,7 @@
       <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
         <input type="checkbox" name="payment_failure_alert" value="1" <?php echo !empty($appConfig['payment_failure_alert']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div>
-          <div style="font-weight:600">Auto-pay failure alert</div>
+          <div class="font-600">Auto-pay failure alert</div>
           <div style="font-size:13px;color:var(--muted)">Notify when automatic payment fails</div>
         </div>
       </label>
@@ -158,7 +158,7 @@
       <label style="display:flex;align-items:start;gap:10px">
         <input type="checkbox" name="payment_received_notification" value="1" <?php echo !empty($appConfig['payment_received_notification']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div>
-          <div style="font-weight:600">Payment received confirmation</div>
+          <div class="font-600">Payment received confirmation</div>
           <div style="font-size:13px;color:var(--muted)">Send confirmation email to clients when payment is received</div>
         </div>
       </label>
@@ -171,7 +171,7 @@
       <label style="display:flex;align-items:start;gap:10px">
         <input type="checkbox" name="link_expiration_warning" value="1" <?php echo !empty($appConfig['link_expiration_warning']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div style="flex:1">
-          <div style="font-weight:600">Notify before link expiration</div>
+          <div class="font-600">Notify before link expiration</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Send warning before client/org links expire</div>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:13px">Send warning</span>

@@ -46,7 +46,7 @@ if (!in_array($currentType, $docTypes)) {
     <div style="margin-bottom:24px">
         <h3 style="margin:0 0 12px 0;font-size:16px">Custom Fields for <?php echo ucfirst($currentType); ?>s</h3>
         
-        <div id="fieldsList" style="display:grid;gap:12px">
+        <div id="fieldsList" class="grid">
             <?php 
             $currentFields = $fields[$currentType] ?? [];
             if (empty($currentFields)): 
@@ -136,14 +136,14 @@ if (!in_array($currentType, $docTypes)) {
                 <div style="margin-bottom:4px;font-weight:600">Field Label *</div>
                 <input type="text" name="field_label" id="fieldLabel" required 
                        placeholder="e.g., Delivery Date, Project Name, PO Number"
-                       style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                       class="input">
                 <div style="margin-top:4px;font-size:12px;color:var(--muted)">This is what users will see</div>
             </label>
             
             <label>
                 <div style="margin-bottom:4px;font-weight:600">Field Type *</div>
                 <select name="field_data_type" id="fieldDataType" required 
-                        style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                        class="input">
                     <option value="text">Text (short)</option>
                     <option value="textarea">Text Area (long)</option>
                     <option value="date">Date</option>
@@ -153,7 +153,7 @@ if (!in_array($currentType, $docTypes)) {
             
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="is_required" id="fieldRequired" value="1">
-                <span style="font-weight:600">Required field</span>
+                <span class="font-600">Required field</span>
             </label>
             
             <div style="display:flex;gap:12px;margin-top:8px">

@@ -79,7 +79,7 @@ $isPdf = $fileExt === 'pdf';
                     <?php if (!empty($receipt['store_name'])): ?>
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Store</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php echo htmlspecialchars($receipt['store_name']); ?>
                         </div>
                     </div>
@@ -87,14 +87,14 @@ $isPdf = $fileExt === 'pdf';
 
                     <div style="padding-top:16px;border-top:1px solid #e5e7eb">
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Receipt Date</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php echo date('F j, Y', strtotime($receipt['receipt_date'])); ?>
                         </div>
                     </div>
 
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php echo date('F j, Y', strtotime($receipt['created_at'])); ?>
                         </div>
                     </div>
@@ -112,7 +112,7 @@ $isPdf = $fileExt === 'pdf';
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
                 <div style="font-weight:600;margin-bottom:12px">Actions</div>
                 
-                <div style="display:grid;gap:8px">
+                <div class="grid">
                     <!-- Download -->
                     <a href="<?php echo htmlspecialchars($fileUrl . '&download=1'); ?>" 
                        download

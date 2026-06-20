@@ -55,7 +55,7 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     
                     <!-- Field Info -->
                     <div>
-                        <div style="font-weight:600;margin-bottom:4px">
+                        <div class="label">
                             <?php echo htmlspecialchars($field['field_label']); ?>
                             <?php if ($field['is_required']): ?>
                                 <span style="color:#dc2626;font-size:12px;margin-left:4px">*</span>
@@ -127,13 +127,13 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div style="margin-bottom:4px;font-weight:600">Field Label *</div>
                 <input type="text" name="field_label" id="fieldLabel" required 
                        placeholder="e.g., Pick Up Date, Rental Duration"
-                       style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                       class="input">
             </label>
             
             <label>
                 <div style="margin-bottom:4px;font-weight:600">Field Type *</div>
                 <select name="field_type" id="fieldType" required onchange="toggleOptionsField()"
-                        style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+                        class="input">
                     <option value="text">Text (short)</option>
                     <option value="textarea">Text Area (long)</option>
                     <option value="date">Date</option>
@@ -147,14 +147,14 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div style="margin-bottom:4px;font-weight:600">Options (one per line) *</div>
                     <textarea name="field_options" id="fieldOptions" rows="4" 
                               placeholder="Option 1&#10;Option 2&#10;Option 3"
-                              style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></textarea>
+                              class="input"></textarea>
                     <div style="margin-top:4px;font-size:12px;color:var(--muted)">Enter each option on a new line</div>
                 </label>
             </div>
             
             <fieldset id="docTypesSection" style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">
                 <legend style="padding:0 8px;font-weight:600">Apply to Document Types:</legend>
-                <div style="display:grid;gap:8px">
+                <div class="grid">
                     <label style="display:flex;align-items:center;gap:8px">
                         <input type="checkbox" name="document_types[]" value="regular" checked>
                         <span>Regular</span>
@@ -172,7 +172,7 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="is_required" id="fieldRequired" value="1">
-                <span style="font-weight:600">Required field</span>
+                <span class="font-600">Required field</span>
             </label>
             
             <div style="display:flex;gap:12px;margin-top:8px">

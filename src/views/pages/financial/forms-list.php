@@ -39,7 +39,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <h1 style="margin:0 0 8px 0;font-size:28px">Forms & Documents</h1>
             <p style="margin:0;color:var(--muted)">Manage business forms like W-9, contracts templates, and other documents</p>
         </div>
-        <div style="display:flex;gap:8px">
+        <div class="flex">
             <button onclick="showUploadFileModal()" 
                     style="padding:10px 16px;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;color:inherit;font-weight:600;cursor:pointer">
                 📄 Upload File

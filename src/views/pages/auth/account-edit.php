@@ -54,7 +54,7 @@ $error = $_GET['error'] ?? '';
   <?php elseif ($success === 'updated'): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">User updated successfully.</div>
   <?php elseif (!empty($error)): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($error); ?></div>
+    <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
   <?php endif; ?>
 
   <div style="display:grid;gap:24px;grid-template-columns:1fr 1fr;align-items:start;">

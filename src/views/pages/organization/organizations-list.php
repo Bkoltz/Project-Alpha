@@ -72,11 +72,11 @@ $organizations = $stmt->fetchAll();
   <?php elseif (!empty($_GET['updated'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Organization updated.</div>
   <?php elseif (!empty($_GET['deleted'])): ?>
-    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Organization deleted.</div>
+    <div class="alert alert-danger">Organization deleted.</div>
   <?php endif; ?>
   
   <div style="overflow:auto;margin-top:16px">
-    <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+    <table class="pa-table">
       <thead>
         <tr style="text-align:left;border-bottom:1px solid #eee">
           <th style="padding:10px">Name</th>

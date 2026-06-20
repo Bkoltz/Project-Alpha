@@ -64,12 +64,12 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div class="no-print" style="padding:12px 16px;background:<?php echo $icolors['bg']; ?>;color:<?php echo $icolors['text']; ?>;border-left:4px solid <?php echo $icolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($inv['status']); ?>
   </div>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
-    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+  <div class="no-print" class="flex flex-wrap">
+    <a href="javascript:history.back()" class="btn btn-sm">Back</a>
+    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
+    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php if ($inv['status'] !== 'paid'): ?>
-      <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+      <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) !== 'void'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
@@ -77,7 +77,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+      <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
     <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
@@ -282,7 +282,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">From</div>
+        <div class="font-600">From</div>
         <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
@@ -312,7 +312,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">To</div>
+        <div class="font-600">To</div>
         <?php 
           $toLines = [];
           if (!empty($inv['client_name'])) { $toLines[] = (string)$inv['client_name']; }
@@ -363,7 +363,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6<?php echo (int)($it['is_extra_charge'] ?? 0) ? ';background:#fffbeb' : ''; ?>">
         <td style="padding:10px;vertical-align:top;text-align:center">
-          <div style="font-weight:600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></div>
+          <div class="font-600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></div>
           <?php if ((int)($it['is_extra_charge'] ?? 0) === 1): ?>
             <span style="display:inline-block;margin-top:4px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:10px;font-weight:600">Extra Charge</span>
           <?php endif; ?>

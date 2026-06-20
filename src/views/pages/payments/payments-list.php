@@ -24,17 +24,17 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>Payments</h2>
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
+  <form method="get" action="/" class="grid form-row">
     <input type="hidden" name="page" value="payments-list">
     <input type="hidden" name="client_id" id="clientIdPL" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputPL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
-      <div id="clientSuggestPL" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
+    <label class="field"><div class="label">Client</div>
+      <input type="text" name="client" id="clientInputPL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." class="input" style="position:relative;z-index:1">
+      <div id="clientSuggestPL" class="suggest-dropdown"></div>
     </label>
-    <label><div>Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>End</div><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=payments-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
+    <label class="field"><div class="label">Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" class="input"></label>
+    <label class="field"><div class="label">End</div><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" class="input"></label>
+    <button type="submit" class="btn btn-primary">Filter</button>
+    <a href="/?page=payments-list" class="btn">Reset</a>
   </form>
   <script>
     (function(){
@@ -46,7 +46,7 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
         var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
   fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
           if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
-          sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
+          sug.innerHTML = list.map(x=><div data-id="${x.id}" data-name="${x.name}" class="suggest-item">${x.name}</div>).join('');
           Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
           sug.style.display='block';
         }).catch(()=>{sug.style.display='none'});

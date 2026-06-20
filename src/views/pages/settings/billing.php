@@ -46,7 +46,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   <legend style="padding:0 6px;color:var(--muted)">Review Request</legend>
   <label>
     <div style="margin-bottom:4px">Review Link <span style="color:#666;font-weight:normal">(Optional)</span></div>
-    <input type="url" name="review_link" value="<?php echo htmlspecialchars($appConfig['review_link'] ?? ''); ?>" placeholder="https://g.page/your-business/review" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <input type="url" name="review_link" value="<?php echo htmlspecialchars($appConfig['review_link'] ?? ''); ?>" placeholder="https://g.page/your-business/review" class="input">
     <div style="font-size:0.85em;color:#666;margin-top:4px">If set, this link will appear on invoices to encourage clients to leave a review.</div>
   </label>
 </fieldset>
@@ -57,7 +57,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   
   <label style="display:block;margin-bottom:12px">
     <div style="margin-bottom:4px;font-weight:500">Surcharge Mode</div>
-    <select name="stripe_surcharge_type" id="surchargeType" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <select name="stripe_surcharge_type" id="surchargeType" class="input">
       <option value="merchant" <?php echo ($appConfig['stripe_surcharge_type'] ?? 'merchant') === 'merchant' ? 'selected' : ''; ?>>Merchant Pays Full Fee</option>
       <option value="split" <?php echo ($appConfig['stripe_surcharge_type'] ?? '') === 'split' ? 'selected' : ''; ?>>Split 50/50</option>
       <option value="client" <?php echo ($appConfig['stripe_surcharge_type'] ?? '') === 'client' ? 'selected' : ''; ?>>Client Pays Full Fee</option>
@@ -69,11 +69,11 @@ require_once __DIR__ . '/../../../utils/csrf.php';
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
       <label>
         <div style="margin-bottom:4px;font-weight:500">Processing Fee %</div>
-        <input type="number" step="0.01" name="stripe_surcharge_percent" value="<?php echo htmlspecialchars((string)($appConfig['stripe_surcharge_percent'] ?? 2.9)); ?>" placeholder="2.9" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="number" step="0.01" name="stripe_surcharge_percent" value="<?php echo htmlspecialchars((string)($appConfig['stripe_surcharge_percent'] ?? 2.9)); ?>" placeholder="2.9" class="input">
       </label>
       <label>
         <div style="margin-bottom:4px;font-weight:500">Fixed Fee ($)</div>
-        <input type="number" step="0.01" name="stripe_surcharge_fixed" value="<?php echo htmlspecialchars((string)($appConfig['stripe_surcharge_fixed'] ?? 0.30)); ?>" placeholder="0.30" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input type="number" step="0.01" name="stripe_surcharge_fixed" value="<?php echo htmlspecialchars((string)($appConfig['stripe_surcharge_fixed'] ?? 0.30)); ?>" placeholder="0.30" class="input">
       </label>
     </div>
     
@@ -102,17 +102,17 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   
   <label style="display:block;margin-bottom:12px">
     <div style="margin-bottom:4px;font-weight:500">Publishable Key</div>
-    <input type="text" name="stripe_publishable_key" value="<?php echo htmlspecialchars($appConfig['stripe_publishable_key'] ?? ''); ?>" placeholder="pk_live_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <input type="text" name="stripe_publishable_key" value="<?php echo htmlspecialchars($appConfig['stripe_publishable_key'] ?? ''); ?>" placeholder="pk_live_..." class="input">
   </label>
   
   <label style="display:block;margin-bottom:12px">
     <div style="margin-bottom:4px;font-weight:500">Secret Key</div>
-    <input type="password" name="stripe_secret_key" value="<?php echo htmlspecialchars($appConfig['stripe_secret_key'] ?? ''); ?>" placeholder="sk_live_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <input type="password" name="stripe_secret_key" value="<?php echo htmlspecialchars($appConfig['stripe_secret_key'] ?? ''); ?>" placeholder="sk_live_..." class="input">
   </label>
   
   <label style="display:block">
     <div style="margin-bottom:4px;font-weight:500">Webhook Secret <span style="font-weight:normal;color:#666">(Optional)</span></div>
-    <input type="password" name="stripe_webhook_secret" value="<?php echo htmlspecialchars($appConfig['stripe_webhook_secret'] ?? ''); ?>" placeholder="whsec_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <input type="password" name="stripe_webhook_secret" value="<?php echo htmlspecialchars($appConfig['stripe_webhook_secret'] ?? ''); ?>" placeholder="whsec_..." class="input">
     <div style="font-size:0.85em;color:#666;margin-top:4px">Required only if you want to receive webhook events from Stripe</div>
   </label>
 </fieldset>
