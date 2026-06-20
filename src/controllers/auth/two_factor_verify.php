@@ -9,6 +9,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
+require_once __DIR__ . '/../../utils/client_ip.php';
 
 use App\Utils\TwoFactorAuth;
 
@@ -19,7 +20,7 @@ if (!isset($_SESSION['2fa_pending'])) {
 }
 
 $userId = (int)$_SESSION['2fa_pending']['user_id'];
-$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$ip = get_client_ip();
 
 // CSRF check
 require_once __DIR__ . '/../../utils/csrf_sf.php';

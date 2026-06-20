@@ -3,11 +3,27 @@
 // Pure PHP audit generation - no Python dependency
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
 // Get form parameters
 $startDate = $_POST['start_date'] ?? date('Y-m-d', strtotime('January 1 ' . date('Y')));
 $endDate = $_POST['end_date'] ?? date('Y-m-d');
+
+// CSRF check: accept legacy 'csrf' or Symfony '_token'
+$csrfOk = false;
+$submitted = $_POST['_token'] ?? '';
+if (is_string($submitted) && $submitted !== '') {
+    $csrfOk = csrf_sf_is_valid('audit', $submitted);
+} elseif (!empty($_POST['csrf'])) {
+    $csrfOk = csrf_validate();
+}
+if (!$csrfOk) {
+    header('HTTP/1.1 403 Forbidden');
+    echo 'Invalid request (CSRF)';
+    exit;
+}
 $includeInvoices = isset($_POST['include_invoices']) && $_POST['include_invoices'] === '1';
 $includeUnpaidInvoices = isset($_POST['include_unpaid_invoices']) && $_POST['include_unpaid_invoices'] === '1';
 $includeContracts = isset($_POST['include_contracts']) && $_POST['include_contracts'] === '1';

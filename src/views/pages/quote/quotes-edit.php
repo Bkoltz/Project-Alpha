@@ -193,4 +193,4 @@
 </div>
 
 <!-- Client logic -->
-<script src="js/quotes-edit-logic.js" defer></script>
+<script src="/assets/js/quotes-edit-logic.js" defer></script>

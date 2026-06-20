@@ -405,7 +405,7 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -750,6 +750,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/forms_handler.php';
         exit;
     }
+    if ($page === 'financial/mileage-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/mileage_handler.php';
+        exit;
+    }
+    if ($page === 'financial/vendor-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/vendor_handler.php';
+        exit;
+    }
+    if ($page === 'financial/category-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/category_handler.php';
+        exit;
+    }
+    if ($page === 'financial/expense-handler' || $page === 'financial/expense_handler') {
+        require_once __DIR__ . '/../src/controllers/financial/expense_handler.php';
+        exit;
+    }
+    if ($page === 'financial/csv-import') {
+        require_once __DIR__ . '/../src/controllers/financial/csv_import.php';
+        exit;
+    }
     if ($page === 'public-link-create') {
         require_once __DIR__ . '/../src/controllers/public_link_create.php';
         exit;
@@ -806,6 +826,16 @@ if ($page === 'logout-confirm') {
 if ($page === 'public-doc') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/controllers/public_view/public_doc.php';
+    exit;
+}
+if ($page === 'legal/tos-accept') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        require_once __DIR__ . '/../src/controllers/legal/tos_accept.php';
+    } else {
+        require_once __DIR__ . '/../src/views/partials/header.php';
+        require_once __DIR__ . '/../src/views/pages/legal/tos-accept.php';
+        require_once __DIR__ . '/../src/views/partials/footer.php';
+    }
     exit;
 }
 if (str_starts_with($page, 'legal/')) {

@@ -18,7 +18,7 @@
 {% set gridCols = columns|default(filters|length + 2) %}
 {% set instanceId = 'filter_' ~ (page|replace({'/' : '_'}))|slice(0, 8) %}
 
-<form method="get" action="/" style="display:grid;grid-template-columns:repeat({{ gridCols }}, 1fr);gap:8px;align-items:end;margin:12px 0;position:relative">
+<form method="get" action="/" class="filter-form" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;max-width:100%">
     <input type="hidden" name="page" value="{{ page }}">
     
     {% for filterName, config in filters %}
@@ -27,7 +27,7 @@
         {% set value = config.value|default('') %}
         {% set idValue = config.id_value|default(0) %}
         
-        <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:0 1 150px;max-width:180px">
             <label for="{{ instanceId }}_{{ filterName }}" style="font-size:13px;font-weight:600;color:#374151">
                 {{ label }}
             </label>
@@ -39,7 +39,7 @@
                     name="{{ filterName }}" 
                     value="{{ value }}"
                     placeholder="{{ config.placeholder|default('') }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
+                    style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;min-width:0;width:100%;min-height:38px"
                 >
             
             {% elseif type == 'date' %}
@@ -48,7 +48,7 @@
                     id="{{ instanceId }}_{{ filterName }}"
                     name="{{ filterName }}" 
                     value="{{ value }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
+                    style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;min-width:0;width:100%;min-height:38px"
                 >
             
             {% elseif type == 'number' %}
@@ -59,14 +59,14 @@
                     value="{{ value }}"
                     placeholder="{{ config.placeholder|default('') }}"
                     step="{{ config.step|default('1') }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
+                    style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;min-width:0;width:100%;min-height:38px"
                 >
             
             {% elseif type == 'select' %}
                 <select 
                     id="{{ instanceId }}_{{ filterName }}"
                     name="{{ filterName }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
+                    style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;min-width:0;width:100%;min-height:38px"
                 >
                     {% if config.options %}
                         {% for option in config.options %}
@@ -90,32 +90,31 @@
                     name="{{ filterName }}"
                     value="{{ value }}"
                     placeholder="{{ config.placeholder|default('Search client...') }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff;position:relative;z-index:1"
+                    style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;position:relative;z-index:1;min-width:0;width:100%;min-height:38px"
                     data-autocomplete="client"
                     data-hidden-id="{{ instanceId }}_{{ filterName }}_id"
                 >
                 <div id="{{ instanceId }}_{{ filterName }}_suggestions" style="position:absolute;display:none;background:#fff;border:1px solid #ddd;border-radius:6px;max-height:200px;overflow-y:auto;width:100%;z-index:10;margin-top:-4px"></div>
-            
             {% endif %}
         </div>
     {% endfor %}
     
     {# Submit and Reset buttons #}
-    <div style="display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;flex-direction:column;gap:4px;flex:0 1 100px;max-width:120px">
         <label style="font-size:13px;font-weight:600;color:#374151;height:24px"></label>
         <button 
             type="submit" 
-            style="padding:8px 14px;background:#2563eb;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px"
+            style="padding:8px 14px;background:#2563eb;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;min-height:38px"
         >
             Filter
         </button>
     </div>
     
-    <div style="display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;flex-direction:column;gap:4px;flex:0 1 100px;max-width:120px">
         <label style="font-size:13px;font-weight:600;color:#374151;height:24px"></label>
         <a 
             href="/?page={{ page }}" 
-            style="padding:8px 14px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;text-decoration:none;text-align:center;display:inline-block"
+            style="padding:8px 14px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;text-decoration:none;text-align:center;display:inline-block;min-height:38px;box-sizing:border-box"
         >
             Reset
         </a>

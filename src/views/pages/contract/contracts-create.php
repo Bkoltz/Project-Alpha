@@ -255,5 +255,5 @@ $csrf = csrf_sf_token('contracts-create');
     </div>
   </form>
 
-  <script src="js/contracts-create-logic.js" defer></script>
+  <script src="/assets/js/contracts-create-logic.js" defer></script>
 </section>

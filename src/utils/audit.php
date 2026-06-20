@@ -27,7 +27,8 @@ function audit_log(
             $userId = (int)$_SESSION['user']['id'];
         }
 
-        $ip = $_SERVER['REMOTE_ADDR'] ?? 'cli';
+        require_once __DIR__ . '/client_ip.php';
+        $ip = get_client_ip();
         $ua = isset($_SERVER['HTTP_USER_AGENT']) ? mb_substr($_SERVER['HTTP_USER_AGENT'], 0, 255) : null;
 
         $stmt = $pdo->prepare('

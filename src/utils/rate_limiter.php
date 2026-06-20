@@ -12,10 +12,13 @@
  * @param int $windowSeconds Window length in seconds
  * @return bool True if the request is allowed, false if rate limited
  */
+require_once __DIR__ . '/client_ip.php';
+
 function rate_limit_check(PDO $pdo, string $key, int $maxAttempts = 10, int $windowSeconds = 60): bool
 {
-    $identifier = ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0') . ':' . $key;
-    $ipAddress  = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $clientIp = get_client_ip();
+    $identifier = $clientIp . ':' . $key;
+    $ipAddress  = $clientIp;
 
     try {
         // Prune old entries outside the current window

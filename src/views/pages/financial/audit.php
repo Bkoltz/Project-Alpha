@@ -2,6 +2,8 @@
 // src/views/pages/financial/audit.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 // Get current year and set default date range
 $currentYear = (int)date('Y');
@@ -16,6 +18,7 @@ $endDate = $currentYear . '-12-31';
   </div>
 
   <form id="auditForm" method="POST" action="/?page=financial/audit-export" style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+    <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('audit')); ?>">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="action" id="formAction" value="generate">
 
@@ -219,4 +222,4 @@ $endDate = $currentYear . '-12-31';
   </div>
 </section>
 
-<script src="js/audit-logic.js" defer></script>
+<script src="/assets/js/audit-logic.js" defer></script>

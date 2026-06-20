@@ -123,4 +123,4 @@ $clients = $clientStmt->fetchAll(PDO::FETCH_ASSOC);
   const orgData = <?php echo json_encode($organizations); ?>;
 </script>
 
-<script src="js/projects-list-logic.js" defer></script>
+<script src="/assets/js/projects-list-logic.js" defer></script>

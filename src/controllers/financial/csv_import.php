@@ -6,6 +6,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
 header('Content-Type: application/json');
@@ -16,7 +17,14 @@ if (!$userId) {
     exit;
 }
 
-if (!csrf_validate()) {
+$csrfOk = false;
+$submitted = $_POST['_token'] ?? '';
+if (is_string($submitted) && $submitted !== '') {
+    $csrfOk = csrf_sf_is_valid('csv_import', $submitted);
+} else {
+    $csrfOk = csrf_validate();
+}
+if (!$csrfOk) {
     echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
     exit;
 }

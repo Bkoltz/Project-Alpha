@@ -84,27 +84,27 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
   $qs = $_GET;
   unset($qs['p']);
   $base = '/?' . http_build_query($qs + ['page' => 'client/archived-clients', 'per_page' => $per]); ?>
-  <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+  <div class="flex-between align-center mt-1">
     <div>
       <form method="get" action="/">
         <?php foreach ($_GET as $k => $v) {
           if ($k === 'per_page' || $k === 'p' || $k === 'page') continue;
-          echo '<input type="hidden" name="' . htmlspecialchars($k) . '" value="' . htmlspecialchars($v) . '">';
+          echo '<input type="hidden" name="' . htmlspecialchars($k) . '" value="' . htmlspecialchars($v) . '"';
         }
         ?>
         <input type="hidden" name="page" value="client/archived-clients">
-        <label>Per page
-          <select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
+        <label class="label-muted">Per page
+          <select name="per_page" onchange="this.form.submit()" class="input-sm">
             <option value="50" <?php echo $per === 50 ? 'selected' : ''; ?>>50</option>
             <option value="100" <?php echo $per === 100 ? 'selected' : ''; ?>>100</option>
           </select>
         </label>
       </form>
     </div>
-    <div style="display:flex;gap:8px">
-      <?php if ($pageN > 1): ?><a href="<?php echo $base . '&p=' . ($pageN - 1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
-      <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
-      <?php if ($pageN < $last): ?><a href="<?php echo $base . '&p=' . ($pageN + 1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
+    <div class="flex">
+      <?php if ($pageN > 1): ?><a href="<?php echo $base . '&p=' . ($pageN - 1); ?>" class="btn btn-sm">Prev</a><?php endif; ?>
+      <div class="btn btn-sm muted">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
+      <?php if ($pageN < $last): ?><a href="<?php echo $base . '&p=' . ($pageN + 1); ?>" class="btn btn-sm">Next</a><?php endif; ?>
     </div>
   </div>
 </section>

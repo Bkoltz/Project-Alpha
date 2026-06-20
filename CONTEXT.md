@@ -1,0 +1,78 @@
+# Project Alpha — Context
+
+Last updated: 2026-06-19 by Hermes
+
+## What This Is
+PHP 8.3 business document management system for quotes, contracts, invoices, and receipts with Stripe payment integration. Built for organizations requiring automated billing, secure document handling, and comprehensive financial reporting.
+
+## Quick Start
+```bash
+cd /home/bkoltz/Project-Alpha
+docker compose up -d          # Start containers
+# App at http://localhost:1627
+# Run tests: composer test
+```
+Docker: Apache + MySQL 8 | Port: 1627 | Staging: docker-compose.staging.yml
+
+## Architecture
+- PHP 8.3, no framework (custom routing via `page` query param)
+- MySQL 8 with direct PDO ($pdo global)
+- Docker Compose (Apache + MySQL + cron container)
+- Stripe Payment Intents (not Stripe Invoices)
+- Dompdf for PDF generation
+- Session-based auth (can be disabled via APP_AUTH_DISABLED=true)
+- Twig templates mixed with plain PHP views
+
+### Directory Structure
+```
+public/index.php     - Single entry point, routing
+src/config/          - DB connection, bootstrap
+src/controllers/      - POST handlers, API endpoints (by domain)
+src/services/         - Business logic (LinkResolver, StripeService)
+src/utils/            - CSRF, crypto, mailer, logger, twig
+src/views/pages/      - Page templates (by domain)
+src/views/partials/   - Shared layout (header, footer)
+cron/                 - Scheduled task scripts (daily at 2am)
+work_flow/            - Business logic documentation
+docs/                 - Technical documentation + AGENTS.md
+api/                  - API data files (income-data.json)
+```
+
+## Current State
+- Core features working: quotes, contracts, invoices, payments, receipts
+- Stripe webhook handling live
+- Recurring invoice generation for long-term contracts
+- Auto-termination of expired contracts
+- Staging environment configured (docker-compose.staging.yml)
+- Cron runs daily at 2:00am for automated tasks
+
+## Recent Changes
+- 2026-06-19: Security audit — .env locked to 600, api_keys_*.php controllers set to 640
+- 2026-06-17: Recent development session (see skill references for details)
+
+## Decisions
+- Session-based auth (not JWT) — simpler for this use case
+- Direct PDO instead of ORM — performance + simplicity
+- Stripe Payment Intents (not Stripe Invoices) — more flexible
+- APP_AUTH_DISABLED=true for local dev, false in production
+
+## Known Issues
+- See docs/TODO.md for open items
+- APP_ENCRYPTION_KEY in .env (mode 600)
+
+## Credentials & Access
+- .env: /home/bkoltz/Project-Alpha/.env (mode 600) — MySQL creds, admin password, encryption key
+- .env.staging: /home/bkoltz/Project-Alpha/.env.staging (mode 644)
+- Stripe keys: in .env
+- DB: MySQL in Docker container (project_alpha database)
+
+## Contact
+Owner: Beau Koltz
+Company: Ledge Top Technologies LLC
+
+## Subfolder Context Files
+- `api/CONTEXT.md` — API endpoints and data shapes
+- `src/controllers/CONTEXT.md` — Controller routing and business logic
+- `cron/CONTEXT.md` — Scheduled tasks reference
+- `work_flow/` — Business workflow documentation (already exists)
+- `docs/AGENTS.md` — AI agent guidance (already exists)

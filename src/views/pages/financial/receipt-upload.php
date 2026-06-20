@@ -138,4 +138,4 @@ $stores = $stmt->fetchAll(PDO::FETCH_COLUMN);
     </form>
 </div>
 
-<script src="js/receipt-upload-logic.js" defer></script>
+<script src="/assets/js/receipt-upload-logic.js" defer></script>

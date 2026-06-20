@@ -111,4 +111,4 @@ document.getElementById('paymentForm').addEventListener('submit', function(e) {
 });
 </script>
 
-<script src="js/payments-create-logic.js" defer></script>
+<script src="/assets/js/payments-create-logic.js" defer></script>

@@ -2,6 +2,7 @@
 // src/views/pages/financial/vendors-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $orgId = 1; // Should come from session/user context
 
@@ -101,6 +102,7 @@ $csrf = csrf_token();
                     <?php if ((int)$vendor['is_active'] === 1): ?>
                       <a href="/?page=financial/vendor-form&amp;id=<?php echo (int)$vendor['id']; ?>" class="btn btn-sm">Edit</a>
                       <form method="post" action="/?page=financial/vendor-handler" style="display:inline" onsubmit="return confirm('Deactivate this vendor? Expenses will retain this vendor reference.')">
+                        <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('vendor')); ?>">
                         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
                         <input type="hidden" name="action" value="deactivate">
                         <input type="hidden" name="id" value="<?php echo (int)$vendor['id']; ?>">

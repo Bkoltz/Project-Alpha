@@ -2,6 +2,7 @@
 // src/views/pages/financial/mileage-create.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $editMode = false;
 $log = [
@@ -52,6 +53,7 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
 
   <div class="card" style="max-width:720px">
     <form id="mileageForm" method="post" action="/?page=financial/mileage-handler">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('mileage')); ?>">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="action" value="<?php echo $editMode ? 'update' : 'create'; ?>">
       <?php if ($editMode): ?>

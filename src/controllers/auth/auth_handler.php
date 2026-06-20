@@ -25,7 +25,8 @@ if (!csrf_sf_is_valid('auth', is_string($submitted) ? $submitted : '')) {
 $action = $_POST['action'] ?? '';
 $emailOrUsername = trim((string)($_POST['email'] ?? ''));
 $password = (string)($_POST['password'] ?? '');
-$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+require_once __DIR__ . '/../../utils/client_ip.php';
+$ip = get_client_ip();
 
 function valid_email($e) { return filter_var($e, FILTER_VALIDATE_EMAIL) !== false; }
 

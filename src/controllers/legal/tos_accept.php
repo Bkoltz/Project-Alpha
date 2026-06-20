@@ -5,10 +5,8 @@
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
-require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/audit.php';
-
-header('Content-Type: application/json');
 
 // Must be logged in
 $userId = $_SESSION['user']['id'] ?? null;
@@ -18,10 +16,8 @@ if (!$userId) {
 }
 
 // CSRF validation
-if (!csrf_validate()) {
-    header('Location: /?page=legal/tos-accept&error=' . urlencode('Invalid request (CSRF)'));
-    exit;
-}
+$submitted = $_POST['_token'] ?? '';
+csrf_sf_verify_or_redirect('auth', 'legal/tos-accept', is_string($submitted) ? $submitted : '');
 
 // Must have accepted the checkbox
 if (empty($_POST['tos_accepted'])) {

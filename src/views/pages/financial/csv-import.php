@@ -3,6 +3,7 @@
 // CSV import page for expenses — upload, map columns, preview, import
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 // Fetch categories for default category dropdown
 $catStmt = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=1 ORDER BY name');
@@ -23,6 +24,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
   <div class="card" id="uploadStep">
     <h3 class="card-title" style="margin-bottom:16px">Step 1: Upload CSV File</h3>
     <form id="csvUploadForm" enctype="multipart/form-data">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('csv')); ?>">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="phase" value="upload">
 
@@ -72,6 +74,24 @@ $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 
 <script>
 const csrfToken = '<?php echo htmlspecialchars(csrf_token()); ?>';
+const csrfSfToken = '<?php echo htmlspecialchars(csrf_sf_token('csv')); ?>';
+
+function appendToken(formData) {
+  formData.append('csrf', csrfToken);
+  formData.append('_token', csrfSfToken);
+}
+
+// Patch fetch calls to include both tokens
+const originalFetch = window.fetch;
+window.fetch = function(url, options = {}) {
+  if (typeof url === 'string' && url.includes('?page=financial/csv-import')) {
+    if (options.body instanceof FormData) {
+      if (!options.body.has('csrf')) options.body.append('csrf', csrfToken);
+      if (!options.body.has('_token')) options.body.append('_token', csrfSfToken);
+    }
+  }
+  return originalFetch(url, options);
+};
 
 document.getElementById('csvUploadForm').addEventListener('submit', async function(e) {
   e.preventDefault();
@@ -147,6 +167,7 @@ async function runImport(dryRun) {
 
   const formData = new FormData();
   formData.append('csrf', csrfToken);
+  formData.append('_token', csrfSfToken);
   formData.append('phase', 'import');
   formData.append('mapping', JSON.stringify(mapping));
   formData.append('default_category_id', defaultCat);

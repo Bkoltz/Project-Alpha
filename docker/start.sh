@@ -233,7 +233,7 @@ if [ -n "$APP_HOST" ]; then
     Header always set X-Frame-Options SAMEORIGIN
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy no-referrer-when-downgrade
-    Header always set Content-Security-Policy "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    Header always set Content-Security-Policy "script-src 'self' https://js.stripe.com https://static.cloudflareinsights.com; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://js.stripe.com https://hooks.stripe.com; connect-src 'self' https://api.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self';"
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
     
     # Disable server signature

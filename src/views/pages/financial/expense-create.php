@@ -3,6 +3,7 @@
 // Create or edit an expense (manual entry or linked to receipt)
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $orgId = 1;
 $editId = (int)($_GET['id'] ?? 0);
@@ -49,7 +50,8 @@ $paymentMethods = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit
     <a href="/?page=financial/expenses-list" class="btn btn-sm">Back to Expenses</a>
   </div>
 
-  <form id="expenseForm" method="post" action="/?page=financial/expense-handler" class="card">
+  <form id="expenseForm" method="post" action="/?page=financial/expense_handler" class="card">
+    <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('expense')); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <input type="hidden" name="action" value="<?php echo $editId > 0 ? 'update' : 'create'; ?>">
     <?php if ($editId > 0): ?><input type="hidden" name="id" value="<?php echo $editId; ?>"><?php endif; ?>

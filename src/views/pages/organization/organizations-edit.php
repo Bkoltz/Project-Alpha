@@ -60,4 +60,4 @@ if (!$org) {
   <input type="hidden" name="id" value="<?php echo $id; ?>">
 </form>
 
-<script src="js/organization-edit-logic.js"></script>
+<script src="/assets/js/organization-edit-logic.js"></script>

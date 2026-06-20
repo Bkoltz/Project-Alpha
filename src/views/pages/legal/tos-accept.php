@@ -1,7 +1,8 @@
 <?php
 // src/views/pages/legal/tos-accept.php
 // ToS acceptance gate — shown after login if tos_accepted_at is NULL
-// This page uses the app's standard layout (header/footer partials included by router)
+// This page renders inside the app's standard layout (header/footer partials included by router)
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 ?>
 <div style="max-width:700px;margin:0 auto;padding:24px">
   <h1 style="font-size:1.5rem;color:var(--nav-text,#0f1720);margin-bottom:0.5rem">Terms of Service Agreement</h1>
@@ -35,7 +36,7 @@
   <?php endif; ?>
 
   <form method="POST" action="/?page=legal/tos-accept">
-    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'] ?? ''); ?>">
+    <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('auth')); ?>">
     <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:1rem;cursor:pointer">
       <input type="checkbox" name="tos_accepted" value="1" required style="margin-top:4px">
       <span>I have read and agree to the <a href="/?page=legal/terms-of-service" target="_blank">Terms of Service</a>,

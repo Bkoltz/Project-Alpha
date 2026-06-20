@@ -355,4 +355,4 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <script>
     window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
 </script>
-<script src="js/forms-list-logic.js" defer></script>
+<script src="/assets/js/forms-list-logic.js" defer></script>

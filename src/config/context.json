@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Project Alpha Settings",
+  "description": "Default non-secret application settings stored in src/config/settings.json or /var/www/config/settings.json. Secrets are loaded from environment variables and are not persisted in this file.",
+  "type": "object",
+  "properties": {
+    "brand_name": { "type": ["string", "null"] },
+    "logo_path": { "type": ["string", "null"] },
+    "from_name": { "type": ["string", "null"] },
+    "from_address_line1": { "type": ["string", "null"] },
+    "from_address_line2": { "type": ["string", "null"] },
+    "from_city": { "type": ["string", "null"] },
+    "from_state": { "type": ["string", "null"] },
+    "from_postal": { "type": ["string", "null"] },
+    "from_country": { "type": ["string", "null"] },
+    "from_email": { "type": ["string", "null"] },
+    "from_phone": { "type": ["string", "null"] },
+    "terms": { "type": ["string", "null"] },
+    "net_terms_days": { "type": "integer", "minimum": 0 },
+    "payment_methods": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "timezone": { "type": "string" },
+    "smtp_host": { "type": ["string", "null"] },
+    "smtp_port": { "type": "integer", "minimum": 1 },
+    "smtp_secure": { "type": "string", "enum": ["tls", "ssl", "none"] },
+    "smtp_username": { "type": ["string", "null"] },
+    "smtp_password_enc": { "type": ["string", "null"], "description": "Encrypted SMTP password. Never store plaintext." }
+  },
+  "required": [],
+  "additionalProperties": true
+}

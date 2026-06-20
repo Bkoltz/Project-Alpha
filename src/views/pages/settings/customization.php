@@ -170,4 +170,4 @@ if (!in_array($currentType, $docTypes)) {
     </div>
 </div>
 
-<script src="js/customization-logic.js" defer></script>
+<script src="/assets/js/customization-logic.js" defer></script>

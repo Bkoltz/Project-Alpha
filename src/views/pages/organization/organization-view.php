@@ -305,4 +305,4 @@ $availableClients = $availableStmt->fetchAll();
   const availableClients = <?php echo json_encode($availableClients); ?>;
 </script>
 
-<script src="js/organization-view-logic.js" defer></script>
+<script src="/assets/js/organization-view-logic.js" defer></script>

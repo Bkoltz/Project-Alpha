@@ -130,7 +130,7 @@ $exportParams = http_build_query(array_filter([
 
   <!-- Filters -->
   <div class="card" style="margin-bottom:20px">
-    <form method="get" action="/" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+    <form method="get" action="/" class="filter-form">
       <input type="hidden" name="page" value="financial/expense-report">
       <div class="field">
         <label class="label-muted">Start Date</label>
@@ -192,7 +192,7 @@ $exportParams = http_build_query(array_filter([
           <option value="month" <?php echo $groupBy === 'month' ? 'selected' : ''; ?>>By Month</option>
         </select>
       </div>
-      <div style="display:flex;align-items:end">
+      <div class="field filter-actions">
         <button type="submit" class="btn btn-primary">Apply Filters</button>
       </div>
     </form>

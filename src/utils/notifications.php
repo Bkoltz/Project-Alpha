@@ -16,9 +16,11 @@ require_once __DIR__ . '/smtp.php';
  * @param string $description Human-readable description
  * @param array $metadata Additional data to store
  */
+require_once __DIR__ . '/client_ip.php';
+
 function log_activity(PDO $pdo, string $eventType, ?string $documentType, ?int $documentId, ?int $clientId, string $description, array $metadata = []): void {
     try {
-        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+        $ip = get_client_ip();
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
         $metaJson = !empty($metadata) ? json_encode($metadata) : null;
         

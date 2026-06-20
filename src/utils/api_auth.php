@@ -20,6 +20,12 @@ function api_get_token(): ?string {
     return null;
 }
 
+require_once __DIR__ . '/client_ip.php';
+
+function api_get_client_ip(): string {
+    return get_client_ip();
+}
+
 function api_require_key(array $requiredScopes = []) {
     global $pdo;
     $token = api_get_token();
@@ -31,7 +37,7 @@ function api_require_key(array $requiredScopes = []) {
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) api_json_error(401, 'Invalid API key');
         // Optional IP allowlist
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        $ip = get_client_ip();
         if (!empty($row['allowed_ips'])) {
             $ips = array_filter(array_map('trim', preg_split('/[\s,]+/', (string)$row['allowed_ips'])));
             if ($ips && !in_array($ip, $ips, true)) api_json_error(403, 'IP not allowed');

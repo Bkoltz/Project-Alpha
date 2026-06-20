@@ -89,5 +89,5 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
     </div>
   </form>
 
-  <script src="js/invoices-create-logic.js" defer></script>
+  <script src="/assets/js/invoices-create-logic.js" defer></script>
 </section>

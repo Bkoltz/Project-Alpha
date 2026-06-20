@@ -137,17 +137,10 @@
             <li class="nav-section">
               <div class="section-label">Financial</div>
               <ul>
-                <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Financial Dashboard</a></li>
+                <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Dashboard</a></li>
                 <li><a href="/?page=financial/expenses-list" data-page="financial/expenses-list">Expenses</a></li>
-                <li><a href="/?page=financial/expense-create" data-page="financial/expense-create">Add Expense</a></li>
-                <li><a href="/?page=financial/vendors-list" data-page="financial/vendors-list">Vendors</a></li>
-                <li><a href="/?page=financial/categories-list" data-page="financial/categories-list">Categories</a></li>
-                <li><a href="/?page=financial/mileage-list" data-page="financial/mileage-list">Mileage</a></li>
-                <li><a href="/?page=financial/csv-import" data-page="financial/csv-import">Import CSV</a></li>
+                <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
                 <li><a href="/?page=financial/expense-report" data-page="financial/expense-report">Reports</a></li>
-                <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms & Docs</a></li>
-                <li><a href="/?page=financial/receipts-list" data-page="financial/receipts-list">Receipts</a></li>
-                <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
               </ul>
             </li>
           </ul>

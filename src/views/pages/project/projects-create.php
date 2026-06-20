@@ -56,6 +56,6 @@ require_once __DIR__ . '/../../../utils/csrf.php';
     </div>
   </form>
 
-  <script src="js/client-selection-dropdown-logic.js" defer></script>
-  <script src="js/projects-create-logic.js" defer></script>
+  <script src="/assets/js/client-selection-dropdown-logic.js" defer></script>
+  <script src="/assets/js/projects-create-logic.js" defer></script>
 </section>

@@ -222,4 +222,4 @@ $isPdf = $fileExt === 'pdf';
     window.receiptCsrfToken = <?php echo json_encode(csrf_token()); ?>;
     window.receiptId = <?php echo (int)$receiptId; ?>;
 </script>
-<script src="js/receipt-detail-logic.js" defer></script>
+<script src="/assets/js/receipt-detail-logic.js" defer></script>

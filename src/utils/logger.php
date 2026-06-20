@@ -45,7 +45,8 @@ if (!function_exists('app_logger')) {
 if (!function_exists('audit_event')) {
   function audit_event(PDO $pdo, string $level, string $category, ?string $actor_type = null, $actor_id = null, ?string $message = null, $payload = null) {
     try {
-      $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+      require_once __DIR__ . '/client_ip.php';
+      $ip = get_client_ip();
       $payloadJson = null;
       if ($payload !== null) {
         if (is_string($payload)) $payloadJson = $payload; else $payloadJson = json_encode($payload, JSON_UNESCAPED_UNICODE);

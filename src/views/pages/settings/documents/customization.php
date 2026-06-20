@@ -193,4 +193,4 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 const activeTab = '<?php echo $activeTab; ?>';
 </script>
 
-<script src="js/document-customization-logic.js" defer></script>
+<script src="/assets/js/document-customization-logic.js" defer></script>

@@ -167,13 +167,28 @@ async function navigateToPage(page, updateHistory = true) {
                         scr.src = s.src;
                         scr.async = false;
                     } else if (s.code) {
-                        scr.textContent = s.code;
+                        // Avoid CSP 'unsafe-inline' violation by loading inline code
+                        // through a same-origin Blob URL. Blob URLs inherit the document
+                        // origin, so they are permitted by script-src 'self'.
+                        const blob = new Blob([s.code], { type: 'application/javascript' });
+                        scr.src = URL.createObjectURL(blob);
                     }
 
                     document.body.appendChild(scr);
                 } catch (err) {
                     // ignore individual script errors
                     console.error('Error executing page script', err);
+                }
+            });
+
+            // Clean up blob URLs after the scripts have loaded to avoid leaking them
+            cachedScripts.forEach(scr => {
+                if (scr.src && scr.src.startsWith('blob:')) {
+                    const cleanup = () => {
+                        try { URL.revokeObjectURL(scr.src); } catch (e) { /* ignore */ }
+                    };
+                    scr.addEventListener('load', cleanup, { once: true });
+                    scr.addEventListener('error', cleanup, { once: true });
                 }
             });
 

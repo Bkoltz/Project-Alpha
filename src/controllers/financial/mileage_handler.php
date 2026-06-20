@@ -11,13 +11,21 @@ ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
 
-// CSRF + auth checks
-if (!csrf_validate()) {
+// CSRF + auth checks: accept legacy 'csrf' or Symfony '_token'
+$csrfOk = false;
+$submitted = $_POST['_token'] ?? '';
+if (is_string($submitted) && $submitted !== '') {
+    $csrfOk = csrf_sf_is_valid('mileage', $submitted);
+} else {
+    $csrfOk = csrf_validate();
+}
+if (!$csrfOk) {
     $response['message'] = 'Invalid request (CSRF validation failed)';
     header('Content-Type: application/json');
     echo json_encode($response);

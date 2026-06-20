@@ -334,4 +334,4 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     window.formDocumentId = <?php echo (int)($category['doc_id'] ?? 0); ?>;
 </script>
 
-<script src="js/form-detail-logic.js" defer></script>
+<script src="/assets/js/form-detail-logic.js" defer></script>

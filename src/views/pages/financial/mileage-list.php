@@ -2,6 +2,7 @@
 // src/views/pages/financial/mileage-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $orgId = 1; // default organization
 
@@ -115,7 +116,7 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
 
   <!-- Filters -->
   <div class="card card-tight" style="margin-bottom:20px">
-    <form method="get" action="/" class="grid grid-4">
+    <form method="get" action="/" class="filter-form">
       <input type="hidden" name="page" value="financial/mileage-list">
       <div class="field">
         <label class="label" for="filter-start">Start Date</label>
@@ -155,9 +156,9 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
           <option value="0" <?php echo $billable === '0' ? 'selected' : ''; ?>>Non-billable</option>
         </select>
       </div>
-      <div class="field" style="display:flex;align-items:flex-end">
+      <div class="field filter-actions">
         <button type="submit" class="btn btn-primary">Filter</button>
-        <a href="/?page=financial/mileage-list" class="btn" style="margin-left:8px">Clear</a>
+        <a href="/?page=financial/mileage-list" class="btn">Clear</a>
       </div>
     </form>
   </div>
@@ -223,10 +224,11 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="flex flex-end">
                   <a href="/?page=financial/mileage-create&id=<?php echo (int)$log['id']; ?>" class="btn btn-sm">Edit</a>
                   <form method="post" action="/?page=financial/mileage-handler" class="inline-form mileage-delete-form" style="display:inline">
+                    <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('mileage')); ?>">
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="id" value="<?php echo (int)$log['id']; ?>">
-                    <button type="submit" class="btn btn-sm">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                   </form>
                 </div>
               </td>

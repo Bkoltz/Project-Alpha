@@ -129,4 +129,4 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   </label>
 </fieldset>
 
-<script src="js/billing-logic.js" defer></script>
+<script src="/assets/js/billing-logic.js" defer></script>

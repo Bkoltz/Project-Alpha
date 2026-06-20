@@ -347,4 +347,4 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
     window.formFolderId = <?php echo (int)$folderId; ?>;
 </script>
-<script src="js/folder-detail-logic.js" defer></script>
+<script src="/assets/js/folder-detail-logic.js" defer></script>
