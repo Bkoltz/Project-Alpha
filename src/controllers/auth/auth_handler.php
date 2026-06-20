@@ -199,6 +199,17 @@ if ($action === 'login') {
             exit;
         }
         
+        // Check if ToS has been accepted; if not, require acceptance before proceeding
+        try {
+            $tosStmt = $pdo->prepare('SELECT tos_accepted_at FROM users WHERE id = ?');
+            $tosStmt->execute([(int)$u['id']]);
+            $tosAccepted = $tosStmt->fetchColumn();
+            if ($tosAccepted === null || $tosAccepted === false) {
+                header('Location: /?page=legal/tos-accept');
+                exit;
+            }
+        } catch (Throwable $e) { /* if column missing, skip ToS gate */ }
+        
         app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
         header('Location: /');
         exit;
