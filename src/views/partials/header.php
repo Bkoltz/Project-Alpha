@@ -144,6 +144,7 @@
                 <li><a href="/?page=financial/categories-list" data-page="financial/categories-list">Categories</a></li>
                 <li><a href="/?page=financial/mileage-list" data-page="financial/mileage-list">Mileage</a></li>
                 <li><a href="/?page=financial/csv-import" data-page="financial/csv-import">Import CSV</a></li>
+                <li><a href="/?page=financial/expense-report" data-page="financial/expense-report">Reports</a></li>
                 <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms & Docs</a></li>
                 <li><a href="/?page=financial/receipts-list" data-page="financial/receipts-list">Receipts</a></li>
                 <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
