@@ -44,7 +44,7 @@ $whereSQL = implode(' AND ', $whereClauses);
 $stmt = $pdo->prepare("
     SELECT r.*, rs.name as store_name
     FROM receipts r
-    LEFT JOIN receipt_stores rs ON r.store_id = rs.id
+    LEFT JOIN vendors rs ON r.store_id = rs.id
     WHERE {$whereSQL}
     ORDER BY r.receipt_date DESC, r.created_at DESC
 ");
@@ -55,7 +55,7 @@ $receipts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $totalAmount = array_sum(array_column($receipts, 'amount'));
 
 // Get all stores for filter dropdown
-$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM receipt_stores WHERE organization_id = ? ORDER BY name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 

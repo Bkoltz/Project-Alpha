@@ -7,7 +7,7 @@ $receiptId = (int)($_GET['id'] ?? 0);
 $orgId = 1; // Should come from session/user context
 
 // Get existing stores for edit modal
-$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM receipt_stores WHERE organization_id = ? ORDER BY name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -20,7 +20,7 @@ if (!$receiptId) {
 $stmt = $pdo->prepare('
     SELECT r.*, rs.name as store_name
     FROM receipts r
-    LEFT JOIN receipt_stores rs ON r.store_id = rs.id
+    LEFT JOIN vendors rs ON r.store_id = rs.id
     WHERE r.id = ? AND r.organization_id = ?
 ');
 $stmt->execute([$receiptId, $orgId]);

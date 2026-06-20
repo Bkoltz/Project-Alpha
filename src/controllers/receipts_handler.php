@@ -44,10 +44,10 @@ try {
             return null;
         }
 
-        $stmt = $pdo->prepare('INSERT INTO receipt_stores (organization_id, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)');
+        $stmt = $pdo->prepare('INSERT INTO vendors (organization_id, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)');
         $stmt->execute([$orgId, $storeName]);
 
-        $stmt = $pdo->prepare('SELECT id FROM receipt_stores WHERE organization_id = ? AND name = ?');
+        $stmt = $pdo->prepare('SELECT id FROM vendors WHERE organization_id = ? AND name = ?');
         $stmt->execute([$orgId, $storeName]);
         $storeId = $stmt->fetchColumn();
 
