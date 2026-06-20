@@ -1,6 +1,6 @@
 # src/controllers — Context
 
-Last updated: 2026-06-19 by Hermes
+Last updated: 2026-06-20 by Hermes
 
 ## What This Is
 
@@ -72,5 +72,6 @@ This folder contains all HTTP request handlers for Project Alpha. Routing is cen
 - `src/config/db.php`, `src/config/app.php`.
 - `src/utils/csrf.php` / `csrf_sf.php`, `src/utils/crypto.php`, `src/utils/mailer.php`, `src/utils/notifications.php`.
 - `src/services/StripeService.php`, `src/services/LinkResolverService.php`.
-- Database tables: `users`, `clients`, `organizations`, `projects`, `quotes`, `contracts`, `invoices`, `payments`, `public_links`, `entity_links`, `receipts`, `form_categories`, `form_documents`, etc.
+- Database tables: `users`, `clients`, `organizations`, `projects`, `quotes` (with `quote_type`), `contracts` (with `contract_type`), `invoices` (with `invoice_type`, `contract_id`), `payments`, `public_links`, `entity_links`, `receipts`, `form_categories`, `form_documents`, `document_custom_fields`, `expenses`, `expense_categories`, `vendors`, `mileage_logs`, etc.
+- **Schema note**: Dev uses unified tables with type columns (`quote_type`, `contract_type`, `invoice_type`). Do NOT query legacy `long_term_contracts`, `on_demand_contracts`, `is_long_term`, `is_on_demand`, or `on_demand_contract_id`.
 - External: Stripe API, SMTP/PHPMailer, Dompdf, Dropbox/Google Drive/S3 link resolvers.

@@ -1,6 +1,6 @@
 # src/utils — Context
 
-Last updated: 2026-06-19 by Hermes
+Last updated: 2026-06-20 by Hermes
 
 ## What This Is
 
@@ -23,7 +23,8 @@ This folder contains small, focused utility modules used across controllers, cro
 - `two_factor_auth.php` — TOTP/backup-code utility class `App\Utils\TwoFactorAuth`.
 - `audit.php` — `audit_log(PDO, $action, $entityType, $entityId, $details, $userId)` writes to `system_audit`.
 - `audit_middleware.php` — Router-level shutdown hook that writes baseline audit rows for sensitive pages.
-- `upload_validator.php` — `validate_upload($file, $allowedMimes, $maxBytes)` returns null or error string.
+- `client_ip.php` — `get_client_ip()` detects real client IP behind reverse proxy. Uses `TRUSTED_PROXIES` env var (space/comma-separated CIDRs) to determine which hops to trust. Checks `CF-Connecting-IP` first, then `X-Forwarded-For`.
+- `upload_validator.php` — `validate_upload($file, $allowedMimes, $maxBytes)` returns null or error string. Validates by real MIME via `finfo`, not browser-provided type.
 - `document_fields.php` — Render/extract custom document fields and deposit composites.
 - `format.php` — `format_phone($raw)` formats North-American phone numbers.
 - `project_id.php` — Project ID helpers.

@@ -1,6 +1,6 @@
 # src/cron — Context
 
-Last updated: 2026-06-19 by Hermes
+Last updated: 2026-06-20 by Hermes
 
 ## What This Is
 
@@ -34,6 +34,7 @@ This folder contains the actual PHP scripts executed by the cron container. Each
 - `cron/crontab` and `cron/entrypoint.sh` for scheduling.
 - `src/config/db.php`, `src/config/app.php`, `src/utils/mailer.php`, `src/utils/crypto.php`.
 - `src/services/StripeService.php`, `src/utils/StripeFeeCalculator.php`.
-- Database tables: `contracts`, `invoices`, `invoice_items`, `payments`, `clients`, `public_links`, `entity_links`, `cron_job_runs`, `invoice_notifications`, `auto_pay_log`, `audit_schedules`, `audit_schedule_logs`.
+- Database tables: `contracts` (with `contract_type`), `invoices` (with `invoice_type`, `contract_id`), `invoice_items`, `payments`, `clients`, `public_links`, `entity_links`, `cron_job_runs`, `invoice_notifications`, `auto_pay_log`, `audit_schedules`, `audit_schedule_logs`.
+- **Schema note**: Dev uses unified `contracts` table with `contract_type='long_term'` filter (NOT separate `long_term_contracts` table). Invoices link to contracts via `contract_id` (NOT `on_demand_contract_id`).
 - Environment: MySQL credentials, `APP_ENCRYPTION_KEY`, SMTP/Stripe settings in `appConfig`.
 - Directories: `/var/www/backups/`, `/var/www/logs/`, `/var/www/config/` (or project fallback).
