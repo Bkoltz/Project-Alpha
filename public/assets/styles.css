@@ -224,7 +224,7 @@ body.nav-open{overflow:hidden}
 .status-badge.status-void{background:#fef2f2;color:#991b1b}
 
 /* dashboard kit */
-.dash-stats{display:grid;gap:16px;grid-template-columns:repeat(6,1fr)}
+.dash-stats{display:grid;gap:16px;grid-template-columns:repeat(6,1fr);margin-top:24px}
 .dash-card{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(11,18,32,0.06);min-width:0}
 .dash-card__icon{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:10px;flex-shrink:0}
 .dash-card__icon.success{background:#ecfdf5;color:#065f46}
