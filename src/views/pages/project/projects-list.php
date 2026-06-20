@@ -80,16 +80,16 @@ $clients = $clientStmt->fetchAll(PDO::FETCH_ASSOC);
       </label>
     </div>
     
-    <div class="flex">
+    <div style="display:flex;gap:8px">
       <button type="submit" style="padding:8px 16px;border-radius:6px;background:var(--nav-accent);color:#fff;border:0;font-weight:600;cursor:pointer">Apply Filters</button>
       <a href="/?page=project/projects-list" style="padding:8px 16px;border-radius:6px;background:#f3f4f6;color:#374151;border:0;font-weight:600;text-decoration:none;display:inline-block">Clear</a>
     </div>
   </form>
 
   <?php if (!$rows): ?>
-    <div class="muted">No projects found matching your filters.</div>
+    <div style="color:var(--muted)">No projects found matching your filters.</div>
   <?php else: ?>
-    <div class="grid">
+    <div style="display:grid;gap:12px">
       <?php foreach ($rows as $r): ?>
         <div style="border:1px solid #eee;border-radius:8px;padding:10px;background:#fff;display:flex;justify-content:space-between;align-items:center">
           <div>

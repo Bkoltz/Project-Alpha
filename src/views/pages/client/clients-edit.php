@@ -27,19 +27,19 @@ $organizations = $orgStmt->fetchAll();
     <input type="hidden" name="id" value="<?php echo (int)$client['id']; ?>">
     <label>
       <div>Name</div>
-      <input required type="text" name="name" value="<?php echo htmlspecialchars($client['name']); ?>" class="input">
+      <input required type="text" name="name" value="<?php echo htmlspecialchars($client['name']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
     <label>
       <div>Email</div>
-      <input type="email" name="email" value="<?php echo htmlspecialchars($client['email'] ?? ''); ?>" class="input">
+      <input type="email" name="email" value="<?php echo htmlspecialchars($client['email'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
     <label>
       <div>Phone</div>
-      <input type="text" name="phone" value="<?php echo htmlspecialchars($client['phone'] ?? ''); ?>" class="input">
+      <input type="text" name="phone" value="<?php echo htmlspecialchars($client['phone'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
     <label style="position:relative">
       <div>Organization</div>
-      <input type="text" id="orgInputEdit" placeholder="Type to search organizations (leave blank for none)..." autocomplete="off" class="input" value="<?php echo htmlspecialchars($client['organization_name'] ?? ''); ?>">
+      <input type="text" id="orgInputEdit" placeholder="Type to search organizations (leave blank for none)..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" value="<?php echo htmlspecialchars($client['organization_name'] ?? ''); ?>">
       <input type="hidden" id="orgIdEdit" name="organization_id" value="<?php echo (int)($client['organization_id'] ?? 0); ?>">
       <small style="display:block;margin-top:4px;color:var(--muted)">Clear the text field to remove from organization</small>
       <div id="orgSuggestEdit" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
@@ -50,28 +50,28 @@ $organizations = $orgStmt->fetchAll();
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
       <legend style="padding:0 6px;color:var(--muted)">Address</legend>
       <label>
-        <div>Address line 1</div><input name="address_line1" value="<?php echo htmlspecialchars($client['address_line1'] ?? ''); ?>" class="input">
+        <div>Address line 1</div><input name="address_line1" value="<?php echo htmlspecialchars($client['address_line1'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
-        <div>Address line 2</div><input name="address_line2" value="<?php echo htmlspecialchars($client['address_line2'] ?? ''); ?>" class="input">
+        <div>Address line 2</div><input name="address_line2" value="<?php echo htmlspecialchars($client['address_line2'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
         <label>
-          <div>City</div><input name="city" value="<?php echo htmlspecialchars($client['city'] ?? ''); ?>" class="input">
+          <div>City</div><input name="city" value="<?php echo htmlspecialchars($client['city'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
-          <div>State</div><input name="state" value="<?php echo htmlspecialchars($client['state'] ?? 'WI'); ?>" class="input">
+          <div>State</div><input name="state" value="<?php echo htmlspecialchars($client['state'] ?? 'WI'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
-          <div>Postal (zip)</div><input name="postal" value="<?php echo htmlspecialchars($client['postal_code'] ?? ''); ?>" class="input">
+          <div>Postal (zip)</div><input name="postal" value="<?php echo htmlspecialchars($client['postal'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
       </div>
     </fieldset>
     <label>
       <div>Notes</div>
-      <textarea name="notes" rows="3" class="input"><?php echo htmlspecialchars($client['notes'] ?? ''); ?></textarea>
+      <textarea name="notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($client['notes'] ?? ''); ?></textarea>
     </label>
-    <div class="flex">
+    <div style="display:flex;gap:8px">
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;font-size:small">Save</button>
       <a href="/?page=client/clients-list" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;font-size:small">Cancel</a>
       <form method="post" action="/?page=clients-delete" onsubmit="return confirm('Archive this client and all associated documents? This will remove them from active lists.');" style="display:inline-block;margin-left:auto">
@@ -100,11 +100,11 @@ $organizations = $orgStmt->fetchAll();
         <h3 style="margin:0;font-size:18px">Create New Organization</h3>
         <button type="button" id="closeCreateOrgModalEdit" style="background:none;border:none;font-size:24px;cursor:pointer;color:#999">&times;</button>
       </div>
-      <form id="createOrgFormEdit" class="grid">
+      <form id="createOrgFormEdit" style="display:grid;gap:12px">
         <input type="hidden" id="createOrgCsrfEdit" name="csrf" value="">
         <label>
           <div style="font-weight:500;margin-bottom:4px">Organization Name</div>
-          <input type="text" id="createOrgNameInputEdit" name="name" required placeholder="Organization name" class="input">
+          <input type="text" id="createOrgNameInputEdit" name="name" required placeholder="Organization name" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <button type="button" id="cancelCreateOrgModalEdit" style="padding:10px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer">Cancel</button>
