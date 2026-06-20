@@ -25,7 +25,8 @@ services:
       MYSQL_ROOT_PASSWORD: changeme_root_pass
       ADMIN_PASSWORD: changeme_admin_pass
       # --- END PASSWORDS ---
-      # Trust Cloudflare Tunnel + Docker networks for real client IP
+      # Optional: only needed behind a reverse proxy (Cloudflare, nginx, etc.)
+      # Lets the app detect real client IPs from X-Forwarded-For / CF-Connecting-IP
       TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
     depends_on:
       db:
