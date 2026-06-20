@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Auto-generate or load encryption key if not provided (same logic as web start.sh)
+CONFIG_DIR="/var/www/config"
+if [ -z "${APP_ENCRYPTION_KEY:-}" ]; then
+  KEY_FILE="${CONFIG_DIR}/.encryption_key"
+  if [ -f "$KEY_FILE" ]; then
+    export APP_ENCRYPTION_KEY="$(cat "$KEY_FILE")"
+  else
+    # Cron container might start before web generates the key
+    # Generate a temporary one — the web container's key will take precedence
+    # since app_config stores the encrypted values, not the cron container
+    export APP_ENCRYPTION_KEY="$(php -r 'echo base64_encode(random_bytes(32));')"
+  fi
+fi
+
 # ── Export environment variables so cron jobs can access them ──
 # Cron does NOT inherit the container's env vars, so we dump them
 # to /etc/environment which each cron job sources before running.

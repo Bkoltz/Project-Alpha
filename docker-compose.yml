@@ -1,5 +1,18 @@
-# TODO: Copy .env.example to .env and fill in real values before docker compose up
-# All credentials live in .env (gitignored) — nothing sensitive is committed.
+# Project Alpha — Docker Compose
+#
+# DEPLOYMENT:
+#   1. Edit the passwords/keys below (search for "CHANGE THESE")
+#   2. Run: docker compose up -d --build
+#   3. Open http://localhost:1627
+#   4. Log in with admin@project-alpha.local / <your ADMIN_PASSWORD>
+#   5. Go to Settings > Billing to enter Stripe keys (encrypted in DB)
+#
+# NO .env FILE NEEDED — all config is inline below.
+# Stripe/SMTP keys are entered via the app UI and stored encrypted in the DB.
+#
+# If you DO have a .env file, it still works (values are used as defaults
+# via the ${VAR:-default} syntax), but it's no longer required.
+
 services:
   web:
     build: .
@@ -9,18 +22,20 @@ services:
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
       MYSQL_USER: ${MYSQL_USER:-appuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
-      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
-      # Stripe keys are now entered via the Settings > Billing UI and stored
-      # encrypted in the app_config DB table. Env-vars below are optional fallbacks.
+      # CHANGE THESE — use env vars from .env if present, otherwise use inline defaults
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_secure_pass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_pass}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme_admin_pass}
+      # Encryption key for secrets (Stripe keys, SMTP password, etc.)
+      # If not set, the web container auto-generates one and persists it
+      # in the config volume for stability across restarts.
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
+      # Stripe keys entered via Settings > Billing UI (stored encrypted in DB)
+      # These env-vars are optional fallbacks only
       stripe_publishable_key: ${stripe_publishable_key:-}
       stripe_secret_key_enc: ${stripe_secret_key_enc:-}
       stripe_webhook_secret_enc: ${stripe_webhook_secret_enc:-}
-      # Dev convenience ONLY — never set to true in production
       APP_AUTH_DISABLED: ${APP_AUTH_DISABLED:-false}
-      # APP_HOST: your-domain.com
-      # SECURITY_HEADERS: true
     depends_on:
       - db
     healthcheck:
@@ -31,10 +46,11 @@ services:
       retries: 5
     restart: unless-stopped
     volumes:
-      - ./src:/var/www/src 
+      - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
-      - ./.env:/var/www/.env:ro
+      - ./backups:/var/www/backups
+
   cron:
     build:
       context: ./cron
@@ -43,8 +59,9 @@ services:
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
       MYSQL_USER: ${MYSQL_USER:-appuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
-      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_secure_pass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_pass}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       DB_HOST: db
       DB_PORT: 3306
     depends_on:
@@ -55,27 +72,22 @@ services:
       - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
-      - ./.env:/var/www/.env:ro
       - ./backups:/var/www/backups
       - cron_logs:/var/log/cron
+
   db:
     image: "mysql:8"
     restart: unless-stopped
-    # Encryption at rest (MySQL 8.4: component_keyring_file via manifest,
-    # the legacy keyring_file.so plugin was removed). New tables, redo and
-    # undo logs encrypted by default. See docs/ENCRYPTION_AT_REST.md.
     command: >
       --log-error-verbosity=1
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_pass}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
       MYSQL_USER: ${MYSQL_USER:-appuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_secure_pass}
     volumes:
       - db_data:/var/lib/mysql
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    # NOTE: Keyring encryption disabled for clean rebuild test.
-    # Re-enable via docs/ENCRYPTION_AT_REST.md when keyring is pre-initialized.
     healthcheck:
       test:
         - CMD-SHELL
@@ -84,11 +96,7 @@ services:
       timeout: 5s
       start_period: 40s
       retries: 10
-    # NOTE: no host port mapping — the DB is reachable only on the internal
-    # docker network (web/cron connect via db:3306). For local DB inspection,
-    # uncomment temporarily or use: docker compose exec db mysql -u appuser -p
-    # ports:
-    #   - "127.0.0.1:3307:3306"
+
 volumes:
   db_data: {}
   db_keyring: {}

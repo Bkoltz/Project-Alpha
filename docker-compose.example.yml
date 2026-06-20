@@ -1,0 +1,98 @@
+# Project Alpha — Docker Compose
+#
+# HOW TO DEPLOY:
+#   1. Copy this file to your server
+#   2. Edit the passwords/keys below (search for "CHANGE THESE")
+#   3. Run: docker compose up -d
+#   4. Open http://localhost:1627 in your browser
+#   5. Log in with admin@project-alpha.local / <your ADMIN_PASSWORD>
+#   6. Go to Settings > Billing to enter your Stripe keys (encrypted in DB)
+#
+# NO .env FILE NEEDED — everything is configured below.
+# Stripe keys, SMTP settings, and other secrets are entered via the app UI
+# and stored encrypted in the database.
+
+services:
+  web:
+    build: .
+    image: "bkoltz/project-alpha:latest"
+    ports:
+      - "1627:80"
+    environment:
+      # Database (web connects to the db service below)
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: "Chang...rd!"  # CHANGE THIS
+      MYSQL_ROOT_PASSWORD: "Chan...ord!"  # CHANGE THIS (needed for schema bootstrap)
+      # First-run admin account
+      ADMIN_PASSWORD: "Chan...ord!"  # CHANGE THIS — password for admin@project-alpha.local
+      # Encryption key for secrets (Stripe keys, SMTP password, etc.)
+      # Generate one: openssl rand -base64 32
+      APP_ENCRYPTION_KEY: "Chan...y=="  # CHANGE THIS — required, used to encrypt UI-entered secrets
+      # Auth bypass for dev (NEVER set to true in production)
+      APP_AUTH_DISABLED: "false"
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/\")!==false?0:1);'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - ./src:/var/www/src
+      - ./src/uploads:/var/www/src/uploads
+      - ./config:/var/www/config
+      - ./backups:/var/www/backups
+
+  cron:
+    build:
+      context: ./cron
+      dockerfile: Dockerfile
+    image: "bkoltz/project-alpha:cron"
+    environment:
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: "Chang...rd!"  # CHANGE THIS — must match web service
+      MYSQL_ROOT_PASSWORD: "Chan...ord!"  # CHANGE THIS — must match web service
+      APP_ENCRYPTION_KEY: "Chan...y=="  # CHANGE THIS — must match web service
+      DB_HOST: db
+      DB_PORT: 3306
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./src:/var/www/src
+      - ./src/uploads:/var/www/src/uploads
+      - ./config:/var/www/config
+      - ./backups:/var/www/backups
+      - cron_logs:/var/log/cron
+
+  db:
+    image: "mysql:8"
+    restart: unless-stopped
+    command: >
+      --log-error-verbosity=1
+    environment:
+      MYSQL_ROOT_PASSWORD: "Chan...ord!"  # CHANGE THIS — must match web service
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: "Chang...rd!"  # CHANGE THIS — must match web service
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 10
+
+volumes:
+  db_data: {}
+  db_keyring: {}
+  cron_logs: {}

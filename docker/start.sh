@@ -6,6 +6,29 @@ DB_PORT="${DB_PORT:-3306}"
 ROOT_USER="${MYSQL_ROOT_USER:-root}"
 ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpass}"
 
+# Auto-generate encryption key if not provided (persists in config volume)
+CONFIG_DIR="/var/www/config"
+if [ -z "${APP_ENCRYPTION_KEY:-}" ]; then
+  KEY_FILE="${CONFIG_DIR}/.encryption_key"
+  if [ -f "$KEY_FILE" ]; then
+    export APP_ENCRYPTION_KEY="$(cat "$KEY_FILE")"
+    echo "Loaded encryption key from ${KEY_FILE}"
+  else
+    echo "APP_ENCRYPTION_KEY not set — auto-generating and persisting to ${KEY_FILE}"
+    mkdir -p "$CONFIG_DIR"
+    export APP_ENCRYPTION_KEY="$(php -r 'echo base64_encode(random_bytes(32));')"
+    echo "$APP_ENCRYPTION_KEY" > "$KEY_FILE"
+    chmod 600 "$KEY_FILE"
+    chown www-data:www-data "$KEY_FILE" 2>/dev/null || true
+  fi
+fi
+
+# Also write the key to a .env file in the config volume so PHP can read it
+# (app.php reads .env from /var/www/config/.env)
+if [ ! -f "${CONFIG_DIR}/.env" ] || ! grep -q "APP_ENCRYPTION_KEY" "${CONFIG_DIR}/.env" 2>/dev/null; then
+  echo "APP_ENCRYPTION_KEY=\"${APP_ENCRYPTION_KEY}\"" >> "${CONFIG_DIR}/.env"
+fi
+
 echo "Waiting for DB at ${DB_HOST}:${DB_PORT} (user=${ROOT_USER})..."
 
 retries=60

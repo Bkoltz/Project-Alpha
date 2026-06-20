@@ -54,8 +54,8 @@ $appConfig = [
     //invoice defaults
 ];
 
-// Load .env file if it exists (project root or config directory)
-$envPaths = [__DIR__ . '/../../.env', '/var/www/config/.env'];
+// Load .env file if it exists (project root, config volume, or container root)
+$envPaths = [__DIR__ . '/../../.env', '/var/www/config/.env', '/var/www/.env'];
 foreach ($envPaths as $envPath) {
     if (is_readable($envPath)) {
         $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);

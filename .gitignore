@@ -12,6 +12,8 @@ public/error_log.txt
 
 # Config files containing secrets - NEVER commit these!
 config/settings.json
+config/.env
+config/.encryption_key
 .env
 .env.local
 .env.*.local
@@ -21,3 +23,4 @@ src/uploads/
 backups/
 .hermes/
 .env.staging
+.env.test
