@@ -136,8 +136,6 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       <tbody>
         <?php foreach ($rows as $r): ?>
 <?php 
-  $rowClass = ($r['status']==='active') ? 'status-pill--active' : (($r['status']==='completed') ? 'status-pill--completed' : ((in_array($r['status'], ['cancelled','paused'], true)) ? 'status-pill--cancelled' : ''));
-  
   $billingText = $r['billing_interval_count'] . ' ' . ucfirst($r['billing_interval_unit']);
   if ($r['billing_interval_count'] > 1) $billingText .= 's';
   

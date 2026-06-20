@@ -36,43 +36,43 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <section>
   <h2>Archived Clients</h2>
-  <form method="get" action="/" style="display:flex;gap:8px;align-items:end;margin:12px 0">
+  <form method="get" action="/" class="flex form-row">
     <input type="hidden" name="page" value="client/archived-clients">
-    <label>
-      <div>Search by name</div>
-      <input type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="e.g., Acme" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+    <label class="field">
+      <div class="label">Search by name</div>
+      <input type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="e.g., Acme" class="input">
     </label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=client/archived-clients" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Reset</a>
+    <button type="submit" class="btn btn-primary">Filter</button>
+    <a href="/?page=client/archived-clients" class="btn">Reset</a>
   </form>
-  <div style="overflow:auto">
-    <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
+  <div class="pa-table-wrap">
+    <table class="pa-table">
       <thead>
-        <tr style="text-align:left;border-bottom:1px solid #eee">
-          <th style="padding:10px">Client ID</th>
-          <th style="padding:10px">Name</th>
-          <th style="padding:10px">Email</th>
-          <th style="padding:10px">Phone</th>
-          <th style="padding:10px">Organization</th>
-          <th style="padding:10px">Archived</th>
+        <tr>
+          <th>Client ID</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Organization</th>
+          <th>Archived</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
-          <tr style="border-top:1px solid #f3f4f6">
-            <td style="padding:10px">#<?php echo (int)$r['client_id']; ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['name']); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['email'] ?? ''); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['phone'] ?? ''); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['organization'] ?? ''); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['archived_at']); ?></td>
+          <tr>
+            <td>#<?php echo (int)$r['client_id']; ?></td>
+            <td><?php echo htmlspecialchars($r['name']); ?></td>
+            <td><?php echo htmlspecialchars($r['email'] ?? ''); ?></td>
+            <td><?php echo htmlspecialchars($r['phone'] ?? ''); ?></td>
+            <td><?php echo htmlspecialchars($r['organization'] ?? ''); ?></td>
+            <td><?php echo htmlspecialchars($r['archived_at']); ?></td>
           </tr>
           <tr>
-            <td colspan="6" style="padding:10px">
-              <form method="post" action="/?page=client/clients-restore" onsubmit="return confirm('Restore client <?php echo addslashes($r['name']); ?> to active list?');" style="display:inline-block">
+            <td colspan="6">
+              <form method="post" action="/?page=client/clients-restore" onsubmit="return confirm('Restore client <?php echo addslashes($r['name']); ?> to active list?');" class="inline-form">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Restore</button>
+                <button type="submit" class="btn btn-sm">Restore</button>
               </form>
             </td>
           </tr>

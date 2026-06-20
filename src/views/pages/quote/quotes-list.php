@@ -114,7 +114,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   // Render the filter component using Twig
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
-  <div style="overflow:auto">
+  <div class="pa-table-wrap">
     <table class="pa-table">
       <thead>
         <tr>
@@ -175,24 +175,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     $last=(int)ceil(max(1,$total)/$per);
     $qs=$_GET; unset($qs['p']); $base='/?'.http_build_query($qs+['page'=>'quote/quotes-list','per_page'=>$per]);
   ?>
-  <div class="flex-between" style="margin-top:12px">
-    <div>
-      <form method="get" action="/">
-        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
-        ?>
-        <input type="hidden" name="page" value="quote/quotes-list">
-        <label>Per page
-          <select name="per_page" onchange="this.form.submit()" class="input-sm">
-            <option value="50" <?php echo $per===50?'selected':''; ?>>50</option>
-            <option value="100" <?php echo $per===100?'selected':''; ?>>100</option>
-          </select>
-        </label>
-      </form>
-    </div>
-    <div class="flex">
-      <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" class="btn btn-sm">Prev</a><?php endif; ?>
-      <div class="muted">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
-      <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" class="btn btn-sm">Next</a><?php endif; ?>
-    </div>
+  <div class="flex-end" style="margin-top:12px">
+    <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" class="btn btn-sm">Prev</a><?php endif; ?>
+    <div class="muted">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
+    <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" class="btn btn-sm">Next</a><?php endif; ?>
   </div>
 </section>
