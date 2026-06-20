@@ -119,7 +119,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
 
-  <div style="overflow:auto">
+  <div class="pa-table-wrap">
     <table class="pa-table">
       <thead>
         <tr>
