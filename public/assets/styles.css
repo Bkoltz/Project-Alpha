@@ -102,32 +102,14 @@ ul{margin:0;padding:0;list-style:none}
 .nav-footer a{color:rgba(255,255,255,0.9);font-size:14px;min-height:44px;display:flex;align-items:center}
 .nav-footer .settings{margin-top:6px;background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:var(--radius-sm)}
 
-/* ---------------------------------------------------------------- layout */
-.site-shell{display:flex;min-height:100vh}
+/* main content area pushes aside the fixed nav */
 .main-content{
   margin-left:var(--nav-width);
   padding:32px 40px;
-  width:calc(100% - var(--nav-width));
-  display:flex;
-  flex-direction:column;
-  min-height:100vh;
+  width:100%;
+  max-width:calc(var(--max-width) + var(--nav-width));
+  margin-right:auto;
 }
-.site-footer{
-  margin-top:auto;
-  padding:40px 0 0;
-  font-size:0.8rem;
-  color:var(--muted);
-  text-align:center;
-  border-top:1px solid var(--border);
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:6px 12px;
-}
-.site-footer a{color:var(--muted);text-decoration:underline;white-space:nowrap}
-.site-footer a:hover{color:var(--nav-accent)}
-.site-footer .sep{margin:0;color:var(--border)}
 
 /* ------------------------------------------------------- mobile topbar */
 .mobile-topbar{
@@ -243,7 +225,7 @@ table tbody tr:hover{background:var(--surface-2)}
 .dash-stats{
   display:grid;
   gap:16px;
-  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  grid-template-columns:repeat(6,1fr);
 }
 .dash-card{
   display:flex;align-items:center;gap:14px;
@@ -259,6 +241,14 @@ table tbody tr:hover{background:var(--surface-2)}
   display:flex;align-items:center;justify-content:center;
   width:42px;height:42px;border-radius:10px;flex-shrink:0;
 }
+/* old semantic card-icon classes (used by home.php main dashboard) */
+.dash-card--income  .dash-card__icon{background:var(--green-bg);color:#059669}
+.dash-card--pending .dash-card__icon{background:var(--amber-bg);color:#d97706}
+.dash-card--active  .dash-card__icon{background:var(--blue-bg);color:var(--blue)}
+.dash-card--unpaid  .dash-card__icon{background:var(--red-bg);color:#dc2626}
+.dash-card--clients .dash-card__icon{background:var(--violet-bg);color:var(--violet)}
+.dash-card--users   .dash-card__icon{background:var(--cyan-bg);color:var(--cyan)}
+/* new generic card-icon classes (used by financial pages) */
 .dash-card__icon.success{background:var(--green-bg);color:#059669}
 .dash-card__icon.danger{background:var(--red-bg);color:#dc2626}
 .dash-card__icon.info{background:var(--blue-bg);color:var(--blue)}
@@ -290,23 +280,42 @@ table tbody tr:hover{background:var(--surface-2)}
 .dash-panel__title{margin:0;font-size:15px;font-weight:700}
 .dash-panel__link{font-size:13px;color:var(--nav-accent);font-weight:600}
 .dash-panel__link:hover{text-decoration:underline}
-.dash-empty{color:var(--muted);font-style:italic;padding:20px 0;text-align:center}
-.dash-list{display:flex;flex-direction:column;gap:10px}
-.dash-list__item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
-.dash-list__item:last-child{border-bottom:none}
-.dash-list__left{min-width:0;flex:1}
-.dash-list__title{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dash-list__meta{font-size:12px;color:var(--muted);margin-top:2px}
-.dash-list__time{font-weight:700;font-size:14px;color:var(--text);white-space:nowrap}
+.dash-empty{color:var(--muted);font-size:14px;margin:0}
 
+.dash-chart-wrap{position:relative;height:240px;overflow:hidden}
+
+/* SVG line chart (used by home.php main dashboard) */
+.dash-svg-chart{width:100%;height:auto;display:block}
+.dash-svg-chart .axis-label{font-size:10px;fill:var(--muted)}
+.dash-svg-chart .grid-line{stroke:rgba(0,0,0,0.05);stroke-width:1}
+.dash-svg-chart .data-line{fill:none;stroke:var(--nav-accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.dash-svg-chart .data-area{fill:rgba(46,163,214,0.08)}
+.dash-svg-chart .data-dot{fill:var(--nav-accent);stroke:#fff;stroke-width:1.5}
+.dash-svg-chart .data-dot:hover{r:5}
+
+/* status bars */
 .dash-bars{display:flex;flex-direction:column;gap:12px}
-.dash-bar__row{display:grid;grid-template-columns:130px 1fr 110px;align-items:center;gap:10px;font-size:13px}
+.dash-bar__row{display:grid;grid-template-columns:130px 1fr 40px;align-items:center;gap:10px;font-size:13px}
 .dash-bar__label{color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dash-bar__track{height:8px;background:#eceae6;border-radius:4px;overflow:hidden}
 .dash-bar__fill{height:100%;border-radius:4px;transition:width .3s}
-.dash-bar__count{font-weight:700;text-align:right;white-space:nowrap}
+.dash-bar__count{font-weight:700;text-align:right}
 .dash-bar__count span{color:var(--muted);font-weight:500;font-size:12px}
 
+/* lists (old style — used by home.php main dashboard) */
+.dash-list{display:flex;flex-direction:column;gap:8px}
+.dash-list__item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px;border-radius:var(--radius-sm);
+  background:var(--surface-2);transition:background .1s;
+}
+.dash-list__item:hover{background:#f3f4f6}
+.dash-list__left{min-width:0}
+.dash-list__title{font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-list__meta{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-list__time{font-size:12px;color:var(--muted);white-space:nowrap;margin-left:10px}
+
+/* financial page status badges + filter forms (added by b30a0c4, used by expense pages) */
 .status-badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--surface-2);color:var(--muted)}
 .status-badge.status-pending{background:var(--amber-bg);color:#d97706}
 .status-badge.status-paid{background:var(--green-bg);color:#059669}
@@ -326,25 +335,6 @@ table tbody tr:hover{background:var(--surface-2)}
 .filter-actions{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
 .filter-actions .btn{min-height:34px;height:34px;padding:6px 14px;font-size:13px;line-height:1.2}
 
-
-@media (max-width: 1100px){
-  .dash-stats{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
-  .dash-cols{grid-template-columns:1fr}
-  .dash-row{grid-template-columns:1fr}
-  .dash-card--actions{justify-content:flex-start}
-  .quick-actions{justify-content:flex-start}
-}
-@media (max-width: 768px){
-  .dash-stats{grid-template-columns:1fr 1fr}
-  .filter-form > div:not(.filter-actions){max-width:none}
-  .filter-form.compact > div:not(.filter-actions){flex:1 1 140px;max-width:none}
-  .quick-actions .btn{width:100%}
-}
-@media (max-width: 480px){
-  .dash-stats{grid-template-columns:1fr}
-  .dash-bar__row{grid-template-columns:1fr;gap:4px}
-  .dash-bar__count{text-align:left}
-}
 /* health */
 .dash-health{display:grid;gap:14px}
 .dash-health__item{display:grid;gap:4px}
@@ -404,9 +394,9 @@ select.input{cursor:pointer;appearance:none;background-image:url("data:image/svg
 
 /* ---------------------------------------------------------------- grid helpers */
 .grid{display:grid;gap:12px}
-.grid-2{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
-.grid-3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-.grid-4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid-4{grid-template-columns:repeat(4,1fr)}
 .flex{display:flex;gap:8px}
 .flex-end{display:flex;justify-content:flex-end;gap:16px}
 .flex-between{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -432,13 +422,10 @@ select.input{cursor:pointer;appearance:none;background-image:url("data:image/svg
 
 /* ---------------------------------------------------------- responsive */
 @media (max-width:1400px){
-  .dash-stats{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  .dash-stats{grid-template-columns:repeat(3,1fr)}
 }
 @media (max-width:1100px){
   .dash-cols{grid-template-columns:1fr}
-  .dash-row{grid-template-columns:1fr}
-  .dash-card--actions{justify-content:flex-start}
-  .quick-actions{justify-content:flex-start}
 }
 @media (max-width:900px){
   /* sidebar becomes a slide-in drawer */
