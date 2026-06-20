@@ -24,17 +24,17 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
 ?>
 <section>
   <h2>Payments</h2>
-  <form method="get" action="/" class="grid form-row">
+  <form method="get" action="/" class="filter-form">
     <input type="hidden" name="page" value="payments-list">
     <input type="hidden" name="client_id" id="clientIdPL" value="<?php echo (int)$client_id; ?>">
-    <label class="field"><div class="label">Client</div>
+    <div class="field"><label class="label-muted">Client</label>
       <input type="text" name="client" id="clientInputPL" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." class="input">
       <div id="clientSuggestPL" class="suggest-dropdown"></div>
-    </label>
-    <label class="field"><div class="label">Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" class="input"></label>
-    <label class="field"><div class="label">End</div><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" class="input"></label>
-    <button type="submit" class="btn btn-primary">Filter</button>
-    <a href="/?page=payments-list" class="btn">Reset</a>
+    </div>
+    <div class="field"><label class="label-muted">Start</label><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" class="input"></div>
+    <div class="field"><label class="label-muted">End</label><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" class="input"></div>
+    <div class="filter-actions"><button type="submit" class="btn btn-primary">Filter</button></div>
+    <div class="filter-actions"><a href="/?page=payments-list" class="btn">Reset</a></div>
   </form>
   <script>
     (function(){
