@@ -19,7 +19,7 @@ if ($pref > 0) {
 ?>
 <section>
   <h2>Record Payment</h2>
-  <form id="paymentForm" method="post" action="/?page=payments/payments-create" style="display:grid;gap:12px;max-width:520px">
+  <form method="post" action="/?page=payments/payments-create" style="display:grid;gap:12px;max-width:520px">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <label>
       <div>Invoice</div>
@@ -42,31 +42,10 @@ if ($pref > 0) {
          $stripeConfigured = StripeService::isConfigured($appConfig);
     ?>
       <select name="method" id="paymentMethod" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <?php
-          // Normalize method labels for display vs value
-          $methodMap = [
-            'Card' => ['card', '💳 Card'],
-            'Cash' => ['cash', '💵 Cash'],
-            'Bank Transfer' => ['bank_transfer', '🏦 Bank Transfer'],
-            'Check' => ['check', '📄 Check'],
-            'Stripe' => ['stripe', '💳 Credit Card (Stripe)'],
-          ];
-          $addedStripe = false;
-          foreach ($methods as $m):
-            $key = trim($m);
-            $lower = strtolower($key);
-            if ($lower === 'stripe') { $addedStripe = true; }
-            if (isset($methodMap[$key])):
-              $val = $methodMap[$key][0];
-              $label = $methodMap[$key][1];
-            else:
-              $val = $lower;
-              $label = htmlspecialchars($key);
-            endif;
-        ?>
-          <option value="<?php echo $val; ?>"><?php echo $label; ?></option>
+        <?php foreach ($methods as $m): ?>
+          <option value="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></option>
         <?php endforeach; ?>
-        <?php if ($stripeConfigured && !$addedStripe): ?>
+        <?php if ($stripeConfigured): ?>
           <option value="stripe">💳 Credit Card (Stripe)</option>
         <?php endif; ?>
       </select>
@@ -87,28 +66,5 @@ if ($pref > 0) {
     <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Save Payment</button>
   </form>
 </section>
-
-<script>
-// Handle Stripe submission: submit directly to stripe-charge in a new tab
-document.getElementById('paymentForm').addEventListener('submit', function(e) {
-    var methodSelect = document.getElementById('paymentMethod');
-    var method = methodSelect.value.toLowerCase();
-    if (method === 'stripe') {
-        e.preventDefault();
-        var invoiceId = document.getElementById('invoiceSelect').value;
-        var amount = document.getElementById('amountInput').value;
-        if (!invoiceId || !amount) {
-            alert('Please select an invoice and enter an amount');
-            return;
-        }
-        var csrf = this.querySelector('input[name="csrf"]').value;
-        // Open Stripe checkout in new tab
-        var stripeUrl = '/?page=stripe-charge&invoice_id=' + encodeURIComponent(invoiceId) + '&amount=' + encodeURIComponent(amount);
-        window.open(stripeUrl, '_blank');
-        // Redirect current page to payments list
-        window.location.href = '/?page=payments/payments-list';
-    }
-});
-</script>
 
 <script src="/assets/js/payments-create-logic.js" defer></script>

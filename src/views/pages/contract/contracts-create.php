@@ -24,17 +24,17 @@ $csrf = csrf_sf_token('contracts-create');
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label style="position:relative">
         <div>Client</div>
-        <input id="clientInputCo" name="client" type="text" placeholder="Type client name..." autocomplete="off" class="input">
+        <input id="clientInputCo" name="client" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <input id="clientIdCo" type="hidden" name="client_id">
         <div id="clientSuggestCo" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
       <label>
         <div>Tax (%)</div>
-        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="0" class="input">
+        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
         <div>Discount Type</div>
-        <select id="discountTypeCo" name="discount_type" class="input">
+        <select id="discountTypeCo" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="none">None</option>
           <option value="percent">Percent</option>
           <option value="fixed">Fixed $</option>
@@ -42,16 +42,16 @@ $csrf = csrf_sf_token('contracts-create');
       </label>
       <label>
         <div>Discount Value</div>
-        <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="0" class="input">
+        <input id="discountValueCo" type="number" step="0.01" name="discount_value" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
 
     <div id="projectSectionCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
       <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
-      <div class="grid">
+      <div style="display:grid;gap:12px">
         <label>
           <div>Add to Existing Project</div>
-          <select id="projectSelectCo" name="project_id" class="input">
+          <select id="projectSelectCo" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="">-- Select Project --</option>
           </select>
         </label>
@@ -76,21 +76,21 @@ $csrf = csrf_sf_token('contracts-create');
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="doc_type" value="regular" checked onchange="toggleDocTypeFields()">
           <div>
-            <div class="font-600">Regular</div>
+            <div style="font-weight:600">Regular</div>
             <div style="font-size:12px;color:#6b7280">One-time contract</div>
           </div>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="doc_type" value="long_term" onchange="toggleDocTypeFields()">
           <div>
-            <div class="font-600">Long Term</div>
+            <div style="font-weight:600">Long Term</div>
             <div style="font-size:12px;color:#6b7280">Recurring billing</div>
           </div>
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="radio" name="doc_type" value="on_demand" onchange="toggleDocTypeFields()">
           <div>
-            <div class="font-600">On-Demand</div>
+            <div style="font-weight:600">On-Demand</div>
             <div style="font-size:12px;color:#6b7280">Manual invoicing</div>
           </div>
         </label>
@@ -103,11 +103,11 @@ $csrf = csrf_sf_token('contracts-create');
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
         <label>
           <div>Start Date *</div>
-          <input id="startDateFieldCo" type="date" name="start_date" class="input">
+          <input id="startDateFieldCo" type="date" name="start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
           <div>Contract Duration *</div>
-          <select id="endDateTypeCo" name="end_date_type" class="input" onchange="toggleEndDate()">
+          <select id="endDateTypeCo" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
             <option value="ongoing">Ongoing (Until Terminated)</option>
             <option value="fixed">Fixed End Date</option>
           </select>
@@ -117,14 +117,14 @@ $csrf = csrf_sf_token('contracts-create');
       <div id="endDateFieldCo" style="display:none;margin-top:12px">
         <label>
           <div>End Date *</div>
-          <input type="date" name="end_date" class="input">
+          <input type="date" name="end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
       </div>
 
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:12px">
         <label>
           <div>Bill Every *</div>
-          <select id="billingIntervalCount" name="billing_interval_count" class="input">
+          <select id="billingIntervalCount" name="billing_interval_count" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -134,7 +134,7 @@ $csrf = csrf_sf_token('contracts-create');
         </label>
         <label>
           <div>Period *</div>
-          <select id="billingIntervalUnit" name="billing_interval_unit" class="input">
+          <select id="billingIntervalUnit" name="billing_interval_unit" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="day">Day(s)</option>
             <option value="week">Week(s)</option>
             <option value="month" selected>Month(s)</option>
@@ -164,14 +164,14 @@ $csrf = csrf_sf_token('contracts-create');
       <div id="perInvoiceField" style="margin-top:12px">
         <label>
           <div>Amount Per Invoice * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
-          <input id="pricePerInvoiceInput" type="number" step="0.01" name="price_per_invoice" placeholder="20.00" class="input" oninput="recalcCo()">
+          <input id="pricePerInvoiceInput" type="number" step="0.01" name="price_per_invoice" placeholder="20.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalcCo()">
         </label>
       </div>
 
       <div id="fixedTotalFieldsCo" style="display:none;margin-top:12px">
         <label>
           <div>Number of Invoices * <span style="font-size:13px;color:#6b7280;font-weight:normal">(how many invoices to divide the total across)</span></div>
-          <input id="invoiceCountInputCo" type="number" step="1" min="1" name="invoice_count" placeholder="4" value="4" class="input" oninput="recalcCo()">
+          <input id="invoiceCountInputCo" type="number" step="1" min="1" name="invoice_count" placeholder="4" value="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalcCo()">
         </label>
         <div id="calculatedPricePerInvoiceCo" style="margin-top:8px;padding:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
           <div style="display:flex;justify-content:space-between;align-items:center">
@@ -186,23 +186,76 @@ $csrf = csrf_sf_token('contracts-create');
       </div>
     </div>
 
+    <div id="onDemandFieldsCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+      <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Contract Settings</h3>
+      
+      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+        <label>
+          <div>Start Date</div>
+          <input id="onDemandStartDateCo" type="date" name="od_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>Contract Duration</div>
+          <select id="onDemandEndDateTypeCo" name="od_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleOnDemandEndDateCo()">
+            <option value="ongoing">Ongoing (Until Terminated)</option>
+            <option value="fixed">Fixed End Date</option>
+          </select>
+        </label>
+      </div>
+      
+      <div id="onDemandEndDateFieldCo" style="display:none;margin-top:12px">
+        <label>
+          <div>End Date</div>
+          <input type="date" name="od_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+      </div>
+
+      <div style="margin-top:16px;padding:12px;background:#e0f2fe;border-radius:8px;border:1px solid #7dd3fc">
+        <div style="font-weight:600;margin-bottom:8px;color:#0369a1">How do you want to specify pricing?</div>
+        <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="radio" name="od_pricing_mode" value="items" checked onchange="toggleOnDemandPricingModeCo()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Use Line Items</div>
+            <div style="font-size:13px;color:#6b7280">Add individual items with quantities and prices</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+          <input type="radio" name="od_pricing_mode" value="flat" onchange="toggleOnDemandPricingModeCo()" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Flat Amount</div>
+            <div style="font-size:13px;color:#6b7280">Enter a single amount without itemized details</div>
+          </div>
+        </label>
+      </div>
+
+      <div id="onDemandFlatAmountCo" style="display:none;margin-top:12px">
+        <label>
+          <div>Contract Amount * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
+          <input id="onDemandAmountInputCo" type="number" step="0.01" name="od_flat_amount" placeholder="0.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalcCo()">
+        </label>
+      </div>
+
+      <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:13px">
+        <strong>ℹ️ Note:</strong> On-demand contracts allow you to generate invoices manually as needed. No recurring billing schedule is set.
+      </div>
+    </div>
 
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
-      <div id="itemsCo" class="grid"></div>
+      <div id="itemsCo" style="display:grid;gap:8px"></div>
       <button type="button" onclick="addItemCo()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
     <?php if (!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])): ?>
       <label>
         <div>Scope of Work</div>
-        <textarea name="scope" rows="4" class="input" placeholder="Optional: Describe the scope of work and deliverables for this contract..."></textarea>
+        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables for this contract..."></textarea>
       </label>
     <?php endif; ?>
 
     <label>
       <div>Job Notes (shared across related docs)</div>
-      <textarea name="project_notes" rows="3" class="input" placeholder="Notes visible to you (not the client PDF)"></textarea>
+      <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"></textarea>
     </label>
 
     <div id="invoiceAmountRow" style="display:none;margin-top:8px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
@@ -213,24 +266,24 @@ $csrf = csrf_sf_token('contracts-create');
     </div>
 
     <div id="totalsCo" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
-      <div class="flex-end">
+      <div style="display:flex;gap:16px;justify-content:flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
-        <div id="subtotalValCo" class="text-right" style="min-width:120px">$0.00</div>
+        <div id="subtotalValCo" style="min-width:120px;text-align:right">$0.00</div>
       </div>
-      <div class="flex-end">
+      <div style="display:flex;gap:16px;justify-content:flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Discount</div>
-        <div id="discountValCo" class="text-right" style="min-width:120px">$0.00</div>
+        <div id="discountValCo" style="min-width:120px;text-align:right">$0.00</div>
       </div>
-      <div class="flex-end">
+      <div style="display:flex;gap:16px;justify-content:flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Tax</div>
-        <div id="taxValCo" class="text-right" style="min-width:120px">$0.00</div>
+        <div id="taxValCo" style="min-width:120px;text-align:right">$0.00</div>
       </div>
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700">
-        <div class="text-right" style="min-width:140px">Total</div>
-        <div id="totalValCo" class="text-right" style="min-width:120px">$0.00</div>
+        <div style="min-width:140px;text-align:right">Total</div>
+        <div id="totalValCo" style="min-width:120px;text-align:right">$0.00</div>
       </div>
       <div id="depositRowCo" style="display:none;border-top:1px solid #e5e7eb;padding-top:6px;margin-top:6px">
-        <div class="flex-end">
+        <div style="display:flex;gap:16px;justify-content:flex-end">
           <div style="min-width:140px;text-align:right;color:#059669;font-weight:700;font-size:15px">Deposit Due</div>
           <div id="depositValCo" style="min-width:120px;text-align:right;color:#059669;font-weight:700;font-size:15px">$0.00</div>
         </div>
@@ -242,7 +295,7 @@ $csrf = csrf_sf_token('contracts-create');
       <h3 style="margin:0 0 8px 0;font-size:15px">Contract Signatures</h3>
       <p style="margin:0 0 12px 0;font-size:13px;color:var(--muted)">Add up to 5 signatures for this contract</p>
 
-      <div id="signaturesList" class="grid"></div>
+      <div id="signaturesList" style="display:grid;gap:12px"></div>
 
       <button type="button" onclick="addSignature()" id="addSigBtn"
         style="margin-top:12px;padding:8px 14px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px">
@@ -254,6 +307,5 @@ $csrf = csrf_sf_token('contracts-create');
       <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Contract</button>
     </div>
   </form>
-
-  <script src="/assets/js/contracts-create-logic.js" defer></script>
 </section>
+<script src="/assets/js/contracts-create-logic.js"></script>
