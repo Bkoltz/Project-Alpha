@@ -1,17 +1,13 @@
 # Project Alpha — Docker Compose
 #
-# DEPLOYMENT:
-#   1. Edit the passwords/keys below (search for "CHANGE THESE")
+# SETUP:
+#   1. Change the three passwords below (search for "CHANGE THESE")
 #   2. Run: docker compose up -d --build
 #   3. Open http://localhost:1627
 #   4. Log in with admin@project-alpha.local / <your ADMIN_PASSWORD>
-#   5. Go to Settings > Billing to enter Stripe keys (encrypted in DB)
+#   5. Go to Settings > Billing to enter Stripe keys (stored encrypted in DB)
 #
-# NO .env FILE NEEDED — all config is inline below.
-# Stripe/SMTP keys are entered via the app UI and stored encrypted in the DB.
-#
-# If you DO have a .env file, it still works (values are used as defaults
-# via the ${VAR:-default} syntax), but it's no longer required.
+# That's it. No .env file needed. Stripe keys go through the SaaS UI.
 
 services:
   web:
@@ -22,24 +18,18 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 3306
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
-      MYSQL_USER: ${MYSQL_USER:-appuser}
-      # CHANGE THESE — use env vars from .env if present, otherwise use inline defaults
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_secure_pass}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_pass}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme_admin_pass}
-      # Encryption key for secrets (Stripe keys, SMTP password, etc.)
-      # If not set, the web container auto-generates one and persists it
-      # in the config volume for stability across restarts.
-      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
-      # Stripe keys entered via Settings > Billing UI (stored encrypted in DB)
-      # These env-vars are optional fallbacks only
-      stripe_publishable_key: ${stripe_publishable_key:-}
-      stripe_secret_key_enc: ${stripe_secret_key_enc:-}
-      stripe_webhook_secret_enc: ${stripe_webhook_secret_enc:-}
-      APP_AUTH_DISABLED: ${APP_AUTH_DISABLED:-false}
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      # --- CHANGE THESE ---
+      MYSQL_PASSWORD: changeme_secure_pass
+      MYSQL_ROOT_PASSWORD: changeme_root_pass
+      ADMIN_PASSWORD: changeme_admin_pass
+      # --- END PASSWORDS ---
+      # Trust Cloudflare Tunnel + Docker networks for real client IP
+      TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/\")!==false?0:1);'"]
       interval: 10s
@@ -60,13 +50,12 @@ services:
       dockerfile: Dockerfile
     image: "bkoltz/project-alpha:cron"
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
-      MYSQL_USER: ${MYSQL_USER:-appuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_secure_pass}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_pass}
-      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       DB_HOST: db
       DB_PORT: 3306
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: changeme_secure_pass
+      MYSQL_ROOT_PASSWORD: changeme_root_pass
     depends_on:
       db:
         condition: service_healthy
@@ -85,10 +74,10 @@ services:
     command: >
       --log-error-verbosity=1
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_pass}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
-      MYSQL_USER: ${MYSQL_USER:-appuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_secure_pass}
+      MYSQL_ROOT_PASSWORD: changeme_root_pass
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: changeme_secure_pass
     volumes:
       - db_data:/var/lib/mysql
       - mysql_socket:/var/run/mysqld
@@ -104,6 +93,5 @@ services:
 
 volumes:
   db_data: {}
-  db_keyring: {}
   cron_logs: {}
   mysql_socket: {}
