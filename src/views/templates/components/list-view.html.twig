@@ -23,13 +23,13 @@
     </div>
     
     {% if search_placeholder or filters %}
-    <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+    <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center">
         {% if search_placeholder %}
         <input 
             type="text" 
             id="listSearch" 
             placeholder="{{ search_placeholder }}"
-            style="flex:1 1 200px;min-width:0;padding:10px;border-radius:8px;border:1px solid #ddd"
+            style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd"
             onkeyup="filterList()"
         >
         {% endif %}
@@ -38,7 +38,7 @@
             {% for filter in filters %}
             <select 
                 id="filter{{ loop.index }}"
-                style="flex:1 1 160px;min-width:0;padding:10px;border-radius:8px;border:1px solid #ddd"
+                style="padding:10px;border-radius:8px;border:1px solid #ddd"
                 onchange="filterList()"
             >
                 <option value="">{{ filter.label }}</option>

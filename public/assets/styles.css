@@ -354,6 +354,8 @@ table tbody tr:hover{background:var(--surface-2)}
 /* Fields inside filter-form: remove default margin so heights align with buttons */
 .filter-form .field{margin-bottom:0}
 .filter-form > div:not(.filter-actions){display:flex;flex-direction:column;gap:4px}
+/* Add a spacer label to filter-actions so buttons align with input fields */
+.filter-form .filter-actions::before{content:"";display:block;height:20px}
 
 /* health */
 .dash-health{display:grid;gap:14px}
