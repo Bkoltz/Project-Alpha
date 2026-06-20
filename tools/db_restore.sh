@@ -48,7 +48,16 @@ docker compose exec -T db mysqldump \
   "${DB_NAME}" | gzip > "$SAFETY"
 
 echo "Restoring..."
-if [[ "$IN" == *.gz ]]; then
+if [[ "$IN" == *.gpg ]]; then
+  # Encrypted backup — decrypt first
+  if [[ -z "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
+    echo "ERROR: BACKUP_ENCRYPTION_KEY not set in .env — cannot decrypt $IN" >&2
+    exit 1
+  fi
+  gpg --batch --passphrase "${BACKUP_ENCRYPTION_KEY}" --decrypt "$IN" 2>/dev/null | \
+    { [[ "$IN" == *.gz.gpg ]] && gzip -cd || cat; } | \
+    docker compose exec -T db mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" "${DB_NAME}"
+elif [[ "$IN" == *.gz ]]; then
   gzip -cd "$IN" | docker compose exec -T db mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" "${DB_NAME}"
 else
   docker compose exec -T db mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" "${DB_NAME}" < "$IN"
