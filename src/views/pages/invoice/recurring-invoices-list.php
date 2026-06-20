@@ -3,6 +3,13 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 
+// Ensure the optional long_term_contracts table exists before querying
+$has_long_term_table = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='long_term_contracts'")->fetchColumn();
+if (!$has_long_term_table) {
+  echo '<section><h2>Recurring Billing Schedule</h2><div style="margin:10px 0;padding:12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;color:#856404">Recurring billing is not available because the database table <code>long_term_contracts</code> is missing. Run the migrations or contact your administrator to enable this feature.</div></section>';
+  return;
+}
+
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? 'active';
@@ -10,7 +17,7 @@ $project_code = trim($_GET['project_code'] ?? '');
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
-$where = ['ltc.contract_type="long_term"'];
+$where = [];
 $p = [];
 
 if($client_id>0){$where[]='ltc.client_id=?';$p[]=$client_id;}
@@ -24,7 +31,7 @@ if($min_price !== null){ $where[]='ltc.price_per_invoice >= ?'; $p[] = $min_pric
 if($max_price !== null){ $where[]='ltc.price_per_invoice <= ?'; $p[] = $max_price; }
 
 $sql = "SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.start_date, ltc.end_date, c.name client_name, c.id AS client_id 
-        FROM contracts ltc 
+        FROM long_term_contracts ltc 
         LEFT JOIN clients c ON c.id=ltc.client_id";
 
 if ($where) {

@@ -14,7 +14,7 @@ $hasDoc = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABL
 $hasProj = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='quotes' AND COLUMN_NAME='project_code'")->fetchColumn();
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
-$where=['q.quote_type = "regular"'];$p=[];
+$where=['(q.is_long_term IS NULL OR q.is_long_term=0)'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
@@ -41,16 +41,13 @@ $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE
 $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
 ?>
 <section>
-  <div class="page-head">
-    <h2>Quotes</h2>
-    <a href="/?page=quote/quotes-create" class="btn btn-primary">Create Quote</a>
-  </div>
+  <h2>Quotes</h2>
   <?php if (!empty($_GET['emailed'])): ?>
-    <div class="alert alert-success">Email sent.</div>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
   <?php elseif (!empty($_GET['email_err'])): ?>
-    <div class="alert alert-danger">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
   <?php endif; ?>
-
+  
   <?php
   // Render the filter using Twig template instead of PHP include
   $statusOptions = [
@@ -59,7 +56,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       ['value' => 'rejected', 'label' => 'Denied'],
       ['value' => 'pending', 'label' => 'Pending']
   ];
-
+  
   $filterConfig = [
       'page' => 'quote/quotes-list',
       'filters' => [
@@ -110,38 +107,38 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           ]
       ]
   ];
-
+  
   // Render the filter component using Twig
   echo render_template('components/document-filter.html.twig', $filterConfig);
   ?>
-  <div class="pa-table-wrap">
-    <table class="pa-table">
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
       <thead>
-        <tr>
-          <th><?php echo $hasDoc ? 'No.' : 'ID'; ?></th>
-          <?php if ($hasProj): ?><th>Project</th><?php endif; ?>
-          <th>Client</th>
-          <th>Status</th>
-          <th>Total</th>
-          <th>Created</th>
-          <th class="text-right">Actions</th>
+        <tr style="text-align:left;border-bottom:1px solid #eee">
+          <th style="padding:10px"><?php echo $hasDoc ? 'No.' : 'ID'; ?></th>
+          <?php if ($hasProj): ?><th style="padding:10px">Project</th><?php endif; ?>
+          <th style="padding:10px">Client</th>
+          <th style="padding:10px">Status</th>
+          <th style="padding:10px">Total</th>
+          <th style="padding:10px">Created</th>
+          <th style="padding:10px;text-align:right">Actions</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
           <?php $rowStyle = $r['status']==='approved' ? 'background:#ecfdf5;' : ($r['status']==='pending' ? 'background:#fffbeb;' : ($r['status']==='rejected' ? 'background:#fef2f2;' : '')); ?>
-          <tr style="<?php echo $rowStyle; ?>">
-            <td>Q-<?php echo (int)$r['doc_number']; ?></td>
-            <?php if ($hasProj): ?><td><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td><?php endif; ?>
-            <td><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client_name']); ?></a></td>
-            <td><span class="status-pill status-pill--<?php echo strtolower(htmlspecialchars($r['status'])); ?>"><?php echo htmlspecialchars($r['status']); ?></span></td>
-            <td>$<?php echo number_format((float)$r['total'], 2); ?></td>
-            <td><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
-            <td>
-              <div class="flex" style="justify-content:flex-end;gap:6px">
-              <a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" class="btn btn-sm">View</a>
+          <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
+            <td style="padding:10px">Q-<?php echo (int)$r['doc_number']; ?></td>
+            <?php if ($hasProj): ?><td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td><?php endif; ?>
+            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client_name']); ?></a></td>
+            <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
+            <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
+            <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
+            <td style="padding:10px">
+              <div style="display:flex;gap:6px;justify-content:flex-end">
+              <a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <?php if ($r['status'] === 'pending'): ?>
-                <a href="/?page=quote/quotes-edit&id=<?php echo (int)$r['id']; ?>" class="btn btn-sm">Edit</a>
+                <a href="/?page=quote/quotes-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
               <?php endif; ?>
               <?php if (strtolower((string)$r['status']) !== 'rejected'): ?>
               <form method="post" action="/?page=quote/email-send" style="display:inline">
@@ -149,19 +146,17 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <input type="hidden" name="type" value="quote">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-                <button type="submit" class="btn btn-sm">Email</button>
+                <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
               </form>
               <?php endif; ?>
               <?php if ($r['status'] === 'pending'): ?>
                 <form method="post" action="/?page=quote/quote-approve" onsubmit="return confirm('Approve this quote and generate contract + invoice?')">
-                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: small;">Approve</button>
                 </form>
                 <form method="post" action="/?page=quote/quote-reject" onsubmit="return confirm('Deny this quote?')">
-                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" class="btn btn-sm btn-danger">Deny</button>
+                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
               </form>
               <?php endif; ?>
               </div>
@@ -175,9 +170,24 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     $last=(int)ceil(max(1,$total)/$per);
     $qs=$_GET; unset($qs['p']); $base='/?'.http_build_query($qs+['page'=>'quote/quotes-list','per_page'=>$per]);
   ?>
-  <div class="flex-end" style="margin-top:12px">
-    <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" class="btn btn-sm">Prev</a><?php endif; ?>
-    <div class="muted">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
-    <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" class="btn btn-sm">Next</a><?php endif; ?>
+  <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <form method="get" action="/">
+        <?php foreach($_GET as $k=>$v){ if($k==='per_page'||$k==='p'||$k==='page') continue; echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">'; }
+        ?>
+        <input type="hidden" name="page" value="quote/quotes-list">
+        <label>Per page
+          <select name="per_page" onchange="this.form.submit()" style="padding:6px;border-radius:8px;border:1px solid #ddd">
+            <option value="50" <?php echo $per===50?'selected':''; ?>>50</option>
+            <option value="100" <?php echo $per===100?'selected':''; ?>>100</option>
+          </select>
+        </label>
+      </form>
+    </div>
+    <div style="display:flex;gap:8px">
+      <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
+      <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
+      <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
+    </div>
   </div>
 </section>
