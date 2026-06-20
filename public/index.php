@@ -61,6 +61,10 @@ function resolve_view_path(string $page): string
     if ($page === 'account-edit') {
         $candidates[] = $base . 'auth/account-edit.php';
     }
+    // GDPR/CCPA account pages are in account/ subdirectory
+    if ($page === 'account-deleted') {
+        $candidates[] = $base . 'account/account-deleted.php';
+    }
 
     // As-provided
     $candidates[] = $base . $page . '.php';
@@ -219,7 +223,7 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy'];
+$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -656,6 +660,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'account-revoke-device') {
         require_once __DIR__ . '/../src/controllers/account_revoke_device.php';
+        exit;
+    }
+    if ($page === 'account/delete') {
+        require_once __DIR__ . '/../src/controllers/account/account_delete.php';
         exit;
     }
     if ($page === 'financial/audit-export') {
