@@ -349,8 +349,11 @@ table tbody tr:hover{background:var(--surface-2)}
 .filter-form .input,
 .filter-form input,
 .filter-form select{width:100%;min-width:0;font-size:13px;padding:6px 10px;min-height:34px;height:34px;line-height:1.2}
-.filter-actions{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.filter-actions{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:0}
 .filter-actions .btn{min-height:34px;height:34px;padding:6px 14px;font-size:13px;line-height:1.2}
+/* Fields inside filter-form: remove default margin so heights align with buttons */
+.filter-form .field{margin-bottom:0}
+.filter-form > div:not(.filter-actions){display:flex;flex-direction:column;gap:4px}
 
 /* health */
 .dash-health{display:grid;gap:14px}
