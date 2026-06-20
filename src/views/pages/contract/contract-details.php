@@ -76,7 +76,7 @@ if ($termsText === '') {
     <div class="no-print" style="padding:12px 16px;background:<?php echo $ccolors['bg']; ?>;color:<?php echo $ccolors['text']; ?>;border-left:4px solid <?php echo $ccolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
       Status: <?php echo htmlspecialchars($contract['status']); ?>
     </div>
-    <div class="no-print" class="flex flex-wrap">
+    <div class="no-print flex flex-wrap">
       <a href="javascript:history.back()" class="btn btn-sm">Back</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" download="contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
