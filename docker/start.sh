@@ -82,19 +82,19 @@ done
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@project-alpha.local}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 echo "Ensuring admin user exists with email: ${ADMIN_EMAIL}, username: ${ADMIN_USERNAME}"
+# Ensure admin user exists and is linked to the default organization
 mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
   INSERT INTO users (email, password_hash, username, role, force_password_reset)
   VALUES ('${ADMIN_EMAIL}', '${ADMIN_PASSWORD_HASH}', '${ADMIN_USERNAME}', 'admin', 0)
   ON DUPLICATE KEY UPDATE password_hash='${ADMIN_PASSWORD_HASH}', email='${ADMIN_EMAIL}', username='${ADMIN_USERNAME}', role='admin', force_password_reset=0, deleted_at=NULL;
-  
-  -- Ensure admin is linked to default organization
-  SET @admin_id = (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1);
-  SET @default_org = (SELECT id FROM organizations ORDER BY id ASC LIMIT 1);
-  IF @admin_id IS NOT NULL AND @default_org IS NOT NULL THEN
-    INSERT INTO user_organizations (user_id, organization_id, role, is_default)
-    VALUES (@admin_id, @default_org, 'owner', 1)
-    ON DUPLICATE KEY UPDATE role='owner', is_default=1;
-  END IF;
+" || true
+
+mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
+  INSERT INTO user_organizations (user_id, organization_id, role, is_default)
+  SELECT u.id, o.id, 'owner', 1
+  FROM (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1) AS u
+  CROSS JOIN (SELECT id FROM organizations ORDER BY id ASC LIMIT 1) AS o
+  ON DUPLICATE KEY UPDATE role='owner', is_default=1;
 " || true
 
 # 1) Base schema: if key table (quotes) is missing, load the init schema
@@ -103,7 +103,7 @@ if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --passwor
   echo "Applying base schema to '${DB_NAME}'..."
   
   # Run the unified init.sql which contains all modules
-  INIT_SQL="/docker-entrypoint-initdb.d/init.sql"
+  INIT_SQL="/docker-entrypoint-initdb.d/01-init.sql"
   if [ -f "$INIT_SQL" ]; then
     echo "Applying unified schema: $INIT_SQL"
     if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then

@@ -3,16 +3,17 @@
 Last updated: 2026-06-19 by Hermes
 
 ## What This Is
-PHP 8.3 business document management system for quotes, contracts, invoices, and receipts with Stripe payment integration. Built for organizations requiring automated billing, secure document handling, and comprehensive financial reporting.
+PHP 8.3 business document management system for quotes, contracts, invoices, receipts, and expenses with Stripe payment integration. Built for organizations requiring automated billing, secure document handling, and comprehensive financial reporting.
 
 ## Quick Start
 ```bash
 cd /home/bkoltz/Project-Alpha
-docker compose up -d          # Start containers
+docker compose up -d --build    # Start containers
 # App at http://localhost:1627
-# Run tests: composer test
+# Log in with admin@project-alpha.local / <ADMIN_PASSWORD from compose file>
+# Enter Stripe keys in Settings > Billing (stored encrypted in the DB)
 ```
-Docker: Apache + MySQL 8 | Port: 1627 | Staging: docker-compose.staging.yml
+Docker: Apache + MySQL 8 | Port: 1627
 
 ## Architecture
 - PHP 8.3, no framework (custom routing via `page` query param)
@@ -39,31 +40,31 @@ api/                  - API data files (income-data.json)
 ```
 
 ## Current State
-- Core features working: quotes, contracts, invoices, payments, receipts
+- Core features working: quotes, contracts, invoices, payments, receipts, expenses, mileage, vendors, categories
 - Stripe webhook handling live
 - Recurring invoice generation for long-term contracts
 - Auto-termination of expired contracts
-- Staging environment configured (docker-compose.staging.yml)
 - Cron runs daily at 2:00am for automated tasks
+- No .env file required — all defaults live in docker-compose.yml
 
 ## Recent Changes
 - 2026-06-19: Security audit — .env locked to 600, api_keys_*.php controllers set to 640
+- 2026-06-19: Removed docker-compose.example.yml, docker-compose.staging.yml, and staging-specific docs/workflows. Single self-contained docker-compose.yml.
 - 2026-06-17: Recent development session (see skill references for details)
 
 ## Decisions
 - Session-based auth (not JWT) — simpler for this use case
 - Direct PDO instead of ORM — performance + simplicity
 - Stripe Payment Intents (not Stripe Invoices) — more flexible
-- APP_AUTH_DISABLED=true for local dev, false in production
+- APP_AUTH_DISABLED defaults to false; set to true only for local dev convenience
+- No .env file required: docker-compose.yml uses inline defaults; encryption key auto-generated on first run
 
 ## Known Issues
 - See docs/TODO.md for open items
-- APP_ENCRYPTION_KEY in .env (mode 600)
 
 ## Credentials & Access
-- .env: /home/bkoltz/Project-Alpha/.env (mode 600) — MySQL creds, admin password, encryption key
-- .env.staging: /home/bkoltz/Project-Alpha/.env.staging (mode 644)
-- Stripe keys: in .env
+- All defaults are in `docker-compose.yml` (edit passwords before deployment)
+- Stripe keys: entered via Settings > Billing UI and stored encrypted in the `app_config` DB table
 - DB: MySQL in Docker container (project_alpha database)
 
 ## Contact

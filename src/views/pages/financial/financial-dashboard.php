@@ -85,6 +85,7 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
 <section class="finance-dashboard">
   <div class="page-head">
     <h2>Financial Dashboard</h2>
+    <p class="page-subtitle">Income, expenses, mileage, and receipts for the selected date range.</p>
   </div>
 
   <!-- Date filter + quick actions -->
@@ -113,8 +114,8 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
   <!-- KPI cards -->
   <div class="dash-stats">
     <article class="dash-card">
-      <div class="dash-card__icon success"><!-- income arrow -->
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+      <div class="dash-card__icon success">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
       </div>
       <div>
         <div class="dash-card__label">Total Income</div>
@@ -124,7 +125,7 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
 
     <article class="dash-card">
       <div class="dash-card__icon danger">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
       </div>
       <div>
         <div class="dash-card__label">Total Expenses</div>
@@ -135,7 +136,7 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
 
     <article class="dash-card">
       <div class="dash-card__icon <?php echo $netClass; ?>">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
       </div>
       <div>
         <div class="dash-card__label">Net Profit</div>
@@ -145,7 +146,7 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
 
     <article class="dash-card">
       <div class="dash-card__icon info">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-4c0-.6-.4-1-1-1h-2"></path><circle cx="9" cy="9" r="4"></circle><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-4c0-.6-.4-1-1-1h-2"></path><circle cx="9" cy="9" r="4"></circle><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path></svg>
       </div>
       <div>
         <div class="dash-card__label">Mileage Deductions</div>
@@ -156,7 +157,7 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
 
     <article class="dash-card">
       <div class="dash-card__icon warning">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="8" y1="12" x2="16" y2="12"></line><line x1="12" y1="8" x2="12" y2="16"></line></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="8" y1="12" x2="16" y2="12"></line><line x1="12" y1="8" x2="12" y2="16"></line></svg>
       </div>
       <div>
         <div class="dash-card__label">Receipts</div>
@@ -169,13 +170,13 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
   <div class="dash-cols">
     <div class="dash-col dash-col--wide">
       <!-- Category breakdown -->
-      <div class="dash-panel">
+      <article class="dash-panel">
         <div class="dash-panel__head"><h3 class="dash-panel__title">Spending by Category</h3><a href="/?page=financial/expenses-list&tab=categories" class="btn btn-sm">Manage Categories</a></div>
         <?php if (empty($categories)): ?>
           <p class="dash-empty">No expenses for the selected period.</p>
         <?php else: ?>
           <div class="dash-bars">
-            <?php foreach ($categories as $c): 
+            <?php foreach ($categories as $c):
               $catTotal = (float)$c['total'];
               $catPercent = $totalExpenses > 0 ? round(($catTotal / $totalExpenses) * 100, 1) : 0;
               $barWidth = $categoryMax > 0 ? round(($catTotal / $categoryMax) * 100) : 0;
@@ -189,22 +190,23 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
             <?php endforeach; ?>
           </div>
         <?php endif; ?>
-      </div>
+      </article>
 
       <!-- Recent expenses -->
-      <div class="dash-panel">
+      <article class="dash-panel">
         <div class="dash-panel__head"><h3 class="dash-panel__title">Recent Expenses</h3><a href="/?page=financial/expenses-list" class="btn btn-sm">View All</a></div>
         <?php if (empty($recentExpenses)): ?>
           <p class="dash-empty">No expenses for the selected period.</p>
         <?php else: ?>
           <div class="pa-table-wrap">
             <table class="pa-table">
-              <thead><tr><th>Date</th><th>Vendor / Description</th><th>Category</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
+              <thead><tr><th>Date</th><th>Vendor</th><th>Description</th><th>Category</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
               <tbody>
                 <?php foreach ($recentExpenses as $e): ?>
                   <tr>
                     <td><?php echo formatDate($e['expense_date']); ?></td>
-                    <td><strong><?php echo htmlspecialchars($e['vendor'] ?: '—'); ?></strong><div class="muted small"><?php echo htmlspecialchars(mb_strimwidth($e['description'] ?? '', 0, 60, '…')); ?></div></td>
+                    <td><strong><?php echo htmlspecialchars($e['vendor'] ?: '—'); ?></strong></td>
+                    <td><span class="muted"><?php echo htmlspecialchars(mb_strimwidth($e['description'] ?? '', 0, 70, '…')); ?></span></td>
                     <td><?php echo htmlspecialchars($e['category'] ?: 'Uncategorized'); ?></td>
                     <td class="text-right"><?php echo formatMoney((float)$e['total_amount']); ?></td>
                     <td><span class="status-badge status-<?php echo htmlspecialchars($e['status']); ?>"><?php echo htmlspecialchars(ucfirst($e['status'])); ?></span></td>
@@ -214,13 +216,19 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
             </table>
           </div>
         <?php endif; ?>
-      </div>
+      </article>
     </div>
 
     <div class="dash-col">
       <!-- Top vendors -->
-      <div class="dash-panel">
-        <div class="dash-panel__head"><h3 class="dash-panel__title">Top Vendors</h3><a href="/?page=financial/expenses-list&tab=vendors" class="btn btn-sm">Manage</a></div>
+      <article class="dash-panel">
+        <div class="dash-panel__head">
+          <h3 class="dash-panel__title">Top Vendors</h3>
+          <a href="/?page=financial/expenses-list&tab=vendors" class="btn btn-sm">Manage</a>
+        </div>
+        <div class="dash-panel__meta">
+          <?php echo number_format(array_sum(array_column($vendors, 'count'))); ?> vendor expense<?php echo array_sum(array_column($vendors, 'count')) === 1 ? '' : 's'; ?> in period
+        </div>
         <?php if (empty($vendors)): ?>
           <p class="dash-empty">No vendor spending for the selected period.</p>
         <?php else: ?>
@@ -236,7 +244,7 @@ $netClass = $netProfit >= 0 ? 'success' : 'danger';
             <?php endforeach; ?>
           </div>
         <?php endif; ?>
-      </div>
+      </article>
     </div>
   </div>
 </section>

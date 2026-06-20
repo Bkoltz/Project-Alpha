@@ -720,6 +720,10 @@ CREATE TABLE IF NOT EXISTS expense_categories (
     CONSTRAINT fk_exp_cat_parent FOREIGN KEY (parent_id) REFERENCES expense_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- DEFAULT ORGANIZATION (seed early so financial module FKs resolve)
+INSERT INTO organizations (name) VALUES ('Default Organization')
+ON DUPLICATE KEY UPDATE name = VALUES(name);
+
 -- Pre-seed IRS Schedule C categories
 INSERT INTO expense_categories (organization_id, name, is_system) VALUES
 (1, 'Advertising', 1),
@@ -1131,10 +1135,6 @@ CREATE TABLE IF NOT EXISTS document_settings (
 -- ============================================================================
 -- MODULE 008: Seed Data
 -- ============================================================================
-
--- DEFAULT ORGANIZATION
-INSERT INTO organizations (name) VALUES ('Default Organization')
-ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 -- DEFAULT ADMIN USER
 -- Password hash will be replaced by docker/start.sh runtime
