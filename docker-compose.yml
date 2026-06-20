@@ -20,6 +20,8 @@ services:
     ports:
       - "1627:80"
     environment:
+      DB_HOST: db
+      DB_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-project_alpha}
       MYSQL_USER: ${MYSQL_USER:-appuser}
       # CHANGE THESE — use env vars from .env if present, otherwise use inline defaults
