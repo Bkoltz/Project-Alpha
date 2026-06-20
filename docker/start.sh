@@ -78,68 +78,54 @@ for sql_file in /usr/local/share/app-migrations/*.sql; do
   fi
 done
 
+# 1) Base schema: if key table (quotes) is missing, load the init schema
+if ! mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
+     "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
+  echo "Applying base schema to '${DB_NAME}'..."
+  
+
+  # Run the unified init.sql which contains all modules
+  INIT_SQL="/docker-entrypoint-initdb.d/01-init.sql"
+  if [ -f "$INIT_SQL" ]; then
+    echo "Applying unified schema: $INIT_SQL"
+    if mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then
+      echo "✅ Base schema applied from init.sql"
+    else
+      echo "⚠️ Failed to apply init.sql, trying individual migrations..."
+      # Fallback to individual migration files
+      for migration in /var/www/database/migrations/*.sql; do
+        if [ -f "$migration" ]; then
+          echo "Applying migration: $(basename "$migration")"
+          mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$migration" || true
+        fi
+      done
+    fi
+  else
+    echo "⚠️ No init.sql found at $INIT_SQL"
+  fi
+fi
+
 # Ensure admin user exists with current password hash (recovery mechanism)
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@project-alpha.local}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 echo "Ensuring admin user exists with email: ${ADMIN_EMAIL}, username: ${ADMIN_USERNAME}"
 # Ensure admin user exists and is linked to the default organization
-mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
+mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
   INSERT INTO users (email, password_hash, username, role, force_password_reset)
   VALUES ('${ADMIN_EMAIL}', '${ADMIN_PASSWORD_HASH}', '${ADMIN_USERNAME}', 'admin', 0)
   ON DUPLICATE KEY UPDATE password_hash='${ADMIN_PASSWORD_HASH}', email='${ADMIN_EMAIL}', username='${ADMIN_USERNAME}', role='admin', force_password_reset=0, deleted_at=NULL;
 " || true
 
-mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
+mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
   INSERT INTO user_organizations (user_id, organization_id, role, is_default)
-  SELECT u.id, o.id, 'owner', 1
-  FROM (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1) AS u
-  CROSS JOIN (SELECT id FROM organizations ORDER BY id ASC LIMIT 1) AS o
-  ON DUPLICATE KEY UPDATE role='owner', is_default=1;
+  VALUES (
+    (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1),
+    (SELECT id FROM organizations ORDER BY id ASC LIMIT 1),
+    'owner',
+    1
+  )
+  ON DUPLICATE KEY UPDATE \`role\`='owner', \`is_default\`=1;
 " || true
-
-# 1) Base schema: if key table (quotes) is missing, load the init schema
-if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
-     "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
-  echo "Applying base schema to '${DB_NAME}'..."
-  
-  # Run the unified init.sql which contains all modules
-  INIT_SQL="/docker-entrypoint-initdb.d/01-init.sql"
-  if [ -f "$INIT_SQL" ]; then
-    echo "Applying unified schema: $INIT_SQL"
-    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then
-      echo "✅ Base schema applied from init.sql"
-    else
-      echo "⚠️ Failed to apply init.sql, trying individual migrations..."
-      # Fallback to individual migration files
-      for sql_file in /usr/local/share/app-migrations/*.sql; do
-        if [ -f "$sql_file" ]; then
-          echo "Applying migration: $(basename "$sql_file")"
-          if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
-            echo "✅ Applied: $(basename "$sql_file")"
-          else
-            echo "⚠️ Failed to apply: $(basename "$sql_file")"
-          fi
-        fi
-      done
-    fi
-  else
-    # Fallback to individual migration files if init.sql not available
-    for sql_file in /usr/local/share/app-migrations/*.sql; do
-      if [ -f "$sql_file" ]; then
-        echo "Applying migration: $(basename "$sql_file")"
-        if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$sql_file" > /dev/null 2>&1; then
-          echo "✅ Applied: $(basename "$sql_file")"
-        else
-          echo "⚠️ Failed to apply: $(basename "$sql_file")"
-        fi
-      fi
-    done
-  fi
-  
-  echo "✅ Base schema applied."
-else
-  echo "Base schema already present (quotes table exists)."
-fi
 
 # 2) Runtime, always safe to re-run
 if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
@@ -148,7 +134,7 @@ if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
   
   # Execute with verbose error reporting
   set +e  # Temporarily disable exit on error
-  mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
+  mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
        "/usr/local/share/app-migrations/runtime.sql" 2>&1 | tee /tmp/migration.log
   MIGRATION_EXIT=${PIPESTATUS[0]}
   set -e  # Re-enable exit on error

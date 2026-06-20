@@ -52,6 +52,7 @@ services:
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
       - ./backups:/var/www/backups
+      - mysql_socket:/var/run/mysqld
 
   cron:
     build:
@@ -76,6 +77,7 @@ services:
       - ./config:/var/www/config
       - ./backups:/var/www/backups
       - cron_logs:/var/log/cron
+      - mysql_socket:/var/run/mysqld
 
   db:
     image: "mysql:8"
@@ -89,11 +91,12 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_secure_pass}
     volumes:
       - db_data:/var/lib/mysql
+      - mysql_socket:/var/run/mysqld
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
-        - mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1
+        - mysqladmin ping -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1
       interval: 10s
       timeout: 5s
       start_period: 40s
@@ -103,3 +106,4 @@ volumes:
   db_data: {}
   db_keyring: {}
   cron_logs: {}
+  mysql_socket: {}
