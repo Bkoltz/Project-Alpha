@@ -75,14 +75,11 @@ try {
 
             $file = $_FILES['receipt_file'];
             $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-            
-            if (!in_array($file['type'], $allowedTypes)) {
-                throw new Exception('Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed');
-            }
 
-            // Check file size (10MB max)
-            if ($file['size'] > 10 * 1024 * 1024) {
-                throw new Exception('File size must be less than 10MB');
+            require_once __DIR__ . '/../utils/upload_validator.php';
+            $uploadErr = validate_upload($file, $allowedTypes, 10 * 1024 * 1024);
+            if ($uploadErr !== null) {
+                throw new Exception($uploadErr);
             }
 
             // Generate unique filename
@@ -191,13 +188,10 @@ try {
             if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['error'] === UPLOAD_ERR_OK) {
                 $file = $_FILES['receipt_file'];
                 $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-                
-                if (!in_array($file['type'], $allowedTypes)) {
-                    throw new Exception('Invalid file type');
-                }
 
-                if ($file['size'] > 10 * 1024 * 1024) {
-                    throw new Exception('File size must be less than 10MB');
+                $uploadErr = validate_upload($file, $allowedTypes, 10 * 1024 * 1024);
+                if ($uploadErr !== null) {
+                    throw new Exception($uploadErr);
                 }
 
                 // Get old file path
