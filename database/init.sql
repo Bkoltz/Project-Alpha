@@ -703,17 +703,68 @@ CREATE TABLE IF NOT EXISTS item_library (
     INDEX idx_item_lib_sku (sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- RECEIPT STORES
-CREATE TABLE IF NOT EXISTS receipt_stores (
+-- EXPENSE CATEGORIES (IRS Schedule C aligned)
+CREATE TABLE IF NOT EXISTS expense_categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    parent_id INT NULL DEFAULT NULL,
+    tax_deductible TINYINT(1) NOT NULL DEFAULT 1,
+    is_system TINYINT(1) NOT NULL DEFAULT 0,
+    color VARCHAR(7) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_exp_cat_org (organization_id),
+    INDEX idx_exp_cat_parent (parent_id),
+    CONSTRAINT fk_exp_cat_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_exp_cat_parent FOREIGN KEY (parent_id) REFERENCES expense_categories(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Pre-seed IRS Schedule C categories
+INSERT INTO expense_categories (organization_id, name, is_system) VALUES
+(1, 'Advertising', 1),
+(1, 'Car & Truck Expenses', 1),
+(1, 'Commissions & Fees', 1),
+(1, 'Contract Labor', 1),
+(1, 'Depletion', 1),
+(1, 'Depreciation', 1),
+(1, 'Employee Benefits', 1),
+(1, 'Insurance', 1),
+(1, 'Interest - Mortgage', 1),
+(1, 'Interest - Other', 1),
+(1, 'Legal & Professional Services', 1),
+(1, 'Office Expense', 1),
+(1, 'Pension & Profit-Sharing', 1),
+(1, 'Rent - Equipment', 1),
+(1, 'Rent - Vehicles/Machinery', 1),
+(1, 'Rent - Other', 1),
+(1, 'Repairs & Maintenance', 1),
+(1, 'Supplies', 1),
+(1, 'Taxes & Licenses', 1),
+(1, 'Travel & Meals', 1),
+(1, 'Utilities', 1),
+(1, 'Wages', 1),
+(1, 'Other', 1);
+
+-- VENDORS (was receipt_stores, extended with email/phone/website/tax_id/category)
+CREATE TABLE IF NOT EXISTS vendors (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NOT NULL,
     name VARCHAR(150) NOT NULL,
+    email VARCHAR(255) NULL,
+    phone VARCHAR(50) NULL,
+    website VARCHAR(255) NULL,
+    tax_id VARCHAR(50) NULL,
+    default_category_id INT NULL,
+    notes TEXT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
     address TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_receipt_store_org_name (organization_id, name),
-    INDEX idx_store_org (organization_id),
-    CONSTRAINT fk_receipt_stores_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+    UNIQUE KEY uq_vendor_org_name (organization_id, name),
+    INDEX idx_vendor_org (organization_id),
+    CONSTRAINT fk_vendor_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_vendor_default_cat FOREIGN KEY (default_category_id) REFERENCES expense_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- RECEIPTS
@@ -739,10 +790,80 @@ CREATE TABLE IF NOT EXISTS receipts (
     INDEX idx_receipt_project (project_id),
     INDEX idx_receipt_date (receipt_date),
     CONSTRAINT fk_receipts_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    CONSTRAINT fk_receipts_store FOREIGN KEY (store_id) REFERENCES receipt_stores(id) ON DELETE SET NULL,
+    CONSTRAINT fk_receipts_store FOREIGN KEY (store_id) REFERENCES vendors(id) ON DELETE SET NULL,
     CONSTRAINT fk_receipts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_receipts_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_receipts_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- EXPENSES
+CREATE TABLE IF NOT EXISTS expenses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    vendor_id INT NULL DEFAULT NULL,
+    category_id INT NULL DEFAULT NULL,
+    client_id INT NULL DEFAULT NULL,
+    project_id INT NULL DEFAULT NULL,
+    receipt_id INT NULL DEFAULT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    tax_amount DECIMAL(12,2) NULL DEFAULT NULL,
+    total_amount DECIMAL(12,2) NULL DEFAULT NULL,
+    expense_date DATE NOT NULL,
+    description TEXT NULL,
+    payment_method ENUM('cash','check','card','bank_transfer','paypal','venmo','other') NULL DEFAULT NULL,
+    reference_number VARCHAR(255) NULL DEFAULT NULL,
+    is_billable TINYINT(1) NOT NULL DEFAULT 0,
+    is_tax_deductible TINYINT(1) NOT NULL DEFAULT 1,
+    is_reimbursed TINYINT(1) NOT NULL DEFAULT 0,
+    is_reconciled TINYINT(1) NOT NULL DEFAULT 0,
+    status ENUM('pending','confirmed','reimbursed','void') NOT NULL DEFAULT 'confirmed',
+    notes TEXT NULL,
+    created_by INT NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_exp_org (organization_id),
+    INDEX idx_exp_vendor (vendor_id),
+    INDEX idx_exp_category (category_id),
+    INDEX idx_exp_client (client_id),
+    INDEX idx_exp_project (project_id),
+    INDEX idx_exp_date (expense_date),
+    INDEX idx_exp_status (status),
+    INDEX idx_exp_billable (is_billable),
+    CONSTRAINT fk_exp_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_exp_vendor FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_category FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_receipt FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- MILEAGE LOGS
+CREATE TABLE IF NOT EXISTS mileage_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    user_id INT NULL DEFAULT NULL,
+    client_id INT NULL DEFAULT NULL,
+    project_id INT NULL DEFAULT NULL,
+    trip_date DATE NOT NULL,
+    start_location VARCHAR(255) NULL DEFAULT NULL,
+    end_location VARCHAR(255) NULL DEFAULT NULL,
+    miles DECIMAL(8,2) NOT NULL DEFAULT 0.00,
+    purpose ENUM('business','medical','moving','charitable','personal') NOT NULL DEFAULT 'business',
+    description TEXT NULL,
+    round_trip TINYINT(1) NOT NULL DEFAULT 0,
+    mileage_rate DECIMAL(5,3) NOT NULL DEFAULT 0.670,
+    is_billable TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_mileage_org (organization_id),
+    INDEX idx_mileage_date (trip_date),
+    INDEX idx_mileage_client (client_id),
+    INDEX idx_mileage_purpose (purpose),
+    CONSTRAINT fk_mileage_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_mileage_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- FORM CATEGORIES
