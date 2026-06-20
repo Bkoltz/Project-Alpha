@@ -111,6 +111,23 @@ ul{margin:0;padding:0;list-style:none}
   margin-right:auto;
 }
 
+/* footer (legal links) */
+.site-footer{
+  margin-top:32px;
+  padding-top:24px;
+  border-top:1px solid var(--border);
+  font-size:0.8rem;
+  color:var(--muted);
+  text-align:center;
+  display:flex;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:6px 12px;
+}
+.site-footer a{color:var(--muted);text-decoration:underline;white-space:nowrap}
+.site-footer a:hover{color:var(--nav-accent)}
+.site-footer .sep{color:var(--border)}
+
 /* ------------------------------------------------------- mobile topbar */
 .mobile-topbar{
   display:none;
