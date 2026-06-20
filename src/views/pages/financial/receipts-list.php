@@ -40,11 +40,12 @@ if (!empty($filterMaxAmount)) {
 
 $whereSQL = implode(' AND ', $whereClauses);
 
-// Fetch filtered receipts
+// Fetch filtered receipts with expense status
 $stmt = $pdo->prepare("
-    SELECT r.*, rs.name as store_name
+    SELECT r.*, v.name as store_name, e.id as expense_id
     FROM receipts r
-    LEFT JOIN vendors rs ON r.store_id = rs.id
+    LEFT JOIN vendors v ON r.store_id = v.id
+    LEFT JOIN expenses e ON e.receipt_id = r.id AND e.status != 'void'
     WHERE {$whereSQL}
     ORDER BY r.receipt_date DESC, r.created_at DESC
 ");

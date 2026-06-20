@@ -127,16 +127,20 @@ $isPdf = $fileExt === 'pdf';
                         🔗 View in New Tab
                     </a>
 
+                    <!-- Create Expense -->
+                    <a href="/?page=financial/expense-create&receipt_id=<?php echo (int)$receipt['id']; ?>&amount=<?php echo htmlspecialchars($receipt['amount']); ?>&date=<?php echo htmlspecialchars($receipt['receipt_date']); ?>&vendor=<?php echo urlencode($receipt['store_name'] ?? ''); ?>"
+                       class="btn btn-sm" style="width:100%;text-align:center;margin-bottom:4px">
+                        Create Expense
+                    </a>
+
                     <!-- Edit -->
-                    <button onclick="showEditModal()" 
-                            style="width:100%;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:600;cursor:pointer">
-                        ✏️ Edit Details
+                    <button onclick="showEditModal()" class="btn btn-sm" style="width:100%;text-align:center">
+                        Edit Details
                     </button>
 
                     <!-- Delete -->
-                    <button onclick="confirmDelete()" 
-                            style="width:100%;padding:10px;border-radius:6px;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;font-weight:600;cursor:pointer;margin-top:8px">
-                        🗑️ Delete Receipt
+                    <button onclick="confirmDelete()" class="btn btn-sm" style="width:100%;text-align:center;background:#fef2f2;border-color:#fca5a5;color:#991b1b;margin-top:8px">
+                        Delete Receipt
                     </button>
                 </div>
             </div>
