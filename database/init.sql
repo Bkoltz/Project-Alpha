@@ -1116,6 +1116,15 @@ CREATE TABLE IF NOT EXISTS document_custom_fields (
     INDEX idx_doc_cf_type (document_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Seed built-in custom fields (Deposit Required, Fulfillment Date)
+INSERT IGNORE INTO document_custom_fields (document_type, field_key, field_label, field_type, is_required, is_builtin, is_enabled, display_order) VALUES
+  ('regular', 'deposit', 'Deposit Required', 'text', 0, 1, 1, 1),
+  ('long_term', 'deposit', 'Deposit Required', 'text', 0, 1, 1, 1),
+  ('on_demand', 'deposit', 'Deposit Required', 'text', 0, 1, 1, 1),
+  ('regular', 'fulfillment_date', 'Fulfillment Date (Estimated)', 'date', 0, 1, 1, 2),
+  ('long_term', 'fulfillment_date', 'Fulfillment Date (Estimated)', 'date', 0, 1, 1, 2),
+  ('on_demand', 'fulfillment_date', 'Fulfillment Date (Estimated)', 'date', 0, 1, 1, 2);
+
 -- DOCUMENT SETTINGS
 CREATE TABLE IF NOT EXISTS document_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,

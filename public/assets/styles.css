@@ -294,3 +294,11 @@ body.nav-open{overflow:hidden}
 .muted-note{color:#6b7280;font-size:13px;margin-top:4px}
 .divider{border:0;border-top:1px solid #e7e5e0;margin:16px 0}
 .tag-row{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Financial dashboard specific */
+.dash-row{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) auto;align-items:start;margin-bottom:16px}
+.dash-card--filter{padding:16px 18px}
+.dash-card--actions{display:flex;align-items:center;justify-content:flex-end}
+.quick-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.dash-col--wide{min-width:0}
+.filter-form.compact > div:not(.filter-actions){flex:0 1 130px;max-width:160px}
