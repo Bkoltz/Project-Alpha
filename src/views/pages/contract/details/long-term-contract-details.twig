@@ -8,7 +8,7 @@
 		<a href="/?page=contract/long-term-contract-pdf&id={{id}}" download="longterm-contract-{{contract.doc_number ?? id}}.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
 	</div>
 
-	{% include 'partials/document_details/project-details-display.twig' with {document: contract, branding: branding} %}
+	{% include 'partials/document_details/display/project-details-display.twig' with {document: contract, branding: branding} %}
 
 	<!-- Contract Details Box -->
 	<table style="width:100%;table-layout:fixed;margin-bottom:16px;border-collapse:collapse;border:1px solid #e5e7eb;background:#f9fafb">
@@ -56,7 +56,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{% if contract.pricingType == perInvoice %}
+			{% if contract.pricing_type == 'per_invoice' %}
 				<tr>
 					<td colspan="3" style="padding:12px">Recurring service fee (billed
 						{{contract.billing_interval_count}}
@@ -79,7 +79,7 @@
 		</tbody>
 	</table>
 	{# TODO custom fields??? #}
-	{% include 'partials/document_detials/display/terms-display.twig' with {document: contract} %}
+	{% include 'partials/document_details/display/terms-display.twig' with {document: contract} %}
 </section>
 <style>
 	.no-print {

@@ -3,10 +3,8 @@
 namespace App\services\invoice;
 
 use App\config\AppConfiguration;
-use App\data_transfer_objects\invoice\InvoiceEditData;
 use App\data_transfer_objects\invoice\InvoiceData;
 use APp\data_transfer_objects\ItemData;
-use App\record_transfer_objects\InvoiceRecord;
 use App\record_transfer_objects\ItemRecord;
 use App\repositories\invoice\InvoiceRepository;
 use App\record_transfer_objects\invoice\create_record\BaseInvoiceRecord;
@@ -14,6 +12,7 @@ use App\record_transfer_objects\invoice\create_record\LongTermInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\OnDemandInvoiceRecord;
 use App\record_transfer_objects\invoice\create_record\RegularInvoiceRecord;
 use App\record_transfer_objects\InvoiceEditRecord;
+use App\services\DateValidator;
 use App\services\MetaService;
 use App\services\ProjectService;
 use App\utils\enum\DocumentType;
@@ -34,15 +33,17 @@ class InvoiceService
 
     public function createInvoice(DocumentType $documentType, InvoiceData $invoiceData, ?ItemData $invoiceItems)
     {
-        $this->updateAndValidateInvoiceData($invoiceData);
+        $this->updateAndValidateInvoiceData($documentType, $invoiceData);
         $invoiceItems?->validate();
 
         $record = $this->generateInsertRecord($documentType, $invoiceData->toArray());
         $itemsRecord = ItemRecord::fromArray($invoiceItems?->toArray());
 
         $id = $this->repository->createInvoice($documentType, $record, $itemsRecord);
-        $this->metaService->insertProjectMetaFromArray($invoiceData->toArray()); 
-        $this->projectService->insertInvoiceProjectDoc($invoiceData->project_id, $id);
+        $this->metaService->insertProjectMetaFromArray($invoiceData->toArray());
+
+        if ($invoiceData->project_id !== null)
+            $this->projectService->insertInvoiceProjectDoc($invoiceData->project_id, $id);
     }
 
     private function generateInsertRecord(DocumentType $documentType, array $data): BaseInvoiceRecord
@@ -54,6 +55,7 @@ class InvoiceService
             default => throw new Exception("Invalid document type")
         };
     }
+
 
     public function updateInvoice(int $id, InvoiceData $invoiceData, ?ItemData $invoiceItems): void
     {
@@ -121,22 +123,32 @@ class InvoiceService
 
     private function validateInvoiceData(InvoiceData $invoiceData): void
     {
-        $invoiceData->contract_id ?: null;
-        $invoiceData->quote_id ?: null;
-        $invoiceData->client_id ?: null;
-        $invoiceData->project_id ?: null;
+        $invoiceData->start_date = $invoiceData->start_date ?: DateValidator::getNewDate();
+        $invoiceData->proration = 0; /* TODO this needs to be fix, where does this come from? */
+        $invoiceData->occurrences_generated = 0;
+
+        $invoiceData->contract_id = $invoiceData->contract_id ?: null;
+        $invoiceData->quote_id = $invoiceData->quote_id ?: null;
+        $invoiceData->client_id = $invoiceData->client_id ?: null;
+        $invoiceData->project_id = $invoiceData->project_id ?: null;
         $invoiceData->discount_type ??= 'none';
         $invoiceData->discount_value ??= 0;
         $invoiceData->tax_percent ??= 0;
         $invoiceData->subtotal ??= 0;
         $invoiceData->total ??= 0;
         $invoiceData->status ??= 'unpaid';
+        $invoiceData->amount ??= $invoiceData->total;
     }
 
-    private function updateAndValidateInvoiceData(InvoiceData $invoiceData): void
+    private function updateAndValidateInvoiceData(DocumentType $documentType, InvoiceData $invoiceData): void
     {
         $this->validateInvoiceData($invoiceData);
 
-        $invoiceData->status = 'unpaid';
+        $invoiceData->status = match ($documentType) {
+            DocumentType::REGULAR => 'unpaid',
+            DocumentType::LONG_TERM => 'active',
+            DocumentType::ON_DEMAND => 'draft',
+            default => throw new Exception("Invalid document type")
+        };
     }
 }

@@ -1,13 +1,12 @@
 <?php
 
-namespace App\render_outputs\contact;
+namespace App\render_outputs\contract;
 
-use App\data_transfer_objects\ContractData;
-use App\render_outputs\RenderOutput;
+use App\data_transfer_objects\contract\ContractData;
 use App\data_transfer_objects\contract\ContractSignatures;
-use App\render_outputs\BrandingView;
-use App\render_outputs\ContactInfoView;
-
+use App\render_outputs\document_details\BrandingView;
+use App\render_outputs\document_details\ContactInfoView;
+use App\render_outputs\RenderOutput;
 
 class LongTermContractDetailsView extends RenderOutput {
     public ?ContractData $contract = null;

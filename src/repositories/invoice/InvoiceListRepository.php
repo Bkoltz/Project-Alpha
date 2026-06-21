@@ -14,20 +14,9 @@ class InvoiceListRepository extends BaseListRepository
     private PDO $pdo;
 
     private const FILTERS = [
-        'client_id' => [
-            'sql' => 'i.client_id = ?',
-            'ignore' => ''
-        ],
+        // 'client_id'/'start'/'end' are added by getFilters(), keyed to the document type's actual columns.
         'client_name' => [
-            'sql' => 'i.name LIKE ?',
-            'ignore' => ''
-        ],
-        'start' => [
-            'sql' => 'i.created_at >= ?',
-            'ignore' => ''
-        ],
-        'end' => [
-            'sql' => 'i.created_at <= ?',
+            'sql' => 'c.name LIKE ?',
             'ignore' => ''
         ],
         'status' => [
@@ -55,13 +44,29 @@ class InvoiceListRepository extends BaseListRepository
     private const DOCUMENT_TYPE_STATEMENTS = [
         DocumentType::REGULAR->value => 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id',
         DocumentType::LONG_TERM->value => 'SELECT i.id, i.doc_number, i.project_code, i.status, i.billing_interval_count, i.billing_interval_unit, i.pricing_type, i.price_per_invoice, i.total, i.total_invoiced, i.next_invoice_date, i.last_invoice_date, i.start_date, i.end_date, c.name client_name, c.id AS client_id FROM long_term_contracts i LEFT JOIN clients c ON c.id=i.client_id',
-        DocumentType::ON_DEMAND->value => 'SELECT i.id, i.on_demand_contract_id, i.amount, i.due_date, i.created_at, c.name AS client_name, c.id AS client_id FROM on_demand_invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id',
+        DocumentType::ON_DEMAND->value => 'SELECT i.id, i.on_demand_contract_id, i.amount, i.due_date, i.generated_at, c.name AS client_name, c.id AS client_id FROM on_demand_invoices i LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id LEFT JOIN clients c ON c.id=odc.client_id',
     ];
 
+    // Each entry joins clients (and, for on-demand, on_demand_contracts) so that
+    // client_id/client_name filters resolve to real columns in the count query too.
     private const DOCUMENT_TYPE_TABLES = [
-        DocumentType::REGULAR->value => "invoices",
-        DocumentType::LONG_TERM->value => "long_term_invoices",
-        DocumentType::ON_DEMAND->value => "on_demand_invoices",
+        DocumentType::REGULAR->value => "invoices i LEFT JOIN clients c ON c.id=i.client_id",
+        DocumentType::LONG_TERM->value => "long_term_invoices i LEFT JOIN clients c ON c.id=i.client_id",
+        DocumentType::ON_DEMAND->value => "on_demand_invoices i LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id LEFT JOIN clients c ON c.id=odc.client_id",
+    ];
+
+    // on_demand_invoices has no created_at column - it tracks generated_at instead.
+    private const DOCUMENT_TYPE_ORDER_COLUMN = [
+        DocumentType::REGULAR->value => 'created_at',
+        DocumentType::LONG_TERM->value => 'created_at',
+        DocumentType::ON_DEMAND->value => 'generated_at',
+    ];
+
+    // on_demand_invoices has no client_id column directly - it's on the joined on_demand_contracts row.
+    private const DOCUMENT_TYPE_CLIENT_ID_COLUMN = [
+        DocumentType::REGULAR->value => 'i.client_id',
+        DocumentType::LONG_TERM->value => 'i.client_id',
+        DocumentType::ON_DEMAND->value => 'odc.client_id',
     ];
 
     public function __construct(PDO $pdo)
@@ -71,12 +76,13 @@ class InvoiceListRepository extends BaseListRepository
 
     public function getInvoiceRows(DocumentType $documentType, ListFilterData $filterData, DisplayCountData $pageCountData): array
     {
-        $filterConfig = new ListFilterConfig($this::FILTERS);
+        $orderColumn = $this::DOCUMENT_TYPE_ORDER_COLUMN[$documentType->value];
+        $filterConfig = new ListFilterConfig($this->getFilters($documentType));
         $filterStatement = $this->createFilteredStatement($documentType, $filterData, $filterConfig);
 
         $sql = $this::DOCUMENT_TYPE_STATEMENTS[$documentType->value];
         $sql .= $filterStatement->sql;
-        $sql .= " ORDER BY i.created_at DESC LIMIT $pageCountData->per_page OFFSET $pageCountData->offset";
+        $sql .= " ORDER BY i.$orderColumn DESC LIMIT $pageCountData->per_page OFFSET $pageCountData->offset";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($filterStatement->values);
 
@@ -85,14 +91,30 @@ class InvoiceListRepository extends BaseListRepository
 
     public function getInvoiceCount(DocumentType $documentType, ListFilterData $filterData): int
     {
-        $filterConfig = new ListFilterConfig($this::FILTERS);
+        $filterConfig = new ListFilterConfig($this->getFilters($documentType));
         $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
         $filterStatement = $this->createFilteredStatement($documentType, $filterData, $filterConfig);
 
-        $sqlCount = 'SELECT COUNT(*) FROM ' . $table . ' i' . $filterStatement->sql;
+        $sqlCount = 'SELECT COUNT(*) FROM ' . $table . $filterStatement->sql;
         $stc = $this->pdo->prepare($sqlCount);
         $stc->execute($filterStatement->values);
 
         return (int)$stc->fetchColumn();
+    }
+
+    // 'start'/'end'/'client_id' need a different source column per document type:
+    // on_demand_invoices has no created_at or client_id - it uses generated_at and the
+    // joined on_demand_contracts.client_id instead.
+    private function getFilters(DocumentType $documentType): array
+    {
+        $dateColumn = $this::DOCUMENT_TYPE_ORDER_COLUMN[$documentType->value];
+        $clientIdColumn = $this::DOCUMENT_TYPE_CLIENT_ID_COLUMN[$documentType->value];
+
+        $filters = $this::FILTERS;
+        $filters['start'] = ['sql' => "i.$dateColumn >= ?", 'ignore' => ''];
+        $filters['end'] = ['sql' => "i.$dateColumn <= ?", 'ignore' => ''];
+        $filters['client_id'] = ['sql' => "$clientIdColumn = ?", 'ignore' => ''];
+
+        return $filters;
     }
 }

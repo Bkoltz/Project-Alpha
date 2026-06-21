@@ -690,15 +690,15 @@ CREATE TABLE
 -- RECURRING INVOICES (FUTURE USE)
 -- ============================================================================
 CREATE TABLE
-  IF NOT EXISTS recurring_invoices (
+  IF NOT EXISTS long_term_invoices (
     id INT AUTO_INCREMENT PRIMARY KEY,
     client_id INT NOT NULL,
     project_id INT NULL,
     template_invoice_id INT NULL,
     project_code VARCHAR(64) NULL,
     status ENUM ('active', 'paused', 'cancelled') NOT NULL DEFAULT 'active',
-    interval_unit ENUM ('day', 'week', 'month', 'year') NOT NULL DEFAULT 'month',
-    interval_count INT NOT NULL DEFAULT 1,
+    billing_interval_unit ENUM ('day', 'week', 'month', 'year') NOT NULL DEFAULT 'month',
+    billing_interval_count INT NOT NULL DEFAULT 1,
     start_date DATE NOT NULL,
     end_date DATE NULL,
     next_run_date DATE NULL,

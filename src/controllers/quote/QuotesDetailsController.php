@@ -19,9 +19,9 @@ class QuotesDetailsController
   private Renderer $renderer;
 
   private const DOCUMENT_PATHS = [
-    DocumentType::REGULAR->value => 'pages/quote/regular-quote-details.twig',
-    DocumentType::LONG_TERM->value => 'pages/quote/long-term-quote-details.twig',
-    DocumentType::ON_DEMAND->value => 'pages/quote/on-demand-quote-details.twig'
+    DocumentType::REGULAR->value => 'pages/quote/details/regular-quote-details.twig',
+    DocumentType::LONG_TERM->value => 'pages/quote/details/long-term-quote-details.twig',
+    DocumentType::ON_DEMAND->value => 'pages/quote/details/on-demand-quote-details.twig'
   ];
 
   public function __construct(QuotesDetailsService $service, DocumentService $documentService, QuoteService $quoteService, Renderer $renderer)

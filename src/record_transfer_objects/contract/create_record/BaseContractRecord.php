@@ -10,6 +10,6 @@ abstract class BaseContractRecord extends TransferObject implements RetrievableR
 {
     public function toInsertValues(): array
     {
-        return $this->toNumericArray();
+        return $this->toArray();
     }
 }

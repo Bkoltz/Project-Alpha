@@ -20,7 +20,7 @@ class ItemData extends TransferObject
     public function toRowsArray(): array
     {
         $output = [];
-        for ($i = 0; $i < count($this->item); $i++)
+        for ($i = 0; $i < count($this->item ?? []); $i++)
             $output[] = $this->getRow($i);
 
         return $output;
@@ -28,7 +28,7 @@ class ItemData extends TransferObject
 
     public function validate(): void
     {
-        foreach ($this->item as $i => $singleItem) {
+        foreach ($this->item ?? [] as $i => $singleItem) {
             $this->description[$i] = empty($this->description[$i]) ? '' : $this->description[$i];
             $this->quantity[$i] = empty($this->quantity[$i]) ? 0 : $this->quantity[$i];
             $this->unit_price[$i] = empty($this->unit_price[$i]) ? 0 : $this->unit_price[$i];
@@ -38,6 +38,6 @@ class ItemData extends TransferObject
 
     public function isNull(): bool
     {
-        return empty(array_filter($this->item));
+        return empty(array_filter($this->item ?? []));
     }
 }

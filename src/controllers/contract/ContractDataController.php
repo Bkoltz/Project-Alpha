@@ -46,11 +46,13 @@ class ContractDataController
 
     public function create()
     {
-        $contractData = ContractData::fromArray($_POST);
-        $contractSignatures = ContractSignatures::fromArray($_POST);
-        $contractItems = ItemData::fromArray($_POST);
+        $postData = $this->resolveDateFields($_POST);
 
-        $documentType = DocumentType::from($_POST['document_type']);
+        $contractData = ContractData::fromArray($postData);
+        $contractSignatures = ContractSignatures::fromArray($postData);
+        $contractItems = ItemData::fromArray($postData);
+
+        $documentType = DocumentType::from($postData['document_type']);
 
         $this->contractService->createContractWithSignatures($documentType, $contractData, $contractItems, $contractSignatures);
         $this->documentService->createInvoiceFromContract($documentType, $contractData, $contractItems);
@@ -59,14 +61,34 @@ class ContractDataController
     public function update(DocumentType $documentType)
     {
         $id = (int)$_POST['id'] ?? 0;
+        $postData = $this->resolveDateFields($_POST);
 
-        $contractData = ContractData::fromArray($_POST);
-        $itemData = ItemData::fromArray($_POST);
-        $signatures = ContractSignatures::fromArray($_POST);
+        $contractData = ContractData::fromArray($postData);
+        $itemData = ItemData::fromArray($postData);
+        $signatures = ContractSignatures::fromArray($postData);
 
         $this->contractService->updateContract($id, $documentType, $contractData, $itemData);
         // $this->documentService->updateContractAndInvoice($id, $documentType, $contractData, $itemData, $signatures);
         // $this->documentService->updateAllInvoicesItems($id, $itemData);
+    }
+
+    // The create form has separate start_date/end_date inputs per document_type (long_term_*,
+    // on_demand_*) so the browser never has two same-named fields to choose between.
+    private function resolveDateFields(array $postData): array
+    {
+        $postData['start_date'] = match ($postData['document_type'] ?? null) {
+            'long_term' => $postData['long_term_start_date'] ?? null,
+            'on_demand' => $postData['on_demand_start_date'] ?? null,
+            default => $postData['start_date'] ?? null
+        };
+
+        $postData['end_date'] = match ($postData['document_type'] ?? null) {
+            'long_term' => $postData['long_term_end_date'] ?? null,
+            'on_demand' => $postData['on_demand_end_date'] ?? null,
+            default => $postData['end_date'] ?? null
+        };
+
+        return $postData;
     }
 
     public function signContract()

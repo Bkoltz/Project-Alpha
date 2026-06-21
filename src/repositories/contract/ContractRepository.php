@@ -11,6 +11,7 @@ use App\record_transfer_objects\contract\create_record\OnDemandContractRecord;
 use App\record_transfer_objects\contract\create_record\RegularContractRecord;
 use App\utils\enum\DocumentType;
 use App\record_transfer_objects\ItemRecord;
+use App\services\SqlStatementFactory;
 
 class ContractRepository
 {
@@ -97,10 +98,12 @@ class ContractRepository
 
     private function insertContract(DocumentType $documentType, InsertableRecord $record): int
     {
-        $sql = $this::DOCUMENT_TYPE_INSERT_STATEMENTS[$documentType->value];
+        $table = self::DOCUMENT_TYPE_TABLES[$documentType->value];
+        $values = $record->toInsertValues();
+        $sql = SqlStatementFactory::makeInsertStatement($table, $values);
 
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($record->toInsertValues());
+        $stmt->execute($values);
 
         return (int)$this->pdo->lastInsertId();
     }

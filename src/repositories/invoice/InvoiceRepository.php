@@ -6,6 +6,7 @@ use App\record_transfer_objects\interfaces\InsertableRecord;
 use App\record_transfer_objects\InvoiceRecord;
 use App\record_transfer_objects\ItemRecord;
 use App\record_transfer_objects\InvoiceEditRecord;
+use App\services\SqlStatementFactory;
 use App\utils\enum\DocumentType;
 use PDO;
 
@@ -14,12 +15,6 @@ require_once BASE_PATH . '/src/utils/csrf.php';
 class InvoiceRepository
 {
     private PDO $pdo;
-
-    private const DOCUMENT_TYPE_INSERT_STATEMENTS = [
-        DocumentType::REGULAR->value => 'INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        DocumentType::LONG_TERM->value => 'INSERT INTO long_term_invoices (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        DocumentType::ON_DEMAND->value => 'INSERT INTO on_demand_invoices (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_amount, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-    ];
 
     private const DOCUMENT_TYPE_TABLES = [
         DocumentType::REGULAR->value => "invoices",
@@ -60,9 +55,12 @@ class InvoiceRepository
 
     private function insertInvoice(DocumentType $documentType, InsertableRecord $invoiceData): int
     {
-        $sql = $this::DOCUMENT_TYPE_INSERT_STATEMENTS[$documentType->value];
+        $table = $this::DOCUMENT_TYPE_TABLES[$documentType->value];
+        $values = $invoiceData->toInsertValues();
+        $sql = SqlStatementFactory::makeInsertStatement($table, $values);
+
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($invoiceData->toInsertValues());
+        $stmt->execute($values);
 
         return (int)$this->pdo->lastInsertId();
     }

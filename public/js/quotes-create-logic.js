@@ -148,9 +148,12 @@ function toggleDocTypeFields() {
     document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
     document.getElementById('onDemandFields').style.display = isOnDemand ? 'block' : 'none';
 
+    document.getElementById('startDateField').disabled = !isLongTerm;
+    document.getElementById('onDemandStartDate').disabled = !isOnDemand;
+
     if (isLongTerm || isOnDemand) {
         // Set start date to today when first enabling LT or On-Demand
-        var startField = document.getElementById('startDateField');
+        var startField = isLongTerm ? document.getElementById('startDateField') : document.getElementById('onDemandStartDate');
         if (!startField.value) {
             startField.value = new Date().toISOString().split('T')[0];
         }
@@ -198,6 +201,15 @@ function toggleEndDate() {
 
     togglePricingFields();
     updateDiscountWarning();
+    recalc();
+}
+
+function toggleOnDemandEndDate() {
+    var type = document.getElementById('onDemandEndDateType').value;
+    var isOngoing = (type === 'ongoing');
+
+    document.getElementById('onDemandEndDateField').style.display = isOngoing ? 'none' : 'block';
+
     recalc();
 }
 

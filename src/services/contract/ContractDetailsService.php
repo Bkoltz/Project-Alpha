@@ -3,8 +3,8 @@
 namespace App\services\contract;
 
 use App\config\AppConfiguration;
-use App\render_outputs\Contact\LongTermContractDetailsView;
-use App\render_outputs\contact\OnDemandContractDetailsView;
+use App\render_outputs\contract\OnDemandContractDetailsView;
+use App\render_outputs\contract\LongTermContractDetailsView;
 use App\render_outputs\contract\RegularContractDetailsView;
 use App\services\BaseDetailsService;
 use App\services\ClientService;
@@ -68,14 +68,14 @@ class ContractDetailsService extends BaseDetailsService
         return new LongTermContractDetailsView([
             'contract' => $contract,
             'signatures' => $signatures,
-            'contract_info' => $contactInfo,
+            'contact_info' => $contactInfo,
             'branding' => $branding
         ]);
     }
 
-    private function getOnDemandDetails(int $id): RenderOutput
+    private function getOnDemandDetails(int $id)
     {
-        return new OnDemandContractDetailsView();
+        // return new OnDemandContractDetailsView();
     }
 
 }

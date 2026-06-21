@@ -33,7 +33,6 @@ class DocumentService
         
         $quoteData = $this->quoteService->getStoredQuote($id);
         $itemData = $this->quoteService->getStoredQuoteItems($id);
-
         $documentType = $this->quoteService->documentTypeFromData($quoteData);
         $this->createFullDocumentFromQuote($documentType, $quoteData, $itemData);
     }

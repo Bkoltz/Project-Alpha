@@ -45,21 +45,18 @@ class ContractDetailsController
     public function pause(DocumentType $documentType = DocumentType::REGULAR): void
     {
         (int)$id = $_POST['id'] ?? 0;
-
         $this->contractService->pauseContract((int)$id, $documentType);
     }
 
     public function resume(DocumentType $documentType = DocumentType::REGULAR): void
     {
         (int)$id = $_POST['id'] ?? 0;
-
         $this->contractService->activateContract((int)$id, $documentType);
     }
 
     public function activate(DocumentType $documentType = DocumentType::REGULAR): void
     {
         (int)$id = $_POST['id'] ?? 0;
-
         $this->contractService->activateContract((int)$id, $documentType);
     }
 

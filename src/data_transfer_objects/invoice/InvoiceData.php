@@ -36,6 +36,22 @@ class InvoiceData extends TransferObject
     public ?string $document_date = null;
     public ?string $document_date_updated_at = null;
     public ?string $notes = null;
+    public ?string $billing_interval_unit = null;
+    public ?int $billing_interval_count = null;
+    public ?string $start_date = null;
+    public ?string $end_date = null;
+    public ?string $next_run_date = null;
+    public ?string $last_run_date = null;
+    public ?int $max_occurrences = null;
+    public ?int $occurrences_generated = null;
+    public ?int $proration = null;
+    public ?int $anchor_day = null;
+    public ?int $template_invoice_id = null;
+
+    // On-demand invoice occurrence fields (on_demand_invoices table)
+    public ?int $invoice_id = null;
+    public ?int $invoice_number = null;
+    public ?float $amount = null;
 }
 
 // $client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $estimated, $fulfillment_date, $weather, $scope,

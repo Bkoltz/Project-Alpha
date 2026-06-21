@@ -17,7 +17,7 @@ class LongTermContractRecord extends BaseContractRecord
     public ?float $total = null;
     public ?string $project_code = null;
     public ?string $deposit_type = null;
-    public ?float $deposit_amount = null;
+    public ?float $deposit_value = null;
     public ?float $deposit_paid = null;
     public ?string $start_date = null;
     public ?string $end_date = null;

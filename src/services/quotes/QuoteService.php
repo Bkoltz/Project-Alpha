@@ -134,5 +134,7 @@ class QuoteService
         $quoteData->scope ??= '';
         $quoteData->custom_fields ??= null;
         $quoteData->created_at = DateValidator::validateDate($quoteData->created_at);
+
+        echo json_encode($quoteData);
     }
 }

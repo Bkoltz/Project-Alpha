@@ -9,6 +9,6 @@ use App\record_transfer_objects\interfaces\RetrievableRecord;
 abstract class BaseInvoiceRecord extends TransferObject implements InsertableRecord, RetrievableRecord {
       public function toInsertValues(): array
     {
-        return $this->toNumericArray();
+        return $this->toArray();
     }
 }

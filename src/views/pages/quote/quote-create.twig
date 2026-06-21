@@ -82,11 +82,11 @@
 			<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 				<label>
 					<div>Start Date *</div>
-					<input id="startDateField" type="date" name="start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+					<input id="startDateField" type="date" name="long_term_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
 				</label>
 				<label>
 					<div>Contract Duration *</div>
-					<select id="endDateType" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
+					<select id="endDateType" name="long_term_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleEndDate()">
 						<option value="ongoing">Ongoing (Until Terminated)</option>
 						<option value="fixed">Fixed End Date</option>
 					</select>
@@ -96,7 +96,7 @@
 			<div id="endDateField" style="display:none;margin-top:12px">
 				<label>
 					<div>End Date *</div>
-					<input type="date" name="end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+					<input type="date" name="long_term_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
 				</label>
 			</div>
 
@@ -176,11 +176,11 @@
 			<div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 				<label>
 					<div>Start Date</div>
-					<input id="onDemandStartDate" type="date" name="start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+					<input id="onDemandStartDate" type="date" name="on_demand_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
 				</label>
 				<label>
 					<div>Contract Duration</div>
-					<select id="onDemandEndDateType" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleOnDemandEndDate()">
+					<select id="onDemandEndDateType" name="on_demand_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleOnDemandEndDate()">
 						<option value="ongoing">Ongoing (Until Terminated)</option>
 						<option value="fixed">Fixed End Date</option>
 					</select>
@@ -190,7 +190,7 @@
 			<div id="onDemandEndDateField" style="display:none;margin-top:12px">
 				<label>
 					<div>End Date</div>
-					<input type="date" name="end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+					<input type="date" name="on_demand_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
 				</label>
 			</div>
 
