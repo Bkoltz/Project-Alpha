@@ -16,6 +16,9 @@ function handleCheckoutSessionCompleted($pdo, $session) {
     
     $invoiceId = (int)$invoiceId;
     $amountTotal = ($session['amount_total'] ?? 0) / 100; // Convert from cents
+    $paymentIntentId = !empty($session['payment_intent']) ? (string)$session['payment_intent'] : null;
+    $paymentAmount = isset($metadata['original_amount']) ? (float)$metadata['original_amount'] : $amountTotal;
+    $surchargeAmount = isset($metadata['surcharge_amount']) ? (float)$metadata['surcharge_amount'] : max(0, $amountTotal - $paymentAmount);
     $paymentStatus = $session['payment_status'] ?? '';
     
     if ($paymentStatus !== 'paid') {
@@ -36,8 +39,8 @@ function handleCheckoutSessionCompleted($pdo, $session) {
     $clientId = (int)($invoice['client_id'] ?? 0);
     
     // Idempotency check - prevent duplicate processing
-    $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_session_id = ?');
-    $existsStmt->execute([$session['id']]);
+    $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_session_id = ? OR (stripe_payment_intent_id IS NOT NULL AND stripe_payment_intent_id = ?)');
+    $existsStmt->execute([$session['id'], $paymentIntentId]);
     if ($existsStmt->fetchColumn()) {
         @error_log('[StripeWebhook] Session ' . $session['id'] . ' already processed - skipping');
         return;
@@ -47,8 +50,11 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         $pdo->beginTransaction();
         
         // Record the payment
-        $stmt = $pdo->prepare('INSERT INTO payments (client_id, invoice_id, amount, payment_method, stripe_session_id, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
-        $stmt->execute([$clientId, $invoiceId, $amountTotal, 'stripe', $session['id'], 'succeeded']);
+        $stmt = $pdo->prepare('
+            INSERT INTO payments (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_session_id, stripe_payment_intent_id, status, payment_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
+        ');
+        $stmt->execute([$clientId, $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $session['id'], $paymentIntentId, 'succeeded']);
         
         // Update invoice status
         $sum = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ? AND status = "succeeded"');
@@ -78,11 +84,11 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         }
         
         $pdo->commit();
-        @error_log('[StripeWebhook] Payment recorded for invoice ' . $invoiceId . ': $' . $amountTotal . ' - status: ' . $status);
+        @error_log('[StripeWebhook] Payment recorded for invoice ' . $invoiceId . ': $' . $paymentAmount . ' - status: ' . $status);
         
         // Notify admin
         try {
-            notify_admin_invoice_paid($pdo, $invoiceId, $amountTotal, 'stripe');
+            notify_admin_invoice_paid($pdo, $invoiceId, $paymentAmount, 'stripe');
         } catch (Throwable $e) {
             @error_log('[StripeWebhook] Failed to send admin notification: ' . $e->getMessage());
         }

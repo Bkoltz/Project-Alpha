@@ -41,16 +41,16 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
     </div>
   <?php endif; ?>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
+  <form method="get" action="/" style="display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;margin:16px 0 22px;position:relative">
     <input type="hidden" name="page" value="contract/on-demand-invoices-list">
     <?php if($contract_id>0): ?><input type="hidden" name="contract_id" value="<?php echo $contract_id; ?>"><?php endif; ?>
     <input type="hidden" name="client_id" id="clientIdODI" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputODI" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
+    <label style="position:relative;display:flex;flex-direction:column;gap:6px;flex:0 1 240px;min-width:min(240px,100%)"><div>Client</div>
+      <input type="text" name="client" id="clientInputODI" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:9px 10px;border-radius:8px;border:1px solid #ddd">
       <div id="clientSuggestODI" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
     </label>
-    <label><div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+    <label style="display:flex;flex-direction:column;gap:6px;flex:0 1 150px;min-width:min(150px,100%)"><div>Status</div>
+      <select name="status" style="padding:9px 10px;border-radius:8px;border:1px solid #ddd">
         <option value="">All</option>
         <option value="unpaid" <?php echo $status==='unpaid'?'selected':''; ?>>Unpaid</option>
         <option value="partial" <?php echo $status==='partial'?'selected':''; ?>>Partial</option>
@@ -58,9 +58,9 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
         <option value="void" <?php echo $status==='void'?'selected':''; ?>>Void</option>
       </select>
     </label>
-    <div style="display:flex;gap:8px">
-      <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-      <a href="/?page=contract/on-demand-invoices-list<?php echo $contract_id>0?'&contract_id='.$contract_id:''; ?>" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;text-decoration:none;color:inherit">Reset</a>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <button type="submit" style="padding:9px 14px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
+      <a href="/?page=contract/on-demand-invoices-list<?php echo $contract_id>0?'&contract_id='.$contract_id:''; ?>" style="padding:9px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;text-decoration:none;color:inherit">Reset</a>
     </div>
   </form>
 

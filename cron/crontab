@@ -7,25 +7,28 @@ SHELL=/bin/bash
 # Unified log file for all cron jobs
 CRON_LOG=/var/www/logs/cron.log
 
-# Generate recurring invoices – daily at 2:00 AM UTC
+# Generate recurring invoices - daily at 2:00 AM UTC
 0 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_invoices.php >> $CRON_LOG 2>&1
 
-# Send invoice reminders (due-7 and overdue-weekly) – daily at 8:00 AM UTC
-0 8 * * * root . /etc/environment && php /var/www/src/cron/send_invoice_reminders.php >> $CRON_LOG 2>&1
+# Auto-charge eligible recurring invoices - daily at 2:15 AM UTC
+15 2 * * * root . /etc/environment && php /var/www/src/cron/auto_charge_recurring.php >> $CRON_LOG 2>&1
 
-# Auto-terminate expired contracts – daily at 3:00 AM UTC
+# Daily database backup - at 2:30 AM UTC (after recurring invoices)
+30 2 * * * root . /etc/environment && php /var/www/src/cron/backup_database.php >> $CRON_LOG 2>&1
+
+# Auto-terminate expired contracts - daily at 3:00 AM UTC
 0 3 * * * root . /etc/environment && php /var/www/src/cron/auto_terminate_contracts.php >> $CRON_LOG 2>&1
 
-# Check and expire links – daily at 4:00 AM UTC
+# Check and expire links - daily at 4:00 AM UTC
 0 4 * * * root . /etc/environment && php /var/www/src/cron/link_expiration_checker.php >> $CRON_LOG 2>&1
 
-# Stripe payment reconciliation – every 6 hours
-0 */6 * * * root . /etc/environment && php /var/www/src/cron/stripe_reconciliation.php >> $CRON_LOG 2>&1
-
-# Process audit schedules – daily at 6:00 AM UTC
+# Process audit schedules - daily at 6:00 AM UTC
 0 6 * * * root . /etc/environment && php /var/www/src/cron/process_audit_schedules.php >> $CRON_LOG 2>&1
 
-# Daily database backup – at 2:30 AM UTC (after recurring invoices)
-30 2 * * * root . /etc/environment && php /var/www/src/cron/backup_database.php >> $CRON_LOG 2>&1
+# Send invoice reminders (due-7 and overdue-weekly) - daily at 8:00 AM UTC
+0 8 * * * root . /etc/environment && php /var/www/src/cron/send_invoice_reminders.php >> $CRON_LOG 2>&1
+
+# Stripe payment reconciliation - every 6 hours
+0 */6 * * * root . /etc/environment && php /var/www/src/cron/stripe_reconciliation.php >> $CRON_LOG 2>&1
 
 # Required blank line at end of crontab

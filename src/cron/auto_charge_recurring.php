@@ -7,6 +7,15 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../services/StripeService.php';
 require_once __DIR__ . '/../utils/StripeFeeCalculator.php';
+require_once __DIR__ . '/../utils/cron_state.php';
+
+$jobName = 'auto_charge_recurring';
+
+if (empty($appConfig['cron_enabled'])) {
+    @error_log('[AutoPay] Cron is disabled in settings. Skipping.');
+    cron_state_mark_success($pdo, $jobName, 'Cron disabled');
+    exit(0);
+}
 
 @error_log('[AutoPay] Starting auto-charge cron job at ' . date('Y-m-d H:i:s'));
 
@@ -14,6 +23,7 @@ try {
     $stripe = StripeService::fromAppConfig($appConfig);
     if (!$stripe) {
         @error_log('[AutoPay] Stripe not configured, skipping');
+        cron_state_mark_success($pdo, $jobName, 'Stripe not configured');
         exit(0);
     }
     
@@ -172,9 +182,11 @@ try {
     }
     
     @error_log('[AutoPay] Auto-charge cron job completed. Processed ' . count($invoices) . ' invoices');
+    cron_state_mark_success($pdo, $jobName, 'Processed ' . count($invoices) . ' invoice(s)');
     
 } catch (Throwable $e) {
     @error_log('[AutoPay] Critical error in auto-pay cron: ' . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

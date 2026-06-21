@@ -11,7 +11,7 @@ if ($id <= 0) {
 $pdo->beginTransaction();
 try {
     // Get contract info
-    $stmt = $pdo->prepare('SELECT deposit_type, deposit_amount, total, deposit_paid FROM contracts WHERE id=? FOR UPDATE');
+    $stmt = $pdo->prepare('SELECT client_id, deposit_type, deposit_amount, total, deposit_paid FROM contracts WHERE id=? FOR UPDATE');
     $stmt->execute([$id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -49,8 +49,10 @@ try {
         $invoiceTotal = (float)$linkedInvoice['total'];
         
         // Record deposit as a succeeded payment so it counts toward amount paid
-        $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, status, reference_number, payment_date) VALUES (?, ?, ?, ?, ?, CURDATE())')
-            ->execute([$linkedInvoiceId, $depositCalc, 'deposit', 'succeeded', 'Contract Deposit']);
+        $pdo->prepare('
+            INSERT INTO payments (client_id, invoice_id, amount, payment_method, status, reference_number, notes, payment_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())
+        ')->execute([(int)$contract['client_id'], $linkedInvoiceId, $depositCalc, 'other', 'succeeded', 'Contract Deposit', 'Contract deposit received']);
         
         // Calculate total paid on this invoice
         $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');

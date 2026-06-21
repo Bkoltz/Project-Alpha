@@ -280,20 +280,20 @@ PA becomes self‑healing.
 
 6. Implementation Checklist
 Database
-- [ ] Add cron_job_runs table
-- [ ] Ensure payments.stripe_payment_intent_id is always stored
-- [ ] Ensure invoices and payments support partial payments
+- [x] Add cron_job_runs table
+- [x] Ensure payments.stripe_payment_intent_id is always stored
+- [x] Ensure invoices and payments support partial payments
 Cron Jobs
-- [ ] Wrap each job with catch‑up logic
-- [ ] Add stripe_reconciliation job
-- [ ] Add idempotency checks
+- [x] Wrap each job with catch-up logic
+- [x] Add stripe_reconciliation job
+- [x] Add idempotency checks
 Stripe
-- [ ] Always include metadata.pa_invoice_id
-- [ ] Implement payment_intent.succeeded webhook
-- [ ] Implement reconciliation script
+- [x] Always include metadata.pa_invoice_id
+- [x] Implement payment_intent.succeeded webhook
+- [x] Implement reconciliation script
 Container Startup
-- [ ] Optional: run bootstrap catch‑up script
-- [ ] Or rely on cron to detect missed periods
+- [x] Optional bootstrap script not required; cron detects missed periods
+- [x] Or rely on cron to detect missed periods
 
 7. Summary
 Project Alpha becomes fully resilient by combining:

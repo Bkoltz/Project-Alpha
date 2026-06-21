@@ -6,6 +6,9 @@
  */
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/cron_state.php';
+
+$jobName = 'backup_database';
 
 $backupDir = '/var/www/backups';
 $dailyDir = $backupDir . '/daily';
@@ -25,6 +28,7 @@ $filepath = $dailyDir . '/' . $filename;
 $gz = gzopen($filepath, 'wb9');
 if (!$gz) {
     @error_log("[Backup] FAILED: Could not open $filepath for writing");
+    cron_state_mark_failure($pdo, $jobName, new RuntimeException("Could not open {$filepath} for writing"));
     exit(1);
 }
 
@@ -81,6 +85,7 @@ gzclose($gz);
 if (!file_exists($filepath) || filesize($filepath) < 100) {
     @error_log("[Backup] FAILED: backup file too small or missing");
     if (file_exists($filepath)) unlink($filepath);
+    cron_state_mark_failure($pdo, $jobName, new RuntimeException('Backup file too small or missing'));
     exit(1);
 }
 
@@ -115,3 +120,4 @@ foreach ($retention as $dir => $keep) {
 }
 
 echo "Backup complete: " . $filepath . " (" . $size . "KB)\n";
+cron_state_mark_success($pdo, $jobName, "Created {$filepath} ({$size}KB)");

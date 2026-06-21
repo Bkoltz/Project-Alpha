@@ -2,6 +2,8 @@
 // src/views/pages/financial/financial-dashboard.php
 require_once __DIR__ . '/../../../config/db.php';
 
+$orgId = 1;
+
 // Date range filter (default: current year)
 $defaultStartDate = date('Y') . '-01-01';
 $defaultEndDate = date('Y') . '-12-31';
@@ -10,233 +12,334 @@ $end = !empty($_GET['end']) ? $_GET['end'] : $defaultEndDate;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start)) $start = $defaultStartDate;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) $end = $defaultEndDate;
 
-// Summary queries
 $incomeStmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE status='succeeded' AND payment_date BETWEEN ? AND ?");
 $incomeStmt->execute([$start, $end]);
 $totalIncome = (float)$incomeStmt->fetchColumn();
 
-$expenseStmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count FROM expenses WHERE organization_id=1 AND status != 'void' AND expense_date BETWEEN ? AND ?");
-$expenseStmt->execute([$start, $end]);
+$expenseStmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count FROM expenses WHERE organization_id=? AND status != 'void' AND expense_date BETWEEN ? AND ?");
+$expenseStmt->execute([$orgId, $start, $end]);
 $expenseSummary = $expenseStmt->fetch(PDO::FETCH_ASSOC);
 $totalExpenses = (float)$expenseSummary['total'];
 $expenseCount = (int)$expenseSummary['count'];
-
 $netProfit = $totalIncome - $totalExpenses;
 
-$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(miles * mileage_rate),0) as total, COALESCE(SUM(miles),0) as miles, COUNT(*) as trips FROM mileage_logs WHERE organization_id=1 AND purpose='business' AND trip_date BETWEEN ? AND ?");
-$mileageStmt->execute([$start, $end]);
+$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(miles * mileage_rate),0) as total, COALESCE(SUM(miles),0) as miles, COUNT(*) as trips FROM mileage_logs WHERE organization_id=? AND purpose='business' AND trip_date BETWEEN ? AND ?");
+$mileageStmt->execute([$orgId, $start, $end]);
 $mileageSummary = $mileageStmt->fetch(PDO::FETCH_ASSOC);
 $totalMileageDeduction = (float)($mileageSummary['total'] ?? 0);
 $totalMiles = (float)($mileageSummary['miles'] ?? 0);
 $totalTrips = (int)($mileageSummary['trips'] ?? 0);
 
-$receiptStmt = $pdo->prepare("SELECT COUNT(*) as count FROM receipts WHERE organization_id=1 AND created_at BETWEEN ? AND ?");
-$receiptStmt->execute([$start . ' 00:00:00', $end . ' 23:59:59']);
+$receiptStmt = $pdo->prepare("SELECT COUNT(*) as count FROM receipts WHERE organization_id=? AND created_at BETWEEN ? AND ?");
+$receiptStmt->execute([$orgId, $start . ' 00:00:00', $end . ' 23:59:59']);
 $receiptCount = (int)$receiptStmt->fetchColumn();
 
-// Category breakdown
 $catStmt = $pdo->prepare("
     SELECT ec.name, ec.color, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
     FROM expense_categories ec
-    LEFT JOIN expenses e ON e.category_id = ec.id AND e.organization_id = 1 AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
-    WHERE ec.organization_id = 1
+    LEFT JOIN expenses e ON e.category_id = ec.id AND e.organization_id = ? AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
+    WHERE ec.organization_id = ?
     GROUP BY ec.id
     HAVING total > 0
     ORDER BY total DESC
 ");
-$catStmt->execute([$start, $end]);
+$catStmt->execute([$orgId, $start, $end, $orgId]);
 $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 $categoryMax = 0;
 foreach ($categories as $c) $categoryMax = max($categoryMax, (float)$c['total']);
 
-// Top vendors
 $vendorStmt = $pdo->prepare("
     SELECT v.name, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
     FROM vendors v
-    LEFT JOIN expenses e ON e.vendor_id = v.id AND e.organization_id = 1 AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
-    WHERE v.organization_id = 1 AND v.is_active = 1
+    LEFT JOIN expenses e ON e.vendor_id = v.id AND e.organization_id = ? AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
+    WHERE v.organization_id = ? AND v.is_active = 1
     GROUP BY v.id
     HAVING total > 0
     ORDER BY total DESC
     LIMIT 8
 ");
-$vendorStmt->execute([$start, $end]);
+$vendorStmt->execute([$orgId, $start, $end, $orgId]);
 $vendors = $vendorStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Recent expenses
 $recentStmt = $pdo->prepare("
     SELECT e.id, e.expense_date, e.total_amount, e.description, e.status, ec.name as category, v.name as vendor
     FROM expenses e
     LEFT JOIN expense_categories ec ON ec.id = e.category_id
     LEFT JOIN vendors v ON v.id = e.vendor_id
-    WHERE e.organization_id = 1 AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
+    WHERE e.organization_id = ? AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     ORDER BY e.expense_date DESC, e.id DESC
     LIMIT 10
 ");
-$recentStmt->execute([$start, $end]);
+$recentStmt->execute([$orgId, $start, $end]);
 $recentExpenses = $recentStmt->fetchAll(PDO::FETCH_ASSOC);
 
-function formatMoney(float $amount): string { return '$' . number_format($amount, 2); }
-function formatDate(?string $d): string { return $d ? date('M j, Y', strtotime($d)) : '—'; }
+$statusStmt = $pdo->prepare("
+    SELECT status, COUNT(*) as count, COALESCE(SUM(total_amount),0) as total
+    FROM expenses
+    WHERE organization_id = ? AND expense_date BETWEEN ? AND ?
+    GROUP BY status
+    ORDER BY total DESC
+");
+$statusStmt->execute([$orgId, $start, $end]);
+$statusSummary = $statusStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$incomeTrendStmt = $pdo->prepare("
+    SELECT DATE_FORMAT(payment_date, '%Y-%m') as period, COALESCE(SUM(amount),0) as total
+    FROM payments
+    WHERE status='succeeded' AND payment_date BETWEEN ? AND ?
+    GROUP BY period
+");
+$incomeTrendStmt->execute([$start, $end]);
+$incomeByMonth = [];
+foreach ($incomeTrendStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $incomeByMonth[$row['period']] = (float)$row['total'];
+}
+
+$expenseTrendStmt = $pdo->prepare("
+    SELECT DATE_FORMAT(expense_date, '%Y-%m') as period, COALESCE(SUM(total_amount),0) as total
+    FROM expenses
+    WHERE organization_id=? AND status != 'void' AND expense_date BETWEEN ? AND ?
+    GROUP BY period
+");
+$expenseTrendStmt->execute([$orgId, $start, $end]);
+$expensesByMonth = [];
+foreach ($expenseTrendStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $expensesByMonth[$row['period']] = (float)$row['total'];
+}
+
+$trendMonths = [];
+$cursor = new DateTimeImmutable(substr($start, 0, 7) . '-01');
+$endMonth = new DateTimeImmutable(substr($end, 0, 7) . '-01');
+while ($cursor <= $endMonth) {
+    $trendMonths[] = $cursor->format('Y-m');
+    $cursor = $cursor->modify('+1 month');
+}
+if (count($trendMonths) > 12) {
+    $trendMonths = array_slice($trendMonths, -12);
+}
+$trendMax = 1.0;
+foreach ($trendMonths as $month) {
+    $trendMax = max($trendMax, $incomeByMonth[$month] ?? 0, $expensesByMonth[$month] ?? 0);
+}
+
+if (!function_exists('finance_dashboard_money')) {
+    function finance_dashboard_money(float $amount): string { return '$' . number_format($amount, 2); }
+}
+if (!function_exists('finance_dashboard_date')) {
+    function finance_dashboard_date(?string $date): string { return $date ? date('M j, Y', strtotime($date)) : '-'; }
+}
+if (!function_exists('finance_dashboard_status_class')) {
+    function finance_dashboard_status_class(?string $status): string {
+        return preg_replace('/[^a-z0-9_-]/', '', strtolower((string)$status)) ?: 'pending';
+    }
+}
 
 $netClass = $netProfit >= 0 ? 'success' : 'danger';
+$profitMargin = $totalIncome > 0 ? ($netProfit / $totalIncome) * 100 : 0;
+$expenseRatio = $totalIncome > 0 ? ($totalExpenses / $totalIncome) * 100 : 0;
+$avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
 ?>
 
 <section class="finance-dashboard">
-  <div class="page-head">
-    <h2>Financial Dashboard</h2>
+  <div class="finance-page-head">
+    <div>
+      <p class="finance-eyebrow">Financial workspace</p>
+      <h2>Financial Dashboard</h2>
+      <p class="finance-subtitle"><?php echo finance_dashboard_date($start); ?> to <?php echo finance_dashboard_date($end); ?></p>
+    </div>
+    <div class="finance-actions">
+      <a href="/?page=financial/expenses-list" class="btn btn-primary">Expenses Hub</a>
+      <a href="/?page=financial/expense-create" class="btn">Add Expense</a>
+      <a href="/?page=financial/expense-report" class="btn">Reports</a>
+    </div>
   </div>
 
-  <!-- Date filter + quick actions -->
-  <div class="dash-row">
-    <div class="dash-card dash-card--filter">
-      <form method="get" action="/" class="filter-form compact">
-        <input type="hidden" name="page" value="financial/financial-dashboard">
-        <label><span class="label">Start</span><input type="date" name="start" class="input" value="<?php echo htmlspecialchars($start); ?>"></label>
-        <label><span class="label">End</span><input type="date" name="end" class="input" value="<?php echo htmlspecialchars($end); ?>"></label>
-        <div class="filter-actions">
-          <button type="submit" class="btn btn-primary">Apply</button>
-          <a href="/?page=financial/financial-dashboard" class="btn btn-secondary">Reset</a>
+  <div class="finance-toolbar">
+    <form method="get" action="/" class="finance-filter">
+      <input type="hidden" name="page" value="financial/financial-dashboard">
+      <label><span class="label-muted">Start</span><input type="date" name="start" class="input" value="<?php echo htmlspecialchars($start); ?>"></label>
+      <label><span class="label-muted">End</span><input type="date" name="end" class="input" value="<?php echo htmlspecialchars($end); ?>"></label>
+      <div class="filter-actions">
+        <button type="submit" class="btn btn-primary">Apply</button>
+        <a href="/?page=financial/financial-dashboard" class="btn">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="finance-kpis">
+    <article class="finance-kpi">
+      <div class="finance-kpi__icon success">$</div>
+      <div>
+        <div class="finance-kpi__label">Income</div>
+        <div class="finance-kpi__value"><?php echo finance_dashboard_money($totalIncome); ?></div>
+        <div class="finance-kpi__meta">Collected payments</div>
+      </div>
+    </article>
+    <article class="finance-kpi">
+      <div class="finance-kpi__icon danger">-</div>
+      <div>
+        <div class="finance-kpi__label">Expenses</div>
+        <div class="finance-kpi__value"><?php echo finance_dashboard_money($totalExpenses); ?></div>
+        <div class="finance-kpi__meta"><?php echo number_format($expenseCount); ?> items, avg <?php echo finance_dashboard_money($avgExpense); ?></div>
+      </div>
+    </article>
+    <article class="finance-kpi">
+      <div class="finance-kpi__icon <?php echo $netClass; ?>">=</div>
+      <div>
+        <div class="finance-kpi__label">Net Profit</div>
+        <div class="finance-kpi__value <?php echo $netClass; ?>"><?php echo finance_dashboard_money($netProfit); ?></div>
+        <div class="finance-kpi__meta"><?php echo number_format($profitMargin, 1); ?>% margin</div>
+      </div>
+    </article>
+    <article class="finance-kpi">
+      <div class="finance-kpi__icon info">mi</div>
+      <div>
+        <div class="finance-kpi__label">Mileage Deduction</div>
+        <div class="finance-kpi__value"><?php echo finance_dashboard_money($totalMileageDeduction); ?></div>
+        <div class="finance-kpi__meta"><?php echo number_format($totalMiles, 1); ?> mi / <?php echo number_format($totalTrips); ?> trips</div>
+      </div>
+    </article>
+    <article class="finance-kpi">
+      <div class="finance-kpi__icon warning">rc</div>
+      <div>
+        <div class="finance-kpi__label">Receipts</div>
+        <div class="finance-kpi__value"><?php echo number_format($receiptCount); ?></div>
+        <div class="finance-kpi__meta">Uploaded in range</div>
+      </div>
+    </article>
+  </div>
+
+  <div class="finance-grid finance-grid--main">
+    <div class="finance-panel finance-panel--wide">
+      <div class="finance-panel__head">
+        <div>
+          <h3 class="finance-panel__title">Income vs. Expenses</h3>
+          <p class="finance-panel__meta">Last <?php echo count($trendMonths); ?> month<?php echo count($trendMonths) === 1 ? '' : 's'; ?> in selected range</p>
         </div>
-      </form>
-    </div>
-    <div class="dash-card dash-card--actions">
-      <div class="quick-actions">
-        <a href="/?page=financial/expenses-list" class="btn btn-primary">Expenses Hub</a>
-        <a href="/?page=financial/expense-create" class="btn btn-secondary">Add Expense</a>
-        <a href="/?page=financial/expense-report" class="btn btn-secondary">Reports</a>
-        <a href="/?page=financial/forms-list" class="btn btn-secondary">Forms &amp; Docs</a>
       </div>
+      <?php if (empty($trendMonths)): ?>
+        <p class="dash-empty">No trend data for the selected period.</p>
+      <?php else: ?>
+        <div class="finance-trend" aria-label="Income and expense trend">
+          <?php foreach ($trendMonths as $month):
+            $incomeValue = $incomeByMonth[$month] ?? 0;
+            $expenseValue = $expensesByMonth[$month] ?? 0;
+            $incomeHeight = max(2, round(($incomeValue / $trendMax) * 100));
+            $expenseHeight = max(2, round(($expenseValue / $trendMax) * 100));
+          ?>
+            <div class="finance-trend__month">
+              <div class="finance-trend__bars">
+                <span class="finance-trend__bar income" style="height:<?php echo $incomeHeight; ?>%" title="Income <?php echo finance_dashboard_money($incomeValue); ?>"></span>
+                <span class="finance-trend__bar expense" style="height:<?php echo $expenseHeight; ?>%" title="Expenses <?php echo finance_dashboard_money($expenseValue); ?>"></span>
+              </div>
+              <span class="finance-trend__label"><?php echo htmlspecialchars(date('M', strtotime($month . '-01'))); ?></span>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <div class="finance-legend"><span class="income"></span> Income <span class="expense"></span> Expenses</div>
+      <?php endif; ?>
+    </div>
+
+    <div class="finance-panel">
+      <div class="finance-panel__head">
+        <h3 class="finance-panel__title">Operating Ratio</h3>
+      </div>
+      <div class="finance-meter">
+        <div class="finance-meter__label"><span>Expense ratio</span><strong><?php echo number_format($expenseRatio, 1); ?>%</strong></div>
+        <div class="finance-meter__track"><span style="width:<?php echo min(100, max(0, round($expenseRatio))); ?>%"></span></div>
+      </div>
+      <?php if (empty($statusSummary)): ?>
+        <p class="dash-empty">No expense statuses in range.</p>
+      <?php else: ?>
+        <div class="finance-status-list">
+          <?php foreach ($statusSummary as $status): ?>
+            <div class="finance-status-list__item">
+              <span class="status-pill status-pill--<?php echo finance_dashboard_status_class($status['status']); ?>"><?php echo htmlspecialchars(ucfirst($status['status'])); ?></span>
+              <strong><?php echo finance_dashboard_money((float)$status['total']); ?></strong>
+              <span class="muted text-sm"><?php echo number_format((int)$status['count']); ?> item<?php echo (int)$status['count'] === 1 ? '' : 's'; ?></span>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 
-  <!-- KPI cards -->
-  <div class="dash-stats">
-    <article class="dash-card">
-      <div class="dash-card__icon success"><!-- income arrow -->
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+  <div class="finance-grid finance-grid--details">
+    <div class="finance-panel finance-panel--wide">
+      <div class="finance-panel__head">
+        <h3 class="finance-panel__title">Spending by Category</h3>
+        <a href="/?page=financial/expenses-list&tab=categories" class="btn btn-sm">Manage Categories</a>
       </div>
-      <div>
-        <div class="dash-card__label">Total Income</div>
-        <div class="dash-card__value"><?php echo formatMoney($totalIncome); ?></div>
-      </div>
-    </article>
+      <?php if (empty($categories)): ?>
+        <p class="dash-empty">No expenses for the selected period.</p>
+      <?php else: ?>
+        <div class="finance-bars">
+          <?php foreach ($categories as $c):
+            $catTotal = (float)$c['total'];
+            $catPercent = $totalExpenses > 0 ? round(($catTotal / $totalExpenses) * 100, 1) : 0;
+            $barWidth = $categoryMax > 0 ? round(($catTotal / $categoryMax) * 100) : 0;
+            $barColor = !empty($c['color']) ? htmlspecialchars($c['color']) : 'var(--nav-accent)';
+          ?>
+            <div class="finance-bar">
+              <div class="finance-bar__top">
+                <strong title="<?php echo htmlspecialchars($c['name']); ?>"><?php echo htmlspecialchars($c['name']); ?></strong>
+                <span><?php echo finance_dashboard_money($catTotal); ?> / <?php echo $catPercent; ?>%</span>
+              </div>
+              <div class="finance-bar__track"><div class="finance-bar__fill" style="width:<?php echo $barWidth; ?>%;background:<?php echo $barColor; ?>"></div></div>
+              <div class="finance-bar__meta"><?php echo number_format((int)$c['count']); ?> expense<?php echo (int)$c['count'] === 1 ? '' : 's'; ?></div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </div>
 
-    <article class="dash-card">
-      <div class="dash-card__icon danger">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+    <div class="finance-panel">
+      <div class="finance-panel__head">
+        <h3 class="finance-panel__title">Top Vendors</h3>
+        <a href="/?page=financial/expenses-list&tab=vendors" class="btn btn-sm">Manage</a>
       </div>
-      <div>
-        <div class="dash-card__label">Total Expenses</div>
-        <div class="dash-card__value"><?php echo formatMoney($totalExpenses); ?></div>
-        <div class="dash-card__meta"><?php echo number_format($expenseCount); ?> expense<?php echo $expenseCount === 1 ? '' : 's'; ?></div>
-      </div>
-    </article>
-
-    <article class="dash-card">
-      <div class="dash-card__icon <?php echo $netClass; ?>">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
-      </div>
-      <div>
-        <div class="dash-card__label">Net Profit</div>
-        <div class="dash-card__value <?php echo $netClass; ?>"><?php echo formatMoney($netProfit); ?></div>
-      </div>
-    </article>
-
-    <article class="dash-card">
-      <div class="dash-card__icon info">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-4c0-.6-.4-1-1-1h-2"></path><circle cx="9" cy="9" r="4"></circle><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path></svg>
-      </div>
-      <div>
-        <div class="dash-card__label">Mileage Deductions</div>
-        <div class="dash-card__value"><?php echo formatMoney($totalMileageDeduction); ?></div>
-        <div class="dash-card__meta"><?php echo number_format($totalMiles, 1); ?> mi · <?php echo number_format($totalTrips); ?> trip<?php echo $totalTrips === 1 ? '' : 's'; ?></div>
-      </div>
-    </article>
-
-    <article class="dash-card">
-      <div class="dash-card__icon warning">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="8" y1="12" x2="16" y2="12"></line><line x1="12" y1="8" x2="12" y2="16"></line></svg>
-      </div>
-      <div>
-        <div class="dash-card__label">Receipts</div>
-        <div class="dash-card__value"><?php echo number_format($receiptCount); ?></div>
-      </div>
-    </article>
+      <?php if (empty($vendors)): ?>
+        <p class="dash-empty">No vendor spending for the selected period.</p>
+      <?php else: ?>
+        <div class="finance-list">
+          <?php foreach ($vendors as $v): ?>
+            <div class="finance-list__item">
+              <div>
+                <strong><?php echo htmlspecialchars($v['name']); ?></strong>
+                <span><?php echo number_format((int)$v['count']); ?> expense<?php echo (int)$v['count'] === 1 ? '' : 's'; ?></span>
+              </div>
+              <b><?php echo finance_dashboard_money((float)$v['total']); ?></b>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 
-  <!-- Two-column details -->
-  <div class="dash-cols">
-    <div class="dash-col dash-col--wide">
-      <!-- Category breakdown -->
-      <div class="dash-panel">
-        <div class="dash-panel__head"><h3 class="dash-panel__title">Spending by Category</h3><a href="/?page=financial/expenses-list&tab=categories" class="btn btn-sm">Manage Categories</a></div>
-        <?php if (empty($categories)): ?>
-          <p class="dash-empty">No expenses for the selected period.</p>
-        <?php else: ?>
-          <div class="dash-bars">
-            <?php foreach ($categories as $c): 
-              $catTotal = (float)$c['total'];
-              $catPercent = $totalExpenses > 0 ? round(($catTotal / $totalExpenses) * 100, 1) : 0;
-              $barWidth = $categoryMax > 0 ? round(($catTotal / $categoryMax) * 100) : 0;
-              $barColor = !empty($c['color']) ? htmlspecialchars($c['color']) : 'var(--nav-accent)';
-            ?>
-              <div class="dash-bar__row">
-                <div class="dash-bar__label" title="<?php echo htmlspecialchars($c['name']); ?>"><?php echo htmlspecialchars($c['name']); ?></div>
-                <div class="dash-bar__track"><div class="dash-bar__fill" style="width:<?php echo $barWidth; ?>%;background:<?php echo $barColor; ?>"></div></div>
-                <div class="dash-bar__count"><?php echo formatMoney($catTotal); ?> <span>(<?php echo $catPercent; ?>%)</span></div>
-              </div>
-            <?php endforeach; ?>
-          </div>
-        <?php endif; ?>
-      </div>
-
-      <!-- Recent expenses -->
-      <div class="dash-panel">
-        <div class="dash-panel__head"><h3 class="dash-panel__title">Recent Expenses</h3><a href="/?page=financial/expenses-list" class="btn btn-sm">View All</a></div>
-        <?php if (empty($recentExpenses)): ?>
-          <p class="dash-empty">No expenses for the selected period.</p>
-        <?php else: ?>
-          <div class="pa-table-wrap">
-            <table class="pa-table">
-              <thead><tr><th>Date</th><th>Vendor / Description</th><th>Category</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
-              <tbody>
-                <?php foreach ($recentExpenses as $e): ?>
-                  <tr>
-                    <td><?php echo formatDate($e['expense_date']); ?></td>
-                    <td><strong><?php echo htmlspecialchars($e['vendor'] ?: '—'); ?></strong><div class="muted small"><?php echo htmlspecialchars(mb_strimwidth($e['description'] ?? '', 0, 60, '…')); ?></div></td>
-                    <td><?php echo htmlspecialchars($e['category'] ?: 'Uncategorized'); ?></td>
-                    <td class="text-right"><?php echo formatMoney((float)$e['total_amount']); ?></td>
-                    <td><span class="status-badge status-<?php echo htmlspecialchars($e['status']); ?>"><?php echo htmlspecialchars(ucfirst($e['status'])); ?></span></td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
-          </div>
-        <?php endif; ?>
-      </div>
+  <div class="finance-panel">
+    <div class="finance-panel__head">
+      <h3 class="finance-panel__title">Recent Expenses</h3>
+      <a href="/?page=financial/expenses-list" class="btn btn-sm">View All</a>
     </div>
-
-    <div class="dash-col">
-      <!-- Top vendors -->
-      <div class="dash-panel">
-        <div class="dash-panel__head"><h3 class="dash-panel__title">Top Vendors</h3><a href="/?page=financial/expenses-list&tab=vendors" class="btn btn-sm">Manage</a></div>
-        <?php if (empty($vendors)): ?>
-          <p class="dash-empty">No vendor spending for the selected period.</p>
-        <?php else: ?>
-          <div class="dash-list">
-            <?php foreach ($vendors as $v): ?>
-              <div class="dash-list__item">
-                <div class="dash-list__left">
-                  <div class="dash-list__title"><?php echo htmlspecialchars($v['name']); ?></div>
-                  <div class="dash-list__meta"><?php echo number_format((int)$v['count']); ?> expense<?php echo (int)$v['count'] === 1 ? '' : 's'; ?></div>
-                </div>
-                <div class="dash-list__time"><?php echo formatMoney((float)$v['total']); ?></div>
-              </div>
+    <?php if (empty($recentExpenses)): ?>
+      <p class="dash-empty">No expenses for the selected period.</p>
+    <?php else: ?>
+      <div class="pa-table-wrap">
+        <table class="pa-table">
+          <thead><tr><th>Date</th><th>Vendor / Description</th><th>Category</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            <?php foreach ($recentExpenses as $e): ?>
+              <tr>
+                <td><?php echo finance_dashboard_date($e['expense_date']); ?></td>
+                <td><strong><?php echo htmlspecialchars($e['vendor'] ?: '-'); ?></strong><div class="muted text-sm"><?php echo htmlspecialchars(mb_strimwidth($e['description'] ?? '', 0, 60, '...')); ?></div></td>
+                <td><?php echo htmlspecialchars($e['category'] ?: 'Uncategorized'); ?></td>
+                <td class="text-right"><?php echo finance_dashboard_money((float)$e['total_amount']); ?></td>
+                <td><span class="status-badge status-<?php echo finance_dashboard_status_class($e['status']); ?>"><?php echo htmlspecialchars(ucfirst($e['status'])); ?></span></td>
+              </tr>
             <?php endforeach; ?>
-          </div>
-        <?php endif; ?>
+          </tbody>
+        </table>
       </div>
-    </div>
+    <?php endif; ?>
   </div>
 </section>

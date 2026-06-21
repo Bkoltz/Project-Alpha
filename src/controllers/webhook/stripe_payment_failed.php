@@ -20,8 +20,23 @@ function handlePaymentIntentFailed($pdo, $paymentIntent) {
     
     // Record failed payment attempt (optional - for tracking)
     try {
-        $stmt = $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
+        $invStmt = $pdo->prepare('SELECT client_id FROM invoices WHERE id = ?');
+        $invStmt->execute([$invoiceId]);
+        $clientId = (int)$invStmt->fetchColumn();
+        if ($clientId <= 0) {
+            @error_log('[StripeWebhook] Failed payment invoice not found: ' . $invoiceId);
+            return;
+        }
+
+        $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id = ?');
+        $existsStmt->execute([$piId]);
+        if ($existsStmt->fetchColumn()) {
+            return;
+        }
+
+        $stmt = $pdo->prepare('INSERT INTO payments (client_id, invoice_id, amount, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())');
         $stmt->execute([
+            $clientId,
             $invoiceId,
             0, // Amount is 0 for failed payments
             'stripe',

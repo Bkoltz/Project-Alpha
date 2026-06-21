@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
@@ -17,23 +18,28 @@ if (empty($appConfig['cron_enabled'])) {
 @error_log("$logPrefix Starting invoice generation run at " . date('Y-m-d H:i:s'));
 
 try {
-    // Find all active long-term contracts that need invoicing
     $today = date('Y-m-d');
+    $invoicesGenerated = 0;
+    $errors = 0;
+    $catchUpPasses = 0;
+    $maxCatchUpPasses = 36;
     
+    do {
+    $catchUpPasses++;
+
+    // Refetch after each pass so contracts that remain overdue generate the
+    // next missed invoice during the same cron run.
     $query = 'SELECT * FROM contracts
               WHERE status = ? 
               AND contract_type = "long_term"
               AND next_invoice_date IS NOT NULL 
               AND next_invoice_date <= ?
               ORDER BY next_invoice_date ASC';
-    
+
     $stmt = $pdo->prepare($query);
     $stmt->execute(['active', $today]);
     $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    $invoicesGenerated = 0;
-    $errors = 0;
-    
+
     foreach ($contracts as $contract) {
         $pdo->beginTransaction();
         
@@ -53,7 +59,7 @@ try {
             } elseif ($contract['pricing_type'] === 'fixed_total') {
                 // Fixed total - divide total by invoice_count
                 $invoiceCount = (int)($contract['invoice_count'] ?? 1);
-                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
                 $contractTotal = (float)$contract['total'];
                 $depositPaid = (float)$contract['deposit_paid'];
                 
@@ -92,9 +98,9 @@ try {
             // Check if we've reached the invoice limit (for fixed_total pricing)
             if ($contract['pricing_type'] === 'fixed_total') {
                 $invoiceCount = (int)($contract['invoice_count'] ?? 1);
-                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
                 
-                if ($invoicesGenerated >= $invoiceCount) {
+                if ($contractInvoicesGenerated >= $invoiceCount) {
                     // All invoices generated - mark as completed
                     $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"')
                         ->execute(['completed', $contractId]);
@@ -152,8 +158,8 @@ try {
             } elseif ($contract['pricing_type'] === 'fixed_total') {
                 // For fixed_total, show items proportionally divided
                 $invoiceCount = (int)($contract['invoice_count'] ?? 1);
-                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
-                $invoiceNum = $invoicesGenerated + 1;
+                $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $invoiceNum = $contractInvoicesGenerated + 1;
                 
                 // Calculate proportion for this invoice
                 foreach ($items as $item) {
@@ -212,8 +218,15 @@ try {
             @error_log("$logPrefix Error processing contract {$contract['id']}: " . $e->getMessage());
         }
     }
+
+    } while (!empty($contracts) && $catchUpPasses < $maxCatchUpPasses);
+
+    if ($catchUpPasses >= $maxCatchUpPasses && !empty($contracts)) {
+        $errors++;
+        @error_log("$logPrefix Catch-up stopped at {$maxCatchUpPasses} passes to avoid an infinite loop.");
+    }
     
-    @error_log("$logPrefix Completed: $invoicesGenerated invoices generated, $errors errors");
+    @error_log("$logPrefix Completed: $invoicesGenerated invoices generated across $catchUpPasses catch-up pass(es), $errors errors");
     
     // Automatic invoice notification deliveries (due reminders & overdue weekly reminders)
     try {
@@ -347,13 +360,7 @@ try {
         @error_log("$logPrefix Notification pass error: " . $e->getMessage());
     }
 
-    // Update cron_job_runs table
-    try {
-        $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status) VALUES (?, NOW(), "success") ON DUPLICATE KEY UPDATE last_run = NOW(), status = "success", error_message = NULL')
-            ->execute([$jobName]);
-    } catch (Throwable $e) {
-        @error_log("$logPrefix Failed to update cron_job_runs: " . $e->getMessage());
-    }
+    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} invoice(s); {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
     
     // Update last run timestamp in settings (legacy support)
     $configMount = '/var/www/config';
@@ -369,6 +376,7 @@ try {
     
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

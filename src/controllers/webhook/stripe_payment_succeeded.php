@@ -35,6 +35,8 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
     
     $invoiceId = (int)$invoiceId;
     $amountTotal = ($paymentIntent['amount'] ?? 0) / 100; // Convert from cents
+    $paymentAmount = isset($metadata['original_amount']) ? (float)$metadata['original_amount'] : $amountTotal;
+    $surchargeAmount = isset($metadata['surcharge_amount']) ? (float)$metadata['surcharge_amount'] : max(0, $amountTotal - $paymentAmount);
     
     // Verify invoice exists and get client info before processing
     $invCheck = $pdo->prepare('SELECT id, total, client_id FROM invoices WHERE id = ?');
@@ -61,8 +63,11 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         
         // Record the payment
         $isAutoPay = !empty($metadata['auto_pay']) ? 1 : 0;
-        $stmt = $pdo->prepare('INSERT INTO payments (client_id, invoice_id, amount, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())');
-        $stmt->execute([$clientId, $invoiceId, $amountTotal, 'stripe', $piId, $isAutoPay, 'succeeded']);
+        $stmt = $pdo->prepare('
+            INSERT INTO payments (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
+        ');
+        $stmt->execute([$clientId, $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $piId, $isAutoPay, 'succeeded']);
         
         // Update invoice status
         $sum = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ? AND status = "succeeded"');
@@ -91,11 +96,11 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         }
         
         $pdo->commit();
-        @error_log('[StripeWebhook] PaymentIntent recorded for invoice ' . $invoiceId . ': $' . $amountTotal . ' - status: ' . $status);
+        @error_log('[StripeWebhook] PaymentIntent recorded for invoice ' . $invoiceId . ': $' . $paymentAmount . ' - status: ' . $status);
         
         // Notify admin
         try {
-            notify_admin_invoice_paid($pdo, $invoiceId, $amountTotal, 'stripe');
+            notify_admin_invoice_paid($pdo, $invoiceId, $paymentAmount, 'stripe');
         } catch (Throwable $e) {
             @error_log('[StripeWebhook] Failed to send admin notification: ' . $e->getMessage());
         }

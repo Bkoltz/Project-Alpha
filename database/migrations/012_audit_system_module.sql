@@ -128,11 +128,13 @@ ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);
 CREATE TABLE IF NOT EXISTS cron_job_runs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     job_name VARCHAR(100) NOT NULL,
-    status ENUM('running', 'completed', 'failed') NOT NULL DEFAULT 'running',
+    last_run DATETIME NULL,
+    status ENUM('running', 'completed', 'failed', 'success') NOT NULL DEFAULT 'running',
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP NULL,
     result TEXT NULL,
     error_message TEXT NULL,
+    UNIQUE KEY uq_cron_job_name (job_name),
     INDEX idx_cron_name (job_name),
     INDEX idx_cron_started (started_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

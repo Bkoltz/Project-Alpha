@@ -5,51 +5,69 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
+$orgId = 1;
 $csrfToken = csrf_sf_token('expense');
 
-function include_financial_tab(string $file): string {
-    ob_start();
-    include __DIR__ . '/' . $file;
-    return ob_get_clean();
-}
-
 $tabs = [
-    'expenses'   => ['label' => 'Expenses',   'file' => '_expenses_tab.php'],
-    'receipts'   => ['label' => 'Receipts',   'file' => 'receipts-list.php'],
-    'mileage'    => ['label' => 'Mileage',    'file' => 'mileage-list.php'],
-    'vendors'    => ['label' => 'Vendors',    'file' => 'vendors-list.php'],
-    'categories' => ['label' => 'Categories', 'file' => 'categories-list.php'],
-    'audit'      => ['label' => 'Audit',      'file' => 'audit.php'],
+    'expenses'   => ['label' => 'Expenses',   'file' => '_expenses_tab.php',   'hint' => 'Spending ledger'],
+    'receipts'   => ['label' => 'Receipts',   'file' => 'receipts-list.php',   'hint' => 'Uploads and matches'],
+    'mileage'    => ['label' => 'Mileage',    'file' => 'mileage-list.php',    'hint' => 'Business trips'],
+    'vendors'    => ['label' => 'Vendors',    'file' => 'vendors-list.php',    'hint' => 'Suppliers'],
+    'categories' => ['label' => 'Categories', 'file' => 'categories-list.php', 'hint' => 'Tax buckets'],
+    'audit'      => ['label' => 'Audit',      'file' => 'audit.php',           'hint' => 'Export reviews'],
 ];
 
 $active = $_GET['tab'] ?? 'expenses';
 if (!isset($tabs[$active])) $active = 'expenses';
+
+$stats = [
+    'expenses' => 0,
+    'receipts' => 0,
+    'mileage' => 0,
+    'vendors' => 0,
+    'categories' => 0,
+    'audit' => 0,
+];
+
+try {
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses WHERE organization_id=? AND status != 'void'");
+    $countStmt->execute([$orgId]);
+    $stats['expenses'] = (int)$countStmt->fetchColumn();
+
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM receipts WHERE organization_id=?");
+    $countStmt->execute([$orgId]);
+    $stats['receipts'] = (int)$countStmt->fetchColumn();
+
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM mileage_logs WHERE organization_id=?");
+    $countStmt->execute([$orgId]);
+    $stats['mileage'] = (int)$countStmt->fetchColumn();
+
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM vendors WHERE organization_id=? AND is_active=1");
+    $countStmt->execute([$orgId]);
+    $stats['vendors'] = (int)$countStmt->fetchColumn();
+
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expense_categories WHERE organization_id=?");
+    $countStmt->execute([$orgId]);
+    $stats['categories'] = (int)$countStmt->fetchColumn();
+
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_schedules WHERE organization_id=?");
+    $countStmt->execute([$orgId]);
+    $stats['audit'] = (int)$countStmt->fetchColumn();
+} catch (Throwable $ignored) {
+    // Some dev databases may be mid-migration; the tab content handles its own errors.
+}
 ?>
 
-<style>
-.expenses-hub { max-width:1600px; margin:0 auto; width:100%; box-sizing:border-box; }
-.expenses-hub__head { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
-.expenses-hub__head h2 { margin:0; font-size:24px; }
-.expenses-hub__tabs { display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--border); margin-bottom:20px; padding-bottom:6px; }
-.expenses-hub__tab { padding:10px 16px; border-radius:var(--radius-sm) var(--radius-sm) 0 0; font-weight:600; color:var(--muted); background:transparent; border:none; cursor:pointer; }
-.expenses-hub__tab:hover { color:var(--text); background:var(--surface-2); }
-.expenses-hub__tab.active { color:var(--nav-accent); background:var(--surface); box-shadow:inset 0 -2px 0 var(--nav-accent); }
-.expenses-hub__panel { display:none; max-width:100%; }
-.expenses-hub__panel.active { display:block; }
-.expenses-hub__panel > div > .page-head:first-child { display:none; }
-.expenses-hub__panel .grid, .expenses-hub__panel form.grid, .expenses-hub__panel form.filter-form { grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); }
-@media (max-width:900px) {
-  .expenses-hub__tabs { flex-direction:column; }
-  .expenses-hub__panel .grid, .expenses-hub__panel form.grid, .expenses-hub__panel form.filter-form { grid-template-columns:1fr; }
-}
-</style>
-
-<div class="expenses-hub" style="padding:24px;max-width:100%">
-  <div class="expenses-hub__head">
-    <h2>Expenses Hub</h2>
-    <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
-      <a href="/?page=financial/expense-report" class="btn btn-sm">Reports</a>
-      <a href="/?page=financial/csv-import" class="btn btn-sm">Import CSV</a>
+<div class="expenses-hub">
+  <div class="finance-page-head expenses-hub__head">
+    <div>
+      <p class="finance-eyebrow">Financial workspace</p>
+      <h2>Expenses Hub</h2>
+      <p class="finance-subtitle">Track spending, receipts, mileage, vendors, categories, and audit exports from one place.</p>
+    </div>
+    <div class="finance-actions">
+      <a href="/?page=financial/expense-report" class="btn">Reports</a>
+      <a href="/?page=financial/csv-import" class="btn">Import CSV</a>
       <a href="/?page=financial/expense-create" class="btn btn-primary">Add Expense</a>
     </div>
   </div>
@@ -60,8 +78,11 @@ if (!isset($tabs[$active])) $active = 'expenses';
          class="expenses-hub__tab <?php echo $active === $id ? 'active' : ''; ?>"
          data-tab="<?php echo htmlspecialchars($id); ?>"
          role="tab"
-         aria-selected="<?php echo $active === $id ? 'true' : 'false'; ?>"
-      ><?php echo htmlspecialchars($t['label']); ?></a>
+         aria-selected="<?php echo $active === $id ? 'true' : 'false'; ?>">
+        <span><?php echo htmlspecialchars($t['label']); ?></span>
+        <small><?php echo htmlspecialchars($t['hint']); ?></small>
+        <b><?php echo number_format($stats[$id] ?? 0); ?></b>
+      </a>
     <?php endforeach; ?>
   </div>
 

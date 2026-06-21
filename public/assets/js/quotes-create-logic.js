@@ -69,8 +69,10 @@ function recalc() {
     // Get pricing type from radio (long-term) or hidden field (on-demand)
     var pricingTypeEl = document.querySelector('input[name="lt_pricing_type"]:checked') || document.querySelector('input[name="lt_pricing_type"][type="hidden"]');
     var pricingType = (isLongTerm || isOnDemand) ? (pricingTypeEl?.value || null) : null;
+    var onDemandPricingModeEl = document.querySelector('input[name="od_pricing_mode"]:checked');
+    var onDemandPricingMode = onDemandPricingModeEl ? onDemandPricingModeEl.value : 'items';
     var endDateEl = document.getElementById('endDateType');
-    var isOngoing = (isLongTerm || isOnDemand) && endDateEl && endDateEl.value === 'ongoing';
+    var isOngoing = isLongTerm && endDateEl && endDateEl.value === 'ongoing';
     var hasFixedEnd = endDateEl && endDateEl.value === 'fixed';
 
     // Auto-calculate invoice count when Fixed End Date + Fixed Total
@@ -99,6 +101,9 @@ function recalc() {
     // Calculate subtotal based on pricing type
     if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
         subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
+    } else if (isOnDemand && onDemandPricingMode === 'flat') {
+        var onDemandAmountInput = document.getElementById('onDemandAmountInput');
+        subtotal = onDemandAmountInput ? (parseFloat(onDemandAmountInput.value) || 0) : 0;
     } else {
         var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
         var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
@@ -211,14 +216,33 @@ function toggleDocTypeFields() {
         toggleEndDate();
         togglePricingFields();
         updateDiscountWarning();
+    } else if (isOnDemand) {
+        var onDemandStartField = document.getElementById('onDemandStartDate');
+        if (onDemandStartField && !onDemandStartField.value) {
+            onDemandStartField.value = new Date().toISOString().split('T')[0];
+        }
+        toggleOnDemandEndDate();
+        toggleOnDemandPricingMode();
     } else {
         // Regular or on-demand quote - show custom fields if they exist
         ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
         });
+        var flatAmount = document.getElementById('onDemandFlatAmount');
+        if (flatAmount) flatAmount.style.display = 'none';
+        document.getElementById('items').parentElement.style.display = 'block';
+        setItemsRequired(true);
     }
     recalc();
+}
+
+function toggleOnDemandEndDate() {
+    var typeEl = document.getElementById('onDemandEndDateType');
+    var field = document.getElementById('onDemandEndDateField');
+    if (!typeEl || !field) return;
+
+    field.style.display = typeEl.value === 'fixed' ? 'block' : 'none';
 }
 
 function toggleEndDate() {
@@ -262,7 +286,12 @@ function togglePricingFields() {
     var docType = document.querySelector('input[name="doc_type"]:checked').value;
 
     if (docType !== 'long_term') {
-        // Regular or on-demand quote - show custom fields, items always visible
+        if (docType === 'on_demand') {
+            toggleOnDemandPricingMode();
+            return;
+        }
+
+        // Regular quote - show custom fields, items always visible
         ['depositTypeLabel', 'depositValueLabel', 'fulfillmentDateLabel'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'block';
@@ -305,6 +334,32 @@ function togglePricingFields() {
         // Re-enable required attributes on items
         setItemsRequired(true);
     }
+    recalc();
+}
+
+function toggleOnDemandPricingMode() {
+    var docType = document.querySelector('input[name="doc_type"]:checked')?.value || 'regular';
+    var selectedMode = document.querySelector('input[name="od_pricing_mode"]:checked')?.value || 'items';
+    var itemsWrap = document.getElementById('items')?.parentElement;
+    var flatAmount = document.getElementById('onDemandFlatAmount');
+    var flatInput = document.getElementById('onDemandAmountInput');
+    var useFlat = docType === 'on_demand' && selectedMode === 'flat';
+
+    if (itemsWrap) {
+        itemsWrap.style.display = useFlat ? 'none' : 'block';
+    }
+    if (flatAmount) {
+        flatAmount.style.display = useFlat ? 'block' : 'none';
+    }
+    if (flatInput) {
+        if (useFlat) {
+            flatInput.setAttribute('required', '');
+        } else {
+            flatInput.removeAttribute('required');
+        }
+    }
+
+    setItemsRequired(!useFlat);
     recalc();
 }
 

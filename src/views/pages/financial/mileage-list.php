@@ -102,7 +102,7 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
     <div class="card card-tight">
       <div class="label-muted">Total Deductible Amount</div>
-      <div class="font-600" style="font-size:20px">$\u003c?php echo number_format($totalDeductible, 2); ?></div>
+      <div class="font-600" style="font-size:20px">$<?php echo number_format($totalDeductible, 2); ?></div>
     </div>
     <div class="card card-tight">
       <div class="label-muted">Business Miles</div>

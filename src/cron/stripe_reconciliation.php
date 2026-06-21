@@ -10,6 +10,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../services/StripeService.php';
+require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[stripe_reconciliation]';
 $jobName = 'stripe_reconciliation';
@@ -35,9 +36,7 @@ try {
     }
     
     // Get last run time
-    $lastRunStmt = $pdo->prepare('SELECT last_run FROM cron_job_runs WHERE job_name = ?');
-    $lastRunStmt->execute([$jobName]);
-    $lastRun = $lastRunStmt->fetchColumn();
+    $lastRun = cron_state_last_run($pdo, $jobName);
     
     // Default to 7 days ago if never run
     $since = $lastRun ? strtotime($lastRun) : strtotime('-7 days');
@@ -70,6 +69,8 @@ try {
             $invoiceId = (int)$invoiceId;
             $piId = $pi['id'];
             $amount = ($pi['amount'] ?? 0) / 100; // Convert cents to dollars
+            $paymentAmount = isset($pi['metadata']['original_amount']) ? (float)$pi['metadata']['original_amount'] : $amount;
+            $surchargeAmount = isset($pi['metadata']['surcharge_amount']) ? (float)$pi['metadata']['surcharge_amount'] : max(0, $amount - $paymentAmount);
             
             // Check if this payment is already recorded
             $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id = ?');
@@ -80,7 +81,7 @@ try {
             }
             
             // Check if invoice exists
-            $invStmt = $pdo->prepare('SELECT id, total, status FROM invoices WHERE id = ?');
+            $invStmt = $pdo->prepare('SELECT id, total, status, client_id FROM invoices WHERE id = ?');
             $invStmt->execute([$invoiceId]);
             $invoice = $invStmt->fetch(PDO::FETCH_ASSOC);
             
@@ -99,8 +100,11 @@ try {
             // Record the payment
             $pdo->beginTransaction();
             
-            $pdo->prepare('INSERT INTO payments (invoice_id, amount, payment_method, stripe_payment_intent_id, status, payment_date, created_at) VALUES (?, ?, ?, ?, ?, CURDATE(), NOW())')
-                ->execute([$invoiceId, $amount, 'stripe', $piId, 'succeeded']);
+            $isAutoPay = !empty($pi['metadata']['auto_pay']) ? 1 : 0;
+            $pdo->prepare('
+                INSERT INTO payments (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), NOW())
+            ')->execute([(int)$invoice['client_id'], $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $piId, $isAutoPay, 'succeeded']);
             
             // Update invoice status
             $sumStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
@@ -139,7 +143,7 @@ try {
             $pdo->commit();
             $reconciled++;
             
-            @error_log("$logPrefix Reconciled payment $piId for invoice $invoiceId: \$$amount");
+            @error_log("$logPrefix Reconciled payment $piId for invoice $invoiceId: \$$paymentAmount");
             
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
@@ -148,20 +152,14 @@ try {
         }
     }
     
-    // Update cron_job_runs
-    $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status) VALUES (?, NOW(), "success") ON DUPLICATE KEY UPDATE last_run = NOW(), status = "success", error_message = NULL')
-        ->execute([$jobName]);
+    cron_state_mark_success($pdo, $jobName, "{$reconciled} reconciled; {$skipped} skipped; {$errors} errors");
     
     @error_log("$logPrefix Completed: $reconciled reconciled, $skipped skipped, $errors errors");
     
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
     
-    // Record failure
-    try {
-        $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status, error_message) VALUES (?, NOW(), "failed", ?) ON DUPLICATE KEY UPDATE last_run = NOW(), status = "failed", error_message = ?')
-            ->execute([$jobName, $e->getMessage(), $e->getMessage()]);
-    } catch (Throwable $e2) { /* ignore */ }
+    cron_state_mark_failure($pdo, $jobName, $e);
     
     exit(1);
 }

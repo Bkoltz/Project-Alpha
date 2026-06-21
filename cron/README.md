@@ -1,4 +1,4 @@
-# Project Alpha – Cron Service
+# Project Alpha - Cron Service
 
 Docker image that runs scheduled background tasks for Project Alpha.
 
@@ -7,14 +7,19 @@ Docker image that runs scheduled background tasks for Project Alpha.
 | Schedule | Script | Description |
 |----------|--------|-------------|
 | Daily 2:00 AM UTC | `generate_recurring_invoices.php` | Creates invoices for active long-term contracts on their billing schedule |
-| Daily 8:00 AM UTC | `send_invoice_reminders.php` | Sends 7-day-due and weekly-overdue email reminders |
+| Daily 2:15 AM UTC | `auto_charge_recurring.php` | Charges eligible auto-pay invoices after recurring invoices are generated |
+| Daily 2:30 AM UTC | `backup_database.php` | Creates rotating daily, weekly, and monthly database backups |
 | Daily 3:00 AM UTC | `auto_terminate_contracts.php` | Marks expired contracts as completed |
 | Daily 4:00 AM UTC | `link_expiration_checker.php` | Flags expired public links |
+| Daily 6:00 AM UTC | `process_audit_schedules.php` | Generates and emails scheduled financial audit CSVs |
+| Daily 8:00 AM UTC | `send_invoice_reminders.php` | Sends 7-day-due and weekly-overdue email reminders |
 | Every 6 hours | `stripe_reconciliation.php` | Reconciles Stripe payments missed during downtime |
+
+All job output is appended to `/var/www/logs/cron.log` inside the cron container.
 
 ## Environment Variables
 
-Passed from `docker-compose.yml` (same DB credentials as the web service):
+Passed from `docker-compose.yml`:
 
 - `MYSQL_DATABASE`
 - `MYSQL_USER`
@@ -22,21 +27,36 @@ Passed from `docker-compose.yml` (same DB credentials as the web service):
 - `MYSQL_ROOT_PASSWORD`
 - `DB_HOST`
 - `DB_PORT`
+- `APP_*`, `STRIPE_*`, and `SMTP_*` values when present
+
+The entrypoint writes these values to `/etc/environment` because cron jobs do not inherit the container environment automatically.
 
 ## Build & Run
 
-```bash
-# Build locally
-docker build -t bkoltz/project-alpha-cron:latest .
+Use Docker Compose from the Project Alpha repo root:
 
-# Push to Docker Hub
-docker push bkoltz/project-alpha-cron:latest
+```bash
+docker compose up -d --build cron
 ```
 
-Or use `docker compose up` from the Project-Alpha repo, which references this image.
+To inspect the installed schedule:
 
-## Keeping Source Files in Sync
+```bash
+docker compose exec cron cat /etc/cron.d/project-alpha
+```
 
-The PHP source files under `src/` are copied from Project Alpha's main repo.
-When you update cron scripts, config, or shared utilities in Project Alpha,
-copy the relevant files here and rebuild the image.
+To follow logs:
+
+```bash
+docker compose exec cron tail -f /var/www/logs/cron.log
+```
+
+## Source Files
+
+The cron container mounts the same live source tree as the web container:
+
+```yaml
+- ./src:/var/www/src
+```
+
+Do not copy PHP source into this image. Rebuild the cron image when `cron/Dockerfile`, `cron/crontab`, `cron/entrypoint.sh`, or Composer dependencies change; ordinary PHP cron script changes are picked up through the mounted `src/` volume.

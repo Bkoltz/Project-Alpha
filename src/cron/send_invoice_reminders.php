@@ -8,8 +8,10 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
+require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[send_invoice_reminders]';
+$jobName = 'send_invoice_reminders';
 
 // Check if either reminder is enabled
 $due7Enabled = !empty($appConfig['invoice_auto_send_due_7days']);
@@ -17,12 +19,22 @@ $overdueEnabled = !empty($appConfig['invoice_auto_send_overdue_weekly']);
 
 if (!$due7Enabled && !$overdueEnabled) {
     @error_log("$logPrefix Both reminder types are disabled. Exiting.");
+    cron_state_mark_success($pdo, $jobName, 'Reminder settings disabled');
     exit(0);
 }
 
 @error_log("$logPrefix Starting invoice reminder run at " . date('Y-m-d H:i:s'));
 
 try {
+    $lastRun = cron_state_last_run($pdo, $jobName);
+    $dueWindowStart = $lastRun
+        ? date('Y-m-d', strtotime($lastRun . ' +7 days'))
+        : date('Y-m-d', strtotime('+7 days'));
+    $dueWindowEnd = date('Y-m-d', strtotime('+7 days'));
+    if ($dueWindowStart > $dueWindowEnd) {
+        $dueWindowStart = $dueWindowEnd;
+    }
+
     // Build SMTP config from app settings
     $smtpPass = '';
     if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
@@ -64,14 +76,13 @@ try {
 
     // 1) 7-day due reminders (sent once per invoice)
     if ($due7Enabled) {
-        $due7 = date('Y-m-d', strtotime('+7 days'));
         $stmt = $pdo->prepare("
             SELECT i.id, i.doc_number, i.total, i.due_date, c.email, c.name 
             FROM invoices i 
             JOIN clients c ON c.id = i.client_id 
-            WHERE i.due_date = ? AND i.status IN ('unpaid', 'partial')
+            WHERE i.due_date BETWEEN ? AND ? AND i.status IN ('unpaid', 'partial')
         ");
-        $stmt->execute([$due7]);
+        $stmt->execute([$dueWindowStart, $dueWindowEnd]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($rows as $inv) {
@@ -201,6 +212,7 @@ try {
     }
 
     @error_log("$logPrefix Completed: {$remindersSent} reminders sent, {$remindersSkipped} skipped, {$errors} errors");
+    cron_state_mark_success($pdo, $jobName, "{$remindersSent} sent; {$remindersSkipped} skipped; {$errors} errors");
 
     // Update last run timestamp in settings
     $configMount = '/var/www/config';
@@ -216,6 +228,7 @@ try {
 
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

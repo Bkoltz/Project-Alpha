@@ -54,6 +54,8 @@ try {
         throw new Exception('This invoice has already been paid in full.');
     }
     
+    $docNumber = $invoice['doc_number'] ?? $invoiceId;
+
     // Calculate surcharge if applicable
     $surchargeInfo = InvoiceSurcharge::getInfo($amountDue, $appConfig);
     $surchargeAmount = $surchargeInfo['has_surcharge'] ? ($surchargeInfo['client_pays'] ?? 0) : 0;
@@ -72,7 +74,6 @@ try {
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
     $baseUrl = $scheme . '://' . $host;
     
-    $docNumber = $invoice['doc_number'] ?? $invoiceId;
     $successUrl = $baseUrl . '/?page=invoice/invoice-details&id=' . $invoiceId . '&payment=success&session_id={CHECKOUT_SESSION_ID}';
     $cancelUrl = $baseUrl . '/?page=invoice/invoice-details&id=' . $invoiceId . '&payment=cancelled';
     

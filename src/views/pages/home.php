@@ -11,6 +11,10 @@ try {
   $unpaid_invoices    = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial')")->fetchColumn();
   $income_30          = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at >= NOW() - INTERVAL 30 DAY AND status='succeeded'")->fetchColumn();
   $income_90          = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at >= NOW() - INTERVAL 90 DAY AND status='succeeded'")->fetchColumn();
+  $expenses_30        = (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM expenses WHERE status != 'void' AND expense_date >= CURDATE() - INTERVAL 29 DAY")->fetchColumn();
+  $net_30             = $income_30 - $expenses_30;
+  $overdue_invoices   = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial','overdue') AND due_date IS NOT NULL AND due_date < CURDATE()")->fetchColumn();
+  $receipts_30        = (int)$pdo->query("SELECT COUNT(*) FROM receipts WHERE created_at >= NOW() - INTERVAL 30 DAY")->fetchColumn();
   $total_clients      = (int)$pdo->query("SELECT COUNT(*) FROM clients WHERE archived=0 AND deleted_at IS NULL")->fetchColumn();
   $total_users        = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_disabled=0")->fetchColumn();
 
@@ -69,7 +73,8 @@ try {
 } catch (PDOException $e) {
   $db_error = true;
   $pending_quotes = $active_contracts = $unpaid_invoices = $total_clients = $total_users = 0;
-  $income_30 = $income_90 = 0;
+  $income_30 = $income_90 = $expenses_30 = $net_30 = 0;
+  $overdue_invoices = $receipts_30 = 0;
   $income_monthly = [];
   $quote_status = $contract_status = $invoice_status = [];
   $clients_recent = $payments_recent = $login_recent = [];
@@ -317,6 +322,38 @@ if ($disk_total !== false && $disk_total > 0) {
         <div class="dash-card__value"><?php echo $total_users; ?></div>
       </div>
     </article>
+  </div>
+
+  <div class="dash-panel dash-finance-snapshot">
+    <div class="dash-panel__head">
+      <div>
+        <h3 class="dash-panel__title">Financial Snapshot</h3>
+        <p class="dash-finance-snapshot__sub">30-day cash flow summary</p>
+      </div>
+      <a class="dash-panel__link" href="/?page=financial/financial-dashboard">Open financial dashboard</a>
+    </div>
+    <div class="dash-finance-snapshot__metrics">
+      <div class="dash-finance-snapshot__metric">
+        <span>Income</span>
+        <strong>$<?php echo number_format($income_30, 2); ?></strong>
+      </div>
+      <div class="dash-finance-snapshot__metric">
+        <span>Expenses</span>
+        <strong>$<?php echo number_format($expenses_30, 2); ?></strong>
+      </div>
+      <div class="dash-finance-snapshot__metric">
+        <span>Net</span>
+        <strong class="<?php echo $net_30 < 0 ? 'danger' : 'success'; ?>"><?php echo $net_30 < 0 ? '-$' . number_format(abs($net_30), 2) : '$' . number_format($net_30, 2); ?></strong>
+      </div>
+      <div class="dash-finance-snapshot__metric">
+        <span>Overdue invoices</span>
+        <strong><?php echo number_format($overdue_invoices); ?></strong>
+      </div>
+      <div class="dash-finance-snapshot__metric">
+        <span>Receipts</span>
+        <strong><?php echo number_format($receipts_30); ?></strong>
+      </div>
+    </div>
   </div>
 
   <!-- Two-column main layout -->

@@ -5,12 +5,15 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[auto_terminate_contracts]';
+$jobName = 'auto_terminate_contracts';
 
 // Check if cron is enabled in settings
 if (empty($appConfig['cron_enabled'])) {
     @error_log("$logPrefix Cron is disabled in settings. Skipping auto-termination.");
+    cron_state_mark_success($pdo, $jobName, 'Cron disabled');
     exit(0);
 }
 
@@ -65,6 +68,7 @@ try {
     }
     
     @error_log("$logPrefix Completed: $terminatedCount contracts auto-terminated");
+    cron_state_mark_success($pdo, $jobName, "{$terminatedCount} contract(s) auto-terminated");
     
     // Update last run timestamp in settings
     $configMount = '/var/www/config';
@@ -80,6 +84,7 @@ try {
     
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

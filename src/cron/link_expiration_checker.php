@@ -2,6 +2,10 @@
 // src/cron/link_expiration_checker.php
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/cron_state.php';
+
+$logPrefix = '[LinkExpirationChecker]';
+$jobName = 'link_expiration_checker';
 
 /**
  * Link Expiration Checker Cron Job
@@ -15,8 +19,6 @@ require_once __DIR__ . '/../config/db.php';
  */
 
 try {
-    $logPrefix = '[LinkExpirationChecker]';
-    
     // Check if link expiration checker is enabled
     $stmt = $pdo->prepare("SELECT config_value FROM app_config WHERE config_key = 'link_expiration_checker'");
     $stmt->execute();
@@ -24,6 +26,7 @@ try {
     
     if (!$enabled) {
         echo $logPrefix . " Link expiration checker is disabled. Exiting.\n";
+        cron_state_mark_success($pdo, $jobName, 'Link expiration checker disabled');
         exit(0);
     }
     
@@ -133,10 +136,12 @@ try {
     }
     
     echo "{$logPrefix} Link expiration check completed successfully.\n";
+    cron_state_mark_success($pdo, $jobName, "{$expiredCount} expired; {$expiringSoon} expiring soon");
     
 } catch (Throwable $e) {
     echo "{$logPrefix} ERROR: " . $e->getMessage() . "\n";
     error_log("{$logPrefix} Error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

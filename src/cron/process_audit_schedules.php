@@ -7,8 +7,16 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
+require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[process_audit_schedules]';
+$jobName = 'process_audit_schedules';
+
+if (empty($appConfig['cron_enabled'])) {
+    @error_log("$logPrefix Cron is disabled in settings. Skipping.");
+    cron_state_mark_success($pdo, $jobName, 'Cron disabled');
+    exit(0);
+}
 
 @error_log("$logPrefix Starting audit schedule check at " . date('Y-m-d H:i:s'));
 
@@ -45,6 +53,7 @@ try {
 
     if (empty($schedules)) {
         @error_log("$logPrefix No schedules due. Exiting.");
+        cron_state_mark_success($pdo, $jobName, 'No schedules due');
         exit(0);
     }
 
@@ -234,9 +243,11 @@ try {
     }
 
     @error_log("$logPrefix Completed: {$processed} processed, {$errors} errors");
+    cron_state_mark_success($pdo, $jobName, "{$processed} processed; {$errors} errors");
 
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

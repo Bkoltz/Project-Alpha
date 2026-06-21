@@ -15,7 +15,7 @@
  *         'doc_number' => ['type' => 'number', 'label' => 'Doc #', 'value' => $doc_number],
  *         'min' => ['type' => 'number', 'label' => 'Min Total ($)', 'value' => $min, 'step' => '0.01'],
  *     ],
- *     'columns' => 7  // Optional: number of columns (default: auto)
+ *     'primary_count' => 4  // Optional: number of filters shown in the primary row
  * ];
  * require __DIR__ . '/../components/document_list_filter.php';
  * ?>
@@ -27,7 +27,7 @@ if (!isset($filterConfig) || !is_array($filterConfig)) {
 
 $page = $filterConfig['page'] ?? '';
 $filters = $filterConfig['filters'] ?? [];
-$columns = $filterConfig['columns'] ?? null;
+$primaryCount = max(1, (int)($filterConfig['primary_count'] ?? 4));
 
 if (empty($page)) {
     throw new Exception('Filter config must include "page" parameter');
@@ -36,114 +36,148 @@ if (empty($page)) {
 // Generate unique ID for this filter instance
 $instanceId = 'filter_' . md5($page . microtime());
 
-// Calculate grid columns: each filter + submit + reset buttons
-$gridCols = $columns ?? (count($filters) + 2);
-?>
-
-<form method="get" action="/" style="display:grid;grid-template-columns:repeat(<?php echo $gridCols; ?>, 1fr);gap:8px;align-items:end;margin:12px 0;position:relative">
-    <input type="hidden" name="page" value="<?php echo htmlspecialchars($page); ?>">
-    
-    <?php foreach ($filters as $name => $config): ?>
-        <?php
+if (!function_exists('document_list_filter_field')) {
+    function document_list_filter_field(string $name, array $config, string $instanceId, bool $compact): string
+    {
         $type = $config['type'] ?? 'text';
         $label = $config['label'] ?? ucfirst($name);
         $value = $config['value'] ?? '';
         $placeholder = $config['placeholder'] ?? '';
         $step = $config['step'] ?? '';
+        $width = $config['width'] ?? ($type === 'client_autocomplete' ? '240px' : ($type === 'date' ? '150px' : ($type === 'number' ? '130px' : '170px')));
+        $fieldStyle = 'display:flex;flex-direction:column;gap:6px;';
+        if ($compact) {
+            $fieldStyle .= 'flex:0 1 ' . $width . ';min-width:min(' . $width . ',100%);';
+        }
+        if (in_array($type, ['client_autocomplete', 'project_autocomplete'], true)) {
+            $fieldStyle .= 'position:relative;';
+        }
+
+        ob_start();
         ?>
-        
-        <?php if ($type === 'client_autocomplete'): ?>
-            <!-- Client Autocomplete -->
-            <?php $idValue = $config['id_value'] ?? 0; ?>
-            <input type="hidden" name="client_id" id="<?php echo $instanceId; ?>_client_id" value="<?php echo (int)$idValue; ?>">
-            <label style="position:relative">
-                <div><?php echo htmlspecialchars($label); ?></div>
-                <input 
-                    type="text" 
-                    name="client" 
-                    id="<?php echo $instanceId; ?>_client_input" 
-                    value="<?php echo htmlspecialchars($value); ?>" 
-                    placeholder="<?php echo htmlspecialchars($placeholder ?: 'Type client name...'); ?>" 
-                    style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-                <div id="<?php echo $instanceId; ?>_client_suggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
+        <div style="<?php echo htmlspecialchars($fieldStyle); ?>">
+            <label for="<?php echo htmlspecialchars($instanceId . '_' . $name); ?>" style="font-size:13px;font-weight:600;color:#374151">
+                <?php echo htmlspecialchars($label); ?>
             </label>
-            
-        <?php elseif ($type === 'project_autocomplete'): ?>
-            <!-- Project Autocomplete -->
-            <label style="position:relative">
-                <div><?php echo htmlspecialchars($label); ?></div>
-                <input 
-                    type="text" 
-                    name="q" 
-                    id="<?php echo $instanceId; ?>_project_input" 
-                    value="<?php echo htmlspecialchars($value); ?>" 
-                    placeholder="<?php echo htmlspecialchars($placeholder ?: 'Type project name...'); ?>" 
-                    style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-                <div id="<?php echo $instanceId; ?>_project_suggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
-            </label>
-            
-        <?php elseif ($type === 'select'): ?>
-            <!-- Select Dropdown -->
-            <?php $options = $config['options'] ?? []; ?>
-            <label>
-                <div><?php echo htmlspecialchars($label); ?></div>
-                <select name="<?php echo htmlspecialchars($name); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+
+            <?php if ($type === 'client_autocomplete'): ?>
+                <?php $idValue = $config['id_value'] ?? 0; ?>
+                <input type="hidden" name="client_id" id="<?php echo htmlspecialchars($instanceId); ?>_client_id" value="<?php echo (int)$idValue; ?>">
+                <input
+                    type="text"
+                    name="client"
+                    id="<?php echo htmlspecialchars($instanceId); ?>_client_input"
+                    value="<?php echo htmlspecialchars($value); ?>"
+                    placeholder="<?php echo htmlspecialchars($placeholder ?: 'Type client name...'); ?>"
+                    style="padding:9px 10px;border-radius:8px;border:1px solid #ddd;width:100%"
+                >
+                <div id="<?php echo htmlspecialchars($instanceId); ?>_client_suggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
+
+            <?php elseif ($type === 'project_autocomplete'): ?>
+                <input
+                    type="text"
+                    name="q"
+                    id="<?php echo htmlspecialchars($instanceId); ?>_project_input"
+                    value="<?php echo htmlspecialchars($value); ?>"
+                    placeholder="<?php echo htmlspecialchars($placeholder ?: 'Type project name...'); ?>"
+                    style="padding:9px 10px;border-radius:8px;border:1px solid #ddd;width:100%"
+                >
+                <div id="<?php echo htmlspecialchars($instanceId); ?>_project_suggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)"></div>
+
+            <?php elseif ($type === 'select'): ?>
+                <?php $options = $config['options'] ?? []; ?>
+                <select name="<?php echo htmlspecialchars($name); ?>" id="<?php echo htmlspecialchars($instanceId . '_' . $name); ?>" style="padding:9px 10px;border-radius:8px;border:1px solid #ddd;width:100%">
                     <?php foreach ($options as $optValue => $optLabel): ?>
                         <option value="<?php echo htmlspecialchars($optValue); ?>" <?php echo $value === $optValue ? 'selected' : ''; ?>>
                             <?php echo htmlspecialchars($optLabel); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
-            </label>
-            
-        <?php elseif ($type === 'date'): ?>
-            <!-- Date Input -->
-            <label>
-                <div><?php echo htmlspecialchars($label); ?></div>
-                <input 
-                    type="date" 
-                    name="<?php echo htmlspecialchars($name); ?>" 
-                    value="<?php echo htmlspecialchars($value); ?>" 
-                    style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-            </label>
-            
-        <?php elseif ($type === 'number'): ?>
-            <!-- Number Input -->
-            <label>
-                <div><?php echo htmlspecialchars($label); ?></div>
-                <input 
-                    type="number" 
-                    name="<?php echo htmlspecialchars($name); ?>" 
-                    value="<?php echo htmlspecialchars($value); ?>" 
+
+            <?php elseif ($type === 'date'): ?>
+                <input
+                    type="date"
+                    name="<?php echo htmlspecialchars($name); ?>"
+                    id="<?php echo htmlspecialchars($instanceId . '_' . $name); ?>"
+                    value="<?php echo htmlspecialchars($value); ?>"
+                    style="padding:9px 10px;border-radius:8px;border:1px solid #ddd;width:100%"
+                >
+
+            <?php elseif ($type === 'number'): ?>
+                <input
+                    type="number"
+                    name="<?php echo htmlspecialchars($name); ?>"
+                    id="<?php echo htmlspecialchars($instanceId . '_' . $name); ?>"
+                    value="<?php echo htmlspecialchars($value); ?>"
                     placeholder="<?php echo htmlspecialchars($placeholder); ?>"
                     <?php echo $step ? 'step="' . htmlspecialchars($step) . '"' : ''; ?>
-                    style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-            </label>
-            
-        <?php else: ?>
-            <!-- Text Input (default) -->
-            <label>
-                <div><?php echo htmlspecialchars($label); ?></div>
-                <input 
-                    type="text" 
-                    name="<?php echo htmlspecialchars($name); ?>" 
-                    value="<?php echo htmlspecialchars($value); ?>" 
+                    style="padding:9px 10px;border-radius:8px;border:1px solid #ddd;width:100%"
+                >
+
+            <?php else: ?>
+                <input
+                    type="text"
+                    name="<?php echo htmlspecialchars($name); ?>"
+                    id="<?php echo htmlspecialchars($instanceId . '_' . $name); ?>"
+                    value="<?php echo htmlspecialchars($value); ?>"
                     placeholder="<?php echo htmlspecialchars($placeholder); ?>"
-                    style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-            </label>
+                    style="padding:9px 10px;border-radius:8px;border:1px solid #ddd;width:100%"
+                >
+            <?php endif; ?>
+        </div>
+        <?php
+        return (string)ob_get_clean();
+    }
+}
+
+$advancedFilters = array_slice($filters, $primaryCount, null, true);
+$hasAdvancedFilters = count($advancedFilters) > 0;
+$storageKey = 'document-filter:' . $page;
+?>
+
+<form method="get" action="/" style="display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;margin:16px 0 22px;position:relative">
+    <input type="hidden" name="page" value="<?php echo htmlspecialchars($page); ?>">
+
+    <?php $i = 0; foreach ($filters as $name => $config): $i++; ?>
+        <?php if ($i <= $primaryCount): ?>
+            <?php echo document_list_filter_field((string)$name, $config, $instanceId, true); ?>
         <?php endif; ?>
-        
     <?php endforeach; ?>
-    
-    <!-- Submit Button -->
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer;white-space:nowrap">
-        Filter
-    </button>
-    
-    <!-- Reset Button -->
-    <a href="/?page=<?php echo htmlspecialchars($page); ?>" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block;font-size:small;text-align:center;text-decoration:none;color:inherit;white-space:nowrap">
-        Reset
-    </a>
+
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <button type="submit" style="padding:9px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer;white-space:nowrap">
+            Filter
+        </button>
+        <a href="/?page=<?php echo htmlspecialchars($page); ?>" style="padding:9px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block;font-size:small;text-align:center;text-decoration:none;color:inherit;white-space:nowrap">
+            Reset
+        </a>
+        <?php if ($hasAdvancedFilters): ?>
+            <button
+                type="button"
+                data-filter-toggle="<?php echo htmlspecialchars($instanceId); ?>_advanced"
+                data-filter-storage-key="<?php echo htmlspecialchars($storageKey); ?>"
+                aria-expanded="false"
+                style="padding:9px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer;white-space:nowrap"
+            >
+                More filters
+            </button>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($hasAdvancedFilters): ?>
+        <div
+            id="<?php echo htmlspecialchars($instanceId); ?>_advanced"
+            data-filter-panel
+            data-filter-storage-key="<?php echo htmlspecialchars($storageKey); ?>"
+            style="display:none;flex-basis:100%;padding:12px 0 0;border-top:1px solid #eef0f2"
+        >
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 14px;align-items:end">
+                <?php foreach ($advancedFilters as $name => $config): ?>
+                    <?php echo document_list_filter_field((string)$name, $config, $instanceId, false); ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 </form>
 
 <?php

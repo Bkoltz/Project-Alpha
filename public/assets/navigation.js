@@ -156,6 +156,7 @@ async function navigateToPage(page, updateHistory = true) {
             const scripts = (typeof content === 'string') ? [] : content.scripts;
 
             mainContent.innerHTML = html;
+            initializeDocumentFilterToggles();
 
             // Execute extracted scripts (external and inline)
             scripts.forEach((s, idx) => {
@@ -302,15 +303,72 @@ function handlePopState(event) {
     navigateToPage(page, false); // Don't update history since this is from history
 }
 
+function getDocumentFilterStorageKey(buttonOrPanel) {
+    return buttonOrPanel?.getAttribute('data-filter-storage-key') || '';
+}
+
+function setDocumentFilterPanel(button, panel, open, persist = false) {
+    if (!button || !panel) return;
+
+    panel.style.display = open ? 'block' : 'none';
+    button.setAttribute('aria-expanded', open ? 'true' : 'false');
+    button.textContent = open ? 'Hide filters' : 'More filters';
+
+    if (persist) {
+        const key = getDocumentFilterStorageKey(button) || getDocumentFilterStorageKey(panel);
+        if (key) {
+            try {
+                window.localStorage.setItem(key, open ? 'open' : 'closed');
+            } catch (err) {
+                // Storage can be unavailable in private or locked-down contexts.
+            }
+        }
+    }
+}
+
+function initializeDocumentFilterToggles(root = document) {
+    root.querySelectorAll('[data-filter-toggle]').forEach(button => {
+        const panel = document.getElementById(button.getAttribute('data-filter-toggle'));
+        if (!panel) return;
+
+        const key = getDocumentFilterStorageKey(button) || getDocumentFilterStorageKey(panel);
+        let open = false;
+
+        if (key) {
+            try {
+                open = window.localStorage.getItem(key) === 'open';
+            } catch (err) {
+                open = false;
+            }
+        }
+
+        setDocumentFilterPanel(button, panel, open, false);
+    });
+}
+
+function handleDocumentFilterToggle(event) {
+    const button = event.target.closest('[data-filter-toggle]');
+    if (!button) return;
+
+    const panel = document.getElementById(button.getAttribute('data-filter-toggle'));
+    if (!panel) return;
+
+    event.preventDefault();
+    const isOpen = button.getAttribute('aria-expanded') === 'true';
+    setDocumentFilterPanel(button, panel, !isOpen, true);
+}
+
 // Initialize client-side navigation
 function initialize() {
     // Set up event listeners
     document.addEventListener('click', handleNavigation);
+    document.addEventListener('click', handleDocumentFilterToggle);
     window.addEventListener('popstate', handlePopState);
 
     // Set initial state
     history.replaceState({ page: currentPage }, '', window.location.href);
     updateActiveNavigation(currentPage);
+    initializeDocumentFilterToggles();
 
     initMobileNav();
 }
