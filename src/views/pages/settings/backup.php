@@ -8,18 +8,31 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 // Get existing backups (also check .gpg encrypted backups)
 $backupsDir = '/var/www/backups';
 
+// Read retention from env (matches backup_database.php)
+$retentionDays = (int)(getenv('BACKUP_RETENTION_DAYS') ?: '10');
+$retentionLabel = $retentionDays > 0 ? "{$retentionDays} daily backups" : 'Unlimited (retention disabled)';
+
 $backups = [];
 if (is_dir($backupsDir)) {
-    // Check for both .sql.gz and .sql.gz.gpg files
-    foreach (glob($backupsDir . '/*.sql.gz*') as $file) {
-        if (is_file($file)) {
-            $backups[] = [
-                'file' => basename($file),
-                'path' => $file,
-                'size' => round(filesize($file) / 1024, 1),
-                'created' => date('Y-m-d H:i:s', filemtime($file)),
-                'encrypted' => substr($file, -4) === '.gpg',
-            ];
+    // Check daily/ subdirectory first (where the backup script writes)
+    $searchDirs = [
+        $backupsDir . '/daily',
+        $backupsDir . '/weekly',
+        $backupsDir . '/monthly',
+        $backupsDir, // root level (legacy backups)
+    ];
+    foreach ($searchDirs as $searchDir) {
+        if (!is_dir($searchDir)) continue;
+        foreach (glob($searchDir . '/*.sql.gz*') as $file) {
+            if (is_file($file)) {
+                $backups[] = [
+                    'file' => basename($file),
+                    'path' => $file,
+                    'size' => round(filesize($file) / 1024, 1),
+                    'created' => date('Y-m-d H:i:s', filemtime($file)),
+                    'encrypted' => substr($file, -4) === '.gpg',
+                ];
+            }
         }
     }
 }
@@ -59,7 +72,7 @@ unset($_SESSION['flash_backup']);
         </div>
         <div class="status-item">
             <span class="status-label">Retention:</span>
-            <span class="status-value">14 daily backups</span>
+            <span class="status-value"><?php echo htmlspecialchars($retentionLabel); ?></span>
         </div>
         <div class="status-item">
             <span class="status-label">Schedule:</span>
