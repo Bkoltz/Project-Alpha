@@ -9,6 +9,13 @@
 #
 # That's it. No .env file needed. Stripe keys go through the SaaS UI.
 
+# Shared DB connection defaults (used by web + cron via <<: *db-env)
+x-db-env: &db-env
+  DB_HOST: db
+  DB_PORT: 3306
+  MYSQL_DATABASE: project_alpha
+  MYSQL_USER: appuser
+
 services:
   web:
     build: .
@@ -16,10 +23,7 @@ services:
     ports:
       - "1627:80"
     environment:
-      DB_HOST: db
-      DB_PORT: 3306
-      MYSQL_DATABASE: project_alpha
-      MYSQL_USER: appuser
+      <<: *db-env
       # --- CHANGE THESE for production ---
       # Default admin login: admin@project-alpha.local / changeme_admin_pass
       MYSQL_PASSWORD: changeme_secure_pass
@@ -27,19 +31,19 @@ services:
       ADMIN_PASSWORD: changeme_admin_pass
       # --- END PASSWORDS ---
       # Optional: only needed behind a reverse proxy (Cloudflare, nginx, etc.)
-      # Lets the app detect real client IPs from X-Forwarded-For / CF-Connecting-IP
       TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/\")!==false?0:1);'"]
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/')!==false?0:1);"]
       interval: 10s
       timeout: 5s
       start_period: 20s
       retries: 5
     restart: unless-stopped
     volumes:
+      # Shared volumes (also mounted in cron service)
       - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
@@ -54,10 +58,7 @@ services:
       dockerfile: Dockerfile
     image: "bkoltz/project-alpha:cron"
     environment:
-      DB_HOST: db
-      DB_PORT: 3306
-      MYSQL_DATABASE: project_alpha
-      MYSQL_USER: appuser
+      <<: *db-env
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
       BACKUP_RETENTION_DAYS: "10"
@@ -66,11 +67,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
     volumes:
+      # Same shared volumes as web service
       - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
-      # Backups volume — shared with web service
       - pa_backups:/var/www/backups
+      # Cron-only volumes
       - cron_logs:/var/log/cron
       - mysql_socket:/var/run/mysqld
 

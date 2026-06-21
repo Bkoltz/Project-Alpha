@@ -104,24 +104,26 @@ unset($_SESSION['flash_backup']);
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="action" value="update_settings">
 
-        <div class="form-group">
-            <label for="retention_days">Retention (days)</label>
-            <input type="number" name="retention_days" id="retention_days"
-                   value="<?php echo htmlspecialchars($retentionDays); ?>"
-                   min="0" max="365" class="input" style="width:120px;">
-            <span class="help-text">Number of daily backups to keep. Set to 0 to disable retention (keep all backups).</span>
-        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; padding:1rem; background:#f8f9fa; border-radius:8px; margin-bottom:1rem;">
+            <div class="form-group" style="margin:0;">
+                <label for="retention_days" style="font-size:0.85rem; color:#6c757d; margin-bottom:0.35rem; display:block;">Retention (days)</label>
+                <input type="number" name="retention_days" id="retention_days"
+                       value="<?php echo htmlspecialchars($retentionDays); ?>"
+                       min="0" max="365" class="input" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;">
+                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">Keep this many daily backups. 0 = keep all (no auto-cleanup).</span>
+            </div>
 
-        <div class="form-group">
-            <label for="backup_hour">Backup Time (UTC)</label>
-            <select name="backup_hour" id="backup_hour" class="input" style="width:120px;">
-                <?php for ($h = 0; $h < 24; $h++): ?>
-                <option value="<?php echo $h; ?>" <?php echo ($h == $backupHour) ? 'selected' : ''; ?>>
-                    <?php echo str_pad($h, 2, '0', STR_PAD_LEFT); ?>:00 UTC
-                </option>
-                <?php endfor; ?>
-            </select>
-            <span class="help-text">Daily backup will run at this hour. Default: 02:00 UTC. Changes take effect on next container restart.</span>
+            <div class="form-group" style="margin:0;">
+                <label for="backup_hour" style="font-size:0.85rem; color:#6c757d; margin-bottom:0.35rem; display:block;">Backup Time (UTC)</label>
+                <select name="backup_hour" id="backup_hour" class="input" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;">
+                    <?php for ($h = 0; $h < 24; $h++): ?>
+                    <option value="<?php echo $h; ?>" <?php echo ($h == $backupHour) ? 'selected' : ''; ?>>
+                        <?php echo str_pad($h, 2, '0', STR_PAD_LEFT); ?>:00 UTC
+                    </option>
+                    <?php endfor; ?>
+                </select>
+                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">Daily backup runs at this hour. Restart cron container to apply.</span>
+            </div>
         </div>
 
         <button type="submit" class="btn btn-primary">Save Settings</button>
