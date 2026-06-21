@@ -106,16 +106,31 @@ if (date('j') === '1') {
     @error_log("[Backup] Monthly copy: " . $monthlyFile);
 }
 
-// Retention
-$retention = [$dailyDir => 7, $weeklyDir => 4, $monthlyDir => 12];
-foreach ($retention as $dir => $keep) {
+// Retention — configurable via BACKUP_RETENTION_DAYS env var
+// Default: 10 daily backups. Set to 0 to disable retention (keep all).
+$retentionDays = (int)(getenv('BACKUP_RETENTION_DAYS') ?: '10');
+if ($retentionDays > 0) {
+    $files = glob($dailyDir . '/*.sql.gz');
+    usort($files, function($a, $b) {
+        return filemtime($b) - filemtime($a);
+    });
+    foreach (array_slice($files, $retentionDays) as $old) {
+        @unlink($old);
+        @error_log("[Backup] Removed old (retention={$retentionDays}d): " . $old);
+    }
+} else {
+    @error_log("[Backup] Retention disabled (BACKUP_RETENTION_DAYS=0), keeping all backups");
+}
+
+// Keep weekly/monthly retention at fixed values (4 weekly, 12 monthly)
+foreach ([$weeklyDir => 4, $monthlyDir => 12] as $dir => $keep) {
     $files = glob($dir . '/*.sql.gz');
     usort($files, function($a, $b) {
         return filemtime($b) - filemtime($a);
     });
     foreach (array_slice($files, $keep) as $old) {
         @unlink($old);
-        @error_log("[Backup] Removed old: " . $old);
+        @error_log("[Backup] Removed old archive: " . $old);
     }
 }
 

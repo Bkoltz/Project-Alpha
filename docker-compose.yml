@@ -20,7 +20,8 @@ services:
       DB_PORT: 3306
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
-      # --- CHANGE THESE ---
+      # --- CHANGE THESE for production ---
+      # Default admin login: admin@project-alpha.local / changeme_admin_pass
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
       ADMIN_PASSWORD: changeme_admin_pass
@@ -42,7 +43,9 @@ services:
       - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
-      - ./backups:/var/www/backups
+      # Backups volume — to mount to a custom path, replace with:
+      #   - /your/backup/path:/var/www/backups
+      - pa_backups:/var/www/backups
       - mysql_socket:/var/run/mysqld
 
   cron:
@@ -57,6 +60,7 @@ services:
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
+      BACKUP_RETENTION_DAYS: "10"
     depends_on:
       db:
         condition: service_healthy
@@ -65,7 +69,8 @@ services:
       - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
-      - ./backups:/var/www/backups
+      # Backups volume — shared with web service
+      - pa_backups:/var/www/backups
       - cron_logs:/var/log/cron
       - mysql_socket:/var/run/mysqld
 
@@ -96,3 +101,4 @@ volumes:
   db_data: {}
   cron_logs: {}
   mysql_socket: {}
+  pa_backups: {}
