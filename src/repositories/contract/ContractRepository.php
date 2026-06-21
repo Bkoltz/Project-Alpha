@@ -17,12 +17,6 @@ class ContractRepository
 {
     private PDO $pdo;
 
-    private const  DOCUMENT_TYPE_INSERT_STATEMENTS = [
-        DocumentType::REGULAR->value => 'INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_value, deposit_paid, fulfillment_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        DocumentType::LONG_TERM->value => 'INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_value, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        DocumentType::ON_DEMAND->value => 'INSERT INTO on_demand_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_value, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-    ];
-
     private const DOCUMENT_TYPE_EDIT_STATEMENTS = [
         DocumentType::REGULAR->value => 'UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, deposit_type=?, deposit_value=?, deposit_paid=?, fulfillment_date=?, scope=?, custom_fields=? WHERE id=?',
         DocumentType::LONG_TERM->value => 'INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_value, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
@@ -143,7 +137,16 @@ class ContractRepository
         return ItemRecord::fromRepoArray($stmt->fetchAll(PDO::FETCH_ASSOC) ?? []);
     }
 
-    public function setContractSignaturePath(int $id, DocumentType $documentType, string $path): void {
+    public function getContractStatus(int $id, DocumentType $documentType) : string {
+        $table = self::DOCUMENT_TYPE_TABLES[$documentType->value];
+        $stmt = $this->pdo->prepare('SELECT status FROM ' . $table . ' WHERE id=?');
+        $stmt->execute([$id]);
+
+        return $stmt->fetchColumn() ?: "";
+    }
+
+    public function setContractSignaturePath(int $id, DocumentType $documentType, string $path): void
+    {
         $table = self::DOCUMENT_TYPE_TABLES[$documentType->value];
         $stmt = $this->pdo->prepare('UPDATE ' . $table . ' SET signed_pdf_path=?, status=? WHERE id=?');
         $stmt->execute([$path, 'active', $id]);
@@ -157,7 +160,7 @@ class ContractRepository
         return ContractSignatures::fromArray($stmt->fetchAll(PDO::FETCH_ASSOC) ?? []);
     }
 
-    public function getStoredContract(int $id, DocumentType $documentType): BaseContractRecord
+    public function getStoredContract(int $id, DocumentType $documentType): RegularContractRecord|LongTermContractRecord|OnDemandContractRecord
     {
         $table = self::DOCUMENT_TYPE_TABLES[$documentType->value];
 
@@ -180,6 +183,7 @@ class ContractRepository
         Status related methods
     */
 
+    // Generic
     public function activateContract(int $id, DocumentType $type): void
     {
         $table = $this::DOCUMENT_TYPE_TABLES[$type->value] ?? "contracts";
@@ -197,21 +201,50 @@ class ContractRepository
     public function denyContract(int $id, DocumentType $type): void
     {
         $table = $this::DOCUMENT_TYPE_TABLES[$type->value] ?? "contracts";
-        $stmt = $this->pdo->prepare('UPDATE ' . $table .  ' SET status="denied" WHERE id=?');
-        $stmt->execute([$id]);
+        $status = $type === DocumentType::REGULAR ? 'denied' : 'cancelled';
+        $stmt = $this->pdo->prepare('UPDATE ' . $table .  ' SET status=? WHERE id=?');
+        $stmt->execute([$status, $id]);
     }
 
     public function voidContract(int $id, DocumentType $type): void
     {
         $table = $this::DOCUMENT_TYPE_TABLES[$type->value] ?? "contracts";
-        $stmt = $this->pdo->prepare("UPDATE ' . $table .  ' SET status='cancelled', voided_at=CURRENT_TIMESTAMP WHERE id=?");
+        $timestamp = $type === DocumentType::REGULAR ? ', voided_at=CURRENT_TIMESTAMP' : '';
+        $stmt = $this->pdo->prepare('UPDATE ' . $table .  ' SET status=\'cancelled\'' . $timestamp . ' WHERE id=?');
         $stmt->execute([$id]);
     }
 
     public function completeContract(int $id, DocumentType $type): void
     {
         $table = $this::DOCUMENT_TYPE_TABLES[$type->value] ?? "contracts";
-        $stmt = $this->pdo->prepare('UPDATE ' . $table .  ' SET status="completed", completed_at=CURRENT_TIMESTAMP WHERE id=?');
+        $timestamp = $type === DocumentType::REGULAR ? ', completed_at=CURRENT_TIMESTAMP' : '';
+        $stmt = $this->pdo->prepare('UPDATE ' . $table .  ' SET status=\'completed\'' . $timestamp . ' WHERE id=?');
         $stmt->execute([$id]);
+    }
+
+    // Long-term
+    public function activateLongTermContract(int $id, string $nextInvoiceDate): void
+    {
+        $this->activateContract($id, DocumentType::LONG_TERM);
+        $stmt = $this->pdo->prepare('UPDATE long_term_contracts SET next_invoice_date=? WHERE id=?');
+        $stmt->execute([$nextInvoiceDate, $id]);
+    }
+
+    public function terminateLongTermContract(int $id): void
+    {
+        $this->voidContract($id, DocumentType::LONG_TERM);
+
+        $stmt = $this->pdo->prepare('UPDATE long_term_contracts SET next_invoice_date=NULL WHERE id=?');
+        $stmt->execute([$id]);
+    }
+
+    public function resumeLongTermContract(int $id): void
+    {
+        $this->activateContract($id, DocumentType::LONG_TERM);
+    }
+
+    public function pauseLongTermContract(int $id): void
+    {
+        $this->pauseContract($id, DocumentType::LONG_TERM);
     }
 }

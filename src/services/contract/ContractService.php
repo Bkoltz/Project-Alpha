@@ -102,7 +102,8 @@ class ContractService
         return $this->repository->getStoredSignatures($id);
     }
 
-    public function setContractSignaturePath(int $id, DocumentType $documentType, string $path): void {
+    public function setContractSignaturePath(int $id, DocumentType $documentType, string $path): void
+    {
         $this->repository->setContractSignaturePath($id, $documentType, $path);
     }
 
@@ -184,6 +185,7 @@ class ContractService
         Status related methods
     */
 
+    // Generic
     public function activateContract(int $id, DocumentType $documentType): void
     {
         $this->repository->activateContract($id, $documentType);
@@ -207,5 +209,40 @@ class ContractService
     public function voidContract(int $id, DocumentType $documentType): void
     {
         $this->repository->voidContract($id, $documentType);
+    }
+
+    // Long-term
+    public function activateLongTermContract(int $id): void
+    {
+        $storedContract = $this->repository->getStoredContract($id, DocumentType::LONG_TERM);
+        if ($storedContract->status !== 'pending')
+            throw new Exception("Failed to activate contract: Cannot activate non pending contract");
+
+        $nextInvoiceDate = $storedContract->next_invoice_date ?: $storedContract->start_date;
+        $this->repository->activateLongTermContract($id, $nextInvoiceDate);
+    }
+
+    public function terminateLongTermContract(int $id): void {
+        $status = $this->repository->getContractStatus($id, DocumentType::LONG_TERM);
+        if ($status === 'completed' || $status === 'cancelled') 
+            throw new Exception("Failed to terminate contract: Contract already cancelled or terminated");
+
+        $this->repository->terminateLongTermContract($id);
+    }
+
+    public function resumeLongTermContract(int $id): void {
+        $status = $this->repository->getContractStatus($id, DocumentType::LONG_TERM);
+        if ($status !== 'paused')
+            throw new Exception("Failed to resume contract: Cannot resume non paused contract");
+
+        $this->repository->resumeLongTermContract($id);
+    }
+
+    public function pauseLongTermContract(int $id): void {
+        $status = $this->repository->getContractStatus($id, DocumentType::LONG_TERM);
+        if($status !== 'active')
+            throw new Exception("Failed to pause contract: Cannot pause non active contract");
+
+        $this->repository->pauseLongTermContract($id);
     }
 }

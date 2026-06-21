@@ -62,13 +62,19 @@ class Router
             'contract/regular-contract-edit' => [ContractDataController::class, 'update', DocumentType::REGULAR],
             'contract/on-demand-contract-edit' => [ContractDataController::class, 'update', DocumentType::ON_DEMAND],
             'contract/long-term-contract-edit' => [ContractDataController::class, 'update', DocumentType::LONG_TERM],
+
+            'contract/long-term-contract-activate' => [ContractDetailsController::class, 'activate',  DocumentType::LONG_TERM],
+            'contract/long-term-contract-pause' => [ContractDetailsController::class, 'pause',  DocumentType::LONG_TERM],
+            'contract/long-term-contract-resume' => [ContractDetailsController::class, 'resume',  DocumentType::LONG_TERM],
+            'contract/long-term-contract-terminate' => [ContractDetailsController::class, 'terminate',  DocumentType::LONG_TERM],
+
             'contract/contract-complete' => [ContractDetailsController::class, 'complete'],
             'contract/contract-resume' => [ContractDetailsController::class, 'resume'],
             'contract/contract-void' => [ContractDetailsController::class, 'terminate'],
             'contract/contract-deny' => [ContractDetailsController::class, 'deny'],
-            'contract/contract-pdf' => [ContractDetailsController::class, ''],
+            // 'contract/contract-pdf' => [ContractDetailsController::class, ''],
             'contract/contract-sign' => [ContractDetailsController::class, 'sign'],
-            'contract-create' => [ContractDataController::class, 'create'],
+            'contract/contract-create' => [ContractDataController::class, 'create'],
 
             // Invoice
             'invoice/invoices-edit' => [InvoiceDataController::class, 'update'],

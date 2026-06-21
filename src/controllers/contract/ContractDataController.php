@@ -36,7 +36,7 @@ class ContractDataController
             $output = $this->service->getEditRenderData($id, $documentType);
             $path = self::CONTRACT_EDIT_PATH[$documentType->value];
 
-            return[$path, $output->toArray()];
+            return [$path, $output->toArray()];
         } else {
             $output = $this->service->getCreateRenderData();
 
@@ -72,8 +72,6 @@ class ContractDataController
         // $this->documentService->updateAllInvoicesItems($id, $itemData);
     }
 
-    // The create form has separate start_date/end_date inputs per document_type (long_term_*,
-    // on_demand_*) so the browser never has two same-named fields to choose between.
     private function resolveDateFields(array $postData): array
     {
         $postData['start_date'] = match ($postData['document_type'] ?? null) {
@@ -89,14 +87,5 @@ class ContractDataController
         };
 
         return $postData;
-    }
-
-    public function signContract()
-    {
-        //Verify upload
-        //verify size
-
-        //store file
-        //store file path in db
     }
 }

@@ -13,7 +13,12 @@
 
 <tbody>
 	{% for row in rows %}
-		<tr style="border-top:1px solid #f3f4f6;{{row.style}}">
+		{% set statusColors = {
+			'pending': '#fffbeb',
+			'approved': '#ecfdf5',
+			'rejected': '#fef2f2'
+		} %}
+		<tr style="border-top:1px solid #f3f4f6;background:{{ statusColors[row.status] ?? '#fff' }};">
 			<td style="padding:10px">
 				<a href="/?page=quote/quote-details&id={{row.id}}" style="text-decoration:none;color:inherit">ODQ-{{row.doc_number}}</a>
 			</td>

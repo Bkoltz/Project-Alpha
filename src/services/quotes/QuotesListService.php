@@ -33,7 +33,6 @@ class QuotesListService extends BaseListService
         $displayFilterConfig = $this->getDisplayFilterConfig($filterData->toArray());
         $displayData = $this->getDisplayData($documentType, $filterData, $displayCountData);
         $rows = $this->repository->getQuoteRows($documentType, $filterData, $displayCountData);
-        $this->updateRowStyle($rows);
 
         return new QuoteListView(array_merge(
             [
@@ -115,25 +114,4 @@ class QuotesListService extends BaseListService
         ];
     }
 
-    // This uses references 
-    private function updateRowStyle(array &$rows): array
-    {
-        foreach ($rows as &$row) {
-            switch ($row['status']) {
-                case 'approved':
-                    $row['style'] = 'background:#ecfdf5;';
-                    break;
-                case 'pending':
-                    $row['style'] = 'background:#fffbeb;';
-                    break;
-                case 'rejected':
-                    $row['style'] = 'background:#fef2f2;';
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        return $rows;
-    }
 }

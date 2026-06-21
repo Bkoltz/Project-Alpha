@@ -14,7 +14,15 @@
 
 		<tbody>
 			{% for row in rows %}
-				<tr style="border-top:1px solid #f3f4f6;{{row.style}}">
+				{% set statusColors = {
+					'pending': '#fffbeb',
+					'active': '#ecfdf5',
+					'completed': '#eff6ff',
+					'cancelled': '#fef2f2',
+					'denied': '#fef2f2',
+					'void': '#fef2f2'
+				} %}
+				<tr style="border-top:1px solid #f3f4f6;background:{{ statusColors[row.status] ?? '#fff' }};">
 					<td style="padding:10px">
 						<a href="/?page=contract/contract-details&id={{row.id}}" style="text-decoration:none;color:inherit">C-{{row.id}}</a>
 					</td>

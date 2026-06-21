@@ -18,7 +18,12 @@
 		</tr>
 	{% else %}
 		{% for row in rows %}
-			<tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
+			{% set statusColors = {
+				'active': '#ecfdf5',
+				'paused': '#fff7ed',
+				'cancelled': '#fef2f2'
+			} %}
+			<tr style="border-top:1px solid #f3f4f6;background:{{ statusColors[row.status] ?? '#fff' }};">
 				<td style="padding:10px">
 					<a href="/?page=row/long-term-row-details&id={{row.id}}" style="text-decoration:none;color:inherit;font-weight:600">
 						LTC-{{row.doc_number}}

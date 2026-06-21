@@ -16,7 +16,15 @@
         
 		<tbody>
 			{% for row in rows %}
-				<tr style="border-top:1px solid #f3f4f6;{{row.style}}">
+				{% set statusColors = {
+					'draft': '#f9fafb',
+					'pending': '#fffbeb',
+					'active': '#ecfdf5',
+					'paused': '#fff7ed',
+					'cancelled': '#fef2f2',
+					'completed': '#eff6ff'
+				} %}
+				<tr style="border-top:1px solid #f3f4f6;background:{{ statusColors[row.status] ?? '#fff' }};">
 					<td style="padding:10px">ODC-{{row.id}}</td>
 					<td style="padding:10px">{{row.project_code}}</td>
 					<td style="padding:10px">

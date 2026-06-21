@@ -13,7 +13,14 @@
 </thead>
 <tbody>
 	{% for row in rows %}
-		<tr style="border-top:1px solid #f3f4f6;{{row.status}}">
+		{% set statusColors = {
+			'unpaid': '#fffbeb',
+			'partial': '#fff7ed',
+			'paid': '#ecfdf5',
+			'void': '#fef2f2',
+			'denied': '#fef2f2'
+		} %}
+		<tr style="border-top:1px solid #f3f4f6;background:{{ statusColors[row.status] ?? '#fff' }};">
 			<td style="padding:10px">I-{{row.doc_number}}</td>
 			<td style="padding:10px">{{row.project_code}}</td>
 			<td style="padding:10px">

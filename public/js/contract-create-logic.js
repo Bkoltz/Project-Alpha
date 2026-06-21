@@ -355,23 +355,6 @@ function loadProjectsForClientCo(clientId) {
 //         });
 // });
 
-document.getElementById('coCreateForm').addEventListener('submit', function (e) {
-    if (!cid.value) {
-        e.preventDefault();
-        alert('Please select a client from suggestions.');
-        return;
-    }
-    // Set form action based on contract type
-    var docType = document.querySelector('input[name="document_type"]:checked').value;
-    if (docType === 'long_term') {
-        this.action = '/?page=long-term-contract-create';
-    } else if (docType === 'on_demand') {
-        this.action = '/?page=on-demand-contract-create';
-    } else {
-        this.action = '/?page=contract-create';
-    }
-});
-
 // Signature Management
 var signatureCount = 0;
 var MAX_SIGNATURES = 5;

@@ -14,7 +14,14 @@
 
 <tbody>
 	{% for row in rows %}
-		<tr style="border-top:1px solid #f3f4f6;{{row.style}}">
+		{% set statusColors = {
+			'draft': '#f9fafb',
+			'sent': '#fffbeb',
+			'paid': '#ecfdf5',
+			'overdue': '#fef2f2',
+			'cancelled': '#fef2f2'
+		} %}
+		<tr style="border-top:1px solid #f3f4f6;background:{{ statusColors[row.status] ?? '#fff' }};">
 			<td style="padding:10px">
 				<a href="/?page=invoice/invoice-details&id=" style="text-decoration:none;color:inherit">ODI-{{row.doc_number}}</a>
 			</td>

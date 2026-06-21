@@ -19,11 +19,11 @@ class ContractDataService
         $this->contractService = $contractService;
         $this->customFieldService = $customFieldService;
     }
-    
+
     public function getCreateRenderData(): RenderOutput
     {
         $customFields = $this->customFieldService->getCustomFieldInputView(DocumentType::REGULAR);
-        
+
         return new ContractCreateView([
             'custom_fields' => $customFields
         ]);
@@ -43,4 +43,6 @@ class ContractDataService
             'app_config' => AppConfiguration::$ConfigSettings
         ]);
     }
+
+
 }

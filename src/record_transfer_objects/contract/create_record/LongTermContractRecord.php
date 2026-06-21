@@ -26,4 +26,5 @@ class LongTermContractRecord extends BaseContractRecord
     public ?string $pricing_type = null;
     public ?float $price_per_invoice = null;
     public ?string $scope = null;
+    public ?string $next_invoice_date = null;
 }

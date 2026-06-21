@@ -15,7 +15,15 @@
 
 		<tbody>
 			{% for row in rows %}
-				<tr style="border-top:1px solid #f3f4f6;{{row.style}}">
+				{% set statusColors = {
+					'draft': '#f9fafb',
+					'pending': '#fffbeb',
+					'active': '#ecfdf5',
+					'paused': '#fff7ed',
+					'cancelled': '#fef2f2',
+					'completed': '#eff6ff'
+				} %}
+				<tr style="border-top:1px solid #f3f4f6;background:{{ statusColors[row.status] ?? '#fff' }};">
 					<td style="padding:10px">
 						<a href="/?page=contract/long-term-contract-details&id={{row.id}}" style="text-decoration:none;color:inherit">LTC-{{row.id}}</a>
 					</td>
@@ -26,32 +34,38 @@
 					<td style="padding:10px;text-transform:capitalize">{{row.status}}</td>
 					<td style="padding:10px">{{row.billing_interval_count}}
 						{{row.billing_interval_unit}}</td>
-					<td style="padding:10px">{% if row.pricing_type == 'per_invoice' %}${{row.price_per_invoice}}/invoice{% else %}${{row.total}} total{% endif %}</td>
+					<td style="padding:10px">
+						{% if row.pricing_type == 'per_invoice' %}
+							${{row.price_per_invoice}}
+						{% else %}
+							${{row.total}}
+						{% endif %}
+					</td>
 					<td style="padding:10px">{{row.next_invoice_date}}</td>
 					<td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
 						<a href="/?page=contract/long-term-contract-details&id={{row.id}}" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
 						{% if row.status == 'pending' %}
-							<form method="post" action="/?page=long-term-contract-activate" style="display:inline">
+							<form method="post" action="/?page=contract/long-term-contract-activate" style="display:inline">
 								<input type="hidden" name="csrf" value="{{token}}">
 								<input type="hidden" name="id" value="{{row.id}}">
 								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
 							</form>
 						{% endif %}
 						{% if row.status == 'active' %}
-							<form method="post" action="/?page=long-term-contract-pause" style="display:inline">
+							<form method="post" action="/?page=contract/long-term-contract-pause" style="display:inline">
 								<input type="hidden" name="csrf" value="{{token}}">
 								<input type="hidden" name="id" value="{{row.id}}">
 								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#f59e0b;color:#fff; font-size: small;">Pause</button>
 							</form>
 						{% elseif row.status == 'paused' %}
-							<form method="post" action="/?page=long-term-contract-resume" style="display:inline">
+							<form method="post" action="/?page=contract/long-term-contract-resume" style="display:inline">
 								<input type="hidden" name="csrf" value="{{token}}">
 								<input type="hidden" name="id" value="{{row.id}}">
 								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Resume</button>
 							</form>
 						{% endif %}
-						{% if row.status != 'rejected' %}
-							<form method="post" action="/?page=long-term-contract-terminate" style="display:inline" onsubmit="return confirm('Terminate this long-term contract? This will stop future invoicing.')">
+						{% if row.status != 'cancelled' and row.status != 'completed' %}
+							<form method="post" action="/?page=contract/long-term-contract-terminate" style="display:inline" onsubmit="return confirm('Terminate this long-term contract? This will stop future invoicing.')">
 								<input type="hidden" name="csrf" value="{{token}}">
 								<input type="hidden" name="id" value="{{row.id}}">
 								<button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#dc2626;color:#fff; font-size: small;">Terminate</button>
