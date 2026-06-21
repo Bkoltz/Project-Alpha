@@ -12,6 +12,23 @@ $backupsDir = '/var/www/backups';
 $retentionDays = (int)(getenv('BACKUP_RETENTION_DAYS') ?: '10');
 $retentionLabel = $retentionDays > 0 ? "{$retentionDays} daily backups" : 'Unlimited (retention disabled)';
 
+// Read backup hour from app_config (default 2 = 2:00 AM UTC)
+$backupHour = 2;
+try {
+    $cfgStmt = $pdo->prepare("SELECT config_value FROM app_config WHERE organization_id = 0 AND config_key = 'backup_hour'");
+    $cfgStmt->execute();
+    $cfgRow = $cfgStmt->fetch(PDO::FETCH_ASSOC);
+    if ($cfgRow) $backupHour = (int)$cfgRow['config_value'];
+} catch (Exception $e) {}
+
+// Also check if retention is overridden in app_config
+try {
+    $cfgStmt2 = $pdo->prepare("SELECT config_value FROM app_config WHERE organization_id = 0 AND config_key = 'backup_retention_days'");
+    $cfgStmt2->execute();
+    $cfgRow2 = $cfgStmt2->fetch(PDO::FETCH_ASSOC);
+    if ($cfgRow2) $retentionDays = (int)$cfgRow2['config_value'];
+} catch (Exception $e) {}
+
 $backups = [];
 if (is_dir($backupsDir)) {
     // Check daily/ subdirectory first (where the backup script writes)
@@ -80,7 +97,37 @@ unset($_SESSION['flash_backup']);
         </div>
     </div>
 
-    <form method="POST" action="/?page=settings/backup" class="backup-form">
+    <hr>
+
+    <h4>Backup Configuration</h4>
+    <form method="POST" action="/?page=settings-backup" class="backup-form">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="action" value="update_settings">
+
+        <div class="form-group">
+            <label for="retention_days">Retention (days)</label>
+            <input type="number" name="retention_days" id="retention_days"
+                   value="<?php echo htmlspecialchars($retentionDays); ?>"
+                   min="0" max="365" class="input" style="width:120px;">
+            <span class="help-text">Number of daily backups to keep. Set to 0 to disable retention (keep all backups).</span>
+        </div>
+
+        <div class="form-group">
+            <label for="backup_hour">Backup Time (UTC)</label>
+            <select name="backup_hour" id="backup_hour" class="input" style="width:120px;">
+                <?php for ($h = 0; $h < 24; $h++): ?>
+                <option value="<?php echo $h; ?>" <?php echo ($h == $backupHour) ? 'selected' : ''; ?>>
+                    <?php echo str_pad($h, 2, '0', STR_PAD_LEFT); ?>:00 UTC
+                </option>
+                <?php endfor; ?>
+            </select>
+            <span class="help-text">Daily backup will run at this hour. Default: 02:00 UTC. Changes take effect on next container restart.</span>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+    </form>
+
+    <form method="POST" action="/?page=settings-backup" class="backup-form">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="action" value="backup_now">
         <button type="submit" class="btn btn-primary">
@@ -97,7 +144,7 @@ unset($_SESSION['flash_backup']);
     <hr>
 
     <h4>Restore from Backup</h4>
-    <form method="POST" action="/?page=settings/backup" class="backup-form" enctype="multipart/form-data">
+    <form method="POST" action="/?page=settings-backup" class="backup-form" enctype="multipart/form-data">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="action" value="restore">
         

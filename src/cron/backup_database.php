@@ -109,6 +109,13 @@ if (date('j') === '1') {
 // Retention — configurable via BACKUP_RETENTION_DAYS env var
 // Default: 10 daily backups. Set to 0 to disable retention (keep all).
 $retentionDays = (int)(getenv('BACKUP_RETENTION_DAYS') ?: '10');
+// Check if overridden in app_config DB
+try {
+    $cfgStmt = $pdo->prepare("SELECT config_value FROM app_config WHERE organization_id = 0 AND config_key = 'backup_retention_days'");
+    $cfgStmt->execute();
+    $cfgRow = $cfgStmt->fetch(PDO::FETCH_ASSOC);
+    if ($cfgRow !== false) $retentionDays = (int)$cfgRow['config_value'];
+} catch (Exception $e) {}
 if ($retentionDays > 0) {
     $files = glob($dailyDir . '/*.sql.gz');
     usort($files, function($a, $b) {
