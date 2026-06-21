@@ -1,19 +1,20 @@
-name: Docker Image CI
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-    - uses: actions/checkout@v6
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+1|name: Docker Image CI
+2|
+3|on:
+4|  push:
+5|    branches: [ "main" ]
+6|  pull_request:
+7|    branches: [ "main" ]
+8|
+9|jobs:
+10|  build:
+11|    runs-on: ubuntu-latest
+12|    permissions:
+13|      contents: read
+14|      packages: write
+15|
+16|    steps:
+17|    - uses: actions/checkout@v6
+18|    - name: Build the Docker image
+19|      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+20|

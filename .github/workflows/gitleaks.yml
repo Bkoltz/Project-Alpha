@@ -1,5 +1,9 @@
 name: Gitleaks Secret Scan
 
+# DISABLED: Gitleaks requires a paid license for organizations.
+# To re-enable: get a license at gitleaks.io, store as GITHUB Secret GITLEAKS_LICENSE,
+# then remove the `if: false` line below.
+
 on:
   push:
   pull_request:
@@ -8,6 +12,7 @@ on:
 
 jobs:
   gitleaks:
+    if: false  # disabled — missing GITLEAKS_LICENSE
     runs-on: ubuntu-latest
     permissions:
       contents: read
