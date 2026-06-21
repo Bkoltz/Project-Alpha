@@ -126,22 +126,23 @@ unset($_SESSION['flash_backup']);
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary">Save Settings</button>
-    </form>
-
-    <form method="POST" action="/?page=settings-backup" class="backup-form">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="action" value="backup_now">
-        <button type="submit" class="btn btn-primary">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Backup Now
-        </button>
-        <span class="help-text">Creates a new database backup immediately.</span>
-    </form>
+        <div style="display:flex; gap:0.75rem; align-items:center;">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+            </form>
+            <form method="POST" action="/?page=settings-backup" style="display:inline;">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                <input type="hidden" name="action" value="backup_now">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;margin-right:0.3rem;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Backup Now
+                </button>
+            </form>
+            <span class="help-text" style="font-size:0.8rem;">Creates a new backup immediately.</span>
+        </div>
 
     <hr>
 
