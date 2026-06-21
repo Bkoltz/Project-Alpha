@@ -12,6 +12,7 @@
 12|
 13|jobs:
 14|  prepare:
+    if: false  # disabled — Docker Hub credentials need updating
 15|    name: Prepare
 16|    runs-on: ubuntu-latest
 17|    steps:

@@ -8,6 +8,7 @@
 8|
 9|jobs:
 10|  build:
+    if: false  # disabled — redundant with docker-publish
 11|    runs-on: ubuntu-latest
 12|    permissions:
 13|      contents: read
