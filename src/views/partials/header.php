@@ -62,17 +62,7 @@
           <?php if ($logo): ?>
             <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" class="brand-logo" loading="eager" fetchpriority="high" />
           <?php else: ?>
-            <svg class="brand-logo" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <defs>
-                <linearGradient id="g" x1="0" x2="1">
-                  <stop offset="0%" stop-color="var(--nav-accent)" />
-                  <stop offset="100%" stop-color="#38bdf8" />
-                </linearGradient>
-              </defs>
-              <rect x="4" y="4" width="40" height="40" rx="8" fill="url(#g)" />
-              <path d="M10 26c7-2 12-9 17-9 4 0 7 3 11 3" stroke="#fff" stroke-width="2" fill="none" />
-              <circle cx="36" cy="20" r="2" fill="#fff" />
-            </svg>
+            <img src="/assets/default-logo.png" alt="<?php echo htmlspecialchars($brand); ?>" class="brand-logo" loading="eager" fetchpriority="high" />
           <?php endif; ?>
           <span class="brand-text"><?php echo htmlspecialchars($brand); ?></span>
         </a>
