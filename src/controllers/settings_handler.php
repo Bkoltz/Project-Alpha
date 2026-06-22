@@ -334,10 +334,10 @@ if (isset($_POST['invoice_show_due_date'])) {
     $settings['invoice_show_due_date'] = !empty($_POST['invoice_show_due_date']) ? 1 : 0;
 }
 
-// Quote settings
+// Quote settings — default to enabled unless explicitly unchecked (missing checkbox = 0)
 $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
-$settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
-$settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
+$settings['quote_auto_create_contract'] = isset($_POST['quote_auto_create_contract']) && empty($_POST['quote_auto_create_contract']) ? 0 : 1;
+$settings['quote_auto_create_invoice'] = isset($_POST['quote_auto_create_invoice']) && empty($_POST['quote_auto_create_invoice']) ? 0 : 1;
 
 // Contract settings
 $settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;
