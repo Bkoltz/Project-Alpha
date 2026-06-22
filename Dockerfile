@@ -28,6 +28,15 @@ FROM php:8.3-apache
 # Tell Apache what hostname to use. NOTE: this is not needed to run, only to avoid warnings
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
 
+# Always-on hardening (ZAP findings 10036/10037): hide Apache version and
+# PHP X-Powered-By header regardless of APP_HOST.
+RUN { \
+      echo "ServerTokens Prod"; \
+      echo "ServerSignature Off"; \
+    } >> /etc/apache2/conf-available/security.conf \
+    && a2enconf security \
+    && echo "expose_php = Off" > /usr/local/etc/php/conf.d/zz-hardening.ini
+
 # Optional: set working dir
 WORKDIR /var/www/html
 
@@ -57,8 +66,9 @@ COPY php.ini /usr/local/etc/php/conf.d/php.ini
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/
 
-# Copy all migration SQL files into the image (no host mounts needed on TrueNAS)
-COPY ./database/migrations/ /usr/local/share/app-migrations/
+# Copy database initialization and migration files into the image
+# The init.sql is the single source of truth with all modules concatenated
+COPY ./database/init.sql /usr/local/share/app-migrations/init.sql
 
 # Copy Composer vendor from the builder stage
 COPY --from=vendor /app/vendor /var/www/vendor

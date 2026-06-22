@@ -17,7 +17,7 @@ if (strlen($query) < 1) {
 try {
     // Search for active items that match the query
     $stmt = $pdo->prepare('
-        SELECT id, item_name, description, unit_price 
+        SELECT id, item_name, description, unit_price, category 
         FROM item_library 
         WHERE is_active = 1 
         AND item_name LIKE ? 
@@ -35,7 +35,8 @@ try {
             'id' => (int)$item['id'],
             'item_name' => $item['item_name'],
             'description' => $item['description'] ?? '',
-            'unit_price' => (float)$item['unit_price']
+            'unit_price' => (float)$item['unit_price'],
+            'is_hourly' => ($item['category'] === 'Hourly')
         ];
     }, $results);
 

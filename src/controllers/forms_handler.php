@@ -10,6 +10,7 @@ ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/csrf.php';
+require_once __DIR__ . '/../utils/upload_validator.php';
 
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
@@ -56,20 +57,15 @@ try {
             }
 
             $file = $_FILES['document_file'];
-            $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-
-            if (!in_array($file['type'], $allowedTypes)) {
-                throw new Exception('Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed');
-            }
-
-            // Check file size (20MB max)
-            if ($file['size'] > 20 * 1024 * 1024) {
-                throw new Exception('File size must be less than 20MB');
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+            $err = validate_upload($file, $allowedMimes, 20 * 1024 * 1024);
+            if ($err !== null) {
+                throw new Exception($err);
             }
 
             // Create category for this file (type='file')
             $stmt = $pdo->prepare('
-                INSERT INTO form_categories (org_id, title, type, created_by)
+                INSERT INTO form_categories (organization_id, title, type, created_by)
                 VALUES (?, ?, ?, ?)
             ');
             $stmt->execute([$orgId, $title, 'file', $userId]);
@@ -101,10 +97,10 @@ try {
 
             // Insert document with optional project_id
             $stmt = $pdo->prepare('
-                INSERT INTO form_documents (category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
-            $stmt->execute([$categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+            $stmt->execute([$orgId, $categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
 
             $response['success'] = true;
             $response['message'] = 'File uploaded successfully';
@@ -120,7 +116,7 @@ try {
             }
 
             $stmt = $pdo->prepare('
-                INSERT INTO form_categories (org_id, title, type, created_by)
+                INSERT INTO form_categories (organization_id, title, type, created_by)
                 VALUES (?, ?, ?, ?)
             ');
             $stmt->execute([$orgId, $title, 'folder', $userId]);
@@ -143,7 +139,7 @@ try {
             $stmt = $pdo->prepare('
                 UPDATE form_categories 
                 SET title = ?
-                WHERE id = ? AND org_id = ?
+                WHERE id = ? AND organization_id = ?
             ');
             $stmt->execute([$title, $categoryId, $orgId]);
 
@@ -166,7 +162,7 @@ try {
             // Delete category (will cascade delete documents due to FK)
             $stmt = $pdo->prepare('
                 DELETE FROM form_categories 
-                WHERE id = ? AND org_id = ?
+                WHERE id = ? AND organization_id = ?
             ');
             $stmt->execute([$categoryId, $orgId]);
 
@@ -191,7 +187,7 @@ try {
             }
 
             // Verify category exists and belongs to org, get its type
-            $stmt = $pdo->prepare('SELECT id, type, title FROM form_categories WHERE id = ? AND org_id = ?');
+            $stmt = $pdo->prepare('SELECT id, type, title FROM form_categories WHERE id = ? AND organization_id = ?');
             $stmt->execute([$categoryId, $orgId]);
             $category = $stmt->fetch();
             if (!$category) {
@@ -204,15 +200,10 @@ try {
             }
 
             $file = $_FILES['document_file'];
-            $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-
-            if (!in_array($file['type'], $allowedTypes)) {
-                throw new Exception('Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed');
-            }
-
-            // Check file size (20MB max)
-            if ($file['size'] > 20 * 1024 * 1024) {
-                throw new Exception('File size must be less than 20MB');
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+            $err = validate_upload($file, $allowedMimes, 20 * 1024 * 1024);
+            if ($err !== null) {
+                throw new Exception($err);
             }
 
 
@@ -278,18 +269,18 @@ try {
                 } else {
                     // Insert new document
                     $stmt = $pdo->prepare('
-                        INSERT INTO form_documents (category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
                     ');
-                    $stmt->execute([$categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                    $stmt->execute([$orgId, $categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
                 }
             } else {
                 // For folder categories, always add new document (allow multiple)
                 $stmt = $pdo->prepare('
-                    INSERT INTO form_documents (category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 ');
-                $stmt->execute([$categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                $stmt->execute([$orgId, $categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
             }
 
             $response['success'] = true;
@@ -311,7 +302,7 @@ try {
 
             // Get document details
             $stmt = $pdo->prepare('
-                SELECT fd.file_path, fc.org_id, fd.category_id
+                SELECT fd.file_path, fc.organization_id, fd.category_id
                 FROM form_documents fd
                 JOIN form_categories fc ON fd.category_id = fc.id
                 WHERE fd.id = ?
@@ -319,7 +310,7 @@ try {
             $stmt->execute([$documentId]);
             $doc = $stmt->fetch();
 
-            if (!$doc || $doc['org_id'] != $orgId) {
+            if (!$doc || $doc['organization_id'] != $orgId) {
                 throw new Exception('Document not found');
             }
 
@@ -367,7 +358,7 @@ try {
                 SELECT fc.title, fd.file_path, fd.file_name
                 FROM form_categories fc
                 LEFT JOIN form_documents fd ON fc.id = fd.category_id
-                WHERE fc.id = ? AND fc.org_id = ?
+                WHERE fc.id = ? AND fc.organization_id = ?
             ');
             $stmt->execute([$categoryId, $orgId]);
             $form = $stmt->fetch();
@@ -462,7 +453,7 @@ try {
             // Get folder name
             $stmt = $pdo->prepare('
                 SELECT title FROM form_categories 
-                WHERE id = ? AND org_id = ? AND type = "folder"
+                WHERE id = ? AND organization_id = ? AND type = "folder"
             ');
             $stmt->execute([$folderId, $orgId]);
             $folder = $stmt->fetch();

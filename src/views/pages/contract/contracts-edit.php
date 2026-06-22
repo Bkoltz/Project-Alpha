@@ -201,4 +201,4 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
   <?php echo json_encode($items) ?>
 </div>
 
-<script src="js/contracts-edit-logic.js" defer></script>
+<script src="/assets/js/contracts-edit-logic.js" defer></script>

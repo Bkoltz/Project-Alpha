@@ -4,6 +4,13 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/rate_limiter.php';
+if (!rate_limit_check($pdo, 'public_contract_sign', 30, 60)) {
+  http_response_code(429);
+  header('Content-Type: text/html; charset=utf-8');
+  echo '<!DOCTYPE html><html><head><title>Rate limited</title></head><body><h1>Rate limited</h1></body></html>';
+  exit;
+}
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/notifications.php';
@@ -45,7 +52,7 @@ try {
     }
     
     // Load and validate public link
-    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     
@@ -61,11 +68,11 @@ try {
         throw new Exception('Link has expired');
     }
     
-    if ($row['type'] !== 'contract') {
+    if ($row['document_type'] !== 'contract') {
         throw new Exception('Invalid link type');
     }
     
-    $contractId = (int)$row['record_id'];
+    $contractId = (int)$row['document_id'];
     
     // Get contract and client info
     $contractStmt = $pdo->prepare('SELECT co.*, c.name as client_name, c.id as client_id FROM contracts co JOIN clients c ON c.id = co.client_id WHERE co.id = ?');
@@ -82,31 +89,23 @@ try {
         throw new Exception('This contract is no longer active');
     }
     
-    // Generate unique filename
-    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
-        $ext = $mimeType === 'application/pdf' ? 'pdf' : 'jpg';
+    // Build allowed MIME → extension map for signed contracts.
+    $allowedMap = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png',
+                   'image/gif' => 'gif', 'image/webp' => 'webp'];
+
+    // Centralized validation, malware scan, and secure storage.
+    $uploadDir = __DIR__ . '/../../uploads/signed_contracts';
+    $filename = validate_and_store_upload(
+        $file,
+        $allowedMap,
+        10 * 1024 * 1024,
+        $uploadDir,
+        $uploadError
+    );
+    if ($filename === null) {
+        throw new Exception($uploadError ?: 'Failed to store uploaded file');
     }
-    $filename = 'signed_contract_' . $contractId . '_' . time() . '.' . $ext;
-    
-    // Determine upload directory - use src/uploads/signed_contracts
-    $baseUploads = realpath(__DIR__ . '/../../uploads');
-    if (!$baseUploads) {
-        $baseUploads = __DIR__ . '/../../uploads';
-    }
-    $uploadDir = $baseUploads . DIRECTORY_SEPARATOR . 'signed_contracts';
-    
-    if (!is_dir($uploadDir)) {
-        @mkdir($uploadDir, 0755, true);
-    }
-    
-    $destPath = rtrim($uploadDir, '/\\') . DIRECTORY_SEPARATOR . $filename;
-    
-    // Move uploaded file
-    if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-        throw new Exception('Failed to save file');
-    }
-    
+
     // Build the file URL - serve from signed_contracts subdirectory
     $fileUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $filename);
     

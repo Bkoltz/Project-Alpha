@@ -18,27 +18,32 @@ $fulfillment_date = !empty($fulfillment_date) ? $fulfillment_date : null;
 
 // Document type from radio buttons
 $doc_type = $_POST['doc_type'] ?? 'regular';
-$is_long_term = ($doc_type === 'long_term') ? 1 : 0;
-$is_on_demand = ($doc_type === 'on_demand') ? 1 : 0;
+$quote_type = in_array($doc_type, ['regular', 'long_term', 'on_demand'], true) ? $doc_type : 'regular';
+$is_long_term = ($quote_type === 'long_term') ? 1 : 0;
+$is_on_demand = ($quote_type === 'on_demand') ? 1 : 0;
+$od_pricing_mode = 'items';
 
 // Only process long-term/on-demand fields if not regular
-if ($is_long_term || $is_on_demand) {
+if ($is_long_term) {
+    // Long-term quote fields
     $start_date = !empty($_POST['lt_start_date']) ? $_POST['lt_start_date'] : null;
     $end_date_type = $_POST['lt_end_date_type'] ?? 'ongoing';
     $end_date = ($end_date_type === 'fixed' && !empty($_POST['lt_end_date'])) ? $_POST['lt_end_date'] : null;
-    $pricing_type = in_array(($_POST['lt_pricing_type'] ?? 'per_invoice'), ['per_invoice', 'fixed_total', 'on_demand']) ? $_POST['lt_pricing_type'] : 'per_invoice';
-
-    // Check if this is an on-demand quote
-    if ($pricing_type === 'on_demand') {
-        $is_on_demand = 1;
-        $billing_interval_count = 1;
-        $billing_interval_unit = 'month';
-    } else {
-        $billing_interval_count = (int)($_POST['lt_billing_interval_count'] ?? 1);
-        $billing_interval_unit = in_array(($_POST['lt_billing_interval_unit'] ?? 'month'), ['day', 'week', 'month', 'year']) ? $_POST['lt_billing_interval_unit'] : 'month';
-    }
-
-    $price_per_invoice = ($pricing_type === 'per_invoice' || $pricing_type === 'on_demand') ? (float)($_POST['lt_price_per_invoice'] ?? 0) : null;
+    $pricing_type = in_array(($_POST['lt_pricing_type'] ?? 'per_invoice'), ['per_invoice', 'fixed_total']) ? $_POST['lt_pricing_type'] : 'per_invoice';
+    $billing_interval_count = (int)($_POST['lt_billing_interval_count'] ?? 1);
+    $billing_interval_unit = in_array(($_POST['lt_billing_interval_unit'] ?? 'month'), ['day', 'week', 'month', 'year']) ? $_POST['lt_billing_interval_unit'] : 'month';
+    $price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['lt_price_per_invoice'] ?? 0) : null;
+    $scope = trim((string)($_POST['scope'] ?? ''));
+} elseif ($is_on_demand) {
+    // On-demand quote fields can use line items or a flat quote amount.
+    $start_date = !empty($_POST['od_start_date']) ? $_POST['od_start_date'] : date('Y-m-d');
+    $end_date_type = $_POST['od_end_date_type'] ?? 'ongoing';
+    $end_date = ($end_date_type === 'fixed' && !empty($_POST['od_end_date'])) ? $_POST['od_end_date'] : null;
+    $od_pricing_mode = in_array(($_POST['od_pricing_mode'] ?? 'items'), ['items', 'flat'], true) ? $_POST['od_pricing_mode'] : 'items';
+    $pricing_type = 'on_demand';
+    $billing_interval_count = 1;
+    $billing_interval_unit = 'month';
+    $price_per_invoice = null;
     $scope = trim((string)($_POST['scope'] ?? ''));
 } else {
     // Set defaults for regular quotes
@@ -62,8 +67,9 @@ if ($client_id <= 0) {
     exit;
 }
 
-// For long-term quotes with per_invoice or on_demand pricing, items are optional
-$requires_items = !($is_long_term && ($pricing_type === 'per_invoice' || $pricing_type === 'on_demand'));
+// Items are required for regular quotes, on-demand itemized quotes, and long-term fixed totals.
+// Items are optional for long-term per-invoice pricing and on-demand flat pricing.
+$requires_items = !($is_long_term && $pricing_type === 'per_invoice') && !($is_on_demand && $od_pricing_mode === 'flat');
 
 if ($requires_items && empty($item)) {
     header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -73,9 +79,15 @@ if ($requires_items && empty($item)) {
 $items = [];
 $subtotal = 0.0;
 
-// For long-term quotes with per_invoice or on_demand pricing, items are optional
-if ($is_long_term && ($pricing_type === 'per_invoice' || $pricing_type === 'on_demand')) {
+// For long-term quotes with per_invoice pricing, use the price_per_invoice value
+if ($is_long_term && $pricing_type === 'per_invoice') {
     $subtotal = $price_per_invoice;
+} elseif ($is_on_demand && $od_pricing_mode === 'flat') {
+    $subtotal = max(0.0, (float)($_POST['od_flat_amount'] ?? 0));
+    if ($subtotal <= 0) {
+        header('Location: /?page=quote/quotes-create&error=Enter%20a%20flat%20quote%20amount');
+        exit;
+    }
 } else {
     // Process items for regular quotes or fixed_total long-term quotes
     for ($i = 0; $i < count($item); $i++) {
@@ -103,14 +115,18 @@ if ($discount_type === 'percent') {
 $tax_amount = max(0.0, $tax_percent) * max(0.0, $subtotal - $discount_amount) / 100.0;
 $total = max(0.0, $subtotal - $discount_amount + $tax_amount);
 
+if ($is_on_demand) {
+    $price_per_invoice = $subtotal;
+}
+
 // Extract custom field values from POST data (only non-empty values)
 $customFields = extractCustomFieldValues($_POST);
 $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, is_long_term, is_on_demand, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, null, null, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $is_long_term, $is_on_demand, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, date("Y-m-d H:i:s")]);
+    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, null, null, 'pending', $quote_type, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, date("Y-m-d H:i:s")]);
     $quote_id = (int)$pdo->lastInsertId();
 
     // Assign a new Project ID for this quote
@@ -125,13 +141,9 @@ try {
     }
 
     // Assign per-type doc_number for quotes (separate sequences for regular, long-term, and on-demand)
-    if ($is_on_demand) {
-        $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_on_demand=1')->fetchColumn();
-    } elseif ($is_long_term) {
-        $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_long_term=1 AND is_on_demand=0')->fetchColumn();
-    } else {
-        $qMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE is_long_term=0 AND is_on_demand=0')->fetchColumn();
-    }
+    $qMaxStmt = $pdo->prepare('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE quote_type = ?');
+    $qMaxStmt->execute([$quote_type]);
+    $qMax = (int)$qMaxStmt->fetchColumn();
 
     $stmt = $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?');
     $stmt->execute([$qMax + 1, $quote_id]);
@@ -159,5 +171,12 @@ try {
     exit;
 }
 
-header('Location: /?page=quote/quotes-list&created=1');
+// Redirect to the appropriate list based on quote type
+if ($quote_type === 'long_term') {
+    header('Location: /?page=quote/long-term-quotes-list&created=1');
+} elseif ($quote_type === 'on_demand') {
+    header('Location: /?page=quote/on-demand-quotes-list&created=1');
+} else {
+    header('Location: /?page=quote/quotes-list&created=1');
+}
 exit;

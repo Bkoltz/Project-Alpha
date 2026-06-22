@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
 
 $id = (int)($_GET['id'] ?? 0);
-$c = $pdo->prepare('SELECT co.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE co.id=?');
+$c = $pdo->prepare('SELECT co.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE co.id=?');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if (!$contract) {
@@ -76,12 +76,12 @@ if ($termsText === '') {
     <div class="no-print" style="padding:12px 16px;background:<?php echo $ccolors['bg']; ?>;color:<?php echo $ccolors['text']; ?>;border-left:4px solid <?php echo $ccolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
       Status: <?php echo htmlspecialchars($contract['status']); ?>
     </div>
-    <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-      <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
-      <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" download="contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+    <div class="no-print flex flex-wrap">
+      <a href="javascript:history.back()" class="btn btn-sm">Back</a>
+      <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
+      <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" download="contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
       <?php if ($contract['status'] === 'pending'): ?>
-        <a href="/?page=contract/contracts-edit&id=<?php echo (int)$id; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+        <a href="/?page=contract/contracts-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
       <?php endif; ?>
       <?php $st = strtolower((string)($contract['status'] ?? ''));
       if (!in_array($st, ['denied', 'cancelled', 'void'], true)): ?>
@@ -90,7 +90,7 @@ if ($termsText === '') {
           <input type="hidden" name="type" value="contract">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
           <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-          <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+          <button type="submit" class="btn btn-sm">Email</button>
         </form>
       <?php endif; ?>
       <?php if ($contract['status'] !== 'cancelled'): ?>
@@ -99,7 +99,7 @@ if ($termsText === '') {
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
           <input id="upload-signed" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
           <?php $uplLabel = empty($contract['signed_pdf_path']) ? 'Upload Signed PDF' : 'Replace Signed PDF'; ?>
-          <button type="button" onclick="document.getElementById('upload-signed').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;"><?php echo $uplLabel; ?></button>
+          <button type="button" onclick="document.getElementById('upload-signed').click()" class="btn btn-sm"><?php echo $uplLabel; ?></button>
         </form>
       <?php endif; ?>
       <?php if (!empty($contract['signed_pdf_path'])): ?>
@@ -164,7 +164,7 @@ if ($termsText === '') {
   $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   // Resolve default logo under project root public/assets
   $projectRoot = realpath(__DIR__ . '/../../../../');
-  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
   $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
   $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
   // If the configured logo is an internal routed URL like "/?page=serve-upload&file=...",
@@ -357,7 +357,7 @@ if ($termsText === '') {
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">From</div>
+        <div class="font-600">From</div>
         <?php
         $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
         $fromNameLine = trim((string)($fromName ?? ''));
@@ -397,13 +397,13 @@ if ($termsText === '') {
               } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if ($fromPhone): ?><div><?php echo format_phone($fromPhone); ?></div><?php endif; ?>
+            <?php if ($fromPhone): ?><div><?php echo htmlspecialchars(format_phone($fromPhone), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">To</div>
+        <div class="font-600">To</div>
         <?php
         $toLines = [];
         if (!empty($contract['client_name'])) {
@@ -420,7 +420,7 @@ if ($termsText === '') {
         }
         $c = trim((string)($contract['city'] ?? ''));
         $s = trim((string)($contract['state'] ?? ''));
-        $p = trim((string)($contract['postal'] ?? ''));
+        $p = trim((string)($contract['postal_code'] ?? ''));
         $parts2 = [];
         if ($c !== '') {
           $parts2[] = $c;
@@ -441,7 +441,7 @@ if ($termsText === '') {
               } ?></div>
         <?php if (!empty($contract['client_phone']) || !empty($contract['client_email'])): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if (!empty($contract['client_phone'])): ?><div><?php echo format_phone($contract['client_phone']); ?></div><?php endif; ?>
+            <?php if (!empty($contract['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($contract['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if (!empty($contract['client_email'])): ?><div><?php echo htmlspecialchars($contract['client_email']); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
@@ -540,7 +540,7 @@ if ($termsText === '') {
 
   <!-- Signature section -->
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
-    <strong>By signing below</strong>, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.
+    <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?>
   </div>
   <table style="width:100%;border-collapse:collapse">
     <?php

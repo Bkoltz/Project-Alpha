@@ -67,4 +67,4 @@ if ($pref > 0) {
   </form>
 </section>
 
-<script src="js/payments-create-logic.js" defer></script>
+<script src="/assets/js/payments-create-logic.js" defer></script>

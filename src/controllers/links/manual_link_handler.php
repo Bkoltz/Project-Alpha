@@ -1,30 +1,36 @@
 <?php
-require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 
 header('Content-Type: application/json');
 
-// Get database connection
-$db = getConnection();
+// Require authenticated session
+if (empty($_SESSION['user'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Authentication required']);
+    exit;
+}
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+// CSRF check (JSON-friendly)
+if (!csrf_validate()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token']);
     exit;
 }
 
 try {
     // Validate required fields
-    $title = $_POST['title'] ?? '';
-    $url = $_POST['url'] ?? '';
+    $title = trim((string)($_POST['title'] ?? ''));
+    $url = trim((string)($_POST['url'] ?? ''));
     $entityType = $_POST['entity_type'] ?? '';
-    $entityId = $_POST['entity_id'] ?? '';
-    $expirationDate = $_POST['expiration_date'] ?? null;
+    $entityId = (int)($_POST['entity_id'] ?? 0);
+    $expirationDate = !empty($_POST['expiration_date']) ? $_POST['expiration_date'] : null;
     
-    if (empty($title)) {
+    if ($title === '') {
         throw new Exception('Link title is required');
     }
     
-    if (empty($url)) {
+    if ($url === '') {
         throw new Exception('URL is required');
     }
     
@@ -32,54 +38,24 @@ try {
         throw new Exception('Invalid URL format');
     }
     
-    if (empty($entityType) || !in_array($entityType, ['client', 'organization'])) {
+    if (!in_array($entityType, ['client', 'organization'])) {
         throw new Exception('Invalid entity type');
     }
     
-    if (empty($entityId) || !is_numeric($entityId)) {
+    if ($entityId <= 0) {
         throw new Exception('Invalid entity ID');
     }
     
-    // Build insert query
-    $query = "INSERT INTO link (
-        entity_type, 
-        entity_id, 
-        title, 
-        url, 
-        type, 
-        expiration_date,
-        is_expired,
-        ignore_auto_generation,
-        created_at
-    ) VALUES (
-        :entity_type,
-        :entity_id,
-        :title,
-        :url,
-        'manual',
-        :expiration_date,
-        0,
-        0,
-        NOW()
-    )";
-    
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':entity_type', $entityType);
-    $stmt->bindValue(':entity_id', $entityId, PDO::PARAM_INT);
-    $stmt->bindValue(':title', $title);
-    $stmt->bindValue(':url', $url);
-    $stmt->bindValue(':expiration_date', !empty($expirationDate) ? $expirationDate : null);
-    
-    $stmt->execute();
+    $stmt = $pdo->prepare('INSERT INTO entity_links (entity_type, entity_id, title, url, link_type, expiration_date, is_expired, ignore_auto_generation) VALUES (?, ?, ?, ?, "manual", ?, 0, 0)');
+    $stmt->execute([$entityType, $entityId, $title, $url, $expirationDate]);
     
     echo json_encode([
         'success' => true,
         'message' => 'Manual link added successfully',
-        'link_id' => $db->lastInsertId()
+        'link_id' => (int)$pdo->lastInsertId()
     ]);
     
 } catch (Exception $e) {
-    http_response_code(400);
     echo json_encode([
         'success' => false,
         'message' => $e->getMessage()

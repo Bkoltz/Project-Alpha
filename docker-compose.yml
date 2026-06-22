@@ -1,71 +1,108 @@
-# TODO: Add a admin username and password that can be used to login. First user setup is admin, but we need a system admin user.
+# Project Alpha — Docker Compose
+#
+# SETUP:
+#   1. Change the three passwords below (search for "CHANGE THESE")
+#   2. Run: docker compose up -d --build
+#   3. Open http://localhost:1627
+#   4. Log in with admin@project-alpha.local / <your ADMIN_PASSWORD>
+#   5. Go to Settings > Billing to enter Stripe keys (stored encrypted in DB)
+#
+# That's it. No .env file needed. Stripe keys go through the SaaS UI.
+
+# Shared DB connection defaults (used by web + cron via <<: *db-env)
+x-db-env: &db-env
+  DB_HOST: db
+  DB_PORT: 3306
+  MYSQL_DATABASE: project_alpha
+  MYSQL_USER: appuser
+
 services:
   web:
     build: .
-    image: "bkoltz/project-alpha:latest"
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
+    pull_policy: if_not_present
     ports:
       - "1627:80"
     environment:
-      MYSQL_DATABASE: project_alpha
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
-      MYSQL_ROOT_PASSWORD: rootpass
-      APP_AUTH_DISABLED: true
+      <<: *db-env
+      # --- CHANGE THESE for production ---
+      # Default admin login: admin@project-alpha.local / changeme_admin_pass
+      MYSQL_PASSWORD: changeme_secure_pass
+      MYSQL_ROOT_PASSWORD: changeme_root_pass
+      ADMIN_PASSWORD: changeme_admin_pass
+      # --- END PASSWORDS ---
+      # Optional: only needed behind a reverse proxy (Cloudflare, nginx, etc.)
+      TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/\")!==false?0:1);'"]
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/')!==false?0:1);"]
       interval: 10s
       timeout: 5s
       start_period: 20s
       retries: 5
     restart: unless-stopped
     volumes:
-      - ./src:/var/www/src 
+      # Shared volumes (also mounted in cron service)
+      - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
+      # Backups volume — to mount to a custom path, replace with:
+      #   - /your/backup/path:/var/www/backups
+      - pa_backups:/var/www/backups
+      - mysql_socket:/var/run/mysqld
+
   cron:
     build:
-      context: .
-      dockerfile: ./docker/cron.dockerfile
-    image: "bkoltz/project-alpha-cron:latest"
+      context: ./cron
+      dockerfile: Dockerfile
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"
+    pull_policy: if_not_present
     environment:
-      MYSQL_DATABASE: project_alpha
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
-      MYSQL_ROOT_PASSWORD: rootpass
-      DB_HOST: db
-      DB_PORT: 3306
+      <<: *db-env
+      MYSQL_PASSWORD: changeme_secure_pass
+      MYSQL_ROOT_PASSWORD: changeme_root_pass
+      BACKUP_RETENTION_DAYS: "10"
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
     volumes:
+      # Same shared volumes as web service
+      - ./src:/var/www/src
       - ./src/uploads:/var/www/src/uploads
       - ./config:/var/www/config
+      - pa_backups:/var/www/backups
+      # Cron-only volumes
       - cron_logs:/var/log/cron
+      - mysql_socket:/var/run/mysqld
+
   db:
     image: "mysql:8"
     restart: unless-stopped
-    command: --log-error-verbosity=1
+    command: >
+      --log-error-verbosity=1
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_ROOT_PASSWORD: changeme_root_pass
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
+      MYSQL_PASSWORD: changeme_secure_pass
     volumes:
       - db_data:/var/lib/mysql
-      - ./database/migrations:/docker-entrypoint-initdb.d
+      - mysql_socket:/var/run/mysqld
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
-        - mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1
+        - mysqladmin ping -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1
       interval: 10s
       timeout: 5s
       start_period: 40s
       retries: 10
-    ports:
-      - 3307:3306
+
 volumes:
   db_data: {}
   cron_logs: {}
+  mysql_socket: {}
+  pa_backups: {}

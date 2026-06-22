@@ -2,6 +2,10 @@
 // src/cron/link_expiration_checker.php
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/cron_state.php';
+
+$logPrefix = '[LinkExpirationChecker]';
+$jobName = 'link_expiration_checker';
 
 /**
  * Link Expiration Checker Cron Job
@@ -15,15 +19,14 @@ require_once __DIR__ . '/../config/db.php';
  */
 
 try {
-    $logPrefix = '[LinkExpirationChecker]';
-    
     // Check if link expiration checker is enabled
     $stmt = $pdo->prepare("SELECT config_value FROM app_config WHERE config_key = 'link_expiration_checker'");
     $stmt->execute();
     $enabled = $stmt->fetchColumn();
     
     if (!$enabled) {
-        echo "{$logPrefix} Link expiration checker is disabled. Exiting.\n";
+        echo $logPrefix . " Link expiration checker is disabled. Exiting.\n";
+        cron_state_mark_success($pdo, $jobName, 'Link expiration checker disabled');
         exit(0);
     }
     
@@ -34,8 +37,8 @@ try {
     
     // Find all links that should be expired but aren't marked as such
     $stmt = $pdo->prepare("
-        SELECT link_id, entity_type, entity_id, type, url, expiration_date
-        FROM link
+        SELECT id, entity_type, entity_id, link_type, url, expiration_date
+        FROM entity_links
         WHERE expiration_date IS NOT NULL 
           AND expiration_date < ?
           AND is_expired = 0
@@ -52,13 +55,13 @@ try {
         echo "{$logPrefix} Found {$expiredCount} expired link(s).\n";
         
         // Mark links as expired
-        $linkIds = array_column($expiredLinks, 'link_id');
+        $linkIds = array_column($expiredLinks, 'id');
         $placeholders = str_repeat('?,', count($linkIds) - 1) . '?';
         
         $stmt = $pdo->prepare("
-            UPDATE link
+            UPDATE entity_links
             SET is_expired = 1
-            WHERE link_id IN ({$placeholders})
+            WHERE id IN ({$placeholders})
         ");
         $stmt->execute($linkIds);
         
@@ -95,7 +98,7 @@ try {
                     $message = "The following links for {$entity['type']} '{$entityName}' have expired:\n\n";
                     
                     foreach ($entity['links'] as $link) {
-                        $message .= "- " . $link['type'] . ": " . $link['url'] . " (expired: " . $link['expiration_date'] . ")\n";
+                        $message .= "- " . $link['link_type'] . ": " . $link['url'] . " (expired: " . $link['expiration_date'] . ")\n";
                     }
                     
                     $message .= "\nPlease refresh or regenerate these links as needed.\n";
@@ -119,7 +122,7 @@ try {
     // Also check for links expiring soon (within 7 days) for early warning
     $stmt = $pdo->prepare("
         SELECT COUNT(*) 
-        FROM link
+        FROM entity_links
         WHERE expiration_date IS NOT NULL
           AND expiration_date BETWEEN ? AND DATE_ADD(?, INTERVAL 7 DAY)
           AND is_expired = 0
@@ -133,10 +136,12 @@ try {
     }
     
     echo "{$logPrefix} Link expiration check completed successfully.\n";
+    cron_state_mark_success($pdo, $jobName, "{$expiredCount} expired; {$expiringSoon} expiring soon");
     
 } catch (Throwable $e) {
     echo "{$logPrefix} ERROR: " . $e->getMessage() . "\n";
     error_log("{$logPrefix} Error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 
@@ -145,11 +150,11 @@ try {
  */
 function getEntityName($pdo, $entityType, $entityId) {
     if ($entityType === 'client') {
-        $stmt = $pdo->prepare("SELECT client_name FROM client WHERE client_id = ?");
+        $stmt = $pdo->prepare("SELECT name FROM clients WHERE id = ?");
         $stmt->execute([$entityId]);
         return $stmt->fetchColumn() ?: "Client #{$entityId}";
     } elseif ($entityType === 'organization') {
-        $stmt = $pdo->prepare("SELECT org_name FROM organization WHERE org_id = ?");
+        $stmt = $pdo->prepare("SELECT name FROM organizations WHERE id = ?");
         $stmt->execute([$entityId]);
         return $stmt->fetchColumn() ?: "Organization #{$entityId}";
     }

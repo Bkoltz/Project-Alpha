@@ -13,16 +13,42 @@ $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_value = (float)($_POST['deposit_value'] ?? 0);
 
-// Long-term contract specific fields
-$start_date = !empty($_POST['start_date']) ? $_POST['start_date'] : null;
-$end_date_type = $_POST['end_date_type'] ?? 'on_termination';
-$end_date = ($end_date_type === 'specific_date' && !empty($_POST['end_date'])) ? $_POST['end_date'] : null;
-$billing_interval_count = max(1, (int)($_POST['billing_interval_count'] ?? 1));
-$billing_interval_unit = in_array(($_POST['billing_interval_unit'] ?? 'month'), ['day','week','month','year']) ? $_POST['billing_interval_unit'] : 'month';
-$pricing_type = in_array(($_POST['pricing_type'] ?? 'per_invoice'), ['fixed_total','per_invoice']) ? $_POST['pricing_type'] : 'per_invoice';
-$price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['price_per_invoice'] ?? 0) : null;
-$invoice_count = ($pricing_type === 'fixed_total') ? max(1, (int)($_POST['invoice_count'] ?? 1)) : null;
+// Long-term contract specific fields - accept both prefixed and non-prefixed field names
+$start_date = !empty($_POST['start_date']) ? $_POST['start_date'] : (!empty($_POST['lt_start_date']) ? $_POST['lt_start_date'] : null);
+$end_date_type = $_POST['end_date_type'] ?? $_POST['lt_end_date_type'] ?? 'ongoing';
+// Accept both 'fixed' and 'specific_date' as indicators for a specific end date
+$has_end_date = in_array($end_date_type, ['fixed', 'specific_date']);
+$end_date = ($has_end_date && !empty($_POST['end_date'])) ? $_POST['end_date'] : (($has_end_date && !empty($_POST['lt_end_date'])) ? $_POST['lt_end_date'] : null);
+$billing_interval_count = max(1, (int)($_POST['billing_interval_count'] ?? $_POST['lt_billing_interval_count'] ?? 1));
+$billing_interval_unit_val = $_POST['billing_interval_unit'] ?? $_POST['lt_billing_interval_unit'] ?? 'month';
+$billing_interval_unit = in_array($billing_interval_unit_val, ['day','week','month','year']) ? $billing_interval_unit_val : 'month';
+$pricing_type_val = $_POST['pricing_type'] ?? $_POST['lt_pricing_type'] ?? 'per_invoice';
+$pricing_type = in_array($pricing_type_val, ['fixed_total','per_invoice']) ? $pricing_type_val : 'per_invoice';
+$price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['price_per_invoice'] ?? $_POST['lt_price_per_invoice'] ?? 0) : null;
+$invoice_count_posted = ($pricing_type === 'fixed_total') ? max(1, (int)($_POST['invoice_count'] ?? 1)) : null;
 $scope = trim((string)($_POST['scope'] ?? ''));
+
+// Auto-calculate invoice count when fixed_total + fixed end date
+if ($pricing_type === 'fixed_total' && $end_date && $start_date) {
+    $s = new DateTime($start_date);
+    $e = new DateTime($end_date);
+    if ($e > $s) {
+        $periods = 0;
+        $cursor = clone $s;
+        while ($cursor < $e) {
+            if ($billing_interval_unit === 'day') $cursor->modify("+{$billing_interval_count} day");
+            elseif ($billing_interval_unit === 'week') $cursor->modify("+" . ($billing_interval_count * 7) . " day");
+            elseif ($billing_interval_unit === 'month') $cursor->modify("+{$billing_interval_count} month");
+            elseif ($billing_interval_unit === 'year') $cursor->modify("+{$billing_interval_count} year");
+            if ($cursor <= $e) $periods++;
+        }
+        $invoice_count = max(1, $periods);
+    } else {
+        $invoice_count = $invoice_count_posted;
+    }
+} else {
+    $invoice_count = $invoice_count_posted;
+}
 
 if ($client_id <= 0) {
     $client_name = trim((string)($_POST['client'] ?? ''));
@@ -116,34 +142,34 @@ try{
         @error_log('[long_term_contracts_create] project_next_code failed: '.$e->getMessage(), 0); 
     }
 
-    // Insert long-term contract
-    $sql = 'INSERT INTO long_term_contracts (
-        client_id, project_id, project_code, status, start_date, end_date, 
+    // Insert long-term contract into the unified contracts table
+    $sql = 'INSERT INTO contracts (
+        client_id, project_id, project_code, status, contract_type, start_date, end_date, 
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid, total_invoiced,
         next_invoice_date, invoice_count, invoices_generated, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'pending', $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'pending', 'long_term', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0, 0,
         $next_invoice_date, $invoice_count, 0, $scope
     ]);
     
-    $ltc_id = (int)$pdo->lastInsertId();
+    $contract_id = (int)$pdo->lastInsertId();
 
     // Assign doc number
-    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM long_term_contracts')->fetchColumn();
-    $pdo->prepare('UPDATE long_term_contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $ltc_id]);
+    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "long_term"')->fetchColumn();
+    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $contract_id]);
 
     // Save items if fixed_total pricing
     if ($pricing_type === 'fixed_total' && $items) {
-        $ins = $pdo->prepare('INSERT INTO long_term_contract_items (long_term_contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
+        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
         foreach($items as $it){ 
-            $ins->execute([$ltc_id, $it['d'], $it['q'], $it['p'], $it['t']]); 
+            $ins->execute([$contract_id, $it['d'], $it['d'], $it['q'], $it['p'], $it['t']]); 
         }
     }
 
@@ -164,21 +190,18 @@ try{
     $signatureRequired = $_POST['signature_required'] ?? [];
     
     if (!empty($signatureTitles)) {
-        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (long_term_contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
+        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
         foreach ($signatureTitles as $idx => $title) {
             $title = trim($title);
             if (empty($title)) continue;
-            
-            $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
-            $isRequired = in_array('sig_' . $idx, $signatureRequired) ? 1 : 0;
-            
-            $sigStmt->execute([$ltc_id, $title, $order, $isRequired]);
+
+            $sigStmt->execute([$contract_id, $idx === 0 ? 'client' : 'witness']);
         }
     }
 
     // Add to project_documents if project_id is set
     if ($project_id) {
-        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "long_term_contract", ?)')->execute([$project_id, $ltc_id]);
+        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $contract_id]);
     }
 
     $pdo->commit();

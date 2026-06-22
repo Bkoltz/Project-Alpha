@@ -9,7 +9,7 @@ if ($id <= 0) {
 }
 
 try {
-    $pdo->prepare('UPDATE on_demand_contracts SET status=? WHERE id=?')->execute(['paused', $id]);
+    $pdo->prepare('UPDATE contracts SET status=? WHERE id=? AND contract_type="on_demand"')->execute(['paused', $id]);
     header('Location: /?page=contract/on-demand-contracts-list');
 } catch (Throwable $e) {
     header('Location: /?page=contract/on-demand-contracts-list&error=' . urlencode($e->getMessage()));

@@ -4,8 +4,19 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 
-// Simple debug log to help diagnose if this endpoint is being hit
-@error_log('[contracts_create] POST received', 0);
+// Route to appropriate handler based on document type
+$doc_type = $_POST['doc_type'] ?? 'regular';
+if ($doc_type === 'long_term') {
+    require __DIR__ . '/long_term_contracts_create.php';
+    exit;
+}
+if ($doc_type === 'on_demand') {
+    require __DIR__ . '/on_demand_contracts_create.php';
+    exit;
+}
+
+// Regular contract creation continues below
+@error_log('[contracts_create] POST received - regular contract', 0);
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
@@ -68,14 +79,16 @@ elseif($deposit_type === 'fixed') { $deposit_amount = max(0, $deposit_value); }
 // Invoice total is the full amount - deposits are tracked via payments table
 $invoice_total = $total;
 
+$memo = trim((string)($_POST['memo'] ?? '')) ?: null;
+
 // Extract custom field values from POST data (only non-empty values)
 $customFields = extractCustomFieldValues($_POST);
 $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, custom_fields) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $customFieldsJson]);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      ->execute([$client_id, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)

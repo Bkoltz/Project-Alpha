@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$c = $pdo->prepare('SELECT ltc.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM long_term_contracts ltc JOIN clients cl ON cl.id=ltc.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE ltc.id=?');
+$c = $pdo->prepare('SELECT ltc.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts ltc JOIN clients cl ON cl.id=ltc.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE ltc.id=? AND ltc.contract_type="long_term"');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
@@ -12,7 +12,7 @@ if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
 // Get items if fixed_total pricing
 $items = [];
 if ($contract['pricing_type'] === 'fixed_total') {
-    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM long_term_contract_items WHERE long_term_contract_id=?');
+    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
     $itemsQuery->execute([$id]);
     $items = $itemsQuery->fetchAll();
 }
@@ -81,8 +81,8 @@ $isOngoing = empty($contract['end_date']);
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
-    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="javascript:history.back()" class="btn btn-sm">Back</a>
+    <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
   </div>
   <?php endif; ?>
@@ -91,7 +91,7 @@ $isOngoing = empty($contract['end_date']);
   $brand = $appConfig['brand_name'] ?? 'Project Alpha';
   $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   $projectRoot = realpath(__DIR__ . '/../../../../');
-  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
   $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
   $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
   
@@ -180,7 +180,7 @@ $isOngoing = empty($contract['end_date']);
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">Service Provider</div>
+        <div class="font-600">Service Provider</div>
         <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
@@ -210,7 +210,7 @@ $isOngoing = empty($contract['end_date']);
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">Client</div>
+        <div class="font-600">Client</div>
         <?php 
           $toLines = [];
           if (!empty($contract['client_name'])) { $toLines[] = (string)$contract['client_name']; }
@@ -219,7 +219,7 @@ $isOngoing = empty($contract['end_date']);
           if (!empty($contract['address_line2'])) { $toLines[] = (string)$contract['address_line2']; }
           $c = trim((string)($contract['city'] ?? ''));
           $s = trim((string)($contract['state'] ?? ''));
-          $p = trim((string)($contract['postal'] ?? ''));
+          $p = trim((string)($contract['postal_code'] ?? ''));
           $parts2 = [];
           if ($c !== '') { $parts2[] = $c; }
           if ($s !== '') { $parts2[] = $s; }
@@ -312,7 +312,7 @@ $isOngoing = empty($contract['end_date']);
       <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
       <tr>
         <td colspan="4" style="padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
-          <strong>By signing below</strong>, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.
+          <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.'); ?>
         </td>
       </tr>
       <tr>

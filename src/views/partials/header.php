@@ -15,7 +15,7 @@
   if ($faviconPath && !empty(trim($faviconPath))): ?>
     <link rel="icon" href="<?php echo htmlspecialchars($faviconPath); ?>">
   <?php else: ?>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0%25' stop-color='%2306b6d4'/%3E%3Cstop offset='100%25' stop-color='%2338bdf8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='40' height='40' rx='8' fill='url(%23g)'/%3E%3Cpath d='M10 26c7-2 12-9 17-9 4 0 7 3 11 3' stroke='%23fff' stroke-width='2' fill='none'/%3E%3Ccircle cx='36' cy='20' r='2' fill='%23fff'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/png" href="/assets/favicon-32.png" />
   <?php endif; ?>
   <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf'] ?? ''); ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,11 +32,55 @@
   <link rel="stylesheet" href="/assets/styles.css">
   <script src="/assets/navigation.js" defer></script>
   <script src="/assets/item-autocomplete.js" defer></script>
+  <script>
+    (function() {
+      var timer = null;
+      function scheduleRefresh() {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function() {
+          if (document.visibilityState === 'visible' && !isFormDirty()) {
+            location.reload();
+          } else {
+            scheduleRefresh();
+          }
+        }, 300000);
+      }
+      function isFormDirty() {
+        var inputs = document.querySelectorAll('input, textarea, select');
+        for (var i = 0; i < inputs.length; i++) {
+          if (inputs[i].type === 'hidden' || inputs[i].type === 'submit') continue;
+          if (inputs[i].value !== inputs[i].defaultValue) return true;
+        }
+        return false;
+      }
+      scheduleRefresh();
+      document.addEventListener('click', scheduleRefresh);
+      document.addEventListener('keypress', scheduleRefresh);
+    })();
+  </script>
 </head>
 
 <body>
+  <div class="mobile-topbar">
+    <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="primary-sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+    <a class="topbar-brand" href="/">
+      <?php $brandTop = $appConfig['brand_name'] ?? 'Project Alpha';
+      $logoTop = $appConfig['logo_path'] ?? null; ?>
+      <?php if ($logoTop): ?>
+        <img src="<?php echo htmlspecialchars($logoTop); ?>" alt="" />
+      <?php endif; ?>
+      <span><?php echo htmlspecialchars($brandTop); ?></span>
+    </a>
+  </div>
+  <div class="nav-overlay" aria-hidden="true"></div>
   <header class="site-shell">
-    <aside class="side-nav" role="navigation" aria-label="Primary">
+    <aside class="side-nav" id="primary-sidebar" role="navigation" aria-label="Primary">
       <div class="nav-inner">
         <a class="brand" href="/">
           <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha';
@@ -44,17 +88,7 @@
           <?php if ($logo): ?>
             <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($brand); ?>" class="brand-logo" loading="eager" fetchpriority="high" />
           <?php else: ?>
-            <svg class="brand-logo" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <defs>
-                <linearGradient id="g" x1="0" x2="1">
-                  <stop offset="0%" stop-color="var(--nav-accent)" />
-                  <stop offset="100%" stop-color="#38bdf8" />
-                </linearGradient>
-              </defs>
-              <rect x="4" y="4" width="40" height="40" rx="8" fill="url(#g)" />
-              <path d="M10 26c7-2 12-9 17-9 4 0 7 3 11 3" stroke="#fff" stroke-width="2" fill="none" />
-              <circle cx="36" cy="20" r="2" fill="#fff" />
-            </svg>
+            <img src="/assets/default-logo.png" alt="<?php echo htmlspecialchars($brand); ?>" class="brand-logo" loading="eager" fetchpriority="high" />
           <?php endif; ?>
           <span class="brand-text"><?php echo htmlspecialchars($brand); ?></span>
         </a>
@@ -119,10 +153,12 @@
             <li class="nav-section">
               <div class="section-label">Financial</div>
               <ul>
-                <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Financial Dashboard</a></li>
-                <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms & Docs</a></li>
-                <li><a href="/?page=financial/receipts-list" data-page="financial/receipts-list">Receipts</a></li>
+                <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Dashboard</a></li>
+                <li><a href="/?page=financial/expenses-list" data-page="financial/expenses-list">Expenses</a></li>
                 <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
+                <li><a href="/?page=time-tracking" data-page="time-tracking">Time Tracking</a></li>
+                <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
+                <li><a href="/?page=financial/expense-report" data-page="financial/expense-report">Reports</a></li>
               </ul>
             </li>
           </ul>
@@ -134,8 +170,12 @@
             <a class="phone" href="tel:<?php echo htmlspecialchars($fromPhone); ?>"><?php echo htmlspecialchars(format_phone($fromPhone)); ?></a>
           <?php endif; ?> -->
           <a class="settings" href="/?page=settings" data-page="settings">Settings</a>
-          <a class="settings" href="/?page=accounts" data-page="accounts" style="margin-top:8px;display:block">Accounts</a>
-          <a class="settings" href="/?page=logout" style="margin-top:8px;display:block">Logout</a>
+          <?php if (!empty($_SESSION['user']['role']) && $_SESSION['user']['role'] === 'admin'): ?>
+            <a class="settings" href="/?page=accounts" data-page="accounts" style="margin-top:8px;display:block">Accounts</a>
+          <?php else: ?>
+            <a class="settings" href="/?page=account" data-page="account" style="margin-top:8px;display:block">My Account</a>
+          <?php endif; ?>
+          <a class="settings" href="/?page=logout" data-skip-nav style="margin-top:8px;display:block">Logout</a>
         </div>
       </div>
     </aside>

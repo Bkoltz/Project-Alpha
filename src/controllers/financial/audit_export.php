@@ -3,13 +3,27 @@
 // Pure PHP audit generation - no Python dependency
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
-
-// Verify CSRF token
-csrf_verify_post_or_redirect('financial/audit-export');
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/audit.php';
 
 // Get form parameters
 $startDate = $_POST['start_date'] ?? date('Y-m-d', strtotime('January 1 ' . date('Y')));
 $endDate = $_POST['end_date'] ?? date('Y-m-d');
+
+// CSRF check: accept legacy 'csrf' or Symfony '_token'
+$csrfOk = false;
+$submitted = $_POST['_token'] ?? '';
+if (is_string($submitted) && $submitted !== '') {
+    $csrfOk = csrf_sf_is_valid('audit', $submitted);
+} elseif (!empty($_POST['csrf'])) {
+    $csrfOk = csrf_validate();
+}
+if (!$csrfOk) {
+    header('HTTP/1.1 403 Forbidden');
+    echo 'Invalid request (CSRF)';
+    exit;
+}
 $includeInvoices = isset($_POST['include_invoices']) && $_POST['include_invoices'] === '1';
 $includeUnpaidInvoices = isset($_POST['include_unpaid_invoices']) && $_POST['include_unpaid_invoices'] === '1';
 $includeContracts = isset($_POST['include_contracts']) && $_POST['include_contracts'] === '1';
@@ -123,7 +137,7 @@ try {
                 i.created_at,
                 i.due_date,
                 COALESCE(SUM(CASE WHEN p.status = 'succeeded' THEN p.amount ELSE 0 END), 0) as amount_paid,
-                GROUP_CONCAT(DISTINCT p.method SEPARATOR ', ') as payment_methods
+                GROUP_CONCAT(DISTINCT p.payment_method SEPARATOR ', ') as payment_methods
             FROM invoices i
             LEFT JOIN clients c ON i.client_id = c.id
             LEFT JOIN payments p ON i.id = p.invoice_id
@@ -147,10 +161,15 @@ try {
                 c.client_id,
                 cl.name as client_name,
                 c.project_code,
-                c.total as total,
+                c.contract_type,
+                c.total,
                 c.status,
                 c.created_at,
-                c.expiration_date
+                c.start_date,
+                c.end_date,
+                c.discount_type,
+                c.discount_value,
+                c.tax_percent
             FROM contracts c
             LEFT JOIN clients cl ON c.client_id = cl.id
             WHERE c.created_at BETWEEN ? AND ?
@@ -171,10 +190,13 @@ try {
                 q.client_id,
                 cl.name as client_name,
                 q.project_code,
+                q.quote_type,
                 q.total,
                 q.status,
                 q.created_at,
-                q.valid_until
+                q.discount_type,
+                q.discount_value,
+                q.tax_percent
             FROM quotes q
             LEFT JOIN clients cl ON q.client_id = cl.id
             WHERE q.created_at BETWEEN ? AND ?
@@ -334,6 +356,14 @@ try {
         $zip->addFile($path, $name);
     }
     $zip->close();
+
+    // Audit the data export
+    audit_log($pdo, 'data.export', 'audit_report', null, [
+        'period' => $startDate . ' to ' . $endDate,
+        'invoices' => count($invoices),
+        'contracts' => count($contracts),
+        'quotes' => count($quotes),
+    ]);
 
     // Send file for download
     header('Content-Type: application/zip');

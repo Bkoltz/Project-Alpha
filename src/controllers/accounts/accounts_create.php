@@ -1,9 +1,17 @@
 <?php
 // src/controllers/accounts/accounts_create.php
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/password_policy.php';
 
-csrf_verify_post_or_redirect('accounts');
+// Ensure user is logged in and is an admin
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
+    header('Location: /?page=login');
+    exit;
+}
+
 
 $email = trim($_POST['email'] ?? '');
 $username = trim($_POST['username'] ?? '');
@@ -17,8 +25,9 @@ if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-if (empty($password) || strlen($password) < 8) {
-    header('Location: /?page=accounts&error=' . urlencode('Password must be at least 8 characters'));
+$pwdErr = password_policy_error((string)$password);
+if ($pwdErr !== null) {
+    header('Location: /?page=accounts&error=' . urlencode($pwdErr));
     exit;
 }
 
@@ -39,12 +48,10 @@ $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
 // Insert user
 try {
-    $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role) VALUES (?, ?, ?, ?)');
-    $stmt->execute([$email, $username ?: null, $passwordHash, $role]);
+    $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role, force_password_reset) VALUES (?, ?, ?, ?, ?)');
+    $stmt->execute([$email, $username ?: null, $passwordHash, $role, $forceReset ? 1 : 0]);
     
-    // TODO: If force_reset is true, set flag in database for forced password change
-    // This would require adding a force_password_reset column to users table
-    
+    audit_log($pdo, 'user.create', 'user', (int)$pdo->lastInsertId(), ['email' => $email, 'role' => $role]);
     header('Location: /?page=accounts&created=1');
 } catch (PDOException $e) {
     error_log('Failed to create user: ' . $e->getMessage());

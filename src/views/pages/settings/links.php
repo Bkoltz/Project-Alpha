@@ -1,6 +1,18 @@
 <?php
 // src/views/pages/settings/links.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
+
+// Fetch global app config
+$appConfig = [];
+try {
+    $stmt = $pdo->query('SELECT config_key, config_value FROM app_config');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $appConfig[$row['config_key']] = $row['config_value'];
+    }
+} catch (Throwable $e) {
+    // Table may not exist yet - will be created on first save
+}
 
 // Fetch link resolver configurations
 $linkConfigs = [];
@@ -10,7 +22,7 @@ try {
         $linkConfigs[$row['provider']] = $row;
     }
 } catch (Throwable $e) {
-    @error_log('[links] Error fetching link configs: ' . $e->getMessage());
+    // Table may not exist yet
 }
 
 // Get counts of links, expired links, and ignored clients/orgs
@@ -22,19 +34,35 @@ $linkStats = [
 ];
 
 try {
-    $linkStats['total_links'] = (int)$pdo->query('SELECT COUNT(*) FROM link')->fetchColumn();
-    $linkStats['expired_links'] = (int)$pdo->query('SELECT COUNT(*) FROM link WHERE is_expired = 1')->fetchColumn();
-    $linkStats['ignored_clients'] = (int)$pdo->query('SELECT COUNT(*) FROM link WHERE ignore_auto_generation = 1')->fetchColumn();
-    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM link WHERE type IN ('auto_dropbox','auto_gdrive','auto_s3')")->fetchColumn();
+    $linkStats['total_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links')->fetchColumn();
+    $linkStats['expired_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE is_expired = 1')->fetchColumn();
+    $linkStats['ignored_clients'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE ignore_auto_generation = 1')->fetchColumn();
+    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM entity_links WHERE link_type IN ('auto_dropbox','auto_gdrive','auto_s3')")->fetchColumn();
 } catch (Throwable $e) {
     @error_log('[links] Error fetching link stats: ' . $e->getMessage());
 }
 
+// Make CSRF token available to JavaScript
+$csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+if (empty($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf'];
+
 $providers = ['dropbox', 'gdrive', 's3'];
 ?>
-
 <div style="max-width:1000px">
-    <h2 style="margin:0 0 8px 0">Link Resolver *Beta*</h2>
+    <!-- CSRF token for JavaScript -->
+    <script nonce="<?php echo e($csrfToken); ?>">
+    (function() {
+        window.csrfToken = "<?php echo e($csrfToken); ?>";
+    })();
+    </script>
+
+    <h2 style="margin:0 0 8px 0">Link Resolver</h2>
     <p style="margin:0 0 24px 0;color:var(--muted)">Auto-generate and manage links for client/organization file storage</p>
 
     <!-- Stats Banner -->
@@ -57,6 +85,9 @@ $providers = ['dropbox', 'gdrive', 's3'];
         </div>
     </div>
 
+    <form method="POST" action="/?page=settings/links-handler">
+    <input type="hidden" name="csrf" value="<?php echo e($csrfToken); ?>">
+    
     <!-- Global Settings -->
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-bottom:20px">
         <legend style="padding:0 8px;font-weight:600">Global Settings</legend>
@@ -64,12 +95,12 @@ $providers = ['dropbox', 'gdrive', 's3'];
         <div style="display:grid;gap:16px">
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="link_resolver_enabled" value="1" <?php echo !empty($appConfig['link_resolver_enabled']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Enable Link Resolver System</span>
+                <span class="font-600">Enable Link Resolver System</span>
             </label>
 
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="org_level_links_only" value="1" <?php echo !empty($appConfig['org_level_links_only']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Organization-level links only</span>
+                <span class="font-600">Organization-level links only</span>
                 <span style="font-size:13px;color:var(--muted);margin-left:4px">(If client belongs to organization, manage links at org level)</span>
             </label>
             
@@ -95,37 +126,75 @@ $providers = ['dropbox', 'gdrive', 's3'];
                 if ($provider === 'gdrive') $providerName = 'Google Drive';
                 elseif ($provider === 's3') $providerName = 'Amazon S3';
                 else $providerName = ucfirst($provider);
-                echo $providerName; 
+                echo e($providerName); 
             ?>
         </legend>
         
         <div style="display:grid;gap:16px">
             <label style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" name="provider_enabled_<?php echo $provider; ?>" value="1" 
+                <input type="checkbox" name="provider_enabled_<?php echo e($provider); ?>" value="1"
                        <?php echo $isEnabled ? 'checked' : ''; ?>
-                       onchange="toggleProviderFields('<?php echo $provider; ?>')">
-                <span style="font-weight:600">Enable <?php echo $providerName; ?> Auto-Generation</span>
+                       onchange="toggleProviderFields('<?php echo e($provider); ?>')">
+                <span class="font-600">Enable <?php echo e($providerName); ?> Auto-Generation</span>
             </label>
 
-            <div id="fields_<?php echo $provider; ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
+            <div id="fields_<?php echo e($provider); ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
                 <?php if ($provider === 'dropbox'): ?>
-                    <label>
-                        <div style="margin-bottom:4px;font-weight:600">Access Token</div>
-                        <input type="text" name="<?php echo $provider; ?>_access_token" 
-                               value="<?php echo htmlspecialchars($credentials['access_token'] ?? ''); ?>"
-                               placeholder="Enter Dropbox access token"
-                               style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
-                        <div style="margin-top:4px;font-size:12px;color:var(--muted)">
-                            Get token from <a href="https://www.dropbox.com/developers/apps" target="_blank" style="color:var(--nav-accent)">Dropbox App Console</a>
-                        </div>
-                    </label>
+                    <div class="grid">
+                        <?php if (!empty($credentials['refresh_token'])): ?>
+                            <!-- OAuth Connected State -->
+                            <div style="padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;display:flex;align-items:center;gap:12px">
+                                <span style="font-size:20px">✅</span>
+                                <div style="flex:1">
+                                    <div style="font-weight:600;color:#065f46">Dropbox Connected</div>
+                                    <div style="font-size:12px;color:#6b7280">
+                                        <?php if (!empty($credentials['token_expires_at'])): ?>
+                                            Token expires: <?php echo e($credentials['token_expires_at']); ?>
+                                        <?php else: ?>
+                                            Connection is active
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <a href="/?page=settings/dropbox-oauth&action=disconnect" 
+                                   style="padding:6px 12px;border-radius:6px;border:1px solid #dc2626;background:#fff;color:#dc2626;font-size:13px;text-decoration:none"
+                                   onclick="return confirm('Disconnect Dropbox? This will revoke the token.');">Disconnect</a>
+                            </div>
+                        <?php else: ?>
+                            <!-- OAuth Disconnected State -->
+                            <div style="padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;display:flex;align-items:center;gap:12px">
+                                <span style="font-size:20px">🔗</span>
+                                <div style="flex:1">
+                                    <div style="font-weight:600;color:#991b1b">Dropbox Not Connected</div>
+                                    <div style="font-size:12px;color:#6b7280">Connect via OAuth for a secure, permanent connection.</div>
+                                </div>
+                                <a href="/?page=settings/dropbox-oauth&action=start" 
+                                   style="padding:8px 16px;border-radius:6px;border:0;background:#2563eb;color:#fff;font-size:13px;text-decoration:none;font-weight:600">Connect Dropbox</a>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <!-- Show legacy access token field if no OAuth, for backward compatibility -->
+                        <?php if (empty($credentials['refresh_token'])): ?>
+                            <div style="margin-top:8px">
+                                <label style="font-size:13px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px">
+                                    <input type="checkbox" onchange="document.getElementById('legacy-dropbox-token').style.display=this.checked?'block':'none'">
+                                    <span>Use legacy access token instead (not recommended)</span>
+                                </label>
+                                <div id="legacy-dropbox-token" style="display:none;margin-top:8px">
+                                    <input type="text" name="<?php echo e($provider); ?>_access_token"
+                                           value="<?php echo e($credentials['access_token'] ?? ''); ?>"
+                                           placeholder="Enter Dropbox access token"
+                                           style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
 
                 <?php elseif ($provider === 'gdrive'): ?>
                     <label>
                         <div style="margin-bottom:4px;font-weight:600">Service Account JSON</div>
-                        <textarea name="<?php echo $provider; ?>_credentials" rows="4"
+                        <textarea name="<?php echo e($provider); ?>_credentials" rows="4"
                                   placeholder='Paste Google Service Account JSON here'
-                                  style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px"><?php echo htmlspecialchars($credentials['service_account'] ?? ''); ?></textarea>
+                                  style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px"><?php echo e($credentials['service_account'] ?? ''); ?></textarea>
                         <div style="margin-top:4px;font-size:12px;color:var(--muted)">
                             Get credentials from <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--nav-accent)">Google Cloud Console</a>
                         </div>
@@ -135,30 +204,30 @@ $providers = ['dropbox', 'gdrive', 's3'];
                     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
                         <label>
                             <div style="margin-bottom:4px;font-weight:600">Access Key ID</div>
-                            <input type="text" name="<?php echo $provider; ?>_access_key" 
-                                   value="<?php echo htmlspecialchars($credentials['access_key'] ?? ''); ?>"
+                            <input type="text" name="<?php echo e($provider); ?>_access_key"
+                                   value="<?php echo e($credentials['access_key'] ?? ''); ?>"
                                    placeholder="AWS Access Key ID"
                                    style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
                         </label>
                         <label>
                             <div style="margin-bottom:4px;font-weight:600">Secret Access Key</div>
-                            <input type="password" name="<?php echo $provider; ?>_secret_key" 
-                                   value="<?php echo htmlspecialchars($credentials['secret_key'] ?? ''); ?>"
+                            <input type="password" name="<?php echo e($provider); ?>_secret_key"
+                                   value="<?php echo e($credentials['secret_key'] ?? ''); ?>"
                                    placeholder="AWS Secret Access Key"
                                    style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
                         </label>
                     </div>
                     <label>
                         <div style="margin-bottom:4px;font-weight:600">Bucket Name</div>
-                        <input type="text" name="<?php echo $provider; ?>_bucket" 
-                               value="<?php echo htmlspecialchars($credentials['bucket'] ?? ''); ?>"
+                        <input type="text" name="<?php echo e($provider); ?>_bucket"
+                               value="<?php echo e($credentials['bucket'] ?? ''); ?>"
                                placeholder="my-bucket-name"
                                style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
                     </label>
                     <label>
                         <div style="margin-bottom:4px;font-weight:600">Region</div>
-                        <input type="text" name="<?php echo $provider; ?>_region" 
-                               value="<?php echo htmlspecialchars($credentials['region'] ?? 'us-east-1'); ?>"
+                        <input type="text" name="<?php echo e($provider); ?>_region"
+                               value="<?php echo e($credentials['region'] ?? 'us-east-1'); ?>"
                                placeholder="us-east-1"
                                style="width:200px;padding:8px;border-radius:6px;border:1px solid #ddd">
                     </label>
@@ -166,8 +235,8 @@ $providers = ['dropbox', 'gdrive', 's3'];
 
                 <label>
                     <div style="margin-bottom:4px;font-weight:600">Root Folder Path</div>
-                    <input type="text" name="<?php echo $provider; ?>_root_path" 
-                           value="<?php echo htmlspecialchars($credentials['root_path'] ?? '/'); ?>"
+                    <input type="text" name="<?php echo e($provider); ?>_root_path"
+                           value="<?php echo e($credentials['root_path'] ?? '/'); ?>"
                            placeholder="/"
                            style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
                     <div style="margin-top:4px;font-size:12px;color:var(--muted)">
@@ -175,7 +244,7 @@ $providers = ['dropbox', 'gdrive', 's3'];
                     </div>
                 </label>
 
-                <button type="button" onclick="testConnection('<?php echo $provider; ?>')"
+                <button type="button" onclick="testConnection('<?php echo e($provider); ?>')"
                         style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
                     Test Connection
                 </button>
@@ -185,28 +254,29 @@ $providers = ['dropbox', 'gdrive', 's3'];
     
     <?php endforeach; ?>
 
-    <!-- Link Expiration Checker -->
+    <!-- Link Expiration Reference -->
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-top:20px">
         <legend style="padding:0 8px;font-weight:600">Link Expiration Management</legend>
-        
-        <div style="display:grid;gap:16px">
-            <label style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" name="link_expiration_checker_enabled" value="1" 
-                       <?php echo !empty($appConfig['link_expiration_checker']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Enable automatic expiration checking (daily cron)</span>
-            </label>
-
-            <label style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" name="link_expiration_email_enabled" value="1" 
-                       <?php echo !empty($appConfig['link_expiration_email_enabled']) ? 'checked' : ''; ?>>
-                <span style="font-weight:600">Email notifications for expiring links</span>
-            </label>
-
-            <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
-                <strong>ℹ️ Note:</strong> Expired links will be marked automatically but not deleted. You can manually refresh or regenerate them as needed.
-            </div>
+        <div style="padding:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:13px">
+            ℹ️ <strong>Link expiration automation and warnings</strong> are managed on the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab under "System Automation" and "Link Expiration Warnings".
+        </div>
+        <div style="margin-top:12px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
+            <strong>ℹ️ Note:</strong> Expired links will be marked automatically but not deleted. You can manually refresh or regenerate them as needed.
         </div>
     </fieldset>
+    
+    <!-- Save Button -->
+    <div style="margin-top:20px">
+        <button type="submit" style="padding:10px 24px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px">
+            Save Settings
+        </button>
+        <?php if (isset($_GET['saved']) && $_GET['saved'] === '1'): ?>
+            <span style="margin-left:12px;color:#059669;font-weight:600">✓ Settings saved!</span>
+        <?php elseif (isset($_GET['saved']) && $_GET['saved'] === '0'): ?>
+            <span style="margin-left:12px;color:#dc2626;font-weight:600">✗ Failed to save settings. <?php echo isset($_GET['error']) ? e($_GET['error']) : ''; ?></span>
+        <?php endif; ?>
+    </div>
+    </form>
 </div>
 
 <script>
@@ -224,6 +294,7 @@ function testConnection(provider) {
     // Gather credentials for this provider
     const formData = new FormData();
     formData.append('provider', provider);
+    formData.append('csrf', window.csrfToken || '');  // Add CSRF token
     
     if (provider === 'dropbox') {
         formData.append('access_token', document.querySelector(`input[name="${provider}_access_token"]`).value);

@@ -15,14 +15,16 @@ if (!$documentId) {
 // Fetch document details with folder info
 $stmt = $pdo->prepare('
     SELECT 
-        fd.*,
-        fc.title as folder_title,
-        fc.type as folder_type,
-        u.username as uploaded_by_name
+        fd.id,
+        fd.organization_id,
+        fd.category_id,
+        fd.file_name,
+        fd.file_path,
+        fd.uploaded_at,
+        fc.title as folder_title
     FROM form_documents fd
     JOIN form_categories fc ON fd.category_id = fc.id
-    LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fd.id = ? AND fc.org_id = ?
+    WHERE fd.id = ? AND fc.organization_id = ?
 ');
 $stmt->execute([$documentId, $orgId]);
 $document = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -85,25 +87,11 @@ $fileUrl = '/?page=serve-upload&file=' . urlencode($fileParam);
                         </div>
                     </div>
 
-                    <?php if ($document['file_size']): ?>
-                    <div>
-                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">File Size</div>
-                        <div style="font-weight:600">
-                            <?php echo number_format($document['file_size'] / 1024 / 1024, 2); ?> MB
-                        </div>
-                    </div>
-                    <?php endif; ?>
-
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
                         <div style="font-weight:600">
-                            <?php echo date('F j, Y', strtotime($document['uploaded_at'])); ?>
+                            <?php echo $document['uploaded_at'] ? date('F j, Y', strtotime($document['uploaded_at'])) : 'N/A'; ?>
                         </div>
-                        <?php if ($document['uploaded_by_name']): ?>
-                            <div style="font-size:13px;color:var(--muted);margin-top:2px">
-                                by <?php echo htmlspecialchars($document['uploaded_by_name']); ?>
-                            </div>
-                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -146,7 +134,7 @@ async function confirmDelete() {
     }
     
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', <?php echo json_encode(csrf_token()); ?>);
     formData.append('action', 'delete_document');
     formData.append('document_id', <?php echo $documentId; ?>);
     

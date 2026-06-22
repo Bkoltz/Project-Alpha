@@ -8,20 +8,25 @@ $orgId = 1; // Should come from session/user context
 // Fetch all form categories with their documents and counts
 $stmt = $pdo->prepare('
     SELECT 
-        fc.*,
+        fc.id,
+        fc.organization_id,
+        fc.title,
+        fc.description,
+        fc.created_at,
+        fc.type,
         fd.id as doc_id,
         fd.file_path,
         fd.file_name,
-        fd.mime_type,
         fd.uploaded_at,
-        u.username as uploaded_by_name,
-        COUNT(DISTINCT fd2.id) as doc_count
+        COALESCE(fdc.doc_count, 0) as doc_count
     FROM form_categories fc
-    LEFT JOIN form_documents fd ON fc.id = fd.category_id
-    LEFT JOIN form_documents fd2 ON fc.id = fd2.category_id
-    LEFT JOIN users u ON fd.uploaded_by = u.id
-    WHERE fc.org_id = ?
-    GROUP BY fc.id, fd.id, fd.file_path, fd.file_name, fd.mime_type, fd.uploaded_at, u.username
+    LEFT JOIN (
+        SELECT category_id, MAX(id) AS latest_doc_id, COUNT(*) AS doc_count
+        FROM form_documents
+        GROUP BY category_id
+    ) fdc ON fdc.category_id = fc.id
+    LEFT JOIN form_documents fd ON fd.id = fdc.latest_doc_id
+    WHERE fc.organization_id = ?
     ORDER BY fc.created_at DESC
 ');
 $stmt->execute([$orgId]);
@@ -34,7 +39,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <h1 style="margin:0 0 8px 0;font-size:28px">Forms & Documents</h1>
             <p style="margin:0;color:var(--muted)">Manage business forms like W-9, contracts templates, and other documents</p>
         </div>
-        <div style="display:flex;gap:8px">
+        <div class="flex">
             <button onclick="showUploadFileModal()" 
                     style="padding:10px 16px;border-radius:8px;background:#f9fafb;border:1px solid #e5e7eb;color:inherit;font-weight:600;cursor:pointer">
                 📄 Upload File
@@ -125,9 +130,6 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php if ($hasDocument): ?>
                             <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
                                 Uploaded <?php echo date('M j, Y', strtotime($category['uploaded_at'])); ?>
-                                <?php if ($category['uploaded_by_name']): ?>
-                                    <br>by <?php echo htmlspecialchars($category['uploaded_by_name']); ?>
-                                <?php endif; ?>
                             </div>
                         <?php else: ?>
                             <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
@@ -350,4 +352,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<script src="js/forms-list-logic.js" defer></script>
+<script>
+    window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
+</script>
+<script src="/assets/js/forms-list-logic.js" defer></script>

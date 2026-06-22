@@ -20,15 +20,15 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <!-- Document Type Tabs -->
     <div style="display:flex;gap:12px;margin-bottom:24px;border-bottom:2px solid #e5e7eb;padding-bottom:2px">
-        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=regular" data-skip-nav
+        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=<?php echo e('regular'); ?>" data-skip-nav
            style="padding:10px 20px;font-weight:<?php echo $activeTab === 'regular' ? '600' : '400'; ?>;color:<?php echo $activeTab === 'regular' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $activeTab === 'regular' ? '3px solid var(--nav-accent)' : '3px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">
             Regular
         </a>
-        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=long_term" data-skip-nav
+        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=<?php echo e('long_term'); ?>" data-skip-nav
            style="padding:10px 20px;font-weight:<?php echo $activeTab === 'long_term' ? '600' : '400'; ?>;color:<?php echo $activeTab === 'long_term' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $activeTab === 'long_term' ? '3px solid var(--nav-accent)' : '3px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">
             Long Term
         </a>
-        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=on_demand" data-skip-nav
+        <a href="/?page=settings&tab=documents&doc_tab=customization&field_tab=<?php echo e('on_demand'); ?>" data-skip-nav
            style="padding:10px 20px;font-weight:<?php echo $activeTab === 'on_demand' ? '600' : '400'; ?>;color:<?php echo $activeTab === 'on_demand' ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $activeTab === 'on_demand' ? '3px solid var(--nav-accent)' : '3px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none">
             On-Demand
         </a>
@@ -47,7 +47,7 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         <?php else: ?>
             <?php foreach ($fields as $field): ?>
-                <div class="field-item" data-field-id="<?php echo $field['id']; ?>" draggable="true"
+                <div class="field-item" data-field-id="<?php echo e($field['id']); ?>" draggable="true"
                      style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:12px;align-items:center;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:move">
                     
                     <!-- Drag Handle -->
@@ -68,14 +68,14 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <?php endif; ?>
                         </div>
                         <div style="font-size:12px;color:var(--muted)">
-                            Type: <?php echo ucfirst($field['field_type']); ?>
+                            Type: <?php echo e(ucfirst($field['field_type'])); ?>
                             <?php if ($field['field_key']): ?> • Key: <?php echo htmlspecialchars($field['field_key']); ?><?php endif; ?>
                         </div>
                     </div>
                     
                     <!-- Toggle Switch -->
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap" title="Enable/Disable">
-                        <input type="checkbox" class="field-toggle" data-field-id="<?php echo $field['id']; ?>" 
+                        <input type="checkbox" class="field-toggle" data-field-id="<?php echo e($field['id']); ?>" 
                                <?php echo $field['is_enabled'] ? 'checked' : ''; ?> 
                                <?php echo $field['is_builtin'] ? 'disabled' : ''; ?>
                                style="width:16px;height:16px">
@@ -84,7 +84,7 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     
                     <!-- Edit Button -->
                     <?php if (!$field['is_builtin']): ?>
-                        <button type="button" onclick="editField(<?php echo $field['id']; ?>)" 
+                        <button type="button" onclick="editField(<?php echo e($field['id']); ?>)" 
                                 style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:13px;white-space:nowrap">
                             Edit
                         </button>
@@ -94,7 +94,7 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     
                     <!-- Delete Button -->
                     <?php if (!$field['is_builtin']): ?>
-                        <button type="button" onclick="deleteField(<?php echo $field['id']; ?>)" 
+                        <button type="button" onclick="deleteField(<?php echo e($field['id']); ?>)" 
                                 style="padding:6px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;cursor:pointer;font-size:13px;white-space:nowrap">
                             Delete
                         </button>
@@ -190,7 +190,7 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <script>
-const activeTab = '<?php echo $activeTab; ?>';
+const activeTab = '<?php echo e($activeTab); ?>';
 </script>
 
-<script src="js/document-customization-logic.js" defer></script>
+<script src="/assets/js/document-customization-logic.js" defer></script>

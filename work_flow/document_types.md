@@ -28,8 +28,16 @@ This document explains the document types Project Alpha supports, the common lif
   - Reminders and scheduled invoicing are managed by the `cron` tasks.
 
 ## 4. Long-term and On-Demand Document Variants
-- Long-term: Documents associated with long-term contracts (e.g. recurring invoices, series of invoices). These use `project_code` and `project_meta` to persist settings.
-- On-demand: Documents generated ad-hoc, often for one-off work or change orders.
+
+Document types are stored in type columns on the unified tables:
+- `quotes.quote_type`: `regular`, `long_term`, `on_demand`
+- `contracts.contract_type`: `regular`, `long_term`, `on_demand`
+- `invoices.invoice_type`: `regular`, `on_demand`
+
+**Important**: The dev branch does NOT use separate `long_term_contracts` or `on_demand_contracts` tables. All documents are in the unified `quotes`/`contracts`/`invoices` tables with a type filter. When restoring files from the main branch, SQL queries MUST be patched to use these type columns instead of the legacy `is_long_term`/`is_on_demand` booleans or separate tables.
+
+- Long-term: Documents associated with long-term contracts (recurring invoices, series of invoices). Uses `contract_type='long_term'` filter and `billing_interval_count`/`billing_interval_unit` columns.
+- On-demand: Documents generated ad-hoc for one-off work or change orders. Uses `contract_type='on_demand'` / `invoice_type='on_demand'` filter.
 
 ## 5. Public Views & PDFs
 - Public view pages (eg: `public-doc`) allow clients to view and accept or interact with documents.

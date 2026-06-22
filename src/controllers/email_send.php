@@ -71,15 +71,18 @@ try {
   try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS public_links (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      type VARCHAR(16) NOT NULL,
-      record_id INT NOT NULL,
       token VARCHAR(64) NOT NULL,
+      document_type VARCHAR(50) NOT NULL,
+      document_id INT NOT NULL,
       redirect VARCHAR(255) NULL,
       expires_at DATETIME NOT NULL,
+      expire_when_paid TINYINT(1) NOT NULL DEFAULT 0,
       revoked TINYINT(1) NOT NULL DEFAULT 0,
+      access_count INT NOT NULL DEFAULT 0,
+      last_accessed_at TIMESTAMP NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_public_token (token),
-      INDEX idx_public_type_record (type, record_id)
+      INDEX idx_public_type_document (document_type, document_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
   } catch (Throwable $e) { /* ignore */ }
 
@@ -90,7 +93,7 @@ try {
   if ($days <= 0) { $days = 14; }
   $exp = date('Y-m-d H:i:s', time() + ($days * 24 * 60 * 60));
   try {
-  $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, redirect, expires_at) VALUES (?,?,?,?,?)');
+  $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, redirect, expires_at) VALUES (?,?,?,?,?)');
   // No redirect by default; callers may update this row later if desired
   $ins->execute([$type, $id, $token, null, $exp]);
   } catch (Throwable $e) { /* ignore */ }

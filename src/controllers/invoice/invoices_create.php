@@ -20,6 +20,7 @@ $item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
+$timeEntryIds = $_POST['time_entry_id'] ?? [];
 
 if ($client_id <= 0 || empty($item)) {
     header('Location: /?page=invoice/invoices-create&error=Invalid%20input');
@@ -36,7 +37,14 @@ for ($i=0; $i<count($item); $i++) {
     if ($itm === '' || $q <= 0 || $p < 0) continue;
     $line = $q * $p;
     $subtotal += $line;
-    $items[] = ['item'=>$itm,'description'=>$d,'quantity'=>$q,'unit_price'=>$p,'line_total'=>$line];
+    $items[] = [
+        'item' => $itm,
+        'description' => $d,
+        'quantity' => $q,
+        'unit_price' => $p,
+        'line_total' => $line,
+        'time_entry_id' => (int)($timeEntryIds[$i] ?? 0) ?: null
+    ];
 }
 if (!$items) {
     header('Location: /?page=invoice/invoices-create&error=Add%20at%20least%20one%20item');
@@ -73,9 +81,14 @@ try {
     $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-    foreach ($items as $it) {
-        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, time_entry_id, hours) VALUES (?,?,?,?,?,?,?,?)');
+    foreach ($items as $idx => $it) {
+        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['time_entry_id'] ?? null, $it['quantity'] ?? null]);
+        if (!empty($it['time_entry_id'])) {
+            $teId = (int)$it['time_entry_id'];
+            $itemId = (int)$pdo->lastInsertId();
+            $pdo->prepare('UPDATE time_entries SET billed = 1, invoice_item_id = ? WHERE id = ?')->execute([$itemId, $teId]);
+        }
     }
     
     // Add to project_documents if project_id is set
@@ -88,6 +101,34 @@ try {
     $pdo->rollBack();
     header('Location: /?page=invoice/invoices-create&error=Failed%20to%20create%20invoice');
     exit;
+}
+
+// Notify client that an invoice has been created (best-effort; don't fail creation)
+try {
+    $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
+    $clientStmt->execute([$client_id]);
+    $clientRow = $clientStmt->fetch(PDO::FETCH_ASSOC);
+    if ($clientRow && !empty($clientRow['email']) && filter_var($clientRow['email'], FILTER_VALIDATE_EMAIL)) {
+        require_once __DIR__ . '/../../services/EmailService.php';
+        $docnum = '';
+        $invStmt = $pdo->prepare('SELECT doc_number, total FROM invoices WHERE id = ?');
+        $invStmt->execute([$invoice_id]);
+        $invRow = $invStmt->fetch(PDO::FETCH_ASSOC);
+        if ($invRow) {
+            $docnum = (string)($invRow['doc_number'] ?? $invoice_id);
+            $total = (float)($invRow['total'] ?? 0);
+        }
+        $clientName = trim((string)($clientRow['name'] ?? ''));
+        $firstName = $clientName !== '' ? preg_split('/\s+/', $clientName)[0] : 'there';
+        $subject = 'Invoice I-' . $docnum . ' has been created';
+        $body = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
+              . '<p>Your invoice <strong>I-' . htmlspecialchars($docnum) . '</strong> has been created for <strong>$' . number_format($total, 2) . '</strong>.</p>'
+              . '<p>Due date: ' . htmlspecialchars($due_date) . '</p>'
+              . '<p>You can log in to view and pay the invoice. Thank you!</p>';
+        EmailService::sendEmail($clientRow['email'], $subject, $body);
+    }
+} catch (Throwable $e) {
+    @error_log('[invoices_create] Client notification email failed: ' . $e->getMessage());
 }
 
 header('Location: /?page=invoice/invoices-list&created=1');

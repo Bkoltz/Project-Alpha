@@ -1,5 +1,5 @@
 <?php
-// src/views/pages/invoices-create.php
+// src/views/pages/invoice/invoices-create.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
@@ -69,7 +69,10 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
       <div id="itemsInv" style="display:grid;gap:8px"></div>
-      <button type="button" onclick="addItemInv()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" onclick="addItemInv()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
+        <button type="button" id="btnAddFromTrackedTime" style="padding:8px 12px;border-radius:8px;border:1px solid #2ea3d6;background:#eff6ff;color:#0b4a6a;font-weight:600">+ Add from Tracked Time</button>
+      </div>
     </div>
 
     <label>
@@ -90,4 +93,37 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
   </form>
 </section>
 
-<script src="js/invoices-create-logic.js" defer></script>
+<!-- Tracked Time Modal -->
+<div id="trackedTimeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="width:100%;max-width:800px;max-height:90vh;overflow:auto">
+    <div class="card-head">
+      <h3 class="card-title">Add from Tracked Time</h3>
+      <button type="button" id="closeTrackedTimeModal" class="btn btn-sm">Close</button>
+    </div>
+    <div id="trackedTimeLoading" style="padding:30px;text-align:center;color:var(--muted)">Loading unbilled time entries…</div>
+    <div id="trackedTimeEmpty" style="display:none;padding:30px;text-align:center;color:var(--muted)">No unbilled billable time entries available.</div>
+    <form id="trackedTimeForm" style="display:none">
+      <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+      <div class="expense-table-wrap">
+        <table class="pa-table expense-table">
+          <thead>
+            <tr>
+              <th style="width:40px"><input type="checkbox" id="selectAllTrackedTime"></th>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Hours</th>
+              <th>Rate</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody id="trackedTimeTbody"></tbody>
+        </table>
+      </div>
+      <div class="expense-filter-actions" style="margin-top:16px">
+        <button type="button" id="btnAddSelectedTrackedTime" class="btn btn-primary">Add Selected to Invoice</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="/assets/js/invoices-create-logic.js" defer></script>

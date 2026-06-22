@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$q = $pdo->prepare('SELECT q.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal, cl.country FROM quotes q JOIN clients cl ON cl.id=q.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE q.id=? AND q.is_long_term=1');
+$q = $pdo->prepare('SELECT q.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM quotes q JOIN clients cl ON cl.id=q.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE q.id=? AND q.quote_type="long_term"');
 $q->execute([$id]);
 $quote = $q->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Long-term quote not found</p>'; return; }
@@ -81,8 +81,8 @@ $isOngoing = empty($quote['end_date']);
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
-    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
+    <a href="javascript:history.back()" class="btn btn-sm">Back</a>
+    <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" download="longterm-quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
@@ -90,7 +90,7 @@ $isOngoing = empty($quote['end_date']);
       <input type="hidden" name="type" value="long_term_quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+      <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
   </div>
@@ -100,7 +100,7 @@ $isOngoing = empty($quote['end_date']);
   $brand = $appConfig['brand_name'] ?? 'Project Alpha';
   $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   $projectRoot = realpath(__DIR__ . '/../../../../');
-  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
   $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
   $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
   
@@ -190,7 +190,7 @@ $isOngoing = empty($quote['end_date']);
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">From</div>
+        <div class="font-600">From</div>
         <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
@@ -220,7 +220,7 @@ $isOngoing = empty($quote['end_date']);
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">To</div>
+        <div class="font-600">To</div>
         <?php 
           $toLines = [];
           if (!empty($quote['client_name'])) { $toLines[] = (string)$quote['client_name']; }
@@ -229,7 +229,7 @@ $isOngoing = empty($quote['end_date']);
           if (!empty($quote['address_line2'])) { $toLines[] = (string)$quote['address_line2']; }
           $c = trim((string)($quote['city'] ?? ''));
           $s = trim((string)($quote['state'] ?? ''));
-          $p = trim((string)($quote['postal'] ?? ''));
+          $p = trim((string)($quote['postal_code'] ?? ''));
           $parts2 = [];
           if ($c !== '') { $parts2[] = $c; }
           if ($s !== '') { $parts2[] = $s; }

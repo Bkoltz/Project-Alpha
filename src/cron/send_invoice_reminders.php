@@ -8,8 +8,10 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
+require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[send_invoice_reminders]';
+$jobName = 'send_invoice_reminders';
 
 // Check if either reminder is enabled
 $due7Enabled = !empty($appConfig['invoice_auto_send_due_7days']);
@@ -17,12 +19,22 @@ $overdueEnabled = !empty($appConfig['invoice_auto_send_overdue_weekly']);
 
 if (!$due7Enabled && !$overdueEnabled) {
     @error_log("$logPrefix Both reminder types are disabled. Exiting.");
+    cron_state_mark_success($pdo, $jobName, 'Reminder settings disabled');
     exit(0);
 }
 
 @error_log("$logPrefix Starting invoice reminder run at " . date('Y-m-d H:i:s'));
 
 try {
+    $lastRun = cron_state_last_run($pdo, $jobName);
+    $dueWindowStart = $lastRun
+        ? date('Y-m-d', strtotime($lastRun . ' +7 days'))
+        : date('Y-m-d', strtotime('+7 days'));
+    $dueWindowEnd = date('Y-m-d', strtotime('+7 days'));
+    if ($dueWindowStart > $dueWindowEnd) {
+        $dueWindowStart = $dueWindowEnd;
+    }
+
     // Build SMTP config from app settings
     $smtpPass = '';
     if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
@@ -53,7 +65,7 @@ try {
         $token = bin2hex(random_bytes(16));
         $days = (int)($appConfig['documents_valid_days'] ?? 14);
         $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
-        $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
+        $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
         $ins->execute(['invoice', $invoiceId, $token, $expiresAt]);
         return $token;
     };
@@ -64,21 +76,20 @@ try {
 
     // 1) 7-day due reminders (sent once per invoice)
     if ($due7Enabled) {
-        $due7 = date('Y-m-d', strtotime('+7 days'));
         $stmt = $pdo->prepare("
             SELECT i.id, i.doc_number, i.total, i.due_date, c.email, c.name 
             FROM invoices i 
             JOIN clients c ON c.id = i.client_id 
-            WHERE i.due_date = ? AND i.status IN ('unpaid', 'partial')
+            WHERE i.due_date BETWEEN ? AND ? AND i.status IN ('unpaid', 'partial')
         ");
-        $stmt->execute([$due7]);
+        $stmt->execute([$dueWindowStart, $dueWindowEnd]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($rows as $inv) {
             $iid = (int)$inv['id'];
             
             // Check if already sent
-            $chk = $pdo->prepare('SELECT COUNT(*) FROM invoice_notifications WHERE invoice_id = ? AND type = ?');
+            $chk = $pdo->prepare('SELECT COUNT(*) FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
             $chk->execute([$iid, 'due_7']);
             if ((int)$chk->fetchColumn() > 0) {
                 $remindersSkipped++;
@@ -110,7 +121,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'due_7']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent due-7 reminder for invoice I-{$inv['doc_number']} to {$to}");
@@ -141,7 +152,7 @@ try {
             $iid = (int)$inv['id'];
             
             // Check last sent timestamp
-            $chk = $pdo->prepare('SELECT MAX(sent_at) AS last_sent FROM invoice_notifications WHERE invoice_id = ? AND type = ?');
+            $chk = $pdo->prepare('SELECT MAX(sent_at) AS last_sent FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
             $chk->execute([$iid, 'overdue_weekly']);
             $last = $chk->fetchColumn();
             
@@ -185,7 +196,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'overdue_weekly']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}");
@@ -201,6 +212,7 @@ try {
     }
 
     @error_log("$logPrefix Completed: {$remindersSent} reminders sent, {$remindersSkipped} skipped, {$errors} errors");
+    cron_state_mark_success($pdo, $jobName, "{$remindersSent} sent; {$remindersSkipped} skipped; {$errors} errors");
 
     // Update last run timestamp in settings
     $configMount = '/var/www/config';
@@ -216,6 +228,7 @@ try {
 
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

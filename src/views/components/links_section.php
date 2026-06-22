@@ -18,7 +18,7 @@ $belongsToOrg = false;
 $isReadOnly = false;
 if ($entityType === 'client') {
     try {
-        $stmt = $pdo->prepare("SELECT org_id FROM client WHERE client_id = ?");
+        $stmt = $pdo->prepare("SELECT organization_id FROM clients WHERE id = ?");
         $stmt->execute([$entityId]);
         $orgId = $stmt->fetchColumn();
         if ($orgId) {
@@ -33,10 +33,10 @@ if ($entityType === 'client') {
 // Fetch links for this entity
 try {
     $stmt = $pdo->prepare("
-        SELECT link_id, type, url, expiration_date, is_expired, ignore_auto_generation, last_verified
-        FROM link
+        SELECT id, link_type, url, expiration_date, is_expired, ignore_auto_generation, last_verified
+        FROM entity_links
         WHERE entity_type = ? AND entity_id = ?
-        ORDER BY type ASC
+        ORDER BY link_type ASC
     ");
     $stmt->execute([$entityType, $entityId]);
     $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -63,25 +63,25 @@ foreach ($links as $link) {
         </div>
         <?php if (!$isReadOnly): ?>
         <div style="display:flex;gap:8px">
-            <button type="button" onclick="showAddManualLinkModal('<?php echo $entityType; ?>', <?php echo $entityId; ?>)"
+            <button type="button" onclick="showAddManualLinkModal('<?php echo e($entityType); ?>', <?php echo (int)$entityId; ?>)"
                     style="padding:8px 12px;border-radius:6px;border:1px solid #3b82f6;background:#eff6ff;color:#1e40af;font-size:13px;cursor:pointer;font-weight:600">
                 + Add Manual Link
             </button>
             <?php if ($isIgnored): ?>
-                <button type="button" onclick="unignoreLinks('<?php echo $entityType; ?>', <?php echo $entityId; ?>)"
+                <button type="button" onclick="unignoreLinks('<?php echo e($entityType); ?>', <?php echo (int)$entityId; ?>)"
                         style="padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
                     🔔 Enable Auto-Generation
                 </button>
             <?php else: ?>
-                <button type="button" onclick="generateLinks('<?php echo $entityType; ?>', <?php echo $entityId; ?>)"
+                <button type="button" onclick="generateLinks('<?php echo e($entityType); ?>', <?php echo (int)$entityId; ?>)"
                         style="padding:8px 12px;border-radius:6px;border:1px solid #10b981;background:#ecfdf5;color:#065f46;font-size:13px;cursor:pointer;font-weight:600">
                     + Generate Links
                 </button>
-                <button type="button" onclick="refreshLinks('<?php echo $entityType; ?>', <?php echo $entityId; ?>)"
+                <button type="button" onclick="refreshLinks('<?php echo e($entityType); ?>', <?php echo (int)$entityId; ?>)"
                         style="padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
                     🔄 Refresh
                 </button>
-                <button type="button" onclick="ignoreLinks('<?php echo $entityType; ?>', <?php echo $entityId; ?>)"
+                <button type="button" onclick="ignoreLinks('<?php echo e($entityType); ?>', <?php echo (int)$entityId; ?>)"
                         style="padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
                     🔕 Ignore
                 </button>
@@ -98,18 +98,18 @@ foreach ($links as $link) {
 
     <?php if ($isIgnored && !$isReadOnly): ?>
         <div style="padding:12px 16px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;margin-bottom:16px">
-            <strong>⚠️ Auto-generation disabled</strong> — This <?php echo $entityType; ?> is marked to ignore automatic link generation.
+            <strong>⚠️ Auto-generation disabled</strong> — This <?php echo e($entityType); ?> is marked to ignore automatic link generation.
         </div>
     <?php endif; ?>
 
-    <div id="linksContainer_<?php echo $entityType; ?>_<?php echo $entityId; ?>" style="display:grid;gap:12px">
+    <div id="linksContainer_<?php echo e($entityType); ?>_<?php echo (int)$entityId; ?>" style="display:grid;gap:12px">
         <?php if (empty($links)): ?>
             <div style="padding:24px;text-align:center;background:#f9fafb;border:1px dashed #d1d5db;border-radius:8px;color:var(--muted)">
                 No links generated yet. Click "Generate Links" to create them.
             </div>
         <?php else: ?>
             <?php foreach ($links as $link): 
-                $typeLabel = str_replace(['auto_', '_'], ['', ' '], $link['type']);
+                $typeLabel = str_replace(['auto_', '_'], ['', ' '], $link['link_type']);
                 $typeLabel = ucwords($typeLabel);
                 
                 $statusClass = '';
@@ -128,14 +128,14 @@ foreach ($links as $link) {
                 <div style="padding:16px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
                     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
                         <div>
-                            <div style="font-weight:600;font-size:14px;margin-bottom:4px"><?php echo htmlspecialchars($typeLabel); ?></div>
-                            <a href="<?php echo htmlspecialchars($link['url']); ?>" target="_blank" 
+                            <div style="font-weight:600;font-size:14px;margin-bottom:4px"><?php echo e($typeLabel); ?></div>
+                            <a href="<?php echo e($link['url']); ?>" target="_blank" 
                                style="font-size:13px;color:#0369a1;text-decoration:none;word-break:break-all">
-                                <?php echo htmlspecialchars($link['url']); ?> ↗
+                                <?php echo e($link['url']); ?> ↗
                             </a>
                         </div>
                         <div style="padding:4px 8px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap;<?php echo $statusClass; ?>">
-                            <?php echo $statusText; ?>
+                            <?php echo e($statusText); ?>
                         </div>
                     </div>
                     <div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:8px">
@@ -157,6 +157,7 @@ foreach ($links as $link) {
     <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%">
         <h3 style="margin:0 0 16px 0">Add Manual Link</h3>
         <form id="manualLinkForm" style="display:grid;gap:16px">
+            <input type="hidden" name="csrf" value="<?php echo e(csrf_token()); ?>">
             <input type="hidden" id="manualLinkEntityType" name="entity_type">
             <input type="hidden" id="manualLinkEntityId" name="entity_id">
             <label>
@@ -191,6 +192,8 @@ foreach ($links as $link) {
 </div>
 
 <script>
+var linksSectionCsrf = '<?php echo e(csrf_token()); ?>';
+
 function generateLinks(entityType, entityId) {
     if (!confirm('Generate storage links for this ' + entityType + '?')) return;
     
@@ -204,7 +207,8 @@ function generateLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'generate',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())
@@ -238,7 +242,8 @@ function refreshLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'refresh',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())
@@ -268,7 +273,8 @@ function ignoreLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'ignore',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())
@@ -294,7 +300,8 @@ function unignoreLinks(entityType, entityId) {
         body: new URLSearchParams({
             action: 'unignore',
             entity_type: entityType,
-            entity_id: entityId
+            entity_id: entityId,
+            csrf: linksSectionCsrf
         })
     })
     .then(r => r.json())

@@ -21,7 +21,7 @@ if ($id <= 0 || $name === '') {
   exit;
 }
 
-$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization_id=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal=?, country=? WHERE id=?');
+$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization_id=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal_code=?, country=? WHERE id=?');
 $st->execute([
   $name,
   $email ?: null,

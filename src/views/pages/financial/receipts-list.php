@@ -14,11 +14,11 @@ $filterMinAmount = $_GET['min_amount'] ?? '';
 $filterMaxAmount = $_GET['max_amount'] ?? '';
 
 // Build WHERE clause
-$whereClauses = ['r.org_id = ?'];
+$whereClauses = ['r.organization_id = ?'];
 $params = [$orgId];
 
 if (!empty($filterStore)) {
-    $whereClauses[] = 'r.store_name = ?';
+    $whereClauses[] = 'rs.name = ?';
     $params[] = $filterStore;
 }
 if (!empty($filterMonth) && !empty($filterYear)) {
@@ -40,11 +40,12 @@ if (!empty($filterMaxAmount)) {
 
 $whereSQL = implode(' AND ', $whereClauses);
 
-// Fetch filtered receipts
+// Fetch filtered receipts with expense status
 $stmt = $pdo->prepare("
-    SELECT r.*, u.username as uploaded_by_name
+    SELECT r.*, v.name as store_name, e.id as expense_id
     FROM receipts r
-    LEFT JOIN users u ON r.uploaded_by = u.id
+    LEFT JOIN vendors v ON r.store_id = v.id
+    LEFT JOIN expenses e ON e.receipt_id = r.id AND e.status != 'void'
     WHERE {$whereSQL}
     ORDER BY r.receipt_date DESC, r.created_at DESC
 ");
@@ -55,12 +56,12 @@ $receipts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $totalAmount = array_sum(array_column($receipts, 'amount'));
 
 // Get all stores for filter dropdown
-$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Get available years
-$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM receipts WHERE org_id = ? ORDER BY year DESC');
+$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM receipts WHERE organization_id = ? ORDER BY year DESC');
 $yearStmt->execute([$orgId]);
 $years = $yearStmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -194,7 +195,7 @@ if (!in_array($currentYear, $years)) {
                     <!-- Receipt Info -->
                     <div style="padding:12px">
                         <div style="font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                            <?php echo htmlspecialchars($receipt['title']); ?>
+                            <?php echo htmlspecialchars($receipt['description'] ?? 'Receipt'); ?>
                         </div>
                         <?php if (!empty($receipt['store_name'])): ?>
                             <div style="font-size:13px;color:var(--muted);margin-bottom:4px">

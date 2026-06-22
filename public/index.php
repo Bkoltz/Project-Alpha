@@ -1,25 +1,26 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
 // Secure session cookies and start session
-$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
+$isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+    || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+    || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
     'domain' => '',
-    'secure' => $secure,
+    'secure' => $isSecure,
     'httponly' => true,
-    'samesite' => 'Lax',
+    'samesite' => 'Strict',
 ]);
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
+ob_start();
 
-// Basic security headers (safe defaults for current app)
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: SAMEORIGIN');
-header('Referrer-Policy: no-referrer-when-downgrade');
-header("Content-Security-Policy: script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;");
+// Security headers
+require_once __DIR__ . '/../src/utils/security_headers.php';
+send_security_headers();
 
 // Resolve requested page (allow letters, numbers, dashes, and slashes)
 // Be defensive: some clients may accidentally URL-encode the entire query
@@ -54,6 +55,16 @@ function resolve_view_path(string $page): string
     if ($page === 'accounts') {
         $candidates[] = $base . 'auth/accounts.php';
     }
+    if ($page === 'account') {
+        $candidates[] = $base . 'auth/account.php';
+    }
+    if ($page === 'account-edit') {
+        $candidates[] = $base . 'auth/account-edit.php';
+    }
+    // GDPR/CCPA account pages are in account/ subdirectory
+    if ($page === 'account-deleted') {
+        $candidates[] = $base . 'account/account-deleted.php';
+    }
 
     // As-provided
     $candidates[] = $base . $page . '.php';
@@ -83,14 +94,20 @@ function resolve_view_path(string $page): string
     return $base . 'home.php';
 }
 
-// Error logging into error log file stored in /var/log/error_log.txt
+// Error logging — NEVER display errors to end users in production
 error_reporting(E_ALL);
-ini_set("display_errors", 1);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
+// Log to a file OUTSIDE the public web root
+$errorLogDir = __DIR__ . '/../logs';
+if (!is_dir($errorLogDir)) { @mkdir($errorLogDir, 0750, true); }
+ini_set('error_log', $errorLogDir . '/error_log.txt');
 
 function error_handler($errorno, $errorstr, $errorfile, $errorline)
 {
     $errorMessage = "Error[$errorno]: $errorstr ($errorfile:$errorline)";
-    error_log($errorMessage . PHP_EOL, 3,  __DIR__ . "/error_log.txt");
+    error_log($errorMessage);
     return true;
 }
 
@@ -121,6 +138,26 @@ csrf_init();
 // First, bootstrap database structures required for auth
 require_once __DIR__ . '/../src/config/bootstrap.php';
 
+// CORS for API endpoints. Note: stateless API routes use the 'api-' prefix
+// (e.g. api-clients-search); 'api-keys' is a UI page, not an API endpoint.
+// Slash-prefixed 'settings/' routes are AJAX/JSON handlers.
+$isApiEndpoint = (str_starts_with($page, 'api-') && $page !== 'api-keys')
+    || str_starts_with($page, 'settings/');
+if ($isApiEndpoint) {
+    $allowedOrigins = getenv('ALLOWED_ORIGINS') ? explode(',', getenv('ALLOWED_ORIGINS')) : [];
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Access-Control-Allow-Credentials: true');
+        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRF-Token');
+    }
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+        http_response_code(204);
+        exit;
+    }
+}
+
 // API routing (stateless, header auth)
 $apiEnabled = filter_var(getenv('APP_API_ENABLED') !== false ? getenv('APP_API_ENABLED') : 'true', FILTER_VALIDATE_BOOLEAN);
 if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // exclude UI page 'api-keys'
@@ -129,6 +166,21 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // 
     $apiKey = api_require_key(['full']);
 
     // Map API endpoints
+    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients'];
+    if (in_array($page, $dashboardPages, true)) {
+        $apiKey = api_require_key(['dashboard']);
+        $map = [
+            'api-dashboard-summary'   => __DIR__ . '/../src/controllers/api/dashboard_summary.php',
+            'api-financial-summary'   => __DIR__ . '/../src/controllers/api/financial_summary.php',
+            'api-invoices'              => __DIR__ . '/../src/controllers/api/invoices_list.php',
+            'api-quotes'                => __DIR__ . '/../src/controllers/api/quotes_list.php',
+            'api-projects'              => __DIR__ . '/../src/controllers/api/projects_list.php',
+            'api-clients'               => __DIR__ . '/../src/controllers/api/clients_list.php',
+        ];
+        require_once $map[$page];
+        exit;
+    }
+
     if ($page === 'api-clients-search') {
         require_once __DIR__ . '/../src/controllers/client/clients_search.php';
         exit;
@@ -143,20 +195,50 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // 
 
 // Handle logout early
 if ($page === 'logout') {
+    // Start session if not already started
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    
+    // Audit the logout before clearing session
+    if (!empty($_SESSION['user']['id'])) {
+        try {
+            require_once __DIR__ . '/../src/config/db.php';
+            require_once __DIR__ . '/../src/utils/audit.php';
+            audit_log($pdo, 'auth.logout', 'user', (int)$_SESSION['user']['id']);
+        } catch (Throwable $e) { /* never block logout */ }
+    }
+    
+    // Clear session data
     $_SESSION = [];
+    
+    // Delete session cookie
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
         setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', $params['secure'] ?? false, $params['httponly'] ?? true);
     }
+    
     // Clear remember-me cookie
-    setcookie('remember', '', time() - 3600, '/', '', $secure, true);
+    setcookie('remember', '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'domain' => '',
+        'secure' => $isSecure,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+    
+    // Destroy the session
     session_destroy();
-    header('Location: /?page=login');
+    
+    // Redirect to logout confirmation (which will start a fresh session)
+    header('Location: /?page=logout-confirm');
     exit;
 }
 
 // Allow unauthenticated access only to explicit public pages
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook'];
+// NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
+$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -202,6 +284,45 @@ if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages,
     exit;
 }
 
+// Session timeout: expire sessions after 8 hours of inactivity
+if (!empty($_SESSION['user'])) {
+    $sessionTimeout = 8 * 60 * 60; // 8 hours
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $sessionTimeout) {
+        $_SESSION = [];
+        session_destroy();
+        header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+}
+
+// Enforce force-password-reset: lock user to account page until they change it
+if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    $allowedForForceReset = ['account', 'account-update', 'logout'];
+    if (!in_array($page, $allowedForForceReset, true)) {
+        try {
+            require_once __DIR__ . '/../src/config/db.php';
+            $fpStmt = $pdo->prepare('SELECT force_password_reset FROM users WHERE id = ?');
+            $fpStmt->execute([(int)$_SESSION['user']['id']]);
+            if ((int)$fpStmt->fetchColumn() === 1) {
+                header('Location: /?page=account&force=1');
+                exit;
+            }
+        } catch (Throwable $e) { /* allow through if check fails */ }
+    }
+}
+
+// Audit middleware: guarantees baseline audit rows for sensitive actions
+// (payments, 2FA changes, API keys, exports, deletes) even when the routed
+// controller doesn't call audit_log() itself. See src/utils/audit_middleware.php.
+try {
+    require_once __DIR__ . '/../src/config/db.php';
+    require_once __DIR__ . '/../src/utils/audit_middleware.php';
+    audit_middleware($pdo, $page);
+} catch (Throwable $e) {
+    @error_log('[audit] middleware init failed: ' . $e->getMessage());
+}
+
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
@@ -218,6 +339,10 @@ if ($page === 'projects-search') {
 // Organization search for client creation (AJAX)
 if ($page === 'org-search' || $page === 'organization/org-search') {
     require_once __DIR__ . '/../src/controllers/organization/org_search.php';
+    exit;
+}
+if ($page === 'time-tracking/unbilled') {
+    require_once __DIR__ . '/../src/controllers/time-tracking/time_entries_unbilled.php';
     exit;
 }
 if ($page === 'financial/financial-api') {
@@ -298,8 +423,191 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'stripe-webhook'];
+    // Add a global per-IP rate-limit gate before routing. Endpoint-specific limits
+    // (e.g. public links) may use tighter checks in their own controllers.
+    require_once __DIR__ . '/../src/config/db.php';
+    require_once __DIR__ . '/../src/utils/client_ip.php';
+
+    // Global POST rate limiter: block only per-IP, not per-page, and skip for
+    // legitimate authenticated actions that naturally chain POSTs.
+    $skipGlobalRateLimitFor = [
+        // Settings & system
+        'settings',
+        'settings-backup',
+        'settings/tax-rates-handler',
+        'settings/tax-import-handler',
+        'settings/links-handler',
+        'settings/custom-fields-handler',
+        'settings/item-library-handler',
+        'settings/document-customization-save',
+        'settings/document-custom-fields-handler',
+        'settings/link-test-connection',
+        'settings/dropbox-oauth',
+
+        // User accounts / auth management
+        'auth/account-edit',
+        'account-update',
+        'account-revoke-device',
+        'account/delete',
+        'accounts-create',
+        'accounts-update',
+        'accounts-delete',
+        'accounts-reset-password',
+        '2fa-setup-action',
+        '2fa-verify-action',
+        '2fa-admin-disable',
+
+        // API keys
+        'api-keys-create',
+        'api-keys-revoke',
+
+        // Clients
+        'client/client-create',
+        'client/clients-create',
+        'clients-create',
+        'client/client-update',
+        'client/clients-update',
+        'clients-update',
+        'client/clients-delete',
+        'clients-delete',
+        'client/clients-restore',
+        'clients-restore',
+        'client/clients-purge',
+        'clients-purge',
+
+        // Projects
+        'project/project-create',
+        'project/projects-create',
+        'project/project-update',
+        'project/projects-update',
+        'project/projects-delete',
+        'project/project-add-document',
+        'project/project-remove-document',
+        'project/projects-update-status',
+        'project-notes-update',
+
+        // Quotes
+        'quote/quotes-create',
+        'quotes-create',
+        'quote/quotes-update',
+        'quotes-update',
+        'quote/quote-approve',
+        'quote/quote-decline',
+        'quote/quote-reject',
+        'quote-reject',
+        'quote/email-send',
+
+        // Contracts
+        'contract/contract-action',
+        'contract/contract-create',
+        'contract/contracts-create',
+        'contracts-create',
+        'contract/contracts-update',
+        'contracts-update',
+        'contract/contract-sign',
+        'contract/contract-complete',
+        'contract/contract-void',
+        'contract/contract-deposit-received',
+        'contract/contract-deny',
+        'contract/email-send',
+        'long-term-contracts-create',
+        'contract/long-term-contracts-create',
+        'long-term-contract-activate',
+        'long-term-contract-pause',
+        'long-term-contract-resume',
+        'long-term-contract-terminate',
+        'on-demand-contract-activate',
+        'on-demand-contract-pause',
+        'on-demand-contract-resume',
+        'on-demand-contract-terminate',
+        'on-demand-invoice-generate',
+
+        // Invoices / payments
+        'invoice/invoice-create',
+        'invoice/invoice-action',
+        'invoice/invoices-create',
+        'invoices-create',
+        'invoice/invoices-update',
+        'invoices-update',
+        'invoice/invoices-mark-paid',
+        'invoice/email-send',
+        'payments/payments-create',
+
+        // Documents / forms / receipts
+        'document-reenable',
+        'document-date-update',
+        'receipts-handler',
+        'forms-handler',
+
+        // Organizations
+        'organization/org-create',
+        'organization/organizations-create',
+        'organization/organizations-update',
+        'organization/organizations-delete',
+        'organization/organization-add-client',
+        'organization/organization-update-notes',
+        'organization-update-notes',
+        'organization/organization-remove-client',
+        'organization/organizations_upload',
+        'organization/organizations-upload',
+
+        // Links / public links
+        'public-link-create',
+        'public-link-revoke',
+        'links/link-management',
+        'links/manual-link-handler',
+
+        // Financial
+        'financial/audit-export',
+        'financial/audit-schedule-handler',
+        'financial/mileage-handler',
+        'financial/vendor-handler',
+        'financial/category-handler',
+        'financial/expense-handler',
+        'financial/expense_handler',
+        'financial/csv-import',
+
+        // Time Tracking
+        'time-tracking/create',
+        'time-tracking/update',
+        'time-tracking/delete',
+        'time-tracking/start-timer',
+        'time-tracking/stop-timer',
+
+        // Email / legal / other
+        'email-send',
+        'email-test',
+        'legal/tos-accept',
+        'stripe-charge',
+    ];
+    if (!in_array($page, $skipGlobalRateLimitFor, true)) {
+        $clientIp = get_client_ip();
+        $globalPostKey = 'global_post_' . md5($clientIp);
+        if (!rate_limit_check($pdo, $globalPostKey, 300, 60, false)) {
+            error_log('Rate limit exceeded: global_post for IP ' . $clientIp . ' page=' . $page);
+            http_response_code(429);
+            header('Content-Type: text/plain');
+            echo 'Too many requests. Please slow down.';
+            exit;
+        }
+    }
+
+    // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation.
+    // Reasons for bypasses:
+    //   auth                         - controller validates CSRF (csrf_sf_is_valid 'auth')
+    //   reset-request                - controller validates CSRF (csrf_sf_is_valid 'reset_request')
+    //   reset-verify                 - controller validates CSRF (csrf_sf_is_valid 'reset_verify')
+    //   reset-update                 - controller validates CSRF (csrf_sf_is_valid 'reset_update')
+    //   public-quote-action          - controller validates CSRF (csrf_sf_is_valid 'public_quote_action')
+    //   public-contract-sign         - controller validates CSRF (csrf_sf_is_valid 'public_contract_sign')
+    //   public-contract-action       - controller validates CSRF (csrf_sf_is_valid 'public_contract_action')
+    //   organization/org-create      - controller validates CSRF (legacy session hash_equals)
+    //   organization/organization-update-notes - controller validates CSRF (csrf_validate)
+    //   stripe-webhook               - tokenless: Stripe webhook uses signature verification (HMAC + replay protection)
+    //   stripe-webhook-legacy        - tokenless: legacy Stripe webhook uses signature verification (HMAC + replay protection)
+    //   settings/link-test-connection - controller validates CSRF (csrf_validate)
+    //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -308,8 +616,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
         exit;
     }
+    if ($page === 'settings-backup') {
+        require_once __DIR__ . '/../src/controllers/backup_handler.php';
+        exit;
+    }
     if ($page === 'settings/tax-rates-handler') {
         require_once __DIR__ . '/../src/controllers/settings/tax-rates-handler.php';
+        exit;
+    }
+    if ($page === 'settings/tax-import-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/tax-import-handler.php';
+        exit;
+    }
+    if ($page === 'settings/links-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/links_handler.php';
         exit;
     }
     if ($page === 'settings/custom-fields-handler') {
@@ -330,6 +650,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'accounts-reset-password') {
         require_once __DIR__ . '/../src/controllers/accounts/accounts_reset_password.php';
+        exit;
+    }
+    if ($page === '2fa-setup-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_setup.php';
+        exit;
+    }
+    if ($page === '2fa-verify-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_verify.php';
+        exit;
+    }
+    if ($page === '2fa-admin-disable') {
+        require_once __DIR__ . '/../src/controllers/auth/admin_2fa_disable.php';
         exit;
     }
     if ($page === 'reset-request') {
@@ -412,6 +744,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract/contract_deposit_received.php';
         exit;
     }
+    if ($page === 'long-term-contract-activate') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_activate.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-activate') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_activate.php';
+        exit;
+    }
+    if ($page === 'on-demand-invoice-generate') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_invoice_generate.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-pause') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_pause.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-resume') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_resume.php';
+        exit;
+    }
+    if ($page === 'on-demand-contract-terminate') {
+        require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_terminate.php';
+        exit;
+    }
+    if ($page === 'long-term-contract-pause') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_pause.php';
+        exit;
+    }
+    if ($page === 'long-term-contract-resume') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_resume.php';
+        exit;
+    }
+    if ($page === 'long-term-contract-terminate') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_terminate.php';
+        exit;
+    }
     if ($page === 'document-reenable') {
         require_once __DIR__ . '/../src/controllers/document_reenable_handler.php';
         exit;
@@ -492,6 +860,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/auth/account_update.php';
         exit;
     }
+    if ($page === 'account-revoke-device') {
+        require_once __DIR__ . '/../src/controllers/account_revoke_device.php';
+        exit;
+    }
+    if ($page === 'account/delete') {
+        require_once __DIR__ . '/../src/controllers/account/account_delete.php';
+        exit;
+    }
     if ($page === 'financial/audit-export') {
         require_once __DIR__ . '/../src/controllers/financial/audit_export.php';
         exit;
@@ -520,6 +896,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/organization/organization_add_client.php';
         exit;
     }
+    if ($page === 'organization/organization-update-notes' || $page === 'organization-update-notes') {
+        require_once __DIR__ . '/../src/controllers/organization/organization-update-notes.php';
+        exit;
+    }
     if ($page === 'organization/organization-remove-client') {
         require_once __DIR__ . '/../src/controllers/organization/organization_remove_client.php';
         exit;
@@ -544,6 +924,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
         exit;
     }
+    if ($page === 'links/link-management') {
+        require_once __DIR__ . '/../src/controllers/links/link_management.php';
+        exit;
+    }
+    if ($page === 'links/manual-link-handler') {
+        require_once __DIR__ . '/../src/controllers/links/manual_link_handler.php';
+        exit;
+    }
+    if ($page === 'settings/dropbox-oauth') {
+        require_once __DIR__ . '/../src/controllers/settings/dropbox_oauth.php';
+        exit;
+    }
+    if ($page === '2fa-setup-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_setup.php';
+        exit;
+    }
+    if ($page === '2fa-verify-action') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_verify.php';
+        exit;
+    }
     if ($page === 'receipts-handler') {
         require_once __DIR__ . '/../src/controllers/receipts_handler.php';
         exit;
@@ -552,18 +952,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/forms_handler.php';
         exit;
     }
+    if ($page === 'financial/mileage-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/mileage_handler.php';
+        exit;
+    }
+    if ($page === 'financial/vendor-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/vendor_handler.php';
+        exit;
+    }
+    if ($page === 'financial/category-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/category_handler.php';
+        exit;
+    }
+    if ($page === 'financial/expense-handler' || $page === 'financial/expense_handler') {
+        require_once __DIR__ . '/../src/controllers/financial/expense_handler.php';
+        exit;
+    }
+    if ($page === 'financial/csv-import') {
+        require_once __DIR__ . '/../src/controllers/financial/csv_import.php';
+        exit;
+    }
+    if ($page === 'time-tracking/create') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_create.php';
+        exit;
+    }
+    if ($page === 'time-tracking/update') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_update.php';
+        exit;
+    }
+    if ($page === 'time-tracking/delete') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_delete.php';
+        exit;
+    }
+    if ($page === 'time-tracking/start-timer') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_start_timer.php';
+        exit;
+    }
+    if ($page === 'time-tracking/stop-timer') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_stop_timer.php';
+        exit;
+    }
     if ($page === 'public-link-create') {
         require_once __DIR__ . '/../src/controllers/public_link_create.php';
         exit;
     }
-    if ($page === 'stripe-charge') {
-        require_once __DIR__ . '/../src/controllers/stripe_charge.php';
+    if ($page === 'public-link-revoke') {
+        require_once __DIR__ . '/../src/controllers/public_link_revoke.php';
         exit;
     }
     if ($page === 'stripe-webhook') {
-        require_once __DIR__ . '/../src/controllers/stripe_webhook.php';
+        // Route to new future-proof webhook handler
+        require_once __DIR__ . '/../src/controllers/webhook/stripe_webhooks.php';
         exit;
     }
+    // Legacy webhook endpoint (kept for backward compatibility)
+    if ($page === 'stripe-webhook-legacy') {
+        require_once __DIR__ . '/../src/controllers/stripe/stripe_webhook.php';
+        exit;
+    }
+}
+
+// Stripe charge endpoint (supports both GET and POST)
+if ($page === 'stripe-charge') {
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_charge.php';
+    exit;
 }
 
 // Standalone login and reset pages use a minimal top header
@@ -587,18 +1039,52 @@ if ($page === 'reset-new') {
     require_once __DIR__ . '/../src/views/pages/auth/reset-new.php';
     exit;
 }
+if ($page === 'logout-confirm') {
+    if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/auth/logout.php';
+    exit;
+}
 if ($page === 'public-doc') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/controllers/public_view/public_doc.php';
     exit;
 }
+if ($page === 'legal/tos-accept') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        require_once __DIR__ . '/../src/controllers/legal/tos_accept.php';
+    } else {
+        require_once __DIR__ . '/../src/views/partials/header.php';
+        require_once __DIR__ . '/../src/views/pages/legal/tos-accept.php';
+        require_once __DIR__ . '/../src/views/partials/footer.php';
+    }
+    exit;
+}
+if (str_starts_with($page, 'legal/')) {
+    $legalView = resolve_view_path($page);
+    if (is_file($legalView)) {
+        require_once $legalView;
+        exit;
+    }
+}
 if ($page === 'stripe-checkout') {
-    require_once __DIR__ . '/../src/controllers/public_view/stripe_checkout.php';
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_checkout.php';
     exit;
 }
 if ($page === 'stripe-success') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
-    require_once __DIR__ . '/../src/controllers/public_view/stripe_success.php';
+    require_once __DIR__ . '/../src/controllers/stripe/stripe_success.php';
+    exit;
+}
+if ($page === '2fa-verify') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/views/pages/auth/two_factor_verify.php';
+    exit;
+}
+if ($page === '2fa-setup') {
+    require_once __DIR__ . '/../src/views/partials/header.php';
+    require_once __DIR__ . '/../src/views/pages/auth/two_factor_setup.php';
+    require_once __DIR__ . '/../src/views/partials/footer.php';
     exit;
 }
 

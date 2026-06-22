@@ -4,6 +4,10 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../config/app.php';
 
+// Auto-create settings (default to true/on when not explicitly set)
+$autoCreateContract = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
+$autoCreateInvoice = !isset($appConfig['quote_auto_create_invoice']) || !empty($appConfig['quote_auto_create_invoice']);
+
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
   header('Location: /?page=quote/quotes-list&error=Invalid%20quote');
@@ -35,109 +39,171 @@ try {
   // Get project_id from quote for inheritance
   $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
 
-  // Check if this is an on-demand quote
-  if (!empty($quote['is_on_demand'])) {
-    // Create on-demand contract with project_id
-    $pdo->prepare('INSERT INTO on_demand_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, price_per_invoice, deposit_type, deposit_amount, deposit_paid, project_code, start_date, end_date, billing_interval_count, billing_interval_unit, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-          $id, 
-          (int)$quote['client_id'],
-          $projectId,
-          'pending', 
-          $quote['discount_type'], 
-          $quote['discount_value'], 
-          $quote['tax_percent'], 
-          $quote['subtotal'], 
-          $quote['price_per_invoice'],
-          $quote['deposit_type'] ?? 'none',
-          $quote['deposit_amount'] ?? 0,
-          0,
-          $projectCode, 
-          $quote['start_date'],
-          $quote['end_date'],
-          $quote['billing_interval_count'],
-          $quote['billing_interval_unit'],
-          $quote['scope']
-        ]);
-    $contract_id = (int)$pdo->lastInsertId();
+  $quoteType = $quote['quote_type'] ?? 'regular';
+  if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
+    // For LT/OD quotes, only create contract if auto-create is enabled
+    if ($autoCreateContract) {
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([
+            $id,
+            (int)$quote['client_id'],
+            $projectId,
+            'pending',
+            $quoteType,
+            $quote['discount_type'],
+            $quote['discount_value'],
+            $quote['tax_percent'],
+            $quote['subtotal'],
+            $quote['total'],
+            $projectCode,
+            $quote['deposit_type'] ?? 'none',
+            $quote['deposit_amount'] ?? 0,
+            0,
+            $quote['start_date'] ?? null,
+            $quote['end_date'] ?? null,
+            $quote['billing_interval_count'] ?? 1,
+            $quote['billing_interval_unit'] ?? 'month',
+            $quote['pricing_type'] ?? ($quoteType === 'on_demand' ? 'on_demand' : null),
+            $quote['price_per_invoice'] ?? null,
+            $quote['scope'] ?? null
+          ]);
+      $contract_id = (int)$pdo->lastInsertId();
 
-    // Assign doc_number to on-demand contract
-    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM on_demand_contracts')->fetchColumn();
-    $pdo->prepare('UPDATE on_demand_contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
-  } elseif (!empty($quote['is_long_term'])) {
-    // Create long-term contract with project_id
-    $pdo->prepare('INSERT INTO long_term_contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-          $id, 
-          (int)$quote['client_id'],
-          $projectId,
-          'pending', 
-          $quote['discount_type'], 
-          $quote['discount_value'], 
-          $quote['tax_percent'], 
-          $quote['subtotal'], 
-          $quote['total'], 
-          $projectCode, 
-          $quote['deposit_type'] ?? 'none', 
-          $quote['deposit_amount'] ?? 0, 
-          0,
-          $quote['start_date'],
-          $quote['end_date'],
-          $quote['billing_interval_count'],
-          $quote['billing_interval_unit'],
-          $quote['pricing_type'],
-          $quote['price_per_invoice'],
-          $quote['scope']
-        ]);
-    $contract_id = (int)$pdo->lastInsertId();
+      if (!empty($qitems)) {
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        foreach ($qitems as $it) {
+          $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+        }
+      }
 
-    // Long-term contract items from quote items (only if we have items)
-    if (!empty($qitems)) {
+      $cMaxStmt = $pdo->prepare('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = ?');
+      $cMaxStmt->execute([$quoteType]);
+      $cMax = (int)$cMaxStmt->fetchColumn();
+      $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+    }
+  } else {
+    // Regular quote: create contract and/or invoice based on settings
+    if ($autoCreateContract) {
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null]);
+      $contract_id = (int)$pdo->lastInsertId();
+
       $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
       foreach ($qitems as $it) {
         $ci->execute([$contract_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
       }
+
+      $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "regular"')->fetchColumn();
+      $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
     }
 
-    // Assign doc_number to long-term contract
-    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM long_term_contracts')->fetchColumn();
-    $pdo->prepare('UPDATE long_term_contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
-  } else {
-    // Create regular contract in pending state with project_id (transfer deposit info from quote)
-    $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null]);
-    $contract_id = (int)$pdo->lastInsertId();
+    if ($autoCreateInvoice) {
+      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+      $invoice_id = (int)$pdo->lastInsertId();
 
-    // Contract items from quote items
-    $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-    foreach ($qitems as $it) {
-      $ci->execute([$contract_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+      foreach ($qitems as $it) {
+        $ii->execute([$invoice_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+      }
+
+      $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "regular"')->fetchColumn();
+      $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
     }
-
-    // Create invoice with no due date (set on completion), includes fulfillment date and project_id from quote
-    $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([$contract_id, $id, (int)$quote['client_id'], $projectId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
-    $invoice_id = (int)$pdo->lastInsertId();
-
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-    foreach ($qitems as $it) {
-      $ii->execute([$invoice_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
-    }
-
-    // Assign per-type doc_numbers: do not change quote doc_number here
-    $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts')->fetchColumn();
-    $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
-    $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
-    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
   }
 
   $pdo->commit();
+
+  // Notify client that their quote has been approved (best-effort; don't fail approval)
+  try {
+    if (!empty($quote['client_id'])) {
+      $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
+      $clientStmt->execute([(int)$quote['client_id']]);
+      $clientRow = $clientStmt->fetch(PDO::FETCH_ASSOC);
+      if ($clientRow && !empty($clientRow['email']) && filter_var($clientRow['email'], FILTER_VALIDATE_EMAIL)) {
+        require_once __DIR__ . '/../../services/EmailService.php';
+        $docnum = (string)($quote['doc_number'] ?? $id);
+        $clientName = trim((string)($clientRow['name'] ?? ''));
+        $firstName = $clientName !== '' ? preg_split('/\s+/', $clientName)[0] : 'there';
+        $subject = 'Your quote Q-' . $docnum . ' has been approved';
+        $body = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
+              . '<p>Your quote <strong>Q-' . htmlspecialchars($docnum) . '</strong> has been approved.</p>'
+              . '<p>We will be in touch shortly with the next steps. Thank you for your business!</p>';
+        EmailService::sendEmail($clientRow['email'], $subject, $body);
+
+        // If an invoice was auto-created, notify the client about it too
+        if (!empty($invoice_id)) {
+          $invStmt = $pdo->prepare('SELECT doc_number, total, due_date FROM invoices WHERE id = ?');
+          $invStmt->execute([$invoice_id]);
+          $invRow = $invStmt->fetch(PDO::FETCH_ASSOC);
+          if ($invRow) {
+            $invDocnum = (string)($invRow['doc_number'] ?? $invoice_id);
+            $invTotal = (float)($invRow['total'] ?? 0);
+            $invDue = (string)($invRow['due_date'] ?? '');
+            $invSubject = 'Invoice I-' . $invDocnum . ' has been created';
+            $invBody = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
+                     . '<p>Your invoice <strong>I-' . htmlspecialchars($invDocnum) . '</strong> has been created for <strong>$' . number_format($invTotal, 2) . '</strong>.</p>';
+            if ($invDue !== '') {
+              $invBody .= '<p>Due date: ' . htmlspecialchars($invDue) . '</p>';
+            }
+            $invBody .= '<p>You can log in to view and pay the invoice. Thank you!</p>';
+            EmailService::sendEmail($clientRow['email'], $invSubject, $invBody);
+          }
+        }
+      }
+    }
+  } catch (Throwable $e) {
+    @error_log('[quote_approve] Client notification email failed: ' . $e->getMessage());
+  }
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) { $pdo->rollBack(); }
   error_log('[quote_approve] Failed: ' . $e->getMessage());
-  header('Location: /?page=quote/quotes-list&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
+  
+  // Determine redirect page based on quote type
+  $redirectPage = 'quote/quotes-list';
+  if (isset($quoteType)) {
+    if ($quoteType === 'long_term') {
+      $redirectPage = 'quote/long-term-quotes-list';
+    } elseif ($quoteType === 'on_demand') {
+      $redirectPage = 'quote/on-demand-quotes-list';
+    }
+  }
+  
+  header('Location: /?page=' . $redirectPage . '&error=' . urlencode('Failed to approve: ' . $e->getMessage()));
   exit;
 }
 
-header('Location: /?page=quote/quotes-list&approved=1');
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+
+// Determine redirect page based on quote type
+$redirectPage = 'quote/quotes-list';
+if ($quoteType === 'long_term') {
+  $redirectPage = 'quote/long-term-quotes-list';
+} elseif ($quoteType === 'on_demand') {
+  $redirectPage = 'quote/on-demand-quotes-list';
+}
+
+$redirect = '/?page=' . $redirectPage . '&approved=1';
+
+// Flash message based on whether auto-creation is enabled
+if (!$autoCreateContract && !$autoCreateInvoice) {
+  $_SESSION['flash_quote_approve'] = [
+    'type' => 'info',
+    'message' => 'Quote approved. Contract and invoice were not auto-generated (disabled in Settings). You can create them manually from the quote.'
+  ];
+} elseif (!$autoCreateContract || !$autoCreateInvoice) {
+  $skipped = [];
+  if (!$autoCreateContract) { $skipped[] = 'contract'; }
+  if (!$autoCreateInvoice) { $skipped[] = 'invoice'; }
+  $_SESSION['flash_quote_approve'] = [
+    'type' => 'info',
+    'message' => 'Quote approved, but auto-create ' . implode(' and ', $skipped) . ' ' . (count($skipped) === 1 ? 'is' : 'are') . ' disabled in settings.'
+  ];
+} else {
+  $_SESSION['flash_quote_approve'] = [
+    'type' => 'success',
+    'message' => 'Quote approved. Contract and invoice have been created.'
+  ];
+}
+header('Location: ' . $redirect);
 exit;

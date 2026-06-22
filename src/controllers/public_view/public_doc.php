@@ -4,6 +4,13 @@
 // TODO: We need to add more public views. One for contract, so a client can upload a signed contract via link/portal on public_contract_action. Use a mix of PHP and twig for page views.
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/rate_limiter.php';
+if (!rate_limit_check($pdo, 'public_doc', 30, 60)) {
+  http_response_code(429);
+  header('Content-Type: text/html; charset=utf-8');
+  echo '<!DOCTYPE html><html><head><title>Rate limited</title></head><body><h1>Rate limited</h1></body></html>';
+  exit;
+}
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 
@@ -22,12 +29,12 @@ try {
   
   // Try query with expire_when_paid column
   try {
-    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
   } catch (Throwable $e) {
     // Fallback query without expire_when_paid column
-    $st = $pdo->prepare('SELECT type, record_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if ($row) {
@@ -44,9 +51,9 @@ try {
   $expireWhenPaid = !empty($row['expire_when_paid']);
   if ($expireWhenPaid) {
     // For expire_when_paid links, check if the invoice is paid
-    if ($row['type'] === 'invoice') {
+    if ($row['document_type'] === 'invoice') {
       $invCheck = $pdo->prepare('SELECT status FROM invoices WHERE id = ?');
-      $invCheck->execute([(int)$row['record_id']]);
+      $invCheck->execute([(int)$row['document_id']]);
       $invStatus = strtolower($invCheck->fetchColumn() ?: '');
       if ($invStatus === 'paid' || $invStatus === 'void') {
         throw new Exception('expired');
@@ -59,8 +66,8 @@ try {
     }
   }
 
-  $type = (string)$row['type'];
-  $rid = (int)$row['record_id'];
+  $type = (string)$row['document_type'];
+  $rid = (int)$row['document_id'];
 
   if (!defined('PUBLIC_VIEW')) define('PUBLIC_VIEW', true);
   $_GET['id'] = (string)$rid;
@@ -118,7 +125,7 @@ try {
       if ($type === 'quote') {
         try {
           $idParam = (int)$rid;
-          $stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.organization client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
+          $stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
           $stmt->execute([$idParam]);
           $quote = $stmt->fetch(PDO::FETCH_ASSOC);
           if ($quote) {

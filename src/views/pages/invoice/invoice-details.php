@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
-$st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
+$st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
@@ -39,7 +39,12 @@ if (!empty($inv['project_code'])) {
   }
 }
 if ($termsText === '') { $termsText = trim((string)($inv['terms'] ?? '')); }
-if ($termsText === '' && !empty($inv['on_demand_contract_id'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+if ($termsText === '' && ($inv['invoice_type'] ?? '') === 'on_demand') { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+// Compute outstanding balance
+$total = (float) ($inv['total'] ?? 0);
+$paid = (float) ($inv['amount_paid'] ?? 0);
+$outstanding = max(0, $total - $paid);
+
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
 <section>
@@ -59,12 +64,12 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div class="no-print" style="padding:12px 16px;background:<?php echo $icolors['bg']; ?>;color:<?php echo $icolors['text']; ?>;border-left:4px solid <?php echo $icolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($inv['status']); ?>
   </div>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
-    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+  <div class="no-print flex flex-wrap">
+    <a href="javascript:history.back()" class="btn btn-sm">Back</a>
+    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
+    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php if ($inv['status'] !== 'paid'): ?>
-      <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+      <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) !== 'void'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
@@ -72,15 +77,12 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+      <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
     <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
-      <form method="post" action="/?page=invoice/invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;">Mark as Paid</button>
-      </form>
+      <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
+         style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;text-decoration:none;display:inline-block;margin-right:6px;">Mark as Paid</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
     <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">
@@ -136,7 +138,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     $brand = $appConfig['brand_name'] ?? 'Project Alpha';
     $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
     $projectRoot = realpath(__DIR__ . '/../../../');
-    $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+    $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
     $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
 
     $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
@@ -280,7 +282,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">From</div>
+        <div class="font-600">From</div>
         <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
@@ -304,13 +306,13 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if ($fromPhone): ?><div><?php echo format_phone($fromPhone); ?></div><?php endif; ?>
+            <?php if ($fromPhone): ?><div><?php echo htmlspecialchars(format_phone($fromPhone), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">To</div>
+        <div class="font-600">To</div>
         <?php 
           $toLines = [];
           if (!empty($inv['client_name'])) { $toLines[] = (string)$inv['client_name']; }
@@ -319,7 +321,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
           if (!empty($inv['address_line2'])) { $toLines[] = (string)$inv['address_line2']; }
           $c = trim((string)($inv['city'] ?? ''));
           $s = trim((string)($inv['state'] ?? ''));
-          $p = trim((string)($inv['postal'] ?? ''));
+          $p = trim((string)($inv['postal_code'] ?? ''));
           $parts2 = [];
           if ($c !== '') { $parts2[] = $c; }
           if ($s !== '') { $parts2[] = $s; }
@@ -330,7 +332,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if (!empty($inv['client_phone']) || !empty($inv['client_email'])): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if (!empty($inv['client_phone'])): ?><div><?php echo format_phone($inv['client_phone']); ?></div><?php endif; ?>
+            <?php if (!empty($inv['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($inv['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if (!empty($inv['client_email'])): ?><div><?php echo htmlspecialchars($inv['client_email']); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
@@ -361,7 +363,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <?php foreach ($items as $it): ?>
       <tr style="border-top:1px solid #f3f4f6<?php echo (int)($it['is_extra_charge'] ?? 0) ? ';background:#fffbeb' : ''; ?>">
         <td style="padding:10px;vertical-align:top;text-align:center">
-          <div style="font-weight:600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></div>
+          <div class="font-600"><?php echo htmlspecialchars($it['item'] ?? ''); ?></div>
           <?php if ((int)($it['is_extra_charge'] ?? 0) === 1): ?>
             <span style="display:inline-block;margin-top:4px;padding:2px 6px;background:#fbbf24;color:#92400e;border-radius:3px;font-size:10px;font-weight:600">Extra Charge</span>
           <?php endif; ?>
@@ -626,38 +628,36 @@ function copyLink() {
 }
 
 function revokeAndCreateNew() {
-  if (!confirm('This will revoke the existing link (it will no longer work) and create a new one. Continue?')) {
+  if (!confirm('This will revoke the existing link (it will no longer work). Continue?')) {
     return;
   }
   
-  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
-  const days = document.getElementById('linkDays').value || 14;
+  // Revoke the existing link
   const formData = new FormData();
   formData.append('type', 'invoice');
   formData.append('id', '<?php echo (int)$id; ?>');
-  formData.append('days', days);
-  formData.append('expire_when_paid', expireWhenPaid ? '1' : '0');
-  formData.append('force_new', '1');
   formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
   
-  fetch('/?page=public-link-create', {
+  fetch('/?page=public-link-revoke', {
     method: 'POST',
     body: formData
   })
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      document.getElementById('generatedLink').value = data.url;
-      document.getElementById('linkStatus').textContent = '✓ New Link Created!';
+      // Reset to creation form view
+      document.getElementById('shareLinkContent').style.display = 'block';
+      document.getElementById('shareLinkResult').style.display = 'none';
+      document.getElementById('generatedLink').value = '';
+      document.getElementById('linkStatus').textContent = '✓ Link Generated!';
       document.getElementById('revokeBtn').style.display = 'none';
-      
-      if (data.expire_when_paid) {
-        document.getElementById('linkExpiry').textContent = 'Expires when invoice is paid in full';
-      } else {
-        document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
-      }
+      document.getElementById('linkExpiry').textContent = '';
+      // Reset to default days
+      document.getElementById('linkDays').value = '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>';
+      document.getElementById('expireWhenPaid').checked = false;
+      toggleDaysInput();
     } else {
-      alert('Error: ' + (data.error || 'Failed to create link'));
+      alert('Error: ' + (data.error || 'Failed to revoke link'));
     }
   })
   .catch(err => {

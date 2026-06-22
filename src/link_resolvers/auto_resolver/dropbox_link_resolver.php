@@ -1,17 +1,110 @@
 <?php
+// src/link_resolvers/auto_resolver/dropbox_link_resolver.php
+// Updated to support OAuth with automatic token refresh
 
 class DropboxLinkResolver
 {
     private $accessToken;
+    private $refreshToken;
+    private $appKey;
+    private $appSecret;
     private $rootPath;
+    private $tokenExpiresAt;
+    private $pdo; // Database connection for updating tokens
     
-    public function __construct(array $credentials)
+    public function __construct(array $credentials, ?PDO $pdo = null)
     {
         $this->accessToken = $credentials['access_token'] ?? null;
+        $this->refreshToken = $credentials['refresh_token'] ?? null;
+        $this->appKey = $credentials['app_key'] ?? null;
+        $this->appSecret = $credentials['app_secret'] ?? null;
         $this->rootPath = $credentials['root_path'] ?? '/';
+        $this->tokenExpiresAt = $credentials['token_expires_at'] ?? null;
+        $this->pdo = $pdo;
         
         if (!$this->accessToken) {
             throw new \Exception('Dropbox access token not configured');
+        }
+        
+        // Refresh token if it's about to expire (within 5 minutes)
+        if ($this->refreshToken && $this->tokenExpiresAt) {
+            $expiresTimestamp = strtotime($this->tokenExpiresAt);
+            if ($expiresTimestamp && $expiresTimestamp - time() < 300) {
+                $this->refreshAccessToken();
+            }
+        }
+    }
+    
+    /**
+     * Refresh the access token using the refresh token
+     */
+    private function refreshAccessToken(): void
+    {
+        if (empty($this->refreshToken) || empty($this->appKey) || empty($this->appSecret)) {
+            return;
+        }
+        
+        try {
+            $ch = curl_init('https://api.dropboxapi.com/oauth2/token');
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => http_build_query([
+                    'refresh_token' => $this->refreshToken,
+                    'grant_type' => 'refresh_token',
+                    'client_id' => $this->appKey,
+                    'client_secret' => $this->appSecret
+                ]),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode === 200) {
+                $data = json_decode($response, true);
+                if (!empty($data['access_token'])) {
+                    $this->accessToken = $data['access_token'];
+                    
+                    // Update expiration if provided
+                    if (!empty($data['expires_in'])) {
+                        $this->tokenExpiresAt = date('Y-m-d H:i:s', time() + $data['expires_in']);
+                    }
+                    
+                    // Update the database with the new token
+                    if ($this->pdo) {
+                        $this->updateStoredToken();
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            @error_log('[Dropbox] Token refresh failed: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Update the stored access token in the database
+     */
+    private function updateStoredToken(): void
+    {
+        if (!$this->pdo) return;
+        
+        try {
+            $stmt = $this->pdo->prepare("SELECT credentials FROM link_resolver_config WHERE provider = 'dropbox'");
+            $stmt->execute();
+            $existing = $stmt->fetchColumn();
+            
+            if ($existing) {
+                $credentials = json_decode($existing, true) ?: [];
+                $credentials['access_token'] = $this->accessToken;
+                $credentials['token_expires_at'] = $this->tokenExpiresAt;
+                
+                $stmt = $this->pdo->prepare("UPDATE link_resolver_config SET credentials = ? WHERE provider = 'dropbox'");
+                $stmt->execute([json_encode($credentials)]);
+            }
+        } catch (\Throwable $e) {
+            @error_log('[Dropbox] Failed to update stored token: ' . $e->getMessage());
         }
     }
     

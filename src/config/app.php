@@ -1,6 +1,9 @@
 <?php
 // src/config/app.php
 // Preferred settings path: config volume mounted at /var/www/config
+// Secrets (Stripe keys, SMTP password, encryption key) are loaded from environment variables
+// or .env file first; non-sensitive settings come from settings.json.
+
 $settingsPrimary = '/var/www/config/settings.json';
 $settingsProject = __DIR__ . '/../../config/settings.json';
 $settingsPublic  = __DIR__ . '/../../public/assets/settings.json';
@@ -31,16 +34,67 @@ $appConfig = [
     // Automatic invoice email settings
     'invoice_auto_send_due_7days' => 0,
     'invoice_auto_send_overdue_weekly' => 0,
-    // SMTP (may be present from settings)
+    // SMTP (loaded from app_config with fallback to settings.json)
     'smtp_host' => null,
     'smtp_port' => 587,
     'smtp_secure' => 'tls',
     'smtp_username' => null,
     'smtp_password_enc' => null,
+    'smtp_from_email' => null,
+    'smtp_from_name' => null,
+    // Stripe (loaded from environment/.env, not stored in settings.json)
+    'stripe_publishable_key' => null,
+    'stripe_secret_key_enc' => null,
+    'stripe_webhook_secret_enc' => null,
+    'stripe_surcharge_type' => 'split',
+    'stripe_surcharge_percent' => 2.9,
+    'stripe_surcharge_fixed' => 0.3,
+    'stripe_surcharge_split_percent' => 50,
+    'stripe_surcharge_message' => 'Using a credit card is a privilege for both parties, so it is fair that we split the fee',
     // qoute defaults
+    'quote_auto_create_contract' => 1,
+    'quote_auto_create_invoice' => 1,
     // contract defaults
     //invoice defaults
 ];
+
+// Load .env file if it exists (project root, config volume, or container root)
+$envPaths = [__DIR__ . '/../../.env', '/var/www/config/.env', '/var/www/.env'];
+foreach ($envPaths as $envPath) {
+    if (is_readable($envPath)) {
+        $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (strpos(trim($line), '#') === 0) continue; // skip comments
+            if (strpos($line, '=') === false) continue;
+            list($key, $value) = explode('=', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+            // Remove quotes if present
+            if (strlen($value) >= 2 && (($value[0] === '"' && $value[strlen($value)-1] === '"') || ($value[0] === "'" && $value[strlen($value)-1] === "'"))) {
+                $value = substr($value, 1, -1);
+            }
+            if (!isset($_ENV[$key]) && !isset($_SERVER[$key])) {
+                $_ENV[$key] = $value;
+                putenv("$key=$value");
+            }
+        }
+    }
+}
+
+// Load secrets from environment variables (they override anything in settings.json)
+$secretKeys = [
+    'stripe_publishable_key',
+    'stripe_secret_key_enc',
+    'stripe_webhook_secret_enc',
+    'smtp_password_enc',
+    'encryption_key',
+];
+foreach ($secretKeys as $key) {
+    $envValue = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key) ?? false;
+    if ($envValue !== false && $envValue !== '') {
+        $appConfig[$key] = $envValue;
+    }
+}
 
 $paths = [$settingsPrimary, $settingsProject, $settingsPublic, $settingsFallback];
 foreach ($paths as $path) {
@@ -49,6 +103,13 @@ foreach ($paths as $path) {
         if ($json !== false) {
             $data = json_decode($json, true);
             if (is_array($data)) {
+                // Don't let settings.json override secrets that came from environment
+                foreach ($secretKeys as $secretKey) {
+                    if (isset($data[$secretKey]) && empty($appConfig[$secretKey])) {
+                        $appConfig[$secretKey] = $data[$secretKey];
+                    }
+                    unset($data[$secretKey]); // remove from merge to prevent overwriting env values
+                }
                 $appConfig = array_merge($appConfig, $data);
                 break;
             }
@@ -65,4 +126,41 @@ if ($tz !== '') {
         // ignore invalid timezone values
         date_default_timezone_set('UTC');
     }
+}
+
+// Load Stripe keys and SMTP config from app_config DB table (UI-entered keys, encrypted)
+// This takes precedence over env-vars and settings.json so that keys entered
+// via the Settings UI are used. Env-vars still work as a fallback.
+try {
+    if (!isset($pdo)) {
+        require_once __DIR__ . '/db.php';
+    }
+    if (isset($pdo)) {
+        $appConfigKeys = [
+            'stripe_publishable_key',
+            'stripe_secret_key_enc',
+            'stripe_webhook_secret_enc',
+            'smtp_host',
+            'smtp_port',
+            'smtp_secure',
+            'smtp_username',
+            'smtp_password_enc',
+            'smtp_from_email',
+            'smtp_from_name',
+        ];
+        $placeholders = implode(',', array_fill(0, count($appConfigKeys), '?'));
+        $cfgStmt = $pdo->prepare("SELECT config_key, config_value FROM app_config WHERE config_key IN ($placeholders)");
+        $cfgStmt->execute($appConfigKeys);
+        if ($cfgStmt) {
+            while ($row = $cfgStmt->fetch(PDO::FETCH_ASSOC)) {
+                $key = $row['config_key'];
+                $val = $row['config_value'];
+                if ($val !== '' && $val !== null) {
+                    $appConfig[$key] = $val;
+                }
+            }
+        }
+    }
+} catch (Throwable $e) {
+    // DB not available yet or table doesn't exist — fall through to env vars
 }

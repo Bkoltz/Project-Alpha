@@ -8,9 +8,9 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/csrf_sf.php';
-require_once __DIR__ . '/../../utils/two_factor_auth.php';
+require_once __DIR__ . '/../../../config/app.php';
+require_once __DIR__ . '/../../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/two_factor_auth.php';
 
 use App\Utils\TwoFactorAuth;
 
@@ -37,7 +37,7 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
 ?>
 
 <style>
-  .settings-container { max-width: 700px; margin: 40px auto; padding: 20px; }
+  .settings-container { max-width: 700px; margin: 0 auto; padding: 20px; }
   .status-badge { display: inline-block; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
   .status-enabled { background: #d1fae5; color: #065f46; }
   .status-disabled { background: #fee2e2; color: #991b1b; }
@@ -59,7 +59,7 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
   .secret-code { font-family: monospace; font-size: 18px; font-weight: 600; letter-spacing: 2px; text-align: center; padding: 12px; background: #fff; border-radius: 6px; word-break: break-all; }
 </style>
 
-<main class="settings-container">
+<section class="settings-container">
   <h1>Two-Factor Authentication</h1>
   
   <?php if ($error): ?>
@@ -197,7 +197,4 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
       </div>
     </div>
   <?php endif; ?>
-</main>
-
-</body>
-</html>
+</section>

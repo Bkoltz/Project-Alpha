@@ -2,6 +2,8 @@
 // src/controllers/auth/account_update.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/password_policy.php';
 
 if (empty($_SESSION['user'])) {
   header('Location: /?page=login');
@@ -24,6 +26,12 @@ if ($uid <= 0 || $new === '' || $new !== $confirm) {
   exit;
 }
 
+$pwdErr = password_policy_error($new);
+if ($pwdErr !== null) {
+  header('Location: /?page=account&pwd_error=' . urlencode($pwdErr));
+  exit;
+}
+
 try {
   $st = $pdo->prepare('SELECT password_hash FROM users WHERE id=?');
   $st->execute([$uid]);
@@ -33,8 +41,9 @@ try {
     exit;
   }
   $newHash = password_hash($new, PASSWORD_DEFAULT);
-  $up = $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?');
+  $up = $pdo->prepare('UPDATE users SET password_hash=?, force_password_reset=0 WHERE id=?');
   $up->execute([$newHash, $uid]);
+  audit_log($pdo, 'user.password_changed', 'user', $uid);
   header('Location: /?page=account&pwd=1');
   exit;
 } catch (Throwable $e) {

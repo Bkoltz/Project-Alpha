@@ -13,8 +13,9 @@ if (!$folderId) {
 
 // Fetch folder details
 $stmt = $pdo->prepare('
-    SELECT * FROM form_categories 
-    WHERE id = ? AND org_id = ? AND type = "folder"
+    SELECT id, organization_id, title, description, created_at
+    FROM form_categories 
+    WHERE id = ? AND organization_id = ? AND type = "folder"
 ');
 $stmt->execute([$folderId, $orgId]);
 $folder = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -27,12 +28,15 @@ if (!$folder) {
 // Fetch all documents in this folder
 $stmt = $pdo->prepare('
     SELECT 
-        fd.*,
-        u.username as uploaded_by_name
+        fd.id,
+        fd.organization_id,
+        fd.category_id,
+        fd.file_name,
+        fd.file_path,
+        fd.uploaded_at
     FROM form_documents fd
-    LEFT JOIN users u ON fd.uploaded_by = u.id
     WHERE fd.category_id = ?
-    ORDER BY fd.uploaded_at DESC
+    ORDER BY fd.created_at DESC
 ');
 $stmt->execute([$folderId]);
 $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -146,9 +150,6 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </div>
                         <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
                             Uploaded <?php echo date('M j, Y', strtotime($doc['uploaded_at'])); ?>
-                            <?php if ($doc['uploaded_by_name']): ?>
-                                <br>by <?php echo htmlspecialchars($doc['uploaded_by_name']); ?>
-                            <?php endif; ?>
                         </div>
                         
                         <!-- Action Buttons -->
@@ -266,7 +267,7 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                    style="margin-right:8px">
                             <?php echo htmlspecialchars($client['name']); ?>
                             <?php if ($client['email']): ?>
-                                <span style="color:var(--muted);font-size:13px">
+                                <span class="muted text-sm">
                                     (<?php echo htmlspecialchars($client['email']); ?>)
                                 </span>
                             <?php endif; ?>
@@ -342,4 +343,8 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<script src="js/folder-detail-logic.js" defer></script>
+<script>
+    window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
+    window.formFolderId = <?php echo (int)$folderId; ?>;
+</script>
+<script src="/assets/js/folder-detail-logic.js" defer></script>

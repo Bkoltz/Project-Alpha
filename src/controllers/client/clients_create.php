@@ -22,7 +22,7 @@ if ($name === '') {
     exit;
 }
 
-$stmt = $pdo->prepare('INSERT INTO clients (name, email, phone, organization_id, notes, address_line1, address_line2, city, state, postal, country) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+$stmt = $pdo->prepare('INSERT INTO clients (name, email, phone, organization_id, notes, address_line1, address_line2, city, state, postal_code, country) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
 $stmt->execute([
   $name,
   $email ?: null,

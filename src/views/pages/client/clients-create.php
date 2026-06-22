@@ -82,4 +82,4 @@ require_once __DIR__ . '/../../../config/db.php';
     </div>
   </div>
 
-  <script type="module" src="js/clients-create-logic.js"></script>
+  <script type="module" src="/assets/js/clients-create-logic.js"></script>

@@ -12,7 +12,7 @@ $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $status = $_GET['status'] ?? '';
 $min_price = isset($_GET['min_price']) ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
-$where=[];$p=[];
+$where=['(co.contract_type IS NULL OR co.contract_type = "regular")'];$p=[];
 if($client_id>0){$where[]='co.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='co.created_at>=?';$p[]=$start.' 00:00:00';}
@@ -231,4 +231,3 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     </div>
   </div>
 </section>
-

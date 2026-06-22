@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/twig.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 $per = null; // show all clients
 $pageN = 1;
 $offset = 0;
@@ -96,7 +97,7 @@ $clients = $st->fetchAll();
             <td style="padding:10px"><a href="/?page=client/clients-edit&id=<?php echo (int)$c['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a></td>
             <td style="padding:10px">
               <!-- TODO: archive button does not work on the edit view of a client -->
-              <form method="post" action="/?page=client/clients-delete" onsubmit="return confirm('Archive client <?php echo addslashes($c['name']); ?>? This moves the client to Archived Clients.');" style="display:inline">
+              <form method="post" action="/?page=client/clients-delete" onsubmit="return confirm('Archive client <?php echo e($c['name']); ?>? This moves the client to Archived Clients.');" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$c['id']; ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#b91c1c">Archive</button>
@@ -126,7 +127,7 @@ $clients = $st->fetchAll();
         <div style="display:grid;gap:12px">
           <?php foreach ($projects as $pc): ?>
             <div style="border:1px solid #eee;border-radius:8px;background:#fff;overflow:hidden">
-              <div style="padding:10px 12px;border-bottom:1px solid #eee;font-weight:600">Project <?php echo htmlspecialchars($pc); ?></div>
+              <div style="padding:10px 12px;border-bottom:1px solid #eee;font-weight:600">Project <?php echo e($pc); ?></div>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:12px">
                 <?php
                   $q = $pdo->prepare('SELECT id, doc_number, total, status, created_at FROM quotes WHERE client_id=? AND project_code=? ORDER BY created_at DESC');

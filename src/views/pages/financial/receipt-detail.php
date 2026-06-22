@@ -7,7 +7,7 @@ $receiptId = (int)($_GET['id'] ?? 0);
 $orgId = 1; // Should come from session/user context
 
 // Get existing stores for edit modal
-$storeStmt = $pdo->prepare('SELECT DISTINCT store_name FROM receipt_stores WHERE org_id = ? ORDER BY store_name');
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
 $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -18,10 +18,10 @@ if (!$receiptId) {
 
 // Fetch receipt details
 $stmt = $pdo->prepare('
-    SELECT r.*, u.username as uploaded_by_name
+    SELECT r.*, rs.name as store_name
     FROM receipts r
-    LEFT JOIN users u ON r.uploaded_by = u.id
-    WHERE r.id = ? AND r.org_id = ?
+    LEFT JOIN vendors rs ON r.store_id = rs.id
+    WHERE r.id = ? AND r.organization_id = ?
 ');
 $stmt->execute([$receiptId, $orgId]);
 $receipt = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -66,7 +66,7 @@ $isPdf = $fileExt === 'pdf';
         <!-- Receipt Info & Actions -->
         <div style="width:400px;max-width:400px;min-width:400px">
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px">
-                <h1 style="margin:0 0 16px 0;font-size:24px"><?php echo htmlspecialchars($receipt['title']); ?></h1>
+                <h1 style="margin:0 0 16px 0;font-size:24px"><?php echo htmlspecialchars($receipt['description'] ?? 'Receipt'); ?></h1>
                 
                 <div style="display:grid;gap:16px">
                     <div>
@@ -79,7 +79,7 @@ $isPdf = $fileExt === 'pdf';
                     <?php if (!empty($receipt['store_name'])): ?>
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Store</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php echo htmlspecialchars($receipt['store_name']); ?>
                         </div>
                     </div>
@@ -87,21 +87,16 @@ $isPdf = $fileExt === 'pdf';
 
                     <div style="padding-top:16px;border-top:1px solid #e5e7eb">
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Receipt Date</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php echo date('F j, Y', strtotime($receipt['receipt_date'])); ?>
                         </div>
                     </div>
 
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Uploaded</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php echo date('F j, Y', strtotime($receipt['created_at'])); ?>
                         </div>
-                        <?php if ($receipt['uploaded_by_name']): ?>
-                            <div style="font-size:13px;color:var(--muted);margin-top:2px">
-                                by <?php echo htmlspecialchars($receipt['uploaded_by_name']); ?>
-                            </div>
-                        <?php endif; ?>
                     </div>
 
                     <div>
@@ -117,7 +112,7 @@ $isPdf = $fileExt === 'pdf';
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
                 <div style="font-weight:600;margin-bottom:12px">Actions</div>
                 
-                <div style="display:grid;gap:8px">
+                <div class="grid">
                     <!-- Download -->
                     <a href="<?php echo htmlspecialchars($fileUrl . '&download=1'); ?>" 
                        download
@@ -132,16 +127,20 @@ $isPdf = $fileExt === 'pdf';
                         🔗 View in New Tab
                     </a>
 
+                    <!-- Create Expense -->
+                    <a href="/?page=financial/expense-create&receipt_id=<?php echo (int)$receipt['id']; ?>&amount=<?php echo htmlspecialchars($receipt['amount']); ?>&date=<?php echo htmlspecialchars($receipt['receipt_date']); ?>&vendor=<?php echo urlencode($receipt['store_name'] ?? ''); ?>"
+                       class="btn btn-sm" style="width:100%;text-align:center;margin-bottom:4px">
+                        Create Expense
+                    </a>
+
                     <!-- Edit -->
-                    <button onclick="showEditModal()" 
-                            style="width:100%;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:600;cursor:pointer">
-                        ✏️ Edit Details
+                    <button onclick="showEditModal()" class="btn btn-sm" style="width:100%;text-align:center">
+                        Edit Details
                     </button>
 
                     <!-- Delete -->
-                    <button onclick="confirmDelete()" 
-                            style="width:100%;padding:10px;border-radius:6px;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;font-weight:600;cursor:pointer;margin-top:8px">
-                        🗑️ Delete Receipt
+                    <button onclick="confirmDelete()" class="btn btn-sm" style="width:100%;text-align:center;background:#fef2f2;border-color:#fca5a5;color:#991b1b;margin-top:8px">
+                        Delete Receipt
                     </button>
                 </div>
             </div>
@@ -173,8 +172,8 @@ $isPdf = $fileExt === 'pdf';
                 </div>
 
                 <div>
-                    <label style="display:block;margin-bottom:4px;font-weight:600">Title *</label>
-                    <input type="text" name="title" value="<?php echo htmlspecialchars($receipt['title']); ?>" required
+                    <label style="display:block;margin-bottom:4px;font-weight:600">Description *</label>
+                    <input type="text" name="description" value="<?php echo htmlspecialchars($receipt['description'] ?? ''); ?>" required
                            style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
                 </div>
 
@@ -219,4 +218,8 @@ $isPdf = $fileExt === 'pdf';
     </div>
 </div>
 
-<script src="js/receipt-detail-logic.js" defer></script>
+<script>
+    window.receiptCsrfToken = <?php echo json_encode(csrf_token()); ?>;
+    window.receiptId = <?php echo (int)$receiptId; ?>;
+</script>
+<script src="/assets/js/receipt-detail-logic.js" defer></script>

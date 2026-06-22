@@ -99,9 +99,9 @@ async function loadPageContent(page) {
             const scripts = Array.from(newMainContent.querySelectorAll('script'));
 
             // Debug: check if script exists in raw HTML
-            if (scripts.length === 0 && html.includes('<script>')) {
+            if (scripts.length === 0 && html.match(/<script\b[^>]*>/i)) {
                 console.warn('WARNING: Script tags exist in raw HTML but not found in parsed DOM!');
-                console.log('Script tag count in raw HTML:', (html.match(/<script>/g) || []).length);
+                console.log('Script tag count in raw HTML:', (html.match(/<script\b[^>]*>/gi) || []).length);
             }
             const inlineScripts = scripts.map(s => ({
                 src: s.src || null,
@@ -156,6 +156,7 @@ async function navigateToPage(page, updateHistory = true) {
             const scripts = (typeof content === 'string') ? [] : content.scripts;
 
             mainContent.innerHTML = html;
+            initializeDocumentFilterToggles();
 
             // Execute extracted scripts (external and inline)
             scripts.forEach((s, idx) => {
@@ -167,13 +168,28 @@ async function navigateToPage(page, updateHistory = true) {
                         scr.src = s.src;
                         scr.async = false;
                     } else if (s.code) {
-                        scr.textContent = s.code;
+                        // Avoid CSP 'unsafe-inline' violation by loading inline code
+                        // through a same-origin Blob URL. Blob URLs inherit the document
+                        // origin, so they are permitted by script-src 'self'.
+                        const blob = new Blob([s.code], { type: 'application/javascript' });
+                        scr.src = URL.createObjectURL(blob);
                     }
 
                     document.body.appendChild(scr);
                 } catch (err) {
                     // ignore individual script errors
                     console.error('Error executing page script', err);
+                }
+            });
+
+            // Clean up blob URLs after the scripts have loaded to avoid leaking them
+            cachedScripts.forEach(scr => {
+                if (scr.src && scr.src.startsWith('blob:')) {
+                    const cleanup = () => {
+                        try { URL.revokeObjectURL(scr.src); } catch (e) { /* ignore */ }
+                    };
+                    scr.addEventListener('load', cleanup, { once: true });
+                    scr.addEventListener('error', cleanup, { once: true });
                 }
             });
 
@@ -228,7 +244,9 @@ function updatePageTitle(page) {
         'api-keys': 'API Keys',
         'settings': 'Settings',
         'financial/financial-dashboard': 'Financial Dashboard',
-        'financial/audit': 'Audit'
+        'financial/audit': 'Audit',
+        'account': 'My Account',
+        'account-edit': 'Edit Account'
     };
 
     const pageTitle = pageTitles[page] || 'Project Alpha';
@@ -285,15 +303,115 @@ function handlePopState(event) {
     navigateToPage(page, false); // Don't update history since this is from history
 }
 
+function getDocumentFilterStorageKey(buttonOrPanel) {
+    return buttonOrPanel?.getAttribute('data-filter-storage-key') || '';
+}
+
+function setDocumentFilterPanel(button, panel, open, persist = false) {
+    if (!button || !panel) return;
+
+    panel.style.display = open ? 'block' : 'none';
+    button.setAttribute('aria-expanded', open ? 'true' : 'false');
+    button.textContent = open ? 'Hide filters' : 'More filters';
+
+    if (persist) {
+        const key = getDocumentFilterStorageKey(button) || getDocumentFilterStorageKey(panel);
+        if (key) {
+            try {
+                window.localStorage.setItem(key, open ? 'open' : 'closed');
+            } catch (err) {
+                // Storage can be unavailable in private or locked-down contexts.
+            }
+        }
+    }
+}
+
+function initializeDocumentFilterToggles(root = document) {
+    root.querySelectorAll('[data-filter-toggle]').forEach(button => {
+        const panel = document.getElementById(button.getAttribute('data-filter-toggle'));
+        if (!panel) return;
+
+        const key = getDocumentFilterStorageKey(button) || getDocumentFilterStorageKey(panel);
+        let open = false;
+
+        if (key) {
+            try {
+                open = window.localStorage.getItem(key) === 'open';
+            } catch (err) {
+                open = false;
+            }
+        }
+
+        setDocumentFilterPanel(button, panel, open, false);
+    });
+}
+
+function handleDocumentFilterToggle(event) {
+    const button = event.target.closest('[data-filter-toggle]');
+    if (!button) return;
+
+    const panel = document.getElementById(button.getAttribute('data-filter-toggle'));
+    if (!panel) return;
+
+    event.preventDefault();
+    const isOpen = button.getAttribute('aria-expanded') === 'true';
+    setDocumentFilterPanel(button, panel, !isOpen, true);
+}
+
 // Initialize client-side navigation
 function initialize() {
     // Set up event listeners
     document.addEventListener('click', handleNavigation);
+    document.addEventListener('click', handleDocumentFilterToggle);
     window.addEventListener('popstate', handlePopState);
 
     // Set initial state
     history.replaceState({ page: currentPage }, '', window.location.href);
     updateActiveNavigation(currentPage);
+    initializeDocumentFilterToggles();
+
+    initMobileNav();
+}
+
+// ---------------------------------------------------------------------
+// Mobile drawer navigation (hamburger toggle + overlay)
+// ---------------------------------------------------------------------
+function setNavOpen(open) {
+    document.body.classList.toggle('nav-open', open);
+    const toggle = document.querySelector('.nav-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function initMobileNav() {
+    const toggle = document.querySelector('.nav-toggle');
+    const overlay = document.querySelector('.nav-overlay');
+    if (!toggle) return;
+
+    toggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setNavOpen(!document.body.classList.contains('nav-open'));
+    });
+
+    if (overlay) {
+        overlay.addEventListener('click', function () { setNavOpen(false); });
+    }
+
+    // Close the drawer after a nav link is tapped
+    document.querySelectorAll('.side-nav a').forEach(function (link) {
+        link.addEventListener('click', function () { setNavOpen(false); });
+    });
+
+    // Escape closes the drawer
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && document.body.classList.contains('nav-open')) {
+            setNavOpen(false);
+        }
+    });
+
+    // Reset state when resizing up to desktop
+    window.addEventListener('resize', function () {
+        if (window.innerWidth > 900) setNavOpen(false);
+    });
 }
 
 // Initialize when DOM is ready

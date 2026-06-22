@@ -243,4 +243,4 @@ foreach ($clients as $c) {
   </form>
 </section>
 
-<script src="js/invoices-edit-logic.js" defer></script>
+<script src="/assets/js/invoices-edit-logic.js" defer></script>

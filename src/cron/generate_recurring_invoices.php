@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
@@ -17,22 +18,28 @@ if (empty($appConfig['cron_enabled'])) {
 @error_log("$logPrefix Starting invoice generation run at " . date('Y-m-d H:i:s'));
 
 try {
-    // Find all active long-term contracts that need invoicing
     $today = date('Y-m-d');
+    $invoicesGenerated = 0;
+    $errors = 0;
+    $catchUpPasses = 0;
+    $maxCatchUpPasses = 36;
     
-    $query = 'SELECT * FROM long_term_contracts 
+    do {
+    $catchUpPasses++;
+
+    // Refetch after each pass so contracts that remain overdue generate the
+    // next missed invoice during the same cron run.
+    $query = 'SELECT * FROM contracts
               WHERE status = ? 
+              AND contract_type = "long_term"
               AND next_invoice_date IS NOT NULL 
               AND next_invoice_date <= ?
               ORDER BY next_invoice_date ASC';
-    
+
     $stmt = $pdo->prepare($query);
     $stmt->execute(['active', $today]);
     $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    $invoicesGenerated = 0;
-    $errors = 0;
-    
+
     foreach ($contracts as $contract) {
         $pdo->beginTransaction();
         
@@ -52,7 +59,7 @@ try {
             } elseif ($contract['pricing_type'] === 'fixed_total') {
                 // Fixed total - divide total by invoice_count
                 $invoiceCount = (int)($contract['invoice_count'] ?? 1);
-                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
                 $contractTotal = (float)$contract['total'];
                 $depositPaid = (float)$contract['deposit_paid'];
                 
@@ -61,7 +68,7 @@ try {
                 $subtotal = $amountToInvoice;
                 
                 // Load items for display (will be shown proportionally)
-                $itemsQuery = $pdo->prepare('SELECT * FROM long_term_contract_items WHERE long_term_contract_id=?');
+                $itemsQuery = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
                 $itemsQuery->execute([$contractId]);
                 $items = $itemsQuery->fetchAll(PDO::FETCH_ASSOC);
             }
@@ -91,11 +98,11 @@ try {
             // Check if we've reached the invoice limit (for fixed_total pricing)
             if ($contract['pricing_type'] === 'fixed_total') {
                 $invoiceCount = (int)($contract['invoice_count'] ?? 1);
-                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
                 
-                if ($invoicesGenerated >= $invoiceCount) {
+                if ($contractInvoicesGenerated >= $invoiceCount) {
                     // All invoices generated - mark as completed
-                    $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL WHERE id=?')
+                    $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"')
                         ->execute(['completed', $contractId]);
                     @error_log("$logPrefix Contract LTC-{$contract['doc_number']} all {$invoiceCount} invoices generated, marked as completed");
                     $pdo->commit();
@@ -108,10 +115,10 @@ try {
             
             $insertInvoice = $pdo->prepare('
                 INSERT INTO invoices (
-                    long_term_contract_id, client_id, project_id, project_code, 
+                    contract_id, client_id, project_id, project_code, invoice_type,
                     discount_type, discount_value, tax_percent, 
                     subtotal, total, status, due_date, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
             
             $insertInvoice->execute([
@@ -119,6 +126,7 @@ try {
                 $clientId,
                 $projectId,
                 $projectCode,
+                'long_term',
                 $discountType,
                 $discountValue,
                 $contract['tax_percent'],
@@ -131,7 +139,7 @@ try {
             $invoiceId = (int)$pdo->lastInsertId();
             
             // Assign doc number
-            $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+            $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "long_term"')->fetchColumn();
             $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $invoiceId]);
             
             // Add invoice items
@@ -150,8 +158,8 @@ try {
             } elseif ($contract['pricing_type'] === 'fixed_total') {
                 // For fixed_total, show items proportionally divided
                 $invoiceCount = (int)($contract['invoice_count'] ?? 1);
-                $invoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
-                $invoiceNum = $invoicesGenerated + 1;
+                $contractInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0);
+                $invoiceNum = $contractInvoicesGenerated + 1;
                 
                 // Calculate proportion for this invoice
                 foreach ($items as $item) {
@@ -192,10 +200,10 @@ try {
             $newInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0) + 1;
             
             if ($shouldContinue) {
-                $pdo->prepare('UPDATE long_term_contracts SET next_invoice_date=?, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=?')
+                $pdo->prepare('UPDATE contracts SET next_invoice_date=?, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=? AND contract_type="long_term"')
                     ->execute([$nextDate, $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
             } else {
-                $pdo->prepare('UPDATE long_term_contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=?')
+                $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=? AND contract_type="long_term"')
                     ->execute(['completed', $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
             }
             
@@ -210,8 +218,15 @@ try {
             @error_log("$logPrefix Error processing contract {$contract['id']}: " . $e->getMessage());
         }
     }
+
+    } while (!empty($contracts) && $catchUpPasses < $maxCatchUpPasses);
+
+    if ($catchUpPasses >= $maxCatchUpPasses && !empty($contracts)) {
+        $errors++;
+        @error_log("$logPrefix Catch-up stopped at {$maxCatchUpPasses} passes to avoid an infinite loop.");
+    }
     
-    @error_log("$logPrefix Completed: $invoicesGenerated invoices generated, $errors errors");
+    @error_log("$logPrefix Completed: $invoicesGenerated invoices generated across $catchUpPasses catch-up pass(es), $errors errors");
     
     // Automatic invoice notification deliveries (due reminders & overdue weekly reminders)
     try {
@@ -244,7 +259,7 @@ try {
             $token = bin2hex(random_bytes(16));
             $days = (int)($appConfig['documents_valid_days'] ?? 14);
             $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0,$days) . ' days'));
-            $ins = $pdo->prepare('INSERT INTO public_links (type, record_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
+            $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
             $ins->execute(['invoice', $invoiceId, $token, $expiresAt]);
             return $token;
         };
@@ -258,7 +273,7 @@ try {
             foreach ($rows as $inv) {
                 $iid = (int)$inv['id'];
                 // skip if we've already sent this reminder
-                $chk = $pdo->prepare('SELECT COUNT(*) FROM invoice_notifications WHERE invoice_id=? AND type=?');
+                $chk = $pdo->prepare('SELECT COUNT(*) FROM invoice_notifications WHERE invoice_id=? AND notification_type=?');
                 $chk->execute([$iid, 'due_7']);
                 if ((int)$chk->fetchColumn() > 0) { continue; }
 
@@ -281,7 +296,7 @@ try {
                 try {
                     [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                     if ($ok) {
-                        $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?,?,NOW())');
+                        $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'due_7']);
                     } else {
                         @error_log("$logPrefix Failed to send due-7 reminder for invoice $iid: $err");
@@ -301,7 +316,7 @@ try {
             foreach ($rows as $inv) {
                 $iid = (int)$inv['id'];
                 // check last sent timestamp
-                $chk = $pdo->prepare('SELECT MAX(sent_at) AS last_sent FROM invoice_notifications WHERE invoice_id=? AND type=?');
+                $chk = $pdo->prepare('SELECT MAX(sent_at) AS last_sent FROM invoice_notifications WHERE invoice_id=? AND notification_type=?');
                 $chk->execute([$iid, 'overdue_weekly']);
                 $last = $chk->fetchColumn();
                 $send = false;
@@ -331,7 +346,7 @@ try {
                 try {
                     [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                     if ($ok) {
-                        $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, type, sent_at) VALUES (?,?,NOW())');
+                        $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'overdue_weekly']);
                     } else {
                         @error_log("$logPrefix Failed to send overdue-weekly reminder for invoice $iid: $err");
@@ -345,13 +360,7 @@ try {
         @error_log("$logPrefix Notification pass error: " . $e->getMessage());
     }
 
-    // Update cron_job_runs table
-    try {
-        $pdo->prepare('INSERT INTO cron_job_runs (job_name, last_run, status) VALUES (?, NOW(), "success") ON DUPLICATE KEY UPDATE last_run = NOW(), status = "success", error_message = NULL')
-            ->execute([$jobName]);
-    } catch (Throwable $e) {
-        @error_log("$logPrefix Failed to update cron_job_runs: " . $e->getMessage());
-    }
+    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} invoice(s); {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
     
     // Update last run timestamp in settings (legacy support)
     $configMount = '/var/www/config';
@@ -367,6 +376,7 @@ try {
     
 } catch (Throwable $e) {
     @error_log("$logPrefix Fatal error: " . $e->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $e);
     exit(1);
 }
 

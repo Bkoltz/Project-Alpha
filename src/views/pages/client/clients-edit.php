@@ -114,4 +114,4 @@ $organizations = $orgStmt->fetchAll();
     </div>
   </div>
 
-  <script src="js/clients-edit-logic.js" defer></script>
+  <script src="/assets/js/clients-edit-logic.js" defer></script>

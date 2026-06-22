@@ -9,7 +9,7 @@ $end = $_GET['end'] ?? date('Y-m-t');
 $st = $pdo->prepare(
   "SELECT 'contract' AS kind, id, client_id, project_code, doc_number, scheduled_date, status, created_at FROM contracts WHERE scheduled_date IS NOT NULL AND scheduled_date BETWEEN ? AND ?
    UNION ALL
-   SELECT 'invoice' AS kind, id, client_id, project_code, doc_number, scheduled_date, status, created_at FROM invoices WHERE scheduled_date IS NOT NULL AND scheduled_date BETWEEN ? AND ?
+   SELECT 'invoice' AS kind, id, client_id, project_code, doc_number, due_date AS scheduled_date, status, created_at FROM invoices WHERE due_date IS NOT NULL AND due_date BETWEEN ? AND ?
    ORDER BY scheduled_date ASC, kind ASC, created_at DESC"
 );
 $st->execute([$start, $end, $start, $end]);

@@ -192,6 +192,17 @@ class ItemAutocomplete {
     if (this.priceField) {
       this.priceField.value = parseFloat(item.unit_price).toFixed(2);
     }
+
+    // When an hourly item is selected, change the quantity placeholder to "Hours"
+    if (item.is_hourly) {
+      const row = this.input.closest('[style*="grid"]') || this.input.parentElement;
+      if (row) {
+        const qtyInput = row.querySelector('.qty-input') || row.querySelector('[name="item_qty[]"]');
+        if (qtyInput) {
+          qtyInput.placeholder = 'Hours';
+        }
+      }
+    }
     
     // Call custom callback if provided
     if (this.onSelect) {

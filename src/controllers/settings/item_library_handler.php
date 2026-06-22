@@ -12,13 +12,15 @@ try {
             $description = trim($_POST['description'] ?? '');
             $unitPrice = (float)($_POST['unit_price'] ?? 0);
             $isActive = isset($_POST['is_active']) ? 1 : 0;
+            $isHourly = isset($_POST['is_hourly']) ? 1 : 0;
+            $category = $isHourly ? 'Hourly' : null;
 
             if (empty($itemName)) {
                 throw new Exception('Item name is required');
             }
 
-            $stmt = $pdo->prepare('INSERT INTO item_library (item_name, description, unit_price, is_active) VALUES (?, ?, ?, ?)');
-            $stmt->execute([$itemName, $description ?: null, $unitPrice, $isActive]);
+            $stmt = $pdo->prepare('INSERT INTO item_library (item_name, description, unit_price, is_active, category) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$itemName, $description ?: null, $unitPrice, $isActive, $category]);
 
             header("Location: {$redirect}&created=1");
             exit;
@@ -29,6 +31,7 @@ try {
             $description = trim($_POST['description'] ?? '');
             $unitPrice = (float)($_POST['unit_price'] ?? 0);
             $isActive = isset($_POST['is_active']) ? 1 : 0;
+            $isHourly = isset($_POST['is_hourly']) ? 1 : 0;
 
             if ($id <= 0) {
                 throw new Exception('Invalid item ID');
@@ -38,8 +41,14 @@ try {
                 throw new Exception('Item name is required');
             }
 
-            $stmt = $pdo->prepare('UPDATE item_library SET item_name=?, description=?, unit_price=?, is_active=? WHERE id=?');
-            $stmt->execute([$itemName, $description ?: null, $unitPrice, $isActive, $id]);
+            // Preserve any existing non-Hourly category when the hourly flag is unchecked
+            $stmt = $pdo->prepare('SELECT category FROM item_library WHERE id=?');
+            $stmt->execute([$id]);
+            $existingCategory = $stmt->fetchColumn();
+            $category = $isHourly ? 'Hourly' : ($existingCategory === 'Hourly' ? null : $existingCategory);
+
+            $stmt = $pdo->prepare('UPDATE item_library SET item_name=?, description=?, unit_price=?, is_active=?, category=? WHERE id=?');
+            $stmt->execute([$itemName, $description ?: null, $unitPrice, $isActive, $category, $id]);
 
             header("Location: {$redirect}&updated=1");
             exit;

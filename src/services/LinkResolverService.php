@@ -58,7 +58,7 @@ class LinkResolverService {
         
         try {
             // Get client info
-            $stmt = $this->pdo->prepare("SELECT client_name, org_id FROM client WHERE client_id = ?");
+            $stmt = $this->pdo->prepare("SELECT name, organization_id FROM clients WHERE id = ?");
             $stmt->execute([$clientId]);
             $client = $stmt->fetch(PDO::FETCH_ASSOC);
             
@@ -67,12 +67,12 @@ class LinkResolverService {
             }
             
             // Check if org-level only and client has org
-            if ($this->config['org_level_only'] && $client['org_id']) {
+            if ($this->config['org_level_only'] && $client['organization_id']) {
                 return ['success' => false, 'message' => 'Client belongs to organization - manage links at org level'];
             }
             
             // Check if client is ignored
-            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM link WHERE entity_type = 'client' AND entity_id = ? LIMIT 1");
+            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM entity_links WHERE entity_type = 'client' AND entity_id = ? LIMIT 1");
             $stmt->execute([$clientId]);
             $link = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($link && $link['ignore_auto_generation']) {
@@ -83,7 +83,7 @@ class LinkResolverService {
             $errors = [];
             
             foreach ($this->config['providers'] as $provider => $providerConfig) {
-                $result = $this->generateLinkForProvider($provider, 'client', $clientId, $client['client_name'], $providerConfig);
+                $result = $this->generateLinkForProvider($provider, 'client', $clientId, $client['name'], $providerConfig);
                 if ($result['success']) {
                     $generated[] = $provider;
                 } else {
@@ -113,7 +113,7 @@ class LinkResolverService {
         
         try {
             // Get org info
-            $stmt = $this->pdo->prepare("SELECT org_name FROM organization WHERE org_id = ?");
+            $stmt = $this->pdo->prepare("SELECT name FROM organizations WHERE id = ?");
             $stmt->execute([$orgId]);
             $org = $stmt->fetch(PDO::FETCH_ASSOC);
             
@@ -122,7 +122,7 @@ class LinkResolverService {
             }
             
             // Check if org is ignored
-            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM link WHERE entity_type = 'organization' AND entity_id = ? LIMIT 1");
+            $stmt = $this->pdo->prepare("SELECT ignore_auto_generation FROM entity_links WHERE entity_type = 'organization' AND entity_id = ? LIMIT 1");
             $stmt->execute([$orgId]);
             $link = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($link && $link['ignore_auto_generation']) {
@@ -133,7 +133,7 @@ class LinkResolverService {
             $errors = [];
             
             foreach ($this->config['providers'] as $provider => $providerConfig) {
-                $result = $this->generateLinkForProvider($provider, 'organization', $orgId, $org['org_name'], $providerConfig);
+                $result = $this->generateLinkForProvider($provider, 'organization', $orgId, $org['name'], $providerConfig);
                 if ($result['success']) {
                     $generated[] = $provider;
                 } else {
@@ -197,22 +197,22 @@ class LinkResolverService {
             $expirationDate = date('Y-m-d', strtotime("+{$expirationDays} days"));
             
             // Check if link already exists
-            $stmt = $this->pdo->prepare("SELECT link_id FROM link WHERE entity_type = ? AND entity_id = ? AND type = ?");
+            $stmt = $this->pdo->prepare("SELECT id FROM entity_links WHERE entity_type = ? AND entity_id = ? AND link_type = ?");
             $stmt->execute([$entityType, $entityId, $linkType]);
             $existing = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($existing) {
                 // Update existing link
                 $stmt = $this->pdo->prepare("
-                    UPDATE link 
+                    UPDATE entity_links 
                     SET url = ?, expiration_date = ?, is_expired = 0, last_verified = NOW()
-                    WHERE link_id = ?
+                    WHERE id = ?
                 ");
-                $stmt->execute([$publicLink, $expirationDate, $existing['link_id']]);
+                $stmt->execute([$publicLink, $expirationDate, $existing['id']]);
             } else {
                 // Insert new link
                 $stmt = $this->pdo->prepare("
-                    INSERT INTO link (entity_type, entity_id, type, url, expiration_date, is_expired, last_verified)
+                    INSERT INTO entity_links (entity_type, entity_id, link_type, url, expiration_date, is_expired, last_verified)
                     VALUES (?, ?, ?, ?, ?, 0, NOW())
                 ");
                 $stmt->execute([$entityType, $entityId, $linkType, $publicLink, $expirationDate]);
@@ -232,7 +232,7 @@ class LinkResolverService {
     public function markAsIgnored($entityType, $entityId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE link 
+                UPDATE entity_links 
                 SET ignore_auto_generation = 1
                 WHERE entity_type = ? AND entity_id = ?
             ");
@@ -251,7 +251,7 @@ class LinkResolverService {
     public function unmarkAsIgnored($entityType, $entityId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE link 
+                UPDATE entity_links 
                 SET ignore_auto_generation = 0
                 WHERE entity_type = ? AND entity_id = ?
             ");
@@ -270,7 +270,7 @@ class LinkResolverService {
     public function expireLinks($entityType, $entityId) {
         try {
             $stmt = $this->pdo->prepare("
-                UPDATE link 
+                UPDATE entity_links 
                 SET is_expired = 1
                 WHERE entity_type = ? AND entity_id = ?
             ");

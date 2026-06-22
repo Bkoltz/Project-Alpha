@@ -6,10 +6,25 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 $id = (int)($_GET['id'] ?? 0);
-$stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
+$stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Quote not found</p>'; return; }
+
+// Determine quote type for back link and display
+$quoteType = $quote['quote_type'] ?? 'regular';
+$backPage = 'quote/quotes-list';
+$quoteTypeLabel = 'Quote';
+$approveConfirm = 'Approve this quote and generate contract + invoice?';
+if ($quoteType === 'long_term') {
+    $backPage = 'quote/long-term-quotes-list';
+    $quoteTypeLabel = 'Long-Term Quote';
+    $approveConfirm = 'Approve this long-term quote and generate contract?';
+} elseif ($quoteType === 'on_demand') {
+    $backPage = 'quote/on-demand-quotes-list';
+    $quoteTypeLabel = 'On-Demand Quote';
+    $approveConfirm = 'Approve this on-demand quote and generate contract?';
+}
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
@@ -29,13 +44,13 @@ if (!empty($quote['project_code'])) {
   } catch (Throwable $e) { /* ignore */ }
 }
 if ($termsText === '') { $termsText = trim((string)($quote['terms'] ?? '')); }
-if ($termsText === '' && !empty($quote['is_on_demand'])) { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+if ($termsText === '' && ($quote['quote_type'] ?? '') === 'on_demand') { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 // Detect PDF mode for conditional page breaks
 $isPdf = defined('PDF_MODE');
 ?>
 <section>
-  <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Quote</div>
+  <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px"><?php echo htmlspecialchars($quoteTypeLabel); ?></div>
   <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <?php 
@@ -51,12 +66,12 @@ $isPdf = defined('PDF_MODE');
   <div class="no-print" style="padding:12px 16px;background:<?php echo $colors['bg']; ?>;color:<?php echo $colors['text']; ?>;border-left:4px solid <?php echo $colors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($quote['status']); ?>
   </div>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-    <a href="javascript:history.back()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Back</a>
-    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">View PDF</a>
-    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Download</a>
+  <div class="no-print flex flex-wrap">
+    <a href="/?page=<?php echo htmlspecialchars($backPage); ?>" class="btn btn-sm">Back</a>
+    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
+    <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php if ($quote['status'] === 'pending'): ?>
-      <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Edit</a>
+      <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
     <form method="post" action="/?page=email-send" style="display:inline">
@@ -64,11 +79,11 @@ $isPdf = defined('PDF_MODE');
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium;">Email</button>
+      <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
     <?php if ($quote['status'] === 'pending'): ?>
-      <form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('Approve this quote and generate contract + invoice?');">
+      <form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('<?php echo htmlspecialchars($approveConfirm); ?>');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
         <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: medium;">Approve</button>
@@ -120,7 +135,7 @@ $isPdf = defined('PDF_MODE');
   $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   // Resolve default logo under project root public/assets
   $projectRoot = realpath(__DIR__ . '/../../../../');
-  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
   $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
   $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
   // If the configured logo is an internal routed URL like "/?page=serve-upload&file=...",
@@ -240,9 +255,7 @@ $isPdf = defined('PDF_MODE');
     $showFulfillmentDate = !empty($fulfillmentDate);
     
     // Get custom fields for display
-    $documentType = 'regular';
-    if (!empty($quote['is_long_term'])) $documentType = 'long_term';
-    elseif (!empty($quote['is_on_demand'])) $documentType = 'on_demand';
+    $documentType = $quote['quote_type'] ?? 'regular';
     
     $customFieldValues = !empty($quote['custom_fields']) ? json_decode($quote['custom_fields'], true) : [];
     if (!is_array($customFieldValues)) $customFieldValues = [];
@@ -297,7 +310,7 @@ $isPdf = defined('PDF_MODE');
   <table style="width:100%;table-layout:fixed;margin:12px 0 16px;border-collapse:collapse">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:12px">
-        <div style="font-weight:600">From</div>
+        <div class="font-600">From</div>
         <?php 
           $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
@@ -321,13 +334,13 @@ $isPdf = defined('PDF_MODE');
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if ($fromPhone): ?><div><?php echo format_phone($fromPhone); ?></div><?php endif; ?>
+            <?php if ($fromPhone): ?><div><?php echo htmlspecialchars(format_phone($fromPhone), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
-        <div style="font-weight:600">To</div>
+        <div class="font-600">To</div>
         <?php 
           $toLines = [];
           if (!empty($quote['client_name'])) { $toLines[] = (string)$quote['client_name']; }
@@ -336,7 +349,7 @@ $isPdf = defined('PDF_MODE');
           if (!empty($quote['address_line2'])) { $toLines[] = (string)$quote['address_line2']; }
           $c = trim((string)($quote['city'] ?? ''));
           $s = trim((string)($quote['state'] ?? ''));
-          $p = trim((string)($quote['postal'] ?? ''));
+          $p = trim((string)($quote['postal_code'] ?? ''));
           $parts2 = [];
           if ($c !== '') { $parts2[] = $c; }
           if ($s !== '') { $parts2[] = $s; }
@@ -347,7 +360,7 @@ $isPdf = defined('PDF_MODE');
         <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if (!empty($quote['client_phone']) || !empty($quote['client_email'])): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if (!empty($quote['client_phone'])): ?><div><?php echo format_phone($quote['client_phone']); ?></div><?php endif; ?>
+            <?php if (!empty($quote['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($quote['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if (!empty($quote['client_email'])): ?><div><?php echo htmlspecialchars($quote['client_email']); ?></div><?php endif; ?>
           </div>
 <?php endif; ?>

@@ -8,8 +8,8 @@ $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $status = $_GET['status'] ?? '';
 
-$where=['i.on_demand_contract_id IS NOT NULL'];$p=[];
-if($contract_id>0){$where[]='i.on_demand_contract_id=?';$p[]=$contract_id;}
+$where=['i.invoice_type="on_demand"'];$p=[];
+if($contract_id>0){$where[]='i.contract_id=?';$p[]=$contract_id;}
 if($client_id>0){$where[]='i.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='i.status=?'; $p[] = $status; }
@@ -22,7 +22,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM invoices i LEFT JOIN clients c ON c.id=i.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.on_demand_contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN on_demand_contracts odc ON odc.id=i.on_demand_contract_id";
+$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN contracts odc ON odc.id=i.contract_id AND odc.contract_type='on_demand'";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY i.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -33,7 +33,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
   <?php if ($contract_id > 0): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">
       Showing invoices for contract ODC-<?php 
-        $stmt = $pdo->prepare('SELECT doc_number FROM on_demand_contracts WHERE id=?');
+        $stmt = $pdo->prepare('SELECT doc_number FROM contracts WHERE id=? AND contract_type="on_demand"');
         $stmt->execute([$contract_id]);
         echo (int)$stmt->fetchColumn();
       ?>
@@ -41,16 +41,16 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
     </div>
   <?php endif; ?>
 
-  <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
+  <form method="get" action="/" style="display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;margin:16px 0 22px;position:relative">
     <input type="hidden" name="page" value="contract/on-demand-invoices-list">
     <?php if($contract_id>0): ?><input type="hidden" name="contract_id" value="<?php echo $contract_id; ?>"><?php endif; ?>
     <input type="hidden" name="client_id" id="clientIdODI" value="<?php echo (int)$client_id; ?>">
-    <label style="position:relative"><div>Client</div>
-      <input type="text" name="client" id="clientInputODI" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:8px;border-radius:8px;border:1px solid #ddd">
+    <label style="position:relative;display:flex;flex-direction:column;gap:6px;flex:0 1 240px;min-width:min(240px,100%)"><div>Client</div>
+      <input type="text" name="client" id="clientInputODI" value="<?php echo htmlspecialchars($client_name); ?>" placeholder="Type client name..." style="padding:9px 10px;border-radius:8px;border:1px solid #ddd">
       <div id="clientSuggestODI" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
     </label>
-    <label><div>Status</div>
-      <select name="status" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+    <label style="display:flex;flex-direction:column;gap:6px;flex:0 1 150px;min-width:min(150px,100%)"><div>Status</div>
+      <select name="status" style="padding:9px 10px;border-radius:8px;border:1px solid #ddd">
         <option value="">All</option>
         <option value="unpaid" <?php echo $status==='unpaid'?'selected':''; ?>>Unpaid</option>
         <option value="partial" <?php echo $status==='partial'?'selected':''; ?>>Partial</option>
@@ -58,9 +58,9 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
         <option value="void" <?php echo $status==='void'?'selected':''; ?>>Void</option>
       </select>
     </label>
-    <div style="display:flex;gap:8px">
-      <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-      <a href="/?page=contract/on-demand-invoices-list<?php echo $contract_id>0?'&contract_id='.$contract_id:''; ?>" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;text-decoration:none;color:inherit">Reset</a>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <button type="submit" style="padding:9px 14px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
+      <a href="/?page=contract/on-demand-invoices-list<?php echo $contract_id>0?'&contract_id='.$contract_id:''; ?>" style="padding:9px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;text-decoration:none;color:inherit">Reset</a>
     </div>
   </form>
 

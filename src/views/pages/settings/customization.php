@@ -28,10 +28,10 @@ if (!in_array($currentType, $docTypes)) {
     <!-- Document Type Tabs -->
     <div style="display:flex;gap:12px;margin-bottom:20px;border-bottom:2px solid #e5e7eb">
         <?php foreach ($docTypes as $type): ?>
-            <a href="/?page=settings&tab=customization&field_type=<?php echo $type; ?>" 
+            <a href="/?page=settings&tab=customization&field_type=<?php echo e($type); ?>" 
                data-skip-nav
                style="padding:10px 20px;font-weight:<?php echo $currentType === $type ? '600' : '400'; ?>;color:<?php echo $currentType === $type ? 'var(--nav-accent)' : '#6b7280'; ?>;border-bottom:<?php echo $currentType === $type ? '2px solid var(--nav-accent)' : '2px solid transparent'; ?>;margin-bottom:-2px;text-decoration:none;text-transform:capitalize">
-                <?php echo ucfirst($type) . 's'; ?>
+                <?php echo e(ucfirst($type) . 's'); ?>
             </a>
         <?php endforeach; ?>
     </div>
@@ -44,7 +44,7 @@ if (!in_array($currentType, $docTypes)) {
 
     <!-- Custom Fields List -->
     <div style="margin-bottom:24px">
-        <h3 style="margin:0 0 12px 0;font-size:16px">Custom Fields for <?php echo ucfirst($currentType); ?>s</h3>
+        <h3 style="margin:0 0 12px 0;font-size:16px">Custom Fields for <?php echo e(ucfirst($currentType)); ?>s</h3>
         
         <div id="fieldsList" style="display:grid;gap:12px">
             <?php 
@@ -56,7 +56,7 @@ if (!in_array($currentType, $docTypes)) {
                 </div>
             <?php else: ?>
                 <?php foreach ($currentFields as $field): ?>
-                    <div class="field-item" data-field-id="<?php echo $field['id']; ?>" 
+                    <div class="field-item" data-field-id="<?php echo e($field['id']); ?>" 
                          style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:12px;align-items:center;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
                         
                         <!-- Drag Handle -->
@@ -73,7 +73,7 @@ if (!in_array($currentType, $docTypes)) {
                                 <?php endif; ?>
                             </div>
                             <div style="font-size:13px;color:var(--muted)">
-                                Type: <?php echo ucfirst($field['field_data_type']); ?>
+                                Type: <?php echo e(ucfirst($field['field_data_type'])); ?>
                                 <?php if ($field['is_builtin']): ?>
                                     <span style="margin-left:8px;padding:2px 6px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:11px">Built-in</span>
                                 <?php endif; ?>
@@ -86,14 +86,14 @@ if (!in_array($currentType, $docTypes)) {
                         </div>
                         
                         <!-- Edit Button -->
-                        <button type="button" onclick="editField(<?php echo $field['id']; ?>)" 
+                        <button type="button" onclick="editField(<?php echo e($field['id']); ?>)" 
                                 style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer">
                             Edit
                         </button>
                         
                         <!-- Delete Button (only for non-builtin) -->
                         <?php if (!$field['is_builtin']): ?>
-                            <button type="button" onclick="deleteField(<?php echo $field['id']; ?>)" 
+                            <button type="button" onclick="deleteField(<?php echo e($field['id']); ?>)" 
                                     style="padding:6px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;cursor:pointer">
                                 Delete
                             </button>
@@ -116,7 +116,7 @@ if (!in_array($currentType, $docTypes)) {
     <div style="padding:16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px">
         <h4 style="margin:0 0 12px 0;font-size:14px;color:var(--muted)">Preview: How fields appear on forms</h4>
         <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;color:var(--muted)">
-            Custom fields will appear in the order shown above when creating or editing <?php echo $currentType; ?>s.
+            Custom fields will appear in the order shown above when creating or editing <?php echo e($currentType); ?>s.
         </div>
     </div>
 </div>
@@ -130,7 +130,7 @@ if (!in_array($currentType, $docTypes)) {
             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
             <input type="hidden" name="action" id="fieldAction" value="create">
             <input type="hidden" name="field_id" id="fieldId" value="">
-            <input type="hidden" name="field_type" value="<?php echo $currentType; ?>">
+            <input type="hidden" name="field_type" value="<?php echo e($currentType); ?>">
             
             <label>
                 <div style="margin-bottom:4px;font-weight:600">Field Label *</div>
@@ -170,4 +170,4 @@ if (!in_array($currentType, $docTypes)) {
     </div>
 </div>
 
-<script src="js/customization-logic.js" defer></script>
+<script src="/assets/js/customization-logic.js" defer></script>

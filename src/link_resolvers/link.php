@@ -5,7 +5,8 @@
 // The application does not use Doctrine ORM - it uses plain PDO with MySQL.
 //
 // The link table is defined in:
-// - database/migrations/000_all.sql (CREATE TABLE link)
+// - database/init.sql
+// - database/migrations/007_public_links_module.sql
 //
 // Links are managed through:
 // - LinkResolverService (src/services/LinkResolverService.php)

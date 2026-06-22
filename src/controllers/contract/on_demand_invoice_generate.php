@@ -17,7 +17,7 @@ $pdo->beginTransaction();
 
 try {
     // Fetch the on-demand contract
-    $stmt = $pdo->prepare('SELECT * FROM on_demand_contracts WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT * FROM contracts WHERE id = ? AND contract_type = "on_demand"');
     $stmt->execute([$contract_id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -62,10 +62,10 @@ try {
     
     $insertInvoice = $pdo->prepare('
         INSERT INTO invoices (
-            on_demand_contract_id, client_id, project_id, project_code, 
+            contract_id, client_id, project_id, project_code, invoice_type,
             discount_type, discount_value, tax_percent, 
             subtotal, total, status, due_date, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ');
     
     $insertInvoice->execute([
@@ -73,6 +73,7 @@ try {
         $clientId,
         $projectId,
         $projectCode,
+        'on_demand',
         $discountType,
         $discountValue,
         $contract['tax_percent'],
@@ -85,7 +86,7 @@ try {
     $invoiceId = (int)$pdo->lastInsertId();
     
     // Assign doc number
-    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
+    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "on_demand"')->fetchColumn();
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $invoiceId]);
     
     // Add invoice item
@@ -104,14 +105,14 @@ try {
     $newTotalInvoiced = (float)$contract['total_invoiced'] + $total;
     $newInvoiceCount = (int)$contract['invoice_count'] + 1;
     
-    $pdo->prepare('UPDATE on_demand_contracts SET total_invoiced=?, invoice_count=?, last_invoice_date=? WHERE id=?')
+    $pdo->prepare('UPDATE contracts SET total_invoiced=?, invoice_count=?, last_invoice_date=? WHERE id=? AND contract_type = "on_demand"')
         ->execute([$newTotalInvoiced, $newInvoiceCount, date('Y-m-d'), $contract_id]);
     
     $pdo->commit();
     
     @error_log("[on_demand_invoice_generate] Generated invoice I-$maxDoc for contract ODC-{$contract['doc_number']} (\${$total})");
     
-    header('Location: /?page=contract/on-demand-contracts-list&invoice_generated=1');
+    header('Location: /?page=contract/on-demand-invoices-list&contract_id=' . $contract_id . '&invoice_generated=1');
     exit;
     
 } catch (Throwable $e) {

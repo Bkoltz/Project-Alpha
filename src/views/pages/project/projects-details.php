@@ -2,6 +2,7 @@
 // src/views/pages/project/projects-details.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
 
@@ -93,21 +94,21 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                     <?php if ($project['client_name']): ?>
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Client</div>
-                        <div style="font-weight:600"><?php echo htmlspecialchars($project['client_name']); ?></div>
+                        <div class="font-600"><?php echo htmlspecialchars($project['client_name']); ?></div>
                     </div>
                     <?php endif; ?>
 
                     <?php if ($project['organization_name']): ?>
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Organization</div>
-                        <div style="font-weight:600"><?php echo htmlspecialchars($project['organization_name']); ?></div>
+                        <div class="font-600"><?php echo htmlspecialchars($project['organization_name']); ?></div>
                     </div>
                     <?php endif; ?>
 
                     <?php if ($project['estimated_start'] || $project['estimated_end']): ?>
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Timeline</div>
-                        <div style="font-weight:600">
+                        <div class="font-600">
                             <?php if ($project['estimated_start']): ?>
                                 <?php echo date('M j, Y', strtotime($project['estimated_start'])); ?>
                             <?php endif; ?>
@@ -138,14 +139,14 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                 <?php if (!empty($quotes)): ?>
                 <div style="margin-bottom:24px">
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Quotes (<?php echo count($quotes); ?>)</h3>
-                    <div style="display:grid;gap:8px">
+                    <div class="grid">
                         <?php foreach ($quotes as $quote): ?>
-                        <a href="/?page=quote/quote-details&id=<?php echo $quote['id']; ?>" 
+                        <a href="/?page=quote/quote-details&id=<?php echo (int)$quote['id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
-                                <div style="font-weight:600">Quote #<?php echo $quote['doc_number'] ?? $quote['id']; ?></div>
+                                <div class="font-600">Quote #<?php echo e($quote['doc_number'] ?? $quote['id']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
-                                    <?php echo ucfirst($quote['status']); ?> · 
+                                    <?php echo e(ucfirst($quote['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($quote['created_at'])); ?>
                                 </div>
                             </div>
@@ -162,14 +163,14 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                 <?php if (!empty($contracts)): ?>
                 <div style="margin-bottom:24px">
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Contracts (<?php echo count($contracts); ?>)</h3>
-                    <div style="display:grid;gap:8px">
+                    <div class="grid">
                         <?php foreach ($contracts as $contract): ?>
-                        <a href="/?page=contract/contract-details&id=<?php echo $contract['id']; ?>" 
+                        <a href="/?page=contract/contract-details&id=<?php echo (int)$contract['id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
-                                <div style="font-weight:600">Contract #<?php echo $contract['doc_number'] ?? $contract['id']; ?></div>
+                                <div class="font-600">Contract #<?php echo e($contract['doc_number'] ?? $contract['id']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
-                                    <?php echo ucfirst($contract['status']); ?> · 
+                                    <?php echo e(ucfirst($contract['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($contract['created_at'])); ?>
                                 </div>
                             </div>
@@ -186,14 +187,14 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                 <?php if (!empty($invoices)): ?>
                 <div style="margin-bottom:24px">
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Invoices (<?php echo count($invoices); ?>)</h3>
-                    <div style="display:grid;gap:8px">
+                    <div class="grid">
                         <?php foreach ($invoices as $invoice): ?>
-                        <a href="/?page=invoice/invoice-details&id=<?php echo $invoice['id']; ?>" 
+                        <a href="/?page=invoice/invoice-details&id=<?php echo (int)$invoice['id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
-                                <div style="font-weight:600">Invoice #<?php echo $invoice['doc_number'] ?? $invoice['id']; ?></div>
+                                <div class="font-600">Invoice #<?php echo e($invoice['doc_number'] ?? $invoice['id']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
-                                    <?php echo ucfirst($invoice['status']); ?> · 
+                                    <?php echo e(ucfirst($invoice['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($invoice['created_at'])); ?>
                                 </div>
                             </div>
@@ -210,19 +211,19 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                 <?php if (!empty($formDocuments)): ?>
                 <div>
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Files (<?php echo count($formDocuments); ?>)</h3>
-                    <div style="display:grid;gap:8px">
+                    <div class="grid">
                         <?php foreach ($formDocuments as $doc): ?>
-                        <a href="/?page=financial/form-detail&id=<?php echo $doc['category_id']; ?>" 
+                        <a href="/?page=financial/form-detail&id=<?php echo (int)$doc['category_id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
-                                <div style="font-weight:600"><?php echo htmlspecialchars($doc['file_name']); ?></div>
+                                <div class="font-600"><?php echo htmlspecialchars($doc['file_name']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
                                     <?php echo htmlspecialchars($doc['category_title'] ?? 'Uncategorized'); ?> · 
                                     <?php echo date('M j, Y', strtotime($doc['uploaded_at'])); ?>
                                 </div>
                             </div>
                             <div style="font-size:13px;color:var(--muted)">
-                                <?php echo strtoupper(pathinfo($doc['file_path'], PATHINFO_EXTENSION)); ?>
+                                <?php echo e(strtoupper(pathinfo($doc['file_path'], PATHINFO_EXTENSION))); ?>
                             </div>
                         </a>
                         <?php endforeach; ?>
@@ -244,7 +245,7 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
             <!-- Status Management -->
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px">
                 <div style="font-weight:600;margin-bottom:12px">Change Status</div>
-                <div style="display:grid;gap:8px">
+                <div class="grid">
                     <?php foreach ($statusColors as $statusKey => $statusInfo): ?>
                         <?php if ($statusKey !== $project['status']): ?>
                         <form method="post" action="/?page=project/projects-update-status" style="margin:0">
@@ -265,7 +266,7 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
             <!-- Quick Actions -->
             <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px">
                 <div style="font-weight:600;margin-bottom:12px">Quick Actions</div>
-                <div style="display:grid;gap:8px">
+                <div class="grid">
                     <a href="/?page=quote/quotes-create&project_id=<?php echo $projectId; ?>" 
                        style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
                         📄 Create Quote

@@ -2,9 +2,24 @@
 // src/controllers/links/link_management.php
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../services/LinkResolverService.php';
 
 header('Content-Type: application/json');
+
+// Require authenticated session
+if (empty($_SESSION['user'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Authentication required']);
+    exit;
+}
+
+// CSRF check (JSON-friendly)
+if (!csrf_validate()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token']);
+    exit;
+}
 
 try {
     $action = $_POST['action'] ?? '';

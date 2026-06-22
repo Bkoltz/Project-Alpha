@@ -18,7 +18,7 @@ $params = [];
 if (!empty($_GET['type'])) {
     $type = trim((string)$_GET['type']);
     if (in_array($type, ['due_7', 'overdue_weekly'], true)) {
-        $where[] = 'n.type = ?';
+        $where[] = 'n.notification_type = ?';
         $params[] = $type;
     }
 }
@@ -56,7 +56,7 @@ $totalPages = (int)ceil($totalCount / $perPage);
 
 // Fetch notifications with invoice details
 $sql = "
-    SELECT n.id, n.invoice_id, n.type, n.sent_at, 
+    SELECT n.id, n.invoice_id, n.notification_type, n.sent_at, 
            i.doc_number, i.total, i.status, i.due_date,
            c.name AS client_name, c.email AS client_email
     FROM invoice_notifications n

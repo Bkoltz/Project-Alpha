@@ -14,7 +14,7 @@ $hasDoc = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABL
 $hasProj = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='quotes' AND COLUMN_NAME='project_code'")->fetchColumn();
 $project_code = trim($_GET['project_code'] ?? '');
 $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
-$where=['(q.is_long_term IS NULL OR q.is_long_term=0)'];$p=[];
+$where=['(q.quote_type IS NULL OR q.quote_type = "regular")'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='q.created_at>=?';$p[]=$start.' 00:00:00';}
@@ -46,6 +46,13 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
   <?php elseif (!empty($_GET['email_err'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
+  <?php
+  $flash = $_SESSION['flash_quote_approve'] ?? null;
+  unset($_SESSION['flash_quote_approve']);
+  ?>
+  <?php if ($flash): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1"><?php echo htmlspecialchars($flash['message']); ?></div>
   <?php endif; ?>
   
   <?php
@@ -185,9 +192,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       </form>
     </div>
     <div style="display:flex;gap:8px">
-      <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
+      <?php if($pageN>1): ?><a href="<?php echo htmlspecialchars($base.'&p='.($pageN-1), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
       <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
-      <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
+      <?php if($pageN<$last): ?><a href="<?php echo htmlspecialchars($base.'&p='.($pageN+1), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
     </div>
   </div>
 </section>

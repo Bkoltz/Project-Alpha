@@ -2,6 +2,7 @@
 // src/views/pages/archived-clients.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 
 $per = (int)($_GET['per_page'] ?? 50);
 if (!in_array($per, [50, 100], true)) $per = 50;
@@ -40,7 +41,7 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     <input type="hidden" name="page" value="client/archived-clients">
     <label>
       <div>Search by name</div>
-      <input type="text" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="e.g., Acme" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+      <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="e.g., Acme" style="padding:8px;border-radius:8px;border:1px solid #ddd">
     </label>
     <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
     <a href="/?page=client/archived-clients" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Reset</a>
@@ -69,7 +70,7 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
           </tr>
           <tr>
             <td colspan="6" style="padding:10px">
-              <form method="post" action="/?page=client/clients-restore" onsubmit="return confirm('Restore client <?php echo addslashes($r['name']); ?> to active list?');" style="display:inline-block">
+              <form method="post" action="/?page=client/clients-restore" onsubmit="return confirm('Restore client <?php echo e($r['name']); ?> to active list?');" style="display:inline-block">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Restore</button>

@@ -1,38 +1,137 @@
 # Project Alpha (PA)
 
-A PHP-based business document management system for quotes, contracts, and invoices with Stripe payment integration.
+A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and payments. It is built as a single-tenant, single-organization application (org_id=1) with Stripe Payment Intents, role-based access, audit logging, and optional 2FA.
 
-## Core Features
+---
 
-- Create and manage clients, organizations, Jobs (auto-generated project_codes), and Projects (manual parent groups)
-- Draft, approve, and archive quotes
-- Generate contracts and invoices automatically from quotes
-- Generate downloadable PDFs for quotes, contracts, and invoices
-- Upload signed contracts (signed PDF files) and serve them securely
-- Long-term and on-demand document support (project-level configurations)
-- Stripe payment integration (Payment Intents, not Stripe Invoices)
-- Public shareable links for quotes, contracts, and invoices
-- Automated invoice generation and reminders
+## What's Working
+
+- **Quotes, Contracts, and Invoices**
+  - Create regular, long-term, and on-demand quotes and contracts.
+  - Convert quotes to contracts and contracts to invoices.
+  - Recurring invoice generation for long-term contracts.
+  - Public shareable document links with expiration.
+  - Document re-enablement (un-void) for voided contracts/invoices.
+
+- **Payments**
+  - Stripe Payment Intents (not Stripe Invoices).
+  - Public invoice payment pages.
+  - Admin-initiated card charges.
+  - Webhook handling for payment confirmations.
+  - Stripe reconciliation for missed payments.
+
+- **Receipts, Expenses, and Financial Tracking**
+  - Receipt upload and categorization.
+  - Expense tracking with categories, vendors, and mileage.
+  - Financial dashboard with income, expenses, net profit, mileage deductions, receipts, category breakdown, top vendors, and recent expenses.
+  - Basic CSV expense reports.
+  - Forms and document storage (W-9, W-8, etc.).
+
+- **Taxes and Items**
+  - Tax-rate management with jurisdiction support.
+  - Custom tax calculations per document.
+  - Item library for reusable line items.
+
+- **Users, Auth, and Security**
+  - Session-based login with CSRF protection.
+  - Optional 2FA (TOTP) with backup codes.
+  - Role-based access (`admin` / `user`).
+  - Login rate limiting (IP and per-account).
+  - Password policy enforcement.
+  - Router-level audit logging for sensitive actions.
+  - InnoDB tablespace encryption at rest.
+  - Apache hardening headers and CSP.
+
+- **Settings and Admin**
+  - Organization, billing, email, legal, and document settings.
+  - User management and audit log.
+  - Backup/restore scripts.
+
+- **API**
+  - Basic JSON data endpoints (auth required for protected resources).
+  - Webhook receiver for Stripe (no auth).
+
+---
+
+## Known Limitations / Not Yet Working
+
+- **Multi-organization**: The app is currently hardcoded to a single organization (`org_id=1`). There is no org switching or multi-tenant billing.
+- **Advanced reporting**: Only basic CSV exports and the financial dashboard are available. There is no built-in P&L, balance sheet, or custom chart builder.
+- **Recurring invoices**: Long-term contracts generate invoices automatically, but each generated invoice still requires normal review/sending workflow.
+- **Mileage IRS form auto-fill**: Mileage logs can be tracked and valued, but automatic IRS form generation/population is not implemented.
+- **Vendor bill-pay integration**: Vendors are tracked for expenses only; there is no direct ACH/check bill-pay integration.
+- **Public client portal**: Clients can view public document links and pay invoices, but there is no persistent client login portal.
+- **Mobile app / PWA**: The UI is responsive but not packaged as a PWA or native app.
+
+---
 
 ## Quick Start
 
-### Docker Setup
+Project Alpha uses inline defaults in `docker-compose.yml`; no `.env` file is required.
+
+1. Review `docker-compose.yml` and change the default passwords (search for `CHANGE THESE`).
+2. Build and start the stack:
 
 ```bash
-docker compose build --no-cache
+docker compose build web
 docker compose up -d
 ```
 
-The application will be available at `http://localhost/` (the container listens on port 80 by default).
-
-### Run Migrations
-
-After starting Docker, run the migrations:
+3. Run migrations once:
 
 ```bash
-docker compose exec app php /var/www/src/migrations/add_cron_job_runs.php
-docker compose exec app php /var/www/src/migrations/add_amount_paid.php
+docker compose exec -T web php /var/www/src/migrations/run_migrations.php --verbose
 ```
+
+4. Open http://localhost:1627 and log in with:
+   - **Email**: `admin@project-alpha.local`
+   - **Password**: the `ADMIN_PASSWORD` value you set in `docker-compose.yml`
+5. Go to **Settings → Billing** and enter your Stripe keys. They are encrypted with the auto-generated `APP_ENCRYPTION_KEY` (persisted to `./config/.encryption_key`) and saved in the `app_config` DB table.
+
+### Admin Login
+
+If the admin account is not auto-seeded, the login page will show a **Create First Admin** form when the `users` table is empty.
+
+---
+
+## Workflow Summary
+
+```
+Quote → Contract → Invoice → Payment
+```
+
+1. **Quote**: Create and send a quote (regular, long-term, or on-demand). The client can view it via a public link.
+2. **Contract**: Approve the quote to generate a contract. Long-term contracts define a recurring billing schedule.
+3. **Invoice**: Generate invoices from contracts manually or through recurring generation. Invoices can be sent with public payment links.
+4. **Payment**: Clients pay via Stripe Payment Intents; admins can also charge a saved card or record offline payments.
+
+Financial activity (income, expenses, receipts, and mileage) is summarized on the **Financial Dashboard**.
+
+---
+
+## Architecture Snapshot
+
+- **Backend**: PHP 8.3, no framework, Composer-managed dependencies (Twig 3, Monolog, Stripe SDK, etc.).
+- **Database**: MySQL 8 with InnoDB tablespace encryption at rest.
+- **Frontend**: Plain HTML/PHP templates, scoped CSS, vanilla JS; no build step.
+- **Payments**: Stripe Payment Intents and Checkout; webhook receiver at `/?page=stripe-webhook`.
+- **Cron**: PHP scripts run via host/container cron for recurring invoices, reminders, reconciliation, contract termination, and link expiration.
+- **Deployment**: Docker Compose with Apache; no `.env` required, optional `.env` for secret management.
+
+---
+
+## Supported Document Types
+
+| Type | Prefix | Description |
+|------|--------|-------------|
+| Regular Quote | Q-XXX | One-time project quoting |
+| Long-term Quote | LTQ-XXX | Recurring service quotes |
+| On-Demand Quote | ODQ-XXX | Flexible quoting without intervals |
+| Regular Contract | C-XXX | One-time service contracts |
+| Long-term Contract | LTC-XXX | Subscription/retainer contracts |
+| On-Demand Contract | ODC-XXX | Flexible billing contracts |
+| Invoice | I-XXX | Standard invoices |
+| On-Demand Invoice | ODI-XXX | Manual invoice generation |
 
 ---
 
@@ -42,7 +141,7 @@ PA uses **Stripe Payment Intents** (not Stripe Invoices) for card payments. This
 
 ### Configuration
 
-1. Go to **Settings → Billing** in the PA admin
+1. Go to **Settings → Billing** in the PA admin.
 2. Enter your Stripe keys:
    - **Publishable Key**: `pk_live_...` or `pk_test_...`
    - **Secret Key**: `sk_live_...` or `sk_test_...`
@@ -81,9 +180,9 @@ The `pa_invoice_id` is the primary identifier used for linking Stripe payments t
 
 ### Payment Flow
 
-1. **Public Invoice Payment**: Client clicks "Pay with Card" on public invoice link
-2. **Admin Card Charge**: Admin clicks "Charge Card" from invoice details
-3. **Record Payment (Stripe)**: Admin selects Stripe from payment methods dropdown
+1. **Public Invoice Payment**: Client clicks "Pay with Card" on a public invoice link.
+2. **Admin Card Charge**: Admin clicks "Charge Card" from invoice details.
+3. **Record Payment (Stripe)**: Admin selects Stripe from the payment-methods dropdown.
 
 All methods redirect to Stripe Checkout, and the webhook updates the invoice status automatically.
 
@@ -128,9 +227,9 @@ Add to your container's crontab:
 
 If PA goes offline, cron jobs automatically catch up on missed work:
 
-1. **Invoice Generation**: Uses `next_invoice_date` on contracts to generate all missed invoices
-2. **Stripe Reconciliation**: Fetches Payment Intents from Stripe API since last run, records any missed payments
-3. **Reminders**: Uses `invoice_notifications` table to avoid duplicate sends
+1. **Invoice Generation**: Uses `next_invoice_date` on contracts to generate all missed invoices.
+2. **Stripe Reconciliation**: Fetches Payment Intents from Stripe API since last run, records any missed payments.
+3. **Reminders**: Uses the `invoice_notifications` table to avoid duplicate sends.
 
 The `cron_job_runs` table tracks:
 - `job_name`: Unique identifier
@@ -140,39 +239,27 @@ The `cron_job_runs` table tracks:
 
 ---
 
-## API Endpoints
-
-### Public Endpoints (No Auth Required)
-
-| Route | Description |
-|-------|-------------|
-| `/?page=public-doc&token=...` | View public quote/contract/invoice |
-| `/?page=stripe-checkout&token=...` | Initiate Stripe payment |
-| `/?page=stripe-success&token=...` | Payment success page |
-| `/?page=stripe-webhook` | Stripe webhook receiver |
-
-### Admin Endpoints (Auth Required)
-
-| Route | Description |
-|-------|-------------|
-| `/?page=stripe-charge&invoice_id=...` | Admin-initiated card charge |
-| `/?page=public-link-create` | Generate shareable link |
-| `/?page=payments/payments-create` | Record payment (supports Stripe redirect) |
-
----
-
 ## Database Schema
 
 ### Key Tables
 
-- **`invoices`**: Invoice records with status tracking
+- **`invoices`**: Invoice records with `invoice_type` (regular/on_demand), `contract_id`, status tracking
 - **`payments`**: Payment records with `stripe_payment_intent_id` for reconciliation
-- **`contracts`**: Standard contracts with deposit tracking
-- **`long_term_contracts`**: Recurring billing contracts
-- **`on_demand_contracts`**: On-demand service contracts
+- **`contracts`**: Unified contracts table with `contract_type` column (regular/long_term/on_demand). Replaces old separate `long_term_contracts`/`on_demand_contracts` tables.
+- **`quotes`**: Unified quotes table with `quote_type` column (regular/long_term/on_demand). Replaces old `is_long_term`/`is_on_demand` boolean columns.
+- **`document_custom_fields`**: Seeded with `deposit` (Deposit Required) and `fulfillment_date` (Fulfillment Date Estimated) for all 3 document types.
 - **`public_links`**: Shareable document links with expiration
 - **`cron_job_runs`**: Cron execution tracking for catch-up logic
 - **`invoice_notifications`**: Tracks sent reminders (idempotency)
+- **`tax_rates`**: Predefined tax rates per jurisdiction
+- **`system_audit`**: Audit log for critical system actions (immutable)
+- **`organizations`**: Organizations with tax-exempt form storage
+- **`clients`**: Client records with archived status
+- **`projects`**: Manual parent grouping for jobs
+- **`project_counters`**: Auto-generated project codes
+- **`api_keys`**: API key management
+- **`entity_links`**: External resource links (Dropbox, Google Drive, S3)
+- **`expenses`**, **`expense_categories`**, **`vendors`**, **`mileage_logs`**, **`receipts`**, **`form_categories`**, **`form_documents`**: Financial records
 
 ### Payments Table Columns
 
@@ -186,17 +273,79 @@ auto_pay_attempt, payment_method_id, status, created_at
 
 ## Environment Variables
 
-Configure in `config/settings.json` or via Settings UI:
+All variables have inline defaults in `docker-compose.yml`. No `.env` file is required — just change the 3 passwords.
 
-| Setting | Description |
-|---------|-------------|
-| `stripe_publishable_key` | Stripe publishable key |
-| `stripe_secret_key_enc` | Encrypted Stripe secret key |
-| `stripe_webhook_secret_enc` | Encrypted webhook signing secret |
-| `cron_enabled` | Enable/disable cron jobs |
-| `smtp_host`, `smtp_port`, etc. | Email configuration |
-| `net_terms_days` | Default payment terms (days) |
-| `documents_valid_days` | Public link expiration days |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ADMIN_PASSWORD` | **Yes** | Initial admin password. Hashed on container start and used to create/reset the admin account |
+| `MYSQL_ROOT_PASSWORD` | **Yes** | MySQL root password |
+| `MYSQL_PASSWORD` | **Yes** | MySQL app user password |
+| `TRUSTED_PROXIES` | No | CIDR ranges for reverse proxy IP detection (default: Docker internal networks + Cloudflare) |
+
+Docker-specific environment variables (hardcoded in compose, not user-configurable):
+
+| Variable | Purpose |
+|----------|---------|
+| `DB_HOST` | MySQL host (default: `db`) |
+| `DB_PORT` | MySQL port (default: `3306`) |
+| `MYSQL_DATABASE` | Database name (default: `project_alpha`) |
+| `MYSQL_USER` | DB app user (default: `appuser`) |
+
+Auto-managed (do NOT set in compose):
+- `APP_ENCRYPTION_KEY` — Auto-generated by `docker/start.sh` on first run, persisted to `./config/.encryption_key`
+- Stripe keys — Entered via **Settings > Billing** UI, stored encrypted in `app_config` DB table
+- SMTP password — Entered via Settings UI, stored encrypted in DB
+
+---
+
+## Advanced Features
+
+### Custom Fields
+
+PA supports customizable document fields:
+
+- **Field Types**: Text short/long, Number, Date
+- **Per-Org Configuration**: Each organization can define their own fields
+- **Validation**: Required toggle, min/max for numbers
+- **Auto-Population**: Default values can be set per field
+
+### Tax Management
+
+- **Predefined Tax Rates**: Store tax rates by country/state/county
+- **Auto-Selection**: System selects appropriate rate based on document context
+- **Manual Override**: Users can enter custom tax percentages when needed
+- **Tax Tracking**: Records `tax_amount` and `tax_county` for audit compliance
+
+### Receipt Management
+
+- Upload images of receipts (JPEG, PNG, PDF)
+- Track date, amount, and description
+- Store in `/uploads/receipts/`
+- Search and filter by date range, amount, client
+
+### Forms & Documents Storage
+
+- Upload and organize forms (W-9, W-8, etc.)
+- Store in `/uploads/forms/`
+- Email forms directly to clients/organizations
+- View/download/replacement capabilities
+
+### Audit System
+
+- Generate CSV, PDF, or ZIP reports
+- Include/exclude invoices, contracts, quotes
+- Auto-select current year (or custom date range)
+- Quick presets: Last Quarter, Last Month, All Time, Current Year
+- Scheduled email delivery (up to 5 recipients)
+- Read-only audit records (immutable)
+
+### Logging System
+
+- Structured JSON logs with rotation
+- User actions logged (document changes, status transitions)
+- System events logged (cron jobs, sync tasks)
+- Security events logged (login attempts, permission changes)
+- 10MB rotation, 30 files retained, archival to cold storage
 
 ---
 
@@ -207,14 +356,15 @@ Configure in `config/settings.json` or via Settings UI:
 1. Check webhook is configured in Stripe Dashboard
 2. Verify webhook secret matches in PA settings
 3. Check `/?page=stripe-webhook` is accessible (no auth)
-4. Review error logs: `docker compose logs app`
+4. Review error logs: `docker compose logs web`
+5. Run manual reconciliation: `docker compose exec web php /var/www/src/cron/stripe_reconciliation.php`
 
 ### Missed Payments After Downtime
 
 Run manual reconciliation:
 
 ```bash
-docker compose exec app php /var/www/src/cron/stripe_reconciliation.php
+docker compose exec web php /var/www/src/cron/stripe_reconciliation.php
 ```
 
 ### Cron Jobs Not Running
@@ -227,49 +377,229 @@ docker compose exec app php /var/www/src/cron/stripe_reconciliation.php
 SELECT * FROM cron_job_runs ORDER BY updated_at DESC;
 ```
 
+### Document Re-enablement Not Working
+
+- Ensure you're on a recent version (requires `document_date` columns)
+- Re-enabling a voided contract will also restore its linked invoice
+- The document date will be updated to current date on re-enable
+- Related documents (invoices from contracts) are automatically restored
+
 ---
 
 ## File Structure
 
 ```
+public/
+├── index.php           # Single entry point, routing
+├── assets/
+│   ├── styles.css      # Main's 113-line CSS + appended dev-only component classes
+│   ├── js/             # All page-logic JS files (consolidated from public/js/)
+│   ├── navigation.js   # SPA-like navigation handler
+│   └── item-autocomplete.js
 src/
-├── config/           # Database and app configuration
-├── controllers/      # Request handlers
-│   ├── contract/     # Contract CRUD
-│   ├── invoice/      # Invoice CRUD
-│   ├── public_view/  # Public document views
-│   └── stripe_*.php  # Stripe payment handlers
-├── cron/             # Scheduled job scripts
-├── migrations/       # Database migrations
-├── services/         # Business logic (StripeService, etc.)
-├── utils/            # Helpers (crypto, mailer, etc.)
-└── views/            # HTML templates
-docs/
-└── work_flow/        # Detailed workflow documentation
-    ├── document_types.md
-    ├── projects.md
-    ├── regular_docs.md
-    ├── long-term_docs.md
-    └── settings.md
+├── config/             # Database and app configuration
+├── controllers/        # Request handlers
+│   ├── auth/           # Auth controllers (login, 2FA, password reset)
+│   ├── contract/       # Contract CRUD + LT/OD actions
+│   ├── invoice/        # Invoice CRUD
+│   ├── financial/      # Expense, audit, CSV import handlers
+│   ├── stripe/         # Stripe payment handlers
+│   ├── webhook/        # Stripe webhook receivers
+│   ├── public_view/    # Public document views
+│   └── settings/       # Settings sub-handlers (links, tax, custom fields)
+├── cron/               # Scheduled job scripts
+├── migrations/         # Database migrations
+├── services/           # Business logic (StripeService, LinkResolverService)
+├── utils/              # Helpers (crypto, csrf, mailer, logger, twig, client_ip, upload_validator, audit)
+└── views/              # HTML templates
+    ├── pages/          # Page templates (organized by domain)
+    ├── partials/       # Shared layout (header with mobile topbar, footer with ToS links)
+    ├── templates/      # Twig templates and components
+    │   ├── layouts/
+    │   └── components/
+    └── uploads/        # User uploads (receipts, forms, etc.)
+database/
+└── init.sql            # Unified schema with all modules + custom field seed data
+docs/                   # Technical documentation
+work_flow/              # Business workflow documentation
+tools/                  # Backup/restore scripts, audit generator
 ```
 
 ---
 
 ## Contributing and Development
 
-If you'd like to contribute or extend the project, please read through the `docs/work_flow` docs first. The public-facing routes are routed through `public/index.php` where `page` query parameters map to controllers and views under `src/controllers` and `src/views/pages`.
+### Getting Started
 
-To run tests:
+1. Clone the repository
+2. Run `docker compose build web && docker compose up -d`
+3. Run migrations: `docker compose exec -T web php /var/www/src/migrations/run_migrations.php --verbose`
+4. Open http://localhost:1627 and log in
+
+### Code Style
+
+- PHP 8.3+ required
+- PSR-4 autoloading via Composer
+- Use Twig for templating where possible
+- Follow existing controller/view naming conventions
+
+### Running Tests
 
 ```bash
 composer install
 vendor/bin/phpunit --colors=always
 ```
 
+### API Endpoints
+
+#### Public Endpoints (No Auth Required)
+
+| Route | Description |
+|-------|-------------|
+| `/?page=public-doc&token=...` | View public quote/contract/invoice |
+| `/?page=stripe-checkout&token=...` | Initiate Stripe payment |
+| `/?page=stripe-success&token=...` | Payment success page |
+| `/?page=stripe-webhook` | Stripe webhook receiver |
+
+#### Admin Endpoints (Auth Required)
+
+| Route | Description |
+|-------|-------------|
+| `/?page=stripe-charge&invoice_id=...` | Admin-initiated card charge |
+| `/?page=public-link-create` | Generate shareable link |
+| `/?page=payments/payments-create` | Record payment (supports Stripe redirect) |
+
+---
+
+## Security
+
+### Reporting Vulnerabilities
+
+To report any security vulnerabilities, send an email to bkoltz1627@gmail.com with as much detail as possible. Please avoid creating any public issues before notifying us of any vulnerabilities. All vulnerabilities will be treated as highest priority with fixes provided within a couple of days of receiving all required information.
+
+### Secret Management
+
+Sensitive values (Stripe keys, SMTP password, encryption key) are **never stored in committed files**. They are either:
+- Entered via the Settings UI and encrypted with AES-256-GCM before being stored in the `app_config` DB table, or
+- Supplied as environment variables through `docker-compose.yml` (or an optional `.env` file) when the container starts.
+
+| What | Where | Notes |
+|------|-------|-------|
+| Stripe keys | Encrypted in DB | Entered via Settings → Billing |
+| Encryption key | `APP_ENCRYPTION_KEY` env var, auto-generated on first run | Persisted to `./config/.encryption_key` |
+| SMTP password | Encrypted in DB | Entered via Settings UI |
+| MySQL passwords | `docker-compose.yml` (or optional `.env`) | Change defaults before deploying |
+
+- `docker-compose.yml` contains inline defaults — no `.env` file is required.
+- An optional `.env` file can still be used to keep secrets out of the compose file.
+- `.gitignore` blocks `config/settings.json`, `.env`, upload directories, and generated key files.
+- `.gitleaksignore` prevents previously-rotated secrets from flagging CI.
+
+### Authentication & Authorization
+
+- **Session-based login** with CSRF protection (Symfony token, legacy fallback).
+- **First-admin registration**: When the `users` table is empty, the login page shows a "Create First Admin" form (no manual DB inserts needed). The Docker startup path also seeds the admin from `ADMIN_PASSWORD` in `docker-compose.yml`.
+- **Password policy**: Minimum 8 characters, mixed case, digit, and special character required; enforced on register, reset, and account update.
+- **Rate limiting**: IP-based (15 attempts / 10 min) and per-account (5 attempts / 15 min) lockout on failed logins.
+- **Role-based access**: `admin` vs `user` roles on all sensitive pages and controllers.
+- **2FA (TOTP)**: Optional two-factor authentication via authenticator app; backup codes provided.
+- **Audit middleware**: Router-level logging of all sensitive actions (payments, password resets, 2FA changes, API key create/revoke, deletes, contract sign/complete, email send, PDF export, Stripe webhooks).
+
+### Database Encryption
+
+- **Encryption at rest** (InnoDB tablespace encryption via MySQL 8.4 `component_keyring_file`).
+  - Manifest + component config bind-mounted read-only; keyring data in a dedicated named volume.
+  - `default_table_encryption=ON`, redo + undo log encryption enabled.
+  - All tablespaces verified encrypted.
+  - See `docs/ENCRYPTION_AT_REST.md` for operational gotchas and backup requirements.
+- **Application-level encryption**: Secrets are encrypted with AES-256-GCM before DB storage using the `APP_ENCRYPTION_KEY`.
+
+### Container & Network Hardening
+
+- **Docker Compose**: No hardcoded passwords in the committed defaults; change the `CHANGE THESE` values in `docker-compose.yml` before deploying. No `.env` file is required.
+- **Network segmentation**: MySQL port is NOT mapped to the host by default — DB is reachable only inside the Docker internal network.
+- **Apache hardening** (always on, not conditional):
+  - `ServerTokens Prod` + `ServerSignature Off` — no version leakage.
+  - `expose_php=Off` — removes `X-Powered-By` header.
+  - Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Strict-Transport-Security` (when HTTPS), and CSP.
+- **ZAP baseline scan**: Run against the compose network; HTML report archived in `docs/zap_baseline_2026-06-11.html`. Remaining findings are informational (session cookies, COEP, non-storable content) — acceptable for an authenticated app.
+
+### Backup & Recovery
+
+- `tools/db_backup.sh` — mysqldump to timestamped `.sql.gz` with automatic rotation (keeps last 7 days).
+- `tools/db_restore.sh` — restore from a backup dump.
+- The **keyring volume MUST be backed up separately** — without it, encrypted data files are unrecoverable.
+
+### Security Documentation in `docs/`
+
+| File | Topic |
+|------|-------|
+| `AGENTS.md` | Development guidance for AI assistants |
+| `AUTH_MIGRATION.md` | Auth folder reorganization summary |
+| `ENCRYPTION_AT_REST.md` | InnoDB tablespace encryption setup & gotchas |
+| `IMPLEMENTATION_ORDER.md` | Feature implementation sequence |
+| `PROGRESS_SUMMARY.md` | Completed tasks and status |
+| `RECURRING_INVOICES_SETUP.md` | Recurring billing guide |
+| `ON_DEMAND_CONTRACTS_README.md` | On-demand features |
+| `FILTER_MIGRATION_SUMMARY.md` | Template migration notes |
+| `SECURITY.md` | Security contact info |
+| `zap_baseline_2026-06-11.html` | OWASP ZAP baseline scan report |
+
 ---
 
 ## License
 
 Proprietary - All rights reserved.
-test
-test
+
+---
+
+## Recent Updates (2025-2026)
+
+### Feature Updates
+
+- Re-enabled document re-enablement (un-void) for voided contracts/invoices
+- Fixed document date display to show creation date instead of current date
+- Added "Update Document Date" button for manual date extension
+- Implemented On-Demand contract/quote type with flexible billing
+- Added tax rates table with jurisdiction support (country/state/county)
+- Created audit report system with CSV/PDF generation and email scheduling
+- Added receipt management system for business expense tracking
+- Implemented forms & docs storage (W-9, W-8, etc.) with client org email
+- Upgraded to PHP 8.3 with updated dependencies (Twig 3.21, Monolog 3.0)
+- Fixed recurring billing and on-demand document logic
+- Resolved multi-signature function issues on contracts
+- Added project and client filtering improvements
+- Integrated Twig templating for consistent list views
+- Fixed invoice public view and Stripe connection issues
+- Moved document settings to consolidated Documents tab with sub-tabs
+- Redesigned Financial navigation and unified Expenses Hub
+- Improved financial dashboard spacing, readability, and responsive layout
+
+### Security & Infrastructure (2026)
+
+- **Removed committed encryption key** — `APP_ENCRYPTION_KEY` now env-var only; `config/settings.json` is untracked (burned old key)
+- **Moved Stripe secrets to `.env`** — no longer stored in committed `settings.json`; encrypted before DB storage
+- **Docker Compose hardening** — all passwords from `.env` with `:?err` validation; DB port removed from host mapping (internal network only)
+- **Router-level audit middleware** — logs all sensitive actions (payments, 2FA, API keys, deletes, contract sign, email, PDF export, webhooks)
+- **Password policy enforcement** — 8+ chars, mixed case, digit, special char on register/reset/update
+- **Login rate limiting** — IP (15/10min) and per-account (5/15min) lockouts
+- **Two-Factor Authentication (TOTP)** — optional 2FA with backup codes
+- **InnoDB encryption at rest** — MySQL 8.4 `component_keyring_file`; all 61 tablespaces encrypted
+- **Apache hardening** — `ServerTokens Prod`, `ServerSignature Off`, `expose_php=Off`, security headers, CSP
+- **ZAP baseline scan** — 0 failures, 9 low-sev warnings (informational only); report in `docs/zap_baseline_2026-06-11.html`
+- **Backup & restore tooling** — `tools/db_backup.sh` and `tools/db_restore.sh` with 7-day rotation
+- **Auth folder migration** — controllers and views moved to `src/controllers/auth/` and `src/views/pages/auth/` for consistency
+
+---
+
+*For detailed technical documentation, see the `docs/` folder including:*
+- `AGENTS.md` - Development guidance for AI assistants
+- `AUTH_MIGRATION.md` - Auth folder reorganization summary
+- `ENCRYPTION_AT_REST.md` - InnoDB tablespace encryption setup & gotchas
+- `IMPLEMENTATION_ORDER.md` - Feature implementation sequence
+- `PROGRESS_SUMMARY.md` - Completed tasks and status
+- `RECURRING_INVOICES_SETUP.md` - Recurring billing guide
+- `ON_DEMAND_CONTRACTS_README.md` - On-demand features
+- `FILTER_MIGRATION_SUMMARY.md` - Template migration notes
+- `SECURITY.md` - Security contact info
+- `zap_baseline_2026-06-11.html` - OWASP ZAP baseline scan report

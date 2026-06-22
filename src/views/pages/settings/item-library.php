@@ -17,13 +17,13 @@ if (!empty($_GET['created'])) {
 }
 
 // Fetch all items
-$stmt = $pdo->prepare('SELECT * FROM item_library ORDER BY is_active DESC, item_name ASC');
+$stmt = $pdo->prepare('SELECT * FROM item_library ORDER BY is_active DESC, name ASC');
 $stmt->execute();
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+  <div class="page-head">
     <h3 style="margin:0">Item Library</h3>
     <button onclick="showCreateModal()" style="padding:10px 20px;background:#3b82f6;color:#fff;border:0;border-radius:8px;cursor:pointer;font-size:14px">
       + Add New Item
@@ -43,7 +43,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
   <?php endif; ?>
 
   <div style="background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);overflow:hidden">
-    <table style="width:100%;border-collapse:collapse">
+    <table class="pa-table">
       <thead>
         <tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb">
           <th style="padding:12px;text-align:left;font-weight:600">Item Name</th>
@@ -126,6 +126,14 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       <div style="margin-bottom:20px">
         <label style="display:flex;align-items:center;cursor:pointer">
+          <input type="checkbox" name="is_hourly" id="isHourly" value="1"
+            style="width:18px;height:18px;margin-right:8px">
+          <span>This is an hourly service</span>
+        </label>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <label style="display:flex;align-items:center;cursor:pointer">
           <input type="checkbox" name="is_active" id="isActive" value="1" checked
             style="width:18px;height:18px;margin-right:8px">
           <span>Active (show in autocomplete)</span>
@@ -152,6 +160,7 @@ function showCreateModal() {
   document.getElementById('itemName').value = '';
   document.getElementById('itemDescription').value = '';
   document.getElementById('unitPrice').value = '';
+  document.getElementById('isHourly').checked = false;
   document.getElementById('isActive').checked = true;
   document.getElementById('itemModal').style.display = 'flex';
 }
@@ -163,6 +172,7 @@ function editItem(item) {
   document.getElementById('itemName').value = item.item_name;
   document.getElementById('itemDescription').value = item.description || '';
   document.getElementById('unitPrice').value = item.unit_price;
+  document.getElementById('isHourly').checked = item.category === 'Hourly';
   document.getElementById('isActive').checked = item.is_active == 1;
   document.getElementById('itemModal').style.display = 'flex';
 }

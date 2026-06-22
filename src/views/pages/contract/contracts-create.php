@@ -308,4 +308,4 @@ $csrf = csrf_sf_token('contracts-create');
     </div>
   </form>
 </section>
-<script src="js/contracts-create-logic.js"></script>
+<script src="/assets/js/contracts-create-logic.js"></script>

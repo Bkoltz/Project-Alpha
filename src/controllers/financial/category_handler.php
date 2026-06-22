@@ -1,0 +1,273 @@
+<?php
+// src/controllers/financial/category_handler.php
+// POST controller for expense category CRUD: create, update, delete, deactivate.
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+error_reporting(E_ERROR | E_PARSE);
+ini_set('display_errors', '0');
+
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/audit.php';
+
+header('Content-Type: application/json');
+
+$response = ['success' => false, 'message' => ''];
+
+// Auth required
+if (empty($_SESSION['user']['id'])) {
+    $response['message'] = 'Authentication required';
+    echo json_encode($response);
+    exit;
+}
+
+$userId = (int)$_SESSION['user']['id'];
+$orgId  = 1; // Fixed for now; should come from session/user context
+
+// CSRF required: accept legacy 'csrf' or Symfony '_token'
+$csrfOk = false;
+$submitted = $_POST['_token'] ?? '';
+if (is_string($submitted) && $submitted !== '') {
+    $csrfOk = csrf_sf_is_valid('category', $submitted);
+} else {
+    $csrfOk = csrf_validate();
+}
+if (!$csrfOk) {
+    $response['message'] = 'Invalid request (CSRF validation failed)';
+    echo json_encode($response);
+    exit;
+}
+
+$action = $_POST['action'] ?? '';
+
+function jsonResponse(bool $success, string $message, array $extra = []): void {
+    echo json_encode(array_merge(['success' => $success, 'message' => $message], $extra));
+    exit;
+}
+
+function trimNullable(string $value): ?string {
+    $value = trim($value);
+    return $value === '' ? null : $value;
+}
+
+function normalizeColor(?string $color): ?string {
+    if ($color === null || $color === '') {
+        return null;
+    }
+    $color = ltrim(trim($color), '#');
+    if (!preg_match('/^[0-9A-Fa-f]{6}$/', $color)) {
+        return null;
+    }
+    return '#' . strtolower($color);
+}
+
+try {
+    switch ($action) {
+        case 'create':
+            $name = trim($_POST['name'] ?? '');
+            if ($name === '') {
+                jsonResponse(false, 'Category name is required');
+            }
+
+            $parentId = isset($_POST['parent_id']) && $_POST['parent_id'] !== ''
+                ? (int)$_POST['parent_id']
+                : null;
+            $taxDeductible = isset($_POST['tax_deductible'])
+                ? (int)(bool)$_POST['tax_deductible']
+                : 1;
+            $color = normalizeColor($_POST['color'] ?? null);
+
+            // Prevent circular parent reference (parent cannot be self)
+            if ($parentId !== null) {
+                $parentCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? AND organization_id = ?');
+                $parentCheck->execute([$parentId, $orgId]);
+                if (!$parentCheck->fetch()) {
+                    jsonResponse(false, 'Parent category not found');
+                }
+            }
+
+            $stmt = $pdo->prepare('
+                INSERT INTO expense_categories
+                    (organization_id, name, parent_id, tax_deductible, is_system, color)
+                VALUES (?, ?, ?, ?, 0, ?)
+            ');
+            $stmt->execute([$orgId, $name, $parentId, $taxDeductible, $color]);
+
+            $categoryId = (int)$pdo->lastInsertId();
+            audit_log($pdo, 'expense_category.create', 'expense_category', $categoryId, [
+                'organization_id' => $orgId,
+                'name' => $name,
+                'parent_id' => $parentId,
+                'tax_deductible' => $taxDeductible,
+                'color' => $color,
+            ]);
+
+            jsonResponse(true, 'Category created successfully', ['id' => $categoryId]);
+
+        case 'update':
+            $id = (int)($_POST['id'] ?? 0);
+            if ($id <= 0) {
+                jsonResponse(false, 'Invalid category ID');
+            }
+
+            $name = trim($_POST['name'] ?? '');
+            if ($name === '') {
+                jsonResponse(false, 'Category name is required');
+            }
+
+            $parentId = isset($_POST['parent_id']) && $_POST['parent_id'] !== ''
+                ? (int)$_POST['parent_id']
+                : null;
+            $taxDeductible = isset($_POST['tax_deductible'])
+                ? (int)(bool)$_POST['tax_deductible']
+                : 1;
+            $color = normalizeColor($_POST['color'] ?? null);
+
+            // Fetch existing category to check system status and org
+            $existing = $pdo->prepare('
+                SELECT id, is_system
+                FROM expense_categories
+                WHERE id = ? AND organization_id = ?
+            ');
+            $existing->execute([$id, $orgId]);
+            $category = $existing->fetch();
+            if (!$category) {
+                jsonResponse(false, 'Category not found');
+            }
+
+            $isSystem = (int)$category['is_system'] === 1;
+
+            // Prevent circular parent reference (parent cannot be self)
+            if ($parentId !== null && $parentId === $id) {
+                jsonResponse(false, 'A category cannot be its own parent');
+            }
+            if ($parentId !== null) {
+                $parentCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? AND organization_id = ?');
+                $parentCheck->execute([$parentId, $orgId]);
+                if (!$parentCheck->fetch()) {
+                    jsonResponse(false, 'Parent category not found');
+                }
+            }
+
+            // System categories can only update name, color (not parent/tax_deductible)
+            if ($isSystem) {
+                $stmt = $pdo->prepare('
+                    UPDATE expense_categories
+                    SET name = ?, color = ?, updated_at = NOW()
+                    WHERE id = ? AND organization_id = ?
+                ');
+                $stmt->execute([$name, $color, $id, $orgId]);
+            } else {
+                $stmt = $pdo->prepare('
+                    UPDATE expense_categories
+                    SET name = ?, parent_id = ?, tax_deductible = ?, color = ?, updated_at = NOW()
+                    WHERE id = ? AND organization_id = ?
+                ');
+                $stmt->execute([$name, $parentId, $taxDeductible, $color, $id, $orgId]);
+            }
+
+            audit_log($pdo, 'expense_category.update', 'expense_category', $id, [
+                'organization_id' => $orgId,
+                'name' => $name,
+                'is_system' => $isSystem,
+                'color' => $color,
+            ]);
+
+            jsonResponse(true, 'Category updated successfully', ['id' => $id]);
+
+        case 'delete':
+            $id = (int)($_POST['id'] ?? 0);
+            if ($id <= 0) {
+                jsonResponse(false, 'Invalid category ID');
+            }
+
+            $existing = $pdo->prepare('
+                SELECT id, is_system, name
+                FROM expense_categories
+                WHERE id = ? AND organization_id = ?
+            ');
+            $existing->execute([$id, $orgId]);
+            $category = $existing->fetch();
+            if (!$category) {
+                jsonResponse(false, 'Category not found');
+            }
+
+            if ((int)$category['is_system'] === 1) {
+                jsonResponse(false, 'System categories cannot be deleted');
+            }
+
+            // Reassign child categories to this category's parent
+            $childStmt = $pdo->prepare('
+                UPDATE expense_categories
+                SET parent_id = (
+                    SELECT parent_id FROM (SELECT parent_id FROM expense_categories WHERE id = ?) AS tmp
+                ), updated_at = NOW()
+                WHERE parent_id = ? AND organization_id = ?
+            ');
+            $childStmt->execute([$id, $id, $orgId]);
+
+            // Reassign expenses referencing this category to null
+            $expenseStmt = $pdo->prepare('
+                UPDATE expenses
+                SET category_id = NULL, updated_at = NOW()
+                WHERE category_id = ? AND organization_id = ?
+            ');
+            $expenseStmt->execute([$id, $orgId]);
+
+            $deleteStmt = $pdo->prepare('DELETE FROM expense_categories WHERE id = ? AND organization_id = ?');
+            $deleteStmt->execute([$id, $orgId]);
+
+            audit_log($pdo, 'expense_category.delete', 'expense_category', $id, [
+                'organization_id' => $orgId,
+                'name' => $category['name'],
+            ]);
+
+            jsonResponse(true, 'Category deleted successfully');
+
+        case 'deactivate':
+            $id = (int)($_POST['id'] ?? 0);
+            if ($id <= 0) {
+                jsonResponse(false, 'Invalid category ID');
+            }
+
+            $existing = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? AND organization_id = ?');
+            $existing->execute([$id, $orgId]);
+            if (!$existing->fetch()) {
+                jsonResponse(false, 'Category not found');
+            }
+
+            // Soft deactivation via a status-like convention is not in the schema;
+            // use is_system=0 sentinel and remove from active usage by clearing parent links.
+            // Note: expense_categories has no is_active column, so we simulate deactivation
+            // by unlinking child categories and nulling expense category references.
+            $childStmt = $pdo->prepare('
+                UPDATE expense_categories
+                SET parent_id = NULL, updated_at = NOW()
+                WHERE parent_id = ? AND organization_id = ?
+            ');
+            $childStmt->execute([$id, $orgId]);
+
+            $expenseStmt = $pdo->prepare('
+                UPDATE expenses
+                SET category_id = NULL, updated_at = NOW()
+                WHERE category_id = ? AND organization_id = ?
+            ');
+            $expenseStmt->execute([$id, $orgId]);
+
+            audit_log($pdo, 'expense_category.deactivate', 'expense_category', $id, [
+                'organization_id' => $orgId,
+            ]);
+
+            jsonResponse(true, 'Category deactivated successfully');
+
+        default:
+            jsonResponse(false, 'Invalid action');
+    }
+} catch (Throwable $e) {
+    error_log('[category_handler] Error: ' . $e->getMessage());
+    jsonResponse(false, 'An error occurred while processing the request');
+}

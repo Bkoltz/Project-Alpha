@@ -45,6 +45,8 @@ if (!empty($_POST['change_password']) && $uid > 0) {
         exit;
     }
 }
+require_once __DIR__ . '/../utils/upload_validator.php';
+
 $configMount = '/var/www/config';
 $projectConfig = __DIR__ . '/../../config';
 $configDir = is_dir($configMount) ? $configMount : $projectConfig;
@@ -74,6 +76,9 @@ $settings = [
     // App extras
     'primary_state' => null,
     'documents_valid_days' => 14,
+    // Quote auto-create on approval (default enabled)
+    'quote_auto_create_contract' => 1,
+    'quote_auto_create_invoice' => 1,
     // Automatic invoice email settings
     'invoice_auto_send_due_7days' => 0,
     'invoice_auto_send_overdue_weekly' => 0,
@@ -111,17 +116,15 @@ $existing = [];
 if (is_readable($target)) {
     $existing = json_decode(@file_get_contents($target), true) ?: [];
 }
-
-// Ensure we have a persistent encryption key for secrets before attempting encryption
-if (empty($existing['encryption_key'])) {
-    // generate a new base64-encoded 32 byte key and attempt to persist it so crypto helpers can use it immediately
-    $newKey = base64_encode(random_bytes(32));
-    $existing['encryption_key'] = $newKey;
-    // best-effort: write the existing file back with the new encryption key so crypto_get_key/crypto_load_persistent_key
-    // can find it during this request. We'll write the file if the directory is writable.
-    if (is_dir(dirname($target)) && is_writable(dirname($target))) {
-        @file_put_contents($target, json_encode($existing, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    }
+// Encryption key is sourced exclusively from the APP_ENCRYPTION_KEY env var
+// (see src/utils/crypto.php). We no longer generate or persist a plaintext
+// key inside settings.json — the repo is public and that pattern leaked a key.
+if (getenv('APP_ENCRYPTION_KEY') === false || getenv('APP_ENCRYPTION_KEY') === '') {
+    @error_log('[settings] APP_ENCRYPTION_KEY not set — secret fields cannot be encrypted/saved');
+}
+// Drop any legacy plaintext key still sitting in the file.
+if (isset($existing['encryption_key'])) {
+    unset($existing['encryption_key']);
 }
 
 if (isset($_POST['brand_name'])) {
@@ -175,23 +178,24 @@ if (isset($_POST['net_terms_days'])) {
 
 if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
     $f = $_FILES['logo'];
-    // Max 5 MB
-    if (!empty($f['size']) && $f['size'] > 5 * 1024 * 1024) {
-        // too large; ignore upload
-    } else {
-        $allowed = [
-'image/png'       => '.png',
-            'image/jpeg'      => '.jpg',
-            'image/webp'      => '.webp',
-            'image/svg+xml'   => '.svg',
-        ];
-        $mime = @mime_content_type($f['tmp_name']);
-        if (isset($allowed[$mime])) {
-            try {
-                $ext = $allowed[$mime];
+    $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    $err = validate_upload($f, $allowedMimes, 5 * 1024 * 1024);
+    if ($err === null) {
+        try {
+            $extMap = [
+                'image/png'       => '.png',
+                'image/jpeg'      => '.jpg',
+                'image/gif'       => '.gif',
+                'image/webp'      => '.webp',
+                'image/svg+xml'   => '.svg',
+            ];
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->file($f['tmp_name']);
+            $ext = $extMap[$mime] ?? '';
+            if ($ext !== '') {
                 $name = 'logo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . $ext;
                 $dest = $uploadsDir . '/' . $name;
-if (@move_uploaded_file($f['tmp_name'], $dest)) {
+                if (@move_uploaded_file($f['tmp_name'], $dest)) {
                     // Serve via controller since this is stored in config/uploads
                     $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
                 } else {
@@ -208,11 +212,12 @@ if (@move_uploaded_file($f['tmp_name'], $dest)) {
                         $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
                     }
                 }
-            } catch (Throwable $e) {
-                // ignore upload errors; keep prior settings
             }
+        } catch (Throwable $e) {
+            // ignore upload errors; keep prior settings
         }
     }
+    // on validation failure, silently ignore upload to preserve existing behavior
 }
 
 // Billing defaults
@@ -277,6 +282,41 @@ if (!empty($_POST['smtp_password'])) {
     $enc = crypto_encrypt((string)$_POST['smtp_password']);
     if ($enc) { $settings['smtp_password_enc'] = $enc; }
 }
+if (isset($_POST['smtp_from_email'])) {
+    $settings['smtp_from_email'] = trim((string)$_POST['smtp_from_email']) ?: null;
+}
+if (isset($_POST['smtp_from_name'])) {
+    $settings['smtp_from_name'] = trim((string)$_POST['smtp_from_name']) ?: null;
+}
+
+// Persist SMTP configuration to app_config table so it takes precedence over settings.json
+$smtpConfigKeys = [];
+foreach (['smtp_host','smtp_port','smtp_secure','smtp_username','smtp_from_email','smtp_from_name'] as $k) {
+    if (isset($settings[$k])) {
+        $smtpConfigKeys[$k] = $settings[$k];
+    }
+}
+if (!empty($settings['smtp_password_enc'])) {
+    $smtpConfigKeys['smtp_password_enc'] = $settings['smtp_password_enc'];
+}
+if (!empty($smtpConfigKeys)) {
+    require_once __DIR__ . '/../config/db.php';
+    $stmtConfig = $pdo->prepare(
+        'INSERT INTO app_config (organization_id, config_key, config_value)
+         VALUES (0, ?, ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+    );
+    foreach ($smtpConfigKeys as $key => $val) {
+        $stmtConfig->execute([$key, $val]);
+    }
+
+    // Also set in current request so they're available immediately
+    foreach ($smtpConfigKeys as $key => $val) {
+        putenv("$key=$val");
+        $_ENV[$key] = $val;
+        $appConfig[$key] = $val;
+    }
+}
 
 // Cron/recurring invoice settings
 if (isset($_POST['cron_enabled'])) {
@@ -297,10 +337,42 @@ if (isset($_POST['cron_custom'])) {
 $settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
 $settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
 
-// Quote settings
-$settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
-$settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
-$settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
+// System automation settings
+$settings['auto_terminate_contracts'] = !empty($_POST['auto_terminate_contracts']) ? 1 : 0;
+$settings['link_expiration_checker'] = !empty($_POST['link_expiration_checker']) ? 1 : 0;
+
+// Contract notification settings
+$settings['contract_expiring_warning'] = !empty($_POST['contract_expiring_warning']) ? 1 : 0;
+if (isset($_POST['contract_expiring_days'])) {
+    $settings['contract_expiring_days'] = max(1, min(90, (int)$_POST['contract_expiring_days']));
+}
+$settings['contract_expired_alert'] = !empty($_POST['contract_expired_alert']) ? 1 : 0;
+
+// Payment notification settings
+$settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
+$settings['payment_received_notification'] = !empty($_POST['payment_received_notification']) ? 1 : 0;
+
+// Link expiration warning settings
+$settings['link_expiration_warning'] = !empty($_POST['link_expiration_warning']) ? 1 : 0;
+if (isset($_POST['link_expiration_warning_days'])) {
+    $settings['link_expiration_warning_days'] = max(1, min(90, (int)$_POST['link_expiration_warning_days']));
+}
+
+// Invoice document settings
+if (isset($_POST['invoice_show_terms'])) {
+    $settings['invoice_show_terms'] = !empty($_POST['invoice_show_terms']) ? 1 : 0;
+}
+if (isset($_POST['invoice_show_project_code'])) {
+    $settings['invoice_show_project_code'] = !empty($_POST['invoice_show_project_code']) ? 1 : 0;
+}
+if (isset($_POST['invoice_show_due_date'])) {
+    $settings['invoice_show_due_date'] = !empty($_POST['invoice_show_due_date']) ? 1 : 0;
+}
+
+    // Quote settings — default to enabled unless explicitly unchecked
+    $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
+    $settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
+    $settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
 
 // Contract settings
 $settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;
@@ -310,41 +382,86 @@ if (isset($_POST['signature_agreement'])) {
     $settings['signature_agreement'] = $sig !== '' ? mb_substr($sig, 0, 500) : 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.';
 }
 
+// Custom contract sections
+if (isset($_POST['section_title']) && is_array($_POST['section_title'])) {
+    $sections = [];
+    $titles = $_POST['section_title'];
+    $contents = $_POST['section_content'] ?? [];
+    $enabledMap = $_POST['section_enabled'] ?? [];
+    foreach ($titles as $idx => $title) {
+        $t = trim((string)$title);
+        $c = trim((string)($contents[$idx] ?? ''));
+        if ($t === '' && $c === '') continue;
+        $sections[] = [
+            'title' => mb_substr($t, 0, 200),
+            'content' => mb_substr($c, 0, 10000),
+            'is_enabled' => !empty($enabledMap[$idx]) ? 1 : 0,
+        ];
+    }
+    $settings['contract_custom_sections'] = $sections;
+}
+
 // Review link for invoices
 if (isset($_POST['review_link'])) {
     $rl = trim((string)$_POST['review_link']);
     $settings['review_link'] = $rl !== '' ? $rl : null;
 }
 
-// Stripe settings
+// Stripe settings — save encrypted to app_config DB table (NOT to .env file)
+// This allows users to enter Stripe keys via the UI without needing to edit .env
+// The .env file is mounted read-only in Docker, so we can't write to it
+$stripeConfigKeys = [];
 if (isset($_POST['stripe_publishable_key'])) {
-    $settings['stripe_publishable_key'] = trim((string)$_POST['stripe_publishable_key']) ?: null;
+    $val = trim((string)$_POST['stripe_publishable_key']);
+    // Always save publishable key (it's public, can be blank to clear)
+    $stripeConfigKeys['stripe_publishable_key'] = $val;
 }
 if (isset($_POST['stripe_secret_key'])) {
     $sk = trim((string)$_POST['stripe_secret_key']);
     if ($sk !== '') {
-        // Encrypt the secret key for storage
+        // Only update if a new key was entered (don't blank out existing)
         require_once __DIR__ . '/../utils/crypto.php';
         $enc = crypto_encrypt($sk);
         if ($enc) {
-            $settings['stripe_secret_key_enc'] = $enc;
-        } else {
-            // Fallback: store with prefix if encryption fails
-            $settings['stripe_secret_key_enc'] = 'plain::' . $sk;
+            $stripeConfigKeys['stripe_secret_key_enc'] = $enc;
         }
     }
 }
 if (isset($_POST['stripe_webhook_secret'])) {
     $ws = trim((string)$_POST['stripe_webhook_secret']);
     if ($ws !== '') {
+        // Only update if a new secret was entered (don't blank out existing)
         require_once __DIR__ . '/../utils/crypto.php';
         $enc = crypto_encrypt($ws);
         if ($enc) {
-            $settings['stripe_webhook_secret_enc'] = $enc;
-        } else {
-            $settings['stripe_webhook_secret_enc'] = 'plain::' . $ws;
+            $stripeConfigKeys['stripe_webhook_secret_enc'] = $enc;
         }
     }
+}
+
+// Write Stripe keys to app_config table (encrypted where needed)
+if (!empty($stripeConfigKeys)) {
+    $stmtConfig = $pdo->prepare(
+        'INSERT INTO app_config (organization_id, config_key, config_value)
+         VALUES (0, ?, ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+    );
+    foreach ($stripeConfigKeys as $key => $val) {
+        $stmtConfig->execute([$key, $val]);
+    }
+
+    // Also set in current request so they're available immediately
+    foreach ($stripeConfigKeys as $key => $val) {
+        putenv("$key=$val");
+        $_ENV[$key] = $val;
+        $appConfig[$key] = $val;
+    }
+}
+
+// Also remove any stripe keys from settings so they don't get written to JSON
+foreach (['stripe_publishable_key','stripe_secret_key_enc','stripe_webhook_secret_enc'] as $k) {
+    unset($settings[$k]);
+    unset($existing[$k]);
 }
 
 // Merge with existing file on target before writing to avoid overwriting unrelated fields
@@ -355,8 +472,17 @@ if (is_readable($target)) {
 }
 
 $merged = array_merge($existing, $settings);
+// Never persist a plaintext encryption key in settings.json (env-var only).
+unset($merged['encryption_key']);
 $payload = json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 $ok = @file_put_contents($target, $payload);
+
+// Audit the settings change
+try {
+    require_once __DIR__ . '/../config/db.php';
+    require_once __DIR__ . '/../utils/audit.php';
+    audit_log($pdo, 'settings.update', 'settings', null, ['tab' => (string)($_POST['tab'] ?? ''), 'keys_changed' => count($settings)]);
+} catch (Throwable $e) { /* never block settings save */ }
 if ($ok === false) {
     // attempt permission fix (best-effort)
     if (is_dir(dirname($settingsFile))) {

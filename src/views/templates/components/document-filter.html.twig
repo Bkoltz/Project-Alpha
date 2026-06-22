@@ -9,117 +9,147 @@
     - name: Form input name
     - value: Current value
     - id_value: For client_autocomplete, the client ID value
-    - options: For select type, array of [{value: '', label: 'All'}, ...]
-    - placeholder: Optional placeholder text
-    - step: For number inputs, the step value
-  - columns: Optional number of grid columns (defaults to filter count + 2)
+  - options: For select type, array of [{value: '', label: 'All'}, ...]
+  - placeholder: Optional placeholder text
+  - step: For number inputs, the step value
+  - primary_count: Optional number of filters shown in the primary row (defaults to 4)
 #}
 
-{% set gridCols = columns|default(filters|length + 2) %}
-{% set instanceId = 'filter_' ~ (page|replace({'/' : '_'}))|slice(0, 8) %}
+{% macro field(filterName, config, instanceId, compact) %}
+    {% set type = config.type|default('text') %}
+    {% set label = config.label|default(filterName|capitalize) %}
+    {% set value = config.value|default('') %}
+    {% set idValue = config.id_value|default(0) %}
+    {% set width = config.width|default(type == 'client_autocomplete' ? '240px' : (type == 'date' ? '150px' : (type == 'number' ? '130px' : '170px'))) %}
+    {% set fieldStyle = 'display:flex;flex-direction:column;gap:6px;' ~ (compact ? 'flex:0 1 ' ~ width ~ ';min-width:min(' ~ width ~ ',100%);' : '') ~ (type == 'client_autocomplete' ? 'position:relative;' : '') %}
 
-<form method="get" action="/" style="display:grid;grid-template-columns:repeat({{ gridCols }}, 1fr);gap:8px;align-items:end;margin:12px 0;position:relative">
+    <div style="{{ fieldStyle }}">
+        <label for="{{ instanceId }}_{{ filterName }}" style="font-size:13px;font-weight:600;color:#374151">
+            {{ label }}
+        </label>
+
+        {% if type == 'text' %}
+            <input
+                type="text"
+                id="{{ instanceId }}_{{ filterName }}"
+                name="{{ filterName }}"
+                value="{{ value }}"
+                placeholder="{{ config.placeholder|default('') }}"
+                style="padding:9px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff;width:100%"
+            >
+
+        {% elseif type == 'date' %}
+            <input
+                type="date"
+                id="{{ instanceId }}_{{ filterName }}"
+                name="{{ filterName }}"
+                value="{{ value }}"
+                style="padding:9px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff;width:100%"
+            >
+
+        {% elseif type == 'number' %}
+            <input
+                type="number"
+                id="{{ instanceId }}_{{ filterName }}"
+                name="{{ filterName }}"
+                value="{{ value }}"
+                placeholder="{{ config.placeholder|default('') }}"
+                step="{{ config.step|default('1') }}"
+                style="padding:9px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff;width:100%"
+            >
+
+        {% elseif type == 'select' %}
+            <select
+                id="{{ instanceId }}_{{ filterName }}"
+                name="{{ filterName }}"
+                style="padding:9px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff;width:100%"
+            >
+                {% if config.options %}
+                    {% for option in config.options %}
+                        <option value="{{ option.value|default('') }}" {% if option.value|default('') == value %}selected{% endif %}>
+                            {{ option.label }}
+                        </option>
+                    {% endfor %}
+                {% endif %}
+            </select>
+
+        {% elseif type == 'client_autocomplete' %}
+            <input
+                type="hidden"
+                id="{{ instanceId }}_{{ filterName }}_id"
+                name="{{ filterName }}_id"
+                value="{{ idValue }}"
+            >
+            <input
+                type="text"
+                id="{{ instanceId }}_{{ filterName }}"
+                name="{{ filterName }}"
+                value="{{ value }}"
+                placeholder="{{ config.placeholder|default('Search client...') }}"
+                style="padding:9px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff;position:relative;z-index:1;width:100%"
+                data-autocomplete="client"
+                data-hidden-id="{{ instanceId }}_{{ filterName }}_id"
+            >
+            <div id="{{ instanceId }}_{{ filterName }}_suggestions" style="position:absolute;display:none;background:#fff;border:1px solid #ddd;border-radius:6px;max-height:200px;overflow-y:auto;width:100%;z-index:10;margin-top:-4px;top:100%"></div>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{% import _self as filterParts %}
+{% set primaryCount = primary_count|default(4) %}
+{% set instanceId = 'filter_' ~ (page|replace({'/' : '_'}))|slice(0, 8) %}
+{% set advancedFilters = filters|slice(primaryCount) %}
+{% set storageKey = 'document-filter:' ~ page %}
+
+<form method="get" action="/" style="display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;margin:16px 0 22px;position:relative">
     <input type="hidden" name="page" value="{{ page }}">
-    
+
     {% for filterName, config in filters %}
-        {% set type = config.type|default('text') %}
-        {% set label = config.label|default(filterName|capitalize) %}
-        {% set value = config.value|default('') %}
-        {% set idValue = config.id_value|default(0) %}
-        
-        <div style="display:flex;flex-direction:column;gap:4px">
-            <label for="{{ instanceId }}_{{ filterName }}" style="font-size:13px;font-weight:600;color:#374151">
-                {{ label }}
-            </label>
-            
-            {% if type == 'text' %}
-                <input 
-                    type="text" 
-                    id="{{ instanceId }}_{{ filterName }}"
-                    name="{{ filterName }}" 
-                    value="{{ value }}"
-                    placeholder="{{ config.placeholder|default('') }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
-                >
-            
-            {% elseif type == 'date' %}
-                <input 
-                    type="date" 
-                    id="{{ instanceId }}_{{ filterName }}"
-                    name="{{ filterName }}" 
-                    value="{{ value }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
-                >
-            
-            {% elseif type == 'number' %}
-                <input 
-                    type="number" 
-                    id="{{ instanceId }}_{{ filterName }}"
-                    name="{{ filterName }}" 
-                    value="{{ value }}"
-                    placeholder="{{ config.placeholder|default('') }}"
-                    step="{{ config.step|default('1') }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
-                >
-            
-            {% elseif type == 'select' %}
-                <select 
-                    id="{{ instanceId }}_{{ filterName }}"
-                    name="{{ filterName }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff"
-                >
-                    {% if config.options %}
-                        {% for option in config.options %}
-                            <option value="{{ option.value|default('') }}" {% if option.value|default('') == value %}selected{% endif %}>
-                                {{ option.label }}
-                            </option>
-                        {% endfor %}
-                    {% endif %}
-                </select>
-            
-            {% elseif type == 'client_autocomplete' %}
-                <input 
-                    type="hidden" 
-                    id="{{ instanceId }}_{{ filterName }}_id"
-                    name="{{ filterName }}_id"
-                    value="{{ idValue }}"
-                >
-                <input 
-                    type="text" 
-                    id="{{ instanceId }}_{{ filterName }}"
-                    name="{{ filterName }}"
-                    value="{{ value }}"
-                    placeholder="{{ config.placeholder|default('Search client...') }}"
-                    style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;background:#fff;position:relative;z-index:1"
-                    data-autocomplete="client"
-                    data-hidden-id="{{ instanceId }}_{{ filterName }}_id"
-                >
-                <div id="{{ instanceId }}_{{ filterName }}_suggestions" style="position:absolute;display:none;background:#fff;border:1px solid #ddd;border-radius:6px;max-height:200px;overflow-y:auto;width:100%;z-index:10;margin-top:-4px"></div>
-            
-            {% endif %}
-        </div>
+        {% if loop.index <= primaryCount %}
+            {{ filterParts.field(filterName, config, instanceId, true) }}
+        {% endif %}
     {% endfor %}
-    
-    {# Submit and Reset buttons #}
-    <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:13px;font-weight:600;color:#374151;height:24px"></label>
-        <button 
-            type="submit" 
-            style="padding:8px 14px;background:#2563eb;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px"
+
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <button
+            type="submit"
+            style="padding:9px 16px;background:#2563eb;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px"
         >
             Filter
         </button>
-    </div>
-    
-    <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:13px;font-weight:600;color:#374151;height:24px"></label>
-        <a 
-            href="/?page={{ page }}" 
-            style="padding:8px 14px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;text-decoration:none;text-align:center;display:inline-block"
+        <a
+            href="/?page={{ page }}"
+            style="padding:9px 16px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;text-decoration:none;text-align:center;display:inline-block"
         >
             Reset
         </a>
+        {% if advancedFilters|length > 0 %}
+            <button
+                type="button"
+                data-filter-toggle="{{ instanceId }}_advanced"
+                data-filter-storage-key="{{ storageKey }}"
+                aria-expanded="false"
+                style="padding:9px 16px;background:#fff;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px"
+            >
+                More filters
+            </button>
+        {% endif %}
     </div>
+
+    {% if advancedFilters|length > 0 %}
+        <div
+            id="{{ instanceId }}_advanced"
+            data-filter-panel
+            data-filter-storage-key="{{ storageKey }}"
+            style="display:none;flex-basis:100%;padding:12px 0 0;border-top:1px solid #eef0f2"
+        >
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 14px;align-items:end">
+                {% for filterName, config in advancedFilters %}
+                    {{ filterParts.field(filterName, config, instanceId, false) }}
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
 </form>
 
 <script>

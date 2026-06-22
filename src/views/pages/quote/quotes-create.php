@@ -191,7 +191,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 
     <div id="onDemandFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
       <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Quote Settings</h3>
-      
+
       <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
         <label>
           <div>Start Date</div>
@@ -205,7 +205,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
           </select>
         </label>
       </div>
-      
+
       <div id="onDemandEndDateField" style="display:none;margin-top:12px">
         <label>
           <div>End Date</div>
@@ -239,64 +239,9 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       </div>
 
       <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:13px">
-        <strong>ℹ️ Note:</strong> On-demand quotes allow you to generate invoices manually as needed. No recurring billing schedule is set.
+        <strong>Note:</strong> On-demand quotes allow you to generate invoices manually as needed. No recurring billing schedule is set.
       </div>
     </div>
-
-    <div id="onDemandFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
-      <h3 style="margin:0 0 12px 0;color:#374151">On-Demand Quote Settings</h3>
-      
-      <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-        <label>
-          <div>Start Date</div>
-          <input id="onDemandStartDate" type="date" name="od_start_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        </label>
-        <label>
-          <div>Contract Duration</div>
-          <select id="onDemandEndDateType" name="od_end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" onchange="toggleOnDemandEndDate()">
-            <option value="ongoing">Ongoing (Until Terminated)</option>
-            <option value="fixed">Fixed End Date</option>
-          </select>
-        </label>
-      </div>
-      
-      <div id="onDemandEndDateField" style="display:none;margin-top:12px">
-        <label>
-          <div>End Date</div>
-          <input type="date" name="od_end_date" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        </label>
-      </div>
-
-      <div style="margin-top:16px;padding:12px;background:#e0f2fe;border-radius:8px;border:1px solid #7dd3fc">
-        <div style="font-weight:600;margin-bottom:8px;color:#0369a1">How do you want to specify pricing?</div>
-        <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
-          <input type="radio" name="od_pricing_mode" value="items" checked onchange="toggleOnDemandPricingMode()" style="margin-top:3px">
-          <div>
-            <div style="font-weight:600;color:#374151">Use Line Items</div>
-            <div style="font-size:13px;color:#6b7280">Add individual items with quantities and prices</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
-          <input type="radio" name="od_pricing_mode" value="flat" onchange="toggleOnDemandPricingMode()" style="margin-top:3px">
-          <div>
-            <div style="font-weight:600;color:#374151">Flat Amount</div>
-            <div style="font-size:13px;color:#6b7280">Enter a single amount without itemized details</div>
-          </div>
-        </label>
-      </div>
-
-      <div id="onDemandFlatAmount" style="display:none;margin-top:12px">
-        <label>
-          <div>Quote Amount * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
-          <input id="onDemandAmountInput" type="number" step="0.01" name="od_flat_amount" placeholder="0.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
-        </label>
-      </div>
-
-      <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:13px">
-        <strong>ℹ️ Note:</strong> On-demand quotes allow you to generate invoices manually as needed. No recurring billing schedule is set.
-      </div>
-    </div>
-
     <!-- Items input -->
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items</div>
@@ -356,5 +301,5 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
   </form>
 </section>
 
-<script src="js/quotes-create-logic.js" defer></script>
-<script src="js/client-selection-dropdown-logic.js" defer></script>
+<script src="/assets/js/quotes-create-logic.js" defer></script>
+<script src="/assets/js/client-selection-dropdown-logic.js" defer></script>

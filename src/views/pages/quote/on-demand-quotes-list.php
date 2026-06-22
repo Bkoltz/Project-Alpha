@@ -14,7 +14,7 @@ $doc_no = isset($_GET['doc_number']) ? (int)$_GET['doc_number'] : 0;
 $min_price = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
 $max_price = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
 
-$where=['q.is_on_demand=1'];$p=[];
+$where=['q.quote_type = "on_demand"'];$p=[];
 if($client_id>0){$where[]='q.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='q.status=?'; $p[] = $status; }
@@ -46,6 +46,13 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
   <?php endif; ?>
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+  <?php endif; ?>
+  <?php
+  $flash = $_SESSION['flash_quote_approve'] ?? null;
+  unset($_SESSION['flash_quote_approve']);
+  ?>
+  <?php if ($flash): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1"><?php echo htmlspecialchars($flash['message']); ?></div>
   <?php endif; ?>
 
   <?php

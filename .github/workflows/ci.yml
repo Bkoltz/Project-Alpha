@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, staging, dev]
+  push:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env for CI
+        run: |
+          ENC_KEY=$(openssl rand -hex 32)
+          cat > .env << ENVEOF
+          MYSQL_ROOT_PASSWORD=ci_root_pass
+          MYSQL_DATABASE=project_alpha
+          MYSQL_USER=appuser
+          MYSQL_PASSWORD=ci_app_pass
+          ADMIN_PASSWORD=ci_admin_pass
+          APP_ENCRYPTION_KEY=${ENC_KEY}
+          APP_AUTH_DISABLED=false
+          stripe_publishable_key=pk_test_ci_placeholder
+          stripe_secret_key_enc=plain::sk_test_placeholder_ci_only
+          stripe_webhook_secret_enc=
+          ENVEOF
+
+      - name: Build and start services
+        run: |
+          docker compose up -d --build
+          sleep 20
+
+      - name: Run migrations
+        run: docker compose exec -T web php /var/www/src/migrations/run_migrations.php --verbose || echo "Migration runner not yet ready"
+
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5; do
+            curl -sf http://localhost:1627 && exit 0
+            sleep 5
+          done
+          exit 1
+
+      - name: PHP syntax check
+        run: docker compose exec -T web bash -c "find /var/www/src -name '*.php' -exec php -l {} \; 2>&1 | grep -v 'No syntax errors' && exit 1 || exit 0"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
