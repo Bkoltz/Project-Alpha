@@ -52,9 +52,74 @@ services:
       - mysql_socket:/var/run/mysqld
 
   cron:
+    # TrueNAS Scale compatibility: embed the Dockerfile and all helper files
+    # (composer.json, crontab, entrypoint.sh) inline so no external ./cron build
+    # context is required. TrueNAS only copies top-level compose files, not subdirs.
     build:
-      context: ./cron
-      dockerfile: Dockerfile
+      dockerfile_inline: |
+        # ---------- Stage 1: Install PHP dependencies with Composer ----------
+        FROM php:8.3-cli AS vendor
+        WORKDIR /app
+
+        RUN echo 'ewogICJuYW1lIjogImJrb2x0ei9wcm9qZWN0LWFscGhhLWNyb24iLAogICJkZXNjcmlwdGlvbiI6ICJDcm9uIHNlcnZpY2UgZm9yIFByb2plY3QgQWxwaGEg4oCTIHNjaGVkdWxlZCB0YXNrcyAoaW52b2ljZXMsIHJlbWluZGVycywgcmVjb25jaWxpYXRpb24pIiwKICAidHlwZSI6ICJwcm9qZWN0IiwKICAibGljZW5zZSI6ICJNSVQiLAogICJyZXF1aXJlIjogewogICAgInBocCI6ICI+PTguMSIsCiAgICAiZXh0LXBkbyI6ICIqIiwKICAgICJleHQtY3VybCI6ICIqIiwKICAgICJleHQtb3BlbnNzbCI6ICIqIiwKICAgICJwaHBtYWlsZXIvcGhwbWFpbGVyIjogIl42LjkiCiAgfSwKICAiYXV0b2xvYWQiOiB7CiAgICAicHNyLTQiOiB7CiAgICAgICJBcHBcXCI6ICJzcmMvIgogICAgfQogIH0KfQo=' | base64 -d > composer.json
+
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+                git curl unzip zip zlib1g-dev libzip-dev \
+            && rm -rf /var/lib/apt/lists/* \
+            && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+            && docker-php-ext-install -j"$(nproc)" zip
+
+        RUN composer install \
+            --no-dev \
+            --prefer-dist \
+            --no-progress \
+            --no-interaction \
+            --optimize-autoloader
+
+        # ---------- Stage 2: Runtime image ----------
+        FROM php:8.3-cli
+
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+                default-mysql-client \
+                cron \
+                curl \
+            && rm -rf /var/lib/apt/lists/*
+
+        # PHP extensions required by the cron scripts
+        RUN docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli
+
+        WORKDIR /var/www
+
+        # NOTE: Application source is provided via volume mount from docker-compose.yml:
+        #   - ./src:/var/www/src
+        # This eliminates cron/src/ duplication — the cron container shares the same
+        # src/ tree as the web container. Do NOT COPY source files here.
+
+        # Copy Composer vendor from the builder stage
+        COPY --from=vendor /app/vendor /var/www/vendor
+
+        # Set proper permissions
+        RUN chown -R root:root /var/www && chmod -R 755 /var/www
+
+        # Create log directory and files for each cron job
+        RUN mkdir -p /var/log/cron && \
+            touch /var/log/cron/generate_recurring_invoices.log \
+                  /var/log/cron/auto_charge_recurring.log \
+                  /var/log/cron/send_invoice_reminders.log \
+                  /var/log/cron/auto_terminate_contracts.log \
+                  /var/log/cron/link_expiration_checker.log \
+                  /var/log/cron/stripe_reconciliation.log && \
+            chmod 666 /var/log/cron/*.log
+
+        # Install crontab into /etc/cron.d/ (requires user field in each entry)
+        RUN echo 'IyBQcm9qZWN0IEFscGhhIGNyb24gam9icwojIEVudmlyb25tZW50IHZhcmlhYmxlcyBhcmUgd3JpdHRlbiB0byAvZXRjL2Vudmlyb25tZW50IGJ5IGVudHJ5cG9pbnQuc2gKIyBzbyB0aGV5IGFyZSBhdmFpbGFibGUgdG8gY3JvbiBqb2JzIHZpYSB0aGUgc2hlbGwgd3JhcHBlciBiZWxvdy4KClNIRUxMPS9iaW4vYmFzaAoKIyBVbmlmaWVkIGxvZyBmaWxlIGZvciBhbGwgY3JvbiBqb2JzCkNST05fTE9HPS92YXIvd3d3L2xvZ3MvY3Jvbi5sb2cKCiMgR2VuZXJhdGUgcmVjdXJyaW5nIGludm9pY2VzIC0gZGFpbHkgYXQgMjowMCBBTSBVVEMKMCAyICogKiAqIHJvb3QgLiAvZXRjL2Vudmlyb25tZW50ICYmIHBocCAvdmFyL3d3dy9zcmMvY3Jvbi9nZW5lcmF0ZV9yZWN1cnJpbmdfaW52b2ljZXMucGhwID4+ICRDUk9OX0xPRyAyPiYxCgojIEF1dG8tY2hhcmdlIGVsaWdpYmxlIHJlY3VycmluZyBpbnZvaWNlcyAtIGRhaWx5IGF0IDI6MTUgQU0gVVRDCjE1IDIgKiAqICogcm9vdCAuIC9ldGMvZW52aXJvbm1lbnQgJiYgcGhwIC92YXIvd3d3L3NyYy9jcm9uL2F1dG9fY2hhcmdlX3JlY3VycmluZy5waHAgPj4gJENST05fTE9HIDI+JjEKCiMgRGFpbHkgZGF0YWJhc2UgYmFja3VwIC0gYXQgMjozMCBBTSBVVEMgKGFmdGVyIHJlY3VycmluZyBpbnZvaWNlcykKMzAgMiAqICogKiByb290IC4gL2V0Yy9lbnZpcm9ubWVudCAmJiBwaHAgL3Zhci93d3cvc3JjL2Nyb24vYmFja3VwX2RhdGFiYXNlLnBocCA+PiAkQ1JPTl9MT0cgMj4mMQoKIyBBdXRvLXRlcm1pbmF0ZSBleHBpcmVkIGNvbnRyYWN0cyAtIGRhaWx5IGF0IDM6MDAgQU0gVVRDCjAgMyAqICogKiByb290IC4gL2V0Yy9lbnZpcm9ubWVudCAmJiBwaHAgL3Zhci93d3cvc3JjL2Nyb24vYXV0b190ZXJtaW5hdGVfY29udHJhY3RzLnBocCA+PiAkQ1JPTl9MT0cgMj4mMQoKIyBDaGVjayBhbmQgZXhwaXJlIGxpbmtzIC0gZGFpbHkgYXQgNDowMCBBTSBVVEMKMCA0ICogKiAqIHJvb3QgLiAvZXRjL2Vudmlyb25tZW50ICYmIHBocCAvdmFyL3d3dy9zcmMvY3Jvbi9saW5rX2V4cGlyYXRpb25fY2hlY2tlci5waHAgPj4gJENST05fTE9HIDI+JjEKCiMgUHJvY2VzcyBhdWRpdCBzY2hlZHVsZXMgLSBkYWlseSBhdCA2OjAwIEFNIFVUQwowIDYgKiAqICogcm9vdCAuIC9ldGMvZW52aXJvbm1lbnQgJiYgcGhwIC92YXIvd3d3L3NyYy9jcm9uL3Byb2Nlc3NfYXVkaXRfc2NoZWR1bGVzLnBocCA+PiAkQ1JPTl9MT0cgMj4mMQoKIyBTZW5kIGludm9pY2UgcmVtaW5kZXJzIChkdWUtNyBhbmQgb3ZlcmR1ZS13ZWVrbHkpIC0gZGFpbHkgYXQgODowMCBBTSBVVEMKMCA4ICogKiAqIHJvb3QgLiAvZXRjL2Vudmlyb25tZW50ICYmIHBocCAvdmFyL3d3dy9zcmMvY3Jvbi9zZW5kX2ludm9pY2VfcmVtaW5kZXJzLnBocCA+PiAkQ1JPTl9MT0cgMj4mMQoKIyBTdHJpcGUgcGF5bWVudCByZWNvbmNpbGlhdGlvbiAtIGV2ZXJ5IDYgaG91cnMKMCAqLzYgKiAqICogcm9vdCAuIC9ldGMvZW52aXJvbm1lbnQgJiYgcGhwIC92YXIvd3d3L3NyYy9jcm9uL3N0cmlwZV9yZWNvbmNpbGlhdGlvbi5waHAgPj4gJENST05fTE9HIDI+JjEKCiMgUmVxdWlyZWQgYmxhbmsgbGluZSBhdCBlbmQgb2YgY3JvbnRhYgo=' | base64 -d > /etc/cron.d/project-alpha
+        RUN sed -i 's/\r$//' /etc/cron.d/project-alpha && chmod 0644 /etc/cron.d/project-alpha
+
+        # Entrypoint script (waits for DB, exports env vars, starts cron)
+        RUN echo 'IyEvdXNyL2Jpbi9lbnYgYmFzaApzZXQgLWV1byBwaXBlZmFpbAoKIyBBdXRvLWdlbmVyYXRlIG9yIGxvYWQgZW5jcnlwdGlvbiBrZXkgaWYgbm90IHByb3ZpZGVkIChzYW1lIGxvZ2ljIGFzIHdlYiBzdGFydC5zaCkKQ09ORklHX0RJUj0iL3Zhci93d3cvY29uZmlnIgppZiBbIC16ICIke0FQUF9FTkNSWVBUSU9OX0tFWTotfSIgXTsgdGhlbgogIEtFWV9GSUxFPSIke0NPTkZJR19ESVJ9Ly5lbmNyeXB0aW9uX2tleSIKICBpZiBbIC1mICIkS0VZX0ZJTEUiIF07IHRoZW4KICAgIGV4cG9ydCBBUFBfRU5DUllQVElPTl9LRVk9IiQoY2F0ICIkS0VZX0ZJTEUiKSIKICBlbHNlCiAgICAjIENyb24gY29udGFpbmVyIG1pZ2h0IHN0YXJ0IGJlZm9yZSB3ZWIgZ2VuZXJhdGVzIHRoZSBrZXkKICAgICMgR2VuZXJhdGUgYSB0ZW1wb3Jhcnkgb25lIOKAlCB0aGUgd2ViIGNvbnRhaW5lcidzIGtleSB3aWxsIHRha2UgcHJlY2VkZW5jZQogICAgIyBzaW5jZSBhcHBfY29uZmlnIHN0b3JlcyB0aGUgZW5jcnlwdGVkIHZhbHVlcywgbm90IHRoZSBjcm9uIGNvbnRhaW5lcgogICAgZXhwb3J0IEFQUF9FTkNSWVBUSU9OX0tFWT0iJChwaHAgLXIgJ2VjaG8gYmFzZTY0X2VuY29kZShyYW5kb21fYnl0ZXMoMzIpKTsnKSIKICBmaQpmaQoKIyDilIDilIAgRXhwb3J0IGVudmlyb25tZW50IHZhcmlhYmxlcyBzbyBjcm9uIGpvYnMgY2FuIGFjY2VzcyB0aGVtIOKUgOKUgAojIENyb24gZG9lcyBOT1QgaW5oZXJpdCB0aGUgY29udGFpbmVyJ3MgZW52IHZhcnMsIHNvIHdlIGR1bXAgdGhlbQojIHRvIC9ldGMvZW52aXJvbm1lbnQgd2hpY2ggZWFjaCBjcm9uIGpvYiBzb3VyY2VzIGJlZm9yZSBydW5uaW5nLgpwcmludGVudiB8IGdyZXAgLUUgJ14oTVlTUUxffERCX3xBUFBffFNUUklQRV98U01UUF8pJyB8IHNlZCAncy89XCguKlwpLz0iXDEiLycgPiAvZXRjL2Vudmlyb25tZW50CgojIOKUgOKUgCBDcmVhdGUgbG9nIGRpcmVjdG9yeSBpZiBpdCBkb2Vzbid0IGV4aXN0IOKUgOKUgApMT0dfRElSPSIvdmFyL3d3dy9sb2dzIgppZiBbICEgLWQgIiRMT0dfRElSIiBdOyB0aGVuCiAgICBta2RpciAtcCAiJExPR19ESVIiCiAgICBlY2hvICJbY3Jvbi1lbnRyeXBvaW50XSBDcmVhdGVkIGxvZyBkaXJlY3Rvcnk6ICRMT0dfRElSIgpmaQoKIyBFbnN1cmUgbG9nIGRpcmVjdG9yeSBpcyB3cml0YWJsZQpjaG1vZCA3NzUgIiRMT0dfRElSIgoKIyBDcmVhdGUgc3ltbGluayBmb3IgbGVnYWN5IGNyb24gbG9nIGRpcmV0b3J5IGlmIG5lZWRlZApMRUdBQ1lfTE9HX0RJUj0iL3Zhci9sb2cvY3JvbiIKaWYgWyAhIC1kICIkTEVHQUNZX0xPR19ESVIiIF07IHRoZW4KICAgIG1rZGlyIC1wICIkTEVHQUNZX0xPR19ESVIiCmZpCgojIFNldCB1cCBsb2cgcmVkaXJlY3Rpb246IGNyb24gam9iIG91dHB1dCBnb2VzIHRvIGJvdGggbGVnYWN5IGxvY2F0aW9uIGFuZCB1bmlmaWVkIGxvZwojIFRoaXMgaXMgaGFuZGxlZCBpbiB0aGUgY3JvbnRhYiBieSByZWRpcmVjdGluZyBvdXRwdXQgdG8gdGhlIGxvZyBmaWxlCgojIOKUgOKUgCBXYWl0IGZvciB0aGUgZGF0YWJhc2UgdG8gYmVjb21lIGF2YWlsYWJsZSDilIDilIAKREJfSE9TVD0iJHtEQl9IT1NUOi1kYn0iCkRCX1BPUlQ9IiR7REJfUE9SVDotMzMwNn0iClJFVFJJRVM9NjAKV0FJVD0yCgplY2hvICJbY3Jvbi1lbnRyeXBvaW50XSBXYWl0aW5nIGZvciBEQiBhdCAke0RCX0hPU1R9OiR7REJfUE9SVH0uLi4iCgpjb3VudGVyPTAKd2hpbGUgWyAkY291bnRlciAtbHQgJFJFVFJJRVMgXTsgZG8KICBpZiBjb21tYW5kIC12IG15c3FsYWRtaW4gPiAvZGV2L251bGwgMj4mMTsgdGhlbgogICAgbXlzcWxhZG1pbiBwaW5nIFwKICAgICAgLVMgL3Zhci9ydW4vbXlzcWxkL215c3FsZC5zb2NrIFwKICAgICAgLXUiIiR7TVlTUUxfVVNFUjotcm9vdH0iIFwKICAgICAgLS1wYXNzd29yZD0iJHtNWVNRTF9QQVNTV09SRDotJHtNWVNRTF9ST09UX1BBU1NXT1JEOi1yb290cGFzc319IiBcCiAgICAgIC0tc2lsZW50ID4gL2Rldi9udWxsIDI+JjEgJiYgewogICAgICBlY2hvICJbY3Jvbi1lbnRyeXBvaW50XSBEQiBpcyByZWFkeS4iCiAgICAgIGJyZWFrCiAgICB9CiAgZWxzZQogICAgKGVjaG8gPiAvZGV2L3RjcC8ke0RCX0hPU1R9LyR7REJfUE9SVH0pID4gL2Rldi9udWxsIDI+JjEgJiYgewogICAgICBlY2hvICJbY3Jvbi1lbnRyeXBvaW50XSBEQiBUQ1AgcG9ydCBpcyBvcGVuLiIKICAgICAgYnJlYWsKICAgIH0KICBmaQoKICBjb3VudGVyPSQoKGNvdW50ZXIgKyAxKSkKICBlY2hvICJbY3Jvbi1lbnRyeXBvaW50XSBTdGlsbCB3YWl0aW5nIGZvciBEQi4uLiAoJHtjb3V0ZXJ9LyR7UkVUUklFU30pIgogIHNsZWVwICR7V0FJVH0KZG9uZQoKaWYgWyAkY291bnRlciAtZ2UgJFJFVFJJRVMgXTsgdGhlbgogIGVjaG8gIlstZW50cnlwb2ludF0gRVJST1I6IERCIGRpZCBub3QgYmVjb21lIGF2YWlsYWJsZSBhZnRlciAkKCgkUkVUUklFUyAqIFdBSVQpKSBzZWNvbmRzLiIKICBleGl0IDEKZmkKCiDilIDilIAgU3RhcnQgY3JvbiBpbiB0aGUgZm9yZWdyb3VuZCDilIDilIAgCmVjaG8gIlstZW50cnlwb2ludF0gU3RhcnRpbmcgY3Jvbi4uLiIKZXhlYyBjcm9uIC1mCg==' | base64 -d > /usr/local/bin/entrypoint.sh
+        RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+        CMD ["entrypoint.sh"]
     environment:
       <<: *db-env
       MYSQL_PASSWORD: changeme_secure_pass
