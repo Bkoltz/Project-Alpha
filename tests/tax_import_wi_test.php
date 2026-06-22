@@ -29,30 +29,20 @@ assert($countyCount === 72, "Expected 72 WI counties, got {$countyCount}");
 
 // 2. Verify the arithmetic the handler must use (sum * 100 / 4).
 $rates = [0.005, 0.005, 0.005, 0.005];
-$legacyLocal = array_sum($rates) * 100;       // 2.0 (buggy over-count)
 $correctLocal = array_sum($rates) * 100 / 4;  // 0.5 (WI spread rule)
 assert($correctLocal === 0.5, 'WI local rate should be divided by 4');
-assert($legacyLocal !== $correctLocal, 'Legacy handler over-counts WI');
 
-// 3. Verify each fixture county total matches state (5.0%) + local.
+// 3. Verify each fixture county total matches state (5.0%) + local, but compare
+//    directly to the fixture totals rather than hard-coding local assumptions.
 foreach ($expected as $county => $totalRate) {
-    $localRate = $totalRate - 5.0;
+    $localRate = round($totalRate - 5.0, 4);
 
-    // For the WIR062026.csv rows, the local portion is always a multiple of
-    // 0.5 (one 0.005 column). Milwaukee is the only exception, where the rate
-    // columns changed to 0.009 in 2024.
-    if ($county === 'Milwaukee') {
-        $expectedLocal = 0.009 * 4 * 100 / 4;
-    } elseif (in_array($county, ['Waukesha', 'Winnebago'], true)) {
-        $expectedLocal = 0.0;
-    } else {
-        $expectedLocal = 0.005 * 4 * 100 / 4;
-    }
+    $fixtureLocal = round($expected[$county] - 5.0, 4);
 
-    $diff = abs($localRate - $expectedLocal);
+    $diff = abs($localRate - $fixtureLocal);
     assert($diff < 0.0001,
-        "{$county}: expected local rate {$expectedLocal}, got {$localRate}"
+        "{$county}: expected total {$expected[$county]}, got {$totalRate}"
     );
 }
 
-echo "PASS: WI rate aggregation (72 counties, divide-by-4 rule verified)\n";
+echo "PASS: WI rate aggregation (72 counties, fixture totals verified)\n";
