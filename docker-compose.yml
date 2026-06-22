@@ -18,8 +18,9 @@ x-db-env: &db-env
 
 services:
   web:
+    build: .
     image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
-    pull_policy: missing
+    pull_policy: if_not_present
     ports:
       - "1627:80"
     environment:
@@ -53,8 +54,11 @@ services:
       - mysql_socket:/var/run/mysqld
 
   cron:
+    build:
+      context: ./cron
+      dockerfile: Dockerfile
     image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"
-    pull_policy: missing
+    pull_policy: if_not_present
     environment:
       <<: *db-env
       MYSQL_PASSWORD: changeme_secure_pass
