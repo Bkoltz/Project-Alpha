@@ -4,6 +4,11 @@
 
 require_once __DIR__ . '/db.php';
 
+// Load globally-available utility helpers
+require_once __DIR__ . '/../utils/escaper.php';
+require_once __DIR__ . '/../utils/security_headers.php';
+require_once __DIR__ . '/../utils/rate_limiter.php';
+
 try {
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS users (

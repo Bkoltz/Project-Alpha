@@ -45,6 +45,13 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
   <?php endif; ?>
   <?php
+  $flash = $_SESSION['flash_quote_approve'] ?? null;
+  unset($_SESSION['flash_quote_approve']);
+  ?>
+  <?php if ($flash): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1"><?php echo htmlspecialchars($flash['message']); ?></div>
+  <?php endif; ?>
+  <?php
   $filterConfig = [
       'page' => 'quote/long-term-quotes-list',
       'filters' => [

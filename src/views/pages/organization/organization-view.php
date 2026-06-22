@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/organization/organization-view.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare('SELECT * FROM organizations WHERE id = ?');
@@ -94,16 +95,16 @@ $availableClients = $availableStmt->fetchAll();
           ?>
           <?php if ($isPdf): ?>
             <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
-              <embed src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" type="application/pdf" width="100%" height="350px" />
+              <embed src="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" type="application/pdf" width="100%" height="350px" />
             </div>
           <?php else: ?>
             <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
-              <img src="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" style="width:100%;height:auto" alt="Tax Exempt Form" />
+              <img src="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" style="width:100%;height:auto" alt="Tax Exempt Form" />
             </div>
           <?php endif; ?>
           <div style="display:flex;gap:8px;margin-top:8px;font-size:small">
-            <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" target="_blank" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">View Full</a>
-            <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" download style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">Download</a>
+            <a href="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" target="_blank" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">View Full</a>
+            <a href="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" download style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">Download</a>
           </div>
           <?php if (!empty($org['tax_exempt_uploaded_at'])): ?>
             <div style="font-size:small;color:var(--muted);margin-top:8px">Uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['tax_exempt_uploaded_at']))); ?></div>
@@ -148,7 +149,7 @@ $availableClients = $availableStmt->fetchAll();
                 <td style="padding:10px"><?php echo htmlspecialchars($client['email'] ?? ''); ?></td>
                 <td style="padding:10px"><?php echo htmlspecialchars($client['phone'] ?? ''); ?></td>
                 <td style="padding:10px">
-                  <form method="post" action="/?page=organization/organization-remove-client" style="display:inline" onsubmit="return confirm('Remove <?php echo addslashes($client['name']); ?> from this organization?')">
+                  <form method="post" action="/?page=organization/organization-remove-client" style="display:inline" onsubmit="return confirm('Remove <?php echo e(substr(json_encode((string)$client['name'], JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS), 1, -1)); ?> from this organization?')">
                     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
                     <input type="hidden" name="client_id" value="<?php echo (int)$client['id']; ?>">
                     <input type="hidden" name="organization_id" value="<?php echo $id; ?>">
@@ -166,7 +167,7 @@ $availableClients = $availableStmt->fetchAll();
 
 <script>
   const orgId = <?php echo $id; ?>;
-  const availableClients = <?php echo json_encode($availableClients); ?>;
+  const availableClients = <?php echo json_encode($availableClients, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 </script>
 
 <script src="/assets/js/organization-view-logic.js" defer></script>

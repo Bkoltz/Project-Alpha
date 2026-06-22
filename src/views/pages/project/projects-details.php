@@ -2,6 +2,7 @@
 // src/views/pages/project/projects-details.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
 
@@ -140,12 +141,12 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Quotes (<?php echo count($quotes); ?>)</h3>
                     <div class="grid">
                         <?php foreach ($quotes as $quote): ?>
-                        <a href="/?page=quote/quote-details&id=<?php echo $quote['id']; ?>" 
+                        <a href="/?page=quote/quote-details&id=<?php echo (int)$quote['id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
-                                <div class="font-600">Quote #<?php echo $quote['doc_number'] ?? $quote['id']; ?></div>
+                                <div class="font-600">Quote #<?php echo e($quote['doc_number'] ?? $quote['id']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
-                                    <?php echo ucfirst($quote['status']); ?> · 
+                                    <?php echo e(ucfirst($quote['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($quote['created_at'])); ?>
                                 </div>
                             </div>
@@ -164,12 +165,12 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Contracts (<?php echo count($contracts); ?>)</h3>
                     <div class="grid">
                         <?php foreach ($contracts as $contract): ?>
-                        <a href="/?page=contract/contract-details&id=<?php echo $contract['id']; ?>" 
+                        <a href="/?page=contract/contract-details&id=<?php echo (int)$contract['id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
-                                <div class="font-600">Contract #<?php echo $contract['doc_number'] ?? $contract['id']; ?></div>
+                                <div class="font-600">Contract #<?php echo e($contract['doc_number'] ?? $contract['id']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
-                                    <?php echo ucfirst($contract['status']); ?> · 
+                                    <?php echo e(ucfirst($contract['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($contract['created_at'])); ?>
                                 </div>
                             </div>
@@ -188,12 +189,12 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Invoices (<?php echo count($invoices); ?>)</h3>
                     <div class="grid">
                         <?php foreach ($invoices as $invoice): ?>
-                        <a href="/?page=invoice/invoice-details&id=<?php echo $invoice['id']; ?>" 
+                        <a href="/?page=invoice/invoice-details&id=<?php echo (int)$invoice['id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
-                                <div class="font-600">Invoice #<?php echo $invoice['doc_number'] ?? $invoice['id']; ?></div>
+                                <div class="font-600">Invoice #<?php echo e($invoice['doc_number'] ?? $invoice['id']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
-                                    <?php echo ucfirst($invoice['status']); ?> · 
+                                    <?php echo e(ucfirst($invoice['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($invoice['created_at'])); ?>
                                 </div>
                             </div>
@@ -212,7 +213,7 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Files (<?php echo count($formDocuments); ?>)</h3>
                     <div class="grid">
                         <?php foreach ($formDocuments as $doc): ?>
-                        <a href="/?page=financial/form-detail&id=<?php echo $doc['category_id']; ?>" 
+                        <a href="/?page=financial/form-detail&id=<?php echo (int)$doc['category_id']; ?>" 
                            style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
                             <div>
                                 <div class="font-600"><?php echo htmlspecialchars($doc['file_name']); ?></div>
@@ -222,7 +223,7 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                                 </div>
                             </div>
                             <div style="font-size:13px;color:var(--muted)">
-                                <?php echo strtoupper(pathinfo($doc['file_path'], PATHINFO_EXTENSION)); ?>
+                                <?php echo e(strtoupper(pathinfo($doc['file_path'], PATHINFO_EXTENSION))); ?>
                             </div>
                         </a>
                         <?php endforeach; ?>

@@ -1,8 +1,98 @@
 <?php
 /**
- * Upload validation utilities for Project Alpha.
+ * Validate an uploaded file and return a safe filename + extension on success.
  *
+ * This is the preferred central upload entry point. It performs:
+ *   - upload error / source checks
+ *   - size validation
+ *   - real MIME detection via finfo
+ *   - extension allow-list matching against the detected MIME
+ *   - optional ClamAV malware scan
+ *   - generation of a random, collision-resistant target filename
+ *
+ * @param array      $file         The $_FILES entry for the upload.
+ * @param array      $allowedMap   Map of allowed MIME type => extension(s). Extension may be
+ *                                 a string or an array of accepted extensions for that MIME.
+ * @param int        $maxBytes     Maximum allowed file size in bytes (default 8 MB).
+ * @param string     $targetDir    Directory where the file will be stored (must exist/be writable).
+ * @param string|null $error       Populated with an error message on failure.
+ * @return string|null The generated safe filename on success, or null on failure.
+ */
+function validate_and_store_upload(
+    array $file,
+    array $allowedMap,
+    int $maxBytes,
+    string $targetDir,
+    ?string &$error = null
+): ?string {
+    if (!isset($file['error'])) {
+        $error = 'No upload data provided';
+        return null;
+    }
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $error = 'Upload failed with error code ' . $file['error'];
+        return null;
+    }
+
+    if ($file['size'] > $maxBytes) {
+        $error = 'File too large (max ' . round($maxBytes / 1024 / 1024, 1) . 'MB)';
+        return null;
+    }
+
+    if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+        $error = 'Invalid upload source';
+        return null;
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($file['tmp_name']);
+
+    if (!array_key_exists($mime, $allowedMap)) {
+        $error = 'Invalid file type';
+        return null;
+    }
+
+    $allowedExts = $allowedMap[$mime];
+    $exts = is_array($allowedExts) ? $allowedExts : [$allowedExts];
+
+    $originalExt = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+    if (!in_array($originalExt, $exts, true)) {
+        $error = 'Invalid file extension';
+        return null;
+    }
+
+    $clamavError = scan_clamav($file['tmp_name']);
+    if ($clamavError !== null) {
+        $error = $clamavError;
+        return null;
+    }
+
+    if (!is_dir($targetDir)) {
+        @mkdir($targetDir, 0755, true);
+    }
+    if (!is_dir($targetDir) || !is_writable($targetDir)) {
+        $error = 'Upload storage directory is not writable';
+        return null;
+    }
+
+    $safeExt = $exts[0];
+    $filename = time() . '_' . bin2hex(random_bytes(8)) . '.' . $safeExt;
+    $targetPath = rtrim($targetDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename;
+
+    if (!@move_uploaded_file($file['tmp_name'], $targetPath)) {
+        $error = 'Failed to save uploaded file';
+        return null;
+    }
+
+    return $filename;
+}
+
+/**
  * Validates an uploaded file for upload errors, size limits, and MIME type.
+ *
+ * @deprecated Use validate_and_store_upload() for new code. This function is
+ *             kept only for backward compatibility with legacy call sites.
  *
  * @param array  $file        The $_FILES entry for the upload.
  * @param array  $allowedMimes Allowed MIME types.
@@ -11,36 +101,9 @@
  */
 function validate_upload(array $file, array $allowedMimes, int $maxBytes = 5 * 1024 * 1024): ?string
 {
-    if (!isset($file['error'])) {
-        return 'No upload data provided';
-    }
-
-    if ($file['error'] !== UPLOAD_ERR_OK) {
-        return 'Upload failed with error code ' . $file['error'];
-    }
-
-    if ($file['size'] > $maxBytes) {
-        return 'File too large (max ' . round($maxBytes / 1024 / 1024, 1) . 'MB)';
-    }
-
-    if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
-        return 'Invalid upload source';
-    }
-
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($file['tmp_name']);
-
-    if (!in_array($mime, $allowedMimes, true)) {
-        return 'Invalid file type. Allowed: ' . implode(', ', $allowedMimes);
-    }
-
-    // Optional malware scan via ClamAV daemon (fails open if unavailable)
-    $clamavError = scan_clamav($file['tmp_name']);
-    if ($clamavError !== null) {
-        return $clamavError;
-    }
-
-    return null;
+    $error = null;
+    validate_and_store_upload($file, array_fill_keys($allowedMimes, ['bin']), $maxBytes, sys_get_temp_dir(), $error);
+    return $error;
 }
 
 /**

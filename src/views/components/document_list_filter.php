@@ -199,9 +199,9 @@ if ($hasClientAutocomplete || $hasProjectAutocomplete):
 (function() {
     <?php if ($hasClientAutocomplete): ?>
     // Client autocomplete
-    var clientInput = document.getElementById('<?php echo $instanceId; ?>_client_input');
-    var clientHid = document.getElementById('<?php echo $instanceId; ?>_client_id');
-    var clientSug = document.getElementById('<?php echo $instanceId; ?>_client_suggest');
+    var clientInput = document.getElementById('<?php echo e($instanceId); ?>_client_input');
+    var clientHid = document.getElementById('<?php echo e($instanceId); ?>_client_id');
+    var clientSug = document.getElementById('<?php echo e($instanceId); ?>_client_suggest');
     
     if (clientInput && clientHid && clientSug) {
         clientInput.addEventListener('input', function() {
@@ -256,8 +256,8 @@ if ($hasClientAutocomplete || $hasProjectAutocomplete):
     
     <?php if ($hasProjectAutocomplete): ?>
     // Project autocomplete
-    var projectInput = document.getElementById('<?php echo $instanceId; ?>_project_input');
-    var projectSug = document.getElementById('<?php echo $instanceId; ?>_project_suggest');
+    var projectInput = document.getElementById('<?php echo e($instanceId); ?>_project_input');
+    var projectSug = document.getElementById('<?php echo e($instanceId); ?>_project_suggest');
     
     if (projectInput && projectSug) {
         projectInput.addEventListener('input', function() {

@@ -5,6 +5,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 
 // Require admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -54,7 +55,7 @@ $error = $_GET['error'] ?? '';
   <?php elseif ($success === 'updated'): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">User updated successfully.</div>
   <?php elseif (!empty($error)): ?>
-    <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+    <div class="alert alert-danger"><?php echo e($error); ?></div>
   <?php endif; ?>
 
   <div style="display:grid;gap:24px;grid-template-columns:1fr 1fr;align-items:start;">
@@ -62,17 +63,17 @@ $error = $_GET['error'] ?? '';
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
       <h3 style="margin-top:0">Account Details</h3>
       <form method="post" action="/?page=accounts-update" style="display:grid;gap:12px;">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-        <input type="hidden" name="user_id" value="<?php echo $userId; ?>">
+        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+        <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
 
         <label>
           <div style="margin-bottom:4px;font-weight:600">Email *</div>
-          <input required type="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
+          <input required type="email" name="email" value="<?php echo e($user['email']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
         </label>
 
         <label>
           <div style="margin-bottom:4px;font-weight:600">Username</div>
-          <input type="text" name="username" value="<?php echo htmlspecialchars($user['username'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
+          <input type="text" name="username" value="<?php echo e($user['username'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
         </label>
 
         <label>
@@ -110,8 +111,8 @@ $error = $_GET['error'] ?? '';
         </p>
         <?php if ($twofaEnabled): ?>
           <form method="post" action="/?page=2fa-admin-disable" onsubmit="return confirm('This will remove the authenticator requirement for this user. Are you sure?')" style="margin-top:8px;">
-            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-            <input type="hidden" name="user_id" value="<?php echo $userId; ?>">
+            <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+            <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
             <button type="submit" style="padding:8px 14px;border-radius:6px;border:1px solid #dc2626;background:#fee2e2;color:#dc2626;font-size:14px;cursor:pointer;font-weight:600;">Disable 2FA for this user</button>
           </form>
         <?php else: ?>
@@ -122,8 +123,8 @@ $error = $_GET['error'] ?? '';
       <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
         <h3 style="margin-top:0">Reset Password</h3>
         <form method="post" action="/?page=accounts-reset-password" style="display:grid;gap:12px;margin-top:12px;">
-          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-          <input type="hidden" name="user_id" value="<?php echo $userId; ?>">
+          <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+          <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
           <label>
             <div style="margin-bottom:4px;font-weight:600">New Password</div>
             <input required minlength="8" type="password" name="new_password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;" placeholder="Min 8 characters">
@@ -140,8 +141,8 @@ $error = $_GET['error'] ?? '';
         <h3 style="margin-top:0;color:#991b1b">Danger Zone</h3>
         <p style="color:#6b7280;font-size:14px;margin:8px 0 16px;">Permanently delete this user account. Quotes, invoices, contracts, and other business records will remain in the system and are not affected.</p>
         <form method="post" action="/?page=accounts-delete" onsubmit="return confirm('Are you sure you want to permanently delete this user? This cannot be undone. Related business records will NOT be deleted.')">
-          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-          <input type="hidden" name="user_id" value="<?php echo $userId; ?>">
+          <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+          <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:1px solid #dc2626;background:#fee2e2;color:#dc2626;font-weight:600;cursor:pointer;">Delete User Account</button>
         </form>
       </div>

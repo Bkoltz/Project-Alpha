@@ -89,31 +89,23 @@ try {
         throw new Exception('This contract is no longer active');
     }
     
-    // Generate unique filename
-    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
-        $ext = $mimeType === 'application/pdf' ? 'pdf' : 'jpg';
+    // Build allowed MIME → extension map for signed contracts.
+    $allowedMap = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png',
+                   'image/gif' => 'gif', 'image/webp' => 'webp'];
+
+    // Centralized validation, malware scan, and secure storage.
+    $uploadDir = __DIR__ . '/../../uploads/signed_contracts';
+    $filename = validate_and_store_upload(
+        $file,
+        $allowedMap,
+        10 * 1024 * 1024,
+        $uploadDir,
+        $uploadError
+    );
+    if ($filename === null) {
+        throw new Exception($uploadError ?: 'Failed to store uploaded file');
     }
-    $filename = 'signed_contract_' . $contractId . '_' . time() . '.' . $ext;
-    
-    // Determine upload directory - use src/uploads/signed_contracts
-    $baseUploads = realpath(__DIR__ . '/../../uploads');
-    if (!$baseUploads) {
-        $baseUploads = __DIR__ . '/../../uploads';
-    }
-    $uploadDir = $baseUploads . DIRECTORY_SEPARATOR . 'signed_contracts';
-    
-    if (!is_dir($uploadDir)) {
-        @mkdir($uploadDir, 0755, true);
-    }
-    
-    $destPath = rtrim($uploadDir, '/\\') . DIRECTORY_SEPARATOR . $filename;
-    
-    // Move uploaded file
-    if (!move_uploaded_file($file['tmp_name'], $destPath)) {
-        throw new Exception('Failed to save file');
-    }
-    
+
     // Build the file URL - serve from signed_contracts subdirectory
     $fileUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $filename);
     

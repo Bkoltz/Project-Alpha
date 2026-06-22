@@ -76,6 +76,9 @@ $settings = [
     // App extras
     'primary_state' => null,
     'documents_valid_days' => 14,
+    // Quote auto-create on approval (default enabled)
+    'quote_auto_create_contract' => 1,
+    'quote_auto_create_invoice' => 1,
     // Automatic invoice email settings
     'invoice_auto_send_due_7days' => 0,
     'invoice_auto_send_overdue_weekly' => 0,

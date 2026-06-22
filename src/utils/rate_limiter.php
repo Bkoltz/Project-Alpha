@@ -4,17 +4,18 @@
  *
  * Tracks requests per IP/key combination in a sliding window. On DB failure
  * it degrades gracefully and allows the request through so public links are
- * never hard-broken by transient DB issues.
+ * never hard-broken by transient DB issues, unless $failOpen is false.
  *
  * @param PDO $pdo Database connection
  * @param string $key Logical action key (e.g. 'public_doc')
  * @param int $maxAttempts Maximum allowed attempts in the window
  * @param int $windowSeconds Window length in seconds
+ * @param bool $failOpen If false, deny on DB failure instead of allowing
  * @return bool True if the request is allowed, false if rate limited
  */
 require_once __DIR__ . '/client_ip.php';
 
-function rate_limit_check(PDO $pdo, string $key, int $maxAttempts = 10, int $windowSeconds = 60): bool
+function rate_limit_check(PDO $pdo, string $key, int $maxAttempts = 10, int $windowSeconds = 60, bool $failOpen = true): bool
 {
     $clientIp = get_client_ip();
     $identifier = $clientIp . ':' . $key;
@@ -44,7 +45,8 @@ function rate_limit_check(PDO $pdo, string $key, int $maxAttempts = 10, int $win
 
         return true;
     } catch (Throwable $e) {
-        // Graceful degradation: allow request if rate-limit data is unavailable
-        return true;
+        // Graceful degradation only for public-link style usage. Critical
+        // auth/admin routes should call with $failOpen = false.
+        return $failOpen;
     }
 }

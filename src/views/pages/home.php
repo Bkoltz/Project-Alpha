@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/escaper.php';
 
 // ------------------------------------------------------------------
 // Data queries
@@ -468,7 +469,7 @@ if ($disk_total !== false && $disk_total > 0) {
           </div>
           <div class="dash-health__item">
             <div class="dash-health__label">Database</div>
-            <div class="dash-health__value <?php echo $db_status === 'Connected' ? 'dash-health__value--ok' : 'dash-health__value--bad'; ?>"><?php echo $db_status; ?></div>
+            <div class="dash-health__value <?php echo $db_status === 'Connected' ? 'dash-health__value--ok' : 'dash-health__value--bad'; ?>"><?php echo e($db_status); ?></div>
           </div>
           <div class="dash-health__item">
             <div class="dash-health__label">Memory</div>

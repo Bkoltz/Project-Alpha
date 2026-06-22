@@ -66,21 +66,20 @@ try {
 
   // Store signed PDF in src/uploads directory (same logic as internal contract_sign)
   $internal = __DIR__ . '/../../uploads';
-  if (!is_dir($internal)) { @mkdir($internal, 0775, true); }
   $name = 'contract_' . $cid . '_signed_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.pdf';
+  $filename = validate_and_store_upload(
+      $f,
+      ['application/pdf' => 'pdf'],
+      25 * 1024 * 1024,
+      $internal,
+      $uploadError
+  );
+  if ($filename === null) {
+      header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&error=' . urlencode($uploadError ?: 'Failed to store uploaded file'));
+      exit;
+  }
+  $name = $filename;
   $internalDest = $internal . '/' . $name;
-  $moved = false;
-  if (!empty($f['tmp_name']) && is_uploaded_file($f['tmp_name'])) {
-    $moved = @move_uploaded_file($f['tmp_name'], $internalDest);
-  }
-  if (!$moved && !empty($f['tmp_name'])) {
-    $moved = @rename($f['tmp_name'], $internalDest);
-  }
-  if (!$moved && !empty($f['tmp_name'])) {
-    $moved = @copy($f['tmp_name'], $internalDest);
-  }
-  if ($moved) { @unlink($f['tmp_name']); }
-  else { throw new Exception('Failed to store uploaded file'); }
 
   $publicUrl = '/?page=serve-upload&file=' . rawurlencode($name);
 

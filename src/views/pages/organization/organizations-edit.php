@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/organization/organizations-edit.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $stmt = $pdo->prepare('SELECT * FROM organizations WHERE id = ?');
@@ -32,7 +33,7 @@ if (!$org) {
       <div>Tax Exempt Form (PDF, JPG, PNG)</div>
       <?php if (!empty($org['tax_exempt_file'])): ?>
         <div style="margin-bottom:6px">
-          Current file: <a href="/?page=serve-upload&file=<?php echo rawurlencode('organizations/' . $org['tax_exempt_file']); ?>" target="_blank">View</a>
+          Current file: <a href="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" target="_blank">View</a>
           <label style="margin-left:12px;font-size:small"><input type="checkbox" name="remove_tax_file" value="1"> Remove file</label>
         </div>
       <?php endif; ?>

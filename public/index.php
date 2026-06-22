@@ -166,6 +166,21 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // 
     $apiKey = api_require_key(['full']);
 
     // Map API endpoints
+    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients'];
+    if (in_array($page, $dashboardPages, true)) {
+        $apiKey = api_require_key(['dashboard']);
+        $map = [
+            'api-dashboard-summary'   => __DIR__ . '/../src/controllers/api/dashboard_summary.php',
+            'api-financial-summary'   => __DIR__ . '/../src/controllers/api/financial_summary.php',
+            'api-invoices'              => __DIR__ . '/../src/controllers/api/invoices_list.php',
+            'api-quotes'                => __DIR__ . '/../src/controllers/api/quotes_list.php',
+            'api-projects'              => __DIR__ . '/../src/controllers/api/projects_list.php',
+            'api-clients'               => __DIR__ . '/../src/controllers/api/clients_list.php',
+        ];
+        require_once $map[$page];
+        exit;
+    }
+
     if ($page === 'api-clients-search') {
         require_once __DIR__ . '/../src/controllers/client/clients_search.php';
         exit;
@@ -404,8 +419,32 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
+    // Add a global per-IP rate-limit gate before routing. Endpoint-specific limits
+    // (e.g. public links) may use tighter checks in their own controllers.
+    require_once __DIR__ . '/../src/config/db.php';
+    if (!rate_limit_check($pdo, 'global_post_' . $page, 120, 60, false)) {
+        http_response_code(429);
+        header('Content-Type: text/plain');
+        echo 'Too many requests. Please slow down.';
+        exit;
+    }
+
+    // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation.
+    // Reasons for bypasses:
+    //   auth                         - controller validates CSRF (csrf_sf_is_valid 'auth')
+    //   reset-request                - controller validates CSRF (csrf_sf_is_valid 'reset_request')
+    //   reset-verify                 - controller validates CSRF (csrf_sf_is_valid 'reset_verify')
+    //   reset-update                 - controller validates CSRF (csrf_sf_is_valid 'reset_update')
+    //   public-quote-action          - controller validates CSRF (csrf_sf_is_valid 'public_quote_action')
+    //   public-contract-sign         - controller validates CSRF (csrf_sf_is_valid 'public_contract_sign')
+    //   public-contract-action       - controller validates CSRF (csrf_sf_is_valid 'public_contract_action')
+    //   organization/org-create      - controller validates CSRF (legacy session hash_equals)
+    //   organization/organization-update-notes - controller validates CSRF (csrf_validate)
+    //   stripe-webhook               - tokenless: Stripe webhook uses signature verification (HMAC + replay protection)
+    //   stripe-webhook-legacy        - tokenless: legacy Stripe webhook uses signature verification (HMAC + replay protection)
+    //   settings/link-test-connection - controller validates CSRF (csrf_validate)
+    //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }

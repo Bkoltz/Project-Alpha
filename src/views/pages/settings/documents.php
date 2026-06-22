@@ -19,6 +19,17 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
   <input type="hidden" name="doc_tab" value="<?php echo htmlspecialchars($docTab); ?>">
 <?php endif; ?>
 <?php if ($docTab === 'quotes'): ?>
+  <?php
+  // Display approval flash messages
+  $flash = $_SESSION['flash_quote_approve'] ?? null;
+  unset($_SESSION['flash_quote_approve']);
+  ?>
+  <?php if ($flash): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1">
+      <?php echo htmlspecialchars($flash['message']); ?>
+    </div>
+  <?php endif; ?>
+
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
     <legend style="padding:0 6px;color:var(--muted)">Quote Options</legend>
     <div class="grid">

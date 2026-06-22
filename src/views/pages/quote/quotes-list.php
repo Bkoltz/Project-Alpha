@@ -47,6 +47,13 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php elseif (!empty($_GET['email_err'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
   <?php endif; ?>
+  <?php
+  $flash = $_SESSION['flash_quote_approve'] ?? null;
+  unset($_SESSION['flash_quote_approve']);
+  ?>
+  <?php if ($flash): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1"><?php echo htmlspecialchars($flash['message']); ?></div>
+  <?php endif; ?>
   
   <?php
   // Render the filter using Twig template instead of PHP include
@@ -185,9 +192,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       </form>
     </div>
     <div style="display:flex;gap:8px">
-      <?php if($pageN>1): ?><a href="<?php echo $base.'&p='.($pageN-1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
+      <?php if($pageN>1): ?><a href="<?php echo htmlspecialchars($base.'&p='.($pageN-1), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Prev</a><?php endif; ?>
       <div style="padding:6px 10px;color:var(--muted)">Page <?php echo $pageN; ?> / <?php echo $last; ?></div>
-      <?php if($pageN<$last): ?><a href="<?php echo $base.'&p='.($pageN+1); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
+      <?php if($pageN<$last): ?><a href="<?php echo htmlspecialchars($base.'&p='.($pageN+1), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">Next</a><?php endif; ?>
     </div>
   </div>
 </section>

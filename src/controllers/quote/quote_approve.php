@@ -131,6 +131,15 @@ try {
   exit;
 }
 
+// Build flash/redirect info if auto-creation was skipped
+$skipped = [];
+if (!$autoCreateContract) {
+  $skipped[] = 'contract';
+}
+if (!$autoCreateInvoice) {
+  $skipped[] = 'invoice';
+}
+
 // Determine redirect page based on quote type
 $redirectPage = 'quote/quotes-list';
 if ($quoteType === 'long_term') {
@@ -139,5 +148,13 @@ if ($quoteType === 'long_term') {
   $redirectPage = 'quote/on-demand-quotes-list';
 }
 
-header('Location: /?page=' . $redirectPage . '&approved=1');
+$redirect = '/?page=' . $redirectPage . '&approved=1';
+if (!empty($skipped)) {
+  if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+  $_SESSION['flash_quote_approve'] = [
+    'type' => 'info',
+    'message' => 'Quote approved, but auto-create ' . implode(' and ', $skipped) . ' ' . (count($skipped) === 1 ? 'is' : 'are') . ' disabled in settings.'
+  ];
+}
+header('Location: ' . $redirect);
 exit;

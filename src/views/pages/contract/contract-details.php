@@ -397,7 +397,7 @@ if ($termsText === '') {
               } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if ($fromPhone): ?><div><?php echo format_phone($fromPhone); ?></div><?php endif; ?>
+            <?php if ($fromPhone): ?><div><?php echo htmlspecialchars(format_phone($fromPhone), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if ($fromEmail): ?><div><?php echo htmlspecialchars($fromEmail); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
@@ -441,7 +441,7 @@ if ($termsText === '') {
               } ?></div>
         <?php if (!empty($contract['client_phone']) || !empty($contract['client_email'])): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if (!empty($contract['client_phone'])): ?><div><?php echo format_phone($contract['client_phone']); ?></div><?php endif; ?>
+            <?php if (!empty($contract['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($contract['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if (!empty($contract['client_email'])): ?><div><?php echo htmlspecialchars($contract['client_email']); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>

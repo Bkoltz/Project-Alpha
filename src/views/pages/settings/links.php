@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/settings/links.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/escaper.php';
 
 // Fetch global app config
 $appConfig = [];
@@ -55,9 +56,9 @@ $providers = ['dropbox', 'gdrive', 's3'];
 ?>
 <div style="max-width:1000px">
     <!-- CSRF token for JavaScript -->
-    <script nonce="<?php echo htmlspecialchars($csrfToken); ?>">
+    <script nonce="<?php echo e($csrfToken); ?>">
     (function() {
-        window.csrfToken = "<?php echo htmlspecialchars($csrfToken); ?>";
+        window.csrfToken = "<?php echo e($csrfToken); ?>";
     })();
     </script>
 
@@ -85,7 +86,7 @@ $providers = ['dropbox', 'gdrive', 's3'];
     </div>
 
     <form method="POST" action="/?page=settings/links-handler">
-    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrfToken); ?>">
+    <input type="hidden" name="csrf" value="<?php echo e($csrfToken); ?>">
     
     <!-- Global Settings -->
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-bottom:20px">
@@ -125,19 +126,19 @@ $providers = ['dropbox', 'gdrive', 's3'];
                 if ($provider === 'gdrive') $providerName = 'Google Drive';
                 elseif ($provider === 's3') $providerName = 'Amazon S3';
                 else $providerName = ucfirst($provider);
-                echo $providerName; 
+                echo e($providerName); 
             ?>
         </legend>
         
         <div style="display:grid;gap:16px">
             <label style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" name="provider_enabled_<?php echo $provider; ?>" value="1" 
+                <input type="checkbox" name="provider_enabled_<?php echo e($provider); ?>" value="1"
                        <?php echo $isEnabled ? 'checked' : ''; ?>
-                       onchange="toggleProviderFields('<?php echo $provider; ?>')">
-                <span class="font-600">Enable <?php echo $providerName; ?> Auto-Generation</span>
+                       onchange="toggleProviderFields('<?php echo e($provider); ?>')">
+                <span class="font-600">Enable <?php echo e($providerName); ?> Auto-Generation</span>
             </label>
 
-            <div id="fields_<?php echo $provider; ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
+            <div id="fields_<?php echo e($provider); ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
                 <?php if ($provider === 'dropbox'): ?>
                     <div class="grid">
                         <?php if (!empty($credentials['refresh_token'])): ?>
@@ -148,7 +149,7 @@ $providers = ['dropbox', 'gdrive', 's3'];
                                     <div style="font-weight:600;color:#065f46">Dropbox Connected</div>
                                     <div style="font-size:12px;color:#6b7280">
                                         <?php if (!empty($credentials['token_expires_at'])): ?>
-                                            Token expires: <?php echo htmlspecialchars($credentials['token_expires_at']); ?>
+                                            Token expires: <?php echo e($credentials['token_expires_at']); ?>
                                         <?php else: ?>
                                             Connection is active
                                         <?php endif; ?>
@@ -179,8 +180,8 @@ $providers = ['dropbox', 'gdrive', 's3'];
                                     <span>Use legacy access token instead (not recommended)</span>
                                 </label>
                                 <div id="legacy-dropbox-token" style="display:none;margin-top:8px">
-                                    <input type="text" name="<?php echo $provider; ?>_access_token" 
-                                           value="<?php echo htmlspecialchars($credentials['access_token'] ?? ''); ?>"
+                                    <input type="text" name="<?php echo e($provider); ?>_access_token"
+                                           value="<?php echo e($credentials['access_token'] ?? ''); ?>"
                                            placeholder="Enter Dropbox access token"
                                            style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
                                 </div>
@@ -191,9 +192,9 @@ $providers = ['dropbox', 'gdrive', 's3'];
                 <?php elseif ($provider === 'gdrive'): ?>
                     <label>
                         <div style="margin-bottom:4px;font-weight:600">Service Account JSON</div>
-                        <textarea name="<?php echo $provider; ?>_credentials" rows="4"
+                        <textarea name="<?php echo e($provider); ?>_credentials" rows="4"
                                   placeholder='Paste Google Service Account JSON here'
-                                  style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px"><?php echo htmlspecialchars($credentials['service_account'] ?? ''); ?></textarea>
+                                  style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px"><?php echo e($credentials['service_account'] ?? ''); ?></textarea>
                         <div style="margin-top:4px;font-size:12px;color:var(--muted)">
                             Get credentials from <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--nav-accent)">Google Cloud Console</a>
                         </div>
@@ -203,30 +204,30 @@ $providers = ['dropbox', 'gdrive', 's3'];
                     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
                         <label>
                             <div style="margin-bottom:4px;font-weight:600">Access Key ID</div>
-                            <input type="text" name="<?php echo $provider; ?>_access_key" 
-                                   value="<?php echo htmlspecialchars($credentials['access_key'] ?? ''); ?>"
+                            <input type="text" name="<?php echo e($provider); ?>_access_key"
+                                   value="<?php echo e($credentials['access_key'] ?? ''); ?>"
                                    placeholder="AWS Access Key ID"
                                    style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
                         </label>
                         <label>
                             <div style="margin-bottom:4px;font-weight:600">Secret Access Key</div>
-                            <input type="password" name="<?php echo $provider; ?>_secret_key" 
-                                   value="<?php echo htmlspecialchars($credentials['secret_key'] ?? ''); ?>"
+                            <input type="password" name="<?php echo e($provider); ?>_secret_key"
+                                   value="<?php echo e($credentials['secret_key'] ?? ''); ?>"
                                    placeholder="AWS Secret Access Key"
                                    style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
                         </label>
                     </div>
                     <label>
                         <div style="margin-bottom:4px;font-weight:600">Bucket Name</div>
-                        <input type="text" name="<?php echo $provider; ?>_bucket" 
-                               value="<?php echo htmlspecialchars($credentials['bucket'] ?? ''); ?>"
+                        <input type="text" name="<?php echo e($provider); ?>_bucket"
+                               value="<?php echo e($credentials['bucket'] ?? ''); ?>"
                                placeholder="my-bucket-name"
                                style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
                     </label>
                     <label>
                         <div style="margin-bottom:4px;font-weight:600">Region</div>
-                        <input type="text" name="<?php echo $provider; ?>_region" 
-                               value="<?php echo htmlspecialchars($credentials['region'] ?? 'us-east-1'); ?>"
+                        <input type="text" name="<?php echo e($provider); ?>_region"
+                               value="<?php echo e($credentials['region'] ?? 'us-east-1'); ?>"
                                placeholder="us-east-1"
                                style="width:200px;padding:8px;border-radius:6px;border:1px solid #ddd">
                     </label>
@@ -234,8 +235,8 @@ $providers = ['dropbox', 'gdrive', 's3'];
 
                 <label>
                     <div style="margin-bottom:4px;font-weight:600">Root Folder Path</div>
-                    <input type="text" name="<?php echo $provider; ?>_root_path" 
-                           value="<?php echo htmlspecialchars($credentials['root_path'] ?? '/'); ?>"
+                    <input type="text" name="<?php echo e($provider); ?>_root_path"
+                           value="<?php echo e($credentials['root_path'] ?? '/'); ?>"
                            placeholder="/"
                            style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
                     <div style="margin-top:4px;font-size:12px;color:var(--muted)">
@@ -243,7 +244,7 @@ $providers = ['dropbox', 'gdrive', 's3'];
                     </div>
                 </label>
 
-                <button type="button" onclick="testConnection('<?php echo $provider; ?>')"
+                <button type="button" onclick="testConnection('<?php echo e($provider); ?>')"
                         style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
                     Test Connection
                 </button>
@@ -272,7 +273,7 @@ $providers = ['dropbox', 'gdrive', 's3'];
         <?php if (isset($_GET['saved']) && $_GET['saved'] === '1'): ?>
             <span style="margin-left:12px;color:#059669;font-weight:600">✓ Settings saved!</span>
         <?php elseif (isset($_GET['saved']) && $_GET['saved'] === '0'): ?>
-            <span style="margin-left:12px;color:#dc2626;font-weight:600">✗ Failed to save settings. <?php echo isset($_GET['error']) ? htmlspecialchars($_GET['error']) : ''; ?></span>
+            <span style="margin-left:12px;color:#dc2626;font-weight:600">✗ Failed to save settings. <?php echo isset($_GET['error']) ? e($_GET['error']) : ''; ?></span>
         <?php endif; ?>
     </div>
     </form>

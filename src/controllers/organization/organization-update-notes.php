@@ -1,6 +1,15 @@
 <?php
 // src/controllers/organization/organization-update-notes.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+
+// CSRF check (endpoint is bypassed from global CSRF gate because it is AJAX-capable)
+if (!csrf_validate()) {
+    header('Location: /?page=organization/organization-view&id=' . (int)($_POST['id'] ?? 0) . '&error=' . urlencode('Invalid request (CSRF)'));
+    exit;
+}
 
 $id = (int)($_POST['id'] ?? 0);
 $notes = trim($_POST['notes'] ?? '');
