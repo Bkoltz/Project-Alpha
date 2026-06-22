@@ -19,7 +19,7 @@ x-db-env: &db-env
 services:
   web:
     image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
-    pull_policy: always
+    pull_policy: missing
     ports:
       - "1627:80"
     environment:
@@ -54,7 +54,7 @@ services:
 
   cron:
     image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"
-    pull_policy: always
+    pull_policy: missing
     environment:
       <<: *db-env
       MYSQL_PASSWORD: changeme_secure_pass
