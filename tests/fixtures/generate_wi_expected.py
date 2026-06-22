@@ -1,6 +1,9 @@
 import csv, json
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
+
+TODAY = int(date.today().strftime('%Y%m%d'))
 
 fips = {}
 with Path('/tmp/st55_wi_cou2020.txt').open() as f:
@@ -17,11 +20,17 @@ with Path('/tmp/WIR062026.csv').open() as f:
             continue
         if row[1].strip() != '00':
             continue
+        start = row[7].strip()
+        end = row[8].strip()
+        # Skip rows that are not currently active. DOR files can contain
+        # superseded rows (e.g., Milwaukee's old 0.5% county rate).
+        if start and end and (TODAY < int(start) or TODAY > int(end)):
+            continue
         key = row[0].zfill(2) + row[2].zfill(3)
         # WI DOR rates are expressed as four quarterly/spread columns.
         # The published local rate is the average (sum * 100 / 4).
         local = round(sum(float(c) for c in row[3:7]) * 100 / 4, 4)
-        agg[key] = max(agg[key], local)
+        agg[key] += local
 
 expected = {fips[k]: round(v + 5.0, 4) for k, v in agg.items() if k in fips}
 
