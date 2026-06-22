@@ -91,23 +91,7 @@ try {
       $clientInfo = $clientStmt->fetch(PDO::FETCH_ASSOC);
       
       if ($clientInfo && !empty($clientInfo['email']) && filter_var($clientInfo['email'], FILTER_VALIDATE_EMAIL)) {
-        require_once __DIR__ . '/../utils/mailer.php';
-        require_once __DIR__ . '/../utils/crypto.php';
-        $smtpPass = '';
-        if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
-          $encVal = $appConfig['smtp_password_enc'];
-          if (strpos($encVal, 'plain::') === 0) { $smtpPass = substr($encVal, 7); }
-          else { $pt = crypto_decrypt($encVal); if (is_string($pt)) { $smtpPass = $pt; } }
-        }
-        $mailCfg = [
-          'host' => (string)($appConfig['smtp_host'] ?? ''),
-          'port' => (int)($appConfig['smtp_port'] ?? 587),
-          'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-          'username' => (string)($appConfig['smtp_username'] ?? ''),
-          'password' => $smtpPass,
-        ];
-        $mFromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-        $mFromName = (string)($appConfig['from_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+        require_once __DIR__ . '/../services/EmailService.php';
         
         $subject = 'Payment Received - Invoice I-' . ($clientInfo['doc_number'] ?? $invoice_id);
         $body = '<p>Dear ' . htmlspecialchars($clientInfo['name'] ?? 'Valued Client') . ',</p>';
@@ -120,7 +104,7 @@ try {
         }
         $body .= '<p>Thank you for your payment!</p>';
         
-        mailer_send($mailCfg, $clientInfo['email'], $subject, $body, $mFromEmail, $mFromName, ($mailCfg['username'] ?: $mFromEmail));
+        EmailService::sendEmail($clientInfo['email'], $subject, $body);
       }
     }
   } catch (Throwable $e) {

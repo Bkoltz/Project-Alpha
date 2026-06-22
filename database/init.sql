@@ -551,6 +551,8 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+    hours DECIMAL(10,2) DEFAULT NULL,
+    time_entry_id INT DEFAULT NULL,
     is_extra_charge TINYINT(1) NOT NULL DEFAULT 0,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -840,6 +842,32 @@ CREATE TABLE IF NOT EXISTS expenses (
     CONSTRAINT fk_exp_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_receipt FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- MODULE 005.1: Time Tracking
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS time_entries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL,
+    user_id INT NOT NULL,
+    client_id INT NULL,
+    project_id INT NULL,
+    description TEXT NULL,
+    started_at DATETIME NULL,
+    ended_at DATETIME NULL,
+    hours DECIMAL(10,2) NOT NULL DEFAULT 0,
+    billable TINYINT(1) DEFAULT 1,
+    billed TINYINT(1) DEFAULT 0,
+    rate DECIMAL(10,2) DEFAULT 0,
+    invoice_item_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_time_entries_user (user_id),
+    INDEX idx_time_entries_client (client_id),
+    INDEX idx_time_entries_project (project_id),
+    INDEX idx_time_entries_billable (billable),
+    INDEX idx_time_entries_billed (billed)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- MILEAGE LOGS
@@ -1139,8 +1167,62 @@ CREATE TABLE IF NOT EXISTS document_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- CUSTOM FIELD VALUES
--- ARCHIVED ENTITIES
--- ARCHIVED CLIENTS
+-- RATE LIMITS
+CREATE TABLE IF NOT EXISTS rate_limits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    identifier VARCHAR(255) NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_identifier_created (identifier, created_at),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- MODULE 007.1: Archive & Migration Tracking Tables
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS archived_clients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NULL,
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(255) NULL,
+    phone VARCHAR(50) NULL,
+    organization_id INT NULL,
+    notes TEXT NULL,
+    address_line1 VARCHAR(255) NULL,
+    address_line2 VARCHAR(255) NULL,
+    city VARCHAR(100) NULL,
+    state VARCHAR(2) NULL,
+    postal_code VARCHAR(20) NULL,
+    country VARCHAR(100) NULL DEFAULT 'US',
+    created_at TIMESTAMP NULL,
+    archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_archived_clients_client (client_id),
+    INDEX idx_archived_clients_org (organization_id),
+    INDEX idx_archived_clients_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS archived_entities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NULL,
+    organization_id INT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id INT NOT NULL,
+    payload JSON NOT NULL,
+    archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_arch_entities_client (client_id),
+    INDEX idx_arch_entities_org (organization_id),
+    INDEX idx_arch_entities_type (entity_type, entity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS migrations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL UNIQUE,
+    run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    checksum VARCHAR(64) NULL,
+    INDEX idx_migrations_filename (filename)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================================
 -- MODULE 008: Seed Data
 -- ============================================================================

@@ -113,6 +113,48 @@ try {
   }
 
   $pdo->commit();
+
+  // Notify client that their quote has been approved (best-effort; don't fail approval)
+  try {
+    if (!empty($quote['client_id'])) {
+      $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
+      $clientStmt->execute([(int)$quote['client_id']]);
+      $clientRow = $clientStmt->fetch(PDO::FETCH_ASSOC);
+      if ($clientRow && !empty($clientRow['email']) && filter_var($clientRow['email'], FILTER_VALIDATE_EMAIL)) {
+        require_once __DIR__ . '/../../services/EmailService.php';
+        $docnum = (string)($quote['doc_number'] ?? $id);
+        $clientName = trim((string)($clientRow['name'] ?? ''));
+        $firstName = $clientName !== '' ? preg_split('/\s+/', $clientName)[0] : 'there';
+        $subject = 'Your quote Q-' . $docnum . ' has been approved';
+        $body = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
+              . '<p>Your quote <strong>Q-' . htmlspecialchars($docnum) . '</strong> has been approved.</p>'
+              . '<p>We will be in touch shortly with the next steps. Thank you for your business!</p>';
+        EmailService::sendEmail($clientRow['email'], $subject, $body);
+
+        // If an invoice was auto-created, notify the client about it too
+        if (!empty($invoice_id)) {
+          $invStmt = $pdo->prepare('SELECT doc_number, total, due_date FROM invoices WHERE id = ?');
+          $invStmt->execute([$invoice_id]);
+          $invRow = $invStmt->fetch(PDO::FETCH_ASSOC);
+          if ($invRow) {
+            $invDocnum = (string)($invRow['doc_number'] ?? $invoice_id);
+            $invTotal = (float)($invRow['total'] ?? 0);
+            $invDue = (string)($invRow['due_date'] ?? '');
+            $invSubject = 'Invoice I-' . $invDocnum . ' has been created';
+            $invBody = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
+                     . '<p>Your invoice <strong>I-' . htmlspecialchars($invDocnum) . '</strong> has been created for <strong>$' . number_format($invTotal, 2) . '</strong>.</p>';
+            if ($invDue !== '') {
+              $invBody .= '<p>Due date: ' . htmlspecialchars($invDue) . '</p>';
+            }
+            $invBody .= '<p>You can log in to view and pay the invoice. Thank you!</p>';
+            EmailService::sendEmail($clientRow['email'], $invSubject, $invBody);
+          }
+        }
+      }
+    }
+  } catch (Throwable $e) {
+    @error_log('[quote_approve] Client notification email failed: ' . $e->getMessage());
+  }
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) { $pdo->rollBack(); }
   error_log('[quote_approve] Failed: ' . $e->getMessage());
@@ -131,14 +173,7 @@ try {
   exit;
 }
 
-// Build flash/redirect info if auto-creation was skipped
-$skipped = [];
-if (!$autoCreateContract) {
-  $skipped[] = 'contract';
-}
-if (!$autoCreateInvoice) {
-  $skipped[] = 'invoice';
-}
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
 // Determine redirect page based on quote type
 $redirectPage = 'quote/quotes-list';
@@ -149,11 +184,25 @@ if ($quoteType === 'long_term') {
 }
 
 $redirect = '/?page=' . $redirectPage . '&approved=1';
-if (!empty($skipped)) {
-  if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+
+// Flash message based on whether auto-creation is enabled
+if (!$autoCreateContract && !$autoCreateInvoice) {
+  $_SESSION['flash_quote_approve'] = [
+    'type' => 'info',
+    'message' => 'Quote approved. Contract and invoice were not auto-generated (disabled in Settings). You can create them manually from the quote.'
+  ];
+} elseif (!$autoCreateContract || !$autoCreateInvoice) {
+  $skipped = [];
+  if (!$autoCreateContract) { $skipped[] = 'contract'; }
+  if (!$autoCreateInvoice) { $skipped[] = 'invoice'; }
   $_SESSION['flash_quote_approve'] = [
     'type' => 'info',
     'message' => 'Quote approved, but auto-create ' . implode(' and ', $skipped) . ' ' . (count($skipped) === 1 ? 'is' : 'are') . ' disabled in settings.'
+  ];
+} else {
+  $_SESSION['flash_quote_approve'] = [
+    'type' => 'success',
+    'message' => 'Quote approved. Contract and invoice have been created.'
   ];
 }
 header('Location: ' . $redirect);

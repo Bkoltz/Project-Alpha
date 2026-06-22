@@ -59,6 +59,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     qtyInput.step = '0.01';
     qtyInput.min = '0';
     qtyInput.name = 'item_qty[]';
+    qtyInput.className = 'qty-input';
     qtyInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
     qtyInput.value = qty;
     qtyInput.oninput = recalc;

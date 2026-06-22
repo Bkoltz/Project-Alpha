@@ -282,6 +282,41 @@ if (!empty($_POST['smtp_password'])) {
     $enc = crypto_encrypt((string)$_POST['smtp_password']);
     if ($enc) { $settings['smtp_password_enc'] = $enc; }
 }
+if (isset($_POST['smtp_from_email'])) {
+    $settings['smtp_from_email'] = trim((string)$_POST['smtp_from_email']) ?: null;
+}
+if (isset($_POST['smtp_from_name'])) {
+    $settings['smtp_from_name'] = trim((string)$_POST['smtp_from_name']) ?: null;
+}
+
+// Persist SMTP configuration to app_config table so it takes precedence over settings.json
+$smtpConfigKeys = [];
+foreach (['smtp_host','smtp_port','smtp_secure','smtp_username','smtp_from_email','smtp_from_name'] as $k) {
+    if (isset($settings[$k])) {
+        $smtpConfigKeys[$k] = $settings[$k];
+    }
+}
+if (!empty($settings['smtp_password_enc'])) {
+    $smtpConfigKeys['smtp_password_enc'] = $settings['smtp_password_enc'];
+}
+if (!empty($smtpConfigKeys)) {
+    require_once __DIR__ . '/../config/db.php';
+    $stmtConfig = $pdo->prepare(
+        'INSERT INTO app_config (organization_id, config_key, config_value)
+         VALUES (0, ?, ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+    );
+    foreach ($smtpConfigKeys as $key => $val) {
+        $stmtConfig->execute([$key, $val]);
+    }
+
+    // Also set in current request so they're available immediately
+    foreach ($smtpConfigKeys as $key => $val) {
+        putenv("$key=$val");
+        $_ENV[$key] = $val;
+        $appConfig[$key] = $val;
+    }
+}
 
 // Cron/recurring invoice settings
 if (isset($_POST['cron_enabled'])) {
@@ -334,10 +369,10 @@ if (isset($_POST['invoice_show_due_date'])) {
     $settings['invoice_show_due_date'] = !empty($_POST['invoice_show_due_date']) ? 1 : 0;
 }
 
-// Quote settings — default to enabled unless explicitly unchecked (missing checkbox = 0)
-$settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
-$settings['quote_auto_create_contract'] = isset($_POST['quote_auto_create_contract']) && empty($_POST['quote_auto_create_contract']) ? 0 : 1;
-$settings['quote_auto_create_invoice'] = isset($_POST['quote_auto_create_invoice']) && empty($_POST['quote_auto_create_invoice']) ? 0 : 1;
+    // Quote settings — default to enabled unless explicitly unchecked
+    $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
+    $settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
+    $settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
 
 // Contract settings
 $settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;

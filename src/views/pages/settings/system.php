@@ -129,6 +129,14 @@
   </div>
   <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
     <label>
+      <div>From Email (override)</div><input name="smtp_from_email" value="<?php echo htmlspecialchars($appConfig['smtp_from_email'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="leave empty to use User Info Email">
+    </label>
+    <label>
+      <div>From Name (override)</div><input name="smtp_from_name" value="<?php echo htmlspecialchars($appConfig['smtp_from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="leave empty to use Brand/User Info Name">
+    </label>
+  </div>
+  <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+    <label>
       <div>Username (email)</div><input name="smtp_username" value="<?php echo htmlspecialchars($appConfig['smtp_username'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="you@gmail.com">
     </label>
     <label>
@@ -141,3 +149,4 @@
     <div id="emailTestResult" style="margin-top:8px;font-size:13px"></div>
   </div>
 </fieldset>
+<script src="/assets/js/settings-system.js" defer></script>

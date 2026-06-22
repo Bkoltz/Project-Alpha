@@ -341,6 +341,10 @@ if ($page === 'org-search' || $page === 'organization/org-search') {
     require_once __DIR__ . '/../src/controllers/organization/org_search.php';
     exit;
 }
+if ($page === 'time-tracking/unbilled') {
+    require_once __DIR__ . '/../src/controllers/time-tracking/time_entries_unbilled.php';
+    exit;
+}
 if ($page === 'financial/financial-api') {
     require_once __DIR__ . '/../src/controllers/financial/financial_api.php';
     exit;
@@ -427,15 +431,154 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Global POST rate limiter: block only per-IP, not per-page, and skip for
     // legitimate authenticated actions that naturally chain POSTs.
     $skipGlobalRateLimitFor = [
-        'quote/quote-approve', 'quote/quote-decline',
-        'contract/contract-action', 'contract/contract-create',
-        'invoice/invoice-create', 'invoice/invoice-action',
-        'settings', 'settings-backup',
-        'organization/org-create', 'organization/organization-update-notes',
-        'client/client-create', 'client/client-update',
-        'project/project-create', 'project/project-update',
+        // Settings & system
+        'settings',
+        'settings-backup',
+        'settings/tax-rates-handler',
+        'settings/tax-import-handler',
+        'settings/links-handler',
+        'settings/custom-fields-handler',
+        'settings/item-library-handler',
+        'settings/document-customization-save',
+        'settings/document-custom-fields-handler',
+        'settings/link-test-connection',
+        'settings/dropbox-oauth',
+
+        // User accounts / auth management
         'auth/account-edit',
+        'account-update',
+        'account-revoke-device',
+        'account/delete',
+        'accounts-create',
+        'accounts-update',
+        'accounts-delete',
+        'accounts-reset-password',
+        '2fa-setup-action',
+        '2fa-verify-action',
+        '2fa-admin-disable',
+
+        // API keys
+        'api-keys-create',
+        'api-keys-revoke',
+
+        // Clients
+        'client/client-create',
+        'client/clients-create',
+        'clients-create',
+        'client/client-update',
+        'client/clients-update',
+        'clients-update',
+        'client/clients-delete',
+        'clients-delete',
+        'client/clients-restore',
+        'clients-restore',
+        'client/clients-purge',
+        'clients-purge',
+
+        // Projects
+        'project/project-create',
+        'project/projects-create',
+        'project/project-update',
+        'project/projects-update',
+        'project/projects-delete',
+        'project/project-add-document',
+        'project/project-remove-document',
+        'project/projects-update-status',
+        'project-notes-update',
+
+        // Quotes
+        'quote/quotes-create',
+        'quotes-create',
+        'quote/quotes-update',
+        'quotes-update',
+        'quote/quote-approve',
+        'quote/quote-decline',
+        'quote/quote-reject',
+        'quote-reject',
+        'quote/email-send',
+
+        // Contracts
+        'contract/contract-action',
+        'contract/contract-create',
+        'contract/contracts-create',
+        'contracts-create',
+        'contract/contracts-update',
+        'contracts-update',
+        'contract/contract-sign',
+        'contract/contract-complete',
+        'contract/contract-void',
+        'contract/contract-deposit-received',
+        'contract/contract-deny',
+        'contract/email-send',
+        'long-term-contracts-create',
+        'contract/long-term-contracts-create',
+        'long-term-contract-activate',
+        'long-term-contract-pause',
+        'long-term-contract-resume',
+        'long-term-contract-terminate',
+        'on-demand-contract-activate',
+        'on-demand-contract-pause',
+        'on-demand-contract-resume',
+        'on-demand-contract-terminate',
+        'on-demand-invoice-generate',
+
+        // Invoices / payments
+        'invoice/invoice-create',
+        'invoice/invoice-action',
+        'invoice/invoices-create',
+        'invoices-create',
+        'invoice/invoices-update',
+        'invoices-update',
+        'invoice/invoices-mark-paid',
+        'invoice/email-send',
+        'payments/payments-create',
+
+        // Documents / forms / receipts
+        'document-reenable',
+        'document-date-update',
+        'receipts-handler',
+        'forms-handler',
+
+        // Organizations
+        'organization/org-create',
+        'organization/organizations-create',
+        'organization/organizations-update',
+        'organization/organizations-delete',
+        'organization/organization-add-client',
+        'organization/organization-update-notes',
+        'organization-update-notes',
+        'organization/organization-remove-client',
+        'organization/organizations_upload',
+        'organization/organizations-upload',
+
+        // Links / public links
+        'public-link-create',
+        'public-link-revoke',
+        'links/link-management',
+        'links/manual-link-handler',
+
+        // Financial
+        'financial/audit-export',
+        'financial/audit-schedule-handler',
+        'financial/mileage-handler',
+        'financial/vendor-handler',
+        'financial/category-handler',
+        'financial/expense-handler',
+        'financial/expense_handler',
+        'financial/csv-import',
+
+        // Time Tracking
+        'time-tracking/create',
+        'time-tracking/update',
+        'time-tracking/delete',
+        'time-tracking/start-timer',
+        'time-tracking/stop-timer',
+
+        // Email / legal / other
+        'email-send',
         'email-test',
+        'legal/tos-accept',
+        'stripe-charge',
     ];
     if (!in_array($page, $skipGlobalRateLimitFor, true)) {
         $clientIp = get_client_ip();
@@ -827,6 +970,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/csv-import') {
         require_once __DIR__ . '/../src/controllers/financial/csv_import.php';
+        exit;
+    }
+    if ($page === 'time-tracking/create') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_create.php';
+        exit;
+    }
+    if ($page === 'time-tracking/update') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_update.php';
+        exit;
+    }
+    if ($page === 'time-tracking/delete') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_delete.php';
+        exit;
+    }
+    if ($page === 'time-tracking/start-timer') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_start_timer.php';
+        exit;
+    }
+    if ($page === 'time-tracking/stop-timer') {
+        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_stop_timer.php';
         exit;
     }
     if ($page === 'public-link-create') {

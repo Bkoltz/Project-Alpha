@@ -34,12 +34,14 @@ $appConfig = [
     // Automatic invoice email settings
     'invoice_auto_send_due_7days' => 0,
     'invoice_auto_send_overdue_weekly' => 0,
-    // SMTP (may be present from settings)
+    // SMTP (loaded from app_config with fallback to settings.json)
     'smtp_host' => null,
     'smtp_port' => 587,
     'smtp_secure' => 'tls',
     'smtp_username' => null,
     'smtp_password_enc' => null,
+    'smtp_from_email' => null,
+    'smtp_from_name' => null,
     // Stripe (loaded from environment/.env, not stored in settings.json)
     'stripe_publishable_key' => null,
     'stripe_secret_key_enc' => null,
@@ -50,6 +52,8 @@ $appConfig = [
     'stripe_surcharge_split_percent' => 50,
     'stripe_surcharge_message' => 'Using a credit card is a privilege for both parties, so it is fair that we split the fee',
     // qoute defaults
+    'quote_auto_create_contract' => 1,
+    'quote_auto_create_invoice' => 1,
     // contract defaults
     //invoice defaults
 ];
@@ -124,16 +128,29 @@ if ($tz !== '') {
     }
 }
 
-// Load Stripe keys from app_config DB table (UI-entered keys, encrypted)
+// Load Stripe keys and SMTP config from app_config DB table (UI-entered keys, encrypted)
 // This takes precedence over env-vars and settings.json so that keys entered
-// via the Settings > Billing UI are used. Env-vars still work as a fallback
-// for deployments that prefer .env-based configuration.
+// via the Settings UI are used. Env-vars still work as a fallback.
 try {
     if (!isset($pdo)) {
         require_once __DIR__ . '/db.php';
     }
     if (isset($pdo)) {
-        $cfgStmt = $pdo->query("SELECT config_key, config_value FROM app_config WHERE config_key IN ('stripe_publishable_key','stripe_secret_key_enc','stripe_webhook_secret_enc','smtp_password_enc')");
+        $appConfigKeys = [
+            'stripe_publishable_key',
+            'stripe_secret_key_enc',
+            'stripe_webhook_secret_enc',
+            'smtp_host',
+            'smtp_port',
+            'smtp_secure',
+            'smtp_username',
+            'smtp_password_enc',
+            'smtp_from_email',
+            'smtp_from_name',
+        ];
+        $placeholders = implode(',', array_fill(0, count($appConfigKeys), '?'));
+        $cfgStmt = $pdo->prepare("SELECT config_key, config_value FROM app_config WHERE config_key IN ($placeholders)");
+        $cfgStmt->execute($appConfigKeys);
         if ($cfgStmt) {
             while ($row = $cfgStmt->fetch(PDO::FETCH_ASSOC)) {
                 $key = $row['config_key'];

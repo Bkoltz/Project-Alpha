@@ -32,6 +32,32 @@
   <link rel="stylesheet" href="/assets/styles.css">
   <script src="/assets/navigation.js" defer></script>
   <script src="/assets/item-autocomplete.js" defer></script>
+  <script>
+    (function() {
+      var timer = null;
+      function scheduleRefresh() {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function() {
+          if (document.visibilityState === 'visible' && !isFormDirty()) {
+            location.reload();
+          } else {
+            scheduleRefresh();
+          }
+        }, 300000);
+      }
+      function isFormDirty() {
+        var inputs = document.querySelectorAll('input, textarea, select');
+        for (var i = 0; i < inputs.length; i++) {
+          if (inputs[i].type === 'hidden' || inputs[i].type === 'submit') continue;
+          if (inputs[i].value !== inputs[i].defaultValue) return true;
+        }
+        return false;
+      }
+      scheduleRefresh();
+      document.addEventListener('click', scheduleRefresh);
+      document.addEventListener('keypress', scheduleRefresh);
+    })();
+  </script>
 </head>
 
 <body>
@@ -129,6 +155,8 @@
               <ul>
                 <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Dashboard</a></li>
                 <li><a href="/?page=financial/expenses-list" data-page="financial/expenses-list">Expenses</a></li>
+                <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
+                <li><a href="/?page=time-tracking" data-page="time-tracking">Time Tracking</a></li>
                 <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
                 <li><a href="/?page=financial/expense-report" data-page="financial/expense-report">Reports</a></li>
               </ul>

@@ -126,6 +126,14 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       <div style="margin-bottom:20px">
         <label style="display:flex;align-items:center;cursor:pointer">
+          <input type="checkbox" name="is_hourly" id="isHourly" value="1"
+            style="width:18px;height:18px;margin-right:8px">
+          <span>This is an hourly service</span>
+        </label>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <label style="display:flex;align-items:center;cursor:pointer">
           <input type="checkbox" name="is_active" id="isActive" value="1" checked
             style="width:18px;height:18px;margin-right:8px">
           <span>Active (show in autocomplete)</span>
@@ -152,6 +160,7 @@ function showCreateModal() {
   document.getElementById('itemName').value = '';
   document.getElementById('itemDescription').value = '';
   document.getElementById('unitPrice').value = '';
+  document.getElementById('isHourly').checked = false;
   document.getElementById('isActive').checked = true;
   document.getElementById('itemModal').style.display = 'flex';
 }
@@ -163,6 +172,7 @@ function editItem(item) {
   document.getElementById('itemName').value = item.item_name;
   document.getElementById('itemDescription').value = item.description || '';
   document.getElementById('unitPrice').value = item.unit_price;
+  document.getElementById('isHourly').checked = item.category === 'Hourly';
   document.getElementById('isActive').checked = item.is_active == 1;
   document.getElementById('itemModal').style.display = 'flex';
 }

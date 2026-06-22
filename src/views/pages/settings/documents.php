@@ -30,11 +30,11 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
     </div>
   <?php endif; ?>
 
-  <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+  <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
     <legend style="padding:0 6px;color:var(--muted)">Quote Options</legend>
     <div class="grid">
       <label>
-        <input type="checkbox" name="quote_scope_enabled" value="1" <?php echo !empty($appConfig['quote_scope_enabled']) ? 'checked' : ''; ?>
+        <input type="checkbox" name="quote_scope_enabled" value="1" <?php echo !empty($appConfig['quote_scope_enabled']) ? 'checked' : ''; ?>>
         <span class="font-600">Enable "Scope of Project" field on quotes</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">If enabled, quotes will have a scope field. If left blank, it will be excluded from PDF.</div>
       </label>
@@ -45,18 +45,18 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
       </label>
     </div>
   </fieldset>
-  
+
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
     <legend style="padding:0 6px;color:var(--muted)">Auto-generation on Quote Approval</legend>
     <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Configure what gets automatically created when a quote is approved</p>
     <div class="grid">
       <label>
-        <input type="checkbox" name="quote_auto_create_contract" value="1" <?php echo !empty($appConfig['quote_auto_create_contract']) || !isset($appConfig['quote_auto_create_contract']) ? 'checked' : ''; ?>
-        <span class="font-600">Auto-create Contract on approval</span>
+        <input type="checkbox" name="quote_auto_create_contract" value="1" <?php echo !empty($appConfig['quote_auto_create_contract']) ? 'checked' : ''; ?>>
+        <span class="font-600">Auto-create contract on quote approval</span>
       </label>
       <label>
-        <input type="checkbox" name="quote_auto_create_invoice" value="1" <?php echo !empty($appConfig['quote_auto_create_invoice']) || !isset($appConfig['quote_auto_create_invoice']) ? 'checked' : ''; ?>
-        <span class="font-600">Auto-create Invoice on approval</span>
+        <input type="checkbox" name="quote_auto_create_invoice" value="1" <?php echo !empty($appConfig['quote_auto_create_invoice']) ? 'checked' : ''; ?>>
+        <span class="font-600">Auto-create invoice on quote approval</span>
       </label>
     </div>
   </fieldset>

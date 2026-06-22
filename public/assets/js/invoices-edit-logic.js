@@ -37,7 +37,7 @@ function addExtraCharge() {
     wrap.innerHTML = `
     <input id="${itemId}" type="text" name="extra_item[]" placeholder="Item name..." style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" name="extra_desc[]" placeholder="Description (optional)" style="padding:8px;border-radius:4px;border:1px solid #ddd;resize:vertical;min-height:34px" oninput="recalcInv()"></textarea>
-    <input type="number" step="0.01" min="0" name="extra_qty[]" value="1" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
+    <input type="number" step="0.01" min="0" name="extra_qty[]" value="1" class="qty-input" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
     <input id="${priceId}" type="number" step="0.01" min="0" name="extra_price[]" value="0" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
     <input type="hidden" name="extra_id[]" value="">
     <button type="button" onclick="this.parentElement.remove();recalcInv()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
