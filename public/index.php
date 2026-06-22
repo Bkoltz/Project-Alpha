@@ -422,11 +422,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Add a global per-IP rate-limit gate before routing. Endpoint-specific limits
     // (e.g. public links) may use tighter checks in their own controllers.
     require_once __DIR__ . '/../src/config/db.php';
-    if (!rate_limit_check($pdo, 'global_post_' . $page, 120, 60, false)) {
-        http_response_code(429);
-        header('Content-Type: text/plain');
-        echo 'Too many requests. Please slow down.';
-        exit;
+    require_once __DIR__ . '/../src/utils/client_ip.php';
+
+    // Global POST rate limiter: block only per-IP, not per-page, and skip for
+    // legitimate authenticated actions that naturally chain POSTs.
+    $skipGlobalRateLimitFor = [
+        'quote/quote-approve', 'quote/quote-decline',
+        'contract/contract-action', 'contract/contract-create',
+        'invoice/invoice-create', 'invoice/invoice-action',
+        'settings', 'settings-backup',
+        'organization/org-create', 'organization/organization-update-notes',
+        'client/client-create', 'client/client-update',
+        'project/project-create', 'project/project-update',
+        'auth/account-edit',
+        'email-test',
+    ];
+    if (!in_array($page, $skipGlobalRateLimitFor, true)) {
+        $clientIp = get_client_ip();
+        $globalPostKey = 'global_post_' . md5($clientIp);
+        if (!rate_limit_check($pdo, $globalPostKey, 300, 60, false)) {
+            error_log('Rate limit exceeded: global_post for IP ' . $clientIp . ' page=' . $page);
+            http_response_code(429);
+            header('Content-Type: text/plain');
+            echo 'Too many requests. Please slow down.';
+            exit;
+        }
     }
 
     // Enforce CSRF on most POST endpoints, but allow controllers with their own CSRF/validation.
