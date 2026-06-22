@@ -34,9 +34,18 @@
 
   <div>
     <div>Logo (PNG, JPG, WEBP)</div>
-    <?php if (!empty($appConfig['logo_path'])): ?>
-      <div style="margin:8px 0"><img alt="Current logo" src="<?php echo htmlspecialchars($appConfig['logo_path']); ?>" style="max-width:240px;max-height:120px;object-fit:contain;border-radius:6px;background:#fff;padding:8px"></div>
-    <?php endif; ?>
+    <?php 
+    $logoPreview = $appConfig['logo_path'] ?? '';
+    if (empty($logoPreview)) {
+      $logoPreview = '/assets/default-logo.png';
+    }
+    ?>
+    <div style="margin:8px 0">
+      <img alt="Current logo" src="<?php echo htmlspecialchars($logoPreview); ?>" style="max-width:240px;max-height:120px;object-fit:contain;border-radius:6px;background:#fff;padding:8px">
+      <?php if (empty($appConfig['logo_path'])): ?>
+        <div style="font-size:0.8rem;color:#6c757d;margin-top:4px;">Default logo shown. Upload a custom logo to replace it.</div>
+      <?php endif; ?>
+    </div>
     <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp">
   </div>
 </fieldset>

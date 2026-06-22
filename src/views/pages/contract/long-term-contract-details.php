@@ -91,7 +91,7 @@ $isOngoing = empty($contract['end_date']);
   $brand = $appConfig['brand_name'] ?? 'Project Alpha';
   $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   $projectRoot = realpath(__DIR__ . '/../../../../');
-  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.svg') : '';
+  $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
   $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
   $isUrl = preg_match('/^(https?:\/\/|data:)/i', $logoPath) === 1;
   

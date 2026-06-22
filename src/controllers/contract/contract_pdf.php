@@ -96,7 +96,7 @@ $pageText = 'Page {PAGE_NUM} of {PAGE_COUNT}';
 $canvas->page_text($w - 140, 22, $pageText, $font, 10, [0,0,0]);
 // Footer: powered-by text at bottom-left on every page
 $h = $canvas->get_height();
-$canvas->page_text(54, $h - 30, 'Powered by Project Alpha', $font, 10, [0,0,0]);
+$canvas->page_text(54, $h - 30, 'Powered by Project-Alpha', $font, 10, [0,0,0]);
 
 $filename = 'contract_C-' . ($id) . '.pdf';
 header('Content-Type: application/pdf');
