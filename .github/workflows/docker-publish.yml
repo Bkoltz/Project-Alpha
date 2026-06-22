@@ -10,12 +10,11 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-web:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -31,31 +30,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for web image
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
-            type=ref,event=tag
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "cron_tag=cron-latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=dev" >> $GITHUB_OUTPUT
+            echo "cron_tag=cron" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build and push web image
-        id: build-and-push
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push cron image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./cron
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.cron_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref == 'refs/heads/main' && 'latest' || 'dev' }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
           format: table
           output: trivy-report.txt
           exit-code: '0'
@@ -68,43 +75,3 @@ jobs:
         with:
           name: trivy-report
           path: trivy-report.txt
-
-  build-cron:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log into GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for cron image
-        id: meta-cron
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=cron-latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=cron,enable=${{ github.ref == 'refs/heads/dev' }}
-            type=raw,value=cron-${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-
-      - name: Build and push cron image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./cron
-          push: true
-          tags: ${{ steps.meta-cron.outputs.tags }}
-          labels: ${{ steps.meta-cron.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
