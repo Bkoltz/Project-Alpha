@@ -603,3 +603,26 @@ Proprietary - All rights reserved.
 - `FILTER_MIGRATION_SUMMARY.md` - Template migration notes
 - `SECURITY.md` - Security contact info
 - `zap_baseline_2026-06-11.html` - OWASP ZAP baseline scan report
+
+## CI/CD and Security
+
+This repo uses only free GitHub-native tools — no paid licenses required.
+
+### Workflows
+- **CI** (`.github/workflows/ci.yml`) — builds Docker Compose, runs health check, PHP syntax check, PHPUnit, composer audit
+- **Docker** (`.github/workflows/docker-publish.yml`) — builds and pushes images to ghcr.io on push to dev/main
+- **CodeQL** (`.github/workflows/codeql.yml`) — free code-level vulnerability scanning (JS + Python)
+
+### Required GitHub repo settings (one-time, manual)
+Go to **Settings** in the GitHub repo:
+1. **Security > Code security and secret scanning > Enable** — turn on:
+   - Secret scanning (free for public repos)
+   - Push protection (free for public repos)
+   - Dependency alerts (Dependabot)
+2. **Settings > Actions > General** — ensure workflows have read/write permissions
+3. **Settings > Packages** — make `ghcr.io/ledgetoptechnologies/project-alpha` package public if you want end users to pull without authentication
+
+### What was removed (paid licenses)
+- ~~Gitleaks~~ — replaced by GitHub built-in secret scanning + push protection (free)
+- ~~Docker Hub~~ — replaced by ghcr.io (free for public repos)
+- ~~Nightly Docker Hub build~~ — removed (dead code)
