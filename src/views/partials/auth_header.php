@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../config/app.php';
   <?php if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); } ?>
   <?php if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); } ?>
   <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf']); ?>">
+  <link rel="icon" type="image/png" href="/assets/favicon-32.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
