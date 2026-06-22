@@ -215,7 +215,7 @@ try {
     <legend style="padding:0 12px;font-weight:600;font-size:16px">📥 Import Tax Rates</legend>
     
     <p style="margin:0 0 16px;color:#6b7280;font-size:14px">
-      Import county-level tax rates from SSTGB files. Upload both files and click Import.
+      Import county-level tax rates from official state sources. Upload the required files and click Import.
     </p>
     
     <?php if ($importSuccess && $importSummary): ?>
@@ -234,24 +234,24 @@ try {
       
       <div class="grid">
         <div>
-          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">📍 FIPS County File (TXT) *</label>
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">📍 FIPS County File (.txt) *</label>
           <input type="file" name="fips_file" accept=".txt" required
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
           <div style="margin-top:4px;color:var(--muted);font-size:11px">Census Bureau county file (e.g., st55_wi_cou2020.txt)</div>
         </div>
         
         <div>
-          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">💰 Tax Rates File (CSV) *</label>
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">💰 Tax Rate File (.csv) *</label>
           <input type="file" name="rate_file" accept=".csv" required
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-          <div style="margin-top:4px;color:var(--muted);font-size:11px">SSTGB rate file (e.g., WIR062026.csv)</div>
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">State tax rate file (e.g., WIR062026.csv)</div>
         </div>
 
         <div>
-          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">🗺️ Boundary File (CSV)</label>
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">🗺️ Boundary File (.csv)</label>
           <input type="file" name="boundary_file" accept=".csv"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-          <div style="margin-top:4px;color:var(--muted);font-size:11px">Optional: SSTGB boundary file (e.g., WIB062026.csv). Enables ZIP-level complexity lookup.</div>
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">Optional: state boundary file (e.g., WIB062026.csv). Enables ZIP-level complexity lookup.</div>
         </div>
 
         <div>
@@ -280,16 +280,21 @@ try {
     <details style="margin-top:16px">
       <summary style="cursor:pointer;font-weight:600;color:#374151;padding:8px 0">📖 Where to get these files</summary>
       <div style="padding:12px;background:#f9fafb;border-radius:8px;margin-top:8px;font-size:13px;line-height:1.6">
-        <p style="margin:0 0 12px"><strong>1. FIPS Counties (TXT file):</strong></p>
+        <p style="margin:0 0 12px"><strong>1. FIPS Counties (.txt file):</strong></p>
         <ul style="margin:0 0 16px 20px;padding:0">
-          <li>Census Bureau: <a href="https://www2.census.gov/geo/docs/reference/codes2020/cou/" target="_blank" rel="noopener" style="color:#2563eb">ANSI FIPS County Codes</a></li>
+          <li>US Census Bureau: <a href="https://www2.census.gov/geo/docs/reference/codes2020/cou/" target="_blank" rel="noopener" style="color:#2563eb">ANSI FIPS County Codes</a></li>
           <li>Download the county file for your state (e.g., st55_wi_cou2020.txt)</li>
         </ul>
-        <p style="margin:0 0 12px"><strong>2. Tax Rates and Boundaries (CSV files):</strong></p>
+        <p style="margin:0 0 12px"><strong>2. Tax Rates and Boundaries (.csv files):</strong></p>
+        <p style="margin:0 0 8px">Examples of official state sources:</p>
         <ul style="margin:0 0 16px 20px;padding:0">
-          <li>Wisconsin: <a href="https://www.revenue.wi.gov/Pages/SSTP/ratebound.aspx" target="_blank" rel="noopener" style="color:#2563eb">WI Dept of Revenue - SSTP Rate and Boundary Files</a></li>
-          <li>Rate file: WIR062026.csv (or similar)</li>
-          <li>Boundary file: WIB062026.csv (or similar)</li>
+          <li>Wisconsin: <a href="https://www.revenue.wi.gov/Pages/SSTP/ratebound.aspx" target="_blank" rel="noopener" style="color:#2563eb">WI Dept of Revenue - SSTP Rate and Boundary Files</a>
+            <ul style="margin:4px 0 0 20px;padding:0">
+              <li>Rate file: WIR062026.csv (or similar)</li>
+              <li>Boundary file: WIB062026.csv (or similar)</li>
+            </ul>
+          </li>
+          <li>Other states: use the equivalent SSTGB rate/boundary files from your state Department of Revenue.</li>
         </ul>
       </div>
     </details>
