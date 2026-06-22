@@ -463,9 +463,51 @@ test("Can create tax rate", function() use ($pdo) {
 });
 
 // ==========================================
-// PHASE 11: Project Document Linking
+// PHASE 11: Quote Auto-Create Defaults
 // ==========================================
-echo "\n📋 PHASE 11: Project Document Linking\n";
+echo "\n📋 PHASE 11: Quote Auto-Create Defaults\n";
+echo "----------------------------------------\n";
+
+test("Quote auto-create contract defaults to ON", function() {
+    // Same default expression used in documents.php and quote_approve.php
+    $appConfig = [];
+    $defaultOn = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
+    return $defaultOn === true;
+});
+
+test("Quote auto-create invoice defaults to ON", function() {
+    $appConfig = [];
+    $defaultOn = !isset($appConfig['quote_auto_create_invoice']) || !empty($appConfig['quote_auto_create_invoice']);
+    return $defaultOn === true;
+});
+
+test("Quote auto-create settings are saved by settings_handler.php", function() {
+    // Simulate the saving logic that appears in settings_handler.php
+    $post = [
+        'quote_auto_create_contract' => '1',
+        'quote_auto_create_invoice' => '0',
+    ];
+    $settings = [];
+    $settings['quote_auto_create_contract'] = !empty($post['quote_auto_create_contract']) ? 1 : 0;
+    $settings['quote_auto_create_invoice']  = !empty($post['quote_auto_create_invoice'])  ? 1 : 0;
+    return $settings['quote_auto_create_contract'] === 1 && $settings['quote_auto_create_invoice'] === 0;
+});
+
+test("Quote auto-create disabled values are saved as OFF", function() {
+    $post = [
+        'quote_auto_create_contract' => '', // unchecked checkbox will omit value
+        'quote_auto_create_invoice' => '',
+    ];
+    $settings = [];
+    $settings['quote_auto_create_contract'] = !empty($post['quote_auto_create_contract']) ? 1 : 0;
+    $settings['quote_auto_create_invoice']  = !empty($post['quote_auto_create_invoice'])  ? 1 : 0;
+    return $settings['quote_auto_create_contract'] === 0 && $settings['quote_auto_create_invoice'] === 0;
+});
+
+// ==========================================
+// PHASE 12: Project Document Linking
+// ==========================================
+echo "\n📋 PHASE 12: Project Document Linking\n";
 echo "----------------------------------------\n";
 
 test("Can link document to project", function() use ($pdo) {

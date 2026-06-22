@@ -244,9 +244,16 @@ try {
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">💰 Tax Rates File (CSV) *</label>
           <input type="file" name="rate_file" accept=".csv" required
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-          <div style="margin-top:4px;color:var(--muted);font-size:11px">SSTGB rate file (e.g., WIR032026.csv)</div>
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">SSTGB rate file (e.g., WIR062026.csv)</div>
         </div>
-        
+
+        <div>
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">🗺️ Boundary File (CSV)</label>
+          <input type="file" name="boundary_file" accept=".csv"
+                 style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">Optional: SSTGB boundary file (e.g., WIB062026.csv). Enables ZIP-level complexity lookup.</div>
+        </div>
+
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">State Tax Rate (%)</label>
           <input type="number" step="0.01" min="0" max="20" name="state_tax_rate" value="5.00" 
@@ -275,13 +282,14 @@ try {
       <div style="padding:12px;background:#f9fafb;border-radius:8px;margin-top:8px;font-size:13px;line-height:1.6">
         <p style="margin:0 0 12px"><strong>1. FIPS Counties (TXT file):</strong></p>
         <ul style="margin:0 0 16px 20px;padding:0">
-          <li>Census Bureau: <a href="https://www.census.gov/library/reference/code-lists/ansi.html#cou" target="_blank" rel="noopener" style="color:#2563eb">ANSI FIPS County Codes</a></li>
+          <li>Census Bureau: <a href="https://www2.census.gov/geo/docs/reference/codes2020/cou/" target="_blank" rel="noopener" style="color:#2563eb">ANSI FIPS County Codes</a></li>
           <li>Download the county file for your state (e.g., st55_wi_cou2020.txt)</li>
         </ul>
-        <p style="margin:0 0 12px"><strong>2. Tax Rates (CSV file):</strong></p>
+        <p style="margin:0 0 12px"><strong>2. Tax Rates and Boundaries (CSV files):</strong></p>
         <ul style="margin:0 0 16px 20px;padding:0">
-          <li>Wisconsin: <a href="https://www.revenue.wi.gov/Pages/SSTGB/home.aspx" target="_blank" rel="noopener" style="color:#2563eb">WI Dept of Revenue - SSTGB Files</a></li>
-          <li>Rate file: WIR032026.csv (or similar)</li>
+          <li>Wisconsin: <a href="https://www.revenue.wi.gov/Pages/SSTP/ratebound.aspx" target="_blank" rel="noopener" style="color:#2563eb">WI Dept of Revenue - SSTP Rate and Boundary Files</a></li>
+          <li>Rate file: WIR062026.csv (or similar)</li>
+          <li>Boundary file: WIB062026.csv (or similar)</li>
         </ul>
       </div>
     </details>

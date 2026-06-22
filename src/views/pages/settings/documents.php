@@ -16,19 +16,19 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
 <form method="post" action="/?page=settings&tab=documents&doc_tab=<?php echo htmlspecialchars($docTab); ?>" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:800px">
   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
   <input type="hidden" name="tab" value="documents">
+  <input type="hidden" name="doc_tab" value="<?php echo htmlspecialchars($docTab); ?>">
 <?php endif; ?>
-
 <?php if ($docTab === 'quotes'): ?>
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
     <legend style="padding:0 6px;color:var(--muted)">Quote Options</legend>
     <div class="grid">
       <label>
-        <input type="checkbox" name="quote_scope_enabled" value="1" <?php echo !empty($appConfig['quote_scope_enabled']) ? 'checked' : ''; ?>>
+        <input type="checkbox" name="quote_scope_enabled" value="1" <?php echo !empty($appConfig['quote_scope_enabled']) ? 'checked' : ''; ?>
         <span class="font-600">Enable "Scope of Project" field on quotes</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">If enabled, quotes will have a scope field. If left blank, it will be excluded from PDF.</div>
       </label>
       <label style="display:block;margin-top:4px">
-        <input type="checkbox" name="quotes_show_terms" value="1" <?php echo (!isset($appConfig['quotes_show_terms']) || (int)($appConfig['quotes_show_terms']) === 1) ? 'checked' : ''; ?>>
+        <input type="checkbox" name="quotes_show_terms" value="1" <?php echo (!isset($appConfig['quotes_show_terms']) || (int)($appConfig['quotes_show_terms']) === 1) ? 'checked' : ''; ?>
         <span class="font-600">Show terms on Quotes</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">When enabled, the standard terms will be included on quote PDFs.</div>
       </label>
@@ -40,11 +40,11 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
     <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Configure what gets automatically created when a quote is approved</p>
     <div class="grid">
       <label>
-        <input type="checkbox" name="quote_auto_create_contract" value="1" <?php echo !empty($appConfig['quote_auto_create_contract']) || !isset($appConfig['quote_auto_create_contract']) ? 'checked' : ''; ?>>
+        <input type="checkbox" name="quote_auto_create_contract" value="1" <?php echo !empty($appConfig['quote_auto_create_contract']) || !isset($appConfig['quote_auto_create_contract']) ? 'checked' : ''; ?>
         <span class="font-600">Auto-create Contract on approval</span>
       </label>
       <label>
-        <input type="checkbox" name="quote_auto_create_invoice" value="1" <?php echo !empty($appConfig['quote_auto_create_invoice']) || !isset($appConfig['quote_auto_create_invoice']) ? 'checked' : ''; ?>>
+        <input type="checkbox" name="quote_auto_create_invoice" value="1" <?php echo !empty($appConfig['quote_auto_create_invoice']) || !isset($appConfig['quote_auto_create_invoice']) ? 'checked' : ''; ?>
         <span class="font-600">Auto-create Invoice on approval</span>
       </label>
     </div>
@@ -56,12 +56,12 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
     <legend style="padding:0 6px;color:var(--muted)">Contract Options</legend>
     <div class="grid">
       <label>
-        <input type="checkbox" name="contract_scope_enabled" value="1" <?php echo !empty($appConfig['contract_scope_enabled']) || !isset($appConfig['contract_scope_enabled']) ? 'checked' : ''; ?>>
+        <input type="checkbox" name="contract_scope_enabled" value="1" <?php echo !empty($appConfig['contract_scope_enabled']) || !isset($appConfig['contract_scope_enabled']) ? 'checked' : ''; ?>
         <span class="font-600">Enable "Scope of Contract" field</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">Available for both regular and long-term contracts. If left blank, excluded from PDF.</div>
       </label>
       <label>
-        <input type="checkbox" name="contract_memo_enabled" value="1" <?php echo !empty($appConfig['contract_memo_enabled']) ? 'checked' : ''; ?>>
+        <input type="checkbox" name="contract_memo_enabled" value="1" <?php echo !empty($appConfig['contract_memo_enabled']) ? 'checked' : ''; ?>
         <span class="font-600">Enable "Memo" field</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">Add a memo/notes section to contracts for additional context.</div>
       </label>
