@@ -18,7 +18,7 @@ x-db-env: &db-env
 
 services:
   web:
-    image: "ghcr.io/ledgetoptechnologies/project-alpha:dev"
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
     pull_policy: always
     ports:
       - "1627:80"
@@ -53,7 +53,7 @@ services:
       - mysql_socket:/var/run/mysqld
 
   cron:
-    image: "ghcr.io/ledgetoptechnologies/project-alpha:cron"
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"
     pull_policy: always
     environment:
       <<: *db-env
