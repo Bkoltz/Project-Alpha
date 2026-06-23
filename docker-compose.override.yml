@@ -11,6 +11,7 @@ services:
   web:
     build:
       context: .
+      target: web
     image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:latest}
 
   cron:

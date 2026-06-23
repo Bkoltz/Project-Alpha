@@ -50,8 +50,8 @@ echo "[cron-entrypoint] Waiting for DB at ${DB_HOST}:${DB_PORT}..."
 counter=0
 while [ $counter -lt $RETRIES ]; do
   if command -v mysqladmin > /dev/null 2>&1; then
-    mysqladmin ping \
-      -S /var/run/mysqld/mysqld.sock \
+    mysqladmin --skip-ssl ping \
+      -h "${DB_HOST}" -P "${DB_PORT}" \
       -u"${MYSQL_USER:-root}" \
       --password="${MYSQL_PASSWORD:-${MYSQL_ROOT_PASSWORD:-rootpass}}" \
       --silent > /dev/null 2>&1 && {

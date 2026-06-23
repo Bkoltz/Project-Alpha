@@ -79,7 +79,7 @@ for sql_file in /usr/local/share/app-migrations/*.sql; do
 done
 
 # 1) Base schema: if key table (quotes) is missing, load the init schema
-if ! mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
+if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
      "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
   echo "Applying base schema to '${DB_NAME}'..."
   
@@ -93,7 +93,7 @@ if ! mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PA
   fi
   if [ -f "$INIT_SQL" ]; then
     echo "Applying unified schema: $INIT_SQL"
-    if mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then
+    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then
       echo "✅ Base schema applied from init.sql"
     else
       echo "⚠️ Failed to apply init.sql, trying individual migrations..."
@@ -101,7 +101,7 @@ if ! mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PA
       for migration in /var/www/database/migrations/*.sql; do
         if [ -f "$migration" ]; then
           echo "Applying migration: $(basename "$migration")"
-          mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$migration" || true
+          mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$migration" || true
         fi
       done
     fi
@@ -115,13 +115,13 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-admin@project-alpha.local}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 echo "Ensuring admin user exists with email: ${ADMIN_EMAIL}, username: ${ADMIN_USERNAME}"
 # Ensure admin user exists and is linked to the default organization
-mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
+mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
   INSERT INTO users (email, password_hash, username, role, force_password_reset)
   VALUES ('${ADMIN_EMAIL}', '${ADMIN_PASSWORD_HASH}', '${ADMIN_USERNAME}', 'admin', 0)
   ON DUPLICATE KEY UPDATE password_hash='${ADMIN_PASSWORD_HASH}', email='${ADMIN_EMAIL}', username='${ADMIN_USERNAME}', role='admin', force_password_reset=0, deleted_at=NULL;
 " || true
 
-mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
+mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
   INSERT INTO user_organizations (user_id, organization_id, role, is_default)
   VALUES (
     (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1),
@@ -139,7 +139,7 @@ if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
   
   # Execute with verbose error reporting
   set +e  # Temporarily disable exit on error
-  mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
+  mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
        "/usr/local/share/app-migrations/runtime.sql" 2>&1 | tee /tmp/migration.log
   MIGRATION_EXIT=${PIPESTATUS[0]}
   set -e  # Re-enable exit on error
