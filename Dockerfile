@@ -69,6 +69,7 @@ COPY ./src/ /var/www/src/
 # Copy database initialization and migration files into the image
 # The init.sql is the single source of truth with all modules concatenated
 COPY ./database/init.sql /usr/local/share/app-migrations/init.sql
+COPY ./database/init.sql /docker-entrypoint-initdb.d/01-init.sql
 
 # Copy Composer vendor from the builder stage
 COPY --from=vendor /app/vendor /var/www/vendor
@@ -106,7 +107,10 @@ RUN docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli
 WORKDIR /var/www
 
 COPY --from=vendor /app/vendor /var/www/vendor
-RUN chown -R root:root /var/www && chmod -R 755 /var/www
+COPY ./src/ /var/www/src/
+RUN mkdir -p /var/www/logs /var/www/backups \
+    && chown -R root:root /var/www \
+    && chmod -R 755 /var/www
 
 RUN mkdir -p /var/log/cron && \
     touch /var/log/cron/generate_recurring_invoices.log \

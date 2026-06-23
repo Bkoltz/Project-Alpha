@@ -9,8 +9,8 @@ Project Alpha is a PHP 8.3 application for managing clients, quotes, contracts, 
 ## Build & Run Commands
 
 ```bash
-# Build and start containers
-docker compose build web
+# Pull and start containers
+docker compose pull
 docker compose up -d
 
 # App at http://localhost:1627

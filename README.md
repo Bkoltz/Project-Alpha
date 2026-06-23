@@ -70,10 +70,10 @@ A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and 
 Project Alpha uses inline defaults in `docker-compose.yml`; no `.env` file is required.
 
 1. Review `docker-compose.yml` and change the default passwords (search for `CHANGE THESE`).
-2. Build and start the stack:
+2. Pull the GitHub Container Registry images and start the stack:
 
 ```bash
-docker compose build web
+docker compose pull
 docker compose up -d
 ```
 
@@ -432,7 +432,7 @@ tools/                  # Backup/restore scripts, audit generator
 ### Getting Started
 
 1. Clone the repository
-2. Run `docker compose build web && docker compose up -d`
+2. Run `docker compose pull && docker compose up -d`
 3. Run migrations: `docker compose exec -T web php /var/www/src/migrations/run_migrations.php --verbose`
 4. Open http://localhost:1627 and log in
 
@@ -620,7 +620,7 @@ Go to **Settings** in the GitHub repo:
    - Push protection (free for public repos)
    - Dependency alerts (Dependabot)
 2. **Settings > Actions > General** — ensure workflows have read/write permissions
-3. **Settings > Packages** — make `ghcr.io/ledgetoptechnologies/project-alpha` package public if you want end users to pull without authentication
+3. **Settings > Packages** — make `ghcr.io/bkoltz/project-alpha` package public if you want end users to pull without authentication
 
 ### What was removed (paid licenses)
 - ~~Gitleaks~~ — replaced by GitHub built-in secret scanning + push protection (free)

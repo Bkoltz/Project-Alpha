@@ -16,15 +16,15 @@ Core features
 Docker / Development notes
 --------------------------
 - This project is containerized using Docker. The runtime uses PHP 8.3 and Apache.
-- The composer/vendor stage uses the same PHP version to avoid package platform mismatches.
-- If you run into build problems related to PHP version/platform mismatch during `composer install`, ensure you build using the provided `Dockerfile` which uses `php:8.3` for the vendor stage.
+- The main Compose file pulls images from GitHub Container Registry (`ghcr.io`).
+- The Dockerfile still builds PHP/vendor layers for the GHCR publish workflow.
 
 Running locally with Docker
 --------------------------
-Build and run (using Compose):
+Pull and run (using Compose):
 
 ```cmd
-docker compose build --no-cache
+docker compose pull
 docker compose up -d
 ```
 

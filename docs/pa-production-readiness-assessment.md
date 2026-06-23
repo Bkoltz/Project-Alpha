@@ -167,7 +167,7 @@ PA is a PHP 8.3 / MySQL 8 / Docker SaaS for quote/contract/invoice management wi
     - Deploy to staging before every production release
 
 24. **Zero-downtime deploy strategy**
-    - Current: `docker compose up -d --build` causes downtime
+    - Current: `docker compose pull && docker compose up -d` can still cause downtime
     - Options: blue/green (two compose stacks, switch proxy), or rolling with multiple web replicas
     - Database migrations must be backward-compatible
 

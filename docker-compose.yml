@@ -2,10 +2,12 @@
 #
 # SETUP:
 #   1. Change the three passwords below (search for "CHANGE THESE")
-#   2. Run: docker compose up -d --build
-#   3. Open http://localhost:1627
-#   4. Log in with admin@project-alpha.local / <your ADMIN_PASSWORD>
-#   5. Go to Settings > Billing to enter Stripe keys (stored encrypted in DB)
+#   2. Optional for TrueNAS: set PROJECT_ALPHA_DATA_DIR to your app dataset
+#      Example: /mnt/tank/apps/project-alpha
+#   3. Run: docker compose pull && docker compose up -d
+#   4. Open http://localhost:1627
+#   5. Log in with admin@project-alpha.local / <your ADMIN_PASSWORD>
+#   6. Go to Settings > Billing to enter Stripe keys (stored encrypted in DB)
 #
 # That's it. No .env file needed. Stripe keys go through the SaaS UI.
 
@@ -21,7 +23,7 @@ x-db-env: &db-env
 
 services:
   web:
-    build: .
+    image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/bkoltz/project-alpha:latest}
     ports:
       - "1627:80"
     environment:
@@ -39,16 +41,13 @@ services:
       retries: 5
     restart: unless-stopped
     volumes:
-      - ./src:/var/www/src
-      - ./src/uploads:/var/www/src/uploads
-      - ./config:/var/www/config
-      - pa_backups:/var/www/backups
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/uploads:/var/www/src/uploads
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/config:/var/www/config
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/backups:/var/www/backups
       - mysql_socket:/var/run/mysqld
 
   cron:
-    build:
-      context: .
-      target: cron
+    image: ${PROJECT_ALPHA_CRON_IMAGE:-ghcr.io/bkoltz/project-alpha:cron-latest}
     environment:
       <<: *db-env
       BACKUP_RETENTION_DAYS: "10"
@@ -57,11 +56,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
     volumes:
-      - ./src:/var/www/src
-      - ./src/uploads:/var/www/src/uploads
-      - ./config:/var/www/config
-      - pa_backups:/var/www/backups
-      - cron_logs:/var/log/cron
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/uploads:/var/www/src/uploads
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/config:/var/www/config
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/backups:/var/www/backups
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/cron_logs:/var/www/logs
       - mysql_socket:/var/run/mysqld
 
   db:
@@ -75,9 +73,8 @@ services:
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_secure_pass
     volumes:
-      - db_data:/var/lib/mysql
+      - ${PROJECT_ALPHA_DATA_DIR:-.}/db_data:/var/lib/mysql
       - mysql_socket:/var/run/mysqld
-      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -88,7 +85,4 @@ services:
       retries: 10
 
 volumes:
-  db_data: {}
-  cron_logs: {}
   mysql_socket: {}
-  pa_backups: {}

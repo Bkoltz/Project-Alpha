@@ -12,20 +12,31 @@
 | TrueNAS Scale | Latest stable release with Apps catalog enabled |
 | Storage | At least one pool for app data and backups |
 | Network | Static LAN IP for the NAS; port 443/80 forwarded if external access is desired |
-| Images | `bkoltz/project-alpha:latest` and `bkoltz/project-alpha:cron` (or build locally) |
+| Images | `ghcr.io/bkoltz/project-alpha:latest` and `ghcr.io/bkoltz/project-alpha:cron-latest` (or your own published tags) |
 | Secrets | MySQL root/app passwords, admin password, Stripe keys (entered in UI) |
 
 ---
 
 ## 2. Deployment options
 
-### Option A — Custom App (recommended)
-Use TrueNAS Scale's **Custom App** wizard and paste the equivalent of `docker-compose.yml`.
+### Option A - Compose with published images (recommended)
+Use the main `docker-compose.yml`. It does not contain `build:` sections, so TrueNAS does not need the local source tree or `Dockerfile` in its app working directory.
 
-### Option B — Docker Compose app
-If TrueNAS Scale still supports the **Docker Compose** app type, upload the project directory as an app.
+This avoids the TrueNAS error:
 
-This guide uses Option A because it gives the most control over volumes, environment, and networking.
+```text
+failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory
+```
+
+Set `PROJECT_ALPHA_DATA_DIR` to your app dataset path, for example `/mnt/tank/apps/project-alpha`.
+
+### Option B - Custom App wizard
+Use TrueNAS Scale's **Custom App** wizard and enter the same images, environment variables, ports, and mounts from `docker-compose.yml`.
+
+### Option C - Build on TrueNAS
+If TrueNAS Scale still supports the **Docker Compose** app type, upload the full project directory as an app.
+
+Use a local build override only when the compose file, `Dockerfile`, `src/`, `public/`, `database/`, `docker/`, and `cron/` directories are all present in the same uploaded project directory. The main `docker-compose.yml` is intended to pull images from GitHub Container Registry.
 
 ---
 
@@ -33,10 +44,11 @@ This guide uses Option A because it gives the most control over volumes, environ
 
 1. Create a dataset for the app, e.g. `tank/apps/project-alpha`.
 2. Inside it create sub-datasets or directories:
-   - `src` — mounted read-write so uploads live here
+   - `uploads` - mounted to `/var/www/src/uploads`
    - `config` — app config (encrypted in UI is fine)
    - `backups` — DB dumps and optional file backups
-   - `database/init.sql` — initial schema, only needed on first install
+   - `cron_logs` - scheduled job output
+   - `db_data` - MySQL data directory
 3. Set ACL owner to the user ID the container runs as (default `33` for `www-data`, or whatever the Dockerfile uses).
 
 ---
@@ -68,7 +80,7 @@ Use these container settings in the wizard:
 
 | Field | Value |
 |---|---|
-| Image repository | `bkoltz/project-alpha` |
+| Image repository | `ghcr.io/bkoltz/project-alpha` |
 | Image tag | `latest` |
 | Container port | `80` |
 | Host port / Node port | `1627` (or use TrueNAS ingress on 80/443) |
@@ -80,8 +92,7 @@ Use these container settings in the wizard:
 | Environment: `MYSQL_ROOT_PASSWORD` | `<generate strong>` |
 | Environment: `ADMIN_PASSWORD` | `<generate strong>` |
 | Environment: `TRUSTED_PROXIES` | `172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8` |
-| Mount: app code | `/mnt/tank/apps/project-alpha/src` → `/var/www/src` |
-| Mount: uploads | `/mnt/tank/apps/project-alpha/src/uploads` → `/var/www/src/uploads` |
+| Mount: uploads | `/mnt/tank/apps/project-alpha/uploads` -> `/var/www/src/uploads` |
 | Mount: config | `/mnt/tank/apps/project-alpha/config` → `/var/www/config` |
 | Mount: backups | `/mnt/tank/apps/project-alpha/backups` → `/var/www/backups` |
 
@@ -96,17 +107,18 @@ Use these container settings in the wizard:
 | Environment: `MYSQL_USER` | `appuser` |
 | Environment: `MYSQL_PASSWORD` | same as web |
 | Mount: data | `/mnt/tank/apps/project-alpha/db_data` → `/var/lib/mysql` |
-| Mount: init | `/mnt/tank/apps/project-alpha/database/init.sql` → `/docker-entrypoint-initdb.d/01-init.sql` (read-only) |
+| Mount: socket | shared named volume `mysql_socket` -> `/var/run/mysqld` |
 
 ### 4.3 cron container
 
 | Field | Value |
 |---|---|
-| Image repository | `bkoltz/project-alpha` or `bkoltz/project-alpha:cron` |
-| Command/args | run the cron entrypoint if not baked into image |
+| Image repository | `ghcr.io/bkoltz/project-alpha` |
+| Image tag | `cron-latest` |
+| Command/args | use image default |
 | Same DB env as web | yes |
-| Same volume mounts as web | yes |
-| Additional mount | `/mnt/tank/apps/project-alpha/cron_logs` → `/var/log/cron` |
+| Same config/uploads/backups mounts as web | yes |
+| Additional mount | `/mnt/tank/apps/project-alpha/cron_logs` -> `/var/www/logs` |
 
 ---
 

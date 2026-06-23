@@ -84,8 +84,13 @@ if ! mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PA
   echo "Applying base schema to '${DB_NAME}'..."
   
 
-  # Run the unified init.sql which contains all modules
+  # Run the unified init.sql which contains all modules. TrueNAS/image-based
+  # deployments rely on the copy baked into the web image, while local compose
+  # can still provide the MySQL entrypoint path as a bind mount.
   INIT_SQL="/docker-entrypoint-initdb.d/01-init.sql"
+  if [ ! -f "$INIT_SQL" ]; then
+    INIT_SQL="/usr/local/share/app-migrations/init.sql"
+  fi
   if [ -f "$INIT_SQL" ]; then
     echo "Applying unified schema: $INIT_SQL"
     if mysql -S /var/run/mysqld/mysqld.sock -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then

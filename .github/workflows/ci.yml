@@ -9,12 +9,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      PROJECT_ALPHA_WEB_IMAGE: project-alpha-ci:web
+      PROJECT_ALPHA_CRON_IMAGE: project-alpha-ci:cron
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and start services
+      - name: Build test images
         run: |
-          docker compose up -d --build
+          docker build -t "$PROJECT_ALPHA_WEB_IMAGE" .
+          docker build --target cron -t "$PROJECT_ALPHA_CRON_IMAGE" .
+
+      - name: Start services
+        run: |
+          docker compose up -d
           sleep 25
 
       - name: Health check
