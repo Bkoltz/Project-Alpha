@@ -92,3 +92,35 @@ RUN sed -i 's/\r$//' /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
 
 EXPOSE 80
 CMD ["start.sh"]
+
+# ---------- Stage 3: Cron service ----------
+# Uses the same vendor stage as web. Source code is volume-mounted at runtime.
+FROM php:8.3-cli AS cron
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        default-mysql-client cron curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli
+
+WORKDIR /var/www
+
+COPY --from=vendor /app/vendor /var/www/vendor
+RUN chown -R root:root /var/www && chmod -R 755 /var/www
+
+RUN mkdir -p /var/log/cron && \
+    touch /var/log/cron/generate_recurring_invoices.log \
+          /var/log/cron/auto_charge_recurring.log \
+          /var/log/cron/send_invoice_reminders.log \
+          /var/log/cron/auto_terminate_contracts.log \
+          /var/log/cron/link_expiration_checker.log \
+          /var/log/cron/stripe_reconciliation.log && \
+    chmod 666 /var/log/cron/*.log
+
+COPY cron/crontab /etc/cron.d/project-alpha
+RUN sed -i 's/\r$//' /etc/cron.d/project-alpha && chmod 0644 /etc/cron.d/project-alpha
+
+COPY cron/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+CMD ["entrypoint.sh"]
