@@ -7,46 +7,66 @@ on:
     branches: [dev]
 
 jobs:
-  test:
+  smoke-test:
     runs-on: ubuntu-latest
-    env:
-      PROJECT_ALPHA_WEB_IMAGE: project-alpha-ci:web
-      PROJECT_ALPHA_CRON_IMAGE: project-alpha-ci:cron
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build test images
+      - name: Build and start real compose path
         run: |
-          docker build -t "$PROJECT_ALPHA_WEB_IMAGE" .
-          docker build --target cron -t "$PROJECT_ALPHA_CRON_IMAGE" .
-
-      - name: Start services
-        run: |
-          docker compose up -d
-          sleep 25
-
-      - name: Health check
-        run: |
-          for i in 1 2 3 4 5; do
-            curl -sf http://localhost:1627 && exit 0
+          docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:1627/ >/dev/null 2>&1; then break; fi
             sleep 5
           done
-          exit 1
+
+      - name: ASSERT web image identity
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web sh -c \
+            'test -f /usr/local/bin/start.sh && command -v apache2ctl >/dev/null && test -f /var/www/html/index.php' \
+            || { echo "WEB IMAGE NOT OK: missing web-stage artifacts"; exit 1; }
+          echo "WEB IMAGE OK"
+
+      - name: ASSERT web serves HTTP
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:1627/)
+          if [ "$code" != "200" ] && [ "$code" != "302" ]; then
+            echo "HTTP code: $code (expected 200 or 302)"; exit 1
+          fi
+          echo "HTTP code: $code"
+
+      - name: ASSERT CSP clean over plain HTTP
+        run: |
+          hdrs=$(curl -s -D - -o /dev/null http://localhost:1627/)
+          if echo "$hdrs" | grep -iE 'upgrade-insecure-requests|Strict-Transport-Security' >/dev/null; then
+            echo "CSP/HSTS found over plain HTTP"; echo "$hdrs"; exit 1
+          fi
+          echo "CSP/HSTS OK (plain HTTP)"
+
+      - name: ASSERT cron connected to DB over TCP
+        run: |
+          logs=$(docker compose -f docker-compose.yml -f docker-compose.override.yml logs cron)
+          if ! echo "$logs" | grep -qE 'DB is ready'; then
+            echo "Cron did not report DB ready"; echo "$logs"; exit 1
+          fi
+          if echo "$logs" | grep -qE 'did not become available'; then
+            echo "Cron reported DB did not become available"; echo "$logs"; exit 1
+          fi
+          echo "CRON DB OK"
 
       - name: PHP syntax check
-        run: docker compose exec -T web bash -c "find /var/www/src -name '*.php' -exec php -l {} \; 2>&1 | grep -v 'No syntax errors' && exit 1 || exit 0"
-
-      - name: Run migrations
-        run: docker compose exec -T web php /var/www/src/migrations/run_migrations.php --verbose || echo "Migration runner not yet ready"
-
-      - name: Run PHPUnit tests
-        run: docker compose exec -T web vendor/bin/phpunit --colors=always || echo "PHPUnit not configured or no tests"
-
-      - name: Composer audit
         run: |
-          curl -sS https://getcomposer.org/installer | php -- --install-dir=/tmp
-          /tmp/composer.phar audit --no-dev || true
+          docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web sh -c \
+            "find /var/www/src -name '*.php' -exec php -l {} \\; 2>&1 | grep -v 'No syntax errors' && exit 1 || exit 0"
+
+      - name: PHPUnit
+        run: |
+          set +e
+          docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web vendor/bin/phpunit --colors=always
+          rc=$?
+          set -e
+          if [ $rc -ne 0 ] && [ -f vendor/bin/phpunit ]; then exit $rc; fi
 
       - name: Dump logs on failure
         if: failure()
-        run: docker compose logs
+        run: docker compose -f docker-compose.yml -f docker-compose.override.yml logs
