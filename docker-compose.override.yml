@@ -1,0 +1,20 @@
+# Project Alpha — Local development override
+#
+# Merges with docker-compose.yml so developers can build locally instead of
+# pulling prebuilt GHCR images. In production, remove this file or do not
+# include it in the docker compose invocation.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+
+services:
+  web:
+    build:
+      context: .
+    image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/bkoltz/project-alpha:latest}
+
+  cron:
+    build:
+      context: .
+      target: cron
+    image: ${PROJECT_ALPHA_CRON_IMAGE:-ghcr.io/bkoltz/project-alpha:cron-latest}
