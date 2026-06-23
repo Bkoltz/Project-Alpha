@@ -620,7 +620,7 @@ Go to **Settings** in the GitHub repo:
    - Push protection (free for public repos)
    - Dependency alerts (Dependabot)
 2. **Settings > Actions > General** — ensure workflows have read/write permissions
-3. **Settings > Packages** — make `ghcr.io/bkoltz/project-alpha` package public if you want end users to pull without authentication
+3. **Settings > Packages** — make `ghcr.io/ledgetoptechnologies/project-alpha` package public if you want end users to pull without authentication
 
 ### What was removed (paid licenses)
 - ~~Gitleaks~~ — replaced by GitHub built-in secret scanning + push protection (free)
