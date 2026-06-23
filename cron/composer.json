@@ -1,5 +1,5 @@
 {
-  "name": "bkoltz/project-alpha-cron",
+  "name": "ledgetoptechnologies/project-alpha-cron",
   "description": "Cron service for Project Alpha – scheduled tasks (invoices, reminders, reconciliation)",
   "type": "project",
   "license": "MIT",
