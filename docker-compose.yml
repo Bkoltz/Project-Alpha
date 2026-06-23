@@ -9,7 +9,6 @@
 #
 # That's it. No .env file needed. Stripe keys go through the SaaS UI.
 
-# DB connection + passwords (shared by web and cron)
 # --- CHANGE THESE for production ---
 x-db-env: &db-env
   DB_HOST: db
@@ -51,7 +50,6 @@ services:
   cron:
     build:
       dockerfile_inline: |
-        # ---------- Stage 1: Composer dependencies ----------
         FROM php:8.3-cli AS vendor
         WORKDIR /app
 
@@ -84,7 +82,6 @@ services:
 
         RUN composer install --no-dev --prefer-dist --no-progress --no-interaction --optimize-autoloader
 
-        # ---------- Stage 2: Runtime ----------
         FROM php:8.3-cli
 
         RUN apt-get update && apt-get install -y --no-install-recommends \
