@@ -12,7 +12,7 @@
 | TrueNAS Scale | Latest stable release with Apps catalog enabled |
 | Storage | At least one pool for app data and backups |
 | Network | Static LAN IP for the NAS; port 443/80 forwarded if external access is desired |
-| Images | `ghcr.io/bkoltz/project-alpha:latest` and `ghcr.io/bkoltz/project-alpha:cron-latest` (or your own published tags) |
+| Images | `ghcr.io/ledgetoptechnologies/project-alpha:latest` and `ghcr.io/ledgetoptechnologies/project-alpha:cron-latest` (or your own published tags) |
 | Secrets | MySQL root/app passwords, admin password, Stripe keys (entered in UI) |
 
 ---
@@ -80,7 +80,7 @@ Use these container settings in the wizard:
 
 | Field | Value |
 |---|---|
-| Image repository | `ghcr.io/bkoltz/project-alpha` |
+| Image repository | `ghcr.io/ledgetoptechnologies/project-alpha` |
 | Image tag | `latest` |
 | Container port | `80` |
 | Host port / Node port | `1627` (or use TrueNAS ingress on 80/443) |
@@ -113,7 +113,7 @@ Use these container settings in the wizard:
 
 | Field | Value |
 |---|---|
-| Image repository | `ghcr.io/bkoltz/project-alpha` |
+| Image repository | `ghcr.io/ledgetoptechnologies/project-alpha` |
 | Image tag | `cron-latest` |
 | Command/args | use image default |
 | Same DB env as web | yes |
