@@ -11,10 +11,10 @@ services:
   web:
     build:
       context: .
-    image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/bkoltz/project-alpha:latest}
+    image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:latest}
 
   cron:
     build:
       context: .
       target: cron
-    image: ${PROJECT_ALPHA_CRON_IMAGE:-ghcr.io/bkoltz/project-alpha:cron-latest}
+    image: ${PROJECT_ALPHA_CRON_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:cron-latest}
