@@ -11,7 +11,6 @@ try {
   $active_contracts   = (int)$pdo->query("SELECT COUNT(*) FROM contracts WHERE status IN ('draft','active')")->fetchColumn();
   $unpaid_invoices    = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial')")->fetchColumn();
   $income_30          = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at >= NOW() - INTERVAL 30 DAY AND status='succeeded'")->fetchColumn();
-  $income_90          = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at >= NOW() - INTERVAL 90 DAY AND status='succeeded'")->fetchColumn();
   $expenses_30        = (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM expenses WHERE status != 'void' AND expense_date >= CURDATE() - INTERVAL 29 DAY")->fetchColumn();
   $net_30             = $income_30 - $expenses_30;
   $overdue_invoices   = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial','overdue') AND due_date IS NOT NULL AND due_date < CURDATE()")->fetchColumn();
@@ -61,9 +60,16 @@ try {
   // System health
   $db_status = 'Connected';
   $php_version = PHP_VERSION;
-  $memory_usage = memory_get_usage(true);
-  $memory_peak  = memory_get_peak_usage(true);
-  $memory_limit = ini_get('memory_limit');
+  // System RAM (bytes) from /proc/meminfo; 0 if unavailable (non-Linux)
+  $sys_mem_total = 0; $sys_mem_avail = 0;
+  if (@is_readable('/proc/meminfo')) {
+    $mi = @file_get_contents('/proc/meminfo');
+    if ($mi !== false) {
+      if (preg_match('/MemTotal:\s+(\d+)\s*kB/', $mi, $mt))     $sys_mem_total = (int)$mt[1] * 1024;
+      if (preg_match('/MemAvailable:\s+(\d+)\s*kB/', $mi, $ma)) $sys_mem_avail = (int)$ma[1] * 1024;
+    }
+  }
+  $sys_mem_used = ($sys_mem_total > 0) ? max(0, $sys_mem_total - $sys_mem_avail) : 0;
   $disk_free = @disk_free_space(__DIR__);
   $disk_total = @disk_total_space(__DIR__);
   $uptime = '';
@@ -74,7 +80,7 @@ try {
 } catch (PDOException $e) {
   $db_error = true;
   $pending_quotes = $active_contracts = $unpaid_invoices = $total_clients = $total_users = 0;
-  $income_30 = $income_90 = $expenses_30 = $net_30 = 0;
+  $income_30 = $expenses_30 = $net_30 = 0;
   $overdue_invoices = $receipts_30 = 0;
   $income_monthly = [];
   $quote_status = $contract_status = $invoice_status = [];
@@ -82,8 +88,7 @@ try {
   $failed_logins_24h = 0;
   $db_status = 'Disconnected';
   $php_version = PHP_VERSION;
-  $memory_usage = $memory_peak = 0;
-  $memory_limit = 'N/A';
+  $sys_mem_total = $sys_mem_avail = $sys_mem_used = 0;
   $disk_free = $disk_total = false;
   $uptime = '';
 }
@@ -205,12 +210,7 @@ $status_rows = [
 $status_max = max(1, max(array_column($status_rows, 1)));
 
 // Memory / disk bar math (moved out of markup)
-$mem_pct = 0;
-if ($memory_limit !== 'N/A' && $memory_limit !== '-1' && preg_match('/^(\d+)([KMGT]?)$/i', (string)$memory_limit, $m)) {
-  $mult = ['' => 1, 'k' => 1024, 'm' => 1024 ** 2, 'g' => 1024 ** 3, 't' => 1024 ** 4];
-  $mx = (int)$m[1] * ($mult[strtolower($m[2])] ?? 1);
-  if ($mx > 0) $mem_pct = min(100, (int)round(($memory_peak / $mx) * 100));
-}
+$mem_pct = ($sys_mem_total > 0) ? min(100, (int)round(($sys_mem_used / $sys_mem_total) * 100)) : 0;
 $mem_color = $mem_pct > 80 ? '#dc2626' : ($mem_pct > 60 ? '#f59e0b' : '#10b981');
 $disk_pct = 0; $disk_color = '#10b981';
 if ($disk_total !== false && $disk_total > 0) {
@@ -227,7 +227,6 @@ if ($disk_total !== false && $disk_total > 0) {
     </div>
     <div class="hero-meta">
       <?php echo date('l, F j, Y'); ?><br>
-      Income (90d): <strong>$<?php echo number_format($income_90, 2); ?></strong>
     </div>
   </div>
 
@@ -472,8 +471,8 @@ if ($disk_total !== false && $disk_total > 0) {
             <div class="dash-health__value <?php echo $db_status === 'Connected' ? 'dash-health__value--ok' : 'dash-health__value--bad'; ?>"><?php echo e($db_status); ?></div>
           </div>
           <div class="dash-health__item">
-            <div class="dash-health__label">Memory</div>
-            <div class="dash-health__value"><?php echo fmtBytes($memory_usage); ?> / <?php echo htmlspecialchars($memory_limit); ?></div>
+            <div class="dash-health__label">System RAM</div>
+            <div class="dash-health__value"><?php echo fmtBytes($sys_mem_used); ?> / <?php echo fmtBytes($sys_mem_total); ?></div>
             <div class="dash-health__bar">
               <div class="dash-health__bar-inner" style="width:<?php echo $mem_pct; ?>%;background:<?php echo $mem_color; ?>"></div>
             </div>
@@ -493,10 +492,6 @@ if ($disk_total !== false && $disk_total > 0) {
               <div class="dash-health__value"><?php echo htmlspecialchars($uptime); ?></div>
             </div>
           <?php endif; ?>
-          <div class="dash-health__item">
-            <div class="dash-health__label">Income (90d)</div>
-            <div class="dash-health__value">$<?php echo number_format($income_90, 2); ?></div>
-          </div>
         </div>
       </div>
     </div>
