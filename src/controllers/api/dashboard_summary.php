@@ -1,6 +1,7 @@
 <?php
 // src/controllers/api/dashboard_summary.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/app_version.php';
 header('Content-Type: application/json');
 
 // Lightweight read-only summary for the Command Center dashboard.
@@ -13,6 +14,7 @@ function _count($pdo, $sql) {
 
 $resp = [
     'generated_at' => gmdate('c'),
+    'version'      => app_version(),
     'clients'      => _count($pdo, "SELECT COUNT(*) FROM clients"),
     'projects'     => _count($pdo, "SELECT COUNT(*) FROM projects"),
     'quotes'       => _count($pdo, "SELECT COUNT(*) FROM quotes"),

@@ -44,6 +44,10 @@ jobs:
             echo "cron_tag=cron" >> $GITHUB_OUTPUT
           fi
 
+      - name: Compute version
+        id: ver
+        run: echo "version=$(git describe --tags --always 2>/dev/null || echo dev)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push web image
         uses: docker/build-push-action@v7
         with:
@@ -51,6 +55,8 @@ jobs:
           target: web
           push: true
           tags: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.tag }}
+          build-args: |
+            APP_VERSION=${{ steps.ver.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -61,6 +67,8 @@ jobs:
           target: cron
           push: true
           tags: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.cron_tag }}
+          build-args: |
+            APP_VERSION=${{ steps.ver.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

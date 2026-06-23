@@ -24,6 +24,8 @@ RUN composer install \
 
 # ---------- Stage 2: Runtime image ----------
 FROM php:8.3-apache AS web
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
 
 # Tell Apache what hostname to use. NOTE: this is not needed to run, only to avoid warnings
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
@@ -80,6 +82,10 @@ RUN chown -R www-data:www-data /var/www/html /var/www/src /var/www/vendor \
 
 # RUN chown -R www-data:www-data /var/www/config && chmod -R 755 /var/www/config
 
+# Stamp the build version into the image. The env var can still be overridden at
+# runtime; the fallback file makes the version survive in either case.
+RUN echo "$APP_VERSION" > /var/www/APP_VERSION
+
 # Create log file
 RUN mkdir -p /var/log && \
     touch /var/log/error_log.txt && \
@@ -97,6 +103,8 @@ CMD ["start.sh"]
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
 FROM php:8.3-cli AS cron
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         default-mysql-client cron curl \
@@ -108,7 +116,8 @@ WORKDIR /var/www
 
 COPY --from=vendor /app/vendor /var/www/vendor
 COPY ./src/ /var/www/src/
-RUN mkdir -p /var/www/logs /var/www/backups \
+RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
+    && mkdir -p /var/www/logs /var/www/backups \
     && chown -R root:root /var/www \
     && chmod -R 755 /var/www
 
