@@ -68,7 +68,7 @@ if [ -z "$ADMIN_PASSWORD" ]; then
   echo "❌ ADMIN_PASSWORD environment variable is required"
   exit 1
 fi
-ADMIN_PASSWORD_HASH=$(php -r "echo password_hash('${ADMIN_PASSWORD}', PASSWORD_DEFAULT);")
+ADMIN_PASSWORD_HASH=$(php -r 'echo password_hash(getenv("ADMIN_PASSWORD"), PASSWORD_DEFAULT);')
 echo "Using admin password hash: ${ADMIN_PASSWORD_HASH}"
 
 # Replace placeholder in SQL files (use a non-/ delimiter to avoid issues with bcrypt hashes)
@@ -119,7 +119,7 @@ mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${
   INSERT INTO users (email, password_hash, username, role, force_password_reset)
   VALUES ('${ADMIN_EMAIL}', '${ADMIN_PASSWORD_HASH}', '${ADMIN_USERNAME}', 'admin', 0)
   ON DUPLICATE KEY UPDATE password_hash='${ADMIN_PASSWORD_HASH}', email='${ADMIN_EMAIL}', username='${ADMIN_USERNAME}', role='admin', force_password_reset=0, deleted_at=NULL;
-" || true
+" || echo "⚠️  WARNING: admin user upsert failed — admin password may not have been updated this boot."
 
 mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
   INSERT INTO user_organizations (user_id, organization_id, role, is_default)
