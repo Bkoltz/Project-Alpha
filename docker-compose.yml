@@ -23,7 +23,7 @@ x-db-env: &db-env
 
 services:
   web:
-    image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/bkoltz/project-alpha:latest}
+    image: ghcr.io/ledgetoptechnologies/project-alpha:latest
     ports:
       - "1627:80"
     environment:
@@ -47,7 +47,7 @@ services:
       - mysql_socket:/var/run/mysqld
 
   cron:
-    image: ${PROJECT_ALPHA_CRON_IMAGE:-ghcr.io/bkoltz/project-alpha:cron-latest}
+    image: ghcr.io/ledgetoptechnologies/project-alpha:cron-latest
     environment:
       <<: *db-env
       BACKUP_RETENTION_DAYS: "10"
