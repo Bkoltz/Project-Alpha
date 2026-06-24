@@ -8,7 +8,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   <legend style="padding:0 6px;color:var(--muted)">Billing Defaults</legend>
   <label>
     <div>Net Terms (days)</div>
-    <input type="number" min="0" name="net_terms" value="<?php echo htmlspecialchars((string)($appConfig['net_terms'] ?? 30)); ?>" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <input type="number" min="0" name="net_terms_days" value="<?php echo htmlspecialchars((string)($appConfig['net_terms_days'] ?? 30)); ?>" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
   </label>
   <div style="margin-top:12px"></div>
   <?php $paymentMethods = (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']); ?>
