@@ -99,10 +99,21 @@ try {
   } catch (Throwable $e) { /* ignore */ }
 
   // Build absolute URL to public view
-  $host = $_SERVER['HTTP_HOST'] ?? '';
-  if ($host === '' && !empty($appConfig['app_host'])) { $host = (string)$appConfig['app_host']; }
+  // Use configured app_host first (user's domain), fall back to HTTP_HOST (internal IP)
+  $host = '';
+  if (!empty($appConfig['app_host'])) { $host = (string)$appConfig['app_host']; }
+  if ($host === '') { $host = $_SERVER['HTTP_HOST'] ?? ''; }
   if ($host === '') { $host = 'localhost'; }
-  $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+  // Detect scheme: check HTTPS, then X-Forwarded-Proto (Cloudflare proxy), then app_host prefix
+  $scheme = 'http';
+  if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') { $scheme = 'https'; }
+  elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos($_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') === 0) { $scheme = 'https'; }
+  elseif (!empty($appConfig['app_host']) && (strpos((string)$appConfig['app_host'], 'https://') === 0 || strpos((string)$appConfig['app_host'], 'http://') === 0)) {
+    // app_host includes scheme — extract it and strip from host
+    $parsedHost = parse_url((string)$appConfig['app_host']);
+    if (isset($parsedHost['scheme'])) { $scheme = $parsedHost['scheme']; }
+    if (isset($parsedHost['host'])) { $host = $parsedHost['host']; if (!empty($parsedHost['port'])) { $host .= ':' . $parsedHost['port']; } }
+  }
   $publicUrl = '/?page=public-doc&token=' . rawurlencode($token);
   $absoluteUrl = $scheme . '://' . $host . $publicUrl;
 
