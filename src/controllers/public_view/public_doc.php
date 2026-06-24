@@ -69,6 +69,15 @@ try {
   $type = (string)$row['document_type'];
   $rid = (int)$row['document_id'];
 
+  require_once __DIR__ . '/../../utils/Branding.php';
+  if ($type==='quote') { $oq=$pdo->prepare('SELECT organization_id FROM quotes WHERE id=?'); }
+  elseif ($type==='contract') { $oq=$pdo->prepare('SELECT organization_id FROM contracts WHERE id=?'); }
+  else { $oq=$pdo->prepare('SELECT organization_id FROM invoices WHERE id=?'); }
+  $oq->execute([$rid]);
+  $docOrgId=(int)$oq->fetchColumn();
+  $brandInfo  = Branding::resolve($appConfig, $docOrgId);
+  $brandTerms = Branding::resolveTerms($appConfig, $docOrgId);
+
   if (!defined('PUBLIC_VIEW')) define('PUBLIC_VIEW', true);
   $_GET['id'] = (string)$rid;
 
@@ -120,7 +129,8 @@ try {
       $twig = new \Twig\Environment($loader);
       // If rendering a public quote, prepare the quote data and pass it into Twig
       $templateVars = ['type'=>$type, 'id'=>$rid, 'token'=>$token, 'notice'=>$notice, 'error'=>$err,
-        'showActions'=>$showActions, 'showUpload'=>$showUpload, 'appConfig'=>$appConfig
+        'showActions'=>$showActions, 'showUpload'=>$showUpload, 'appConfig'=>$appConfig,
+        'brandInfo'=>$brandInfo, 'brandTerms'=>$brandTerms
       ];
       if ($type === 'quote') {
         try {
