@@ -279,9 +279,9 @@ try {
 
                 // create short-lived public link
                 $token = $createPublicLink($iid);
-                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['base_url'] ?? ''), '/'), rawurlencode($token));
+                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
                 if ($link === '/?page=public_doc&type=invoice&token=' . rawurlencode($token)) {
-                    // fallback to relative path if base_url not set
+                    // fallback to relative path if app_host not set
                     $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
                 }
 
@@ -330,7 +330,7 @@ try {
 
                 // create public link for convenience
                 $token = $createPublicLink($iid);
-                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['base_url'] ?? ''), '/'), rawurlencode($token));
+                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
                 if ($link === '/?page=public_doc&type=invoice&token=' . rawurlencode($token)) {
                     $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
                 }
