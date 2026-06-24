@@ -24,3 +24,6 @@ backups/
 .hermes/
 .env.staging
 .env.test
+.env.bak
+.env.bak.*
+*.bak.pre-noenv-test
