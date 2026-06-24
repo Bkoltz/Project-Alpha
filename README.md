@@ -1,6 +1,6 @@
 # Project Alpha (PA)
 
-A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and payments. It is built as a single-tenant, single-organization application (org_id=1) with Stripe Payment Intents, role-based access, audit logging, and optional 2FA.
+A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and payments. Built with a multi-organization architecture (organizations + user_organizations tables) for running multiple divisions under one LLC (e.g. Ledge Top Technologies + Ledge Top Drone Services). Features Stripe Payment Intents, role-based access, audit logging, optional 2FA, and a pluggable payment processor interface (Stripe now, Square-ready).
 
 ---
 
@@ -55,7 +55,7 @@ A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and 
 
 ## Known Limitations / Not Yet Working
 
-- **Multi-organization**: The app is currently hardcoded to a single organization (`org_id=1`). There is no org switching or multi-tenant billing.
+- **Per-organization branding**: Brand name, logo, and contact info can be overridden per-organization (via Settings), falling back to global config when not set. The Branding utility resolves org-first, global-fallback.
 - **Advanced reporting**: Only basic CSV exports and the financial dashboard are available. There is no built-in P&L, balance sheet, or custom chart builder.
 - **Recurring invoices**: Long-term contracts generate invoices automatically, but each generated invoice still requires normal review/sending workflow.
 - **Mileage IRS form auto-fill**: Mileage logs can be tracked and valued, but automatic IRS form generation/population is not implemented.
@@ -69,7 +69,7 @@ A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and 
 
 Project Alpha uses inline defaults in `docker-compose.yml`; no `.env` file is required.
 
-1. Review `docker-compose.yml` and change the default passwords (search for `CHANGE THESE`).
+1. Review `docker-compose.yml` — it uses inline defaults and no `.env` file is required. Change `ADMIN_PASSWORD` and the MySQL passwords from their defaults.
 2. Pull the GitHub Container Registry images and start the stack:
 
 ```bash
@@ -186,6 +186,24 @@ The `pa_invoice_id` is the primary identifier used for linking Stripe payments t
 
 All methods redirect to Stripe Checkout, and the webhook updates the invoice status automatically.
 
+### Credit Card Surcharge (Compliant)
+
+PA includes a compliant credit-card surcharge system with three modes controlled from **Settings → Billing**:
+
+- **Merchant absorb**: PA absorbs the processing cost (default).
+- **Client pays**: Customer pays the full processing fee.
+- **Split**: Customer pays a configurable portion of the fee.
+
+The surcharge amount is capped at the actual blended merchant processing rate, which is computed daily from Stripe `balance_transaction` fees. The surcharge never exceeds the real fee paid to the processor, satisfying Visa/Mastercard compliance rules.
+
+**Debit card protection**: The Stripe webhook detects the card funding type (`credit` vs `debit`/`prepaid`). If a surcharge was applied to a debit or prepaid card, it is automatically refunded to the customer (Durbin Amendment compliance). Migration `020` adds `surcharge_refunded` and `surcharge_refund_amount` columns to the `payments` table.
+
+**Disclosure**: A pre-payment surcharge notice is displayed on the public invoice payment page before the customer clicks Pay.
+
+**Pluggable processor interface**: Surcharge logic is built around `PaymentProcessorInterface` in `src/services/`. Stripe is fully implemented; Square support is architected and ready for integration.
+
+> **Note**: Enabling client/split surcharging requires Visa registration and a 30-day notice before deployment. Configure and enable only after completing merchant/processor registration.
+
 ---
 
 ## Cron Jobs
@@ -201,6 +219,7 @@ PA uses scheduled cron jobs for automated tasks. All jobs track their execution 
 | `stripe_reconciliation.php` | Syncs missed Stripe payments | Every 6 hours |
 | `auto_terminate_contracts.php` | Ends expired contracts | Daily |
 | `link_expiration_checker.php` | Expires old public links | Daily |
+| `sync_merchant_rate.php` | Computes actual blended Stripe merchant rate from recent balance transactions | Daily at 5:00 AM UTC |
 
 ### Cron Configuration (Docker)
 
@@ -221,6 +240,9 @@ Add to your container's crontab:
 
 # Link expiration check (daily at 2am)
 0 2 * * * php /var/www/src/cron/link_expiration_checker.php >> /var/log/cron.log 2>&1
+
+# Sync blended merchant rate from Stripe balance transactions (daily at 5am UTC)
+0 5 * * * php /var/www/src/cron/sync_merchant_rate.php >> /var/log/cron.log 2>&1
 ```
 
 ### Catch-Up & Resilience
@@ -253,7 +275,8 @@ The `cron_job_runs` table tracks:
 - **`invoice_notifications`**: Tracks sent reminders (idempotency)
 - **`tax_rates`**: Predefined tax rates per jurisdiction
 - **`system_audit`**: Audit log for critical system actions (immutable)
-- **`organizations`**: Organizations with tax-exempt form storage
+- **`organizations`**: Organizations with tax-exempt form storage and per-org `brand_*` overrides (name, logo, contact info) resolved with global fallback.
+- **`user_organizations`**: Many-to-many membership linking users to organizations.
 - **`clients`**: Client records with archived status
 - **`projects`**: Manual parent grouping for jobs
 - **`project_counters`**: Auto-generated project codes
@@ -266,7 +289,9 @@ The `cron_job_runs` table tracks:
 ```sql
 id, invoice_id, amount, method, check_number, notes,
 stripe_payment_intent_id, stripe_subscription_id, stripe_charge_id,
-auto_pay_attempt, payment_method_id, status, created_at
+auto_pay_attempt, payment_method_id, status,
+surcharge_paid, surcharge_refunded, surcharge_refund_amount,
+created_at
 ```
 
 ---
@@ -295,6 +320,37 @@ Auto-managed (do NOT set in compose):
 - `APP_ENCRYPTION_KEY` — Auto-generated by `docker/start.sh` on first run, persisted to `./config/.encryption_key`
 - Stripe keys — Entered via **Settings > Billing** UI, stored encrypted in `app_config` DB table
 - SMTP password — Entered via Settings UI, stored encrypted in DB
+
+---
+
+### Version Display
+
+Each Docker image is stamped with a build version from `git describe` via the `APP_VERSION` build argument. The version is shown in the site footer and exposed through the `api-dashboard-summary` endpoint for external monitoring (e.g. the Command Center).
+
+### Deployment (CI/CD)
+
+PA is distributed as prebuilt images from the GitHub Container Registry:
+
+- `ghcr.io/ledgetoptechnologies/project-alpha:latest` — web (Apache) image
+- `ghcr.io/ledgetoptechnologies/project-alpha:cron-latest` — cron (CLI) image
+
+**Staging**: Pull and run the `:dev` / `:cron-dev` tags on port `1628` for pre-production testing before promoting to production.
+
+**CI / smoke-test**: `.github/workflows/ci.yml` builds the stack from source and asserts:
+
+- Web image identity
+- DB connectivity over TCP
+- CSP-clean responses over HTTP
+- PHP syntax check
+- PHPUnit test run
+
+**Branch protection**: The `main` branch is protected — changes require a pull request and a passing smoke-test check before merging. Auto-merge is enabled.
+
+**Production**: Deployed as a TrueNAS Custom App on port `1627`, pulling `:latest`. Redeploy with Pull + Up. Production uses the multi-stage Dockerfile:
+
+- `AS vendor` — installs Composer dependencies
+- `AS web` — based on `php:8.3-apache`
+- `AS cron` — based on `php:8.3-cli`
 
 ---
 
@@ -475,7 +531,7 @@ vendor/bin/phpunit --colors=always
 
 ### Reporting Vulnerabilities
 
-To report any security vulnerabilities, send an email to bkoltz1627@gmail.com with as much detail as possible. Please avoid creating any public issues before notifying us of any vulnerabilities. All vulnerabilities will be treated as highest priority with fixes provided within a couple of days of receiving all required information.
+To report any security vulnerabilities, send an email to bkoltz@ledgetoptechnologies.com with as much detail as possible. Please avoid creating any public issues before notifying us of any vulnerabilities. All vulnerabilities will be treated as highest priority with fixes provided within a couple of days of receiving all required information.
 
 ### Secret Management
 
@@ -516,7 +572,7 @@ Sensitive values (Stripe keys, SMTP password, encryption key) are **never stored
 
 ### Container & Network Hardening
 
-- **Docker Compose**: No hardcoded passwords in the committed defaults; change the `CHANGE THESE` values in `docker-compose.yml` before deploying. No `.env` file is required.
+- **Docker Compose**: `docker-compose.yml` uses inline defaults; change `ADMIN_PASSWORD` and the MySQL passwords before deploying. No `.env` file is required, but an optional `.env` can still be used.
 - **Network segmentation**: MySQL port is NOT mapped to the host by default — DB is reachable only inside the Docker internal network.
 - **Apache hardening** (always on, not conditional):
   - `ServerTokens Prod` + `ServerSignature Off` — no version leakage.
