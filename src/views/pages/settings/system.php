@@ -149,4 +149,38 @@
     <div id="emailTestResult" style="margin-top:8px;font-size:13px"></div>
   </div>
 </fieldset>
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">Multi-Brand Support</legend>
+  <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+    <input type="checkbox" name="multi_brand_enabled" value="1" <?php echo !empty($appConfig['multi_brand_enabled']) ? 'checked' : ''; ?> style="margin-top:3px;width:18px;height:18px">
+    <div><span style="font-weight:600">Enable per-organization branding</span>
+    <div style="margin-top:4px;color:var(--muted);font-size:12px">When enabled, each organization can have its own brand name, logo, contact info, and terms. When disabled, global settings are used for all documents.</div></div>
+  </label>
+</fieldset>
+
+<?php if (!empty($appConfig['multi_brand_enabled'])):
+  $__orgs = $pdo->query('SELECT id, name, brand_name, brand_from_name, brand_from_email, brand_from_phone, brand_address_line1, brand_address_line2, brand_city, brand_state, brand_postal FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($__orgs as $o): ?>
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)"><?php echo htmlspecialchars($o['name']); ?> — Brand</legend>
+  <form method="post" action="/?page=settings&tab=system<?php echo isset($_GET['doc_tab']) ? '&doc_tab=' . htmlspecialchars($_GET['doc_tab']) : ''; ?>" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+    <input type="hidden" name="tab" value="system">
+    <input type="hidden" name="update_org_brand" value="<?php echo (int)$o['id']; ?>">
+    <label><div>Brand Name</div><input type="text" name="brand_name" value="<?php echo htmlspecialchars($o['brand_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>From Name</div><input type="text" name="brand_from_name" value="<?php echo htmlspecialchars($o['brand_from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Email</div><input type="text" name="brand_from_email" value="<?php echo htmlspecialchars($o['brand_from_email'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Phone</div><input type="text" name="brand_from_phone" value="<?php echo htmlspecialchars($o['brand_from_phone'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Address line 1</div><input type="text" name="brand_address_line1" value="<?php echo htmlspecialchars($o['brand_address_line1'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Address line 2</div><input type="text" name="brand_address_line2" value="<?php echo htmlspecialchars($o['brand_address_line2'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
+      <label><div>City</div><input type="text" name="brand_city" value="<?php echo htmlspecialchars($o['brand_city'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      <label><div>State</div><input type="text" name="brand_state" value="<?php echo htmlspecialchars($o['brand_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      <label><div>Postal</div><input type="text" name="brand_postal" value="<?php echo htmlspecialchars($o['brand_postal'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    </div>
+    <div style="margin-top:12px"><button type="submit" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Save <?php echo htmlspecialchars($o['name']); ?> Brand</button></div>
+  </form>
+</fieldset>
+<?php endforeach; endif; ?>
+
 <script src="/assets/js/settings-system.js" defer></script>

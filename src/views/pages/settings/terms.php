@@ -27,3 +27,13 @@
   <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Terms to include on on-demand documents (e.g., single-use invoices). Leave blank to use standard terms.</p>
   <textarea name="on_demand_terms" rows="6" class="input" placeholder="Enter on-demand terms..."><?php echo htmlspecialchars($appConfig['on_demand_terms'] ?? ''); ?></textarea>
 </fieldset>
+
+<?php if (!empty($appConfig['multi_brand_enabled'])):
+  $__orgsT = $pdo->query('SELECT id, name, brand_terms, brand_long_term_terms, brand_on_demand_terms FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($__orgsT as $o): ?>
+    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:12px"><legend><?php echo htmlspecialchars($o['name']); ?> — Terms</legend>
+      <label>Standard terms<textarea name="org_<?php echo (int)$o['id']; ?>_brand_terms" rows="8" style="width:100%"><?php echo htmlspecialchars($o['brand_terms'] ?? ''); ?></textarea></label>
+      <label>Long-term terms<textarea name="org_<?php echo (int)$o['id']; ?>_brand_long_term_terms" rows="8" style="width:100%"><?php echo htmlspecialchars($o['brand_long_term_terms'] ?? ''); ?></textarea></label>
+      <label>On-demand terms<textarea name="org_<?php echo (int)$o['id']; ?>_brand_on_demand_terms" rows="6" style="width:100%"><?php echo htmlspecialchars($o['brand_on_demand_terms'] ?? ''); ?></textarea></label>
+    </fieldset>
+<?php endforeach; endif; ?>

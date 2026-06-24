@@ -144,6 +144,7 @@ if (isset($_POST['app_host'])) {
 }
 // Public links in email checkbox (was MISSING — never saved before)
 $settings['public_links_in_email'] = !empty($_POST['public_links_in_email']) ? 1 : 0;
+$settings['multi_brand_enabled'] = !empty($_POST['multi_brand_enabled']) ? 1 : 0;
 
 // From and contact fields
 foreach (['from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
@@ -321,6 +322,7 @@ $generalConfigKeys = [
     'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
     'signature_agreement', 'review_link', 'suppress_assets_warning',
     'cron_enabled', 'cron_schedule', 'cron_custom',
+    'multi_brand_enabled',
 ];
 // contract_custom_sections is an array — serialize to JSON for DB storage
 if (isset($settings['contract_custom_sections'])) {
@@ -347,6 +349,50 @@ if (!empty($generalConfigKeys)) {
         // DB or app_config table not available (fresh install, migration pending) —
         // settings.json fallback below still persists the values. Log and continue.
         @error_log('[settings] app_config DB write failed: ' . $e->getMessage() . ' — falling back to settings.json');
+    }
+}
+
+// Per-organization brand update (System tab)
+if (!empty($_POST['update_org_brand']) && (int)$_POST['update_org_brand'] > 0) {
+    $orgId = (int)$_POST['update_org_brand'];
+    $bf = ['brand_name','brand_from_name','brand_from_email','brand_from_phone','brand_address_line1','brand_address_line2','brand_city','brand_state','brand_postal'];
+    $set = []; $par = [];
+    foreach ($bf as $f) {
+        if (isset($_POST[$f])) {
+            $set[] = "$f = ?";
+            $par[] = trim((string)$_POST[$f]);
+        }
+    }
+    if ($set) {
+        $par[] = $orgId;
+        $pdo->prepare('UPDATE organizations SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($par);
+    }
+}
+
+// Per-organization terms update (Terms tab)
+$hasOrgTerms = false;
+foreach ($_POST as $k => $v) {
+    if (preg_match('/^org_\d+_brand_(terms|long_term_terms|on_demand_terms)$/', $k)) {
+        $hasOrgTerms = true;
+        break;
+    }
+}
+if ($hasOrgTerms) {
+    $orgIds = $pdo->query('SELECT id FROM organizations')->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($orgIds as $oid) {
+        $tf = ['brand_terms','brand_long_term_terms','brand_on_demand_terms'];
+        $set = []; $par = [];
+        foreach ($tf as $f) {
+            $key = "org_{$oid}_{$f}";
+            if (isset($_POST[$key])) {
+                $set[] = "$f = ?";
+                $par[] = mb_substr(trim((string)$_POST[$key]), 0, 20000);
+            }
+        }
+        if ($set) {
+            $par[] = $oid;
+            $pdo->prepare('UPDATE organizations SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($par);
+        }
     }
 }
 
