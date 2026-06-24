@@ -12,10 +12,16 @@ if(!$inv){ echo '<p>Invoice not found</p>'; return; }
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+require_once __DIR__ . '/../../../utils/Branding.php';
+if (!isset($brandInfo) || !is_array($brandInfo)) {
+    $docOrgId = (int)($inv['organization_id'] ?? 0);
+    $brandInfo  = Branding::resolve($appConfig, $docOrgId);
+    $brandTerms = Branding::resolveTerms($appConfig, $docOrgId);
+}
+$fromName = ($brandInfo['from_name'] ?? '') ?: ($brandInfo['brand_name'] ?? 'Project Alpha');
+$fromAddress = trim(($brandInfo['from_address_line1'] ?? '')."\n".($brandInfo['from_address_line2'] ?? '')."\n".($brandInfo['from_city'] ?? '').' '.($brandInfo['from_state'] ?? '').' '.($brandInfo['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
+$fromPhone = $brandInfo['from_phone'] ?? '';
+$fromEmail = $brandInfo['from_email'] ?? '';
 // Load project notes if available and resolve terms fallback
 $projectNotes = null;
 $termsText = '';
@@ -39,13 +45,13 @@ if (!empty($inv['project_code'])) {
   }
 }
 if ($termsText === '') { $termsText = trim((string)($inv['terms'] ?? '')); }
-if ($termsText === '' && ($inv['invoice_type'] ?? '') === 'on_demand') { $termsText = trim((string)($appConfig['on_demand_terms'] ?? '')); }
+if ($termsText === '' && ($inv['invoice_type'] ?? '') === 'on_demand') { $termsText = trim((string)($brandTerms['on_demand_terms'] ?? '')); }
 // Compute outstanding balance
 $total = (float) ($inv['total'] ?? 0);
 $paid = (float) ($inv['amount_paid'] ?? 0);
 $outstanding = max(0, $total - $paid);
 
-if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
+if ($termsText === '') { $termsText = trim((string)($brandTerms['terms'] ?? '')); }
 ?>
 <section>
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Invoice</div>
@@ -135,8 +141,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   </div>
   <?php endif; ?>
   <?php
-    $brand = $appConfig['brand_name'] ?? 'Project Alpha';
-    $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
+    $brand = $brandInfo['brand_name'] ?? 'Project Alpha';
+    $logoConf = trim((string)($brandInfo['logo_path'] ?? ''));
     $projectRoot = realpath(__DIR__ . '/../../../');
     $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
     $logoPath = $logoConf !== '' ? $logoConf : $defaultLogo;
@@ -284,18 +290,18 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
+          $fromCompany = $brandInfo['brand_name'] ?? 'Project Alpha';
           $fromNameLine = trim((string)($fromName ?? ''));
           $fromLines = [];
           if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
           $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
+          $addr1 = trim((string)($brandInfo['from_address_line1'] ?? ''));
+          $addr2 = trim((string)($brandInfo['from_address_line2'] ?? ''));
           if ($addr1 !== '') { $fromLines[] = $addr1; }
           if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
+          $city = trim((string)($brandInfo['from_city'] ?? ''));
+          $state = trim((string)($brandInfo['from_state'] ?? ''));
+          $postal = trim((string)($brandInfo['from_postal'] ?? ''));
           $parts = [];
           if ($city !== '') { $parts[] = $city; }
           if ($state !== '') { $parts[] = $state; }
