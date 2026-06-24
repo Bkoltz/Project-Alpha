@@ -32,11 +32,18 @@ class StripeFeeCalculator {
      * @param array $config App config with surcharge settings
      * @return array Surcharge breakdown with new totals
      */
-    public static function calculateSurcharge(float $amount, array $config): array {
+    public static function calculateSurcharge(float $amount, array $config, ?float $actualFee = null): array {
         $type = $config['stripe_surcharge_type'] ?? 'merchant';
-        $feeInfo = self::calculateFee($amount, $config);
-        $feeTotal = $feeInfo['fee_total'];
-        
+
+        if ($actualFee !== null && $actualFee >= 0) {
+            $feeTotal = round($actualFee, 2);
+            $feeSource = 'actual';
+        } else {
+            $feeInfo = self::calculateFee($amount, $config);
+            $feeTotal = $feeInfo['fee_total'];
+            $feeSource = 'estimate';
+        }
+
         $result = [
             'original_amount' => $amount,
             'fee_total' => $feeTotal,
@@ -45,6 +52,7 @@ class StripeFeeCalculator {
             'merchant_pays' => 0,
             'new_total' => $amount,
             'display_text' => '',
+            'fee_source' => $feeSource,
         ];
         
         // Get custom message from config
@@ -68,10 +76,18 @@ class StripeFeeCalculator {
                 break;
                 
             case 'client':
-                // Client pays full fee
-                $result['client_pays'] = $feeTotal;
-                $result['merchant_pays'] = 0;
-                $result['new_total'] = $amount + $feeTotal;
+                // Client pays the processing fee, capped at the real merchant cost
+                $clientPays = $feeTotal;
+                $configPercent = (float)($config['stripe_surcharge_percent'] ?? 2.9);
+                $configFixed = (float)($config['stripe_surcharge_fixed'] ?? 0.30);
+                $estimatedClientFee = round(($amount * $configPercent / 100) + $configFixed, 2);
+                if ($estimatedClientFee < $clientPays) {
+                    $clientPays = $estimatedClientFee;
+                }
+
+                $result['client_pays'] = $clientPays;
+                $result['merchant_pays'] = round($feeTotal - $clientPays, 2);
+                $result['new_total'] = $amount + $clientPays;
                 $defaultText = sprintf(
                     'Credit card surcharge: $%.2f (processing fee)',
                     $feeTotal

@@ -3,6 +3,7 @@
 // Helper to apply Stripe surcharge to invoices when payment method is card
 
 require_once __DIR__ . '/StripeFeeCalculator.php';
+require_once __DIR__ . '/../services/PaymentProcessorInterface.php';
 
 class InvoiceSurcharge {
     
@@ -13,9 +14,10 @@ class InvoiceSurcharge {
      * @param int $invoiceId Invoice ID
      * @param array $config App config
      * @param string $paymentMethod Selected payment method (stripe, card, etc.)
+     * @param PaymentProcessorInterface|null $processor Processor to use for actual merchant fee
      * @return array Updated invoice info with surcharge details
      */
-    public static function applyIfNeeded($pdo, $invoiceId, $config, $paymentMethod = 'stripe'): array {
+    public static function applyIfNeeded($pdo, $invoiceId, $config, $paymentMethod = 'stripe', ?PaymentProcessorInterface $processor = null): array {
         // Only apply for credit card payments
         if (!in_array(strtolower($paymentMethod), ['stripe', 'card'])) {
             return [
@@ -56,9 +58,18 @@ class InvoiceSurcharge {
                 'error' => 'Invoice already paid',
             ];
         }
+
+        // Use processor's actual merchant fee if available
+        $actualFee = null;
+        if ($processor !== null && $processor->isConfigured()) {
+            $feeInfo = $processor->actualMerchantFee($remainingAmount);
+            if (isset($feeInfo['fee']) && is_numeric($feeInfo['fee'])) {
+                $actualFee = (float)$feeInfo['fee'];
+            }
+        }
         
         // Calculate surcharge
-        $surcharge = StripeFeeCalculator::calculateSurcharge($remainingAmount, $config);
+        $surcharge = StripeFeeCalculator::calculateSurcharge($remainingAmount, $config, $actualFee);
         
         // Only update invoice if client pays any portion
         if ($surcharge['client_pays'] > 0) {
