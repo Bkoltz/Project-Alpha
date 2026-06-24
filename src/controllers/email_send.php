@@ -162,9 +162,9 @@ try {
       }
       try {
         $viewFile = null;
-  if ($type === 'quote') { $viewFile = __DIR__ . '/../views/pages/quote/quote-print-wrapper.php'; }
-  elseif ($type === 'contract') { $viewFile = __DIR__ . '/../views/pages/contract/contract-print.php'; }
-  else { $viewFile = __DIR__ . '/../views/pages/invoice/invoice-print.php'; }
+  if ($type === 'quote') { $viewFile = __DIR__ . '/../views/pages/quote/quote-details.php'; }
+  elseif ($type === 'contract') { $viewFile = __DIR__ . '/../views/pages/contract/contract-details.php'; }
+  else { $viewFile = __DIR__ . '/../views/pages/invoice/invoice-details.php'; }
         if (is_file($viewFile)) {
           ob_start();
           if (!defined('PDF_MODE')) define('PDF_MODE', true);
