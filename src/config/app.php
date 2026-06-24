@@ -137,16 +137,26 @@ try {
     }
     if (isset($pdo)) {
         $appConfigKeys = [
-            'stripe_publishable_key',
-            'stripe_secret_key_enc',
-            'stripe_webhook_secret_enc',
-            'smtp_host',
-            'smtp_port',
-            'smtp_secure',
-            'smtp_username',
-            'smtp_password_enc',
-            'smtp_from_email',
-            'smtp_from_name',
+            // Stripe + SMTP (already loaded from DB)
+            'stripe_publishable_key', 'stripe_secret_key_enc', 'stripe_webhook_secret_enc',
+            'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_username', 'smtp_password_enc',
+            'smtp_from_email', 'smtp_from_name',
+            // General UI settings (now stored in app_config DB)
+            'brand_name', 'logo_path', 'from_name', 'from_address_line1', 'from_address_line2',
+            'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
+            'app_host', 'public_links_in_email', 'primary_state', 'timezone',
+            'terms', 'long_term_terms', 'on_demand_terms',
+            'net_terms_days', 'documents_valid_days',
+            'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
+            'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly',
+            'auto_terminate_contracts', 'link_expiration_checker',
+            'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
+            'payment_failure_alert', 'payment_received_notification',
+            'link_expiration_warning', 'link_expiration_warning_days',
+            'invoice_show_terms', 'invoice_show_project_code', 'invoice_show_due_date',
+            'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
+            'signature_agreement', 'review_link', 'suppress_assets_warning',
+            'contract_custom_sections_json',
         ];
         $placeholders = implode(',', array_fill(0, count($appConfigKeys), '?'));
         $cfgStmt = $pdo->prepare("SELECT config_key, config_value FROM app_config WHERE config_key IN ($placeholders)");
@@ -159,6 +169,17 @@ try {
                     $appConfig[$key] = $val;
                 }
             }
+        }
+
+        // Deserialize JSON-encoded settings
+        if (isset($appConfig['contract_custom_sections_json'])) {
+            $decoded = json_decode($appConfig['contract_custom_sections_json'], true);
+            if (is_array($decoded)) { $appConfig['contract_custom_sections'] = $decoded; }
+            unset($appConfig['contract_custom_sections_json']);
+        }
+        if (isset($appConfig['payment_methods']) && is_string($appConfig['payment_methods'])) {
+            $decoded = json_decode($appConfig['payment_methods'], true);
+            if (is_array($decoded)) { $appConfig['payment_methods'] = $decoded; }
         }
     }
 } catch (Throwable $e) {

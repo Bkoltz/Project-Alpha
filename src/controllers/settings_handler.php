@@ -135,6 +135,16 @@ if (isset($_POST['brand_name'])) {
     }
 }
 
+// Application domain (was MISSING — never saved before)
+if (isset($_POST['app_host'])) {
+    $h = trim((string)$_POST['app_host']);
+    $h = preg_replace('#^https?://#', '', $h);
+    $h = rtrim($h, '/');
+    $settings['app_host'] = $h !== '' ? mb_substr($h, 0, 255) : null;
+}
+// Public links in email checkbox (was MISSING — never saved before)
+$settings['public_links_in_email'] = !empty($_POST['public_links_in_email']) ? 1 : 0;
+
 // From and contact fields
 foreach (['from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
     if (isset($_POST[$k])) {
@@ -315,6 +325,46 @@ if (!empty($smtpConfigKeys)) {
         putenv("$key=$val");
         $_ENV[$key] = $val;
         $appConfig[$key] = $val;
+    }
+}
+
+// General UI settings persistence: store all non-secret settings in app_config DB
+$generalConfigKeys = [
+    'brand_name', 'logo_path', 'from_name', 'from_address_line1', 'from_address_line2',
+    'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
+    'app_host', 'public_links_in_email', 'primary_state', 'timezone',
+    'terms', 'long_term_terms', 'on_demand_terms',
+    'net_terms_days', 'documents_valid_days', 'payment_methods',
+    'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
+    'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly',
+    'auto_terminate_contracts', 'link_expiration_checker',
+    'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
+    'payment_failure_alert', 'payment_received_notification',
+    'link_expiration_warning', 'link_expiration_warning_days',
+    'invoice_show_terms', 'invoice_show_project_code', 'invoice_show_due_date',
+    'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
+    'signature_agreement', 'review_link', 'suppress_assets_warning',
+    'cron_enabled', 'cron_schedule', 'cron_custom',
+];
+// contract_custom_sections is an array — serialize to JSON for DB storage
+if (isset($settings['contract_custom_sections'])) {
+    $settings['contract_custom_sections_json'] = json_encode($settings['contract_custom_sections']);
+    $generalConfigKeys[] = 'contract_custom_sections_json';
+}
+if (!empty($generalConfigKeys)) {
+    require_once __DIR__ . '/../config/db.php';
+    $stmtGen = $pdo->prepare(
+        'INSERT INTO app_config (organization_id, config_key, config_value)
+         VALUES (0, ?, ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+    );
+    foreach ($generalConfigKeys as $key) {
+        if (array_key_exists($key, $settings)) {
+            $val = $settings[$key];
+            if (is_array($val)) { $val = json_encode($val); }
+            if ($val === null) { $val = ''; }  // app_config.config_value is NOT NULL
+            $stmtGen->execute([$key, (string)$val]);
+        }
     }
 }
 
