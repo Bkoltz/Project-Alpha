@@ -188,46 +188,22 @@ if (isset($_POST['net_terms_days'])) {
 
 if (!empty($_FILES['logo']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
     $f = $_FILES['logo'];
-    $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-    $err = validate_upload($f, $allowedMimes, 5 * 1024 * 1024);
-    if ($err === null) {
-        try {
-            $extMap = [
-                'image/png'       => '.png',
-                'image/jpeg'      => '.jpg',
-                'image/gif'       => '.gif',
-                'image/webp'      => '.webp',
-                'image/svg+xml'   => '.svg',
-            ];
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $mime = $finfo->file($f['tmp_name']);
-            $ext = $extMap[$mime] ?? '';
-            if ($ext !== '') {
-                $name = 'logo_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . $ext;
-                $dest = $uploadsDir . '/' . $name;
-                if (@move_uploaded_file($f['tmp_name'], $dest)) {
-                    // Serve via controller since this is stored in config/uploads
-                    $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
-                } else {
-                    // fallback: try to save to internal src/uploads and serve via controller
-                    $internal = __DIR__ . '/../uploads';
-                    if (!is_dir($internal)) {
-                        @mkdir($internal, 0775, true);
-                    }
-                    $internalDest = $internal . '/' . $name;
-                    // try move, then rename, then copy as a last resort
-                    if (@move_uploaded_file($f['tmp_name'], $internalDest) || @rename($f['tmp_name'], $internalDest) || @copy($f['tmp_name'], $internalDest)) {
-                        @unlink($f['tmp_name']);
-                        // serve through internal controller
-                        $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($name);
-                    }
-                }
-            }
-        } catch (Throwable $e) {
-            // ignore upload errors; keep prior settings
-        }
+    $allowedMap = [
+        'image/jpeg'    => ['jpg', 'jpeg'],
+        'image/png'     => ['png'],
+        'image/gif'     => ['gif'],
+        'image/webp'    => ['webp'],
+        'image/svg+xml' => ['svg'],
+    ];
+    $uploadError = null;
+    $storedName = validate_and_store_upload($f, $allowedMap, 5 * 1024 * 1024, $uploadsDir, $uploadError);
+    if ($storedName !== null) {
+        // File validated and stored — serve via controller
+        $settings['logo_path'] = '/?page=serve-upload&file=' . rawurlencode($storedName);
+    } elseif ($uploadError !== null) {
+        // Surface the error to the user instead of silently ignoring
+        $settings['_logo_upload_error'] = $uploadError;
     }
-    // on validation failure, silently ignore upload to preserve existing behavior
 }
 
 // Billing defaults
@@ -571,6 +547,13 @@ if ($ok === false) {
     // Redirect back with error flag
     $err = rawurlencode('failed-to-write-settings');
     header('Location: /?page=settings&saved=0&error=' . $err);
+    exit;
+}
+
+$logoErr = $settings['_logo_upload_error'] ?? null;
+if ($logoErr) {
+    $tab = $_POST['tab'] ?? $_GET['tab'] ?? 'system';
+    header('Location: /?page=settings&tab=' . rawurlencode($tab) . '&error=' . rawurlencode('Logo upload failed: ' . $logoErr));
     exit;
 }
 
