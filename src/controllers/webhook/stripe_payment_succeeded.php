@@ -69,6 +69,23 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         ');
         $stmt->execute([$clientId, $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $piId, $isAutoPay, 'succeeded']);
         
+        // COMPLIANCE: If the card was debit/prepaid, refund the surcharge (Durbin Amendment)
+        $surchargePaid = (float)$surchargeAmount;
+        if ($surchargePaid > 0) {
+            require_once __DIR__ . '/../../services/StripeProcessor.php';
+            $processor = StripeProcessor::fromAppConfig($GLOBALS['appConfig'] ?? []);
+            if ($processor && !$processor->isCreditCardPayment($paymentIntent)) {
+                $chargeId = $paymentIntent['charges']['data'][0]['id'] ?? null;
+                if ($chargeId && $processor->refundSurcharge($chargeId, $surchargePaid)) {
+                    $pdo->prepare('UPDATE payments SET surcharge_refunded = 1, surcharge_refund_amount = ? WHERE stripe_payment_intent_id = ?')
+                        ->execute([$surchargePaid, $piId]);
+                    @error_log('[StripeWebhook] Refunded surcharge $' . $surchargePaid . ' for debit card on invoice ' . $invoiceId);
+                } else {
+                    @error_log('[StripeWebhook] WARNING: failed to refund surcharge for debit card on invoice ' . $invoiceId);
+                }
+            }
+        }
+        
         // Update invoice status
         $sum = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ? AND status = "succeeded"');
         $sum->execute([$invoiceId]);

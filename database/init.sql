@@ -595,6 +595,8 @@ CREATE TABLE IF NOT EXISTS payments (
     organization_id INT NULL,
     amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
     surcharge_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
+    surcharge_refunded TINYINT(1) NOT NULL DEFAULT 0,
+    surcharge_refund_amount DECIMAL(10,2) NULL,
     payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'stripe', 'other') NOT NULL DEFAULT 'cash',
     payment_date DATE NOT NULL,
     reference_number VARCHAR(255) NULL,
