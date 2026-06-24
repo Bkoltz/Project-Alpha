@@ -7,7 +7,7 @@ $period = (int)($_GET['days'] ?? 30);
 if ($period < 1 || $period > 365) $period = 30;
 $start = gmdate('Y-m-d', strtotime("-$period days"));
 
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='succeeded' AND DATE(paid_at)>=?");
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='succeeded' AND DATE(payment_date)>=?");
 $stmt->execute([$start]);
 $revenue = (float) $stmt->fetchColumn();
 
@@ -15,7 +15,7 @@ $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) FROM invoices WHERE status=
 $stmt->execute([$start]);
 $invoicedPaid = (float) $stmt->fetchColumn();
 
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM expenses WHERE DATE(date)>=?");
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0) FROM expenses WHERE DATE(expense_date)>=?");
 $stmt->execute([$start]);
 $expenses = (float) $stmt->fetchColumn();
 
