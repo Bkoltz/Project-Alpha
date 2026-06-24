@@ -146,7 +146,7 @@ try {
             'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
             'app_host', 'public_links_in_email', 'primary_state', 'timezone',
             'terms', 'long_term_terms', 'on_demand_terms',
-            'net_terms_days', 'documents_valid_days',
+            'net_terms_days', 'documents_valid_days', 'payment_methods',
             'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
             'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly',
             'auto_terminate_contracts', 'link_expiration_checker',

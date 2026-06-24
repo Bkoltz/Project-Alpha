@@ -353,18 +353,24 @@ if (isset($settings['contract_custom_sections'])) {
 }
 if (!empty($generalConfigKeys)) {
     require_once __DIR__ . '/../config/db.php';
-    $stmtGen = $pdo->prepare(
-        'INSERT INTO app_config (organization_id, config_key, config_value)
-         VALUES (0, ?, ?)
-         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
-    );
-    foreach ($generalConfigKeys as $key) {
-        if (array_key_exists($key, $settings)) {
-            $val = $settings[$key];
-            if (is_array($val)) { $val = json_encode($val); }
-            if ($val === null) { $val = ''; }  // app_config.config_value is NOT NULL
-            $stmtGen->execute([$key, (string)$val]);
+    try {
+        $stmtGen = $pdo->prepare(
+            'INSERT INTO app_config (organization_id, config_key, config_value)
+             VALUES (0, ?, ?)
+             ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+        );
+        foreach ($generalConfigKeys as $key) {
+            if (array_key_exists($key, $settings)) {
+                $val = $settings[$key];
+                if (is_array($val)) { $val = json_encode($val); }
+                if ($val === null) { $val = ''; }  // app_config.config_value is NOT NULL
+                $stmtGen->execute([$key, (string)$val]);
+            }
         }
+    } catch (Throwable $e) {
+        // DB or app_config table not available (fresh install, migration pending) —
+        // settings.json fallback below still persists the values. Log and continue.
+        @error_log('[settings] app_config DB write failed: ' . $e->getMessage() . ' — falling back to settings.json');
     }
 }
 
