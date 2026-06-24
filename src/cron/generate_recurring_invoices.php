@@ -5,6 +5,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
+require_once __DIR__ . '/../utils/org_resolver.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
@@ -48,6 +49,10 @@ try {
             $clientId = $contract['client_id'];
             $projectCode = $contract['project_code'];
             $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
+            
+            // Resolve organization_id: inherit from contract, or fall back to client
+            $orgId = (int)($contract['organization_id'] ?? 0) ?: org_id_for_client($pdo, (int)$clientId);
+            $orgId = $orgId ?: null;
             
             // Calculate invoice amount
             $subtotal = 0;
@@ -115,10 +120,10 @@ try {
             
             $insertInvoice = $pdo->prepare('
                 INSERT INTO invoices (
-                    contract_id, client_id, project_id, project_code, invoice_type,
+                    contract_id, client_id, project_id, project_code, organization_id, invoice_type,
                     discount_type, discount_value, tax_percent, 
                     subtotal, total, status, due_date, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
             
             $insertInvoice->execute([
@@ -126,6 +131,7 @@ try {
                 $clientId,
                 $projectId,
                 $projectCode,
+                $orgId,
                 'long_term',
                 $discountType,
                 $discountValue,

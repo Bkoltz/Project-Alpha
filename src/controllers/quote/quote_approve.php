@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/org_resolver.php';
 
 // Auto-create settings (default to true/on when not explicitly set)
 $autoCreateContract = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
@@ -39,15 +40,20 @@ try {
   // Get project_id from quote for inheritance
   $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
 
+  // Resolve organization_id: inherit from quote, or fall back to client
+  $orgId = (int)($quote['organization_id'] ?? 0) ?: org_id_for_client($pdo, (int)$quote['client_id']);
+  $orgId = $orgId ?: null;
+
   $quoteType = $quote['quote_type'] ?? 'regular';
   if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
     // For LT/OD quotes, only create contract if auto-create is enabled
     if ($autoCreateContract) {
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, organization_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
           ->execute([
             $id,
             (int)$quote['client_id'],
             $projectId,
+            $orgId,
             'pending',
             $quoteType,
             $quote['discount_type'],
@@ -84,8 +90,8 @@ try {
   } else {
     // Regular quote: create contract and/or invoice based on settings
     if ($autoCreateContract) {
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null]);
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, organization_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$id, (int)$quote['client_id'], $projectId, $orgId, 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null]);
       $contract_id = (int)$pdo->lastInsertId();
 
       $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
@@ -98,8 +104,8 @@ try {
     }
 
     if ($autoCreateInvoice) {
-      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, organization_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $orgId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
       $invoice_id = (int)$pdo->lastInsertId();
 
       $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
