@@ -158,6 +158,11 @@ try {
             'signature_agreement', 'review_link', 'suppress_assets_warning',
             'cron_enabled', 'cron_schedule', 'cron_custom',
             'contract_custom_sections_json',
+            // Surcharge settings (user-editable via billing settings)
+            'stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed',
+            'stripe_surcharge_split_percent', 'stripe_surcharge_message',
+            // Merchant rate sync (set by cron, read-only for user)
+            'stripe_effective_rate_pct', 'stripe_effective_fixed', 'stripe_effective_rate_synced_at',
         ];
         $placeholders = implode(',', array_fill(0, count($appConfigKeys), '?'));
         $cfgStmt = $pdo->prepare("SELECT config_key, config_value FROM app_config WHERE config_key IN ($placeholders)");
