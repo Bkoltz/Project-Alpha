@@ -352,47 +352,24 @@ if (!empty($generalConfigKeys)) {
     }
 }
 
-// Per-organization brand update (System tab)
-if (!empty($_POST['update_org_brand']) && (int)$_POST['update_org_brand'] > 0) {
-    $orgId = (int)$_POST['update_org_brand'];
-    $bf = ['brand_name','brand_from_name','brand_from_email','brand_from_phone','brand_address_line1','brand_address_line2','brand_city','brand_state','brand_postal'];
+// Per-organization brand + terms (unique org_<id>_<field> keys; only updates fields present in POST)
+$orgIds = $pdo->query('SELECT id FROM organizations')->fetchAll(PDO::FETCH_COLUMN);
+$perOrgFields = ['brand_name','brand_from_name','brand_from_email','brand_from_phone','brand_address_line1','brand_address_line2','brand_city','brand_state','brand_postal','brand_terms','brand_long_term_terms','brand_on_demand_terms'];
+$termsFieldSet = ['brand_terms','brand_long_term_terms','brand_on_demand_terms'];
+foreach ($orgIds as $oid) {
     $set = []; $par = [];
-    foreach ($bf as $f) {
-        if (isset($_POST[$f])) {
+    foreach ($perOrgFields as $f) {
+        $key = "org_{$oid}_{$f}";
+        if (isset($_POST[$key])) {
             $set[] = "$f = ?";
-            $par[] = trim((string)$_POST[$f]);
+            $par[] = in_array($f, $termsFieldSet, true)
+                ? mb_substr(trim((string)$_POST[$key]), 0, 20000)
+                : trim((string)$_POST[$key]);
         }
     }
     if ($set) {
-        $par[] = $orgId;
+        $par[] = $oid;
         $pdo->prepare('UPDATE organizations SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($par);
-    }
-}
-
-// Per-organization terms update (Terms tab)
-$hasOrgTerms = false;
-foreach ($_POST as $k => $v) {
-    if (preg_match('/^org_\d+_brand_(terms|long_term_terms|on_demand_terms)$/', $k)) {
-        $hasOrgTerms = true;
-        break;
-    }
-}
-if ($hasOrgTerms) {
-    $orgIds = $pdo->query('SELECT id FROM organizations')->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($orgIds as $oid) {
-        $tf = ['brand_terms','brand_long_term_terms','brand_on_demand_terms'];
-        $set = []; $par = [];
-        foreach ($tf as $f) {
-            $key = "org_{$oid}_{$f}";
-            if (isset($_POST[$key])) {
-                $set[] = "$f = ?";
-                $par[] = mb_substr(trim((string)$_POST[$key]), 0, 20000);
-            }
-        }
-        if ($set) {
-            $par[] = $oid;
-            $pdo->prepare('UPDATE organizations SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($par);
-        }
     }
 }
 
