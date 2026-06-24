@@ -141,7 +141,7 @@ require_once __DIR__ . '/../src/config/bootstrap.php';
 // CORS for API endpoints. Note: stateless API routes use the 'api-' prefix
 // (e.g. api-clients-search); 'api-keys' is a UI page, not an API endpoint.
 // Slash-prefixed 'settings/' routes are AJAX/JSON handlers.
-$isApiEndpoint = (str_starts_with($page, 'api-') && $page !== 'api-keys')
+$isApiEndpoint = (str_starts_with($page, 'api-') && !str_starts_with($page, 'api-keys'))
     || str_starts_with($page, 'settings/');
 if ($isApiEndpoint) {
     $allowedOrigins = getenv('ALLOWED_ORIGINS') ? explode(',', getenv('ALLOWED_ORIGINS')) : [];
@@ -160,7 +160,7 @@ if ($isApiEndpoint) {
 
 // API routing (stateless, header auth)
 $apiEnabled = filter_var(getenv('APP_API_ENABLED') !== false ? getenv('APP_API_ENABLED') : 'true', FILTER_VALIDATE_BOOLEAN);
-if ($apiEnabled && substr($page, 0, 4) === 'api-' && $page !== 'api-keys') { // exclude UI page 'api-keys'
+if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'api-keys')) { // exclude UI page 'api-keys'
     require_once __DIR__ . '/../src/utils/api_auth.php';
     // Require API key (default scope: full)
     $apiKey = api_require_key(['full']);
