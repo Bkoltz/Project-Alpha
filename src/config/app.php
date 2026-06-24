@@ -156,6 +156,7 @@ try {
             'invoice_show_terms', 'invoice_show_project_code', 'invoice_show_due_date',
             'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
             'signature_agreement', 'review_link', 'suppress_assets_warning',
+            'cron_enabled', 'cron_schedule', 'cron_custom',
             'contract_custom_sections_json',
         ];
         $placeholders = implode(',', array_fill(0, count($appConfigKeys), '?'));
