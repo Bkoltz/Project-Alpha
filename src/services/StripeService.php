@@ -424,6 +424,25 @@ class StripeService {
     }
     
     /**
+     * Create a partial refund on a Stripe Charge.
+     *
+     * @param string $chargeId The Stripe charge ID to refund.
+     * @param int $amountCents Amount to refund in the smallest currency unit (cents).
+     * @return array Stripe refund object.
+     */
+    public function refundCharge($chargeId, $amountCents) {
+        try {
+            return $this->apiRequest('POST', 'refunds', [
+                'charge' => $chargeId,
+                'amount' => (int)$amountCents
+            ]);
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error creating refund: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
      * Make API request to Stripe
      */
     private function apiRequest($method, $endpoint, $data = []) {
