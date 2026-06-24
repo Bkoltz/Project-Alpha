@@ -27,3 +27,7 @@ backups/
 .env.bak
 .env.bak.*
 *.bak.pre-noenv-test
+graphify-out/
+docs/CI-CD-NEXT-STEPS.md
+docs/OPERATIONAL-CONTEXT.md
+docs/pa-comprehensive-plan.md
