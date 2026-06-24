@@ -1,0 +1,12 @@
+# Gitleaks config for Project Alpha
+# Extends the default ruleset; allowlists vendored code and test-only fixtures.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendored third-party code and test-only fixtures (no real secrets)"
+paths = [
+  '''vendor/''',
+  '''.*\.env\.test$''',
+  '''.*\.env\.example$''',
+]
