@@ -19,6 +19,7 @@ if ($doc_type === 'on_demand') {
 @error_log('[contracts_create] POST received - regular contract', 0);
 
 $client_id = (int)($_POST['client_id'] ?? 0);
+require_once __DIR__ . '/../../utils/org_resolver.php';
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
@@ -87,8 +88,9 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson]);
+  $orgId = org_id_for_client($pdo, $client_id);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, organization_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      ->execute([$client_id, $orgId, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
@@ -116,8 +118,8 @@ try{
 
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date]);
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, organization_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$co_id, null, $client_id, $orgId, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date]);
   $invoice_id = (int)$pdo->lastInsertId();
   $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
   foreach($items as $it){ $ii->execute([$invoice_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
