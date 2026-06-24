@@ -7,7 +7,7 @@ $period = (int)($_GET['days'] ?? 30);
 if ($period < 1 || $period > 365) $period = 30;
 $start = gmdate('Y-m-d', strtotime("-$period days"));
 
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM payments WHERE is_refunded=0 AND DATE(paid_at)>=?");
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='succeeded' AND DATE(paid_at)>=?");
 $stmt->execute([$start]);
 $revenue = (float) $stmt->fetchColumn();
 

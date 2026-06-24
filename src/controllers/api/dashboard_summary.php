@@ -21,8 +21,8 @@ $resp = [
     'contracts'    => _count($pdo, "SELECT COUNT(*) FROM contracts"),
     'invoices'     => _count($pdo, "SELECT COUNT(*) FROM invoices"),
     'expenses'     => _count($pdo, "SELECT COUNT(*) FROM expenses"),
-    'revenue'      => _scalar($pdo, "SELECT COALESCE(SUM(amount),0) FROM payments WHERE is_refunded=0"),
-    'outstanding'  => _scalar($pdo, "SELECT COALESCE(SUM(balance),0) FROM invoices WHERE status!='paid' AND status!='cancelled'"),
+    'revenue'      => _scalar($pdo, "SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='succeeded'"),
+    'outstanding'  => _scalar($pdo, "SELECT COALESCE(SUM(balance_due),0) FROM invoices WHERE status NOT IN ('paid','cancelled','void')"),
 ];
 
 echo json_encode($resp, JSON_NUMERIC_CHECK);
