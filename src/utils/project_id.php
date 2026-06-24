@@ -59,28 +59,28 @@ function project_next_code(PDO $pdo, int $client_id): string {
     
     try {
         // Try to lock and update the counter
-        $sel = $pdo->prepare('SELECT next_seq FROM project_counters WHERE prefix=? FOR UPDATE');
+        $sel = $pdo->prepare('SELECT counter_value FROM project_counters WHERE organization_id=0 AND project_id IS NULL AND counter_type=? FOR UPDATE');
         $sel->execute([$prefix]);
         $row = $sel->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($row) {
             // Counter exists, increment it
-            $seq = (int)$row['next_seq'];
-            $upd = $pdo->prepare('UPDATE project_counters SET next_seq=next_seq+1 WHERE prefix=?');
+            $seq = (int)$row['counter_value'];
+            $upd = $pdo->prepare('UPDATE project_counters SET counter_value=counter_value+1 WHERE organization_id=0 AND project_id IS NULL AND counter_type=?');
             $upd->execute([$prefix]);
         } else {
             // Counter doesn't exist, create it
             $seq = 1;
             try {
-                $ins = $pdo->prepare('INSERT INTO project_counters (prefix, next_seq) VALUES (?, 2) ON DUPLICATE KEY UPDATE next_seq=next_seq');
+                $ins = $pdo->prepare('INSERT INTO project_counters (organization_id, project_id, counter_type, counter_value) VALUES (0, NULL, ?, 2) ON DUPLICATE KEY UPDATE counter_value=counter_value');
                 $ins->execute([$prefix]);
             } catch (Throwable $insertErr) {
                 // Handle race condition where another request inserted first
                 $sel->execute([$prefix]);
                 $row = $sel->fetch(PDO::FETCH_ASSOC);
                 if ($row) {
-                    $seq = (int)$row['next_seq'];
-                    $upd = $pdo->prepare('UPDATE project_counters SET next_seq=next_seq+1 WHERE prefix=?');
+                    $seq = (int)$row['counter_value'];
+                    $upd = $pdo->prepare('UPDATE project_counters SET counter_value=counter_value+1 WHERE organization_id=0 AND project_id IS NULL AND counter_type=?');
                     $upd->execute([$prefix]);
                 }
             }
