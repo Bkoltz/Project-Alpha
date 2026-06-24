@@ -77,4 +77,41 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   </label>
 </fieldset>
 
+<fieldset id="surchargeConfig" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;">
+  <legend style="font-weight:600;padding:0 8px;">Credit Card Surcharge</legend>
+  <div class="form-group" style="margin-top:12px;">
+    <label style="font-size:0.85rem;color:#6c757d;display:block;margin-bottom:0.35rem;">Surcharge Mode</label>
+    <select name="stripe_surcharge_type" class="input" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #ddd;">
+      <option value="merchant" <?php echo ($appConfig['stripe_surcharge_type'] ?? 'merchant') === 'merchant' ? 'selected' : ''; ?>>Merchant absorbs fee (no surcharge)</option>
+      <option value="split" <?php echo ($appConfig['stripe_surcharge_type'] ?? 'merchant') === 'split' ? 'selected' : ''; ?>>Split fee with client</option>
+      <option value="client" <?php echo ($appConfig['stripe_surcharge_type'] ?? 'merchant') === 'client' ? 'selected' : ''; ?>>Client pays full fee</option>
+    </select>
+    <span class="help-text" style="display:block;margin-top:0.35rem;font-size:0.8rem;">Merchant: you absorb the processing fee. Split: client pays a portion. Client: client pays the full fee (capped at actual merchant rate).</span>
+  </div>
+  <div class="form-group" style="margin-top:12px;">
+    <label style="font-size:0.85rem;color:#6c757d;display:block;margin-bottom:0.35rem;">Split Percentage (%)</label>
+    <input type="number" name="stripe_surcharge_split_percent" value="<?php echo htmlspecialchars($appConfig['stripe_surcharge_split_percent'] ?? 50); ?>" min="0" max="100" step="1" class="input" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #ddd;">
+    <span class="help-text" style="display:block;margin-top:0.35rem;font-size:0.8rem;">In split mode, what percentage of the fee does the client pay? (0-100, default 50)</span>
+  </div>
+  <div class="form-group" style="margin-top:12px;">
+    <label style="font-size:0.85rem;color:#6c757d;display:block;margin-bottom:0.35rem;">Custom Surcharge Message</label>
+    <textarea name="stripe_surcharge_message" class="input" style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid #ddd;min-height:60px;" placeholder="Optional message shown to clients about the surcharge"><?php echo htmlspecialchars($appConfig['stripe_surcharge_message'] ?? ''); ?></textarea>
+  </div>
+  <?php
+  // Show synced merchant rate if available
+  $syncedRate = $appConfig['stripe_effective_rate_pct'] ?? null;
+  $syncedAt = $appConfig['stripe_effective_rate_synced_at'] ?? null;
+  if ($syncedRate !== null):
+  ?>
+  <div style="margin-top:12px;padding:8px 12px;background:#f0f7ff;border-radius:6px;font-size:0.85rem;color:#1e40af;">
+    <strong>Synced Merchant Rate:</strong> <?php echo htmlspecialchars($syncedRate); ?>%
+    <?php if ($syncedAt): ?> (last synced: <?php echo htmlspecialchars($syncedAt); ?>)<?php endif; ?>
+    <br><span style="font-size:0.78rem;color:#6b7280;">This is your actual blended Stripe rate from the last 30 days of transactions. The client surcharge is capped at this rate.</span>
+  </div>
+  <?php endif; ?>
+  <div style="margin-top:8px;font-size:0.78rem;color:#6b7280;">
+    <strong>Note:</strong> Surcharging requires Visa registration (30-day notice) before enabling client/split mode. Debit cards are never surcharged (automatically refunded). The surcharge is capped at your actual merchant processing rate.
+  </div>
+</fieldset>
+
 <script src="/assets/js/billing-logic.js" defer></script>

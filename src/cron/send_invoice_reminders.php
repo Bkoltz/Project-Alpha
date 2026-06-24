@@ -105,7 +105,7 @@ try {
             try {
                 // Create public link
                 $token = $createPublicLink($iid);
-                $baseUrl = rtrim(($appConfig['base_url'] ?? ''), '/');
+                $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($baseUrl === '') $baseUrl = 'http://localhost';
                 $link = $baseUrl . '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
 
@@ -180,7 +180,7 @@ try {
             try {
                 // Create public link
                 $token = $createPublicLink($iid);
-                $baseUrl = rtrim(($appConfig['base_url'] ?? ''), '/');
+                $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($baseUrl === '') $baseUrl = 'http://localhost';
                 $link = $baseUrl . '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
 

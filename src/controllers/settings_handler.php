@@ -471,6 +471,26 @@ if (isset($_POST['stripe_webhook_secret'])) {
     }
 }
 
+// Surcharge settings
+$surchargeKeys = ['stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed', 'stripe_surcharge_split_percent', 'stripe_surcharge_message'];
+foreach ($surchargeKeys as $sk) {
+    if (isset($_POST[$sk])) {
+        $val = trim((string)$_POST[$sk]);
+        if ($sk === 'stripe_surcharge_percent' || $sk === 'stripe_surcharge_fixed' || $sk === 'stripe_surcharge_split_percent') {
+            $val = (float)$val;
+        }
+        // Save to settings.json (like other billing settings)
+        $settings[$sk] = $val;
+        // Also save to app_config DB
+        try {
+            $pdo->prepare('INSERT INTO app_config (organization_id, config_key, config_value) VALUES (0, ?, ?) ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)')
+                ->execute([$sk, (string)$val]);
+        } catch (Throwable $e) {
+            // DB might not have app_config on fresh install
+        }
+    }
+}
+
 // Write Stripe keys to app_config table (encrypted where needed)
 if (!empty($stripeConfigKeys)) {
     $stmtConfig = $pdo->prepare(

@@ -24,9 +24,10 @@ switch ($action) {
                 'message' => 'Backup completed successfully.'
             ];
         } else {
+            $errorOutput = implode("\n", $output);
             $_SESSION['flash_backup'] = [
                 'type' => 'error',
-                'message' => 'Backup failed. Check server logs for details.'
+                'message' => 'Backup failed: ' . ($errorOutput ?: 'Unknown error (exit code ' . $returnCode . ')')
             ];
         }
         header('Location: /?page=settings-backup');

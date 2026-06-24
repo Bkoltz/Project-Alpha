@@ -205,6 +205,17 @@ fi
 chown -R www-data:www-data "${UPLOADS_DIR}" || true
 chmod -R 775 "${UPLOADS_DIR}" || true
 
+# 5b) Ensure backup directories exist with correct permissions
+echo "Creating backup directories..."
+BACKUP_DIR="/var/www/backups"
+for subdir in daily weekly monthly; do
+    if [ ! -d "$BACKUP_DIR/$subdir" ]; then
+        mkdir -p "$BACKUP_DIR/$subdir"
+    fi
+done
+chown -R www-data:www-data "$BACKUP_DIR" 2>/dev/null || true
+chmod -R 775 "$BACKUP_DIR" 2>/dev/null || true
+
 # 6) Database and config setup complete
 # Note: Cron jobs are now handled by the separate 'cron' service in docker-compose.yml
 # This web service no longer manages scheduled tasks.
