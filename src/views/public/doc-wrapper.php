@@ -271,7 +271,7 @@ if ($type === 'invoice') {
       </div>
     </div>
 
-    <?php if ($surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
+    <?php if (StripeFeeCalculator::isSurchargeEnabled($appConfig) && $surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
     <div class="surcharge-notice">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"></circle>
@@ -279,19 +279,14 @@ if ($type === 'invoice') {
         <line x1="12" y1="16" x2="12.01" y2="16"></line>
       </svg>
       <div class="surcharge-text">
-        <?php 
-        // Show the calculation first, then custom message on new line
-        $displayLines = explode("\n", $surchargeInfo['display_text']);
-        foreach ($displayLines as $index => $line): 
-          if ($index === 0): 
-        ?>
-          <div style="font-weight:600;margin-bottom:4px"><?php echo htmlspecialchars($line); ?></div>
-        <?php else: ?>
-          <div style="margin-top:4px;font-style:italic"><?php echo htmlspecialchars($line); ?></div>
-        <?php 
-          endif;
-        endforeach; 
-        ?>
+        <div style="font-weight:600;margin-bottom:4px">
+          <strong>Credit Card Processing Fee:</strong>
+          A surcharge of $<?php echo number_format($surchargeInfo['client_pays'], 2); ?> will be added to your payment.
+          <?php echo htmlspecialchars($surchargeInfo['display_text']); ?>
+        </div>
+        <div style="margin-top:4px;font-size:12px;">
+          <small>This fee does not apply to debit cards, bank transfers, or checks.</small>
+        </div>
       </div>
     </div>
     <?php endif; ?>
