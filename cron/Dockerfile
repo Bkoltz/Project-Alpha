@@ -49,7 +49,8 @@ RUN mkdir -p /var/log/cron && \
           /var/log/cron/send_invoice_reminders.log \
           /var/log/cron/auto_terminate_contracts.log \
           /var/log/cron/link_expiration_checker.log \
-          /var/log/cron/stripe_reconciliation.log && \
+          /var/log/cron/stripe_reconciliation.log \
+          /var/log/cron/sync_merchant_rate.log && \
     chmod 666 /var/log/cron/*.log
 
 # Install crontab into /etc/cron.d/ (requires user field in each entry)

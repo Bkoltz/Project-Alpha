@@ -14,6 +14,7 @@ Docker image that runs scheduled background tasks for Project Alpha.
 | Daily 6:00 AM UTC | `process_audit_schedules.php` | Generates and emails scheduled financial audit CSVs |
 | Daily 8:00 AM UTC | `send_invoice_reminders.php` | Sends 7-day-due and weekly-overdue email reminders |
 | Every 6 hours | `stripe_reconciliation.php` | Reconciles Stripe payments missed during downtime |
+| Daily 5:00 AM UTC | `sync_merchant_rate.php` | Computes the actual blended Stripe merchant rate from recent balance transactions and stores it in `app_config` |
 
 All job output is appended to `/var/www/logs/cron.log` inside the cron container.
 

@@ -326,7 +326,8 @@ class StripeService {
             while ($hasMore) {
                 $params = [
                     'limit' => 100,
-                    'created[gte]' => $since
+                    'created[gte]' => $since,
+                    'expand[]' => 'charges.data'
                 ];
                 if ($startingAfter) {
                     $params['starting_after'] = $startingAfter;
@@ -438,6 +439,20 @@ class StripeService {
             ]);
         } catch (\Throwable $e) {
             @error_log('[StripeService] Error creating refund: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Fetch a Stripe balance transaction by ID
+     * @param string $btId Balance transaction ID (e.g. 'txn_...')
+     * @return array Balance transaction object
+     */
+    public function getBalanceTransaction($btId) {
+        try {
+            return $this->apiRequest('GET', "balance_transactions/{$btId}");
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error fetching balance transaction: ' . $e->getMessage());
             throw $e;
         }
     }

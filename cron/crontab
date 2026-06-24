@@ -31,4 +31,7 @@ CRON_LOG=/var/www/logs/cron.log
 # Stripe payment reconciliation - every 6 hours
 0 */6 * * * root . /etc/environment && php /var/www/src/cron/stripe_reconciliation.php >> $CRON_LOG 2>&1
 
+# Sync actual Stripe merchant rate (non-changeable) - daily at 5:00 AM UTC
+0 5 * * * root . /etc/environment && php /var/www/src/cron/sync_merchant_rate.php >> $CRON_LOG 2>&1
+
 # Required blank line at end of crontab
