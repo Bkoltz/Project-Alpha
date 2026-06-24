@@ -2,6 +2,7 @@
 // src/views/pages/api-keys.php
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
 
 if (empty($_SESSION['user'])) { echo '<p>Unauthorized</p>'; return; }
 $isAdmin = (($_SESSION['user']['role'] ?? 'user') === 'admin');
@@ -26,6 +27,7 @@ $flash = $_SESSION['flash_api_key'] ?? null; unset($_SESSION['flash_api_key']);
   <?php endif; ?>
 
   <form method="post" action="/?page=api-keys-create" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:12px 0">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <label><div>Key name/label</div>
       <input type="text" name="name" required placeholder="CI pipeline, Zapier, etc." style="padding:8px 10px;border:1px solid #ddd;border-radius:8px">
     </label>
@@ -50,6 +52,7 @@ $flash = $_SESSION['flash_api_key'] ?? null; unset($_SESSION['flash_api_key']);
           <td style="padding:8px 10px;text-align:center">
             <?php if (empty($k['revoked_at'])): ?>
             <form method="post" action="/?page=api-keys-revoke" onsubmit="return confirm('Revoke this key?');" style="display:inline">
+              <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
               <input type="hidden" name="id" value="<?php echo (int)$k['id']; ?>">
               <button type="submit" style="padding:6px 10px;border:0;border-radius:6px;background:#fee2e2;color:#991b1b">Revoke</button>
             </form>
