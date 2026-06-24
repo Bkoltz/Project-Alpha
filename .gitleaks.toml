@@ -4,9 +4,18 @@
 useDefault = true
 
 [allowlist]
-description = "Vendored third-party code and test-only fixtures (no real secrets)"
+description = "Vendored third-party code, test-only fixtures, and ACKNOWLEDGED historical findings (pending credential rotation — see .hermes/plans/2026-06-24_pa-credential-rotation-and-history-purge.md)"
 paths = [
   '''vendor/''',
   '''.*\.env\.test$''',
   '''.*\.env\.example$''',
+]
+# Historical commits containing secrets that have been acknowledged. These remain in
+# git history until the rotation + history-purge plan is executed. The exposed values
+# MUST be treated as compromised and rotated regardless of this allowlist.
+#   80c3081 — .env.bak.pre-noenv-test (DB/admin passwords, encryption key)
+#   67b840c — old config/settings.json key
+commits = [
+  "80c30810740baa2a2a4409b4e261073b3d909c1b",
+  "67b840c7ca3a5fe08b570514f79f473a027e7147",
 ]
