@@ -1,7 +1,7 @@
 -- Migration 023: Role-based access control — custom roles + permission matrix
 -- Idempotent. Safe to run on every container boot.
-
-START TRANSACTION;
+-- Note: No explicit START TRANSACTION/COMMIT — MySQL DDL statements auto-commit
+-- and cannot be wrapped in transactions. Each statement is idempotent on its own.
 
 -- roles table
 CREATE TABLE IF NOT EXISTS roles (
@@ -134,5 +134,3 @@ UPDATE user_organizations uo
 JOIN roles r ON r.name = uo.role AND r.is_system = 1
 SET uo.role_id = r.id
 WHERE uo.role_id IS NULL;
-
-COMMIT;

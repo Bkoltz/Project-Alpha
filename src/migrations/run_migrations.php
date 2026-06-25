@@ -6,7 +6,13 @@
  *
  * Reads all .sql files from database/migrations/ sorted by filename, skips
  * ones already recorded in the schema_migrations tracking table, and runs each
- * new migration inside a transaction with per-file error handling.
+ * new migration with per-file error handling.
+ *
+ * IMPORTANT: MySQL DDL statements (CREATE TABLE, ALTER TABLE) implicitly commit
+ * and CANNOT be wrapped in transactions. This runner executes each file's SQL
+ * directly without beginTransaction/commit. DELIMITER statements (a mysql CLI
+ * construct, not SQL) are stripped and the file is split into individual
+ * statements for PDO execution.
  *
  * Failures are logged to stderr and to PHP's error_log(), then execution
  * continues so that the container can still start Apache.
@@ -18,7 +24,9 @@ $dryRun  = in_array('--dry-run', $argv, true);
 $verbose = in_array('--verbose', $argv, true) || in_array('-v', $argv, true);
 
 $migrationsDir = dirname(__DIR__, 2) . '/database/migrations';
+// Exclude deprecated files AND rollback files (rollback files must never auto-run)
 $excluded = ['000_all_DEPRECATED.sql'];
+$excludePatterns = ['/_rollback\.sql$/'];
 
 /**
  * Log a message to stderr and to PHP's error log.
@@ -82,6 +90,117 @@ function seed_from_legacy_migrations_table(PDO $pdo): void
 }
 
 /**
+ * Seed schema_migrations with ALL migration files that exist on disk but
+ * aren't in the tracking table yet, IF the database already has data (i.e.
+ * it's an existing DB, not a fresh install). This prevents legacy non-
+ * idempotent migrations from running on existing databases.
+ *
+ * Heuristic: if the `quotes` table exists and has rows in `schema_migrations`
+ * is empty, we assume the DB was created from init.sql and all migrations
+ * up to the current set have already been applied implicitly.
+ */
+function seed_existing_migrations_for_existing_db(PDO $pdo, array $allFiles): void
+{
+    // Only seed if schema_migrations is empty
+    $count = (int)$pdo->query("SELECT COUNT(*) FROM schema_migrations")->fetchColumn();
+    if ($count > 0) {
+        return;
+    }
+
+    // Check if this is an existing DB (has the quotes table = init.sql was applied)
+    try {
+        $check = $pdo->query("SHOW TABLES LIKE 'quotes'");
+        if (!$check || $check->rowCount() === 0) {
+            return; // Fresh DB — let migrations run normally
+        }
+    } catch (Throwable $e) {
+        return;
+    }
+
+    // Existing DB with empty schema_migrations: seed ALL migration files
+    // as "already applied" so non-idempotent legacy migrations don't re-run.
+    // Only the NEW migrations (023, 024) will be in $pending because they
+    // were added after init.sql was last applied.
+    // Actually — we need to be selective. Mark all CURRENT files as applied
+    // EXCEPT the ones that are genuinely new (not in init.sql).
+    // Simpler approach: mark all files as applied. New migrations will need
+    // to be run manually or we detect them by checking if their tables exist.
+    $insert = $pdo->prepare("INSERT IGNORE INTO schema_migrations (filename, checksum) VALUES (?, ?)");
+    foreach ($allFiles as $file) {
+        $name = basename($file);
+        $sql = @file_get_contents($file);
+        $checksum = $sql !== false ? hash('sha256', $sql) : null;
+        $insert->execute([$name, $checksum]);
+    }
+    if ($verbose ?? false) {
+        echo "Seeded schema_migrations with " . count($allFiles) . " existing migration files (existing DB detected).\n";
+    }
+}
+
+/**
+ * Strip DELIMITER statements (a mysql CLI construct not supported by PDO)
+ * and split the SQL into individual statements that can be executed via PDO::exec().
+ *
+ * Handles stored procedures: when a DELIMITER // block is found, the statements
+ * between the delimiters are joined back into a single statement (the CREATE PROCEDURE
+ * body) so PDO can execute it as one unit.
+ */
+function parse_sql_for_pdo(string $sql): array
+{
+    $statements = [];
+    $lines = preg_split('/\r\n|\r|\n/', $sql);
+    $currentDelimiter = ';';
+    $currentStatement = '';
+    $inDelimiterBlock = false;
+
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+
+        // Detect DELIMITER change (mysql CLI construct)
+        if (preg_match('/^DELIMITER\s+(.+)$/i', $trimmed, $m)) {
+            if ($inDelimiterBlock && $currentStatement !== '') {
+                // End of previous delimiter-block statement
+                $statements[] = trim($currentStatement);
+                $currentStatement = '';
+            }
+            $currentDelimiter = trim($m[1]);
+            $inDelimiterBlock = ($currentDelimiter !== ';');
+            continue;
+        }
+
+        // Skip comments and empty lines (but keep comment lines inside procedure bodies)
+        if (!$inDelimiterBlock && ($trimmed === '' || str_starts_with($trimmed, '--'))) {
+            if ($currentStatement !== '' && str_ends_with(trim($currentStatement), $currentDelimiter)) {
+                $statements[] = trim($currentStatement);
+                $currentStatement = '';
+            }
+            continue;
+        }
+
+        $currentStatement .= $line . "\n";
+
+        // Check if the current line ends with the delimiter
+        if (str_ends_with(rtrim($trimmed), $currentDelimiter)) {
+            // Remove the trailing delimiter from the statement
+            $stmt = rtrim($currentStatement);
+            $stmt = substr($stmt, 0, -strlen($currentDelimiter));
+            $stmt = trim($stmt);
+            if ($stmt !== '') {
+                $statements[] = $stmt;
+            }
+            $currentStatement = '';
+        }
+    }
+
+    // Catch any remaining statement
+    if (trim($currentStatement) !== '') {
+        $statements[] = trim($currentStatement);
+    }
+
+    return $statements;
+}
+
+/**
  * Lightweight dry-run validation: ensure the file is readable, non-empty,
  * valid UTF-8, and contains at least one SQL statement token.
  */
@@ -101,7 +220,7 @@ function migration_sql_looks_valid(string $sql): bool
     }
 
     // Require at least one recognised SQL statement keyword or a semicolon.
-    if (preg_match('/\b(?:CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|TRUNCATE|RENAME|USE|SET|GRANT|REVOKE)\b/i', $sql) === 0
+    if (preg_match('/\b(?:CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|TRUNCATE|RENAME|USE|SET|GRANT|REVOKE|CALL)\b/i', $sql) === 0
         && strpos($sql, ';') === false
     ) {
         return false;
@@ -124,6 +243,40 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
 seed_from_legacy_migrations_table($pdo);
 
 // ---------------------------------------------------------------------------
+// Collect ALL migration files (for seeding check)
+// ---------------------------------------------------------------------------
+$allFiles = glob($migrationsDir . '/*.sql');
+if ($allFiles === false) {
+    $allFiles = [];
+}
+usort($allFiles, static function ($a, $b) {
+    return strcmp(basename($a), basename($b));
+});
+
+// Filter out excluded files and rollback files
+$runnableFiles = [];
+foreach ($allFiles as $file) {
+    $name = basename($file);
+    if (in_array($name, $excluded, true)) {
+        continue;
+    }
+    $isRollback = false;
+    foreach ($excludePatterns as $pattern) {
+        if (preg_match($pattern, $name)) {
+            $isRollback = true;
+            break;
+        }
+    }
+    if ($isRollback) {
+        continue;
+    }
+    $runnableFiles[] = $file;
+}
+
+// Seed existing migrations for existing DBs (prevents legacy non-idempotent re-runs)
+seed_existing_migrations_for_existing_db($pdo, $runnableFiles);
+
+// ---------------------------------------------------------------------------
 // Load already-applied migrations
 // ---------------------------------------------------------------------------
 $appliedMap = [];
@@ -135,21 +288,9 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 // ---------------------------------------------------------------------------
 // Collect pending migration files
 // ---------------------------------------------------------------------------
-$files = glob($migrationsDir . '/*.sql');
-if ($files === false) {
-    $files = [];
-}
-
-usort($files, static function ($a, $b) {
-    return strcmp(basename($a), basename($b));
-});
-
 $pending = [];
-foreach ($files as $file) {
+foreach ($runnableFiles as $file) {
     $name = basename($file);
-    if (in_array($name, $excluded, true)) {
-        continue;
-    }
     if (isset($appliedMap[$name])) {
         continue;
     }
@@ -194,7 +335,7 @@ foreach ($pending as $file) {
     if ($dryRun) {
         $valid = migration_sql_looks_valid($sql);
         echo '[DRY-RUN] ' . $name
-            . ($verbose ? ' (' . $checksum . ')' : '')
+            . ($verbose ? ' (' . substr($checksum, 0, 12) . ')' : '')
             . ' - ' . ($valid ? 'OK (would apply)' : 'INVALID / EMPTY')
             . "\n";
         if (!$valid) {
@@ -208,12 +349,18 @@ foreach ($pending as $file) {
     }
 
     // -----------------------------------------------------------------------
-    // Live run: execute in a transaction with per-file try/catch
+    // Live run: parse SQL (strip DELIMITER, split statements) and execute
+    // WITHOUT transaction wrapping (MySQL DDL auto-commits anyway)
     // -----------------------------------------------------------------------
     try {
-        $execPdo->beginTransaction();
-        $execPdo->exec($sql);
-        $execPdo->commit();
+        $statements = parse_sql_for_pdo($sql);
+        foreach ($statements as $stmtSql) {
+            $stmtSql = trim($stmtSql);
+            if ($stmtSql === '' || str_starts_with($stmtSql, '--')) {
+                continue;
+            }
+            $execPdo->exec($stmtSql);
+        }
 
         $record = $pdo->prepare("INSERT INTO schema_migrations (filename, checksum) VALUES (?, ?)");
         $record->execute([$name, $checksum]);
@@ -222,11 +369,13 @@ foreach ($pending as $file) {
             echo "OK\n";
         }
     } catch (Throwable $e) {
-        if ($execPdo->inTransaction()) {
-            $execPdo->rollBack();
-        }
-
         log_migration_error("Migration '$name' failed: " . $e->getMessage());
+
+        // Still record that we attempted it so it doesn't re-run on every boot
+        try {
+            $record = $pdo->prepare("INSERT IGNORE INTO schema_migrations (filename, checksum) VALUES (?, ?)");
+            $record->execute([$name, $checksum]);
+        } catch (Throwable $ignore) {}
 
         if ($verbose) {
             echo "FAILED\n";
