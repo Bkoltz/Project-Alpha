@@ -69,9 +69,9 @@ function permLabel(string $perm): string {
     <?php endif; ?>
 
     <form method="post" action="/?page=settings/permissions-handler">
-        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?">
+        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="action" value="save_user_overrides">
-        <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?">
+        <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
         <input type="hidden" name="referer" value="account-edit">
 
         <div style="display:grid;gap:16px">
