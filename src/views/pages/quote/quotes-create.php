@@ -15,6 +15,18 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 
+      <?php if (!empty($appConfig['multi_brand_enabled'])):
+        $__bsw = $pdo->query('SELECT id, name FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC); ?>
+      <label style="grid-column:1/2">
+        <div>Brand / Organization</div>
+        <select class="brand-switcher" data-page="quote" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <option value="">All brands</option>
+          <?php foreach ($__bsw as $b): ?><option value="<?php echo (int)$b['id']; ?>"><?php echo htmlspecialchars($b['name']); ?></option><?php endforeach; ?>
+        </select>
+        <div style="font-size:0.85em;color:#666;margin-top:4px">Filter clients by brand. Selecting a client sets the organization automatically.</div>
+      </label>
+      <?php endif; ?>
+
       <!-- Client input -->
       <label style="grid-column:1/2;position:relative">
         <div>Client</div>
@@ -301,5 +313,6 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
   </form>
 </section>
 
+<script src="/assets/js/brand-switcher.js" defer></script>
 <script src="/assets/js/quotes-create-logic.js" defer></script>
 <script src="/assets/js/client-selection-dropdown-logic.js" defer></script>
