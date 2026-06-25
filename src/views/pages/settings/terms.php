@@ -29,7 +29,10 @@
 </fieldset>
 
 <?php if (!empty($appConfig['multi_brand_enabled'])):
-  $__orgsT = $pdo->query('SELECT id, name, brand_terms, brand_long_term_terms, brand_on_demand_terms FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+  $__primaryOrgIdT = (int)$pdo->query('SELECT MIN(id) FROM organizations')->fetchColumn();
+  $__orgsT = $pdo->prepare('SELECT id, name, brand_terms, brand_long_term_terms, brand_on_demand_terms FROM organizations WHERE id <> ? ORDER BY name');
+  $__orgsT->execute([$__primaryOrgIdT]);
+  $__orgsT = $__orgsT->fetchAll(PDO::FETCH_ASSOC);
   foreach ($__orgsT as $o): ?>
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:12px"><legend><?php echo htmlspecialchars($o['name']); ?> — Terms</legend>
       <label>Standard terms<textarea name="org_<?php echo (int)$o['id']; ?>_brand_terms" rows="8" style="width:100%"><?php echo htmlspecialchars($o['brand_terms'] ?? ''); ?></textarea></label>

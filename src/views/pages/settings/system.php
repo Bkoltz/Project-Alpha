@@ -159,9 +159,16 @@
 </fieldset>
 
 <?php
-$__orgs = $pdo->query('SELECT id, name, brand_name, brand_from_name, brand_from_email, brand_from_phone, brand_address_line1, brand_address_line2, brand_city, brand_state, brand_postal FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$__primaryOrgId = (int)$pdo->query('SELECT MIN(id) FROM organizations')->fetchColumn();
+$__orgs = $pdo->prepare('SELECT id, name, brand_name, brand_from_name, brand_from_email, brand_from_phone, brand_address_line1, brand_address_line2, brand_city, brand_state, brand_postal FROM organizations WHERE id <> ? ORDER BY name');
+$__orgs->execute([$__primaryOrgId]);
+$__orgs = $__orgs->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <div id="perOrgBrandEditors" style="<?php echo !empty($appConfig['multi_brand_enabled']) ? '' : 'display:none'; ?>">
+  <p style="margin:4px 0 8px;color:var(--muted);font-size:12px">Additional brands. The main brand above is used by your primary organization and for all documents when multi-brand is off.</p>
+  <?php if (empty($__orgs)): ?>
+    <p style="margin:4px 0;color:var(--muted);font-size:12px">No additional organizations yet. Create another organization to configure a second brand.</p>
+  <?php endif; ?>
 <?php foreach ($__orgs as $o): ?>
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
   <legend style="padding:0 6px;color:var(--muted)"><?php echo htmlspecialchars($o['name']); ?> — Brand</legend>
