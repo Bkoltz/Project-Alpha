@@ -14,6 +14,13 @@ if($client_id>0){$where[]='i.client_id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='i.status=?'; $p[] = $status; }
 
+require_once __DIR__ . '/../../../utils/acl.php';
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'i', (int)$_SESSION['user']['id']);
+if ($scopeWhere !== '') {
+    $where[] = ltrim($scopeWhere, ' AND');
+    $p = array_merge($p, $scopeParams);
+}
+
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));

@@ -40,8 +40,15 @@ if ($whereParts) {
 }
 $sql .= ' ORDER BY pc.project_code DESC';
 $rows = $pdo->prepare($sql);
-$jobScopeParams = $scopeWhere !== '' ? array_fill(0, 6, $orgId) : [];
-$rows->execute(array_merge($params, $jobScopeParams));
+// Org-id placeholders in the query when scoped: 3 subquery counts (quotes/contracts/invoices)
+// + 3 UNION sources + 1 outer jobScopeWhere = 7 total. Bind exactly that many.
+$jobScopeParams = $scopeWhere !== '' ? array_fill(0, 7, $orgId) : [];
+// $params (prefix filter) applies to pc.project_code LIKE in the outer WHERE, which is
+// appended AFTER the subquery/UNION placeholders. Reorder so bound params match token order:
+// subquery counts (3) + UNION (3) come first, then outer WHERE (prefix + jobScopeWhere).
+$subAndUnionParams = $scopeWhere !== '' ? array_fill(0, 6, $orgId) : [];
+$outerScopeParam   = $scopeWhere !== '' ? [$orgId] : [];
+$rows->execute(array_merge($subAndUnionParams, $params, $outerScopeParam));
 $projects = $rows->fetchAll();
 $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
 

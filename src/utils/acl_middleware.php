@@ -102,11 +102,11 @@ function page_permission_map(): array
         'long-term-contract-activate' => 'contracts.edit',
         'long-term-contract-pause'    => 'contracts.edit',
         'long-term-contract-resume'   => 'contracts.edit',
-        'long-term-contract-terminate' => 'contracts.delete',
+        'long-term-contract-terminate' => 'contracts.void',
         'on-demand-contract-activate'  => 'contracts.edit',
         'on-demand-contract-pause'     => 'contracts.edit',
         'on-demand-contract-resume'    => 'contracts.edit',
-        'on-demand-contract-terminate' => 'contracts.delete',
+        'on-demand-contract-terminate' => 'contracts.void',
 
         // Invoices module
         'invoice/invoices-list'     => 'invoices.view',

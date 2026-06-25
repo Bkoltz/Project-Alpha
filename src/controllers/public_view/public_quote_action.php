@@ -69,8 +69,14 @@ try {
 
         $quoteType = $quote['quote_type'] ?? 'regular';
 
+        // Resolve creator + organization for derived records (no session user for public link)
+        $fallbackUserId = 1;
+        $fallbackOrgId  = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
+        $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
+        $quoteOrgId   = (int)($quote['organization_id'] ?? 0) ?: $fallbackOrgId;
+
         // Create contract (pending)
-        $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
            ->execute([
              $qid,
              (int)$quote['client_id'],
@@ -91,7 +97,9 @@ try {
              $quote['billing_interval_unit'] ?? 'month',
              $quote['pricing_type'] ?? ($quoteType === 'on_demand' ? 'on_demand' : null),
              $quote['price_per_invoice'] ?? null,
-             $quote['scope'] ?? null
+             $quote['scope'] ?? null,
+             $quoteOrgId,
+             $quoteCreator
            ]);
         $contract_id = (int)$pdo->lastInsertId();
 
@@ -100,8 +108,8 @@ try {
 
         if ($quoteType === 'regular') {
           // Create invoice (unpaid)
-          $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null]);
+          $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
           $invoice_id = (int)$pdo->lastInsertId();
 
           $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');

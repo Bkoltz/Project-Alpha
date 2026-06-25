@@ -2,18 +2,15 @@
   require_once __DIR__ . '/../../../config/db.php';
   require_once __DIR__ . '/../../../config/app.php';
   require_once __DIR__ . '/../../../utils/document_fields.php';
+  require_once __DIR__ . '/../../../utils/acl.php';
   $id = (int)($_GET['id'] ?? 0);
+  require_record_ownership($pdo, 'quotes', $id);
   $q = $pdo->prepare('SELECT * FROM quotes WHERE id=?');
   $q->execute([$id]);
   $quote = $q->fetch(PDO::FETCH_ASSOC);
   if (!$quote) {
     echo '<p>Quote not found</p>';
     return;
-  }
-  require_once __DIR__ . '/../../../utils/acl.php';
-  require_once __DIR__ . '/../../../utils/acl_middleware.php';
-  if (!can_access_record($pdo, 'quotes', $id, (int)$_SESSION['user']['id'])) {
-    deny_response('quote/quotes-edit');
   }
   $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
   $items->execute([$id]);

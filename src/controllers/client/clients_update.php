@@ -1,8 +1,10 @@
 <?php
 // src/controllers/clients_update.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 $id = (int)($_POST['id'] ?? 0);
+require_record_ownership($pdo, 'clients', $id);
 $name = trim($_POST['name'] ?? '');
 $email = trim($_POST['email'] ?? '');
 $phone = trim($_POST['phone'] ?? '');

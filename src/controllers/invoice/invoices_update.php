@@ -6,9 +6,7 @@ require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 $id = (int)($_POST['id'] ?? 0);
-if (!can_access_record($pdo, 'invoices', $id, (int)$_SESSION['user']['id'])) {
-    deny_response('invoice/invoices-update');
-}
+require_record_ownership($pdo, 'invoices', $id);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);

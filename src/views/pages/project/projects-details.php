@@ -3,8 +3,10 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
+require_record_ownership($pdo, 'projects', $projectId);
 
 if (!$projectId) {
     header('Location: /?page=project/projects-list');

@@ -4,16 +4,13 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 $id = (int)($_GET['id'] ?? 0);
+require_record_ownership($pdo, 'invoices', $id);
 $st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
-require_once __DIR__ . '/../../../utils/acl.php';
-require_once __DIR__ . '/../../../utils/acl_middleware.php';
-if (!can_access_record($pdo, 'invoices', $id, (int)$_SESSION['user']['id'])) {
-    deny_response('invoice/invoice-details');
-}
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();

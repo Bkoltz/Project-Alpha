@@ -28,26 +28,9 @@ if (empty($_SESSION['csrf']) || !is_string($token) || !hash_equals($_SESSION['cs
 
 $action = $_POST['action'] ?? '';
 
-// All permission keys that the UI exposes
-$permissionGroups = [
-    'Quotes'        => ['quotes.view','quotes.create','quotes.edit','quotes.delete','quotes.send','quotes.approve','quotes.reject'],
-    'Contracts'     => ['contracts.view','contracts.create','contracts.edit','contracts.delete','contracts.sign','contracts.complete','contracts.void','contracts.send'],
-    'Invoices'      => ['invoices.view','invoices.create','invoices.edit','invoices.delete','invoices.mark_paid','invoices.send'],
-    'Clients'       => ['clients.view','clients.create','clients.edit','clients.delete','clients.purge','clients.restore'],
-    'Projects'      => ['projects.view','projects.create','projects.edit','projects.delete','projects.search'],
-    'Jobs'          => ['jobs.view','jobs.edit','jobs.delete','jobs.search'],
-    'Financial'     => ['financial.view','financial.manage','financial.export','financial.audit'],
-    'Reports'       => ['reports.view'],
-    'Settings'      => ['settings.view','settings.manage'],
-    'Users'         => ['users.view','users.manage','users.reset_password','users.delete'],
-    'API Keys'      => ['api_keys.view','api_keys.manage'],
-    'Billing'       => ['billing.view','billing.manage'],
-    'Organizations' => ['organizations.view','organizations.manage','organizations.delete'],
-    'Public Links'  => ['public_links.view','public_links.create','public_links.revoke','public_links.manage'],
-    'Time Tracking' => ['time_tracking.view','time_tracking.manage'],
-    '2FA'           => ['2fa.manage'],
-    'Profile'       => ['profile.view','profile.edit'],
-];
+// All permission keys that the UI exposes — canonical catalog
+require_once __DIR__ . '/../../utils/permission_catalog.php';
+$permissionGroups = permission_catalog();
 
 $allPermissions = [];
 foreach ($permissionGroups as $group => $keys) {

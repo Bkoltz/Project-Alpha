@@ -3,18 +3,15 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 $id = (int)($_GET['id'] ?? 0);
+require_record_ownership($pdo, 'invoices', $id);
 $iv = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
 $iv->execute([$id]);
 $inv = $iv->fetch(PDO::FETCH_ASSOC);
 if (!$inv) {
   echo '<p>Invoice not found</p>';
   return;
-}
-require_once __DIR__ . '/../../../utils/acl.php';
-require_once __DIR__ . '/../../../utils/acl_middleware.php';
-if (!can_access_record($pdo, 'invoices', $id, (int)$_SESSION['user']['id'])) {
-    deny_response('invoice/invoices-edit');
 }
 $items = $pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);

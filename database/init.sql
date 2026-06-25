@@ -203,11 +203,11 @@ INSERT INTO role_permissions (role_id, permission, allowed) VALUES
     (3, 'users.view', 0), (3, 'users.manage', 0), (3, 'users.reset_password', 0),
     (3, 'api_keys.*', 0), (3, 'billing.*', 0),
     (3, 'time_tracking.*', 1), (3, 'profile.*', 1), (3, '2fa.manage', 0),
-    (4, 'quotes.view', 1), (4, 'quotes.create', 1), (4, 'quotes.edit', 1), (4, 'quotes.delete', 0), (4, 'quotes.send', 1), (4, 'quotes.approve', 0), (4, 'quotes.reject', 0),
-    (4, 'contracts.view', 1), (4, 'contracts.create', 1), (4, 'contracts.edit', 1), (4, 'contracts.delete', 0), (4, 'contracts.sign', 1), (4, 'contracts.complete', 0), (4, 'contracts.void', 0), (4, 'contracts.send', 1),
-    (4, 'invoices.view', 1), (4, 'invoices.create', 1), (4, 'invoices.edit', 1), (4, 'invoices.delete', 0), (4, 'invoices.mark_paid', 0), (4, 'invoices.send', 1),
+    (4, 'quotes.view', 1), (4, 'quotes.create', 1), (4, 'quotes.edit', 1), (4, 'quotes.send', 1), (4, 'quotes.approve', 0), (4, 'quotes.reject', 0),
+    (4, 'contracts.view', 1), (4, 'contracts.create', 1), (4, 'contracts.edit', 1), (4, 'contracts.sign', 1), (4, 'contracts.complete', 0), (4, 'contracts.void', 0), (4, 'contracts.send', 1),
+    (4, 'invoices.view', 1), (4, 'invoices.create', 1), (4, 'invoices.edit', 1), (4, 'invoices.void', 0), (4, 'invoices.mark_paid', 0), (4, 'invoices.send', 1),
     (4, 'clients.*', 1), (4, 'projects.*', 1), (4, 'jobs.*', 1),
-    (4, 'organizations.view', 1), (4, 'organizations.manage', 0), (4, 'organizations.delete', 0),
+    (4, 'organizations.view', 1), (4, 'organizations.manage', 0),
     (4, 'public_links.*', 1),
     (4, 'financial.*', 0),
     (4, 'reports.view', 0),
@@ -215,6 +215,15 @@ INSERT INTO role_permissions (role_id, permission, allowed) VALUES
     (4, 'users.*', 0), (4, 'api_keys.*', 0), (4, 'billing.*', 0),
     (4, 'time_tracking.view', 1), (4, 'time_tracking.manage', 0),
     (4, 'profile.*', 1), (4, '2fa.manage', 0)
+ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
+
+-- Seed void permission keys for system roles (owner/staff allowed, member denied)
+INSERT INTO role_permissions (role_id, permission, allowed)
+SELECT id, 'contracts.void', CASE WHEN name IN ('owner','staff','member') THEN 1 ELSE 0 END FROM roles WHERE is_system = 1
+ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
+
+INSERT INTO role_permissions (role_id, permission, allowed)
+SELECT id, 'invoices.void', CASE WHEN name IN ('owner','staff','member') THEN 1 ELSE 0 END FROM roles WHERE is_system = 1
 ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
 
 -- USER-ORGANIZATION MEMBERSHIP

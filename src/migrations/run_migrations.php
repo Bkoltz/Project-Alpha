@@ -140,8 +140,9 @@ function seed_existing_migrations_for_existing_db(PDO $pdo, array $allFiles): vo
     $seededCount = 0;
     foreach ($allFiles as $file) {
         $name = basename($file);
-        // Skip ACL migrations (023+) — they must be allowed to run
-        if (preg_match('/^02[3-9]|^0[3-9]|^[1-9]/', $name)) {
+        // Skip ACL migrations (023+) — they must be allowed to run. Only
+        // migrations numbered below 023 are seeded as already-applied.
+        if (preg_match('/^(\d+)_/', $name, $m) && (int)$m[1] >= 23) {
             continue;
         }
         $sql = @file_get_contents($file);
@@ -304,10 +305,11 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 $stmt->closeCursor();
 
 // ---------------------------------------------------------------------------
-// REPAIR: If ACL migrations (023/024) are marked "applied" but the ACL tables
-// don't actually exist (happened due to a buggy seed function that marked
-// ALL migrations as applied on existing DBs), remove them from the applied
-// list and delete their schema_migrations entries so they re-run.
+// REPAIR: If ACL migrations (023/024/025) are marked "applied" but the ACL
+// tables don't actually exist (happened due to a buggy seed function that
+// marked ALL migrations as applied on existing DBs), remove them from the
+// applied list and delete their schema_migrations entries so they re-run.
+// 025 is included so its role_id/created_by backfills re-apply too.
 // ---------------------------------------------------------------------------
 $aclTablesOk = true;
 try {
@@ -321,7 +323,7 @@ try {
 }
 
 if (!$aclTablesOk) {
-    $aclMigrations = ['023_role_permissions.sql', '024_add_created_by_columns.sql'];
+    $aclMigrations = ['023_role_permissions.sql', '024_add_created_by_columns.sql', '025_acl_round3_fixes.sql'];
     $repaired = [];
     foreach ($aclMigrations as $mname) {
         if (isset($appliedMap[$mname])) {

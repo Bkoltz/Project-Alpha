@@ -2,6 +2,7 @@
 // src/views/pages/invoice/recurring-invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/twig.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 
 
@@ -24,6 +25,12 @@ if ($status !== '' && $status !== 'all') {
 if($project_code!==''){ $where[]='ltc.project_code LIKE ?'; $p[] = $project_code.'%'; }
 if($min_price !== null){ $where[]='ltc.price_per_invoice >= ?'; $p[] = $min_price; }
 if($max_price !== null){ $where[]='ltc.price_per_invoice <= ?'; $p[] = $max_price; }
+
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'ltc', (int)$_SESSION['user']['id']);
+if ($scopeWhere !== '') {
+    $where[] = trim($scopeWhere);
+    $p = array_merge($p, $scopeParams);
+}
 
 $sql = "SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.start_date, ltc.end_date, c.name client_name, c.id AS client_id 
         FROM contracts ltc 

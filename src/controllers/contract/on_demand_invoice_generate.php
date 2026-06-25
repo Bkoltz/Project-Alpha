@@ -39,6 +39,12 @@ try {
     $projectCode = $contract['project_code'];
     $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
     
+    // Resolve creator + organization for derived invoice (no session in on-demand generator)
+    $fallbackUserId = 1;
+    $fallbackOrgId  = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
+    $contractCreator = (int)($contract['created_by'] ?? 0) ?: $fallbackUserId;
+    $contractOrgId   = (int)($contract['organization_id'] ?? 0) ?: $fallbackOrgId;
+    
     // Calculate invoice amount
     $subtotal = (float)$contract['price_per_invoice'];
     
@@ -64,8 +70,8 @@ try {
         INSERT INTO invoices (
             contract_id, client_id, project_id, project_code, invoice_type,
             discount_type, discount_value, tax_percent, 
-            subtotal, total, status, due_date, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            subtotal, total, status, due_date, created_at, organization_id, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ');
     
     $insertInvoice->execute([
@@ -80,7 +86,10 @@ try {
         $subtotal,
         $total,
         'unpaid',
-        $dueDate
+        $dueDate,
+        date('Y-m-d H:i:s'),
+        $contractOrgId,
+        $contractCreator
     ]);
     
     $invoiceId = (int)$pdo->lastInsertId();

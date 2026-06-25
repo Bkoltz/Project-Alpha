@@ -157,3 +157,28 @@ function can_access_record(PDO $pdo, string $table, int $recordId, int $userId):
     if ($isMember && (int)$row['created_by'] !== $userId) return false;
     return true;
 }
+
+function role_id_by_name(PDO $pdo, string $roleName, ?int $orgId = null): ?int
+{
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT id FROM roles
+             WHERE name = ? AND (organization_id = ? OR organization_id IS NULL)
+             ORDER BY (organization_id IS NULL) ASC, is_system DESC
+             LIMIT 1'
+        );
+        $stmt->execute([$roleName, $orgId]);
+        $id = $stmt->fetchColumn();
+        return $id !== false ? (int)$id : null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function require_record_ownership(PDO $pdo, string $table, int $recordId): void
+{
+    if (!can_access_record($pdo, $table, $recordId, (int)($_SESSION['user']['id'] ?? 0))) {
+        require_once __DIR__ . '/acl_middleware.php';
+        deny_response($table . '/view');
+    }
+}
