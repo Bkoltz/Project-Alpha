@@ -304,6 +304,43 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 $stmt->closeCursor();
 
 // ---------------------------------------------------------------------------
+// REPAIR: If ACL migrations (023/024) are marked "applied" but the ACL tables
+// don't actually exist (happened due to a buggy seed function that marked
+// ALL migrations as applied on existing DBs), remove them from the applied
+// list and delete their schema_migrations entries so they re-run.
+// ---------------------------------------------------------------------------
+$aclTablesOk = true;
+try {
+    $check = $pdo->query("SHOW TABLES LIKE 'role_permissions'");
+    if (!$check || $check->rowCount() === 0) {
+        $aclTablesOk = false;
+    }
+    $check->closeCursor();
+} catch (Throwable $e) {
+    $aclTablesOk = false;
+}
+
+if (!$aclTablesOk) {
+    $aclMigrations = ['023_role_permissions.sql', '024_add_created_by_columns.sql'];
+    $repaired = [];
+    foreach ($aclMigrations as $mname) {
+        if (isset($appliedMap[$mname])) {
+            unset($appliedMap[$mname]);
+            $repaired[] = $mname;
+        }
+    }
+    if (!empty($repaired)) {
+        if ($verbose) {
+            echo "REPAIR: ACL tables missing but migrations marked as applied. Re-queueing: " . implode(', ', $repaired) . "\n";
+        }
+        $del = $pdo->prepare("DELETE FROM schema_migrations WHERE filename = ?");
+        foreach ($repaired as $mname) {
+            $del->execute([$mname]);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Collect pending migration files
 // ---------------------------------------------------------------------------
 $pending = [];
