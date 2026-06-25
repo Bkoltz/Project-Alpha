@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/twig.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
@@ -22,6 +23,13 @@ if($project_code!==''){ $where[]='co.project_code LIKE ?'; $p[] = $project_code.
 if($doc_no>0){ $where[]='co.doc_number=?'; $p[] = $doc_no; }
 if($min_price !== null){ $where[]='co.total>=?'; $p[] = $min_price; }
 if($max_price !== null){ $where[]='co.total<=?'; $p[] = $max_price; }
+
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'co', (int)$_SESSION['user']['id']);
+if ($scopeWhere) {
+    $where[] = trim($scopeWhere);
+    $p = array_merge($p, $scopeParams);
+}
+
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;

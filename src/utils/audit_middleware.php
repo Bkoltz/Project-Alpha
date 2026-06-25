@@ -17,6 +17,37 @@
 require_once __DIR__ . '/audit.php';
 
 /**
+ * Pattern-based fallback for audit coverage.
+ *
+ * Returns [action, entity_type] for routes that follow common create/update/delete/export
+ * naming conventions. The caller must still enforce request-method restrictions:
+ * write/lifecycle patterns are only applied on POST; export patterns may fire on any method.
+ */
+function audit_matches_pattern(string $page): ?array
+{
+    // Destructive operations
+    if (preg_match('/(-delete|\/clients-delete|\/projects-delete|\/organizations-delete)$/', $page)) {
+        return ['record.delete', 'record'];
+    }
+    if (preg_match('/(-purge|\/clients-purge)$/', $page)) {
+        return ['record.purge', 'record'];
+    }
+    // Write operations (POST only — checked by caller)
+    if (preg_match('/(-update|-edit|-create)$/', $page)) {
+        return ['record.write', 'record'];
+    }
+    // Void/complete/sign lifecycle
+    if (preg_match('/(-void|-complete|-sign|-deny|-approve|-reject)$/', $page)) {
+        return ['record.lifecycle', 'record'];
+    }
+    // Exports
+    if (str_contains($page, 'export')) {
+        return ['data.export', 'record'];
+    }
+    return null;
+}
+
+/**
  * Map of page => [action, entity_type].
  * POST-only entries fire only on POST; the '*' list fires on any method.
  */
@@ -96,6 +127,19 @@ function audit_middleware(PDO $pdo, string $page): void
     } elseif (isset($map['*'][$page])) {
         $match = $map['*'][$page];
     }
+
+    // Fallback: pattern-based coverage for POST create/update/delete/lifecycle
+    // and for any-method export routes.
+    if ($match === null) {
+        $pattern = audit_matches_pattern($page);
+        if ($pattern !== null) {
+            $isPostOnlyPattern = !str_contains($page, 'export');
+            if (!$isPostOnlyPattern || $method === 'POST') {
+                $match = $pattern;
+            }
+        }
+    }
+
     if ($match === null) {
         return;
     }
