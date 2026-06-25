@@ -144,7 +144,11 @@ if (isset($_POST['app_host'])) {
 }
 // Public links in email checkbox (was MISSING — never saved before)
 $settings['public_links_in_email'] = !empty($_POST['public_links_in_email']) ? 1 : 0;
-$settings['multi_brand_enabled'] = !empty($_POST['multi_brand_enabled']) ? 1 : 0;
+// Multi-brand toggle only on the System tab; unchecked checkboxes don't POST so we must gate by tab
+if (isset($_POST['tab']) && $_POST['tab'] === 'system') {
+    $settings['multi_brand_enabled'] = !empty($_POST['multi_brand_enabled']) ? 1 : 0;
+    $settings['default_brand_org_id'] = (int)($_POST['default_brand_org_id'] ?? 0);
+}
 
 // From and contact fields
 foreach (['from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
@@ -322,7 +326,7 @@ $generalConfigKeys = [
     'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
     'signature_agreement', 'review_link', 'suppress_assets_warning',
     'cron_enabled', 'cron_schedule', 'cron_custom',
-    'multi_brand_enabled',
+    'multi_brand_enabled', 'default_brand_org_id',
 ];
 // contract_custom_sections is an array — serialize to JSON for DB storage
 if (isset($settings['contract_custom_sections'])) {
