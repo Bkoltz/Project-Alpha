@@ -100,8 +100,10 @@ $error = $_GET['error'] ?? '';
       </form>
     </div>
 
-    <!-- Right: 2FA + Security -->
+    <!-- Right: 2FA + Security + Permission Overrides -->
     <div style="display:grid;gap:16px;">
+      <?php include __DIR__ . '/../account/permissions_overrides.php'; ?>
+
       <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
         <h3 style="margin-top:0">Two-Factor Authentication</h3>
         <p style="margin:0 0 12px;">Status:

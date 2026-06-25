@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../config/app.php';
 $tab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', $_GET['tab']) : 'system';
 
 // Valid tabs
-$validTabs = ['system', 'terms', 'billing', 'taxes', 'documents', 'notifications', 'links', 'item-library', 'backup'];
+$validTabs = ['system', 'terms', 'billing', 'taxes', 'documents', 'notifications', 'links', 'item-library', 'backup', 'logs', 'permissions'];
 if (!in_array($tab, $validTabs)) {
   $tab = 'system';
 }
@@ -35,11 +35,13 @@ if (!in_array($tab, $validTabs)) {
       <a href="/?page=settings&tab=links" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'links' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Links</a>
       <a href="/?page=settings&tab=item-library" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'item-library' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Item Library</a>
       <a href="/?page=settings&tab=backup" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'backup' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Backups</a>
+      <a href="/?page=settings&tab=permissions" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'permissions' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Permissions</a>
+      <a href="/?page=settings&tab=logs" style="display:block;padding:10px 12px;border-bottom:1px solid #eee;<?php echo $tab === 'logs' ? 'background:#f8fafc;font-weight:600' : ''; ?>">Logs</a>
       <a href="/?page=api-keys" style="display:block;padding:10px 12px;">API Keys</a>
     </aside>
 
     <div>
-      <?php if ($tab === 'taxes' || $tab === 'item-library' || $tab === 'documents' || $tab === 'links' || $tab === 'backup'): ?>
+      <?php if ($tab === 'taxes' || $tab === 'item-library' || $tab === 'documents' || $tab === 'links' || $tab === 'backup' || $tab === 'permissions' || $tab === 'logs'): ?>
         <?php
         // Include tabs without the form wrapper since they have their own forms
         $tabFile = __DIR__ . '/settings/' . $tab . '.php';

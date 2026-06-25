@@ -409,6 +409,18 @@ if ($page === 'settings/item-library-search') {
     require_once __DIR__ . '/../src/controllers/settings/item_library_search.php';
     exit;
 }
+if ($page === 'settings/logs') {
+    require_once __DIR__ . '/../src/views/pages/settings/logs.php';
+    exit;
+}
+if ($page === 'settings/permissions') {
+    require_once __DIR__ . '/../src/views/pages/settings/permissions.php';
+    exit;
+}
+if ($page === 'settings/permissions-handler') {
+    require_once __DIR__ . '/../src/controllers/settings/permissions_handler.php';
+    exit;
+}
 if ($page === 'custom-fields-ajax') {
     require_once __DIR__ . '/../src/controllers/api/custom_fields_ajax.php';
     exit;
@@ -493,6 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/tax-rates-handler',
         'settings/tax-import-handler',
         'settings/links-handler',
+        'settings/permissions-handler',
         'settings/custom-fields-handler',
         'settings/item-library-handler',
         'settings/document-customization-save',
@@ -686,6 +699,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/links-handler') {
         require_once __DIR__ . '/../src/controllers/settings/links_handler.php';
+        exit;
+    }
+    if ($page === 'settings/permissions-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/permissions_handler.php';
+        exit;
+    }
+    if ($page === 'settings/logs-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/logs_handler.php';
         exit;
     }
     if ($page === 'settings/custom-fields-handler') {
