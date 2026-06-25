@@ -64,12 +64,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    const termsToggle = document.getElementById('termsOrgToggle');
-    const termsEditors = document.getElementById('perOrgTermsEditors');
-    if (termsToggle && termsEditors) {
-        termsEditors.style.display = termsToggle.checked ? '' : 'none';
-        termsToggle.addEventListener('change', function () {
-            termsEditors.style.display = termsToggle.checked ? '' : 'none';
+    var termsBtns = document.querySelectorAll('.terms-brand-btn');
+    if (termsBtns.length) {
+        termsBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var oid = btn.getAttribute('data-org-id');
+                document.querySelectorAll('.terms-editor-set').forEach(function (set) {
+                    set.style.display = set.getAttribute('data-org-id') === oid ? 'block' : 'none';
+                });
+                termsBtns.forEach(function (b) { b.style.background = '#fff'; b.style.fontWeight = '400'; });
+                btn.style.background = '#f8fafc';
+                btn.style.fontWeight = '600';
+            });
         });
+        termsBtns[0].style.background = '#f8fafc';
+        termsBtns[0].style.fontWeight = '600';
     }
 });
