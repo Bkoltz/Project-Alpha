@@ -119,6 +119,7 @@ WORKDIR /var/www
 
 COPY --from=vendor /app/vendor /var/www/vendor
 COPY ./src/ /var/www/src/
+COPY ./database/migrations/ /var/www/database/migrations/
 RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
     && mkdir -p /var/www/logs /var/www/backups \
     && chown -R root:root /var/www \

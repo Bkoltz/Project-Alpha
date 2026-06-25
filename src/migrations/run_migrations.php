@@ -23,6 +23,15 @@ require_once __DIR__ . '/../config/db.php';
 $dryRun  = in_array('--dry-run', $argv, true);
 $verbose = in_array('--verbose', $argv, true) || in_array('-v', $argv, true);
 
+// Safety valve: skip migrations entirely if SKIP_MIGRATIONS_ON_BOOT is set.
+// This allows the app to start even if a migration is broken, providing a
+// recovery path without requiring a code rollback.
+if (filter_var(getenv('SKIP_MIGRATIONS_ON_BOOT') ?: 'false', FILTER_VALIDATE_BOOLEAN)) {
+    fwrite(STDERR, "[migrations] SKIP_MIGRATIONS_ON_BOOT is set — skipping all migrations.\n");
+    error_log('[migrations] SKIP_MIGRATIONS_ON_BOOT is set — skipping all migrations.');
+    exit(0);
+}
+
 $migrationsDir = dirname(__DIR__, 2) . '/database/migrations';
 // Exclude deprecated files AND rollback files (rollback files must never auto-run)
 $excluded = ['000_all_DEPRECATED.sql'];

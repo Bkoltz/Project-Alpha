@@ -77,22 +77,30 @@ function user_permissions(PDO $pdo, int $userId, ?int $activeOrgId = null): arra
 
     $permissions = [];
 
-    $stmt = $pdo->prepare('SELECT rp.permission, rp.allowed
-        FROM user_organizations uo
-        JOIN roles r ON r.id = uo.role_id
-        JOIN role_permissions rp ON rp.role_id = r.id
-        WHERE uo.user_id = ? AND uo.organization_id = ?');
-    $stmt->execute([$userId, $activeOrgId]);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $permissions[$row['permission']] = (bool)$row['allowed'];
+    try {
+        $stmt = $pdo->prepare('SELECT rp.permission, rp.allowed
+            FROM user_organizations uo
+            JOIN roles r ON r.id = uo.role_id
+            JOIN role_permissions rp ON rp.role_id = r.id
+            WHERE uo.user_id = ? AND uo.organization_id = ?');
+        $stmt->execute([$userId, $activeOrgId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $permissions[$row['permission']] = (bool)$row['allowed'];
+        }
+    } catch (Throwable $e) {
+        // ACL tables may not exist yet (pre-migration) — return empty permissions
     }
 
-    $stmt = $pdo->prepare('SELECT permission, allowed
-        FROM user_permissions_overrides
-        WHERE user_id = ? AND (organization_id = ? OR organization_id IS NULL)');
-    $stmt->execute([$userId, $activeOrgId]);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $permissions[$row['permission']] = (bool)$row['allowed'];
+    try {
+        $stmt = $pdo->prepare('SELECT permission, allowed
+            FROM user_permissions_overrides
+            WHERE user_id = ? AND (organization_id = ? OR organization_id IS NULL)');
+        $stmt->execute([$userId, $activeOrgId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $permissions[$row['permission']] = (bool)$row['allowed'];
+        }
+    } catch (Throwable $e) {
+        // user_permissions_overrides table may not exist yet (pre-migration)
     }
 
     $cache[$key] = $permissions;
