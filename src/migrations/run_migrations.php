@@ -61,7 +61,9 @@ function create_multi_statement_pdo(): PDO
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::MYSQL_ATTR_MULTI_STATEMENTS => true,
+        // NO multi-statement — we execute statements one at a time
+        // Buffer all queries so no unbuffered result sets block execution
+        PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
     ];
 
     return new PDO($dsn, $user, $pass, $options);
@@ -126,23 +128,29 @@ function seed_existing_migrations_for_existing_db(PDO $pdo, array $allFiles): vo
         return;
     }
 
-    // Existing DB with empty schema_migrations: seed ALL migration files
-    // as "already applied" so non-idempotent legacy migrations don't re-run.
-    // Only the NEW migrations (023, 024) will be in $pending because they
-    // were added after init.sql was last applied.
-    // Actually — we need to be selective. Mark all CURRENT files as applied
-    // EXCEPT the ones that are genuinely new (not in init.sql).
-    // Simpler approach: mark all files as applied. New migrations will need
-    // to be run manually or we detect them by checking if their tables exist.
+    // Existing DB with empty schema_migrations: seed all migration files
+    // as "already applied" EXCEPT migrations 023+ (the ACL migrations).
+    // Migrations 023 and 024 add the ACL schema (roles, role_permissions,
+    // user_permissions_overrides, created_by columns) which are NOT in the
+    // old init.sql. They must be allowed to run so the ACL tables get created.
+    // Migrations before 023 were already incorporated into init.sql, so
+    // marking them as "applied" prevents non-idempotent legacy migrations
+    // from re-running and failing.
     $insert = $pdo->prepare("INSERT IGNORE INTO schema_migrations (filename, checksum) VALUES (?, ?)");
+    $seededCount = 0;
     foreach ($allFiles as $file) {
         $name = basename($file);
+        // Skip ACL migrations (023+) — they must be allowed to run
+        if (preg_match('/^02[3-9]|^0[3-9]|^[1-9]/', $name)) {
+            continue;
+        }
         $sql = @file_get_contents($file);
         $checksum = $sql !== false ? hash('sha256', $sql) : null;
         $insert->execute([$name, $checksum]);
+        $seededCount++;
     }
     if ($verbose ?? false) {
-        echo "Seeded schema_migrations with " . count($allFiles) . " existing migration files (existing DB detected).\n";
+        echo "Seeded schema_migrations with {$seededCount} legacy migration files (existing DB detected). ACL migrations (023+) will run.\n";
     }
 }
 
@@ -293,6 +301,7 @@ $stmt = $pdo->query("SELECT filename FROM schema_migrations");
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $appliedMap[$row['filename']] = true;
 }
+$stmt->closeCursor();
 
 // ---------------------------------------------------------------------------
 // Collect pending migration files
@@ -323,6 +332,15 @@ echo "\n";
 
 // Dedicated PDO for executing multi-statement migration SQL.
 $execPdo = create_multi_statement_pdo();
+
+// Clear any unbuffered result sets on the main $pdo connection
+// (left over from the seed function's queries)
+try {
+    $stmt = $pdo->query('SELECT 1');
+    $stmt->closeCursor();
+} catch (Throwable $e) {
+    // ignore
+}
 
 $anyFailed = false;
 
@@ -368,10 +386,18 @@ foreach ($pending as $file) {
             if ($stmtSql === '' || str_starts_with($stmtSql, '--')) {
                 continue;
             }
-            $execPdo->exec($stmtSql);
+            // Use query() instead of exec() so we can drain result sets
+            // (statements like SET @x := (SELECT ...) return a result set
+            // that blocks the next query if not consumed)
+            $result = $execPdo->query($stmtSql);
+            if ($result !== false) {
+                $result->closeCursor();
+            }
         }
 
-        $record = $pdo->prepare("INSERT INTO schema_migrations (filename, checksum) VALUES (?, ?)");
+        // Record the migration using the exec PDO (avoids unbuffered query
+        // conflicts on the main $pdo connection)
+        $record = $execPdo->prepare("INSERT INTO schema_migrations (filename, checksum) VALUES (?, ?)");
         $record->execute([$name, $checksum]);
 
         if ($verbose) {
@@ -382,7 +408,7 @@ foreach ($pending as $file) {
 
         // Still record that we attempted it so it doesn't re-run on every boot
         try {
-            $record = $pdo->prepare("INSERT IGNORE INTO schema_migrations (filename, checksum) VALUES (?, ?)");
+            $record = $execPdo->prepare("INSERT IGNORE INTO schema_migrations (filename, checksum) VALUES (?, ?)");
             $record->execute([$name, $checksum]);
         } catch (Throwable $ignore) {}
 

@@ -273,6 +273,18 @@ function deny_response(string $page): void
         echo json_encode(['error' => 'Permission denied']);
         exit;
     }
+    // Prevent infinite redirect loop: if the target page IS the redirect target,
+    // show a 403 page instead of redirecting again
+    if ($page === 'quote/quotes-list') {
+        http_response_code(403);
+        echo '<!DOCTYPE html><html><head><title>Access Denied</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb">';
+        echo '<div style="text-align:center;padding:40px;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">';
+        echo '<h1 style="color:#dc2626;margin:0 0 12px">Access Denied</h1>';
+        echo '<p style="color:#6b7280;margin:0">You do not have permission to access this page. Please contact an administrator.</p>';
+        echo '<p style="margin:16px 0 0"><a href="/?page=logout" style="color:#3b82f6;text-decoration:none">Log out</a></p>';
+        echo '</div></body></html>';
+        exit;
+    }
     header('Location: /?page=quote/quotes-list&error=' . urlencode('You do not have permission to access that page.'));
     exit;
 }

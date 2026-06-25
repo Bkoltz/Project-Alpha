@@ -74,7 +74,7 @@ function permLabel(string $perm): string {
 
 <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-top:24px">
     <h3 style="margin:0 0 8px 0">Permission Overrides</h3>
-    <p style="margin:0 0 16px 0;color:#6b7280;font-size:14px">Per-user overrides take precedence over role permissions. Leave both boxes unchecked to inherit from the assigned role.</p>
+    <p style="margin:0 0 16px 0;color:#6b7280;font-size:14px">Set permissions for this user. Checkboxes are pre-filled from the user's role. Overrides take precedence over role permissions.</p>
 
     <?php if ($activeOrgId <= 0): ?>
         <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;color:#92400e;font-size:13px;margin-bottom:16px">
@@ -108,17 +108,21 @@ function permLabel(string $perm): string {
 
                         <?php foreach ($permissions as $perm): ?>
                             <?php
-                            $allowChecked = isset($overrides[$perm]) && $overrides[$perm] === 1 ? 'checked' : '';
-                            $denyChecked  = isset($overrides[$perm]) && $overrides[$perm] === 0 ? 'checked' : '';
                             $allowKey = 'allow_' . str_replace('.', '_', $perm);
                             $denyKey  = 'deny_' . str_replace('.', '_', $perm);
+                            // Determine effective state: override > inherited > deny
+                            if (isset($overrides[$perm])) {
+                                $isAllowed = $overrides[$perm] === 1;
+                            } elseif (isset($inheritedPerms[$perm])) {
+                                $isAllowed = $inheritedPerms[$perm];
+                            } else {
+                                $isAllowed = false; // Default to deny
+                            }
+                            $allowChecked = $isAllowed ? 'checked' : '';
+                            $denyChecked  = !$isAllowed ? 'checked' : '';
                             $inheritedText = '';
-                            if (!isset($overrides[$perm])) {
-                                if (isset($inheritedPerms[$perm]) && $inheritedPerms[$perm]) {
-                                    $inheritedText = ' <span style="color:#9ca3af;font-size:11px">✓ inherited</span>';
-                                } else {
-                                    $inheritedText = ' <span style="color:#9ca3af;font-size:11px">✗ inherited</span>';
-                                }
+                            if (!isset($overrides[$perm]) && isset($inheritedPerms[$perm])) {
+                                $inheritedText = ' <span style="color:#9ca3af;font-size:11px">(role)</span>';
                             }
                             ?>
                             <label style="display:flex;align-items:center;justify-content:center;cursor:pointer">
@@ -143,21 +147,49 @@ function permLabel(string $perm): string {
         var fieldset = btn.closest('fieldset');
         var checkboxes = fieldset.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach(function(cb) {
-            // Allow checkboxes have name starting with 'allow_', Deny with 'deny_'
             if (type === 'allow' && cb.name.startsWith('allow_')) {
                 cb.checked = true;
-                // Uncheck the corresponding deny
                 var denyName = cb.name.replace('allow_', 'deny_');
                 var denyCb = fieldset.querySelector('input[name="' + denyName + '"]');
                 if (denyCb) denyCb.checked = false;
             } else if (type === 'deny' && cb.name.startsWith('deny_')) {
                 cb.checked = true;
-                // Uncheck the corresponding allow
                 var allowName = cb.name.replace('deny_', 'allow_');
                 var allowCb = fieldset.querySelector('input[name="' + allowName + '"]');
                 if (allowCb) allowCb.checked = false;
             }
         });
     }
+    // Mutual exclusion: checking Allow unchecks Deny and vice versa
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[name^="allow_"]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                if (this.checked) {
+                    var denyName = this.name.replace('allow_', 'deny_');
+                    var denyCb = document.querySelector('input[name="' + denyName + '"]');
+                    if (denyCb) denyCb.checked = false;
+                } else {
+                    // If unchecking allow, auto-check deny (every box must be one or the other)
+                    var denyName = this.name.replace('allow_', 'deny_');
+                    var denyCb = document.querySelector('input[name="' + denyName + '"]');
+                    if (denyCb) denyCb.checked = true;
+                }
+            });
+        });
+        document.querySelectorAll('input[name^="deny_"]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                if (this.checked) {
+                    var allowName = this.name.replace('deny_', 'allow_');
+                    var allowCb = document.querySelector('input[name="' + allowName + '"]');
+                    if (allowCb) allowCb.checked = false;
+                } else {
+                    // If unchecking deny, auto-check allow
+                    var allowName = this.name.replace('deny_', 'allow_');
+                    var allowCb = document.querySelector('input[name="' + allowName + '"]');
+                    if (allowCb) allowCb.checked = true;
+                }
+            });
+        });
+    });
     </script>
 </div>
