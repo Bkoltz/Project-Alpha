@@ -366,7 +366,6 @@ function initContractClientDropdown() {
             .then(r => r.json())
             .then(list => {
                 if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
-                list = window.BrandSwitcher ? BrandSwitcher.filterClientsByBrand(list, BrandSwitcher.getCurrentBrandOrg('contract')) : list;
                 sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
                 Array.from(sug.children).forEach(el => {
                     el.addEventListener('click', function () {
@@ -380,7 +379,6 @@ function initContractClientDropdown() {
             }).catch(() => { sug.style.display = 'none' });
     });
     document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
-    if (window.BrandSwitcher) BrandSwitcher.listen('contract', 'clientInputCo', 'clientIdCo', 'clientSuggestCo', 'taxExemptBannerCo');
 }
 
 // Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)

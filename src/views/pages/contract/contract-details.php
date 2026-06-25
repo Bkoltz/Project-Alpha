@@ -25,16 +25,10 @@ $signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
 if (empty($signatures)) {
   $signatures = [['signer_title' => 'Client Signature', 'is_required' => 1]];
 }
-require_once __DIR__ . '/../../../utils/Branding.php';
-if (!isset($brandInfo) || !is_array($brandInfo)) {
-    $docOrgId = (int)($contract['organization_id'] ?? 0);
-    $brandInfo  = Branding::resolve($appConfig, $docOrgId);
-    $brandTerms = Branding::resolveTerms($appConfig, $docOrgId);
-}
-$fromName = ($brandInfo['from_name'] ?? '') ?: ($brandInfo['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($brandInfo['from_address_line1'] ?? '')."\n".($brandInfo['from_address_line2'] ?? '')."\n".($brandInfo['from_city'] ?? '').' '.($brandInfo['from_state'] ?? '').' '.($brandInfo['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $brandInfo['from_phone'] ?? '';
-$fromEmail = $brandInfo['from_email'] ?? '';
+$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
+$fromAddress = trim(($appConfig['from_address_line1'] ?? '') . "\n" . ($appConfig['from_address_line2'] ?? '') . "\n" . ($appConfig['from_city'] ?? '') . ' ' . ($appConfig['from_state'] ?? '') . ' ' . ($appConfig['from_postal'] ?? '') . "\n" . ($appConfig['from_country'] ?? ''));
+$fromPhone = $appConfig['from_phone'] ?? '';
+$fromEmail = $appConfig['from_email'] ?? '';
 // Resolve terms: project-level terms override contract terms override app settings
 $termsText = '';
 if (!empty($contract['project_code'])) {
@@ -52,7 +46,7 @@ if ($termsText === '') {
   $termsText = trim((string)($contract['terms'] ?? ''));
 }
 if ($termsText === '') {
-  $termsText = trim((string)($brandTerms['terms'] ?? ''));
+  $termsText = trim((string)($appConfig['terms'] ?? ''));
 }
 ?>
 <section>
@@ -166,8 +160,8 @@ if ($termsText === '') {
     </div>
   <?php endif; ?>
   <?php
-  $brand = $brandInfo['brand_name'] ?? 'Project Alpha';
-  $logoConf = trim((string)($brandInfo['logo_path'] ?? ''));
+  $brand = $appConfig['brand_name'] ?? 'Project Alpha';
+  $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
   // Resolve default logo under project root public/assets
   $projectRoot = realpath(__DIR__ . '/../../../../');
   $defaultLogo = $projectRoot ? ($projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'default-logo.png') : '';
@@ -365,24 +359,24 @@ if ($termsText === '') {
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php
-        $fromCompany = $brandInfo['brand_name'] ?? 'Project Alpha';
+        $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
         $fromNameLine = trim((string)($fromName ?? ''));
         $fromLines = [];
         if ($fromNameLine !== '') {
           $fromLines[] = $fromNameLine;
         }
         $fromLines[] = $fromCompany;
-        $addr1 = trim((string)($brandInfo['from_address_line1'] ?? ''));
-        $addr2 = trim((string)($brandInfo['from_address_line2'] ?? ''));
+        $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
+        $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
         if ($addr1 !== '') {
           $fromLines[] = $addr1;
         }
         if ($addr2 !== '') {
           $fromLines[] = $addr2;
         }
-        $city = trim((string)($brandInfo['from_city'] ?? ''));
-        $state = trim((string)($brandInfo['from_state'] ?? ''));
-        $postal = trim((string)($brandInfo['from_postal'] ?? ''));
+        $city = trim((string)($appConfig['from_city'] ?? ''));
+        $state = trim((string)($appConfig['from_state'] ?? ''));
+        $postal = trim((string)($appConfig['from_postal'] ?? ''));
         $parts = [];
         if ($city !== '') {
           $parts[] = $city;

@@ -77,80 +77,33 @@ foreach ($pending as $file) {
 
     echo "Running: $name ... ";
 
-    // Execute via mysql CLI (handles DELIMITER, stored procedures, multi-statement).
-    // PDO exec() cannot run DELIMITER/PROCEDURE files (migration 015 uses them).
-    $host = getenv('DB_HOST') ?: 'db';
-    $port = getenv('DB_PORT') ?: '3306';
-    $db   = getenv('MYSQL_DATABASE') ?: 'project_alpha';
-    $user = getenv('MYSQL_USER') ?: 'root';
-    $pass = getenv('MYSQL_PASSWORD') ?: getenv('MYSQL_ROOT_PASSWORD') ?: '';
+    $pdo->beginTransaction();
+    try {
+        // MySQL PDO doesn't support multiple statements via exec by default,
+        // so we split on semicolons but preserve triggers/procedures
+        $statements = preg_split('/;\s*\n(?=\s*(?:CREATE|ALTER|INSERT|UPDATE|DELETE|DROP|USE|SET|GRANT|REVOKE|FLUSH|OPTIMIZE|ANALYZE|CHECK|REPAIR|TRUNCATE|CALL|DO|HANDLER|LOAD|REPLACE|SHOW|DESCRIBE|EXPLAIN|HELP|USE|LOCK|UNLOCK|START|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|CHAIN|XA|PREPARE|EXECUTE|DEALLOCATE|SET|GET|SHOW|DECLARE|IF|CASE|LOOP|WHILE|REPEAT|LEAVE|ITERATE|RETURN|SIGNAL|RESIGNAL|UNTIL|OPEN|FETCH|CLOSE|CURSOR|CONTINUE|EXIT|UNDO|SQLSTATE|CONDITION|HANDLER|FORCE|IGNORE|QUICK|CONCURRENT|NO_WRITE_TO_BINLOG|LOCAL|LOW_PRIORITY|DELAYED|HIGH_PRIORITY|SQL_SMALL_RESULT|SQL_BIG_RESULT|SQL_BUFFER_RESULT|SQL_CACHE|SQL_NO_CACHE|SQL_CALC_FOUND_ROWS|STRAIGHT_JOIN|FOR_UPDATE|LOCK_IN_SHARE_MODE|INTO|OUTFILE|DUMPFILE|CHARACTER|SET|NAMES|COLLATE|FROM|DATABASE|SCHEMA|TABLE|INDEX|VIEW|EVENT|TRIGGER|FUNCTION|PROCEDURE|SERVER|PLUGIN|USER|LOGFILE_GROUP|TABLESPACE|PARTITION|COLUMN|SPATIAL|FULLTEXT|UNIQUE|PRIMARY|FOREIGN|KEY|CONSTRAINT|DEFAULT|AUTO_INCREMENT|CHECK|NOT|NULL|UNSIGNED|ZEROFILL|BINARY|CHARACTER|SET|COLLATE|COMMENT|ON|UPDATE|DELETE|CASCADE|SET|NULL|NO|ACTION|RESTRICT|RESTRICT|DEFINER|INVOKER|SQL|SECURITY|DETERMINISTIC|CONTAINS|SQL|READS|SQL|DATA|MODIFIES|SQL|DATA|LANGUAGE|SQL|EXTERNAL|NAME|PARAMETER|RETURNS|AGGREGATE|SONAME|SHARE|MODE|NOWAIT|WAIT|SKIP|LOCKED|OF|NOWAIT|WAIT|SKIP|LOCKED))/s', $sql);
 
-    $descriptors = [
-        0 => ['pipe', 'r'],  // stdin — pipe the SQL in
-        1 => ['pipe', 'w'],  // stdout
-        2 => ['pipe', 'w'],  // stderr
-    ];
-    $cmd = sprintf(
-        'mysql --skip-ssl -h %s -P %s -u %s --password=%s -D %s 2>&1',
-        escapeshellarg($host),
-        escapeshellarg($port),
-        escapeshellarg($user),
-        escapeshellarg($pass),
-        escapeshellarg($db)
-    );
-    $proc = proc_open($cmd, $descriptors, $pipes);
-    if (!is_resource($proc)) {
-        echo "FAILED (could not start mysql CLI)\n";
-        $failed = true;
-        continue;
-    }
-    fwrite($pipes[0], $sql);
-    fclose($pipes[0]);
-    $cliOut = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    $cliErr = stream_get_contents($pipes[2]);
-    fclose($pipes[2]);
-    $cliStatus = proc_close($proc);
+        // Simpler approach: just exec the whole file
+        // This works if we use PDO with proper multi-statement support
+        // Actually let's just use exec
+        $pdo->exec($sql);
 
-    if ($cliStatus === 0) {
-        // Success — record in tracking table (PDO)
-        try {
-            $stmt = $pdo->prepare("INSERT IGNORE INTO migrations (filename, checksum) VALUES (?, ?)");
-            $stmt->execute([$name, $checksum]);
-            echo "OK\n";
-        } catch (Exception $e) {
-            echo "OK (tracking record failed: " . $e->getMessage() . ")\n";
-        }
-    } else {
-        // mysql CLI failed — check if it's an "already exists" (idempotent no-op)
-        $msg = trim($cliErr . ' ' . $cliOut);
-        $isAlreadyApplied = (
-            stripos($msg, 'Duplicate column') !== false ||
-            stripos($msg, 'already exists') !== false ||
-            stripos($msg, 'Duplicate key') !== false ||
-            stripos($msg, '1060') !== false ||
-            stripos($msg, '1050') !== false
-        );
-        if ($isAlreadyApplied) {
-            echo "ALREADY APPLIED (skipped)\n";
-            try {
-                $pdo->prepare("INSERT IGNORE INTO migrations (filename, checksum) VALUES (?, ?)")
-                    ->execute([$name, $checksum]);
-            } catch (Exception $e) {
-                // tracking insert failed — non-fatal, will retry next boot
-            }
-            continue;
-        }
+        $stmt = $pdo->prepare("INSERT INTO migrations (filename, checksum) VALUES (?, ?)");
+        $stmt->execute([$name, $checksum]);
+
+        $pdo->commit();
+        echo "OK\n";
+    } catch (Exception $e) {
+        $pdo->rollBack();
         echo "FAILED\n";
-        echo "  Error: " . substr($msg, 0, 500) . "\n";
+        echo "  Error: " . $e->getMessage() . "\n";
         $failed = true;
-        // DO NOT break — continue to try subsequent migrations so one bad file
-        // doesn't block all later ones (e.g. 015 failing shouldn't block 021/022).
+        break;
     }
 }
 
 if ($failed) {
-    echo "\nMigration runner finished, but one or more migrations failed.\n";
+    echo "\nMigration failed. Database rolled back.\n";
     exit(1);
 }
 

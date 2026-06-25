@@ -6,7 +6,6 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
-require_once __DIR__ . '/../../utils/org_resolver.php';
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
@@ -67,9 +66,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $orgId = org_id_for_client($pdo, $client_id);
-    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, organization_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $orgId, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson]);
+    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson]);
     $invoice_id = (int)$pdo->lastInsertId();
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);

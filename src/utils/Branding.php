@@ -19,8 +19,6 @@ class Branding {
             'from_state' => $appConfig['from_state'] ?? null,
             'from_postal' => $appConfig['from_postal'] ?? null,
         ];
-        // When multi-brand is OFF, always use global — even if org rows have brand_* values.
-        if (!self::multiBrandEnabled($appConfig)) { return $global; }
         if ($orgId === null || $orgId <= 0) { return $global; }
         // Load org overrides from DB
         require_once __DIR__ . '/../config/db.php';
@@ -56,37 +54,5 @@ class Branding {
     // Convenience: just the brand name for an org
     public static function brandName(array $appConfig, ?int $orgId = null): string {
         return self::resolve($appConfig, $orgId)['brand_name'];
-    }
-
-    public static function multiBrandEnabled(array $appConfig): bool {
-        return !empty($appConfig['multi_brand_enabled']);
-    }
-
-    public static function resolveTerms(array $appConfig, ?int $orgId = null): array {
-        $global = [
-            'terms' => $appConfig['terms'] ?? '',
-            'long_term_terms' => $appConfig['long_term_terms'] ?? '',
-            'on_demand_terms' => $appConfig['on_demand_terms'] ?? '',
-        ];
-        if (!self::multiBrandEnabled($appConfig)) { return $global; }
-        if ($orgId === null || $orgId <= 0) { return $global; }
-        require_once __DIR__ . '/../config/db.php';
-        global $pdo;
-        if (!isset($pdo)) { return $global; }
-        $stmt = $pdo->prepare(
-            'SELECT brand_terms, brand_long_term_terms, brand_on_demand_terms
-             FROM organizations WHERE id = ?'
-        );
-        $stmt->execute([$orgId]);
-        $org = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$org) { return $global; }
-        $merge = function(string $globalKey, ?string $orgVal) use ($global) {
-            return ($orgVal !== null && $orgVal !== '') ? $orgVal : $global[$globalKey];
-        };
-        return [
-            'terms' => $merge('terms', $org['brand_terms'] ?? null),
-            'long_term_terms' => $merge('long_term_terms', $org['brand_long_term_terms'] ?? null),
-            'on_demand_terms' => $merge('on_demand_terms', $org['brand_on_demand_terms'] ?? null),
-        ];
     }
 }
