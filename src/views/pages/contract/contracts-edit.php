@@ -11,6 +11,11 @@ if (!$contract) {
   echo '<p>Contract not found</p>';
   return;
 }
+require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/acl_middleware.php';
+if (!can_access_record($pdo, 'contracts', $id, (int)$_SESSION['user']['id'])) {
+    deny_response('contract/contracts-edit');
+}
 $items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);

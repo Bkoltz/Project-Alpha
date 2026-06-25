@@ -10,6 +10,11 @@
     echo '<p>Quote not found</p>';
     return;
   }
+  require_once __DIR__ . '/../../../utils/acl.php';
+  require_once __DIR__ . '/../../../utils/acl_middleware.php';
+  if (!can_access_record($pdo, 'quotes', $id, (int)$_SESSION['user']['id'])) {
+    deny_response('quote/quotes-edit');
+  }
   $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
   $items->execute([$id]);
   $items = $items->fetchAll(PDO::FETCH_ASSOC);

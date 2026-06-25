@@ -9,6 +9,11 @@ $st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.ema
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
+require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/acl_middleware.php';
+if (!can_access_record($pdo, 'invoices', $id, (int)$_SESSION['user']['id'])) {
+    deny_response('invoice/invoice-details');
+}
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();

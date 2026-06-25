@@ -23,9 +23,6 @@ CALL _add_col_if_missing('projects', 'created_by', 'INT NULL AFTER organization_
 
 DROP PROCEDURE IF EXISTS _add_col_if_missing;
 
--- Backfill: set created_by from existing user_id if present, else NULL.
-UPDATE quotes SET created_by = user_id WHERE created_by IS NULL AND user_id IS NOT NULL;
-UPDATE contracts SET created_by = user_id WHERE created_by IS NULL AND user_id IS NOT NULL;
-UPDATE invoices SET created_by = user_id WHERE created_by IS NULL AND user_id IS NOT NULL;
-UPDATE projects SET created_by = user_id WHERE created_by IS NULL AND user_id IS NOT NULL;
--- clients may not have user_id -- leave NULL (members see no clients unless created_by is set).
+-- Note: No user_id column exists on these scoped tables in the current schema,
+-- so record-level created_by values must be populated by application code or a
+-- later targeted backfill once a creator source is defined.

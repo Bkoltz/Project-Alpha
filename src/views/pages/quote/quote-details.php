@@ -10,6 +10,11 @@ $stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.e
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Quote not found</p>'; return; }
+require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/acl_middleware.php';
+if (!can_access_record($pdo, 'quotes', $id, (int)$_SESSION['user']['id'])) {
+    deny_response('quote/quote-details');
+}
 
 // Determine quote type for back link and display
 $quoteType = $quote['quote_type'] ?? 'regular';

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 $per = null; // show all clients
 $pageN = 1;
 $offset = 0;
@@ -18,8 +19,10 @@ if ($org !== '') { $where[] = 'o.name LIKE ?'; $params[] = '%'.$org.'%'; }
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
 $activeFilter = $hasArchived ? 'archived=0' : '1=1';
 
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'c', (int)$_SESSION['user']['id']);
+
 // Build WHERE clause
-$whereClause = 'WHERE '.$activeFilter;
+$whereClause = 'WHERE '.$activeFilter . $scopeWhere;
 if (!empty($where)) {
   $whereClause .= ' AND ('.implode(' AND ', $where).')';
 }
@@ -31,7 +34,8 @@ $sql = "SELECT c.id, c.name, c.email, c.phone, c.created_at, o.name as organizat
         $whereClause
         ORDER BY c.name ASC";
 $st = $pdo->prepare($sql);
-$st->execute($params);
+$stmtParams = array_merge($params, $scopeParams);
+$st->execute($stmtParams);
 $clients = $st->fetchAll();
 ?>
 <section>

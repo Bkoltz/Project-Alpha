@@ -2,6 +2,7 @@
 // src/views/pages/jobs-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/twig.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 // TODo: Change the Details Button in the project list view to "Preview" and then add button called "Details" That will open up a new page with all the details of the project.
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $prefix = trim($_GET['project_prefix'] ?? '');
@@ -17,22 +18,30 @@ if ($prefix !== '') {
   $params[] = $prefix . '%';
 }
 
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'pc', (int)$_SESSION['user']['id']);
+
 // Collect distinct project codes with owning client (from any table)
+$orgId = get_active_org_id();
+$jobScopeWhere = $scopeWhere !== '' ? " AND pc.organization_id = ? " : '';
+
 $sql = "SELECT pc.project_code, pc.client_id, c.name AS client_name, p.id AS project_id, p.notes,
-  (SELECT COUNT(*) FROM quotes q WHERE q.project_code=pc.project_code) AS quotes_count,
-  (SELECT COUNT(*) FROM contracts co WHERE co.project_code=pc.project_code) AS contracts_count,
-  (SELECT COUNT(*) FROM invoices i WHERE i.project_code=pc.project_code) AS invoices_count
+  (SELECT COUNT(*) FROM quotes q WHERE q.project_code=pc.project_code" . ($scopeWhere !== '' ? " AND q.organization_id = ?" : "") . ") AS quotes_count,
+  (SELECT COUNT(*) FROM contracts co WHERE co.project_code=pc.project_code" . ($scopeWhere !== '' ? " AND co.organization_id = ?" : "") . ") AS contracts_count,
+  (SELECT COUNT(*) FROM invoices i WHERE i.project_code=pc.project_code" . ($scopeWhere !== '' ? " AND i.organization_id = ?" : "") . ") AS invoices_count
 FROM (
-  SELECT project_code, client_id FROM quotes WHERE project_code IS NOT NULL
-  UNION SELECT project_code, client_id FROM contracts WHERE project_code IS NOT NULL
-  UNION SELECT project_code, client_id FROM invoices WHERE project_code IS NOT NULL
+  SELECT project_code, client_id, organization_id FROM quotes WHERE project_code IS NOT NULL" . ($scopeWhere !== '' ? " AND organization_id = ?" : "") . "
+  UNION SELECT project_code, client_id, organization_id FROM contracts WHERE project_code IS NOT NULL" . ($scopeWhere !== '' ? " AND organization_id = ?" : "") . "
+  UNION SELECT project_code, client_id, organization_id FROM invoices WHERE project_code IS NOT NULL" . ($scopeWhere !== '' ? " AND organization_id = ?" : "") . "
 ) pc JOIN clients c ON c.id=pc.client_id LEFT JOIN projects p ON p.client_id=pc.client_id AND p.name=pc.project_code";
-if ($where) {
-  $sql .= ' WHERE ' . implode(' AND ', $where);
+$whereParts = array_merge($where, [$jobScopeWhere]);
+$whereParts = array_filter($whereParts, function ($part) { return trim($part) !== ''; });
+if ($whereParts) {
+  $sql .= ' WHERE ' . implode(' AND ', array_map(function ($p) { return ltrim($p, ' AND'); }, $whereParts));
 }
 $sql .= ' ORDER BY pc.project_code DESC';
 $rows = $pdo->prepare($sql);
-$rows->execute($params);
+$jobScopeParams = $scopeWhere !== '' ? array_fill(0, 6, $orgId) : [];
+$rows->execute(array_merge($params, $jobScopeParams));
 $projects = $rows->fetchAll();
 $clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
 
