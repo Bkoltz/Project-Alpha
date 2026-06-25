@@ -22,19 +22,6 @@ $csrf = csrf_sf_token('contracts-create');
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
-      <?php if (!empty($appConfig['multi_brand_enabled'])):
-        $__bsw = $pdo->query('SELECT id, name FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
-        $__defaultBrand = (int)($appConfig['default_brand_org_id'] ?? 0); ?>
-      <label style="grid-column:1/-1">
-        <div>Brand / Organization</div>
-        <select class="brand-switcher" data-page="contract" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <option value="">All brands</option>
-          <?php foreach ($__bsw as $b): ?><option value="<?php echo (int)$b['id']; ?>" <?php echo $__defaultBrand === (int)$b['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?></option><?php endforeach; ?>
-        </select>
-        <div style="font-size:0.85em;color:#666;margin-top:4px">Filter clients by brand. Selecting a client sets the organization automatically.</div>
-      </label>
-      <?php endif; ?>
-
       <label style="position:relative">
         <div>Client</div>
         <input id="clientInputCo" name="client" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -321,5 +308,4 @@ $csrf = csrf_sf_token('contracts-create');
     </div>
   </form>
 </section>
-<script src="/assets/js/brand-switcher.js" defer></script>
 <script src="/assets/js/contracts-create-logic.js"></script>

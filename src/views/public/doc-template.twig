@@ -8,10 +8,6 @@
     <div class="notice n-err">{{ error|e }}</div>
   {% endif %}
 
-  {% if type == 'invoice' and paymentBannerHtml is not empty %}
-    {{ paymentBannerHtml|raw }}
-  {% endif %}
-
   {# Include the appropriate print template. These are plain PHP files; Twig can't include them directly without additional setup. #}
   {% if type == 'quote' %}
     {# Prefer Twig-based quote print when available #}

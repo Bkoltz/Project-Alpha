@@ -143,13 +143,7 @@ if (isset($_POST['app_host'])) {
     $settings['app_host'] = $h !== '' ? mb_substr($h, 0, 255) : null;
 }
 // Public links in email checkbox (was MISSING — never saved before)
-// System-tab toggles: gate by tab because unchecked checkboxes don't POST
-if (isset($_POST['tab']) && $_POST['tab'] === 'system') {
-    $settings['public_links_in_email'] = !empty($_POST['public_links_in_email']) ? 1 : 0;
-    $settings['multi_brand_enabled'] = !empty($_POST['multi_brand_enabled']) ? 1 : 0;
-    $settings['default_brand_org_id'] = (int)($_POST['default_brand_org_id'] ?? 0);
-    $settings['suppress_assets_warning'] = !empty($_POST['suppress_assets_warning']) ? 1 : 0;
-}
+$settings['public_links_in_email'] = !empty($_POST['public_links_in_email']) ? 1 : 0;
 
 // From and contact fields
 foreach (['from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
@@ -178,10 +172,7 @@ if (isset($_POST['documents_valid_days'])) {
     $settings['documents_valid_days'] = $dv;
 }
 // Toggle terms on quotes (moved to Documents → Quotes tab)
-// Documents-tab toggles: gate by tab because unchecked checkboxes don't POST
-if (isset($_POST['tab']) && $_POST['tab'] === 'documents') {
-    $settings['quotes_show_terms'] = !empty($_POST['quotes_show_terms']) ? 1 : 0;
-}
+$settings['quotes_show_terms'] = !empty($_POST['quotes_show_terms']) ? 1 : 0;
 
 // On-demand document terms (new)
 if (isset($_POST['on_demand_terms'])) {
@@ -221,6 +212,8 @@ if (isset($_POST['net_terms_days'])) {
     if ($nd < 0) $nd = 0;
     $settings['net_terms_days'] = $nd;
 }
+// Suppress assets warning checkbox
+$settings['suppress_assets_warning'] = !empty($_POST['suppress_assets_warning']) ? 1 : 0;
 // Payment methods (JSON from modernized UI)
 if (isset($_POST['payment_methods_json'])) {
     $jsonData = json_decode((string)$_POST['payment_methods_json'], true);
@@ -328,7 +321,6 @@ $generalConfigKeys = [
     'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
     'signature_agreement', 'review_link', 'suppress_assets_warning',
     'cron_enabled', 'cron_schedule', 'cron_custom',
-    'multi_brand_enabled', 'default_brand_org_id',
 ];
 // contract_custom_sections is an array — serialize to JSON for DB storage
 if (isset($settings['contract_custom_sections'])) {
@@ -358,104 +350,72 @@ if (!empty($generalConfigKeys)) {
     }
 }
 
-// Per-organization brand + terms (unique org_<id>_<field> keys; only updates fields present in POST)
-$orgIds = $pdo->query('SELECT id FROM organizations')->fetchAll(PDO::FETCH_COLUMN);
-$perOrgFields = ['brand_name','brand_from_name','brand_from_email','brand_from_phone','brand_address_line1','brand_address_line2','brand_city','brand_state','brand_postal','brand_terms','brand_long_term_terms','brand_on_demand_terms'];
-$termsFieldSet = ['brand_terms','brand_long_term_terms','brand_on_demand_terms'];
-foreach ($orgIds as $oid) {
-    $set = []; $par = [];
-    foreach ($perOrgFields as $f) {
-        $key = "org_{$oid}_{$f}";
-        if (isset($_POST[$key])) {
-            $set[] = "$f = ?";
-            $par[] = in_array($f, $termsFieldSet, true)
-                ? mb_substr(trim((string)$_POST[$key]), 0, 20000)
-                : trim((string)$_POST[$key]);
-        }
-    }
-    if ($set) {
-        $par[] = $oid;
-        $pdo->prepare('UPDATE organizations SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($par);
-    }
-}
-
-// Per-organization logo upload (same validation/storage as global logo)
-if (!function_exists('validate_and_store_upload')) {
-    require_once __DIR__ . '/../utils/upload_validator.php';
-}
-foreach ($orgIds as $oid) {
-    $fileKey = "org_{$oid}_brand_logo";
-    if (!empty($_FILES[$fileKey]) && is_uploaded_file($_FILES[$fileKey]['tmp_name'])) {
-        $f = $_FILES[$fileKey];
-        $allowedMap = [
-            'image/jpeg'    => ['jpg', 'jpeg'],
-            'image/png'     => ['png'],
-            'image/gif'     => ['gif'],
-            'image/webp'    => ['webp'],
-            'image/svg+xml' => ['svg'],
-        ];
-        $uploadError = null;
-        $storedName = validate_and_store_upload($f, $allowedMap, 5 * 1024 * 1024, $uploadsDir, $uploadError);
-        if ($storedName !== null) {
-            $logoPath = '/?page=serve-upload&file=' . rawurlencode($storedName);
-            $pdo->prepare('UPDATE organizations SET brand_logo_path = ? WHERE id = ?')->execute([$logoPath, $oid]);
-        }
-        // Per-org logo upload errors are intentionally silent to avoid blocking all settings saves.
-    }
-}
-
 // Cron/recurring invoice settings
-// Notifications-tab toggles: gate by tab because unchecked checkboxes don't POST
-if (isset($_POST['tab']) && $_POST['tab'] === 'notifications') {
+if (isset($_POST['cron_enabled'])) {
     $settings['cron_enabled'] = !empty($_POST['cron_enabled']) ? 1 : 0;
-    $settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
-    $settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
-    $settings['auto_terminate_contracts'] = !empty($_POST['auto_terminate_contracts']) ? 1 : 0;
-    $settings['link_expiration_checker'] = !empty($_POST['link_expiration_checker']) ? 1 : 0;
-    $settings['contract_expiring_warning'] = !empty($_POST['contract_expiring_warning']) ? 1 : 0;
-    $settings['contract_expired_alert'] = !empty($_POST['contract_expired_alert']) ? 1 : 0;
-    $settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
-    $settings['payment_received_notification'] = !empty($_POST['payment_received_notification']) ? 1 : 0;
-    $settings['link_expiration_warning'] = !empty($_POST['link_expiration_warning']) ? 1 : 0;
 }
-if (isset($_POST['tab']) && $_POST['tab'] === 'notifications' && isset($_POST['cron_schedule'])) {
+if (isset($_POST['cron_schedule'])) {
     $sched = trim((string)$_POST['cron_schedule']);
     $allowed = ['hourly','every_6hours','daily_midnight','daily_2am','daily_6am','daily_noon','custom'];
     if (in_array($sched, $allowed, true)) {
         $settings['cron_schedule'] = $sched;
     }
 }
-if (isset($_POST['tab']) && $_POST['tab'] === 'notifications' && isset($_POST['cron_custom'])) {
+if (isset($_POST['cron_custom'])) {
     $settings['cron_custom'] = trim((string)$_POST['cron_custom']) ?: '0 2 * * *';
 }
 
 // Automatic invoice email settings
-// Contract notification days (notifications tab)
-if (isset($_POST['tab']) && $_POST['tab'] === 'notifications' && isset($_POST['contract_expiring_days'])) {
+$settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
+$settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
+
+// System automation settings
+$settings['auto_terminate_contracts'] = !empty($_POST['auto_terminate_contracts']) ? 1 : 0;
+$settings['link_expiration_checker'] = !empty($_POST['link_expiration_checker']) ? 1 : 0;
+
+// Contract notification settings
+$settings['contract_expiring_warning'] = !empty($_POST['contract_expiring_warning']) ? 1 : 0;
+if (isset($_POST['contract_expiring_days'])) {
     $settings['contract_expiring_days'] = max(1, min(90, (int)$_POST['contract_expiring_days']));
 }
-if (isset($_POST['tab']) && $_POST['tab'] === 'notifications' && isset($_POST['link_expiration_warning_days'])) {
+$settings['contract_expired_alert'] = !empty($_POST['contract_expired_alert']) ? 1 : 0;
+
+// Payment notification settings
+$settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
+$settings['payment_received_notification'] = !empty($_POST['payment_received_notification']) ? 1 : 0;
+
+// Link expiration warning settings
+$settings['link_expiration_warning'] = !empty($_POST['link_expiration_warning']) ? 1 : 0;
+if (isset($_POST['link_expiration_warning_days'])) {
     $settings['link_expiration_warning_days'] = max(1, min(90, (int)$_POST['link_expiration_warning_days']));
 }
 
 // Invoice document settings
-// Documents-tab toggles: gate by tab because unchecked checkboxes don't POST
-if (isset($_POST['tab']) && $_POST['tab'] === 'documents') {
+if (isset($_POST['invoice_show_terms'])) {
     $settings['invoice_show_terms'] = !empty($_POST['invoice_show_terms']) ? 1 : 0;
+}
+if (isset($_POST['invoice_show_project_code'])) {
     $settings['invoice_show_project_code'] = !empty($_POST['invoice_show_project_code']) ? 1 : 0;
+}
+if (isset($_POST['invoice_show_due_date'])) {
     $settings['invoice_show_due_date'] = !empty($_POST['invoice_show_due_date']) ? 1 : 0;
+}
+
+    // Quote settings — default to enabled unless explicitly unchecked
     $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
     $settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
     $settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
-    $settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;
-    $settings['contract_memo_enabled'] = !empty($_POST['contract_memo_enabled']) ? 1 : 0;
-}
-if (isset($_POST['tab']) && $_POST['tab'] === 'documents' && isset($_POST['signature_agreement'])) {
+
+// Contract settings
+$settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;
+$settings['contract_memo_enabled'] = !empty($_POST['contract_memo_enabled']) ? 1 : 0;
+if (isset($_POST['signature_agreement'])) {
     $sig = trim((string)$_POST['signature_agreement']);
     $settings['signature_agreement'] = $sig !== '' ? mb_substr($sig, 0, 500) : 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.';
 }
+
 // Custom contract sections
-if (isset($_POST['tab']) && $_POST['tab'] === 'documents' && isset($_POST['section_title']) && is_array($_POST['section_title'])) {
+if (isset($_POST['section_title']) && is_array($_POST['section_title'])) {
     $sections = [];
     $titles = $_POST['section_title'];
     $contents = $_POST['section_content'] ?? [];

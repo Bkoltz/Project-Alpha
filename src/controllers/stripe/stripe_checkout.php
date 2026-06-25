@@ -5,7 +5,6 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
-require_once __DIR__ . '/../../utils/InvoiceSurcharge.php';
 
 header('Content-Type: text/html; charset=UTF-8');
 
@@ -119,17 +118,10 @@ try {
     }
     
     $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
-
-    // Calculate surcharge if applicable
-    $surchargeInfo = InvoiceSurcharge::getInfo($amountDue, $appConfig);
-    $surchargeAmount = $surchargeInfo['has_surcharge'] ? ($surchargeInfo['client_pays'] ?? 0) : 0;
-    $description = $surchargeInfo['has_surcharge']
-        ? "Invoice I-{$docNumber} from {$brandName} (includes $" . number_format($surchargeAmount, 2) . " processing fee)"
-        : "Invoice I-{$docNumber} from {$brandName}";
-
-    $session = $stripe->createCheckoutSessionWithSurcharge(
+    $description = "Invoice I-{$docNumber} from {$brandName}";
+    
+    $session = $stripe->createCheckoutSession(
         $amountDue,
-        $surchargeAmount,
         'usd', // TODO: Make currency configurable
         $description,
         $successUrl,
@@ -138,10 +130,7 @@ try {
             'pa_invoice_id' => (string)$invoiceId,
             'invoice_id' => (string)$invoiceId, // Legacy support
             'doc_number' => $docNumber,
-            'token' => $token,
-            'charged_by' => 'client_public_link',
-            'surcharge_amount' => (string)$surchargeAmount,
-            'original_amount' => (string)$amountDue,
+            'token' => $token
         ]
     );
     

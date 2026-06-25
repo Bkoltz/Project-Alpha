@@ -2,27 +2,6 @@
 // src/views/public/doc-wrapper.php
 // Expects variables set by controller: $type, $rid, $token, $notice, $err, $pdo, $appConfig, $row (link data)
 
-require_once __DIR__ . '/../../utils/Branding.php';
-if (!isset($brandInfo) || !is_array($brandInfo)) {
-    $docOrgId = 0;
-    if (isset($pdo) && !empty($type) && !empty($rid)) {
-        try {
-            if ($type === 'quote') {
-                $orgStmt = $pdo->prepare('SELECT c.organization_id FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
-            } elseif ($type === 'contract') {
-                $orgStmt = $pdo->prepare('SELECT c.organization_id FROM contracts co JOIN clients c ON c.id=co.client_id WHERE co.id=?');
-            } elseif ($type === 'invoice') {
-                $orgStmt = $pdo->prepare('SELECT c.organization_id FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
-            }
-            if (!empty($orgStmt)) {
-                $orgStmt->execute([(int)$rid]);
-                $docOrgId = (int)($orgStmt->fetchColumn() ?: 0);
-            }
-        } catch (Throwable $e) { $docOrgId = 0; }
-    }
-    $brandInfo = Branding::resolve($appConfig, $docOrgId);
-}
-
 // Get link expiration info
 $linkExpiresAt = isset($row['expires_at']) && $row['expires_at'] !== null && $row['expires_at'] !== '' ? $row['expires_at'] : null;
 $linkExpireWhenPaid = isset($row['expire_when_paid']) && (int)$row['expire_when_paid'] === 1;
@@ -336,14 +315,12 @@ if ($type === 'invoice') {
       }
       
       if ($hasCheck):
-        $payeeName = ($brandInfo['from_name'] ?? '') ?: ($brandInfo['brand_name'] ?? 'Project Alpha');
+        $payeeName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
         $payeeAddress = [];
-        if (!empty($brandInfo['from_address_line1'])) $payeeAddress[] = $brandInfo['from_address_line1'];
         if (!empty($appConfig['from_address'])) $payeeAddress[] = $appConfig['from_address'];
-        if (!empty($brandInfo['from_city'])) $payeeAddress[] = $brandInfo['from_city'];
-        if (!empty($brandInfo['from_state'])) $payeeAddress[] = $brandInfo['from_state'];
-        if (!empty($brandInfo['from_postal'])) $payeeAddress[] = $brandInfo['from_postal'];
-        if (empty($payeeAddress) && !empty($appConfig['from_zip'])) $payeeAddress[] = $appConfig['from_zip'];
+        if (!empty($appConfig['from_city'])) $payeeAddress[] = $appConfig['from_city'];
+        if (!empty($appConfig['from_state'])) $payeeAddress[] = $appConfig['from_state'];
+        if (!empty($appConfig['from_zip'])) $payeeAddress[] = $appConfig['from_zip'];
       ?>
       <div class="payment-option">
         <div class="payment-option-icon">📄</div>

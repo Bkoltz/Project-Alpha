@@ -38,12 +38,6 @@ use Dompdf\Options;
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
-require_once __DIR__ . '/../../utils/Branding.php';
-$oq = $pdo->prepare('SELECT organization_id FROM quotes WHERE id=?');
-$oq->execute([$id]);
-$docOrgId = (int)$oq->fetchColumn();
-$brandInfo = Branding::resolve($appConfig, $docOrgId);
-
 // Fetch document_date from the database
 $stmt = $pdo->prepare('SELECT document_date FROM quotes WHERE id=?');
 $stmt->execute([$id]);
@@ -57,7 +51,7 @@ $_GET['id'] = (string)$id;
 require __DIR__ . '/../../views/pages/quote/quote-details.php';
 $content = ob_get_clean();
 
-$brand = htmlspecialchars($brandInfo['brand_name'] ?? 'Project Alpha');
+$brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');
 $html = "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Quote - {$brand}</title>\n<style>\n  @page { margin: 72px 54px 72px 54px; }\n  body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 12px; color: #111; }\n</style>\n</head><body>" . $content . "</body></html>";
 
 $options = new Options();

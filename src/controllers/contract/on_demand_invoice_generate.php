@@ -2,7 +2,6 @@
 // src/controllers/contract/on_demand_invoice_generate.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/org_resolver.php';
 
 @error_log('[on_demand_invoice_generate] POST received', 0);
 
@@ -39,10 +38,6 @@ try {
     $clientId = $contract['client_id'];
     $projectCode = $contract['project_code'];
     $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
-
-    // Resolve organization_id: inherit from contract, or fall back to client
-    $orgId = (int)($contract['organization_id'] ?? 0) ?: org_id_for_client($pdo, (int)$clientId);
-    $orgId = $orgId ?: null;
     
     // Calculate invoice amount
     $subtotal = (float)$contract['price_per_invoice'];
@@ -67,10 +62,10 @@ try {
     
     $insertInvoice = $pdo->prepare('
         INSERT INTO invoices (
-            contract_id, client_id, project_id, project_code, organization_id, invoice_type,
+            contract_id, client_id, project_id, project_code, invoice_type,
             discount_type, discount_value, tax_percent, 
             subtotal, total, status, due_date, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ');
     
     $insertInvoice->execute([
@@ -78,7 +73,6 @@ try {
         $clientId,
         $projectId,
         $projectCode,
-        $orgId,
         'on_demand',
         $discountType,
         $discountValue,

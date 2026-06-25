@@ -19,22 +19,6 @@ if (!in_array($type, ['quote','contract','invoice'], true) || $id <= 0) {
   exit;
 }
 
-// Resolve per-org branding once type/id is validated, before any document fetch or view inclusion.
-require_once __DIR__ . '/../utils/Branding.php';
-$docOrgId = 0;
-if ($type === 'quote') {
-  $oq = $pdo->prepare('SELECT organization_id FROM quotes WHERE id=?');
-} elseif ($type === 'contract') {
-  $oq = $pdo->prepare('SELECT organization_id FROM contracts WHERE id=?');
-} else {
-  $oq = $pdo->prepare('SELECT organization_id FROM invoices WHERE id=?');
-}
-if (isset($oq)) {
-  $oq->execute([$id]);
-  $docOrgId = (int)$oq->fetchColumn();
-}
-$brandInfo = Branding::resolve($appConfig, $docOrgId);
-
 try {
   if ($type === 'quote') {
     $st = $pdo->prepare('SELECT q.id, q.doc_number, q.project_code, q.status, c.email, c.name FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
@@ -138,9 +122,6 @@ try {
     '<p>Please find your document attached and available at the link below:</p>' .
     '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>';
 
-  $fromName = ($brandInfo['from_name'] ?? '') ?: ($appConfig['from_name'] ?? 'Project Alpha');
-  $fromEmail = ($brandInfo['from_email'] ?? '') ?: ($appConfig['from_email'] ?? '');
-
   // Add Pay via Credit Card button for invoices if Stripe is configured
   if ($type === 'invoice') {
     require_once __DIR__ . '/../services/StripeService.php';
@@ -191,7 +172,7 @@ try {
           require $viewFile;
           $content = ob_get_clean();
 
-          $brand = htmlspecialchars($brandInfo['brand_name'] ?? 'Project Alpha');
+          $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');
           $html = "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Document - {$brand}</title>\n<style>\n  @page { margin: 72px 54px 72px 54px; }\n  body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 12px; color: #111; }\n</style>\n</head><body>" . $content . "</body></html>";
 
           $options = new Dompdf\Options();
@@ -238,8 +219,8 @@ try {
 
   // Try PHPMailer first (supports attachments), else fallback to SMTP client, else mail()
   $smtpHost = $appConfig['smtp_host'] ?? null;
-  if ($fromEmail === '') { $fromEmail = $appConfig['from_email'] ?? ''; }
-  if ($fromName === '') { $fromName = $appConfig['from_name'] ?? 'Project Alpha'; }
+  $fromEmail = $appConfig['from_email'] ?? '';
+  $fromName = $appConfig['from_name'] ?? 'Project Alpha';
   $sent = false; $err = '';
   if ($smtpHost) {
     $pass = '';

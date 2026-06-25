@@ -1,31 +1,6 @@
 <?php
 // src/views/pages/settings/terms.php
 ?>
-
-<?php
-$__userId = (int)($_SESSION['user']['id'] ?? 0);
-$__termsOrgs = $pdo->prepare('SELECT uo.organization_id AS id, uo.is_default, o.name, o.brand_terms, o.brand_long_term_terms, o.brand_on_demand_terms FROM user_organizations uo JOIN organizations o ON o.id = uo.organization_id WHERE uo.user_id = ? ORDER BY uo.is_default DESC, o.name ASC');
-$__termsOrgs->execute([$__userId]);
-$__termsOrgs = $__termsOrgs->fetchAll(PDO::FETCH_ASSOC);
-$__primaryId = null;
-foreach ($__termsOrgs as $o) {
-    if (!empty($o['is_default'])) { $__primaryId = (int)$o['id']; break; }
-}
-if ($__primaryId === null && !empty($__termsOrgs)) { $__primaryId = (int)min(array_column($__termsOrgs, 'id')); }
-$__primaryId = $__primaryId ?? 0;
-?>
-
-<?php if (!empty($appConfig['multi_brand_enabled'])): ?>
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:16px">
-  <legend style="padding:0 6px;color:var(--muted)">Brand</legend>
-  <div id="termsBrandSwitcher" style="display:flex;gap:8px;flex-wrap:wrap">
-    <?php foreach ($__termsOrgs as $to): $isP = ((int)$to['id'] === $__primaryId); ?>
-      <button type="button" class="terms-brand-btn" data-org-id="<?php echo (int)$to['id']; ?>" style="padding:8px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer"><?php echo htmlspecialchars($to['name']); ?><?php echo $isP ? ' (Main)' : ''; ?></button>
-    <?php endforeach; ?>
-  </div>
-</fieldset>
-<?php endif; ?>
-
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
   <legend style="padding:0 6px;color:var(--muted)">Document Validity</legend>
   <label style="margin-bottom:8px;display:block">
@@ -35,42 +10,20 @@ $__primaryId = $__primaryId ?? 0;
   </label>
 </fieldset>
 
-<?php if (empty($appConfig['multi_brand_enabled'])): ?>
-  <?php foreach ($__termsOrgs as $to):
-    $isP = ((int)$to['id'] === $__primaryId);
-    if (!$isP) continue;
-  ?>
-  <div class="terms-editor-set" data-org-id="<?php echo (int)$to['id']; ?>" style="display:block">
-    <h3 style="margin:8px 0">Terms for <?php echo htmlspecialchars($to['name']); ?> (main brand)</h3>
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px"><legend>Standard Terms &amp; Conditions</legend>
-      <textarea name="terms" rows="12" class="input"><?php echo htmlspecialchars($appConfig['terms'] ?? ''); ?></textarea>
-    </fieldset>
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px"><legend>Long-term Contract Terms</legend>
-      <textarea name="long_term_terms" rows="12" class="input"><?php echo htmlspecialchars($appConfig['long_term_terms'] ?? ''); ?></textarea>
-    </fieldset>
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px"><legend>On-Demand Document Terms</legend>
-      <textarea name="on_demand_terms" rows="6" class="input"><?php echo htmlspecialchars($appConfig['on_demand_terms'] ?? ''); ?></textarea>
-    </fieldset>
-  </div>
-  <?php endforeach; ?>
-<?php else: ?>
-  <?php foreach ($__termsOrgs as $to):
-    $isP = ((int)$to['id'] === $__primaryId);
-    $disp = $isP ? 'block' : 'none';
-  ?>
-  <div class="terms-editor-set" data-org-id="<?php echo (int)$to['id']; ?>" style="display:<?php echo $disp; ?>">
-    <h3 style="margin:8px 0">Terms for <?php echo htmlspecialchars($to['name']); ?><?php echo $isP ? ' (main brand)' : ''; ?></h3>
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px"><legend>Standard Terms &amp; Conditions</legend>
-      <textarea name="<?php echo $isP ? 'terms' : 'org_'.(int)$to['id'].'_brand_terms'; ?>" rows="12" class="input"><?php echo htmlspecialchars($isP ? ($appConfig['terms'] ?? '') : ($to['brand_terms'] ?? '')); ?></textarea>
-    </fieldset>
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px"><legend>Long-term Contract Terms</legend>
-      <textarea name="<?php echo $isP ? 'long_term_terms' : 'org_'.(int)$to['id'].'_brand_long_term_terms'; ?>" rows="12" class="input"><?php echo htmlspecialchars($isP ? ($appConfig['long_term_terms'] ?? '') : ($to['brand_long_term_terms'] ?? '')); ?></textarea>
-    </fieldset>
-    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px"><legend>On-Demand Document Terms</legend>
-      <textarea name="<?php echo $isP ? 'on_demand_terms' : 'org_'.(int)$to['id'].'_brand_on_demand_terms'; ?>" rows="6" class="input"><?php echo htmlspecialchars($isP ? ($appConfig['on_demand_terms'] ?? '') : ($to['brand_on_demand_terms'] ?? '')); ?></textarea>
-    </fieldset>
-  </div>
-  <?php endforeach; ?>
-<?php endif; ?>
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">Standard Terms & Conditions</legend>
+  <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Default terms for quotes and regular contracts</p>
+  <textarea name="terms" rows="12" class="input" placeholder="Enter your standard terms..."><?php echo htmlspecialchars($appConfig['terms'] ?? ''); ?></textarea>
+</fieldset>
 
-<script src="/assets/js/settings-system.js" defer></script>
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">Long-term Contract Terms & Conditions</legend>
+  <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Specific terms for recurring/long-term service contracts (leave blank to use standard terms)</p>
+  <textarea name="long_term_terms" rows="12" class="input" placeholder="Enter your long-term contract terms..."><?php echo htmlspecialchars($appConfig['long_term_terms'] ?? ''); ?></textarea>
+</fieldset>
+
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">On-Demand Document Terms</legend>
+  <p style="margin:0 0 8px;color:var(--muted);font-size:13px">Terms to include on on-demand documents (e.g., single-use invoices). Leave blank to use standard terms.</p>
+  <textarea name="on_demand_terms" rows="6" class="input" placeholder="Enter on-demand terms..."><?php echo htmlspecialchars($appConfig['on_demand_terms'] ?? ''); ?></textarea>
+</fieldset>

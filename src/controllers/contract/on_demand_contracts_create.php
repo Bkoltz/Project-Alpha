@@ -2,7 +2,6 @@
 // src/controllers/contract/on_demand_contracts_create.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
-require_once __DIR__ . '/../../utils/org_resolver.php';
 
 @error_log('[on_demand_contracts_create] POST received', 0);
 
@@ -107,20 +106,17 @@ try{
         @error_log('[on_demand_contracts_create] project_next_code failed: '.$e->getMessage(), 0); 
     }
 
-    // Resolve organization_id for this client
-    $orgId = org_id_for_client($pdo, $client_id);
-
     // Insert on-demand contract into the unified contracts table
     $sql = 'INSERT INTO contracts (
-        client_id, project_id, project_code, organization_id, status, contract_type, start_date, end_date, 
+        client_id, project_id, project_code, status, contract_type, start_date, end_date, 
         billing_interval_count, billing_interval_unit, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal,
         deposit_type, deposit_amount, deposit_paid,
         total_invoiced, invoice_count, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, $orgId, 'pending', 'on_demand', $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'pending', 'on_demand', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal,
         $deposit_type, $deposit_amount, 0,

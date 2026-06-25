@@ -69,7 +69,6 @@ function initInvoiceClientDropdown() {
             .then(r => r.json())
             .then(list => {
                 if (!Array.isArray(list) || list.length === 0) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
-                list = window.BrandSwitcher ? BrandSwitcher.filterClientsByBrand(list, BrandSwitcher.getCurrentBrandOrg('invoice')) : list;
                 sugI.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
                 Array.from(sugI.children).forEach(el => {
                     el.addEventListener('click', function () {
@@ -83,7 +82,6 @@ function initInvoiceClientDropdown() {
             }).catch(() => { sugI.style.display = 'none' });
     });
     document.addEventListener('click', function (e) { if (!sugI.contains(e.target) && e.target !== ciI) { sugI.style.display = 'none'; } });
-    if (window.BrandSwitcher) BrandSwitcher.listen('invoice', 'clientInputInv', 'clientIdInv', 'clientSuggestInv', 'taxExemptBannerInv');
 }
 
 initInvoiceClientDropdown();

@@ -24,8 +24,6 @@ $appConfig = [
     'from_phone' => null,
     // Terms for contracts
     'terms' => null,
-    'long_term_terms' => null,
-    'on_demand_terms' => null,
     'net_terms_days' => 30,
     'payment_methods' => ['Card','Cash','Bank Transfer'],
     'quotes_show_terms' => 0,
@@ -58,8 +56,6 @@ $appConfig = [
     'quote_auto_create_invoice' => 1,
     // contract defaults
     //invoice defaults
-    'multi_brand_enabled' => 0,
-    'default_brand_org_id' => 0, // 0 = primary brand; existing installs default to primary (backward compatible)
 ];
 
 // Load .env file if it exists (project root, config volume, or container root)
@@ -165,7 +161,6 @@ try {
             // Surcharge settings (user-editable via billing settings)
             'stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed',
             'stripe_surcharge_split_percent', 'stripe_surcharge_message',
-            'multi_brand_enabled', 'default_brand_org_id',
             // Merchant rate sync (set by cron, read-only for user)
             'stripe_effective_rate_pct', 'stripe_effective_fixed', 'stripe_effective_rate_synced_at',
         ];
