@@ -13,9 +13,14 @@ function user_role_on_org(PDO $pdo, int $userId, int $orgId): ?string
     static $cache = [];
     $key = "{$userId}:{$orgId}";
     if (isset($cache[$key])) return $cache[$key];
-    $stmt = $pdo->prepare('SELECT r.name FROM user_organizations uo JOIN roles r ON r.id = uo.role_id WHERE uo.user_id = ? AND uo.organization_id = ? LIMIT 1');
-    $stmt->execute([$userId, $orgId]);
-    $cache[$key] = $stmt->fetchColumn() ?: null;
+    try {
+        $stmt = $pdo->prepare('SELECT r.name FROM user_organizations uo JOIN roles r ON r.id = uo.role_id WHERE uo.user_id = ? AND uo.organization_id = ? LIMIT 1');
+        $stmt->execute([$userId, $orgId]);
+        $cache[$key] = $stmt->fetchColumn() ?: null;
+    } catch (Throwable $e) {
+        // ACL tables may not exist yet (pre-migration)
+        $cache[$key] = null;
+    }
     return $cache[$key];
 }
 
@@ -32,14 +37,24 @@ function user_org_ids(PDO $pdo, int $userId): array
 
 function compute_permissions_hash(PDO $pdo, int $userId, int $activeOrgId): string
 {
-    $roleId = null;
-    $stmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? AND organization_id = ? LIMIT 1');
-    $stmt->execute([$userId, $activeOrgId]);
-    $roleId = $stmt->fetchColumn();
+    try {
+        $roleId = null;
+        $stmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? AND organization_id = ? LIMIT 1');
+        $stmt->execute([$userId, $activeOrgId]);
+        $roleId = $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        // role_id column may not exist yet (pre-ACL migration)
+        $roleId = null;
+    }
 
-    $stmt = $pdo->prepare('SELECT permission, allowed FROM user_permissions_overrides WHERE user_id = ? AND (organization_id = ? OR organization_id IS NULL) ORDER BY permission');
-    $stmt->execute([$userId, $activeOrgId]);
-    $overrides = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $stmt = $pdo->prepare('SELECT permission, allowed FROM user_permissions_overrides WHERE user_id = ? AND (organization_id = ? OR organization_id IS NULL) ORDER BY permission');
+        $stmt->execute([$userId, $activeOrgId]);
+        $overrides = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        // user_permissions_overrides table may not exist yet (pre-ACL migration)
+        $overrides = [];
+    }
 
     return hash('sha256', json_encode(['role_id' => $roleId, 'overrides' => $overrides]));
 }
