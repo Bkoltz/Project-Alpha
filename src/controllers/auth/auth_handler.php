@@ -233,7 +233,14 @@ if ($action === 'login') {
         } catch (Throwable $e) { /* if column missing, skip ToS gate */ }
         
         app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
-        header('Location: /');
+
+        // Route user to appropriate landing page based on permissions
+        require_once __DIR__ . '/../../utils/acl.php';
+        if (user_can($pdo, (int)$u['id'], 'financial.view', $defaultOrgId)) {
+            header('Location: /');
+        } else {
+            header('Location: /?page=quote/quotes-list');
+        }
         exit;
     } catch (Throwable $e) {
         header('Location: /?page=login&error=' . urlencode('Login failed'));

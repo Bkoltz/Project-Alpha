@@ -48,6 +48,24 @@ try {
     @error_log('[permissions_overrides] load failed: ' . $e->getMessage());
 }
 
+// Load the user's current role permissions to show as inherited baseline
+$inheritedPerms = [];
+try {
+    $roleId = null;
+    $stmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? AND (organization_id = ? OR (organization_id IS NULL AND ? = 0)) ORDER BY is_default DESC LIMIT 1');
+    $stmt->execute([(int)$userId, $activeOrgId, $activeOrgId]);
+    $roleId = $stmt->fetchColumn();
+    if ($roleId) {
+        $rpStmt = $pdo->prepare('SELECT permission, allowed FROM role_permissions WHERE role_id = ?');
+        $rpStmt->execute([(int)$roleId]);
+        foreach ($rpStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $inheritedPerms[$row['permission']] = (bool)$row['allowed'];
+        }
+    }
+} catch (Throwable $e) {
+    // ACL tables may not exist yet
+}
+
 function permLabel(string $perm): string {
     [$module, $action] = explode('.', $perm, 2);
     return ucfirst(str_replace('_', ' ', $action));
@@ -78,6 +96,10 @@ function permLabel(string $perm): string {
             <?php foreach ($permissionGroups as $group => $permissions): ?>
                 <fieldset style="border:1px solid #eee;border-radius:8px;padding:14px">
                     <legend style="padding:0 8px;font-weight:600"><?php echo e($group); ?></legend>
+                    <div style="margin-bottom:8px;display:flex;gap:8px">
+                        <button type="button" onclick="selectAllInSection(this, 'allow')" style="padding:4px 10px;border-radius:4px;border:1px solid #d1d5db;background:#f0fdf4;color:#166534;font-size:12px;cursor:pointer">Allow All</button>
+                        <button type="button" onclick="selectAllInSection(this, 'deny')" style="padding:4px 10px;border-radius:4px;border:1px solid #d1d5db;background:#fef2f2;color:#991b1b;font-size:12px;cursor:pointer">Deny All</button>
+                    </div>
 
                     <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 2fr">
                         <div style="font-size:12px;font-weight:600;color:#6b7280">Allow</div>
@@ -90,6 +112,14 @@ function permLabel(string $perm): string {
                             $denyChecked  = isset($overrides[$perm]) && $overrides[$perm] === 0 ? 'checked' : '';
                             $allowKey = 'allow_' . str_replace('.', '_', $perm);
                             $denyKey  = 'deny_' . str_replace('.', '_', $perm);
+                            $inheritedText = '';
+                            if (!isset($overrides[$perm])) {
+                                if (isset($inheritedPerms[$perm]) && $inheritedPerms[$perm]) {
+                                    $inheritedText = ' <span style="color:#9ca3af;font-size:11px">✓ inherited</span>';
+                                } else {
+                                    $inheritedText = ' <span style="color:#9ca3af;font-size:11px">✗ inherited</span>';
+                                }
+                            }
                             ?>
                             <label style="display:flex;align-items:center;justify-content:center;cursor:pointer">
                                 <input type="checkbox" name="<?php echo e($allowKey); ?>" value="1" <?php echo $allowChecked; ?> aria-label="Allow <?php echo e($perm); ?>">
@@ -97,7 +127,7 @@ function permLabel(string $perm): string {
                             <label style="display:flex;align-items:center;justify-content:center;cursor:pointer">
                                 <input type="checkbox" name="<?php echo e($denyKey); ?>" value="1" <?php echo $denyChecked; ?> aria-label="Deny <?php echo e($perm); ?>">
                             </label>
-                            <div style="font-size:13px"><?php echo e(permLabel($perm)); ?> <span style="color:#9ca3af;font-size:12px">(<?php echo e($perm); ?>)</span></div>
+                            <div style="font-size:13px"><?php echo e(permLabel($perm)); ?> <span style="color:#9ca3af;font-size:12px">(<?php echo e($perm); ?>)</span><?php echo $inheritedText; ?></div>
                         <?php endforeach; ?>
                     </div>
                 </fieldset>
@@ -108,4 +138,26 @@ function permLabel(string $perm): string {
             <button type="submit" style="padding:10px 20px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">Save Overrides</button>
         </div>
     </form>
+    <script>
+    function selectAllInSection(btn, type) {
+        var fieldset = btn.closest('fieldset');
+        var checkboxes = fieldset.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(function(cb) {
+            // Allow checkboxes have name starting with 'allow_', Deny with 'deny_'
+            if (type === 'allow' && cb.name.startsWith('allow_')) {
+                cb.checked = true;
+                // Uncheck the corresponding deny
+                var denyName = cb.name.replace('allow_', 'deny_');
+                var denyCb = fieldset.querySelector('input[name="' + denyName + '"]');
+                if (denyCb) denyCb.checked = false;
+            } else if (type === 'deny' && cb.name.startsWith('deny_')) {
+                cb.checked = true;
+                // Uncheck the corresponding allow
+                var allowName = cb.name.replace('deny_', 'allow_');
+                var allowCb = fieldset.querySelector('input[name="' + allowName + '"]');
+                if (allowCb) allowCb.checked = false;
+            }
+        });
+    }
+    </script>
 </div>

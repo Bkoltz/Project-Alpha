@@ -200,7 +200,12 @@ try {
     }
     @error_log('[PermissionsHandler] Error: ' . $e->getMessage());
     $referrer = ($_POST['referer'] ?? '') !== '' ? (string)$_POST['referer'] : 'settings/permissions';
-    header('Location: /?page=' . rawurlencode($referrer) . '&saved=0&error=' . rawurlencode($e->getMessage()));
+    $redirectUrl = '/?page=' . rawurlencode($referrer) . '&saved=0&error=' . rawurlencode($e->getMessage());
+    // Preserve user_id for account-edit redirects so the page doesn't show "User not found"
+    if ($action === 'save_user_overrides' && !empty($_POST['user_id'])) {
+        $redirectUrl = '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&saved=0&error=' . rawurlencode($e->getMessage());
+    }
+    header('Location: ' . $redirectUrl);
     exit;
 }
 

@@ -12,8 +12,8 @@ function page_permission_map(): array
 
     $map = [
         // Core authenticated pages (low bar)
-        'home'                => 'profile.view',
-        'dashboard'           => 'profile.view',
+        'home'                => 'financial.view',
+        'dashboard'           => 'financial.view',
         'account'             => 'profile.edit',
         'account-update'      => 'profile.edit',
         'account/delete'      => 'users.manage',
@@ -273,6 +273,6 @@ function deny_response(string $page): void
         echo json_encode(['error' => 'Permission denied']);
         exit;
     }
-    header('Location: /?page=home&error=' . urlencode('You do not have permission to access that page.'));
+    header('Location: /?page=quote/quotes-list&error=' . urlencode('You do not have permission to access that page.'));
     exit;
 }
