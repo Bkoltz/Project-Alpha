@@ -72,6 +72,7 @@ COPY ./src/ /var/www/src/
 # The init.sql is the single source of truth with all modules concatenated
 COPY ./database/init.sql /usr/local/share/app-migrations/init.sql
 COPY ./database/init.sql /docker-entrypoint-initdb.d/01-init.sql
+COPY ./database/migrations/ /var/www/database/migrations/
 
 # Copy Composer vendor from the builder stage
 COPY --from=vendor /app/vendor /var/www/vendor

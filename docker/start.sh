@@ -110,6 +110,14 @@ if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --passwor
   fi
 fi
 
+# Apply any new migrations (idempotent — runner skips already-applied via migrations tracking table)
+echo "Checking for pending database migrations..."
+if php /var/www/src/migrations/run_migrations.php --verbose 2>&1; then
+  echo "✅ Migrations checked/applied"
+else
+  echo "⚠️ Migration runner reported errors (non-fatal — app will continue)"
+fi
+
 # Ensure admin user exists with current password hash (recovery mechanism)
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@project-alpha.local}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
