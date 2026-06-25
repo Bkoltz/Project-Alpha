@@ -3,8 +3,16 @@
 ?>
 
 <?php
-$__primaryId = (int)$pdo->query('SELECT MIN(id) FROM organizations')->fetchColumn();
-$__termsOrgs = $pdo->query('SELECT id, name, brand_terms, brand_long_term_terms, brand_on_demand_terms FROM organizations ORDER BY (id = ' . (int)$__primaryId . ') DESC, name')->fetchAll(PDO::FETCH_ASSOC);
+$__userId = (int)($_SESSION['user']['id'] ?? 0);
+$__termsOrgs = $pdo->prepare('SELECT uo.organization_id AS id, uo.is_default, o.name, o.brand_terms, o.brand_long_term_terms, o.brand_on_demand_terms FROM user_organizations uo JOIN organizations o ON o.id = uo.organization_id WHERE uo.user_id = ? ORDER BY uo.is_default DESC, o.name ASC');
+$__termsOrgs->execute([$__userId]);
+$__termsOrgs = $__termsOrgs->fetchAll(PDO::FETCH_ASSOC);
+$__primaryId = null;
+foreach ($__termsOrgs as $o) {
+    if (!empty($o['is_default'])) { $__primaryId = (int)$o['id']; break; }
+}
+if ($__primaryId === null && !empty($__termsOrgs)) { $__primaryId = (int)min(array_column($__termsOrgs, 'id')); }
+$__primaryId = $__primaryId ?? 0;
 ?>
 
 <?php if (!empty($appConfig['multi_brand_enabled'])): ?>
@@ -64,3 +72,5 @@ $__termsOrgs = $pdo->query('SELECT id, name, brand_terms, brand_long_term_terms,
   </div>
   <?php endforeach; ?>
 <?php endif; ?>
+
+<script src="/assets/js/settings-system.js" defer></script>

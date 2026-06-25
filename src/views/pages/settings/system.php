@@ -159,11 +159,20 @@
 </fieldset>
 
 <?php
-$__primaryOrgId = (int)$pdo->query('SELECT MIN(id) FROM organizations')->fetchColumn();
-$__orgs = $pdo->prepare('SELECT id, name, brand_name, brand_from_name, brand_from_email, brand_from_phone, brand_address_line1, brand_address_line2, brand_city, brand_state, brand_postal, brand_logo_path FROM organizations WHERE id <> ? ORDER BY name');
-$__orgs->execute([$__primaryOrgId]);
-$__orgs = $__orgs->fetchAll(PDO::FETCH_ASSOC);
-$__allOrgs = $pdo->query('SELECT id, name FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$__userId = (int)($_SESSION['user']['id'] ?? 0);
+$__userOrgRows = $pdo->prepare('SELECT uo.organization_id AS id, uo.is_default, o.name, o.brand_name, o.brand_from_name, o.brand_from_email, o.brand_from_phone, o.brand_address_line1, o.brand_address_line2, o.brand_city, o.brand_state, o.brand_postal, o.brand_logo_path FROM user_organizations uo JOIN organizations o ON o.id = uo.organization_id WHERE uo.user_id = ? ORDER BY uo.is_default DESC, o.name ASC');
+$__userOrgRows->execute([$__userId]);
+$__userOrgRows = $__userOrgRows->fetchAll(PDO::FETCH_ASSOC);
+$__primaryOrgId = null;
+foreach ($__userOrgRows as $o) {
+    if (!empty($o['is_default'])) { $__primaryOrgId = (int)$o['id']; break; }
+}
+if ($__primaryOrgId === null && !empty($__userOrgRows)) { $__primaryOrgId = (int)min(array_column($__userOrgRows, 'id')); }
+$__primaryOrgId = $__primaryOrgId ?? 0;
+$__orgs = [];
+foreach ($__userOrgRows as $o) {
+    if ((int)$o['id'] !== $__primaryOrgId) { $__orgs[] = $o; }
+}
 $__defaultBrand = (int)($appConfig['default_brand_org_id'] ?? 0);
 ?>
 <div id="perOrgBrandEditors" style="<?php echo !empty($appConfig['multi_brand_enabled']) ? '' : 'display:none'; ?>">
@@ -171,7 +180,7 @@ $__defaultBrand = (int)($appConfig['default_brand_org_id'] ?? 0);
     <div style="font-weight:500">Default brand for new documents</div>
     <select name="default_brand_org_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       <option value="0">Primary brand (default)</option>
-      <?php foreach ($__allOrgs as $ob): ?>
+      <?php foreach ($__userOrgRows as $ob): ?>
         <option value="<?php echo (int)$ob['id']; ?>" <?php echo $__defaultBrand === (int)$ob['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($ob['name']); ?></option>
       <?php endforeach; ?>
     </select>
