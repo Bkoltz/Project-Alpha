@@ -63,4 +63,13 @@ document.addEventListener('DOMContentLoaded', function () {
             editors.style.display = toggle.checked ? '' : 'none';
         });
     }
+
+    const termsToggle = document.getElementById('termsOrgToggle');
+    const termsEditors = document.getElementById('perOrgTermsEditors');
+    if (termsToggle && termsEditors) {
+        termsEditors.style.display = termsToggle.checked ? '' : 'none';
+        termsToggle.addEventListener('change', function () {
+            termsEditors.style.display = termsToggle.checked ? '' : 'none';
+        });
+    }
 });

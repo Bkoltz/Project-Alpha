@@ -160,7 +160,7 @@
 
 <?php
 $__primaryOrgId = (int)$pdo->query('SELECT MIN(id) FROM organizations')->fetchColumn();
-$__orgs = $pdo->prepare('SELECT id, name, brand_name, brand_from_name, brand_from_email, brand_from_phone, brand_address_line1, brand_address_line2, brand_city, brand_state, brand_postal FROM organizations WHERE id <> ? ORDER BY name');
+$__orgs = $pdo->prepare('SELECT id, name, brand_name, brand_from_name, brand_from_email, brand_from_phone, brand_address_line1, brand_address_line2, brand_city, brand_state, brand_postal, brand_logo_path FROM organizations WHERE id <> ? ORDER BY name');
 $__orgs->execute([$__primaryOrgId]);
 $__orgs = $__orgs->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -182,6 +182,19 @@ $__orgs = $__orgs->fetchAll(PDO::FETCH_ASSOC);
     <label><div>City</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_city" value="<?php echo htmlspecialchars($o['brand_city'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
     <label><div>State</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_state" value="<?php echo htmlspecialchars($o['brand_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
     <label><div>Postal</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_postal" value="<?php echo htmlspecialchars($o['brand_postal'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  </div>
+  <div style="margin-top:12px">
+    <div>Logo (PNG, JPG, WEBP, SVG)</div>
+    <?php
+    $__orgLogo = $o['brand_logo_path'] ?? '';
+    if (empty($__orgLogo)) {
+      $__orgLogo = '/assets/default-logo.png';
+    }
+    ?>
+    <div style="margin:8px 0">
+      <img alt="<?php echo htmlspecialchars($o['name']); ?> logo" src="<?php echo htmlspecialchars($__orgLogo); ?>" style="max-width:240px;max-height:120px;object-fit:contain;border-radius:6px;background:#fff;padding:8px">
+    </div>
+    <input type="file" name="org_<?php echo (int)$o['id']; ?>_brand_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp">
   </div>
 </fieldset>
 <?php endforeach; ?>

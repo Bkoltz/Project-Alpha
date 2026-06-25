@@ -373,6 +373,31 @@ foreach ($orgIds as $oid) {
     }
 }
 
+// Per-organization logo upload (same validation/storage as global logo)
+if (!function_exists('validate_and_store_upload')) {
+    require_once __DIR__ . '/../utils/upload_validator.php';
+}
+foreach ($orgIds as $oid) {
+    $fileKey = "org_{$oid}_brand_logo";
+    if (!empty($_FILES[$fileKey]) && is_uploaded_file($_FILES[$fileKey]['tmp_name'])) {
+        $f = $_FILES[$fileKey];
+        $allowedMap = [
+            'image/jpeg'    => ['jpg', 'jpeg'],
+            'image/png'     => ['png'],
+            'image/gif'     => ['gif'],
+            'image/webp'    => ['webp'],
+            'image/svg+xml' => ['svg'],
+        ];
+        $uploadError = null;
+        $storedName = validate_and_store_upload($f, $allowedMap, 5 * 1024 * 1024, $uploadsDir, $uploadError);
+        if ($storedName !== null) {
+            $logoPath = '/?page=serve-upload&file=' . rawurlencode($storedName);
+            $pdo->prepare('UPDATE organizations SET brand_logo_path = ? WHERE id = ?')->execute([$logoPath, $oid]);
+        }
+        // Per-org logo upload errors are intentionally silent to avoid blocking all settings saves.
+    }
+}
+
 // Cron/recurring invoice settings
 if (isset($_POST['cron_enabled'])) {
     $settings['cron_enabled'] = !empty($_POST['cron_enabled']) ? 1 : 0;
