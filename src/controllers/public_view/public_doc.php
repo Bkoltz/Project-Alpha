@@ -132,6 +132,269 @@ try {
         'showActions'=>$showActions, 'showUpload'=>$showUpload, 'appConfig'=>$appConfig,
         'brandInfo'=>$brandInfo, 'brandTerms'=>$brandTerms
       ];
+
+      // Pre-render payment-options banner for invoices (mirrors doc-wrapper.php)
+      $paymentBannerHtml = '';
+      if ($type === 'invoice') {
+        require_once __DIR__ . '/../../services/StripeService.php';
+        require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
+        if (StripeService::isConfigured($appConfig)) {
+          $invSt = $pdo->prepare('SELECT status, total, original_amount, surcharge_amount, surcharge_type FROM invoices WHERE id = ?');
+          $invSt->execute([$rid]);
+          $invD = $invSt->fetch(PDO::FETCH_ASSOC);
+          if ($invD) {
+            $paidSt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+            $paidSt->execute([$rid]);
+            $amountPaid = (float)$paidSt->fetchColumn();
+            $invStatus = strtolower($invD['status'] ?? '');
+            $calculatedAmountDue = (float)($invD['total'] ?? 0) - $amountPaid;
+            $showPayButton = in_array($invStatus, ['unpaid', 'partial'], true) && $calculatedAmountDue > 0;
+            $surchargeInfo = StripeFeeCalculator::calculateSurcharge($calculatedAmountDue, $appConfig);
+            if ($showPayButton) {
+              $amountDue = $calculatedAmountDue;
+              ob_start();
+?>
+  <div class="payment-section">
+    <div class="payment-header">
+      <div class="payment-title">Payment Options</div>
+      <div class="payment-amount-due">
+        <?php if ($surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
+          <span class="original-amount">$<?php echo number_format($calculatedAmountDue, 2); ?></span>
+          <span class="total-due">$<?php echo number_format($surchargeInfo['new_total'], 2); ?></span>
+          <span class="due-label">total due</span>
+        <?php else: ?>
+          <span class="total-due">$<?php echo number_format($amountDue, 2); ?></span>
+          <span class="due-label">due</span>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <?php if (StripeFeeCalculator::isSurchargeEnabled($appConfig) && $surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
+    <div class="surcharge-notice">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <div class="surcharge-text">
+        <div style="font-weight:600;margin-bottom:4px">
+          <strong>Credit Card Processing Fee:</strong>
+          A surcharge of $<?php echo number_format($surchargeInfo['client_pays'], 2); ?> will be added to your payment.
+          <?php echo htmlspecialchars($surchargeInfo['display_text']); ?>
+        </div>
+        <div style="margin-top:4px;font-size:12px;">
+          <small>This fee does not apply to debit cards, bank transfers, or checks.</small>
+        </div>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <div class="payment-options">
+      <!-- Credit Card (Primary) -->
+      <a href="/?page=stripe-checkout&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" class="payment-option primary">
+        <div class="payment-option-icon">💳</div>
+        <div class="payment-option-details">
+          <div class="payment-option-name">Pay by Credit Card</div>
+          <div class="payment-option-desc">Secure online payment via Stripe</div>
+        </div>
+        <div class="payment-option-arrow">→</div>
+      </a>
+
+      <?php
+      // Show check option if enabled
+      $paymentMethods = (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']);
+      $hasCheck = false;
+      $hasCash = false;
+
+      foreach ($paymentMethods as $pm) {
+        $pmLower = strtolower(trim($pm));
+        if ($pmLower === 'check') $hasCheck = true;
+        if ($pmLower === 'cash') $hasCash = true;
+      }
+
+      if ($hasCheck):
+        $payeeName = ($brandInfo['from_name'] ?? '') ?: ($brandInfo['brand_name'] ?? 'Project Alpha');
+        $payeeAddress = [];
+        if (!empty($brandInfo['from_address_line1'])) $payeeAddress[] = $brandInfo['from_address_line1'];
+        if (!empty($appConfig['from_address'])) $payeeAddress[] = $appConfig['from_address'];
+        if (!empty($brandInfo['from_city'])) $payeeAddress[] = $brandInfo['from_city'];
+        if (!empty($brandInfo['from_state'])) $payeeAddress[] = $brandInfo['from_state'];
+        if (!empty($brandInfo['from_postal'])) $payeeAddress[] = $brandInfo['from_postal'];
+        if (empty($payeeAddress) && !empty($appConfig['from_zip'])) $payeeAddress[] = $appConfig['from_zip'];
+      ?>
+      <div class="payment-option">
+        <div class="payment-option-icon">📄</div>
+        <div class="payment-option-details">
+          <div class="payment-option-name">Pay by Check</div>
+          <div class="payment-option-desc">
+            Make check payable to: <strong><?php echo htmlspecialchars($payeeName); ?></strong>
+            <?php if (!empty($payeeAddress)): ?>
+            <br><span style="color:#6b7280"><?php echo htmlspecialchars(implode(', ', $payeeAddress)); ?></span>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($hasCash): ?>
+      <div class="payment-option">
+        <div class="payment-option-icon">💵</div>
+        <div class="payment-option-details">
+          <div class="payment-option-name">Pay with Cash</div>
+          <div class="payment-option-desc">Contact us to arrange an in-person payment</div>
+        </div>
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <div class="payment-footer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+      All credit card payments are secure and encrypted
+    </div>
+  </div>
+
+  <style>
+    .payment-section {
+      margin-bottom: 24px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .payment-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      color: #fff;
+      padding: 24px;
+      text-align: center;
+    }
+    .payment-title {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.9;
+      margin-bottom: 8px;
+    }
+    .payment-amount-due {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .total-due {
+      font-size: 36px;
+      font-weight: 700;
+    }
+    .due-label {
+      font-size: 16px;
+      opacity: 0.8;
+    }
+    .original-amount {
+      font-size: 18px;
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+    .surcharge-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #fffbeb;
+      border-bottom: 1px solid #fcd34d;
+      color: #92400e;
+      font-size: 13px;
+    }
+    .surcharge-notice svg {
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .payment-options {
+      padding: 16px;
+    }
+    .payment-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      transition: all 0.2s;
+    }
+    .payment-option:last-child {
+      margin-bottom: 0;
+    }
+    .payment-option.primary {
+      background: #eff6ff;
+      border-color: #3b82f6;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+    }
+    .payment-option.primary:hover {
+      background: #dbeafe;
+      border-color: #2563eb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59,130,246,0.15);
+    }
+    .payment-option-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+    .payment-option.primary .payment-option-icon {
+      background: #dbeafe;
+    }
+    .payment-option-details {
+      flex: 1;
+      text-align: left;
+    }
+    .payment-option-name {
+      font-weight: 600;
+      color: #111827;
+      font-size: 15px;
+    }
+    .payment-option-desc {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    .payment-option-arrow {
+      font-size: 20px;
+      color: #3b82f6;
+      font-weight: 600;
+    }
+    .payment-footer {
+      padding: 12px 16px;
+      background: #f9fafb;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      font-size: 12px;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+  </style>
+<?php
+              $paymentBannerHtml = ob_get_clean();
+            }
+          }
+        }
+      }
+      $templateVars['paymentBannerHtml'] = $paymentBannerHtml;
+
       if ($type === 'quote') {
         try {
           $idParam = (int)$rid;
