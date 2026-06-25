@@ -371,6 +371,14 @@ try {
     @error_log('[audit] middleware init failed: ' . $e->getMessage());
 }
 
+// ACL middleware — permission check after login, before controller dispatch
+try {
+    require_once __DIR__ . '/../src/utils/acl_middleware.php';
+    acl_middleware($pdo, $page);
+} catch (Throwable $e) {
+    @error_log('[acl] middleware failed: ' . $e->getMessage());
+}
+
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
