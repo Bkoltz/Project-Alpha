@@ -144,9 +144,9 @@ try {
             $items = $itemsSt->fetchAll(PDO::FETCH_ASSOC);
 
             // Prepare sender info
-            $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-            $fromPhone = $appConfig['from_phone'] ?? '';
-            $fromEmail = $appConfig['from_email'] ?? '';
+            $fromName = ($brandInfo['from_name'] ?? '') ?: ($brandInfo['brand_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+            $fromPhone = $brandInfo['from_phone'] ?? ($appConfig['from_phone'] ?? '');
+            $fromEmail = $brandInfo['from_email'] ?? ($appConfig['from_email'] ?? '');
 
             // Resolve terms: project-level -> quote -> app
             $termsText = '';
@@ -159,7 +159,7 @@ try {
               } catch (Throwable $_e) { /* ignore */ }
             }
             if ($termsText === '') { $termsText = trim((string)($quote['terms'] ?? '')); }
-            if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
+            if ($termsText === '') { $termsText = trim((string)($brandTerms['terms'] ?? ($appConfig['terms'] ?? ''))); }
 
             // Deposit calculation
             $depositType = $quote['deposit_type'] ?? 'none';
@@ -180,7 +180,7 @@ try {
             $scopeEnabled = !isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled']);
 
             // Minimal logo handling: pass configured logo and let template decide how to render
-            $logoConf = trim((string)($appConfig['logo_path'] ?? ''));
+            $logoConf = trim((string)($brandInfo['logo_path'] ?? ($appConfig['logo_path'] ?? '')));
 
             $templateVars['quote'] = $quote;
             $templateVars['items'] = $items;
