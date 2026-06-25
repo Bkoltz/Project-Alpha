@@ -3,9 +3,22 @@
 -- Note: No explicit START TRANSACTION/COMMIT — MySQL DDL statements auto-commit
 -- and cannot be wrapped in transactions. Each statement is idempotent on its own.
 
--- Backfill role_id from legacy ENUM role for existing rows (matches Migration 023)
+-- Some older databases still have user_organizations.role as ENUM('admin','user').
+-- Convert to VARCHAR so we can safely normalize legacy values regardless of current enum.
+ALTER TABLE user_organizations MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'member';
+
+-- Normalize legacy form value 'user' (and any unknowns) to the actual DB role 'member'
+UPDATE user_organizations SET role = 'member' WHERE role NOT IN ('owner','admin','member') OR role IS NULL;
+
+-- Backfill role_id from role text for existing rows
 UPDATE user_organizations uo
 JOIN roles r ON r.name = uo.role AND r.is_system = 1
+SET uo.role_id = r.id
+WHERE uo.role_id IS NULL;
+
+-- Hard-fallback: any row still missing role_id gets the system 'member' role.
+UPDATE user_organizations uo
+JOIN roles r ON r.name = 'member' AND r.is_system = 1
 SET uo.role_id = r.id
 WHERE uo.role_id IS NULL;
 

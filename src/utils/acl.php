@@ -47,6 +47,28 @@ function compute_permissions_hash(PDO $pdo, int $userId, int $activeOrgId): stri
         $roleId = null;
     }
 
+    // Safety net: if user_organizations.role_id is NULL, resolve and persist it from text role / member fallback,
+    // then re-read so the hash reflects the corrected state. This prevents session-staleness
+    // redirect loops when legacy data has role_id=NULL.
+    if ($roleId === null || $roleId === '') {
+        try {
+            $stmt = $pdo->prepare('SELECT id, role, role_id FROM user_organizations WHERE user_id = ? AND organization_id = ? LIMIT 1');
+            $stmt->execute([$userId, $activeOrgId]);
+            $uo = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($uo && ($uo['role_id'] === null || $uo['role_id'] === '')) {
+                $resolved = role_id_by_name($pdo, in_array($uo['role'], ['owner','admin','member','staff']) ? $uo['role'] : 'member', null);
+                if ($resolved === null) {
+                    $fallback = $pdo->query("SELECT id FROM roles WHERE name='member' AND is_system=1 LIMIT 1")->fetchColumn();
+                    $resolved = $fallback !== false ? (int)$fallback : null;
+                }
+                if ($resolved !== null) {
+                    $pdo->prepare('UPDATE user_organizations SET role_id = ?, role = ? WHERE id = ?')->execute([$resolved, in_array($uo['role'], ['owner','admin','member','staff']) ? $uo['role'] : 'member', $uo['id']]);
+                    $roleId = $resolved;
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
     try {
         $stmt = $pdo->prepare('SELECT permission, allowed FROM user_permissions_overrides WHERE user_id = ? AND (organization_id = ? OR organization_id IS NULL) ORDER BY permission');
         $stmt->execute([$userId, $activeOrgId]);
@@ -77,6 +99,29 @@ function user_permissions(PDO $pdo, int $userId, ?int $activeOrgId = null): arra
 
     $permissions = [];
 
+    // Safety net: if user_organizations.role_id is NULL (stale data / failed migration),
+    // resolve and persist the correct role_id from the text role, falling back to 'member'.
+    // Then re-run the permission load so the same request benefits from the fix.
+    $healed = false;
+    try {
+        $stmt = $pdo->prepare('SELECT id, role, role_id FROM user_organizations WHERE user_id = ? AND organization_id = ? LIMIT 1');
+        $stmt->execute([$userId, $activeOrgId]);
+        $uo = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($uo && ($uo['role_id'] === null || $uo['role_id'] === '')) {
+            $resolved = role_id_by_name($pdo, in_array($uo['role'], ['owner','admin','member','staff']) ? $uo['role'] : 'member', null);
+            if ($resolved === null) {
+                $fallback = $pdo->query("SELECT id FROM roles WHERE name='member' AND is_system=1 LIMIT 1")->fetchColumn();
+                $resolved = $fallback !== false ? (int)$fallback : null;
+            }
+            if ($resolved !== null) {
+                $pdo->prepare('UPDATE user_organizations SET role_id = ?, role = ? WHERE id = ?')->execute([$resolved, in_array($uo['role'], ['owner','admin','member','staff']) ? $uo['role'] : 'member', $uo['id']]);
+                $healed = true;
+            }
+        }
+    } catch (Throwable $e) {
+        // ACL tables may not exist yet (pre-migration)
+    }
+
     try {
         $stmt = $pdo->prepare('SELECT rp.permission, rp.allowed
             FROM user_organizations uo
@@ -89,6 +134,23 @@ function user_permissions(PDO $pdo, int $userId, ?int $activeOrgId = null): arra
         }
     } catch (Throwable $e) {
         // ACL tables may not exist yet (pre-migration) — return empty permissions
+    }
+
+    // If we just healed role_id, the first permission query above may have run before
+    // the UPDATE took effect in the same transaction/connection. Run it once more.
+    if ($healed) {
+        try {
+            $permissions = [];
+            $stmt = $pdo->prepare('SELECT rp.permission, rp.allowed
+                FROM user_organizations uo
+                JOIN roles r ON r.id = uo.role_id
+                JOIN role_permissions rp ON rp.role_id = r.id
+                WHERE uo.user_id = ? AND uo.organization_id = ?');
+            $stmt->execute([$userId, $activeOrgId]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $permissions[$row['permission']] = (bool)$row['allowed'];
+            }
+        } catch (Throwable $e) {}
     }
 
     try {
