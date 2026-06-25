@@ -163,8 +163,20 @@ $__primaryOrgId = (int)$pdo->query('SELECT MIN(id) FROM organizations')->fetchCo
 $__orgs = $pdo->prepare('SELECT id, name, brand_name, brand_from_name, brand_from_email, brand_from_phone, brand_address_line1, brand_address_line2, brand_city, brand_state, brand_postal, brand_logo_path FROM organizations WHERE id <> ? ORDER BY name');
 $__orgs->execute([$__primaryOrgId]);
 $__orgs = $__orgs->fetchAll(PDO::FETCH_ASSOC);
+$__allOrgs = $pdo->query('SELECT id, name FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$__defaultBrand = (int)($appConfig['default_brand_org_id'] ?? 0);
 ?>
 <div id="perOrgBrandEditors" style="<?php echo !empty($appConfig['multi_brand_enabled']) ? '' : 'display:none'; ?>">
+  <label style="display:block;margin-top:12px">
+    <div style="font-weight:500">Default brand for new documents</div>
+    <select name="default_brand_org_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <option value="0">Primary brand (default)</option>
+      <?php foreach ($__allOrgs as $ob): ?>
+        <option value="<?php echo (int)$ob['id']; ?>" <?php echo $__defaultBrand === (int)$ob['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($ob['name']); ?></option>
+      <?php endforeach; ?>
+    </select>
+    <div style="font-size:0.85em;color:#666;margin-top:4px">Which brand the quote/contract/invoice create pages should start on. You can still switch per document. The document's organization is still determined by the client you select.</div>
+  </label>
   <p style="margin:4px 0 8px;color:var(--muted);font-size:12px">Additional brands. The main brand above is used by your primary organization and for all documents when multi-brand is off.</p>
   <?php if (empty($__orgs)): ?>
     <p style="margin:4px 0;color:var(--muted);font-size:12px">No additional organizations yet. Create another organization to configure a second brand.</p>
@@ -172,17 +184,6 @@ $__orgs = $__orgs->fetchAll(PDO::FETCH_ASSOC);
 <?php foreach ($__orgs as $o): ?>
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
   <legend style="padding:0 6px;color:var(--muted)"><?php echo htmlspecialchars($o['name']); ?> — Brand</legend>
-  <label><div>Brand Name</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_name" value="<?php echo htmlspecialchars($o['brand_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-  <label><div>From Name</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_from_name" value="<?php echo htmlspecialchars($o['brand_from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-  <label><div>Email</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_from_email" value="<?php echo htmlspecialchars($o['brand_from_email'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-  <label><div>Phone</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_from_phone" value="<?php echo htmlspecialchars($o['brand_from_phone'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-  <label><div>Address line 1</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_address_line1" value="<?php echo htmlspecialchars($o['brand_address_line1'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-  <label><div>Address line 2</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_address_line2" value="<?php echo htmlspecialchars($o['brand_address_line2'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-  <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
-    <label><div>City</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_city" value="<?php echo htmlspecialchars($o['brand_city'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>State</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_state" value="<?php echo htmlspecialchars($o['brand_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-    <label><div>Postal</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_postal" value="<?php echo htmlspecialchars($o['brand_postal'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-  </div>
   <div style="margin-top:12px">
     <div>Logo (PNG, JPG, WEBP, SVG)</div>
     <?php
@@ -195,6 +196,17 @@ $__orgs = $__orgs->fetchAll(PDO::FETCH_ASSOC);
       <img alt="<?php echo htmlspecialchars($o['name']); ?> logo" src="<?php echo htmlspecialchars($__orgLogo); ?>" style="max-width:240px;max-height:120px;object-fit:contain;border-radius:6px;background:#fff;padding:8px">
     </div>
     <input type="file" name="org_<?php echo (int)$o['id']; ?>_brand_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+  </div>
+  <label><div>Brand Name</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_name" value="<?php echo htmlspecialchars($o['brand_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  <label><div>From Name</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_from_name" value="<?php echo htmlspecialchars($o['brand_from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  <label><div>Email</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_from_email" value="<?php echo htmlspecialchars($o['brand_from_email'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  <label><div>Phone</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_from_phone" value="<?php echo htmlspecialchars($o['brand_from_phone'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  <label><div>Address line 1</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_address_line1" value="<?php echo htmlspecialchars($o['brand_address_line1'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  <label><div>Address line 2</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_address_line2" value="<?php echo htmlspecialchars($o['brand_address_line2'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
+    <label><div>City</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_city" value="<?php echo htmlspecialchars($o['brand_city'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>State</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_state" value="<?php echo htmlspecialchars($o['brand_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Postal</div><input type="text" name="org_<?php echo (int)$o['id']; ?>_brand_postal" value="<?php echo htmlspecialchars($o['brand_postal'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
   </div>
 </fieldset>
 <?php endforeach; ?>
