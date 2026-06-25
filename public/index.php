@@ -312,6 +312,54 @@ if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     }
 }
 
+// Global error/exception/shutdown handlers: route PHP errors to Monolog with error_log() fallback
+require_once __DIR__ . '/../src/utils/logger.php';
+$errLogger = app_logger('error');
+set_error_handler(function ($severity, $message, $file, $line) use ($errLogger) {
+    if (!(error_reporting() & $severity)) {
+        return false;
+    }
+    try {
+        $errLogger->error('PHP error', [
+            'severity' => $severity,
+            'message'  => $message,
+            'file'     => $file,
+            'line'     => $line,
+        ]);
+    } catch (Throwable $e) {
+        error_log(sprintf('[PHP error] severity=%d message=%s file=%s line=%d', $severity, $message, $file, $line));
+    }
+    return true;
+});
+set_exception_handler(function ($e) use ($errLogger) {
+    try {
+        $errLogger->error('Uncaught exception', [
+            'exception' => get_class($e),
+            'message'   => $e->getMessage(),
+            'file'      => $e->getFile(),
+            'line'      => $e->getLine(),
+            'trace'     => $e->getTraceAsString(),
+        ]);
+    } catch (Throwable $e2) {
+        error_log('[Uncaught exception] ' . get_class($e) . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    }
+});
+register_shutdown_function(function () use ($errLogger) {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        try {
+            $errLogger->error('Fatal shutdown', [
+                'type'    => $e['type'],
+                'message' => $e['message'],
+                'file'    => $e['file'],
+                'line'    => $e['line'],
+            ]);
+        } catch (Throwable $_e) {
+            error_log(sprintf('[Fatal shutdown] type=%d message=%s file=%s line=%d', $e['type'], $e['message'], $e['file'], $e['line']));
+        }
+    }
+});
+
 // Audit middleware: guarantees baseline audit rows for sensitive actions
 // (payments, 2FA changes, API keys, exports, deletes) even when the routed
 // controller doesn't call audit_log() itself. See src/utils/audit_middleware.php.

@@ -132,18 +132,23 @@ mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${
   ON DUPLICATE KEY UPDATE \`role\`='owner', \`is_default\`=1;
 " || true
 
-# 2) Runtime, always safe to re-run
+# 2) Run PHP migration runner BEFORE Apache starts. It tracks applied state
+#    in schema_migrations and tolerates per-file failures non-fatally.
+echo "Running PHP migration runner (state-tracked, non-fatal errors)..."
+php /var/www/src/migrations/run_migrations.php --verbose 2>&1 || echo "WARNING: Migration runner reported errors (non-fatal)"
+
+# 2b) Runtime SQL file (kept as an idempotent fallback / legacy hook)
 if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
   echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
   echo "Debug: Executing runtime.sql from $(ls -l /usr/local/share/app-migrations/runtime.sql)"
-  
+
   # Execute with verbose error reporting
   set +e  # Temporarily disable exit on error
   mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
        "/usr/local/share/app-migrations/runtime.sql" 2>&1 | tee /tmp/migration.log
   MIGRATION_EXIT=${PIPESTATUS[0]}
   set -e  # Re-enable exit on error
-  
+
   if [ $MIGRATION_EXIT -eq 0 ]; then
     echo "✅ Runtime migrations applied (or already up-to-date)."
   else

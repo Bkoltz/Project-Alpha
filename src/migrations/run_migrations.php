@@ -4,110 +4,248 @@
  *
  * Usage: php src/migrations/run_migrations.php [--dry-run] [--verbose]
  *
- * Reads all .sql files from database/migrations/ in numeric order,
- * skips ones already recorded in the migrations tracking table.
- * Runs each new migration inside a transaction.
+ * Reads all .sql files from database/migrations/ sorted by filename, skips
+ * ones already recorded in the schema_migrations tracking table, and runs each
+ * new migration inside a transaction with per-file error handling.
+ *
+ * Failures are logged to stderr and to PHP's error_log(), then execution
+ * continues so that the container can still start Apache.
  */
 
 require_once __DIR__ . '/../config/db.php';
 
-$dryRun = in_array('--dry-run', $argv);
-$verbose = in_array('--verbose', $argv) || in_array('-v', $argv);
+$dryRun  = in_array('--dry-run', $argv, true);
+$verbose = in_array('--verbose', $argv, true) || in_array('-v', $argv, true);
 
 $migrationsDir = dirname(__DIR__, 2) . '/database/migrations';
 $excluded = ['000_all_DEPRECATED.sql'];
 
-echo "=== Project Alpha Migration Runner ===\n";
-echo "Mode: " . ($dryRun ? "DRY-RUN" : "LIVE") . "\n\n";
-
-// Ensure migrations tracking table exists
-$pdo->exec("CREATE TABLE IF NOT EXISTS migrations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    filename VARCHAR(255) NOT NULL UNIQUE,
-    run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    checksum VARCHAR(64) NULL,
-    INDEX idx_migrations_filename (filename)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-// Get already-run migrations
-$runMap = [];
-foreach ($pdo->query("SELECT filename FROM migrations") as $row) {
-    $runMap[$row['filename']] = true;
+/**
+ * Log a message to stderr and to PHP's error log.
+ */
+function log_migration_error(string $message): void
+{
+    $line = '[' . date('c') . '] ' . $message;
+    fwrite(STDERR, $line . PHP_EOL);
+    error_log($line);
 }
 
-// Collect migration files
+/**
+ * Build a PDO connection that explicitly enables multi-statement execution.
+ */
+function create_multi_statement_pdo(): PDO
+{
+    $host = getenv('DB_HOST') ?: 'db';
+    $db   = getenv('MYSQL_DATABASE') ?: 'project_alpha';
+    $user = getenv('MYSQL_USER') ?: 'root';
+    $pass = getenv('MYSQL_PASSWORD') ?: getenv('MYSQL_ROOT_PASSWORD') ?: 'rootpass';
+
+    $dsn = "mysql:host={$host};dbname={$db};charset=utf8mb4";
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::MYSQL_ATTR_MULTI_STATEMENTS => true,
+    ];
+
+    return new PDO($dsn, $user, $pass, $options);
+}
+
+/**
+ * One-time seed: copy already-applied migrations from the legacy
+ * `migrations` table (if it exists) into the new `schema_migrations`
+ * table so legacy non-idempotent files are not re-run.
+ */
+function seed_from_legacy_migrations_table(PDO $pdo): void
+{
+    try {
+        $check = $pdo->query("SHOW TABLES LIKE 'migrations'");
+        if (!$check || $check->rowCount() === 0) {
+            return;
+        }
+
+        $rows = $pdo->query("SELECT filename, checksum FROM migrations")->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($rows)) {
+            return;
+        }
+
+        $insert = $pdo->prepare("INSERT IGNORE INTO schema_migrations (filename, checksum) VALUES (?, ?)");
+        foreach ($rows as $row) {
+            $insert->execute([
+                $row['filename'],
+                $row['checksum'] ?? null,
+            ]);
+        }
+    } catch (Throwable $e) {
+        // Non-fatal: if the legacy table cannot be read we simply continue.
+        log_migration_error('Legacy migration seeding skipped: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Lightweight dry-run validation: ensure the file is readable, non-empty,
+ * valid UTF-8, and contains at least one SQL statement token.
+ */
+function migration_sql_looks_valid(string $sql): bool
+{
+    $trimmed = trim($sql);
+    if ($trimmed === '') {
+        return false;
+    }
+
+    if (function_exists('mb_check_encoding')) {
+        if (!mb_check_encoding($sql, 'UTF-8')) {
+            return false;
+        }
+    } elseif (preg_match('//u', $sql) === false) {
+        return false;
+    }
+
+    // Require at least one recognised SQL statement keyword or a semicolon.
+    if (preg_match('/\b(?:CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|TRUNCATE|RENAME|USE|SET|GRANT|REVOKE)\b/i', $sql) === 0
+        && strpos($sql, ';') === false
+    ) {
+        return false;
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Ensure tracking table exists
+// ---------------------------------------------------------------------------
+$pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL UNIQUE,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    checksum VARCHAR(64) NULL,
+    INDEX idx_sm_filename (filename)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+seed_from_legacy_migrations_table($pdo);
+
+// ---------------------------------------------------------------------------
+// Load already-applied migrations
+// ---------------------------------------------------------------------------
+$appliedMap = [];
+$stmt = $pdo->query("SELECT filename FROM schema_migrations");
+foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $appliedMap[$row['filename']] = true;
+}
+
+// ---------------------------------------------------------------------------
+// Collect pending migration files
+// ---------------------------------------------------------------------------
 $files = glob($migrationsDir . '/*.sql');
-usort($files, function ($a, $b) {
+if ($files === false) {
+    $files = [];
+}
+
+usort($files, static function ($a, $b) {
     return strcmp(basename($a), basename($b));
 });
 
 $pending = [];
 foreach ($files as $file) {
     $name = basename($file);
-    if (in_array($name, $excluded)) continue;
-    if (isset($runMap[$name])) continue;
+    if (in_array($name, $excluded, true)) {
+        continue;
+    }
+    if (isset($appliedMap[$name])) {
+        continue;
+    }
     $pending[] = $file;
 }
 
-usort($pending, function ($a, $b) {
-    return strcmp(basename($a), basename($b));
-});
-
 if (empty($pending)) {
-    echo "No pending migrations. All up to date.\n";
+    if ($verbose) {
+        echo "No pending migrations. All up to date.\n";
+    }
     exit(0);
 }
 
+echo "=== Project Alpha Migration Runner ===\n";
+echo "Mode: " . ($dryRun ? "DRY-RUN" : "LIVE") . "\n";
 echo "Pending migrations (" . count($pending) . "):\n";
 foreach ($pending as $file) {
     echo "  " . basename($file) . "\n";
 }
 echo "\n";
 
-$failed = false;
+// Dedicated PDO for executing multi-statement migration SQL.
+$execPdo = create_multi_statement_pdo();
+
+$anyFailed = false;
+
 foreach ($pending as $file) {
     $name = basename($file);
-    $sql = file_get_contents($file);
-    $checksum = hash('sha256', $sql);
+    $sql = @file_get_contents($file);
 
-    if ($dryRun) {
-        echo "[DRY-RUN] Would run: $name\n";
+    if ($sql === false) {
+        log_migration_error("Migration file '$name' could not be read.");
+        $anyFailed = true;
         continue;
     }
 
-    echo "Running: $name ... ";
+    $checksum = hash('sha256', $sql);
 
-    $pdo->beginTransaction();
+    // -----------------------------------------------------------------------
+    // Dry run: validate but do not execute
+    // -----------------------------------------------------------------------
+    if ($dryRun) {
+        $valid = migration_sql_looks_valid($sql);
+        echo '[DRY-RUN] ' . $name
+            . ($verbose ? ' (' . $checksum . ')' : '')
+            . ' - ' . ($valid ? 'OK (would apply)' : 'INVALID / EMPTY')
+            . "\n";
+        if (!$valid) {
+            $anyFailed = true;
+        }
+        continue;
+    }
+
+    if ($verbose) {
+        echo "Running: $name ... ";
+    }
+
+    // -----------------------------------------------------------------------
+    // Live run: execute in a transaction with per-file try/catch
+    // -----------------------------------------------------------------------
     try {
-        // MySQL PDO doesn't support multiple statements via exec by default,
-        // so we split on semicolons but preserve triggers/procedures
-        $statements = preg_split('/;\s*\n(?=\s*(?:CREATE|ALTER|INSERT|UPDATE|DELETE|DROP|USE|SET|GRANT|REVOKE|FLUSH|OPTIMIZE|ANALYZE|CHECK|REPAIR|TRUNCATE|CALL|DO|HANDLER|LOAD|REPLACE|SHOW|DESCRIBE|EXPLAIN|HELP|USE|LOCK|UNLOCK|START|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|CHAIN|XA|PREPARE|EXECUTE|DEALLOCATE|SET|GET|SHOW|DECLARE|IF|CASE|LOOP|WHILE|REPEAT|LEAVE|ITERATE|RETURN|SIGNAL|RESIGNAL|UNTIL|OPEN|FETCH|CLOSE|CURSOR|CONTINUE|EXIT|UNDO|SQLSTATE|CONDITION|HANDLER|FORCE|IGNORE|QUICK|CONCURRENT|NO_WRITE_TO_BINLOG|LOCAL|LOW_PRIORITY|DELAYED|HIGH_PRIORITY|SQL_SMALL_RESULT|SQL_BIG_RESULT|SQL_BUFFER_RESULT|SQL_CACHE|SQL_NO_CACHE|SQL_CALC_FOUND_ROWS|STRAIGHT_JOIN|FOR_UPDATE|LOCK_IN_SHARE_MODE|INTO|OUTFILE|DUMPFILE|CHARACTER|SET|NAMES|COLLATE|FROM|DATABASE|SCHEMA|TABLE|INDEX|VIEW|EVENT|TRIGGER|FUNCTION|PROCEDURE|SERVER|PLUGIN|USER|LOGFILE_GROUP|TABLESPACE|PARTITION|COLUMN|SPATIAL|FULLTEXT|UNIQUE|PRIMARY|FOREIGN|KEY|CONSTRAINT|DEFAULT|AUTO_INCREMENT|CHECK|NOT|NULL|UNSIGNED|ZEROFILL|BINARY|CHARACTER|SET|COLLATE|COMMENT|ON|UPDATE|DELETE|CASCADE|SET|NULL|NO|ACTION|RESTRICT|RESTRICT|DEFINER|INVOKER|SQL|SECURITY|DETERMINISTIC|CONTAINS|SQL|READS|SQL|DATA|MODIFIES|SQL|DATA|LANGUAGE|SQL|EXTERNAL|NAME|PARAMETER|RETURNS|AGGREGATE|SONAME|SHARE|MODE|NOWAIT|WAIT|SKIP|LOCKED|OF|NOWAIT|WAIT|SKIP|LOCKED))/s', $sql);
+        $execPdo->beginTransaction();
+        $execPdo->exec($sql);
+        $execPdo->commit();
 
-        // Simpler approach: just exec the whole file
-        // This works if we use PDO with proper multi-statement support
-        // Actually let's just use exec
-        $pdo->exec($sql);
+        $record = $pdo->prepare("INSERT INTO schema_migrations (filename, checksum) VALUES (?, ?)");
+        $record->execute([$name, $checksum]);
 
-        $stmt = $pdo->prepare("INSERT INTO migrations (filename, checksum) VALUES (?, ?)");
-        $stmt->execute([$name, $checksum]);
+        if ($verbose) {
+            echo "OK\n";
+        }
+    } catch (Throwable $e) {
+        if ($execPdo->inTransaction()) {
+            $execPdo->rollBack();
+        }
 
-        $pdo->commit();
-        echo "OK\n";
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        echo "FAILED\n";
-        echo "  Error: " . $e->getMessage() . "\n";
-        $failed = true;
-        break;
+        log_migration_error("Migration '$name' failed: " . $e->getMessage());
+
+        if ($verbose) {
+            echo "FAILED\n";
+            echo "  Error: " . $e->getMessage() . "\n";
+        }
+
+        $anyFailed = true;
+        continue;
     }
 }
 
-if ($failed) {
-    echo "\nMigration failed. Database rolled back.\n";
-    exit(1);
+if ($dryRun) {
+    echo "\nDry-run complete. "
+        . ($anyFailed ? "Some pending migrations look invalid." : "All pending migrations look valid.")
+        . "\n";
+} else {
+    echo "\nMigration run complete. "
+        . ($anyFailed ? "One or more migrations failed; the application will still start." : "All migrations applied successfully.")
+        . "\n";
 }
 
-if (!$dryRun) {
-    echo "\nAll migrations completed successfully.\n";
-}
 exit(0);
