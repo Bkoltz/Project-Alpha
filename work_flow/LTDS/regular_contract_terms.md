@@ -1,7 +1,6 @@
-# LTDS Contract Terms — Regular (One-Time Projects)
+# LTDS Contract Terms — Regular (One-Time Drone Projects)
 
-> Source: Provided by Beau Koltz, June 2026. These are the default terms for
-> regular one-time drone service contracts (photos/video).
+> Source: Provided by Beau Koltz, June 2026. Verbatim from current contracts.
 
 ## Default Terms
 
@@ -34,5 +33,4 @@
 - LTDS business address: 7039 County Road PP, Wisconsin
 - Legal jurisdiction: State of Wisconsin, USA
 - Late interest: 18% if not paid within 30 days
-- These terms apply to regular (one-time) contracts only.
-- Long-term and on-demand contract terms need to be drafted (see sibling files).
+- These terms apply to regular (one-time) drone service contracts.
