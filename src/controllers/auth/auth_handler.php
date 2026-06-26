@@ -139,21 +139,42 @@ if ($action === 'login') {
             $twofa_enabled = (bool)$st2fa->fetchColumn();
         } catch (Throwable $e) {}
         
+        // Build the full session user data before storing or redirecting
+        require_once __DIR__ . '/../../utils/acl.php';
+        $defaultOrgId = 0;
+        $stmt = $pdo->prepare('SELECT organization_id FROM user_organizations WHERE user_id = ? AND is_default = 1 LIMIT 1');
+        $stmt->execute([(int)$u['id']]);
+        $defaultOrgId = (int)$stmt->fetchColumn();
+        if ($defaultOrgId === 0) {
+            $stmt = $pdo->prepare('SELECT organization_id FROM user_organizations WHERE user_id = ? ORDER BY organization_id ASC LIMIT 1');
+            $stmt->execute([(int)$u['id']]);
+            $defaultOrgId = (int)$stmt->fetchColumn();
+        }
+
+        $userSession = [
+            'id'               => (int)$u['id'],
+            'email'            => $u['email'],
+            'role'             => $u['role'],
+            'app_role'         => $u['role'],
+            'active_org_id'    => $defaultOrgId,
+            'permissions_hash' => compute_permissions_hash($pdo, (int)$u['id'], $defaultOrgId),
+        ];
+
         if ($twofa_enabled) {
             // User has 2FA enabled, redirect to 2FA verification
             session_regenerate_id(true);
             $_SESSION['2fa_pending'] = [
                 'user_id' => (int)$u['id'],
-                'user_data' => ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']]
+                'user_data' => $userSession
             ];
             app_log('auth', 'login requires 2FA', ['user_id'=>(int)$u['id'], 'ip'=>$ip]);
             header('Location: /?page=2fa-verify');
             exit;
         }
-        
+
         // on success (no 2FA), regenerate session and optionally clear attempts
         session_regenerate_id(true);
-        $_SESSION['user'] = ['id'=>(int)$u['id'], 'email'=>$u['email'], 'role'=>$u['role']];
+        $_SESSION['user'] = $userSession;
         // Clear old login attempts on success
         try {
             $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]);
@@ -212,7 +233,14 @@ if ($action === 'login') {
         } catch (Throwable $e) { /* if column missing, skip ToS gate */ }
         
         app_log('auth', 'login success', ['uid'=>(int)$u['id'], 'ip'=>$ip]);
-        header('Location: /');
+
+        // Route user to appropriate landing page based on permissions
+        require_once __DIR__ . '/../../utils/acl.php';
+        if (user_can($pdo, (int)$u['id'], 'financial.view', $defaultOrgId)) {
+            header('Location: /');
+        } else {
+            header('Location: /?page=user-dashboard');
+        }
         exit;
     } catch (Throwable $e) {
         header('Location: /?page=login&error=' . urlencode('Login failed'));

@@ -132,6 +132,13 @@ elseif($deposit_type === 'fixed') {
 // Calculate next invoice date
 $next_invoice_date = $start_date;
 
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+$sessionUserId = (int)($_SESSION['user']['id'] ?? 0) ?: 1;
+$activeOrgId   = (int)(get_active_org_id() ?: 0);
+if (!$activeOrgId) {
+    $activeOrgId = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
+}
+
 $pdo->beginTransaction();
 try{
     // Get project code
@@ -148,15 +155,15 @@ try{
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid, total_invoiced,
-        next_invoice_date, invoice_count, invoices_generated, scope
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        next_invoice_date, invoice_count, invoices_generated, scope, organization_id, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
         $client_id, $project_id, $projectCode, 'pending', 'long_term', $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0, 0,
-        $next_invoice_date, $invoice_count, 0, $scope
+        $next_invoice_date, $invoice_count, 0, $scope, $activeOrgId, $sessionUserId
     ]);
     
     $contract_id = (int)$pdo->lastInsertId();

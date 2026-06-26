@@ -1,7 +1,9 @@
 <?php
 // src/views/pages/clients-edit.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 $id = (int)($_GET['id'] ?? 0);
+require_record_ownership($pdo, 'clients', $id);
 $st = $pdo->prepare('SELECT c.*, o.name AS organization_name FROM clients c LEFT JOIN organizations o ON o.id = c.organization_id WHERE c.id=?');
 $st->execute([$id]);
 $client = $st->fetch(PDO::FETCH_ASSOC);

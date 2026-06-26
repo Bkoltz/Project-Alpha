@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/payments-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
@@ -10,6 +11,13 @@ if($client_id>0){$where[]='c.id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='p.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='p.created_at<=?';$p[]=$end.' 23:59:59';}
+
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'i', (int)$_SESSION['user']['id']);
+if ($scopeWhere) {
+    $where[] = $scopeWhere;
+    $p = array_merge($p, $scopeParams);
+}
+
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;

@@ -29,7 +29,8 @@ docker cp public/assets/styles.css project-alpha-web-1:/var/www/html/assets/styl
 2. **CSS**: List pages and create/edit pages use **main branch inline CSS styling** (not CSS classes like pa-table, btn, alert). Dev-only pages (expenses, financial dashboard, legal, settings) use CSS classes from the appended section of `styles.css`.
 3. **JS**: All JS files are in `public/assets/js/` (NOT `public/js/`). Templates reference `/assets/js/*.js`. JS files are dev versions — supersets of main's functions. Do NOT restore main's JS files.
 4. **Cross-branch restoration**: When restoring files from `main` to `dev`, you MUST patch SQL WHERE/SELECT/JOIN clauses for the unified schema. Main uses old schema columns. See `CONTEXT.md` for details.
-5. **Dashboard**: `home.php` is the dev redesigned 466-line version with SVG charts. Do NOT replace with main's 77-line version.
+5. **Dashboard**: `home.php` is the dev redesigned 466-line version with SVG charts (admin financial dashboard). `user-dashboard.php` is the member landing page with card-based module quick-access. Do NOT replace with main's 77-line version.
+6. **ACL**: The ACL system uses 4 system roles (owner=2, admin=1, staff=3, member=4) with per-user overrides. `scope_clause()` in `src/utils/acl.php` provides org-level scoping for all non-admin roles. `acl_middleware.php` maps pages to permissions. `header.php` uses `nav_can()` to filter the navigation sidebar by user permissions.
 
 ## Architecture
 

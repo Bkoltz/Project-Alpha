@@ -312,6 +312,54 @@ if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     }
 }
 
+// Global error/exception/shutdown handlers: route PHP errors to Monolog with error_log() fallback
+require_once __DIR__ . '/../src/utils/logger.php';
+$errLogger = app_logger('error');
+set_error_handler(function ($severity, $message, $file, $line) use ($errLogger) {
+    if (!(error_reporting() & $severity)) {
+        return false;
+    }
+    try {
+        $errLogger->error('PHP error', [
+            'severity' => $severity,
+            'message'  => $message,
+            'file'     => $file,
+            'line'     => $line,
+        ]);
+    } catch (Throwable $e) {
+        error_log(sprintf('[PHP error] severity=%d message=%s file=%s line=%d', $severity, $message, $file, $line));
+    }
+    return true;
+});
+set_exception_handler(function ($e) use ($errLogger) {
+    try {
+        $errLogger->error('Uncaught exception', [
+            'exception' => get_class($e),
+            'message'   => $e->getMessage(),
+            'file'      => $e->getFile(),
+            'line'      => $e->getLine(),
+            'trace'     => $e->getTraceAsString(),
+        ]);
+    } catch (Throwable $e2) {
+        error_log('[Uncaught exception] ' . get_class($e) . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    }
+});
+register_shutdown_function(function () use ($errLogger) {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        try {
+            $errLogger->error('Fatal shutdown', [
+                'type'    => $e['type'],
+                'message' => $e['message'],
+                'file'    => $e['file'],
+                'line'    => $e['line'],
+            ]);
+        } catch (Throwable $_e) {
+            error_log(sprintf('[Fatal shutdown] type=%d message=%s file=%s line=%d', $e['type'], $e['message'], $e['file'], $e['line']));
+        }
+    }
+});
+
 // Audit middleware: guarantees baseline audit rows for sensitive actions
 // (payments, 2FA changes, API keys, exports, deletes) even when the routed
 // controller doesn't call audit_log() itself. See src/utils/audit_middleware.php.
@@ -321,6 +369,14 @@ try {
     audit_middleware($pdo, $page);
 } catch (Throwable $e) {
     @error_log('[audit] middleware init failed: ' . $e->getMessage());
+}
+
+// ACL middleware — permission check after login, before controller dispatch
+try {
+    require_once __DIR__ . '/../src/utils/acl_middleware.php';
+    acl_middleware($pdo, $page);
+} catch (Throwable $e) {
+    @error_log('[acl] middleware failed: ' . $e->getMessage());
 }
 
 // API/GET endpoints that should bypass layout (still require auth by default)
@@ -351,6 +407,18 @@ if ($page === 'financial/financial-api') {
 }
 if ($page === 'settings/item-library-search') {
     require_once __DIR__ . '/../src/controllers/settings/item_library_search.php';
+    exit;
+}
+if ($page === 'settings/logs') {
+    require_once __DIR__ . '/../src/views/pages/settings/logs.php';
+    exit;
+}
+if ($page === 'settings/permissions') {
+    require_once __DIR__ . '/../src/views/pages/settings/permissions.php';
+    exit;
+}
+if ($page === 'settings/permissions-handler') {
+    require_once __DIR__ . '/../src/controllers/settings/permissions_handler.php';
     exit;
 }
 if ($page === 'custom-fields-ajax') {
@@ -437,6 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/tax-rates-handler',
         'settings/tax-import-handler',
         'settings/links-handler',
+        'settings/permissions-handler',
         'settings/custom-fields-handler',
         'settings/item-library-handler',
         'settings/document-customization-save',
@@ -630,6 +699,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/links-handler') {
         require_once __DIR__ . '/../src/controllers/settings/links_handler.php';
+        exit;
+    }
+    if ($page === 'settings/permissions-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/permissions_handler.php';
+        exit;
+    }
+    if ($page === 'settings/logs-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/logs_handler.php';
         exit;
     }
     if ($page === 'settings/custom-fields-handler') {

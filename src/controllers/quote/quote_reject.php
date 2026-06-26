@@ -2,6 +2,7 @@
 // src/controllers/quote_reject.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 // CSRF verification
 require_once __DIR__ . '/../../utils/csrf.php';
@@ -15,6 +16,7 @@ if ($id <= 0) {
   header('Location: /?page=quote/quotes-list&error=Invalid%20quote');
   exit;
 }
+require_record_ownership($pdo, 'quotes', $id);
 
 // Get quote type before rejecting for proper redirect
 $quoteType = 'regular';

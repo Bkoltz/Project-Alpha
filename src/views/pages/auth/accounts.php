@@ -20,6 +20,35 @@ $csrf = csrf_token();
 // Fetch all users
 $stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Canonical permission catalog for the create-page grid
+require_once __DIR__ . '/../../../utils/permission_catalog.php';
+$permissionGroupsCreate = permission_catalog();
+
+// Build member-role defaults map for the create-page JS UX hint.
+// Fallback: core modules get true, everything else false.
+$memberDefaults = [];
+try {
+    $stmt = $pdo->prepare("SELECT rp.permission, rp.allowed FROM role_permissions rp JOIN roles r ON r.id = rp.role_id WHERE r.name = 'member' AND r.is_system = 1");
+    $stmt->execute();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!empty($rows)) {
+        foreach ($rows as $row) {
+            $memberDefaults[$row['permission']] = (bool)$row['allowed'];
+        }
+    }
+} catch (Throwable $e) {
+    $rows = [];
+}
+
+if (empty($memberDefaults)) {
+    $memberTrueGroups = ['Quotes', 'Contracts', 'Invoices', 'Clients', 'Projects', 'Jobs', 'Organizations', 'Public Links'];
+    foreach ($permissionGroupsCreate as $group => $permissions) {
+        foreach ($permissions as $perm) {
+            $memberDefaults[$perm] = in_array($group, $memberTrueGroups, true);
+        }
+    }
+}
 ?>
 <section>
   <h2>Account Management</h2>
@@ -40,52 +69,213 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="alert alert-danger"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
 
+  <?php if (!isset($_GET['action']) || $_GET['action'] !== 'create'): ?>
   <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0">
     <p style="color:#6b7280">Manage user accounts, roles, and permissions</p>
     <a href="/?page=accounts&action=create" style="padding:10px 16px;border-radius:8px;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600">+ Create User</a>
   </div>
+  <?php endif; ?>
 
   <?php if (isset($_GET['action']) && $_GET['action'] === 'create'): ?>
     <!-- Create User Form -->
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:16px 0;max-width:600px">
+    <style>
+      .pa-create-layout { max-width: 980px; }
+      .pa-create-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; }
+      .pa-create-card h3 { margin: 0 0 16px 0; }
+      .pa-create-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      .pa-create-grid label { display: flex; flex-direction: column; gap: 4px; }
+      .pa-create-grid input,
+      .pa-create-grid select { width: 100%; box-sizing: border-box; }
+      .pa-create-actionbar { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+      @media (max-width: 720px) {
+        .pa-create-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+
+    <script>
+      window.PA_USER_DEFAULTS = <?php echo json_encode($memberDefaults, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+      // INTENTIONAL: UX hint only. Enforcement is server-side in acl_middleware.php.
+    </script>
+
+    <div class="pa-create-layout">
       <h3 style="margin-top:0">Create New User</h3>
-      <form method="post" action="/?page=accounts-create" class="grid">
+
+      <form method="post" action="/?page=accounts-create">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
 
-        <label>
-          <div style="margin-bottom:4px;font-weight:600">Email *</div>
-          <input required type="email" name="email" class="input" placeholder="user@example.com">
-        </label>
+        <div class="pa-create-card" style="margin-bottom:16px;">
+          <h3>Account Details</h3>
+          <div class="pa-create-grid">
+            <label>
+              <span style="font-weight:600">Email *</span>
+              <input required type="email" name="email" class="input" placeholder="user@example.com">
+            </label>
 
-        <label>
-          <div style="margin-bottom:4px;font-weight:600">Username</div>
-          <input type="text" name="username" class="input" placeholder="Optional">
-        </label>
+            <label>
+              <span style="font-weight:600">Username</span>
+              <input type="text" name="username" class="input" placeholder="Optional">
+            </label>
 
-        <label>
-          <div style="margin-bottom:4px;font-weight:600">Role *</div>
-          <select required name="role" class="input">
-            <option value="user">User</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
+            <label>
+              <span style="font-weight:600">Role *</span>
+              <select required name="role" id="account-role-select" class="input">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
 
-        <label>
-          <div style="margin-bottom:4px;font-weight:600">Password *</div>
-          <input required minlength="8" type="password" name="password" class="input" placeholder="Min 8 characters">
-        </label>
+            <label>
+              <span style="font-weight:600">Password *</span>
+              <input required minlength="8" type="password" name="password" class="input" placeholder="Min 8 characters">
+            </label>
+          </div>
 
-        <label>
-          <input type="checkbox" name="force_reset" value="1">
-          <span>Force password change on first login</span>
-        </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:16px;">
+            <input type="checkbox" name="force_reset" value="1">
+            <span>Force password change on first login</span>
+          </label>
+        </div>
 
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create User</button>
-          <a href="/?page=accounts" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151">Cancel</a>
+        <div id="permissions-panel" class="pa-create-card" style="margin-bottom:16px;">
+          <h3>Permissions</h3>
+          <p style="margin:0 0 16px 0;color:#6b7280;font-size:14px;">Set what this user can access. Admins always have full access — these settings apply to non-admin users only.</p>
+
+          <div id="admin-permissions-note" style="display:none;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;color:#0c4a6e;">
+            <p style="margin:0;">Admins have full access to everything. Per-permission settings don't apply to admin accounts.</p>
+          </div>
+
+          <div id="permissions-grid">
+            <div style="display:grid;gap:12px;">
+              <?php foreach ($permissionGroupsCreate as $group => $permissions): ?>
+                <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff;">
+                  <legend style="padding:0 6px;font-weight:600;font-size:13px;"><?php echo htmlspecialchars($group); ?></legend>
+                  <div style="margin-bottom:8px;display:flex;gap:8px;">
+                    <button type="button" onclick="selectAllInSection(this, 'allow')" style="padding:4px 10px;border-radius:4px;border:1px solid #d1d5db;background:#f0fdf4;color:#166534;font-size:12px;cursor:pointer;">Allow All</button>
+                    <button type="button" onclick="selectAllInSection(this, 'deny')" style="padding:4px 10px;border-radius:4px;border:1px solid #d1d5db;background:#fef2f2;color:#991b1b;font-size:12px;cursor:pointer;">Deny All</button>
+                  </div>
+                  <div style="display:grid;gap:6px;grid-template-columns:1fr 1fr 2fr;">
+                    <div style="font-size:11px;font-weight:600;color:#6b7280;">Allow</div>
+                    <div style="font-size:11px;font-weight:600;color:#6b7280;">Deny</div>
+                    <div style="font-size:11px;font-weight:600;color:#6b7280;">Permission</div>
+                    <?php foreach ($permissions as $perm): ?>
+                      <?php
+                      $allowKey = 'allow_' . str_replace('.', '_', $perm);
+                      $denyKey  = 'deny_' . str_replace('.', '_', $perm);
+                      $label    = ucfirst(str_replace('_', ' ', explode('.', $perm, 2)[1] ?? $perm));
+                      $defaultAllowed = !empty($memberDefaults[$perm]);
+                      ?>
+                      <label style="display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                        <input type="checkbox" name="<?php echo htmlspecialchars($allowKey); ?>" value="1" <?php if ($defaultAllowed) echo 'checked'; ?>>
+                      </label>
+                      <label style="display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                        <input type="checkbox" name="<?php echo htmlspecialchars($denyKey); ?>" value="1" <?php if (!$defaultAllowed) echo 'checked'; ?>>
+                      </label>
+                      <div style="font-size:12px;"><?php echo htmlspecialchars($label); ?> <span style="color:#9ca3af;font-size:11px;">(<?php echo htmlspecialchars($perm); ?>)</span></div>
+                    <?php endforeach; ?>
+                  </div>
+                </fieldset>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
+
+        <div class="pa-create-actionbar">
+          <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Create User</button>
+          <button type="button" id="reset-to-defaults" style="padding:10px 16px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;">Reset to Defaults</button>
+          <a href="/?page=accounts" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151;">Cancel</a>
         </div>
       </form>
     </div>
+
+    <script>
+    function selectAllInSection(btn, type) {
+      var fieldset = btn.closest('fieldset');
+      var checkboxes = fieldset.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(function(cb) {
+        if (type === 'allow' && cb.name.startsWith('allow_')) {
+          cb.checked = true;
+          var denyName = cb.name.replace('allow_', 'deny_');
+          var denyCb = fieldset.querySelector('input[name="' + denyName + '"]');
+          if (denyCb) denyCb.checked = false;
+        } else if (type === 'deny' && cb.name.startsWith('deny_')) {
+          cb.checked = true;
+          var allowName = cb.name.replace('deny_', 'allow_');
+          var allowCb = fieldset.querySelector('input[name="' + allowName + '"]');
+          if (allowCb) allowCb.checked = false;
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var roleSelect = document.getElementById('account-role-select');
+      var panel = document.getElementById('permissions-panel');
+      var grid = document.getElementById('permissions-grid');
+      var adminNote = document.getElementById('admin-permissions-note');
+
+      function applyRoleDefaults() {
+        if (!window.PA_USER_DEFAULTS) return;
+        Object.keys(window.PA_USER_DEFAULTS).forEach(function(perm) {
+          var key = perm.replace(/\./g, '_');
+          var allowCb = document.querySelector('input[name="allow_' + key + '"]');
+          var denyCb  = document.querySelector('input[name="deny_' + key + '"]');
+          if (allowCb && denyCb) {
+            var allowed = !!window.PA_USER_DEFAULTS[perm];
+            allowCb.checked = allowed;
+            denyCb.checked = !allowed;
+          }
+        });
+      }
+
+      function updateForRole() {
+        if (!roleSelect || !panel) return;
+        if (roleSelect.value === 'admin') {
+          panel.style.display = 'none';
+          if (adminNote) adminNote.style.display = 'block';
+          if (grid) grid.style.display = 'none';
+        } else {
+          panel.style.display = 'block';
+          if (adminNote) adminNote.style.display = 'none';
+          if (grid) grid.style.display = 'block';
+        }
+      }
+
+      var resetBtn = document.getElementById('reset-to-defaults');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+          applyRoleDefaults();
+        });
+      }
+
+      // Mutual exclusion: every permission is either allow or deny.
+      document.querySelectorAll('input[name^="allow_"]').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+          var denyName = this.name.replace('allow_', 'deny_');
+          var denyCb = document.querySelector('input[name="' + denyName + '"]');
+          if (!denyCb) return;
+          if (this.checked) {
+            denyCb.checked = false;
+          } else {
+            denyCb.checked = true;
+          }
+        });
+      });
+      document.querySelectorAll('input[name^="deny_"]').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+          var allowName = this.name.replace('deny_', 'allow_');
+          var allowCb = document.querySelector('input[name="' + allowName + '"]');
+          if (!allowCb) return;
+          if (this.checked) {
+            allowCb.checked = false;
+          } else {
+            allowCb.checked = true;
+          }
+        });
+      });
+
+      if (roleSelect) roleSelect.addEventListener('change', updateForRole);
+      updateForRole();
+    });
+    </script>
   <?php else: ?>
     <!-- Users List -->
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">

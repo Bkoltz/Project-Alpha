@@ -4,6 +4,11 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
+require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/audit.php';
+
+$__orgId = get_active_org_id() ?: null;
+$__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
@@ -66,8 +71,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields) VALUES (?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson]);
+    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
     $invoice_id = (int)$pdo->lastInsertId();
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);
@@ -95,6 +100,8 @@ try {
     if ($project_id) {
         $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, $invoice_id]);
     }
+    
+    audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator]);
     
     $pdo->commit();
 } catch (Throwable $e) {

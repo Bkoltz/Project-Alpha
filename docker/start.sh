@@ -71,8 +71,8 @@ fi
 ADMIN_PASSWORD_HASH=$(php -r 'echo password_hash(getenv("ADMIN_PASSWORD"), PASSWORD_DEFAULT);')
 echo "Using admin password hash: ${ADMIN_PASSWORD_HASH}"
 
-# Replace placeholder in SQL files (use a non-/ delimiter to avoid issues with bcrypt hashes)
-for sql_file in /usr/local/share/app-migrations/*.sql; do
+# Replace placeholder in all SQL files used during boot (both copies)
+for sql_file in /usr/local/share/app-migrations/*.sql /docker-entrypoint-initdb.d/*.sql; do
   if [ -f "$sql_file" ]; then
     sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" "$sql_file"
   fi
@@ -122,28 +122,34 @@ mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${
 " || echo "⚠️  WARNING: admin user upsert failed — admin password may not have been updated this boot."
 
 mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
-  INSERT INTO user_organizations (user_id, organization_id, role, is_default)
+  INSERT INTO user_organizations (user_id, organization_id, role, role_id, is_default)
   VALUES (
     (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1),
     (SELECT id FROM organizations ORDER BY id ASC LIMIT 1),
     'owner',
+    (SELECT id FROM roles WHERE name='owner' AND is_system=1 LIMIT 1),
     1
   )
-  ON DUPLICATE KEY UPDATE \`role\`='owner', \`is_default\`=1;
+  ON DUPLICATE KEY UPDATE \`role\`='owner', \`role_id\`=VALUES(role_id), \`is_default\`=1;
 " || true
 
-# 2) Runtime, always safe to re-run
+# 2) Run PHP migration runner BEFORE Apache starts. It tracks applied state
+#    in schema_migrations and tolerates per-file failures non-fatally.
+echo "Running PHP migration runner (state-tracked, non-fatal errors)..."
+php /var/www/src/migrations/run_migrations.php --verbose 2>&1 || echo "WARNING: Migration runner reported errors (non-fatal)"
+
+# 2b) Runtime SQL file (kept as an idempotent fallback / legacy hook)
 if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
   echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
   echo "Debug: Executing runtime.sql from $(ls -l /usr/local/share/app-migrations/runtime.sql)"
-  
+
   # Execute with verbose error reporting
   set +e  # Temporarily disable exit on error
   mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
        "/usr/local/share/app-migrations/runtime.sql" 2>&1 | tee /tmp/migration.log
   MIGRATION_EXIT=${PIPESTATUS[0]}
   set -e  # Re-enable exit on error
-  
+
   if [ $MIGRATION_EXIT -eq 0 ]; then
     echo "✅ Runtime migrations applied (or already up-to-date)."
   else
@@ -185,6 +191,18 @@ JSON
     chown www-data:www-data "${CONFIG_DIR}/settings.json" || true
     chmod 664 "${CONFIG_DIR}/settings.json" || true
   fi
+
+  # Ensure dedicated log directories exist with correct permissions
+  for log_subdir in logs/system-logs logs/cron-logs; do
+    full_dir="${CONFIG_DIR}/${log_subdir}"
+    if [ ! -d "$full_dir" ]; then
+      echo "Creating ${full_dir}..."
+      mkdir -p "$full_dir" || true
+    fi
+    chown -R www-data:www-data "$full_dir" 2>/dev/null || true
+    chmod 775 "$full_dir" 2>/dev/null || true
+  done
+
   if [ ! -d "${CONFIG_DIR}/uploads" ]; then
     mkdir -p "${CONFIG_DIR}/uploads" || true
     chown -R www-data:www-data "${CONFIG_DIR}/uploads" || true

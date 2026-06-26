@@ -4,8 +4,10 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 $id = (int)($_GET['id'] ?? 0);
+require_record_ownership($pdo, 'contracts', $id);
 $c = $pdo->prepare('SELECT co.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE co.id=?');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);

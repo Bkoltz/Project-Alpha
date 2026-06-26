@@ -3,9 +3,11 @@
 // Handles uploading a signed PDF and activating the contract (no invoice creation here)
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
 if ($contract_id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
+require_record_ownership($pdo, 'contracts', $contract_id);
 
 // Validate upload
 if (empty($_FILES['signed_pdf']) || !is_uploaded_file($_FILES['signed_pdf']['tmp_name'])) {

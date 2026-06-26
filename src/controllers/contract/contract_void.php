@@ -1,9 +1,11 @@
 <?php
 // src/controllers/contract_void.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
+require_record_ownership($pdo, 'contracts', $id);
 
 $pdo->beginTransaction();
 try {

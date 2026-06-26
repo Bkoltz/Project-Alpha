@@ -3,7 +3,9 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 $id = (int)($_GET['id'] ?? 0);
+require_record_ownership($pdo, 'contracts', $id);
 $co = $pdo->prepare('SELECT * FROM contracts WHERE id=?');
 $co->execute([$id]);
 $contract = $co->fetch(PDO::FETCH_ASSOC);

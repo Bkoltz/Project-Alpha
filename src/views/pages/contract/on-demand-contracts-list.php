@@ -27,6 +27,13 @@ if($doc_no>0){ $where[]='odc.doc_number=?'; $p[] = $doc_no; }
 if($min_price !== null){ $where[]='odc.price_per_invoice>=?'; $p[] = $min_price; }
 if($max_price !== null){ $where[]='odc.price_per_invoice<=?'; $p[] = $max_price; }
 
+require_once __DIR__ . '/../../../utils/acl.php';
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'odc', (int)$_SESSION['user']['id']);
+if ($scopeWhere !== '') {
+    $where[] = ltrim($scopeWhere, ' AND');
+    $p = array_merge($p, $scopeParams);
+}
+
 $per = (int)($_GET['per_page'] ?? 50); 
 if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));

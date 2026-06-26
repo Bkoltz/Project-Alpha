@@ -1,9 +1,9 @@
 <?php
 // src/utils/cron_logger.php
-// Unified cron logging that writes to the same log file as the main app
+// Unified cron logging that writes to the dedicated cron log directory
 
 /**
- * Log a cron job event to the same log file as the main application
+ * Log a cron job event to the dedicated cron log directory
  * 
  * @param string $jobName The name of the cron job
  * @param string $message The log message
@@ -16,12 +16,11 @@ function cron_log(string $jobName, string $message, array $context = [], string 
         $day = $date->format('Y-m-d');
         $time = $date->format('Y-m-d H:i:s');
         
-        // Determine log directory - same as app_log
+        // Cron logs live under /config/logs/cron-logs/
         $candidates = [
-            '/var/www/config/uploads/logs',
-            __DIR__ . '/../../config/uploads/logs',
-            __DIR__ . '/../../uploads/logs',
-            __DIR__ . '/../../logs',
+            '/var/www/config/logs/cron-logs',
+            __DIR__ . '/../../config/logs/cron-logs',
+            __DIR__ . '/../../logs/cron',
         ];
         
         $logDir = null;

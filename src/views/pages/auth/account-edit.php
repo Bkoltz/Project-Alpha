@@ -41,6 +41,9 @@ try {
 
 $success = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
+
+// Pass the current target role to the permissions partial so it can hide the grid for admins.
+$targetRole = $user['role'];
 ?>
 <section>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
@@ -58,52 +61,75 @@ $error = $_GET['error'] ?? '';
     <div class="alert alert-danger"><?php echo e($error); ?></div>
   <?php endif; ?>
 
-  <div style="display:grid;gap:24px;grid-template-columns:1fr 1fr;align-items:start;">
-    <!-- Left: Account Details -->
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
-      <h3 style="margin-top:0">Account Details</h3>
-      <form method="post" action="/?page=accounts-update" style="display:grid;gap:12px;">
+  <style>
+    .pa-edit-layout { display: grid; gap: 24px; align-items: start; }
+    .pa-edit-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; }
+    .pa-edit-card h3 { margin: 0 0 16px 0; }
+    .pa-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .pa-edit-grid label { display: flex; flex-direction: column; gap: 4px; }
+    .pa-edit-grid input,
+    .pa-edit-grid select { width: 100%; box-sizing: border-box; }
+    .pa-edit-actionbar { margin-top: 4px; }
+    .pa-edit-secondary { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+    @media (max-width: 960px) {
+      .pa-edit-secondary { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .pa-edit-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <div class="pa-edit-layout">
+    <!-- Account Details -->
+    <div class="pa-edit-card">
+      <h3>Account Details</h3>
+      <form method="post" action="/?page=accounts-update">
         <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
 
-        <label>
-          <div style="margin-bottom:4px;font-weight:600">Email *</div>
-          <input required type="email" name="email" value="<?php echo e($user['email']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
-        </label>
+        <div class="pa-edit-grid">
+          <label>
+            <span style="font-weight:600">Email *</span>
+            <input required type="email" name="email" value="<?php echo e($user['email']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
+          </label>
 
-        <label>
-          <div style="margin-bottom:4px;font-weight:600">Username</div>
-          <input type="text" name="username" value="<?php echo e($user['username'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
-        </label>
+          <label>
+            <span style="font-weight:600">Username</span>
+            <input type="text" name="username" value="<?php echo e($user['username'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
+          </label>
 
-        <label>
-          <div style="margin-bottom:4px;font-weight:600">Role *</div>
-          <select required name="role" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
-            <option value="user" <?php echo $user['role'] === 'user' ? 'selected' : ''; ?>>User</option>
-            <option value="admin" <?php echo $user['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
-          </select>
-        </label>
+          <label>
+            <span style="font-weight:600">Role *</span>
+            <select required name="role" id="account-role-select" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
+              <option value="user" <?php echo $user['role'] === 'user' ? 'selected' : ''; ?>>User</option>
+              <option value="admin" <?php echo $user['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
+            </select>
+          </label>
+        </div>
 
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" name="is_disabled" value="1" <?php echo ($user['is_disabled'] ?? 0) ? 'checked' : ''; ?>>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:16px;">
+          <input type="checkbox" name="is_disabled" value="1" <?php echo ($user['is_disabled'] ?? 0) ? 'checked' : ''; ?>
           <span>Disable account (prevents login)</span>
         </label>
 
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" name="force_reset" value="1" <?php echo ($user['force_password_reset'] ?? 0) ? 'checked' : ''; ?>>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;">
+          <input type="checkbox" name="force_reset" value="1" <?php echo ($user['force_password_reset'] ?? 0) ? 'checked' : ''; ?>
           <span>Force password change on next login</span>
         </label>
 
-        <div style="margin-top:4px;">
+        <div class="pa-edit-actionbar">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save Changes</button>
         </div>
       </form>
     </div>
 
-    <!-- Right: 2FA + Security -->
-    <div style="display:grid;gap:16px;">
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
-        <h3 style="margin-top:0">Two-Factor Authentication</h3>
+    <!-- Permissions (full-width card) -->
+    <?php include __DIR__ . '/../account/permissions_overrides.php'; ?>
+
+    <!-- Secondary actions: 2FA, Reset Password, Danger Zone -->
+    <div class="pa-edit-secondary">
+      <div class="pa-edit-card">
+        <h3>Two-Factor Authentication</h3>
         <p style="margin:0 0 12px;">Status:
           <span style="padding:4px 10px;border-radius:4px;font-size:13px;font-weight:600;<?php echo $twofaEnabled ? 'background:#d1fae5;color:#065f46' : 'background:#f3f4f6;color:#374151'; ?>">
             <?php echo $twofaEnabled ? 'Enabled' : 'Not enabled'; ?>
@@ -120,13 +146,13 @@ $error = $_GET['error'] ?? '';
         <?php endif; ?>
       </div>
 
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
-        <h3 style="margin-top:0">Reset Password</h3>
+      <div class="pa-edit-card">
+        <h3>Reset Password</h3>
         <form method="post" action="/?page=accounts-reset-password" style="display:grid;gap:12px;margin-top:12px;">
           <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
           <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
           <label>
-            <div style="margin-bottom:4px;font-weight:600">New Password</div>
+            <span style="font-weight:600">New Password</span>
             <input required minlength="8" type="password" name="new_password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;" placeholder="Min 8 characters">
           </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -137,8 +163,8 @@ $error = $_GET['error'] ?? '';
         </form>
       </div>
 
-      <div style="background:#fff;border:1px solid #fca5a5;border-radius:8px;padding:20px;">
-        <h3 style="margin-top:0;color:#991b1b">Danger Zone</h3>
+      <div class="pa-edit-card" style="border-color:#fca5a5;">
+        <h3 style="color:#991b1b">Danger Zone</h3>
         <p style="color:#6b7280;font-size:14px;margin:8px 0 16px;">Permanently delete this user account. Quotes, invoices, contracts, and other business records will remain in the system and are not affected.</p>
         <form method="post" action="/?page=accounts-delete" onsubmit="return confirm('Are you sure you want to permanently delete this user? This cannot be undone. Related business records will NOT be deleted.')">
           <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">

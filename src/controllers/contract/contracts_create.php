@@ -3,6 +3,11 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
+require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/audit.php';
+
+$__orgId = get_active_org_id() ?: null;
+$__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 // Route to appropriate handler based on document type
 $doc_type = $_POST['doc_type'] ?? 'regular';
@@ -87,8 +92,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson]);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields, organization_id, created_by) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      ->execute([$client_id, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $__creator]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
@@ -116,8 +121,8 @@ try{
 
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date]);
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$co_id, null, $client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
   $invoice_id = (int)$pdo->lastInsertId();
   $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
   foreach($items as $it){ $ii->execute([$invoice_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
@@ -148,6 +153,9 @@ try{
       $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $co_id]);
       $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, $invoice_id]);
   }
+
+  audit_log($pdo, 'contract.create', 'contract', $co_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'invoice_id' => $invoice_id]);
+  audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['contract_id' => $co_id, 'client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'auto_generated' => true]);
 
   $pdo->commit();
 }catch(Throwable $e){

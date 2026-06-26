@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/twig.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 $orgId = 1;
 
@@ -14,9 +15,10 @@ $clientId = (int)($_GET['client_id'] ?? 0);
 $billable = $_GET['billable'] ?? '';
 $status = $_GET['status'] ?? '';
 
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'e', (int)$_SESSION['user']['id']);
+
 $where = ['e.organization_id = ?'];
 $params = [$orgId];
-
 if ($start) { $where[] = 'e.expense_date >= ?'; $params[] = $start; }
 if ($end) { $where[] = 'e.expense_date <= ?'; $params[] = $end; }
 if ($categoryId > 0) { $where[] = 'e.category_id = ?'; $params[] = $categoryId; }
@@ -25,6 +27,7 @@ if ($clientId > 0) { $where[] = 'e.client_id = ?'; $params[] = $clientId; }
 if ($billable === '1') { $where[] = 'e.is_billable = 1'; }
 if ($billable === '0') { $where[] = 'e.is_billable = 0'; }
 if ($status) { $where[] = 'e.status = ?'; $params[] = $status; }
+if ($scopeWhere !== '') { $where[] = ltrim($scopeWhere, ' AND'); }
 
 $whereSQL = implode(' AND ', $where);
 
@@ -34,7 +37,7 @@ $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses e WHERE {$whereSQL}");
-$countStmt->execute($params);
+$countStmt->execute(array_merge($params, $scopeParams));
 $total = (int)$countStmt->fetchColumn();
 
 $sql = "
@@ -48,7 +51,7 @@ $sql = "
     LIMIT $per OFFSET $offset
 ";
 $stmt = $pdo->prepare($sql);
-$stmt->execute($params);
+$stmt->execute(array_merge($params, $scopeParams));
 $expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $sumStmt = $pdo->prepare("
@@ -58,7 +61,7 @@ $sumStmt = $pdo->prepare("
            COALESCE(SUM(CASE WHEN e.is_billable=1 AND e.is_reimbursed=0 THEN e.total_amount ELSE 0 END),0) as unreimbursed_total
     FROM expenses e WHERE {$whereSQL}
 ");
-$sumStmt->execute($params);
+$sumStmt->execute(array_merge($params, $scopeParams));
 $summary = $sumStmt->fetch(PDO::FETCH_ASSOC);
 
 $cats = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');

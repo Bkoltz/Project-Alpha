@@ -106,23 +106,13 @@ CREATE TABLE IF NOT EXISTS trusted_ips (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
--- MODULE 002: Organizations, API Keys & Webhooks
+-- MODULE 002: Organizations, Roles, API Keys & Webhooks
 -- ============================================================================
 
 -- ORGANIZATIONS
 CREATE TABLE IF NOT EXISTS organizations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
-    brand_name VARCHAR(150) NULL,
-    brand_logo_path VARCHAR(255) NULL,
-    brand_from_name VARCHAR(150) NULL,
-    brand_from_email VARCHAR(255) NULL,
-    brand_from_phone VARCHAR(50) NULL,
-    brand_address_line1 VARCHAR(255) NULL,
-    brand_address_line2 VARCHAR(255) NULL,
-    brand_city VARCHAR(100) NULL,
-    brand_state VARCHAR(100) NULL,
-    brand_postal VARCHAR(20) NULL,
     notes TEXT NULL,
     tax_exempt_file VARCHAR(255) NULL,
     tax_exempt_uploaded_at TIMESTAMP NULL,
@@ -131,18 +121,135 @@ CREATE TABLE IF NOT EXISTS organizations (
     UNIQUE KEY uq_organizations_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ROLES
+CREATE TABLE IF NOT EXISTS roles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    description TEXT,
+    is_system TINYINT(1) NOT NULL DEFAULT 0,
+    organization_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_role_name_org (name, organization_id),
+    INDEX idx_roles_org (organization_id),
+    INDEX idx_roles_system (is_system),
+    CONSTRAINT fk_roles_organization
+        FOREIGN KEY (organization_id) REFERENCES organizations(id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ROLE PERMISSIONS
+CREATE TABLE IF NOT EXISTS role_permissions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    role_id INT NOT NULL,
+    permission VARCHAR(80) NOT NULL,
+    allowed TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_role_permission (role_id, permission),
+    INDEX idx_rp_role (role_id),
+    INDEX idx_rp_permission (permission),
+    CONSTRAINT fk_rp_role
+        FOREIGN KEY (role_id) REFERENCES roles(id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- USER PERMISSION OVERRIDES
+CREATE TABLE IF NOT EXISTS user_permissions_overrides (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    organization_id INT NULL,
+    permission VARCHAR(80) NOT NULL,
+    allowed TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_org_permission (user_id, organization_id, permission),
+    INDEX idx_upo_user (user_id),
+    INDEX idx_upo_permission (permission),
+    CONSTRAINT fk_upo_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_upo_organization
+        FOREIGN KEY (organization_id) REFERENCES organizations(id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Seed system roles
+INSERT INTO roles (id, name, description, is_system, organization_id) VALUES
+    (1, 'admin', 'Super-admin bypass; manages app, all orgs, all data.', 1, NULL),
+    (2, 'owner', 'Full access within assigned orgs.', 1, NULL),
+    (3, 'staff', 'Operational access within assigned orgs; no settings/users/billing.', 1, NULL),
+    (4, 'member', 'Read-mostly within assigned orgs; record-level scoping.', 1, NULL)
+ON DUPLICATE KEY UPDATE
+    description = VALUES(description),
+    is_system = VALUES(is_system);
+
+-- Seed system role permissions
+INSERT INTO role_permissions (role_id, permission, allowed) VALUES
+    (1, '*', 1),
+    (1, 'payments.view', 1), (1, 'payments.create', 1),
+    (2, 'quotes.*', 1), (2, 'contracts.*', 1), (2, 'invoices.*', 1),
+    (2, 'clients.*', 1), (2, 'projects.*', 1), (2, 'jobs.*', 1),
+    (2, 'financial.view', 1), (2, 'financial.manage', 1), (2, 'financial.export', 1), (2, 'financial.audit', 1),
+    (2, 'reports.view', 1), (2, 'settings.view', 1), (2, 'settings.manage', 1),
+    (2, 'users.view', 1), (2, 'users.manage', 1), (2, 'users.reset_password', 1),
+    (2, 'api_keys.*', 1), (2, 'billing.*', 1), (2, 'organizations.*', 1),
+    (2, 'public_links.*', 1), (2, 'time_tracking.*', 1), (2, 'profile.*', 1),
+    (2, 'payments.view', 1), (2, 'payments.create', 1),
+    (3, 'quotes.*', 1), (3, 'contracts.*', 1), (3, 'invoices.*', 1),
+    (3, 'clients.*', 1), (3, 'projects.*', 1), (3, 'jobs.*', 1),
+    (3, 'organizations.*', 1), (3, 'public_links.*', 1),
+    (3, 'payments.view', 1), (3, 'payments.create', 1),
+    (3, 'financial.view', 0), (3, 'financial.manage', 0), (3, 'financial.export', 0), (3, 'financial.audit', 0),
+    (3, 'reports.view', 0),
+    (3, 'settings.view', 0), (3, 'settings.manage', 0),
+    (3, 'users.view', 0), (3, 'users.manage', 0), (3, 'users.reset_password', 0),
+    (3, 'api_keys.*', 0), (3, 'billing.*', 0),
+    (3, 'time_tracking.*', 1), (3, 'profile.*', 1), (3, '2fa.manage', 0),
+    (4, 'quotes.view', 1), (4, 'quotes.create', 1), (4, 'quotes.edit', 1), (4, 'quotes.send', 1), (4, 'quotes.approve', 1), (4, 'quotes.reject', 1),
+    (4, 'contracts.view', 1), (4, 'contracts.create', 1), (4, 'contracts.edit', 1), (4, 'contracts.sign', 1), (4, 'contracts.complete', 1), (4, 'contracts.void', 1), (4, 'contracts.send', 1),
+    (4, 'invoices.view', 1), (4, 'invoices.create', 1), (4, 'invoices.edit', 1), (4, 'invoices.void', 1), (4, 'invoices.mark_paid', 1), (4, 'invoices.send', 1),
+    (4, 'payments.view', 1), (4, 'payments.create', 1),
+    (4, 'clients.view', 1), (4, 'clients.create', 1), (4, 'clients.edit', 1), (4, 'clients.delete', 1), (4, 'clients.purge', 1), (4, 'clients.restore', 1),
+    (4, 'projects.view', 1), (4, 'projects.create', 1), (4, 'projects.edit', 1), (4, 'projects.delete', 1), (4, 'projects.search', 1),
+    (4, 'jobs.view', 1), (4, 'jobs.edit', 1), (4, 'jobs.search', 1),
+    (4, 'organizations.view', 1), (4, 'organizations.manage', 1),
+    (4, 'public_links.view', 1), (4, 'public_links.create', 1), (4, 'public_links.revoke', 1), (4, 'public_links.manage', 1),
+    (4, 'time_tracking.view', 0), (4, 'time_tracking.manage', 0),
+    (4, 'reports.view', 0),
+    (4, 'financial.view', 0), (4, 'financial.manage', 0), (4, 'financial.export', 0), (4, 'financial.audit', 0),
+    (4, 'billing.view', 0), (4, 'billing.manage', 0),
+    (4, 'users.view', 0), (4, 'users.manage', 0), (4, 'users.reset_password', 0), (4, 'users.delete', 0),
+    (4, 'api_keys.view', 0), (4, 'api_keys.manage', 0),
+    (4, 'settings.view', 0), (4, 'settings.manage', 0),
+    (4, '2fa.manage', 0),
+    (4, 'profile.view', 1), (4, 'profile.edit', 1)
+ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
+
+-- Seed void permission keys for system roles (owner/staff/member allowed)
+INSERT INTO role_permissions (role_id, permission, allowed)
+SELECT id, 'contracts.void', CASE WHEN name IN ('owner','staff','member') THEN 1 ELSE 0 END FROM roles WHERE is_system = 1
+ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
+
+INSERT INTO role_permissions (role_id, permission, allowed)
+SELECT id, 'invoices.void', CASE WHEN name IN ('owner','staff','member') THEN 1 ELSE 0 END FROM roles WHERE is_system = 1
+ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
+
 -- USER-ORGANIZATION MEMBERSHIP
 CREATE TABLE IF NOT EXISTS user_organizations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     organization_id INT NOT NULL,
-    role ENUM('owner', 'admin', 'member') NOT NULL DEFAULT 'member',
+    role VARCHAR(50) NOT NULL DEFAULT 'member',
+    role_id INT NULL,
     is_default TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_user_org (user_id, organization_id),
     INDEX idx_uo_org (organization_id),
+    INDEX idx_user_orgs_role_id (role_id),
     CONSTRAINT fk_uo_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_uo_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+    CONSTRAINT fk_uo_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_orgs_role_id FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- API KEYS
@@ -205,6 +312,7 @@ CREATE TABLE IF NOT EXISTS clients (
     postal_code VARCHAR(20) NULL,
     country VARCHAR(100) NULL DEFAULT 'US',
     organization_id INT NULL,
+    created_by INT NULL,
     config JSON NULL,
     stripe_customer_id VARCHAR(255) NULL,
     stripe_payment_method_id VARCHAR(255) NULL,
@@ -231,6 +339,7 @@ CREATE TABLE IF NOT EXISTS projects (
     client_id INT NOT NULL,
     parent_id INT NULL,
     organization_id INT NULL,
+    created_by INT NULL,
     name VARCHAR(150) NOT NULL,
     description TEXT NULL,
     status ENUM('not_started', 'active', 'overdue', 'completed', 'cancelled') NOT NULL DEFAULT 'not_started',
@@ -330,6 +439,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     client_id INT NOT NULL,
     project_id INT NULL,
     organization_id INT NULL,
+    created_by INT NULL,
     doc_number INT NULL,
     project_code VARCHAR(64) NULL,
     status ENUM('draft','pending','approved','denied','rejected','expired') NOT NULL DEFAULT 'draft',
@@ -396,6 +506,7 @@ CREATE TABLE IF NOT EXISTS contracts (
     client_id INT NOT NULL,
     project_id INT NULL,
     organization_id INT NULL,
+    created_by INT NULL,
     doc_number INT NULL,
     project_code VARCHAR(64) NULL,
     status ENUM('draft','pending','active','paused','completed','cancelled','denied','void') NOT NULL DEFAULT 'pending',
@@ -501,6 +612,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     client_id INT NOT NULL,
     project_id INT NULL,
     organization_id INT NULL,
+    created_by INT NULL,
     doc_number INT NULL,
     project_code VARCHAR(64) NULL,
     status ENUM('draft','sent','unpaid','partial','paid','overdue','cancelled','void') NOT NULL DEFAULT 'draft',

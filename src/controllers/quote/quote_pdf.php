@@ -5,6 +5,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 // Locate Composer autoload by walking up to the project root
 $autoload = '';
@@ -36,6 +37,7 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 
 $id = (int)($_GET['id'] ?? 0);
+require_record_ownership($pdo, 'quotes', $id);
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
 // Fetch document_date from the database

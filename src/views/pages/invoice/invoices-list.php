@@ -2,6 +2,7 @@
 // src/views/pages/invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/twig.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../config/app.php';
 $netDays = (int)($appConfig['net_terms_days'] ?? 30);
 if ($netDays < 0) $netDays = 0;
@@ -60,6 +61,12 @@ if ($project_code !== '') {
 if ($doc_no > 0) {
   $where[] = 'i.doc_number=?';
   $params[] = $doc_no;
+}
+
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'i', (int)$_SESSION['user']['id']);
+if ($scopeWhere) {
+  $where[] = trim($scopeWhere);
+  $params = array_merge($params, $scopeParams);
 }
 
 $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50;

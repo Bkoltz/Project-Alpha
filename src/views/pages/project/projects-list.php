@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/project/projects-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 // Get filter parameters
 $q = trim($_GET['q'] ?? '');
@@ -16,7 +17,12 @@ if ($status !== '') { $where[] = 'p.status = ?'; $params[] = $status; }
 if ($client_id !== '') { $where[] = 'p.client_id = ?'; $params[] = $client_id; }
 if ($org_id !== '') { $where[] = 'p.organization_id = ?'; $params[] = $org_id; }
 
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'p', (int)$_SESSION['user']['id']);
+
 $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+if ($scopeWhere !== '') {
+    $whereClause .= ($whereClause === '' ? 'WHERE ' : ' AND ') . ltrim($scopeWhere, ' AND');
+}
 
 $sql = "SELECT p.*, c.name AS client_name, o.name AS organization_name
         FROM projects p
@@ -26,7 +32,7 @@ $sql = "SELECT p.*, c.name AS client_name, o.name AS organization_name
         ORDER BY p.created_at DESC";
 
 $stmt = $pdo->prepare($sql);
-$stmt->execute($params);
+$stmt->execute(array_merge($params, $scopeParams));
 $rows = $stmt->fetchAll();
 
 // Get all organizations for filter dropdown
