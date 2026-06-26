@@ -26,12 +26,16 @@ Intellectual property covers ongoing deliverables.
 
 11. Indemnification: Client agrees to indemnify and hold LTT harmless from any claims arising from Client-provided content, including copyright infringement, trademark violations, and defamatory material.
 
-12. Liability: Under no circumstances shall LTT be liable for any indirect, consequential, or special damages, including loss of revenue, profits, or data. LTT's total liability shall not exceed the total fees paid by Client in the preceding 3 months.
+12. Website Content Liability: LTT is not responsible for the accuracy, legality, or truthfulness of any claims, statements, product descriptions, testimonials, or other content that Client requests LTT to publish on Client's website or digital properties. Client assumes full responsibility for all content published on their website. If any claim, lawsuit, or regulatory action arises from content on Client's website, Client shall indemnify and hold LTT harmless from all resulting damages, costs, and legal fees. LTT is a service provider publishing content at Client's direction and is not the author or originator of such content.
 
-13. Governing Law: This Contract shall be governed by and construed in accordance with the laws of the State of Wisconsin. Client shall be responsible for all legal costs if a breach occurs.
+13. Regulated Substances Disclaimer: If Client's business involves hemp, CBD, cannabis, or other regulated or restricted substances (even those legal under federal or state law), Client is solely responsible for ensuring all claims, marketing language, product descriptions, and health or therapeutic statements comply with applicable FDA, USDA, and state regulations. LTT is not responsible for verifying the legal status, regulatory compliance, or accuracy of claims related to regulated substances. Client shall indemnify and hold LTT harmless from any claims, fines, or regulatory actions arising from the marketing or sale of regulated substance products, including but not limited to claims about efficacy, safety, legality, or health benefits. The word "hemp" and similar terms may carry legal or regulatory implications that vary by jurisdiction, and Client bears sole responsibility for the use of such terms in their marketing.
 
-14. Amendment: No amendment or waiver of any provision of this agreement shall be valid unless provided in writing and signed by both parties.
+14. Liability: Under no circumstances shall LTT be liable for any indirect, consequential, or special damages, including loss of revenue, profits, or data. LTT's total liability shall not exceed the total fees paid by Client in the preceding 3 months.
 
-15. Severability: If any provision of this agreement is found to be invalid or unenforceable, the remaining provisions shall remain in full force and effect.
+15. Governing Law: This Contract shall be governed by and construed in accordance with the laws of the State of Wisconsin. Client shall be responsible for all legal costs if a breach occurs.
+
+16. Amendment: No amendment or waiver of any provision of this agreement shall be valid unless provided in writing and signed by both parties.
+
+17. Severability: If any provision of this agreement is found to be invalid or unenforceable, the remaining provisions shall remain in full force and effect.
 
 These terms cover recurring digital services: websites, ad campaigns, SEO, managed hosting.
