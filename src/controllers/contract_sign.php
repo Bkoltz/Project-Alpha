@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/recurring_billing.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
 if ($contract_id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
@@ -36,7 +37,7 @@ try {
   $c->execute([$contract_id]);
   $contract = $c->fetch(PDO::FETCH_ASSOC);
   if (!$contract) throw new Exception('Not found');
-  
+
   // Note: Deposit and signed contract can be received in any order
   // We no longer require deposit to be received before signing
 
@@ -73,16 +74,8 @@ try {
   }
   $publicUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $name);
 
-  // Save path and activate. For long-term contracts, also seed next_invoice_date
-  // (from start_date) on activation so recurring billing can begin.
-  if (($contract['contract_type'] ?? 'regular') === 'long_term') {
-    $nextInvoiceDate = $contract['next_invoice_date'] ?: ($contract['start_date'] ?: date('Y-m-d'));
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=?, next_invoice_date=? WHERE id=?')
-        ->execute([$publicUrl, 'active', $nextInvoiceDate, $contract_id]);
-  } else {
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')
-        ->execute([$publicUrl, 'active', $contract_id]);
-  }
+  // Save path and activate
+  $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')->execute([$publicUrl, 'active', $contract_id]);
 
   $pdo->commit();
 } catch (Throwable $e) {
@@ -91,36 +84,36 @@ try {
   exit;
 }
 
-// Determine the contract type for a correct redirect target and any post-activation billing.
-$contractType = 'regular';
-try {
-  $tStmt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=?');
-  $tStmt->execute([$contract_id]);
-  $contractType = (string)($tStmt->fetchColumn() ?: 'regular');
-} catch (Throwable $e) { /* default regular */ }
+// Type-aware redirect target.
+$redirectMap = [
+  'long_term' => 'contract/long-term-contracts-list',
+  'on_demand' => 'contract/on-demand-contracts-list',
+  'regular' => 'contract/contracts-list',
+];
+$contractType = (string)($contract['contract_type'] ?? 'regular');
+$redirectPage = $redirectMap[$contractType] ?? $redirectMap['regular'];
 
-// For long-term contracts, activating via signed upload should also send the first
-// invoice immediately if due (idempotent helper guards against double-billing).
-if ($contractType === 'long_term') {
-  try {
-    require_once __DIR__ . '/../../utils/recurring_billing.php';
-    $cStmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
-    $cStmt->execute([$contract_id]);
-    $ltContract = $cStmt->fetch(PDO::FETCH_ASSOC);
-    if ($ltContract && $ltContract['status'] === 'active' && !empty($ltContract['next_invoice_date']) && $ltContract['next_invoice_date'] <= date('Y-m-d')) {
-      generate_recurring_invoice($pdo, $ltContract, $appConfig);
+// For long-term contracts, generate the first invoice immediately when due.
+if ($contractType === 'long_term' && $contract && $contract['status'] === 'active') {
+  // Ensure next_invoice_date is set for newly signed contracts.
+  if (empty($contract['next_invoice_date'])) {
+    try {
+      $stmt = $pdo->prepare('UPDATE contracts SET next_invoice_date = ? WHERE id = ? AND contract_type = "long_term"');
+      $stmt->execute([$contract['start_date'], $contract_id]);
+      $contract['next_invoice_date'] = $contract['start_date'];
+    } catch (Throwable $e) {
+      @error_log('[contract_sign] Failed to set next_invoice_date for contract ' . $contract_id . ': ' . $e->getMessage());
     }
-  } catch (Throwable $e) {
-    @error_log('[contract_sign] LT first-invoice generation failed: ' . $e->getMessage());
+  }
+
+  if (!empty($contract['next_invoice_date']) && $contract['next_invoice_date'] <= date('Y-m-d')) {
+    try {
+      generate_recurring_invoice($pdo, $contract, $appConfig);
+    } catch (Throwable $e) {
+      @error_log('[contract_sign] First invoice generation failed for contract ' . $contract_id . ': ' . $e->getMessage());
+    }
   }
 }
 
-// Type-aware redirect so the user lands back on the correct list.
-$listPage = 'contract/contracts-list';
-if ($contractType === 'long_term') {
-  $listPage = 'contract/long-term-contracts-list';
-} elseif ($contractType === 'on_demand') {
-  $listPage = 'contract/on-demand-contracts-list';
-}
-header('Location: /?page=' . $listPage . '&signed=1');
+header('Location: /?page=' . $redirectPage . '&signed=1');
 exit;

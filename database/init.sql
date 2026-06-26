@@ -1366,7 +1366,11 @@ ON DUPLICATE KEY UPDATE role = VALUES(role), is_default = VALUES(is_default);
 INSERT INTO app_config (config_key, config_value) VALUES
     ('brand_name', 'Project Alpha'),
     ('timezone', 'UTC'),
-    ('primary_state', '')
+    ('primary_state', ''),
+    ('cron_enabled', '1'),
+    ('invoice_auto_send_due_7days', '1'),
+    ('invoice_auto_send_overdue_weekly', '1'),
+    ('invoice_auto_email_on_generate', '1')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);
 
 -- ============================================================================

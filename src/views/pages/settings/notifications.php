@@ -108,6 +108,14 @@
         </div>
       </label>
 
+      <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
+        <input type="checkbox" name="invoice_auto_email_on_generate" value="1" <?php echo !empty($appConfig['invoice_auto_email_on_generate']) ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div class="font-600">Automatically email invoices to clients when generated</div>
+          <div style="font-size:13px;color:var(--muted)">Email clients an invoice immediately after it is created</div>
+        </div>
+      </label>
+
       <label style="display:flex;align-items:start;gap:10px">
         <input type="checkbox" name="invoice_auto_send_overdue_weekly" value="1" <?php echo !empty($appConfig['invoice_auto_send_overdue_weekly']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div>

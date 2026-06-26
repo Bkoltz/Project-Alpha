@@ -62,24 +62,30 @@ try{
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
   
-  // Save contract signatures
-  $pdo->prepare('DELETE FROM contract_signatures WHERE contract_id=?')->execute([$id]);
-  $signatureTitles = $_POST['signature_titles'] ?? [];
-  $signatureOrders = $_POST['signature_orders'] ?? [];
-  $signatureRequired = $_POST['signature_required'] ?? [];
-  
-  if (!empty($signatureTitles)) {
-      $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
-      foreach ($signatureTitles as $idx => $title) {
-          $title = trim($title);
-          if (empty($title)) continue;
-          
-          $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
-          // Check if any of the signature_required values match this index
-          $isRequired = !empty($signatureRequired[$idx]) ? 1 : 0;
-          
-          $sigStmt->execute([$id, $title, $order, $isRequired]);
+  // Save contract signatures (non-critical; failures must not roll back contract update)
+  try {
+      $pdo->prepare('DELETE FROM contract_signatures WHERE contract_id=?')->execute([$id]);
+      $signatureTitles = $_POST['signature_titles'] ?? [];
+      if (!empty($signatureTitles)) {
+          $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
+          foreach ($signatureTitles as $title) {
+              $title = trim((string)$title);
+              if ($title === '') continue;
+
+              $lower = strtolower($title);
+              if (strpos($lower, 'admin') !== false) {
+                  $signatoryType = 'admin';
+              } elseif (strpos($lower, 'witness') !== false) {
+                  $signatoryType = 'witness';
+              } else {
+                  $signatoryType = 'client';
+              }
+
+              $sigStmt->execute([$id, $signatoryType]);
+          }
       }
+  } catch (Throwable $sigErr) {
+      @error_log('contracts_update signature insert failed: ' . $sigErr->getMessage());
   }
   
   $pdo->commit();

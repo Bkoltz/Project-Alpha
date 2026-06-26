@@ -84,10 +84,22 @@ $isOngoing = empty($contract['end_date']);
   <div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Recurring Billing Agreement</div>
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
+    <?php if (($contract['status'] ?? '') !== 'cancelled'): ?>
+      <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <input id="upload-signed-lt" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+        <?php $uplLabel = empty($contract['signed_pdf_path']) ? 'Upload Signed PDF' : 'Replace Signed PDF'; ?>
+        <button type="button" onclick="document.getElementById('upload-signed-lt').click()" class="btn btn-sm"><?php echo $uplLabel; ?></button>
+      </form>
+    <?php endif; ?>
+    <?php if (!empty($contract['signed_pdf_path'])): ?>
+      <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
+    <?php endif; ?>
   </div>
   <?php endif; ?>
 
