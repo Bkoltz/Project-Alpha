@@ -270,7 +270,7 @@ $isOngoing = empty($contract['end_date']);
     <tbody>
       <?php if ($contract['pricing_type'] === 'per_invoice'): ?>
         <tr>
-          <td colspan="3" style="padding:12px">Recurring service fee (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
+          <td colspan="3" style="padding:12px"><?php echo !empty($contract['scope']) ? htmlspecialchars($contract['scope']) : 'Recurring service fee'; ?> (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
           <td style="padding:12px;text-align:right;font-weight:600">$<?php echo number_format($contract['price_per_invoice'], 2); ?></td>
         </tr>
       <?php else: ?>
@@ -331,13 +331,21 @@ $isOngoing = empty($contract['end_date']);
           <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.'); ?>
         </td>
       </tr>
-      <tr>
-        <td colspan="4" style="padding:20px 10px 40px">
-          <div style="border-top:2px solid #111;width:50%;margin-top:40px"></div>
-          <div style="margin-top:4px;color:#4b5563">Client Signature</div>
-        </td>
-      </tr>
     </tbody>
+  </table>
+
+  <!-- Signature block -->
+  <table style="width:100%;border-collapse:collapse;margin-top:50px">
+    <tr>
+      <td style="width:60%;vertical-align:bottom;padding-right:24px">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Client Signature</div>
+      </td>
+      <td style="width:40%;vertical-align:bottom">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Date</div>
+      </td>
+    </tr>
   </table>
 
   <div style="page-break-after:always"></div>
