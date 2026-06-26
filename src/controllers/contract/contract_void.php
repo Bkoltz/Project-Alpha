@@ -13,6 +13,7 @@ try {
   $st->execute([$id]);
   $co = $st->fetch(PDO::FETCH_ASSOC);
   if (!$co) throw new Exception('Contract not found');
+  $contractType = (string)($co['contract_type'] ?? '');
 
   // Contracts enum historically doesn't include 'void' in older schemas; set to 'cancelled' to avoid enum truncation
   $pdo->prepare("UPDATE contracts SET status='cancelled', voided_at=CURRENT_TIMESTAMP WHERE id=?")->execute([$id]);
@@ -28,9 +29,11 @@ try {
   $pdo->commit();
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
-  header('Location: /?page=contract/contracts-list&error=' . urlencode($e->getMessage()));
+  $errorPage = ($contractType ?? '') === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
+  header('Location: /?page=' . $errorPage . '&id=' . $id . '&error=' . urlencode($e->getMessage()));
   exit;
 }
 
-header('Location: /?page=contract/contracts-list&voided=1');
+$successPage = ($contractType ?? '') === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
+header('Location: /?page=' . $successPage . '&id=' . $id . '&voided=1');
 exit;

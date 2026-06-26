@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
-if (!defined('PDF_MODE')) {
+if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'contracts', $id);
 }
 $c = $pdo->prepare('SELECT ltc.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts ltc JOIN clients cl ON cl.id=ltc.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE ltc.id=? AND ltc.contract_type="long_term"');
@@ -91,6 +91,9 @@ $isOngoing = empty($contract['end_date']);
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php $contractStatus = strtolower((string)($contract['status'] ?? '')); ?>
+    <?php if (($contract['status'] ?? '') === 'pending'): ?>
+      <a href="/?page=contract/contracts-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
+    <?php endif; ?>
     <?php if (!in_array($contractStatus, ['denied','cancelled','void'], true)): ?>
       <form method="post" action="/?page=contract/email-send" style="display:inline">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -112,11 +115,47 @@ $isOngoing = empty($contract['end_date']);
     <?php if (!empty($contract['signed_pdf_path'])): ?>
       <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
     <?php endif; ?>
+    <?php if (!in_array($contractStatus, ['cancelled', 'completed', 'void'], true)): ?>
+      <form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Void</button>
+      </form>
+    <?php endif; ?>
+    <?php if (in_array($contractStatus, ['denied', 'cancelled', 'void'], true)): ?>
+      <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this contract? It will be set back to pending status.');">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="type" value="contract">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Re-enable</button>
+      </form>
+    <?php endif; ?>
+    <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="contract">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <button type="submit" class="btn btn-sm">Update Document Date</button>
+    </form>
+    <?php if (!in_array($contractStatus, ['denied','cancelled','void'], true)): ?>
+      <button type="button" onclick="generatePublicLink()" class="btn btn-sm">Share Link</button>
+    <?php endif; ?>
   </div>
   <?php if (!empty($_GET['emailed'])): ?>
     <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
   <?php elseif (!empty($_GET['email_err'])): ?>
     <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['updated'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Contract updated successfully.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['voided'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">Contract voided successfully.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['reenabled'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Contract re-enabled successfully.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['date_updated'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#dbeafe;color:#1e3a8a;border:1px solid #93c5fd">Document date updated successfully.</div>
   <?php endif; ?>
   <?php endif; ?>
 
@@ -374,3 +413,58 @@ $isOngoing = empty($contract['end_date']);
   }
 </style>
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
+<?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
+<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:18px">Share Long-term Contract Link</h3>
+      <button onclick="closeShareModal()" style="border:0;background:none;font-size:20px;cursor:pointer;color:#6b7280">&times;</button>
+    </div>
+    <div id="shareLinkContent">
+      <p style="color:#6b7280;margin:0 0 16px">Generate a public link that clients can use to view and upload a signed copy of this contract.</p>
+      <label style="display:block;margin-bottom:12px">
+        <div style="font-weight:600;margin-bottom:6px">Expires in days</div>
+        <input type="number" id="linkDays" value="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" min="1" max="365" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+      </label>
+      <button onclick="createPublicLink()" style="width:100%;padding:12px;background:#4f46e5;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer">Generate Link</button>
+    </div>
+    <div id="shareLinkResult" style="display:none">
+      <div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;margin-bottom:12px">
+        <div style="font-weight:600;color:#166534;margin-bottom:4px">Link Generated</div>
+        <div style="font-size:13px;color:#15803d" id="linkExpiry"></div>
+      </div>
+      <div style="position:relative">
+        <input type="text" id="generatedLink" readonly style="width:100%;padding:10px;padding-right:80px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#f9fafb">
+        <button onclick="copyLink()" style="position:absolute;right:4px;top:4px;padding:6px 12px;border:0;border-radius:6px;background:#4f46e5;color:#fff;cursor:pointer">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function generatePublicLink() { document.getElementById('shareLinkModal').style.display = 'flex'; }
+function closeShareModal() { document.getElementById('shareLinkModal').style.display = 'none'; }
+function createPublicLink() {
+  const formData = new FormData();
+  formData.append('type', 'contract');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', document.getElementById('linkDays').value || '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>');
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  fetch('/?page=public-link-create', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) { alert(data.error || 'Failed to create link'); return; }
+      document.getElementById('shareLinkContent').style.display = 'none';
+      document.getElementById('shareLinkResult').style.display = 'block';
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkExpiry').textContent = data.expires_at ? 'Expires: ' + data.expires_at : '';
+    })
+    .catch(() => alert('Failed to create link'));
+}
+function copyLink() {
+  const input = document.getElementById('generatedLink');
+  input.select();
+  document.execCommand('copy');
+}
+document.getElementById('shareLinkModal').addEventListener('click', function(e) { if (e.target === this) closeShareModal(); });
+</script>
+<?php endif; ?>

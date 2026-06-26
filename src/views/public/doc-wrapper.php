@@ -499,9 +499,25 @@ if ($type === 'invoice') {
     <?php
       // Use the detail views - they check for PUBLIC_VIEW constant to hide admin controls
       if ($type === 'quote') {
-        require __DIR__ . '/../pages/quote/quote-details.php';
+        $quoteType = '';
+        try {
+          $typeSt = $pdo->prepare('SELECT quote_type FROM quotes WHERE id=? LIMIT 1');
+          $typeSt->execute([$rid]);
+          $quoteType = (string)($typeSt->fetchColumn() ?: '');
+        } catch (Throwable $e) { /* default to regular detail */ }
+        require $quoteType === 'long_term'
+          ? __DIR__ . '/../pages/quote/long-term-quote-details.php'
+          : __DIR__ . '/../pages/quote/quote-details.php';
       } elseif ($type === 'contract') {
-        require __DIR__ . '/../pages/contract/contract-details.php';
+        $contractType = '';
+        try {
+          $typeSt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=? LIMIT 1');
+          $typeSt->execute([$rid]);
+          $contractType = (string)($typeSt->fetchColumn() ?: '');
+        } catch (Throwable $e) { /* default to regular detail */ }
+        require $contractType === 'long_term'
+          ? __DIR__ . '/../pages/contract/long-term-contract-details.php'
+          : __DIR__ . '/../pages/contract/contract-details.php';
       } elseif ($type === 'invoice') {
         require __DIR__ . '/../pages/invoice/invoice-details.php';
       }
