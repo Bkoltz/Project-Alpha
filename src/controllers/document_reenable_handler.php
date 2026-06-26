@@ -34,7 +34,7 @@ try {
             $pdo->prepare("UPDATE quotes SET status='pending', document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$id]);
             
-            $redirectPage = 'quote/quote-details';
+            $redirectPage = ($doc['quote_type'] ?? '') === 'long_term' ? 'quote/long-term-quote-details' : 'quote/quote-details';
             break;
 
         case 'contract':
@@ -66,7 +66,7 @@ try {
                     ->execute([$id]);
             } catch (Throwable $_e) { /* ignore */ }
             
-            $redirectPage = 'contract/contract-details';
+            $redirectPage = ($doc['contract_type'] ?? '') === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
             break;
 
         case 'invoice':
@@ -101,13 +101,13 @@ try {
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('Long-term contract not found');
             
-            // Only allow re-enabling cancelled contracts
-            if ($doc['status'] !== 'cancelled') {
-                throw new Exception('Only cancelled long-term contracts can be re-enabled');
+            // Only allow re-enabling cancelled/denied/void contracts
+            if (!in_array($doc['status'], ['cancelled', 'denied', 'void'], true)) {
+                throw new Exception('Only cancelled/denied/void long-term contracts can be re-enabled');
             }
             
-            // Update status to draft
-            $pdo->prepare("UPDATE contracts SET status='draft' WHERE id=? AND contract_type='long_term'")
+            // Update status to pending and refresh document date
+            $pdo->prepare("UPDATE contracts SET status='pending', voided_at=NULL, document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=? AND contract_type='long_term'")
                 ->execute([$id]);
             
             $redirectPage = 'contract/long-term-contract-details';
@@ -120,16 +120,16 @@ try {
             $doc = $st->fetch(PDO::FETCH_ASSOC);
             if (!$doc) throw new Exception('On-demand contract not found');
             
-            // Only allow re-enabling cancelled contracts
-            if ($doc['status'] !== 'cancelled') {
-                throw new Exception('Only cancelled on-demand contracts can be re-enabled');
+            // Only allow re-enabling cancelled/denied/void contracts
+            if (!in_array($doc['status'], ['cancelled', 'denied', 'void'], true)) {
+                throw new Exception('Only cancelled/denied/void on-demand contracts can be re-enabled');
             }
             
-            // Update status to draft
-            $pdo->prepare("UPDATE contracts SET status='draft' WHERE id=? AND contract_type='on_demand'")
+            // Update status to pending and refresh document date
+            $pdo->prepare("UPDATE contracts SET status='pending', voided_at=NULL, document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=? AND contract_type='on_demand'")
                 ->execute([$id]);
             
-            $redirectPage = 'contract/on-demand-contract-details';
+            $redirectPage = 'contract/contract-details';
             break;
 
         default:

@@ -114,10 +114,10 @@ try {
 
                 // create short-lived public link
                 $token = $createPublicLink($iid);
-                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
-                if ($link === '/?page=public_doc&type=invoice&token=' . rawurlencode($token)) {
+                $link = sprintf('%s/?page=public-doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
+                if ($link === '/?page=public-doc&type=invoice&token=' . rawurlencode($token)) {
                     // fallback to relative path if app_host not set
-                    $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                    $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                 }
 
                 $to = (string)$inv['email'];
@@ -165,9 +165,9 @@ try {
 
                 // create public link for convenience
                 $token = $createPublicLink($iid);
-                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
-                if ($link === '/?page=public_doc&type=invoice&token=' . rawurlencode($token)) {
-                    $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = sprintf('%s/?page=public-doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
+                if ($link === '/?page=public-doc&type=invoice&token=' . rawurlencode($token)) {
+                    $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                 }
 
                 $to = (string)$inv['email'];
@@ -203,7 +203,7 @@ try {
                 if ($to === '') continue;
 
                 $token = $createPublicLink($iid);
-                $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                 $host = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($host !== '') { $link = $host . $link; }
 

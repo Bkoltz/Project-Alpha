@@ -19,6 +19,10 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 if ($id<=0 || $client_id<=0) { header('Location: /?page=contract/contracts-list&error=Invalid'); exit; }
+$contractTypeStmt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=? LIMIT 1');
+$contractTypeStmt->execute([$id]);
+$contractType = (string)($contractTypeStmt->fetchColumn() ?: '');
+$detailPage = $contractType === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){
   $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
@@ -89,6 +93,6 @@ try{
   }
   
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=contract/contract-details&id=' . $id . '&error=Update%20failed'); exit; }
-header('Location: /?page=contract/contract-details&id=' . $id . '&updated=1');
+}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=' . $detailPage . '&id=' . $id . '&error=Update%20failed'); exit; }
+header('Location: /?page=' . $detailPage . '&id=' . $id . '&updated=1');
 exit;

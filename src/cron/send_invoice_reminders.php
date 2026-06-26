@@ -107,7 +107,7 @@ try {
                 $token = $createPublicLink($iid);
                 $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($baseUrl === '') $baseUrl = 'http://localhost';
-                $link = $baseUrl . '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
 
                 // Build email
                 $subject = sprintf('Invoice I-%s due %s', $inv['doc_number'] ?? $iid, date('M j, Y', strtotime($inv['due_date'])));
@@ -182,7 +182,7 @@ try {
                 $token = $createPublicLink($iid);
                 $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($baseUrl === '') $baseUrl = 'http://localhost';
-                $link = $baseUrl . '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
 
                 // Build email
                 $subject = sprintf('Action Required: Overdue invoice I-%s', $inv['doc_number'] ?? $iid);

@@ -187,7 +187,7 @@ try {
                     $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
                     $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())')
                         ->execute(['invoice', $invoiceId, $token, $expiresAt]);
-                    $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                    $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                     $host = rtrim(($appConfig['app_host'] ?? ''), '/');
                     if ($host !== '') { $link = $host . $link; }
 

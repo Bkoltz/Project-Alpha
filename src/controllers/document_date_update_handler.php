@@ -20,13 +20,19 @@ try {
         case 'quote':
             $pdo->prepare("UPDATE quotes SET document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$id]);
-            $redirectPage = 'quote/quote-details';
+            $qt = $pdo->prepare('SELECT quote_type FROM quotes WHERE id=? LIMIT 1');
+            $qt->execute([$id]);
+            $quoteType = (string)($qt->fetchColumn() ?: '');
+            $redirectPage = $quoteType === 'long_term' ? 'quote/long-term-quote-details' : 'quote/quote-details';
             break;
 
         case 'contract':
             $pdo->prepare("UPDATE contracts SET document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
                 ->execute([$id]);
-            $redirectPage = 'contract/contract-details';
+            $ct = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=? LIMIT 1');
+            $ct->execute([$id]);
+            $contractType = (string)($ct->fetchColumn() ?: '');
+            $redirectPage = $contractType === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
             break;
 
         case 'invoice':
