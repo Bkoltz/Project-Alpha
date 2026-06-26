@@ -59,7 +59,6 @@ services:
       - pa_uploads:/var/www/src/uploads
       - pa_config:/var/www/config
       - pa_backups:/var/www/backups
-      - pa_cron_logs:/var/www/logs
 
   db:
     image: "mysql:8"
@@ -83,5 +82,4 @@ volumes:
   pa_uploads: {}
   pa_config: {}
   pa_backups: {}
-  pa_cron_logs: {}
   pa_db_data: {}

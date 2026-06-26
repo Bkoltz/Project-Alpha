@@ -100,7 +100,11 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 // Log to a file OUTSIDE the public web root
-$errorLogDir = __DIR__ . '/../logs';
+$errorLogDir = '/var/www/config/logs/system';
+if (!is_dir($errorLogDir)) {
+    $fallbackLogDir = __DIR__ . '/../config/logs/system';
+    $errorLogDir = $fallbackLogDir;
+}
 if (!is_dir($errorLogDir)) { @mkdir($errorLogDir, 0750, true); }
 ini_set('error_log', $errorLogDir . '/error_log.txt');
 

@@ -26,7 +26,7 @@ This folder packages the Docker cron service for Project Alpha. It is not the ac
   - `0 6 * * *` - `process_audit_schedules.php`
   - `0 8 * * *` - `send_invoice_reminders.php`
   - `0 */6 * * *` - `stripe_reconciliation.php`
-- All job output is appended to `/var/www/logs/cron.log`.
+- All job output is appended to `/var/www/config/logs/cron/cron.log`.
 - `entrypoint.sh` waits up to 120 seconds for MySQL using `mysqladmin ping` or a TCP socket test.
 - The cron image is built from this folder, while application PHP source is mounted from `./src:/var/www/src` by Docker Compose.
 

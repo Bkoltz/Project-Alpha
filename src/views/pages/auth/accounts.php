@@ -4,6 +4,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -16,14 +17,100 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
 
 // CSRF token
 $csrf = csrf_token();
+$activeOrgId = get_active_org_id();
 
 // Fetch all users
-$stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
-$users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    if ($activeOrgId > 0) {
+        $stmt = $pdo->prepare('SELECT u.id, u.email, u.username, u.role, u.is_disabled, u.force_password_reset, u.created_at, r.name AS acl_role_name FROM users u LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.organization_id = ? LEFT JOIN roles r ON r.id = uo.role_id ORDER BY u.created_at DESC');
+        $stmt->execute([$activeOrgId]);
+    } else {
+        $stmt = $pdo->query('SELECT u.id, u.email, u.username, u.role, u.is_disabled, u.force_password_reset, u.created_at, r.name AS acl_role_name FROM users u LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_default = 1 LEFT JOIN roles r ON r.id = uo.role_id ORDER BY u.created_at DESC');
+    }
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
 
 // Canonical permission catalog for the create-page grid
 require_once __DIR__ . '/../../../utils/permission_catalog.php';
 $permissionGroupsCreate = permission_catalog();
+
+$availableRoles = [];
+try {
+    $roleStmt = $pdo->prepare('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id <=> ? OR is_system = 1 ORDER BY CASE name WHEN "member" THEN 0 WHEN "staff" THEN 1 WHEN "owner" THEN 2 WHEN "admin" THEN 3 ELSE 4 END, is_system DESC, name');
+    $roleStmt->execute([$activeOrgId > 0 ? $activeOrgId : null]);
+    $availableRoles = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    @error_log('[accounts] role load failed: ' . $e->getMessage());
+}
+
+if (empty($availableRoles)) {
+    $availableRoles = [
+        ['id' => 0, 'name' => 'member', 'description' => 'Default user access.', 'is_system' => 1, 'organization_id' => null],
+        ['id' => -1, 'name' => 'admin', 'description' => 'Full administrative access.', 'is_system' => 1, 'organization_id' => null],
+    ];
+}
+
+$defaultCreateRoleId = (int)($availableRoles[0]['id'] ?? 0);
+foreach ($availableRoles as $roleRow) {
+    if (($roleRow['name'] ?? '') === 'member') {
+        $defaultCreateRoleId = (int)$roleRow['id'];
+        break;
+    }
+}
+
+$roleDefaults = [];
+$roleMeta = [];
+$flatCreatePerms = [];
+foreach ($permissionGroupsCreate as $group => $permissions) {
+    foreach ($permissions as $perm) {
+        $flatCreatePerms[$perm] = true;
+    }
+}
+
+foreach ($availableRoles as $roleRow) {
+    $roleId = (int)$roleRow['id'];
+    $roleName = (string)$roleRow['name'];
+    $roleMeta[(string)$roleId] = [
+        'name' => $roleName,
+        'isAdmin' => $roleName === 'admin',
+    ];
+    $roleDefaults[(string)$roleId] = [];
+    foreach ($flatCreatePerms as $perm => $_) {
+        $roleDefaults[(string)$roleId][$perm] = $roleName === 'admin';
+    }
+}
+
+try {
+    $ids = array_values(array_filter(array_map(static fn($r) => (int)$r['id'], $availableRoles), static fn($id) => $id > 0));
+    if (!empty($ids)) {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $rpStmt = $pdo->prepare("SELECT role_id, permission, allowed FROM role_permissions WHERE role_id IN ($placeholders)");
+        $rpStmt->execute($ids);
+        $rawRolePerms = [];
+        foreach ($rpStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $rawRolePerms[(int)$row['role_id']][(string)$row['permission']] = (bool)$row['allowed'];
+        }
+        foreach ($availableRoles as $roleRow) {
+            $roleId = (int)$roleRow['id'];
+            $roleName = (string)$roleRow['name'];
+            if ($roleName === 'admin') {
+                continue;
+            }
+            foreach ($flatCreatePerms as $perm => $_) {
+                $module = explode('.', $perm, 2)[0] ?? $perm;
+                $roleDefaults[(string)$roleId][$perm] =
+                    $rawRolePerms[$roleId][$perm]
+                    ?? $rawRolePerms[$roleId][$module . '.*']
+                    ?? false;
+            }
+        }
+    }
+} catch (Throwable $e) {
+    @error_log('[accounts] role defaults load failed: ' . $e->getMessage());
+}
 
 // Build member-role defaults map for the create-page JS UX hint.
 // Fallback: core modules get true, everything else false.
@@ -48,6 +135,10 @@ if (empty($memberDefaults)) {
             $memberDefaults[$perm] = in_array($group, $memberTrueGroups, true);
         }
     }
+}
+
+if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(string)$defaultCreateRoleId])) {
+    $roleDefaults[(string)$defaultCreateRoleId] = $memberDefaults;
 }
 ?>
 <section>
@@ -87,6 +178,20 @@ if (empty($memberDefaults)) {
       .pa-create-grid input,
       .pa-create-grid select { width: 100%; box-sizing: border-box; }
       .pa-create-actionbar { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+      #permissions-panel {
+        transition: opacity 180ms ease, max-height 220ms ease, padding 180ms ease, margin 180ms ease, border-width 180ms ease;
+        max-height: 5000px;
+        overflow: hidden;
+      }
+      #permissions-panel.pa-hidden {
+        opacity: 0;
+        max-height: 0;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
+        border-width: 0 !important;
+        pointer-events: none;
+      }
       @media (max-width: 720px) {
         .pa-create-grid { grid-template-columns: 1fr; }
       }
@@ -94,6 +199,8 @@ if (empty($memberDefaults)) {
 
     <script>
       window.PA_USER_DEFAULTS = <?php echo json_encode($memberDefaults, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+      window.PA_ROLE_DEFAULTS = <?php echo json_encode($roleDefaults, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+      window.PA_ROLE_META = <?php echo json_encode($roleMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
       // INTENTIONAL: UX hint only. Enforcement is server-side in acl_middleware.php.
     </script>
 
@@ -118,9 +225,18 @@ if (empty($memberDefaults)) {
 
             <label>
               <span style="font-weight:600">Role *</span>
-              <select required name="role" id="account-role-select" class="input">
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
+              <select required name="role_id" id="account-role-select" class="input">
+                <?php foreach ($availableRoles as $roleRow): ?>
+                  <?php
+                    $roleId = (int)$roleRow['id'];
+                    $roleName = (string)$roleRow['name'];
+                    $roleLabel = ucwords(str_replace('_', ' ', $roleName));
+                    $roleScope = (int)($roleRow['is_system'] ?? 0) === 1 ? 'System' : 'Custom';
+                  ?>
+                  <option value="<?php echo $roleId; ?>" <?php echo $roleId === $defaultCreateRoleId ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars($roleLabel . ' (' . $roleScope . ')'); ?>
+                  </option>
+                <?php endforeach; ?>
               </select>
             </label>
 
@@ -212,14 +328,26 @@ if (empty($memberDefaults)) {
       var grid = document.getElementById('permissions-grid');
       var adminNote = document.getElementById('admin-permissions-note');
 
+      function selectedRoleMeta() {
+        if (!roleSelect || !window.PA_ROLE_META) return {};
+        return window.PA_ROLE_META[roleSelect.value] || {};
+      }
+
+      function selectedRoleDefaults() {
+        if (roleSelect && window.PA_ROLE_DEFAULTS && window.PA_ROLE_DEFAULTS[roleSelect.value]) {
+          return window.PA_ROLE_DEFAULTS[roleSelect.value];
+        }
+        return window.PA_USER_DEFAULTS || {};
+      }
+
       function applyRoleDefaults() {
-        if (!window.PA_USER_DEFAULTS) return;
-        Object.keys(window.PA_USER_DEFAULTS).forEach(function(perm) {
+        var defaults = selectedRoleDefaults();
+        Object.keys(defaults).forEach(function(perm) {
           var key = perm.replace(/\./g, '_');
           var allowCb = document.querySelector('input[name="allow_' + key + '"]');
           var denyCb  = document.querySelector('input[name="deny_' + key + '"]');
           if (allowCb && denyCb) {
-            var allowed = !!window.PA_USER_DEFAULTS[perm];
+            var allowed = !!defaults[perm];
             allowCb.checked = allowed;
             denyCb.checked = !allowed;
           }
@@ -228,14 +356,14 @@ if (empty($memberDefaults)) {
 
       function updateForRole() {
         if (!roleSelect || !panel) return;
-        if (roleSelect.value === 'admin') {
-          panel.style.display = 'none';
-          if (adminNote) adminNote.style.display = 'block';
-          if (grid) grid.style.display = 'none';
+        var meta = selectedRoleMeta();
+        if (meta.isAdmin) {
+          panel.classList.add('pa-hidden');
         } else {
-          panel.style.display = 'block';
+          panel.classList.remove('pa-hidden');
           if (adminNote) adminNote.style.display = 'none';
           if (grid) grid.style.display = 'block';
+          applyRoleDefaults();
         }
       }
 
@@ -296,9 +424,13 @@ if (empty($memberDefaults)) {
             <td style="padding:12px"><?php echo htmlspecialchars($user['email']); ?></td>
             <td style="padding:12px"><?php echo htmlspecialchars($user['username'] ?? '-'); ?></td>
             <td style="padding:12px">
+              <?php
+                $displayRole = $user['role'] === 'admin' ? 'admin' : ($user['acl_role_name'] ?? $user['role']);
+                $displayRoleLabel = ucwords(str_replace('_', ' ', (string)$displayRole));
+              ?>
               <span style="padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;
                 <?php echo $user['role'] === 'admin' ? 'background:#dbeafe;color:#1e40af' : 'background:#f3f4f6;color:#374151'; ?>">
-                <?php echo htmlspecialchars(ucfirst($user['role'])); ?>
+                <?php echo htmlspecialchars($displayRoleLabel); ?>
               </span>
             </td>
             <td style="padding:12px">

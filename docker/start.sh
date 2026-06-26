@@ -193,7 +193,7 @@ JSON
   fi
 
   # Ensure dedicated log directories exist with correct permissions
-  for log_subdir in logs/system-logs logs/cron-logs; do
+  for log_subdir in logs/system logs/cron; do
     full_dir="${CONFIG_DIR}/${log_subdir}"
     if [ ! -d "$full_dir" ]; then
       echo "Creating ${full_dir}..."

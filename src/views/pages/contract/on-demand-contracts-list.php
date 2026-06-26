@@ -196,10 +196,11 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   }
                 ?>
                 <?php if ($canGenerate): ?>
-                <form method="post" action="/?page=on-demand-invoice-generate" style="display:inline" onsubmit="return confirm('Generate invoice for this contract?')">
+                <form method="post" action="/?page=on-demand-invoice-generate" class="od-generate-form" style="display:inline">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#3b82f6;color:#fff; font-size: small;">Generate Invoice</button>
+                  <input type="hidden" name="send_email" value="0">
+                  <button type="button" onclick="openOdGenerateModal(this.form)" style="padding:6px 10px;border:0;border-radius:8px;background:#3b82f6;color:#fff; font-size: small;">Generate Invoice</button>
                 </form>
                 <?php endif; ?>
                 <form method="post" action="/?page=on-demand-contract-pause" style="display:inline">
@@ -227,6 +228,43 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       </tbody>
     </table>
   </div>
+
+  <div id="odGenerateModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:1000;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#fff;border-radius:8px;max-width:440px;width:100%;box-shadow:0 24px 70px rgba(15,23,42,0.25);border:1px solid #e5e7eb">
+      <div style="padding:18px 20px;border-bottom:1px solid #e5e7eb">
+        <h3 style="margin:0;font-size:18px">Generate On-Demand Invoice</h3>
+        <p style="margin:6px 0 0;color:#6b7280;font-size:14px">Choose whether to send the invoice now or generate it for review and edits first.</p>
+      </div>
+      <div style="padding:18px 20px;display:grid;gap:10px">
+        <button type="button" onclick="submitOdGenerate(true)" style="width:100%;padding:11px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">Generate and Send Email</button>
+        <button type="button" onclick="submitOdGenerate(false)" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-weight:600;cursor:pointer">Generate Only</button>
+        <button type="button" onclick="closeOdGenerateModal()" style="width:100%;padding:11px 14px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;color:#6b7280;font-weight:600;cursor:pointer">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var odGenerateForm = null;
+    function openOdGenerateModal(form) {
+      odGenerateForm = form;
+      var modal = document.getElementById('odGenerateModal');
+      if (modal) modal.style.display = 'flex';
+    }
+    function closeOdGenerateModal() {
+      odGenerateForm = null;
+      var modal = document.getElementById('odGenerateModal');
+      if (modal) modal.style.display = 'none';
+    }
+    function submitOdGenerate(sendEmail) {
+      if (!odGenerateForm) return;
+      var input = odGenerateForm.querySelector('input[name="send_email"]');
+      if (input) input.value = sendEmail ? '1' : '0';
+      odGenerateForm.submit();
+    }
+    document.getElementById('odGenerateModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeOdGenerateModal();
+    });
+  </script>
 
   <?php
     $last=(int)ceil(max(1,$total)/$per);

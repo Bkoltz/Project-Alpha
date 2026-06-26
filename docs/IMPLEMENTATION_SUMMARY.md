@@ -49,7 +49,7 @@ Added beta banners to:
 ### 4. ✅ Cron Logging
 **Status:** Implemented
 
-- All cron jobs now log to unified log file: `/var/www/logs/cron.log`
+- All cron jobs now log to unified log file: `/var/www/config/logs/cron/cron.log`
 - Also writes to same daily log as app: `logs/YYYY-MM-DD.log`
 - Created `cron/src/utils/cron_logger.php` with helper functions
 - Updated `cron/crontab` to redirect all output to unified log

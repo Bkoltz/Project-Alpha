@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../utils/crypto.php';
 @error_log('[on_demand_invoice_generate] POST received', 0);
 
 $contract_id = (int)($_POST['id'] ?? 0);
+$sendEmail = !empty($_POST['send_email']);
 
 if ($contract_id <= 0) {
     @error_log('[on_demand_invoice_generate] invalid contract_id', 0);
@@ -146,8 +147,9 @@ try {
     
     @error_log("[on_demand_invoice_generate] Generated invoice I-$maxDoc for contract ODC-{$contract['doc_number']} (\${$total})");
 
-    // Auto-email invoice on generation if enabled
-    if (!empty($appConfig['invoice_auto_email_on_generate'])) {
+    // User-selected auto-email for on-demand generation. Unlike long-term
+    // cron invoices, on-demand invoices can be generated as drafts first.
+    if ($sendEmail) {
         try {
             $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
             $clientStmt->execute([$clientId]);
@@ -214,7 +216,11 @@ try {
         }
     }
 
-    header('Location: /?page=contract/on-demand-invoices-list&contract_id=' . $contract_id . '&invoice_generated=1');
+    $redirect = '/?page=contract/on-demand-invoices-list&contract_id=' . $contract_id . '&invoice_generated=1';
+    if ($sendEmail) {
+        $redirect .= '&email_requested=1';
+    }
+    header('Location: ' . $redirect);
     exit;
     
 } catch (Throwable $e) {

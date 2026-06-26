@@ -37,4 +37,4 @@ This folder contains the actual PHP scripts executed by the cron container. Each
 - Database tables: `contracts` (with `contract_type`), `invoices` (with `invoice_type`, `contract_id`), `invoice_items`, `payments`, `clients`, `public_links`, `entity_links`, `cron_job_runs`, `invoice_notifications`, `auto_pay_log`, `audit_schedules`, `audit_schedule_logs`.
 - **Schema note**: Dev uses unified `contracts` table with `contract_type='long_term'` filter (NOT separate `long_term_contracts` table). Invoices link to contracts via `contract_id` (NOT `on_demand_contract_id`).
 - Environment: MySQL credentials, `APP_ENCRYPTION_KEY`, SMTP/Stripe settings in `appConfig`.
-- Directories: `/var/www/backups/`, `/var/www/logs/`, `/var/www/config/` (or project fallback).
+- Directories: `/var/www/backups/`, `/var/www/config/logs/cron/`, `/var/www/config/` (or project fallback).

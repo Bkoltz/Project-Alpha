@@ -12,12 +12,6 @@ if ($hasArchived) { $where[] = 'c.archived = 0'; }
 $where[] = 'c.name LIKE ?';
 $params = ['%'.$term.'%'];
 
-[$scopeWhere, $scopeParams] = scope_clause($pdo, 'c', (int)$_SESSION['user']['id']);
-if ($scopeWhere !== '') {
-    $where[] = trim($scopeWhere);
-    $params = array_merge($params, $scopeParams);
-}
-
 $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 $sql = "SELECT c.id, c.name, c.organization_id, o.name as org_name, o.tax_exempt_file FROM clients c LEFT JOIN organizations o ON c.organization_id = o.id {$whereSQL} ORDER BY c.name LIMIT 10";
 $stmt = $pdo->prepare($sql);

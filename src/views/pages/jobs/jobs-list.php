@@ -19,19 +19,21 @@ if ($prefix !== '') {
 }
 
 [$scopeWhere, $scopeParams] = scope_clause($pdo, 'pc', (int)$_SESSION['user']['id']);
+$quoteScopeWhere = $scopeWhere !== '' ? str_replace('pc.', 'q.', $scopeWhere) : '';
+$contractScopeWhere = $scopeWhere !== '' ? str_replace('pc.', 'co.', $scopeWhere) : '';
+$invoiceScopeWhere = $scopeWhere !== '' ? str_replace('pc.', 'i.', $scopeWhere) : '';
 
 // Collect distinct project codes with owning client (from any table)
-$orgId = get_active_org_id();
-$jobScopeWhere = $scopeWhere !== '' ? " AND pc.organization_id = ? " : '';
+$jobScopeWhere = $scopeWhere !== '' ? " AND {$scopeWhere} " : '';
 
 $sql = "SELECT pc.project_code, pc.client_id, c.name AS client_name, p.id AS project_id, p.notes,
-  (SELECT COUNT(*) FROM quotes q WHERE q.project_code=pc.project_code" . ($scopeWhere !== '' ? " AND q.organization_id = ?" : "") . ") AS quotes_count,
-  (SELECT COUNT(*) FROM contracts co WHERE co.project_code=pc.project_code" . ($scopeWhere !== '' ? " AND co.organization_id = ?" : "") . ") AS contracts_count,
-  (SELECT COUNT(*) FROM invoices i WHERE i.project_code=pc.project_code" . ($scopeWhere !== '' ? " AND i.organization_id = ?" : "") . ") AS invoices_count
+  (SELECT COUNT(*) FROM quotes q WHERE q.project_code=pc.project_code" . ($quoteScopeWhere !== '' ? " AND {$quoteScopeWhere}" : "") . ") AS quotes_count,
+  (SELECT COUNT(*) FROM contracts co WHERE co.project_code=pc.project_code" . ($contractScopeWhere !== '' ? " AND {$contractScopeWhere}" : "") . ") AS contracts_count,
+  (SELECT COUNT(*) FROM invoices i WHERE i.project_code=pc.project_code" . ($invoiceScopeWhere !== '' ? " AND {$invoiceScopeWhere}" : "") . ") AS invoices_count
 FROM (
-  SELECT project_code, client_id, organization_id FROM quotes WHERE project_code IS NOT NULL" . ($scopeWhere !== '' ? " AND organization_id = ?" : "") . "
-  UNION SELECT project_code, client_id, organization_id FROM contracts WHERE project_code IS NOT NULL" . ($scopeWhere !== '' ? " AND organization_id = ?" : "") . "
-  UNION SELECT project_code, client_id, organization_id FROM invoices WHERE project_code IS NOT NULL" . ($scopeWhere !== '' ? " AND organization_id = ?" : "") . "
+  SELECT q.project_code, q.client_id, q.organization_id, q.created_by FROM quotes q WHERE q.project_code IS NOT NULL" . ($quoteScopeWhere !== '' ? " AND {$quoteScopeWhere}" : "") . "
+  UNION SELECT co.project_code, co.client_id, co.organization_id, co.created_by FROM contracts co WHERE co.project_code IS NOT NULL" . ($contractScopeWhere !== '' ? " AND {$contractScopeWhere}" : "") . "
+  UNION SELECT i.project_code, i.client_id, i.organization_id, i.created_by FROM invoices i WHERE i.project_code IS NOT NULL" . ($invoiceScopeWhere !== '' ? " AND {$invoiceScopeWhere}" : "") . "
 ) pc JOIN clients c ON c.id=pc.client_id LEFT JOIN projects p ON p.client_id=pc.client_id AND p.name=pc.project_code";
 $whereParts = array_merge($where, [$jobScopeWhere]);
 $whereParts = array_filter($whereParts, function ($part) { return trim($part) !== ''; });
@@ -40,17 +42,15 @@ if ($whereParts) {
 }
 $sql .= ' ORDER BY pc.project_code DESC';
 $rows = $pdo->prepare($sql);
-// Org-id placeholders in the query when scoped: 3 subquery counts (quotes/contracts/invoices)
-// + 3 UNION sources + 1 outer jobScopeWhere = 7 total. Bind exactly that many.
-$jobScopeParams = $scopeWhere !== '' ? array_fill(0, 7, $orgId) : [];
-// $params (prefix filter) applies to pc.project_code LIKE in the outer WHERE, which is
-// appended AFTER the subquery/UNION placeholders. Reorder so bound params match token order:
-// subquery counts (3) + UNION (3) come first, then outer WHERE (prefix + jobScopeWhere).
-$subAndUnionParams = $scopeWhere !== '' ? array_fill(0, 6, $orgId) : [];
-$outerScopeParam   = $scopeWhere !== '' ? [$orgId] : [];
-$rows->execute(array_merge($subAndUnionParams, $params, $outerScopeParam));
+// Scope placeholders appear in 3 subquery counts, 3 UNION sources, and the outer pc WHERE.
+$subAndUnionParams = $scopeWhere !== '' ? array_merge($scopeParams, $scopeParams, $scopeParams, $scopeParams, $scopeParams, $scopeParams) : [];
+$outerScopeParams = $scopeWhere !== '' ? $scopeParams : [];
+$rows->execute(array_merge($subAndUnionParams, $params, $outerScopeParams));
 $projects = $rows->fetchAll();
-$clients = $pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
+$clientSql = 'SELECT c.id, c.name FROM clients c ORDER BY c.name';
+$clientStmt = $pdo->prepare($clientSql);
+$clientStmt->execute();
+$clients = $clientStmt->fetchAll();
 
 $selectedRow = null;
 if ($selected !== '') {

@@ -47,7 +47,7 @@ Use a local build override only when the compose file, `Dockerfile`, `src/`, `pu
    - `uploads` - mounted to `/var/www/src/uploads`
    - `config` — app config (encrypted in UI is fine)
    - `backups` — DB dumps and optional file backups
-   - `cron_logs` - scheduled job output
+   - Scheduled job output is stored inside the config volume at `logs/cron`
    - `db_data` - MySQL data directory
 3. Set ACL owner to the user ID the container runs as (default `33` for `www-data`, or whatever the Dockerfile uses).
 
@@ -118,7 +118,7 @@ Use these container settings in the wizard:
 | Command/args | use image default |
 | Same DB env as web | yes |
 | Same config/uploads/backups mounts as web | yes |
-| Additional mount | `/mnt/tank/apps/project-alpha/cron_logs` -> `/var/www/logs` |
+| Cron logs | Stored in the config mount at `/var/www/config/logs/cron` |
 
 ---
 

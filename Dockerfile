@@ -121,7 +121,7 @@ COPY --from=vendor /app/vendor /var/www/vendor
 COPY ./src/ /var/www/src/
 COPY ./database/migrations/ /var/www/database/migrations/
 RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
-    && mkdir -p /var/www/logs /var/www/backups \
+    && mkdir -p /var/www/config/logs/cron /var/www/backups \
     && chown -R root:root /var/www \
     && chmod -R 755 /var/www
 

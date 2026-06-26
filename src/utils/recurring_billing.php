@@ -32,6 +32,8 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         $clientId = $contract['client_id'];
         $projectCode = $contract['project_code'];
         $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
+        $organizationId = !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null;
+        $createdBy = !empty($contract['created_by']) ? (int)$contract['created_by'] : null;
 
         // Calculate invoice amount
         $subtotal = 0;
@@ -99,10 +101,10 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
 
         $insertInvoice = $pdo->prepare('
             INSERT INTO invoices (
-                contract_id, client_id, project_id, project_code, invoice_type,
+                contract_id, client_id, project_id, project_code, organization_id, created_by, invoice_type,
                 discount_type, discount_value, tax_percent,
                 subtotal, total, status, due_date, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ');
 
         $insertInvoice->execute([
@@ -110,6 +112,8 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             $clientId,
             $projectId,
             $projectCode,
+            $organizationId,
+            $createdBy,
             'long_term',
             $discountType,
             $discountValue,

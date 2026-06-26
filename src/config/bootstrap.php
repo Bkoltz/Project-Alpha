@@ -18,6 +18,17 @@ try {
             username VARCHAR(50) NULL,
             role ENUM('admin','user') NOT NULL DEFAULT 'user',
             force_password_reset TINYINT(1) NOT NULL DEFAULT 0,
+            document_sender_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            document_sender_name VARCHAR(255) NULL,
+            document_sender_company VARCHAR(255) NULL,
+            document_sender_address_line1 VARCHAR(255) NULL,
+            document_sender_address_line2 VARCHAR(255) NULL,
+            document_sender_city VARCHAR(120) NULL,
+            document_sender_state VARCHAR(120) NULL,
+            document_sender_postal VARCHAR(40) NULL,
+            document_sender_country VARCHAR(120) NULL,
+            document_sender_phone VARCHAR(80) NULL,
+            document_sender_email VARCHAR(255) NULL,
             is_disabled TINYINT(1) NOT NULL DEFAULT 0,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -27,6 +38,17 @@ try {
     // Idempotent column additions for older databases
     try { $pdo->exec("ALTER TABLE users ADD COLUMN username VARCHAR(50) NULL AFTER password_hash"); } catch (Throwable $e) {}
     try { $pdo->exec("ALTER TABLE users ADD COLUMN force_password_reset TINYINT(1) NOT NULL DEFAULT 0 AFTER role"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER force_password_reset"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_name VARCHAR(255) NULL AFTER document_sender_enabled"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_company VARCHAR(255) NULL AFTER document_sender_name"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_address_line1 VARCHAR(255) NULL AFTER document_sender_company"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_address_line2 VARCHAR(255) NULL AFTER document_sender_address_line1"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_city VARCHAR(120) NULL AFTER document_sender_address_line2"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_state VARCHAR(120) NULL AFTER document_sender_city"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_postal VARCHAR(40) NULL AFTER document_sender_state"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_country VARCHAR(120) NULL AFTER document_sender_postal"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_phone VARCHAR(80) NULL AFTER document_sender_country"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_email VARCHAR(255) NULL AFTER document_sender_phone"); } catch (Throwable $e) {}
     try { $pdo->exec("ALTER TABLE users ADD COLUMN is_disabled TINYINT(1) NOT NULL DEFAULT 0 AFTER force_password_reset"); } catch (Throwable $e) {}
 
     // Login attempts for throttling
