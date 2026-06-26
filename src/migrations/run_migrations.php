@@ -439,12 +439,12 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 $stmt->closeCursor();
 
 // ---------------------------------------------------------------------------
-// REPAIR: If ACL migrations (023/024/025/026/027) are marked "applied" but the ACL
+// REPAIR: If ACL migrations (023/024/025/026/027/028) are marked "applied" but the ACL
 // tables don't actually exist (happened due to a buggy seed function that
 // marked ALL migrations as applied on existing DBs), remove them from the
 // applied list and delete their schema_migrations entries so they re-run.
 // Later ACL migrations are included so their backfills (role_id, created_by,
-// organization_id, member role defaults) re-apply too.
+// organization_id, member role defaults, payments permissions) re-apply too.
 // ---------------------------------------------------------------------------
 $aclTablesOk = true;
 try {
@@ -464,6 +464,7 @@ if (!$aclTablesOk) {
         '025_acl_round3_fixes.sql',
         '026_acl_round3_user_role_safety.sql',
         '027_update_member_role_defaults_and_backfill_org_id.sql',
+        '028_seed_payments_permissions.sql',
     ];
     $repaired = [];
     foreach ($aclMigrations as $mname) {

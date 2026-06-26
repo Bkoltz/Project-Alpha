@@ -239,7 +239,7 @@ if ($action === 'login') {
         if (user_can($pdo, (int)$u['id'], 'financial.view', $defaultOrgId)) {
             header('Location: /');
         } else {
-            header('Location: /?page=quote/quotes-list');
+            header('Location: /?page=landing');
         }
         exit;
     } catch (Throwable $e) {

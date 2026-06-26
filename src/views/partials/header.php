@@ -1,8 +1,28 @@
 <?php require_once __DIR__ . '/../../config/app.php'; ?>
+<?php require_once __DIR__ . '/../../config/db.php'; ?>
 <?php require_once __DIR__ . '/../../utils/format.php'; ?>
+<?php require_once __DIR__ . '/../../utils/acl.php'; ?>
 <?php if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
-} ?>
+}
+
+// Permission-based nav visibility helper
+function nav_can(string $permission): bool {
+  if (($_SESSION['user']['role'] ?? '') === 'admin') return true;
+  $pdo = $GLOBALS['pdo'] ?? null;
+  if (!$pdo) {
+    // Last-resort load if db isn't global yet
+    try {
+      require_once __DIR__ . '/../../config/db.php';
+      $pdo = $GLOBALS['pdo'] ?? null;
+    } catch (Throwable $e) {
+      return true; // fail open when DB unavailable
+    }
+  }
+  if (!$pdo) return true;
+  return user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), $permission, get_active_org_id());
+}
+?>
 <!doctype html>
 <html lang="en">
 
@@ -95,81 +115,130 @@
 
         <nav class="primary-nav">
           <ul>
+            <?php $showDashboard = nav_can('financial.view'); ?>
+            <?php if ($showDashboard): ?>
             <li>
               <a href="/" data-page="home" class="active">Dashboard</a>
             </li>
+            <?php endif; ?>
 
+            <?php if (nav_can('clients.view') || nav_can('clients.create') || nav_can('organizations.view')): ?>
             <li class="nav-section">
               <div class="section-label">Clients</div>
               <ul>
+                <?php if (nav_can('clients.view')): ?>
                 <li><a href="/?page=client/clients-list" data-page="client/clients-list">List Clients</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('organizations.view')): ?>
                 <li><a href="/?page=organization/organizations-list" data-page="organization/organizations-list">Organizations</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('clients.create')): ?>
                 <li><a href="/?page=client/clients-create" data-page="client/clients-create">Create Client</a></li>
+                <?php endif; ?>
               </ul>
             </li>
+            <?php endif; ?>
 
+            <?php if (nav_can('quotes.view') || nav_can('quotes.create')): ?>
             <li class="nav-section">
               <div class="section-label">Quotes</div>
               <ul>
+                <?php if (nav_can('quotes.view')): ?>
                 <li><a href="/?page=quote/quotes-list" data-page="quote/quotes-list">Quotes</a></li>
                 <li><a href="/?page=quote/long-term-quotes-list" data-page="quote/long-term-quotes-list">Long-term Quotes</a></li>
                 <li><a href="/?page=quote/on-demand-quotes-list" data-page="quote/on-demand-quotes-list">On-Demand Quotes</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('quotes.create')): ?>
                 <li><a href="/?page=quote/quotes-create" data-page="quote/quotes-create">Create Quote</a></li>
+                <?php endif; ?>
               </ul>
             </li>
+            <?php endif; ?>
+
+            <?php if (nav_can('contracts.view') || nav_can('contracts.create')): ?>
             <li class="nav-section">
               <div class="section-label">Contracts</div>
               <ul>
+                <?php if (nav_can('contracts.view')): ?>
                 <li><a href="/?page=contract/contracts-list" data-page="contract/contracts-list">Contracts</a></li>
                 <li><a href="/?page=contract/long-term-contracts-list" data-page="contract/long-term-contracts-list">Long-term Contracts</a></li>
                 <li><a href="/?page=contract/on-demand-contracts-list" data-page="contract/on-demand-contracts-list">On-Demand Contracts</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('contracts.create')): ?>
                 <li><a href="/?page=contract/contracts-create" data-page="contract/contracts-create">Create Contract</a></li>
+                <?php endif; ?>
               </ul>
             </li>
+            <?php endif; ?>
+
+            <?php if (nav_can('invoices.view') || nav_can('invoices.create')): ?>
             <li class="nav-section">
               <div class="section-label">Invoices</div>
               <ul>
+                <?php if (nav_can('invoices.view')): ?>
                 <li><a href="/?page=invoice/invoices-list" data-page="invoice/invoices-list">Invoices</a></li>
                 <li><a href="/?page=invoice/recurring-invoices-list" data-page="invoice/recurring-invoices-list">Recurring Invoices</a></li>
                 <li><a href="/?page=invoice/on-demand-invoices-list" data-page="invoice/on-demand-invoices-list">On-Demand Invoices</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('invoices.create')): ?>
                 <li><a href="/?page=invoice/invoices-create" data-page="invoice/invoices-create">Create Invoice</a></li>
+                <?php endif; ?>
               </ul>
             </li>
+            <?php endif; ?>
+
+            <?php if (nav_can('payments.view') || nav_can('invoices.mark_paid')): ?>
             <li class="nav-section">
               <div class="section-label">Payments</div>
               <ul>
+                <?php if (nav_can('payments.view')): ?>
                 <li><a href="/?page=payments/payments-list" data-page="payments/payments-list">List Payments</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('invoices.mark_paid')): ?>
                 <li><a href="/?page=payments/payments-create" data-page="payments/payments-create">Record Payment</a></li>
-                <!-- <li><a href="/?page=settings&tab=terms" data-page="settings">Terms & Conditions</a></li> -->
+                <?php endif; ?>
               </ul>
             </li>
+            <?php endif; ?>
+
+            <?php if (nav_can('jobs.view') || nav_can('projects.view')): ?>
             <li class="nav-section">
               <div class="section-label">Jobs</div>
               <ul>
+                <?php if (nav_can('jobs.view')): ?>
                 <li><a href="/?page=jobs/jobs-list" data-page="/jobs/jobs-list">Jobs</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('projects.view')): ?>
                 <li><a href="/?page=project/projects-list" data-page="project/projects-list">Projects</a></li>
+                <?php endif; ?>
               </ul>
             </li>
+            <?php endif; ?>
+
+            <?php if (nav_can('financial.view') || nav_can('time_tracking.view')): ?>
             <li class="nav-section">
               <div class="section-label">Financial</div>
               <ul>
+                <?php if (nav_can('financial.view')): ?>
                 <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Dashboard</a></li>
                 <li><a href="/?page=financial/expenses-list" data-page="financial/expenses-list">Expenses</a></li>
                 <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
-                <li><a href="/?page=time-tracking" data-page="time-tracking">Time Tracking</a></li>
                 <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
                 <li><a href="/?page=financial/expense-report" data-page="financial/expense-report">Reports</a></li>
+                <?php endif; ?>
+                <?php if (nav_can('time_tracking.view')): ?>
+                <li><a href="/?page=time-tracking" data-page="time-tracking">Time Tracking</a></li>
+                <?php endif; ?>
               </ul>
             </li>
+            <?php endif; ?>
           </ul>
         </nav>
 
         <div class="nav-footer">
-          <!-- <?php $fromPhone = $appConfig['from_phone'] ?? null; ?>
-          <?php if ($fromPhone): ?>
-            <a class="phone" href="tel:<?php echo htmlspecialchars($fromPhone); ?>"><?php echo htmlspecialchars(format_phone($fromPhone)); ?></a>
-          <?php endif; ?> -->
+          <?php if (nav_can('settings.view')): ?>
           <a class="settings" href="/?page=settings" data-page="settings">Settings</a>
+          <?php endif; ?>
           <?php if (!empty($_SESSION['user']['role']) && $_SESSION['user']['role'] === 'admin'): ?>
             <a class="settings" href="/?page=accounts" data-page="accounts" style="margin-top:8px;display:block">Accounts</a>
           <?php else: ?>

@@ -13,6 +13,7 @@ function page_permission_map(): array
     $map = [
         // Core authenticated pages (low bar)
         'home'                => 'financial.view',
+        'landing'             => 'profile.view',
         'dashboard'           => 'financial.view',
         'account'             => 'profile.edit',
         'account-update'      => 'profile.edit',
@@ -62,6 +63,8 @@ function page_permission_map(): array
 
         // Quotes module
         'quote/quotes-list'   => 'quotes.view',
+        'quote/long-term-quotes-list' => 'quotes.view',
+        'quote/on-demand-quotes-list' => 'quotes.view',
         'quote/quotes-create' => 'quotes.create',
         'quote/quotes-edit'   => 'quotes.edit',
         'quote/quotes-update' => 'quotes.edit',
@@ -80,6 +83,8 @@ function page_permission_map(): array
 
         // Contracts module
         'contract/contracts-list'   => 'contracts.view',
+        'contract/long-term-contracts-list' => 'contracts.view',
+        'contract/on-demand-contracts-list' => 'contracts.view',
         'contract/contracts-create' => 'contracts.create',
         'contract/contracts-edit'   => 'contracts.edit',
         'contract/contract-details' => 'contracts.view',
@@ -121,6 +126,12 @@ function page_permission_map(): array
         'invoices-update'           => 'invoices.edit',
         'invoices-mark-paid'        => 'invoices.mark_paid',
         'on-demand-invoice-generate' => 'invoices.create',
+        'invoice/recurring-invoices-list' => 'invoices.view',
+        'invoice/on-demand-invoices-list' => 'invoices.view',
+
+        // Payments module
+        'payments/payments-list'    => 'payments.view',
+        'payments-list'             => 'payments.view',
         'payments/payments-create'  => 'invoices.mark_paid',
 
         // Clients module
@@ -157,7 +168,9 @@ function page_permission_map(): array
         'jobs-list'        => 'jobs.view',
 
         // Organizations module
-        'organization/organizations-create'      => 'organizations.manage',
+        'organization/organizations-list'      => 'organizations.view',
+        'organization/organization-view'       => 'organizations.view',
+        'organizations-list'                     => 'organizations.view',
         'organization/organizations-update'      => 'organizations.manage',
         'organization/organizations-delete'      => 'organizations.delete',
         'organization/organization-add-client'     => 'organizations.manage',
@@ -185,6 +198,9 @@ function page_permission_map(): array
         'financial/audit-export'           => 'financial.export',
         'financial/audit-schedule-handler' => 'financial.audit',
         'financial/financial-api'          => 'financial.view',
+        'financial/forms-list'     => 'financial.view',
+        'financial/expense-report' => 'financial.view',
+        'time-tracking'            => 'time_tracking.view',
 
         // Time tracking
         'time-tracking/create'   => 'time_tracking.manage',
@@ -275,7 +291,7 @@ function deny_response(string $page): void
     }
     // Prevent infinite redirect loop: if the target page IS the redirect target,
     // show a 403 page instead of redirecting again
-    if ($page === 'quote/quotes-list') {
+    if ($page === 'landing' || $page === 'quote/quotes-list') {
         http_response_code(403);
         echo '<!DOCTYPE html><html><head><title>Access Denied</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb">';
         echo '<div style="text-align:center;padding:40px;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">';
@@ -285,6 +301,6 @@ function deny_response(string $page): void
         echo '</div></body></html>';
         exit;
     }
-    header('Location: /?page=quote/quotes-list&error=' . urlencode('You do not have permission to access that page.'));
+    header('Location: /?page=landing&error=' . urlencode('You do not have permission to access that page.'));
     exit;
 }

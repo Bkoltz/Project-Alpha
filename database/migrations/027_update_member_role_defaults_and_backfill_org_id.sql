@@ -11,6 +11,7 @@ INSERT INTO role_permissions (role_id, permission, allowed) VALUES
     (4, 'quotes.view', 1), (4, 'quotes.create', 1), (4, 'quotes.edit', 1), (4, 'quotes.send', 1), (4, 'quotes.approve', 1), (4, 'quotes.reject', 1),
     (4, 'contracts.view', 1), (4, 'contracts.create', 1), (4, 'contracts.edit', 1), (4, 'contracts.sign', 1), (4, 'contracts.complete', 1), (4, 'contracts.void', 1), (4, 'contracts.send', 1),
     (4, 'invoices.view', 1), (4, 'invoices.create', 1), (4, 'invoices.edit', 1), (4, 'invoices.void', 1), (4, 'invoices.mark_paid', 1), (4, 'invoices.send', 1),
+    (4, 'payments.view', 1), (4, 'payments.create', 1),
     (4, 'clients.view', 1), (4, 'clients.create', 1), (4, 'clients.edit', 1), (4, 'clients.delete', 1), (4, 'clients.purge', 1), (4, 'clients.restore', 1),
     (4, 'projects.view', 1), (4, 'projects.create', 1), (4, 'projects.edit', 1), (4, 'projects.delete', 1), (4, 'projects.search', 1),
     (4, 'jobs.view', 1), (4, 'jobs.edit', 1), (4, 'jobs.search', 1),

@@ -187,6 +187,7 @@ ON DUPLICATE KEY UPDATE
 -- Seed system role permissions
 INSERT INTO role_permissions (role_id, permission, allowed) VALUES
     (1, '*', 1),
+    (1, 'payments.view', 1), (1, 'payments.create', 1),
     (2, 'quotes.*', 1), (2, 'contracts.*', 1), (2, 'invoices.*', 1),
     (2, 'clients.*', 1), (2, 'projects.*', 1), (2, 'jobs.*', 1),
     (2, 'financial.view', 1), (2, 'financial.manage', 1), (2, 'financial.export', 1), (2, 'financial.audit', 1),
@@ -194,9 +195,11 @@ INSERT INTO role_permissions (role_id, permission, allowed) VALUES
     (2, 'users.view', 1), (2, 'users.manage', 1), (2, 'users.reset_password', 1),
     (2, 'api_keys.*', 1), (2, 'billing.*', 1), (2, 'organizations.*', 1),
     (2, 'public_links.*', 1), (2, 'time_tracking.*', 1), (2, 'profile.*', 1),
+    (2, 'payments.view', 1), (2, 'payments.create', 1),
     (3, 'quotes.*', 1), (3, 'contracts.*', 1), (3, 'invoices.*', 1),
     (3, 'clients.*', 1), (3, 'projects.*', 1), (3, 'jobs.*', 1),
     (3, 'organizations.*', 1), (3, 'public_links.*', 1),
+    (3, 'payments.view', 1), (3, 'payments.create', 1),
     (3, 'financial.view', 0), (3, 'financial.manage', 0), (3, 'financial.export', 0), (3, 'financial.audit', 0),
     (3, 'reports.view', 0),
     (3, 'settings.view', 0), (3, 'settings.manage', 0),
@@ -206,6 +209,7 @@ INSERT INTO role_permissions (role_id, permission, allowed) VALUES
     (4, 'quotes.view', 1), (4, 'quotes.create', 1), (4, 'quotes.edit', 1), (4, 'quotes.send', 1), (4, 'quotes.approve', 1), (4, 'quotes.reject', 1),
     (4, 'contracts.view', 1), (4, 'contracts.create', 1), (4, 'contracts.edit', 1), (4, 'contracts.sign', 1), (4, 'contracts.complete', 1), (4, 'contracts.void', 1), (4, 'contracts.send', 1),
     (4, 'invoices.view', 1), (4, 'invoices.create', 1), (4, 'invoices.edit', 1), (4, 'invoices.void', 1), (4, 'invoices.mark_paid', 1), (4, 'invoices.send', 1),
+    (4, 'payments.view', 1), (4, 'payments.create', 1),
     (4, 'clients.view', 1), (4, 'clients.create', 1), (4, 'clients.edit', 1), (4, 'clients.delete', 1), (4, 'clients.purge', 1), (4, 'clients.restore', 1),
     (4, 'projects.view', 1), (4, 'projects.create', 1), (4, 'projects.edit', 1), (4, 'projects.delete', 1), (4, 'projects.search', 1),
     (4, 'jobs.view', 1), (4, 'jobs.edit', 1), (4, 'jobs.search', 1),
