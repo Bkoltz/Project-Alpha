@@ -384,6 +384,39 @@ $isPdf = defined('PDF_MODE');
   <div style="page-break-after:always"></div>
   <?php endif; ?>
 
+  <?php
+  // Long-term / on-demand billing summary for quote PDFs
+  $qtType = $quote['quote_type'] ?? 'regular';
+  if (in_array($qtType, ['long_term', 'on_demand'], true)):
+    $qBiCount = (int)($quote['billing_interval_count'] ?? 1);
+    $qBiUnit = $quote['billing_interval_unit'] ?? 'month';
+    $qBiText = $qBiCount . ' ' . ucfirst($qBiUnit);
+    if ($qBiCount > 1) $qBiText .= 's';
+    $qSvcDesc = trim((string)($quote['scope'] ?? ''));
+    $qAmtPerInv = (float)($quote['price_per_invoice'] ?? 0);
+    $qPricingType = $quote['pricing_type'] ?? null;
+  ?>
+  <div style="margin:16px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#065f46">
+      <?php echo $qtType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
+    </div>
+    <?php if ($qSvcDesc !== ''): ?>
+      <div style="margin-bottom:8px"><strong>Service:</strong> <?php echo htmlspecialchars($qSvcDesc); ?></div>
+    <?php endif; ?>
+    <?php if ($qtType === 'long_term'): ?>
+      <div style="margin-bottom:8px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($qBiText); ?></div>
+    <?php endif; ?>
+    <?php if ($qPricingType === 'per_invoice' || $qtType === 'on_demand'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">
+        Amount Per Invoice: $<?php echo number_format($qAmtPerInv, 2); ?>
+        <?php if ($qtType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($qBiUnit)); ?><?php endif; ?>
+      </div>
+    <?php elseif ($qPricingType === 'fixed_total'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">Total: $<?php echo number_format((float)($quote['total'] ?? 0), 2); ?></div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">

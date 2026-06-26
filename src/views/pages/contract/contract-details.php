@@ -470,6 +470,39 @@ if ($termsText === '') {
     <div style="page-break-after:always"></div>
   <?php endif; ?>
 
+  <?php
+  // Long-term / on-demand billing summary (shows what the client is buying)
+  $ctType = $contract['contract_type'] ?? 'regular';
+  if (in_array($ctType, ['long_term', 'on_demand'], true)):
+    $biCount = (int)($contract['billing_interval_count'] ?? 1);
+    $biUnit = $contract['billing_interval_unit'] ?? 'month';
+    $biText = $biCount . ' ' . ucfirst($biUnit);
+    if ($biCount > 1) $biText .= 's';
+    $svcDesc = trim((string)($contract['scope'] ?? ''));
+    $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
+    $pricingType = $contract['pricing_type'] ?? null;
+  ?>
+  <div style="margin:16px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#065f46">
+      <?php echo $ctType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
+    </div>
+    <?php if ($svcDesc !== ''): ?>
+      <div style="margin-bottom:8px"><strong>Service:</strong> <?php echo htmlspecialchars($svcDesc); ?></div>
+    <?php endif; ?>
+    <?php if ($ctType === 'long_term'): ?>
+      <div style="margin-bottom:8px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($biText); ?></div>
+    <?php endif; ?>
+    <?php if ($pricingType === 'per_invoice' || $ctType === 'on_demand'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">
+        Amount Per Invoice: $<?php echo number_format($amtPerInv, 2); ?>
+        <?php if ($ctType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($biUnit)); ?><?php endif; ?>
+      </div>
+    <?php elseif ($pricingType === 'fixed_total'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
