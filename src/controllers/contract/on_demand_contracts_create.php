@@ -73,7 +73,10 @@ if ($hasLineItems) {
         $subtotal += $line;
         $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
     }
-} else {
+}
+
+// Fallback: if no valid line items were entered, use the flat amount if provided.
+if (empty($items)) {
     $subtotal = $price_per_invoice;
 }
 

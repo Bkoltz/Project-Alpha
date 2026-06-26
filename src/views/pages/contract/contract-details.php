@@ -467,7 +467,6 @@ if ($termsText === '') {
       <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
       <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
     </div>
-    <div style="page-break-after:always"></div>
   <?php endif; ?>
 
   <?php
@@ -584,55 +583,17 @@ if ($termsText === '') {
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
     <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?>
   </div>
-  <table style="width:100%;border-collapse:collapse">
-    <?php
-    $sigCount = count($signatures);
-    for ($i = 0; $i < $sigCount; $i += 2):
-      $sig1 = $signatures[$i];
-      $sig2 = isset($signatures[$i + 1]) ? $signatures[$i + 1] : null;
-    ?>
-      <tr>
-        <td style="width:50%;vertical-align:top;padding:10px 16px 16px 10px">
-          <table style="width:100%;border-collapse:collapse;margin-top:20px">
-            <tr>
-              <td style="width:65%;vertical-align:bottom;padding-right:12px">
-                <div style="border-top:2px solid #111"></div>
-                <div style="margin-top:4px;color:#4b5563;font-size:12px">
-                  <?php echo htmlspecialchars($sig1['signer_title']); ?>
-                  <?php if (!empty($sig1['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
-                </div>
-              </td>
-              <td style="width:35%;vertical-align:bottom">
-                <div style="border-top:2px solid #111"></div>
-                <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
-              </td>
-            </tr>
-          </table>
-        </td>
-        <?php if ($sig2): ?>
-          <td style="width:50%;vertical-align:top;padding:10px 10px 16px 16px">
-            <table style="width:100%;border-collapse:collapse;margin-top:20px">
-              <tr>
-                <td style="width:65%;vertical-align:bottom;padding-right:12px">
-                  <div style="border-top:2px solid #111"></div>
-                  <div style="margin-top:4px;color:#4b5563;font-size:12px">
-                    <?php echo htmlspecialchars($sig2['signer_title']); ?>
-                    <?php if (!empty($sig2['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
-                  </div>
-                </td>
-                <td style="width:35%;vertical-align:bottom">
-                  <div style="border-top:2px solid #111"></div>
-                  <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        <?php else: ?>
-          <td style="width:50%"></td>
-        <?php endif; ?>
-      </tr>
-    <?php endfor; ?>
+  <?php foreach ($signatures as $sig): ?>
+  <table style="width:100%;border-collapse:collapse;margin-top:30px">
+    <tr>
+      <td style="width:60%;height:60px;vertical-align:bottom;border-top:1px solid #333;padding-top:4px;padding-right:20px;font-size:12px;color:#4b5563">
+        <?php echo htmlspecialchars($sig['signer_title'] ?? 'Client Signature'); ?>
+        <?php if (!empty($sig['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
+      </td>
+      <td style="width:40%;height:60px;vertical-align:bottom;border-top:1px solid #333;padding-top:4px;font-size:12px;color:#4b5563">Date</td>
+    </tr>
   </table>
+  <?php endforeach; ?>
 
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
