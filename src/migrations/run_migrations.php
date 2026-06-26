@@ -48,6 +48,140 @@ function log_migration_error(string $message): void
 }
 
 /**
+ * Build the same DB credentials used by PDO so backups/health checks stay consistent.
+ */
+function db_credentials(): array
+{
+    return [
+        'host' => getenv('DB_HOST') ?: 'db',
+        'db'   => getenv('MYSQL_DATABASE') ?: 'project_alpha',
+        'user' => getenv('MYSQL_USER') ?: 'root',
+        'pass' => getenv('MYSQL_PASSWORD') ?: getenv('MYSQL_ROOT_PASSWORD') ?: 'rootpass',
+    ];
+}
+
+/**
+ * Create a gzipped mysqldump backup before running migrations.
+ *
+ * Backup path: /var/www/backups/pre-migration/<dbname>_YYYY-MM-DD_HH-MM-SS.sql.gz
+ * Keeps the most recent 7 days of backups; older files are removed.
+ *
+ * Returns the backup file path on success, or null on failure (failure is logged
+ * but does not block migration execution).
+ */
+function create_pre_migration_backup(): ?string
+{
+    $creds = db_credentials();
+    $backupDir = '/var/www/backups/pre-migration';
+    $timestamp = date('Y-m-d_H-i-s');
+    $filename = "{$creds['db']}_{$timestamp}.sql.gz";
+    $backupPath = $backupDir . '/' . $filename;
+
+    // Ensure the backup directory exists.
+    if (!is_dir($backupDir)) {
+        if (!@mkdir($backupDir, 0755, true)) {
+            log_migration_error("Pre-migration backup directory '$backupDir' could not be created.");
+            return null;
+        }
+    }
+
+    $mysqldump = 'mysqldump';
+    $cmd = sprintf(
+        '%s --host=%s --user=%s --password=%s --single-transaction --quick --lock-tables=false %s 2>&1 | gzip > %s',
+        escapeshellarg($mysqldump),
+        escapeshellarg($creds['host']),
+        escapeshellarg($creds['user']),
+        escapeshellarg($creds['pass']),
+        escapeshellarg($creds['db']),
+        escapeshellarg($backupPath)
+    );
+
+    exec($cmd, $output, $exitCode);
+
+    if ($exitCode !== 0 || !file_exists($backupPath) || filesize($backupPath) === 0) {
+        log_migration_error('Pre-migration backup failed (exit code ' . $exitCode . '): ' . implode("\n", $output));
+        if (file_exists($backupPath)) {
+            @unlink($backupPath);
+        }
+        return null;
+    }
+
+    // 7-day retention: delete files in the backup directory older than 7 days.
+    $cutoff = time() - (7 * 24 * 60 * 60);
+    foreach (glob($backupDir . '/*.sql.gz') as $file) {
+        if (is_file($file) && filemtime($file) < $cutoff) {
+            @unlink($file);
+        }
+    }
+
+    return $backupPath;
+}
+
+/**
+ * Post-migration health check for critical ACL tables and columns.
+ *
+ * Verifies that the ACL schema introduced by migrations 023+ exists:
+ * - roles, role_permissions, user_permissions_overrides tables
+ * - created_by column on record-scoped tables (quotes, contracts, invoices, clients, projects)
+ * - role_id column on user_organizations
+ *
+ * Issues are logged but do not stop the application from starting.
+ */
+function run_post_migration_health_check(PDO $pdo): void
+{
+    $issues = [];
+
+    $requiredTables = ['roles', 'role_permissions', 'user_permissions_overrides'];
+    foreach ($requiredTables as $table) {
+        try {
+            $check = $pdo->query("SHOW TABLES LIKE " . $pdo->quote($table));
+            if (!$check || $check->rowCount() === 0) {
+                $issues[] = "Missing critical ACL table: $table";
+            }
+            $check?->closeCursor();
+        } catch (Throwable $e) {
+            $issues[] = "Could not verify ACL table '$table': " . $e->getMessage();
+        }
+    }
+
+    $requiredColumns = [
+        'quotes'              => ['created_by', 'organization_id'],
+        'contracts'           => ['created_by', 'organization_id'],
+        'invoices'            => ['created_by', 'organization_id'],
+        'clients'             => ['created_by', 'organization_id'],
+        'projects'            => ['created_by', 'organization_id'],
+        'user_organizations'  => ['role_id'],
+    ];
+
+    foreach ($requiredColumns as $table => $columns) {
+        foreach ($columns as $column) {
+            try {
+                $stmt = $pdo->prepare(
+                    "SELECT 1 FROM information_schema.columns
+                     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?"
+                );
+                $stmt->execute([$table, $column]);
+                if ($stmt->fetchColumn() === false) {
+                    $issues[] = "Missing critical column: $table.$column";
+                }
+            } catch (Throwable $e) {
+                $issues[] = "Could not verify column '$table.$column': " . $e->getMessage();
+            }
+        }
+    }
+
+    if (!empty($issues)) {
+        log_migration_error('Post-migration health check FAILED: ' . implode('; ', $issues));
+    } else {
+        $msg = 'Post-migration health check passed: all critical ACL tables and columns present.';
+        if (getenv('MIGRATION_VERBOSE') || ($GLOBALS['verbose'] ?? false)) {
+            echo $msg . "\n";
+        }
+        error_log('[' . date('c') . '] ' . $msg);
+    }
+}
+
+/**
  * Build a PDO connection that explicitly enables multi-statement execution.
  */
 function create_multi_statement_pdo(): PDO
@@ -305,11 +439,12 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 $stmt->closeCursor();
 
 // ---------------------------------------------------------------------------
-// REPAIR: If ACL migrations (023/024/025) are marked "applied" but the ACL
+// REPAIR: If ACL migrations (023/024/025/026/027) are marked "applied" but the ACL
 // tables don't actually exist (happened due to a buggy seed function that
 // marked ALL migrations as applied on existing DBs), remove them from the
 // applied list and delete their schema_migrations entries so they re-run.
-// 025 is included so its role_id/created_by backfills re-apply too.
+// Later ACL migrations are included so their backfills (role_id, created_by,
+// organization_id, member role defaults) re-apply too.
 // ---------------------------------------------------------------------------
 $aclTablesOk = true;
 try {
@@ -323,7 +458,13 @@ try {
 }
 
 if (!$aclTablesOk) {
-    $aclMigrations = ['023_role_permissions.sql', '024_add_created_by_columns.sql', '025_acl_round3_fixes.sql'];
+    $aclMigrations = [
+        '023_role_permissions.sql',
+        '024_add_created_by_columns.sql',
+        '025_acl_round3_fixes.sql',
+        '026_acl_round3_user_role_safety.sql',
+        '027_update_member_role_defaults_and_backfill_org_id.sql',
+    ];
     $repaired = [];
     foreach ($aclMigrations as $mname) {
         if (isset($appliedMap[$mname])) {
@@ -368,6 +509,20 @@ foreach ($pending as $file) {
     echo "  " . basename($file) . "\n";
 }
 echo "\n";
+
+// Pre-migration backup before we execute anything.
+if (!$dryRun) {
+    $backupPath = create_pre_migration_backup();
+    if ($backupPath) {
+        echo "Pre-migration backup created: $backupPath\n";
+        if ($verbose) {
+            echo "  Size: " . number_format(filesize($backupPath)) . " bytes\n";
+        }
+    } else {
+        echo "Pre-migration backup could not be created (see error log). Continuing with migrations.\n";
+    }
+    echo "\n";
+}
 
 // Dedicated PDO for executing multi-statement migration SQL.
 $execPdo = create_multi_statement_pdo();
@@ -445,12 +600,9 @@ foreach ($pending as $file) {
     } catch (Throwable $e) {
         log_migration_error("Migration '$name' failed: " . $e->getMessage());
 
-        // Still record that we attempted it so it doesn't re-run on every boot
-        try {
-            $record = $execPdo->prepare("INSERT IGNORE INTO schema_migrations (filename, checksum) VALUES (?, ?)");
-            $record->execute([$name, $checksum]);
-        } catch (Throwable $ignore) {}
-
+        // Do NOT record failed migrations as applied. This allows them to
+        // re-run on the next container boot so transient or fixable issues
+        // are automatically retried.
         if ($verbose) {
             echo "FAILED\n";
             echo "  Error: " . $e->getMessage() . "\n";
@@ -466,6 +618,9 @@ if ($dryRun) {
         . ($anyFailed ? "Some pending migrations look invalid." : "All pending migrations look valid.")
         . "\n";
 } else {
+    // Post-migration health check after all migrations have run.
+    run_post_migration_health_check($execPdo);
+
     echo "\nMigration run complete. "
         . ($anyFailed ? "One or more migrations failed; the application will still start." : "All migrations applied successfully.")
         . "\n";

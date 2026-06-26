@@ -191,16 +191,13 @@ function scope_clause(PDO $pdo, string $tableAlias, int $userId): array
     }
     $activeOrgId = get_active_org_id();
     if ($activeOrgId === 0) {
-        return [' AND 1=0 ', []];
+        return ['1=0', []];
     }
-    if (user_role_on_org($pdo, $userId, $activeOrgId) === 'member') {
-        return [
-            " AND {$tableAlias}.organization_id = ? AND {$tableAlias}.created_by = ? ",
-            [$activeOrgId, $userId]
-        ];
-    }
+    // All non-admin roles (owner, staff, member) get org-level scoping.
+    // Record-level scoping (created_by) is reserved for future per-user restrictions
+    // via explicit permission overrides, not the default member role.
     return [
-        " AND {$tableAlias}.organization_id = ? ",
+        "{$tableAlias}.organization_id = ?",
         [$activeOrgId]
     ];
 }
@@ -210,13 +207,11 @@ function can_access_record(PDO $pdo, string $table, int $recordId, int $userId):
     if (($_SESSION['user']['role'] ?? '') === 'admin') return true;
     $activeOrgId = get_active_org_id();
     if ($activeOrgId === 0) return false;
-    $isMember = user_role_on_org($pdo, $userId, $activeOrgId) === 'member';
-    $stmt = $pdo->prepare("SELECT organization_id, created_by FROM {$table} WHERE id = ? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT organization_id FROM {$table} WHERE id = ? LIMIT 1");
     $stmt->execute([$recordId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$row) return false;
     if ((int)$row['organization_id'] !== $activeOrgId) return false;
-    if ($isMember && (int)$row['created_by'] !== $userId) return false;
     return true;
 }
 

@@ -12,8 +12,11 @@ if (!function_exists('app_logger')) {
     try {
       if (!class_exists(MonologLogger::class)) throw new \Exception('monolog not installed');
       $projectRoot = realpath(__DIR__ . '/../../') ?: __DIR__ . '/../../';
-      $logDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'logs';
-      if (!is_dir($logDir)) @mkdir($logDir, 0755, true);
+      $logDir = '/var/www/config/logs/system-logs';
+      if (!is_dir($logDir)) {
+        $logDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'config/logs/system-logs';
+      }
+      if (!is_dir($logDir)) @mkdir($logDir, 0775, true);
       $handler = new RotatingFileHandler($logDir . DIRECTORY_SEPARATOR . 'app.log', 30, MonologLogger::DEBUG);
       $formatter = new JsonFormatter();
       $formatter->includeStacktraces(true);
@@ -25,8 +28,12 @@ if (!function_exists('app_logger')) {
     } catch (Throwable $e) {
       // fallback simple logger
       $projectRoot = realpath(__DIR__ . '/../../') ?: __DIR__ . '/../../';
-      $file = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR . 'app.log';
-      if (!is_dir(dirname($file))) @mkdir(dirname($file), 0755, true);
+      $fbDir = '/var/www/config/logs/system-logs';
+      if (!is_dir($fbDir)) {
+        $fbDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'config/logs/system-logs';
+      }
+      $file = $fbDir . DIRECTORY_SEPARATOR . 'app.log';
+      if (!is_dir(dirname($file))) @mkdir(dirname($file), 0775, true);
       $fallback = new class($file, $name) {
         private $file; private $name;
         public function __construct($file, $name){ $this->file = $file; $this->name = $name; }
@@ -61,7 +68,7 @@ if (!function_exists('audit_event')) {
 }
 // <?php
 // src/utils/logger.php
-// Simple application logger writing to config/uploads/logs/YYYY-MM-DD.log
+// Simple application logger writing to config/logs/system-logs/YYYY-MM-DD.log
 
 if (!function_exists('app_log_safe')) {
     function app_log_safe(string $category, string $message, array $context = []): void {
@@ -79,10 +86,11 @@ if (!function_exists('app_log')) {
             $date = new DateTime('now');
             $day = $date->format('Y-m-d');
             $time = $date->format('Y-m-d H:i:s');
-            // Determine base config path preference: external mount, then project config, then src/uploads
+            // System logs live under /config/logs/system-logs/ (external mount or project config)
             $candidates = [
-                ['/var/www/config/uploads/logs', true],
-                [__DIR__ . '/../config/../../config/uploads/logs', false], // resolve to project config/uploads/logs
+                ['/var/www/config/logs/system-logs', true],
+                [__DIR__ . '/../../config/logs/system-logs', false],
+                [__DIR__ . '/../config/../../config/logs/system-logs', false],
                 [__DIR__ . '/../uploads/logs', false],
             ];
             $logDir = null;

@@ -22,7 +22,10 @@ $activeFilter = $hasArchived ? 'archived=0' : '1=1';
 [$scopeWhere, $scopeParams] = scope_clause($pdo, 'c', (int)$_SESSION['user']['id']);
 
 // Build WHERE clause
-$whereClause = 'WHERE '.$activeFilter . $scopeWhere;
+$whereClause = 'WHERE '.$activeFilter;
+if ($scopeWhere) {
+    $whereClause .= ' AND '.$scopeWhere;
+}
 if (!empty($where)) {
   $whereClause .= ' AND ('.implode(' AND ', $where).')';
 }

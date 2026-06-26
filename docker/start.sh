@@ -191,6 +191,18 @@ JSON
     chown www-data:www-data "${CONFIG_DIR}/settings.json" || true
     chmod 664 "${CONFIG_DIR}/settings.json" || true
   fi
+
+  # Ensure dedicated log directories exist with correct permissions
+  for log_subdir in logs/system-logs logs/cron-logs; do
+    full_dir="${CONFIG_DIR}/${log_subdir}"
+    if [ ! -d "$full_dir" ]; then
+      echo "Creating ${full_dir}..."
+      mkdir -p "$full_dir" || true
+    fi
+    chown -R www-data:www-data "$full_dir" 2>/dev/null || true
+    chmod 775 "$full_dir" 2>/dev/null || true
+  done
+
   if [ ! -d "${CONFIG_DIR}/uploads" ]; then
     mkdir -p "${CONFIG_DIR}/uploads" || true
     chown -R www-data:www-data "${CONFIG_DIR}/uploads" || true

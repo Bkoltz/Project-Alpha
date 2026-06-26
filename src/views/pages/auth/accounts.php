@@ -69,10 +69,12 @@ if (empty($memberDefaults)) {
     <div class="alert alert-danger"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
 
+  <?php if (!isset($_GET['action']) || $_GET['action'] !== 'create'): ?>
   <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0">
     <p style="color:#6b7280">Manage user accounts, roles, and permissions</p>
     <a href="/?page=accounts&action=create" style="padding:10px 16px;border-radius:8px;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600">+ Create User</a>
   </div>
+  <?php endif; ?>
 
   <?php if (isset($_GET['action']) && $_GET['action'] === 'create'): ?>
     <!-- Create User Form -->
@@ -160,12 +162,13 @@ if (empty($memberDefaults)) {
                       $allowKey = 'allow_' . str_replace('.', '_', $perm);
                       $denyKey  = 'deny_' . str_replace('.', '_', $perm);
                       $label    = ucfirst(str_replace('_', ' ', explode('.', $perm, 2)[1] ?? $perm));
+                      $defaultAllowed = !empty($memberDefaults[$perm]);
                       ?>
                       <label style="display:flex;align-items:center;justify-content:center;cursor:pointer;">
-                        <input type="checkbox" name="<?php echo htmlspecialchars($allowKey); ?>" value="1">
+                        <input type="checkbox" name="<?php echo htmlspecialchars($allowKey); ?>" value="1" <?php if ($defaultAllowed) echo 'checked'; ?>>
                       </label>
                       <label style="display:flex;align-items:center;justify-content:center;cursor:pointer;">
-                        <input type="checkbox" name="<?php echo htmlspecialchars($denyKey); ?>" value="1">
+                        <input type="checkbox" name="<?php echo htmlspecialchars($denyKey); ?>" value="1" <?php if (!$defaultAllowed) echo 'checked'; ?>>
                       </label>
                       <div style="font-size:12px;"><?php echo htmlspecialchars($label); ?> <span style="color:#9ca3af;font-size:11px;">(<?php echo htmlspecialchars($perm); ?>)</span></div>
                     <?php endforeach; ?>
@@ -178,6 +181,7 @@ if (empty($memberDefaults)) {
 
         <div class="pa-create-actionbar">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Create User</button>
+          <button type="button" id="reset-to-defaults" style="padding:10px 16px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;">Reset to Defaults</button>
           <a href="/?page=accounts" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151;">Cancel</a>
         </div>
       </form>
@@ -232,8 +236,14 @@ if (empty($memberDefaults)) {
           panel.style.display = 'block';
           if (adminNote) adminNote.style.display = 'none';
           if (grid) grid.style.display = 'block';
-          applyRoleDefaults();
         }
+      }
+
+      var resetBtn = document.getElementById('reset-to-defaults');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+          applyRoleDefaults();
+        });
       }
 
       // Mutual exclusion: every permission is either allow or deny.

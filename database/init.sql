@@ -203,21 +203,26 @@ INSERT INTO role_permissions (role_id, permission, allowed) VALUES
     (3, 'users.view', 0), (3, 'users.manage', 0), (3, 'users.reset_password', 0),
     (3, 'api_keys.*', 0), (3, 'billing.*', 0),
     (3, 'time_tracking.*', 1), (3, 'profile.*', 1), (3, '2fa.manage', 0),
-    (4, 'quotes.view', 1), (4, 'quotes.create', 1), (4, 'quotes.edit', 1), (4, 'quotes.send', 1), (4, 'quotes.approve', 0), (4, 'quotes.reject', 0),
-    (4, 'contracts.view', 1), (4, 'contracts.create', 1), (4, 'contracts.edit', 1), (4, 'contracts.sign', 1), (4, 'contracts.complete', 0), (4, 'contracts.void', 0), (4, 'contracts.send', 1),
-    (4, 'invoices.view', 1), (4, 'invoices.create', 1), (4, 'invoices.edit', 1), (4, 'invoices.void', 0), (4, 'invoices.mark_paid', 0), (4, 'invoices.send', 1),
-    (4, 'clients.*', 1), (4, 'projects.*', 1), (4, 'jobs.*', 1),
-    (4, 'organizations.view', 1), (4, 'organizations.manage', 0),
-    (4, 'public_links.*', 1),
-    (4, 'financial.*', 0),
+    (4, 'quotes.view', 1), (4, 'quotes.create', 1), (4, 'quotes.edit', 1), (4, 'quotes.send', 1), (4, 'quotes.approve', 1), (4, 'quotes.reject', 1),
+    (4, 'contracts.view', 1), (4, 'contracts.create', 1), (4, 'contracts.edit', 1), (4, 'contracts.sign', 1), (4, 'contracts.complete', 1), (4, 'contracts.void', 1), (4, 'contracts.send', 1),
+    (4, 'invoices.view', 1), (4, 'invoices.create', 1), (4, 'invoices.edit', 1), (4, 'invoices.void', 1), (4, 'invoices.mark_paid', 1), (4, 'invoices.send', 1),
+    (4, 'clients.view', 1), (4, 'clients.create', 1), (4, 'clients.edit', 1), (4, 'clients.delete', 1), (4, 'clients.purge', 1), (4, 'clients.restore', 1),
+    (4, 'projects.view', 1), (4, 'projects.create', 1), (4, 'projects.edit', 1), (4, 'projects.delete', 1), (4, 'projects.search', 1),
+    (4, 'jobs.view', 1), (4, 'jobs.edit', 1), (4, 'jobs.search', 1),
+    (4, 'organizations.view', 1), (4, 'organizations.manage', 1),
+    (4, 'public_links.view', 1), (4, 'public_links.create', 1), (4, 'public_links.revoke', 1), (4, 'public_links.manage', 1),
+    (4, 'time_tracking.view', 0), (4, 'time_tracking.manage', 0),
     (4, 'reports.view', 0),
-    (4, 'settings.*', 0),
-    (4, 'users.*', 0), (4, 'api_keys.*', 0), (4, 'billing.*', 0),
-    (4, 'time_tracking.view', 1), (4, 'time_tracking.manage', 0),
-    (4, 'profile.*', 1), (4, '2fa.manage', 0)
+    (4, 'financial.view', 0), (4, 'financial.manage', 0), (4, 'financial.export', 0), (4, 'financial.audit', 0),
+    (4, 'billing.view', 0), (4, 'billing.manage', 0),
+    (4, 'users.view', 0), (4, 'users.manage', 0), (4, 'users.reset_password', 0), (4, 'users.delete', 0),
+    (4, 'api_keys.view', 0), (4, 'api_keys.manage', 0),
+    (4, 'settings.view', 0), (4, 'settings.manage', 0),
+    (4, '2fa.manage', 0),
+    (4, 'profile.view', 1), (4, 'profile.edit', 1)
 ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
 
--- Seed void permission keys for system roles (owner/staff allowed, member denied)
+-- Seed void permission keys for system roles (owner/staff/member allowed)
 INSERT INTO role_permissions (role_id, permission, allowed)
 SELECT id, 'contracts.void', CASE WHEN name IN ('owner','staff','member') THEN 1 ELSE 0 END FROM roles WHERE is_system = 1
 ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
