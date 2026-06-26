@@ -71,8 +71,8 @@ fi
 ADMIN_PASSWORD_HASH=$(php -r 'echo password_hash(getenv("ADMIN_PASSWORD"), PASSWORD_DEFAULT);')
 echo "Using admin password hash: ${ADMIN_PASSWORD_HASH}"
 
-# Replace placeholder in SQL files (use a non-/ delimiter to avoid issues with bcrypt hashes)
-for sql_file in /usr/local/share/app-migrations/*.sql; do
+# Replace placeholder in all SQL files used during boot (both copies)
+for sql_file in /usr/local/share/app-migrations/*.sql /docker-entrypoint-initdb.d/*.sql; do
   if [ -f "$sql_file" ]; then
     sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" "$sql_file"
   fi
@@ -122,14 +122,15 @@ mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${
 " || echo "⚠️  WARNING: admin user upsert failed — admin password may not have been updated this boot."
 
 mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
-  INSERT INTO user_organizations (user_id, organization_id, role, is_default)
+  INSERT INTO user_organizations (user_id, organization_id, role, role_id, is_default)
   VALUES (
     (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1),
     (SELECT id FROM organizations ORDER BY id ASC LIMIT 1),
     'owner',
+    (SELECT id FROM roles WHERE name='owner' AND is_system=1 LIMIT 1),
     1
   )
-  ON DUPLICATE KEY UPDATE \`role\`='owner', \`is_default\`=1;
+  ON DUPLICATE KEY UPDATE \`role\`='owner', \`role_id\`=VALUES(role_id), \`is_default\`=1;
 " || true
 
 # 2) Run PHP migration runner BEFORE Apache starts. It tracks applied state
