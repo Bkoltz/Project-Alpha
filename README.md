@@ -1,6 +1,6 @@
 # Project Alpha (PA)
 
-A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and payments. Built with a multi-organization architecture (organizations + user_organizations tables) for running multiple divisions under one LLC (e.g. Ledge Top Technologies + Ledge Top Drone Services). Features Stripe Payment Intents, role-based access, audit logging, optional 2FA, and a pluggable payment processor interface (Stripe now, Square-ready).
+A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and payments. Built around a single organization with role-based access control, audit logging, optional 2FA, and a pluggable payment processor interface (Stripe now, Square-ready). Features Stripe Payment Intents, customizable permissions, and document workflows.
 
 ---
 
@@ -55,7 +55,7 @@ A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and 
 
 ## Known Limitations / Not Yet Working
 
-- **Per-organization branding**: Brand name, logo, and contact info can be overridden per-organization (via Settings), falling back to global config when not set. The Branding utility resolves org-first, global-fallback.
+- **Organization branding**: Single-organization only; name, logo, and contact info default from global config with optional override via Settings.
 - **Advanced reporting**: Only basic CSV exports and the financial dashboard are available. There is no built-in P&L, balance sheet, or custom chart builder.
 - **Recurring invoices**: Long-term contracts generate invoices automatically, but each generated invoice still requires normal review/sending workflow.
 - **Mileage IRS form auto-fill**: Mileage logs can be tracked and valued, but automatic IRS form generation/population is not implemented.
@@ -275,8 +275,8 @@ The `cron_job_runs` table tracks:
 - **`invoice_notifications`**: Tracks sent reminders (idempotency)
 - **`tax_rates`**: Predefined tax rates per jurisdiction
 - **`system_audit`**: Audit log for critical system actions (immutable)
-- **`organizations`**: Organizations with tax-exempt form storage and per-org `brand_*` overrides (name, logo, contact info) resolved with global fallback.
-- **`user_organizations`**: Many-to-many membership linking users to organizations.
+- **`organizations`**: Single default organization with tax-exempt form storage and `brand_*` overrides resolved against global config.
+- **`user_organizations`**: Links users to the default organization with a role and role-based permissions.
 - **`clients`**: Client records with archived status
 - **`projects`**: Manual parent grouping for jobs
 - **`project_counters`**: Auto-generated project codes
@@ -557,7 +557,7 @@ Sensitive values (Stripe keys, SMTP password, encryption key) are **never stored
 - **First-admin registration**: When the `users` table is empty, the login page shows a "Create First Admin" form (no manual DB inserts needed). The Docker startup path also seeds the admin from `ADMIN_PASSWORD` in `docker-compose.yml`.
 - **Password policy**: Minimum 8 characters, mixed case, digit, and special character required; enforced on register, reset, and account update.
 - **Rate limiting**: IP-based (15 attempts / 10 min) and per-account (5 attempts / 15 min) lockout on failed logins.
-- **Role-based access**: `admin` vs `user` roles on all sensitive pages and controllers.
+- **Role-based access**: Permission groups assigned by role (`owner`, `admin`, `staff`, `member`) with user-level overrides for sensitive pages and controllers.
 - **2FA (TOTP)**: Optional two-factor authentication via authenticator app; backup codes provided.
 - **Audit middleware**: Router-level logging of all sensitive actions (payments, password resets, 2FA changes, API key create/revoke, deletes, contract sign/complete, email send, PDF export, Stripe webhooks).
 
