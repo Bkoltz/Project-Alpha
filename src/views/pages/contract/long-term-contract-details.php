@@ -335,15 +335,15 @@ $isOngoing = empty($contract['end_date']);
   </table>
 
   <!-- Signature block -->
-  <table style="width:100%;border-collapse:collapse;margin-top:50px">
+  <table style="width:100%;border-collapse:collapse;margin-top:20px">
     <tr>
-      <td style="width:60%;vertical-align:bottom;padding-right:24px">
-        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
-        <div style="margin-top:4px;color:#4b5563">Client Signature</div>
+      <td style="width:65%;height:50px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        Client Signature
       </td>
-      <td style="width:40%;vertical-align:bottom">
-        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
-        <div style="margin-top:4px;color:#4b5563">Date</div>
+      <td style="width:35%;height:50px;vertical-align:bottom;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        Date
       </td>
     </tr>
   </table>

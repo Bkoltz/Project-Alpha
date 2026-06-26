@@ -86,6 +86,15 @@ function recalcCo() {
     if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
         // Use price per invoice
         subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
+    } else if (isOnDemand) {
+        var odMode = document.querySelector('input[name="od_pricing_mode"]:checked');
+        if (odMode && odMode.value === 'flat') {
+            subtotal = parseFloat(document.getElementById('onDemandAmountInputCo').value) || 0;
+        } else {
+            var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
+            var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
+            for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
+        }
     } else {
         // Use line items
         var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
@@ -300,6 +309,23 @@ function togglePricingFields() {
         document.getElementById('fixedTotalFieldsCo').style.display = 'block';
         document.getElementById('itemsCo').parentElement.style.display = 'block';
         // Re-enable required attributes on items
+        setItemsRequiredCo(true);
+    }
+    recalcCo();
+}
+
+function toggleOnDemandPricingModeCo() {
+    var mode = document.querySelector('input[name="od_pricing_mode"]:checked');
+    var modeVal = mode ? mode.value : 'items';
+    var flatSection = document.getElementById('onDemandFlatAmountCo');
+    var itemsSection = document.getElementById('itemsCo');
+    if (modeVal === 'flat') {
+        if (flatSection) flatSection.style.display = 'block';
+        if (itemsSection && itemsSection.parentElement) itemsSection.parentElement.style.display = 'none';
+        setItemsRequiredCo(false);
+    } else {
+        if (flatSection) flatSection.style.display = 'none';
+        if (itemsSection && itemsSection.parentElement) itemsSection.parentElement.style.display = 'block';
         setItemsRequiredCo(true);
     }
     recalcCo();

@@ -20,7 +20,7 @@ $billing_interval_count = 1;
 $billing_interval_unit = 'month';
 
 // Price can come from flat amount or line items
-$price_per_invoice = (float)($_POST['price_per_invoice'] ?? $_POST['od_flat_amount'] ?? 0);
+$price_per_invoice = (float)($_POST['od_flat_amount'] ?? $_POST['price_per_invoice'] ?? 0);
 $scope = trim((string)($_POST['scope'] ?? ''));
 
 if ($client_id <= 0) {

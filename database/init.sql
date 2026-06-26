@@ -696,6 +696,7 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_inv_notif_invoice (invoice_id),
     INDEX idx_inv_notif_type (notification_type),
+    UNIQUE INDEX uq_invoice_notification (invoice_id, notification_type),
     CONSTRAINT fk_inv_notif_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

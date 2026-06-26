@@ -463,7 +463,7 @@ if ($termsText === '') {
   $scopeEnabled = !isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled']);
   if ($scopeEnabled && $scopeText !== ''):
   ?>
-    <div style="page-break-before:auto;margin-top:20px">
+    <div style="page-break-before:auto;margin-top:12px">
       <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
       <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
     </div>
@@ -481,23 +481,23 @@ if ($termsText === '') {
     $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
     $pricingType = $contract['pricing_type'] ?? null;
   ?>
-  <div style="margin:16px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
-    <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#065f46">
+  <div style="margin:8px 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#065f46">
       <?php echo $ctType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
     </div>
     <?php if ($svcDesc !== ''): ?>
-      <div style="margin-bottom:8px"><strong>Service:</strong> <?php echo htmlspecialchars($svcDesc); ?></div>
+      <div style="margin-bottom:4px"><strong>Service:</strong> <?php echo htmlspecialchars($svcDesc); ?></div>
     <?php endif; ?>
     <?php if ($ctType === 'long_term'): ?>
-      <div style="margin-bottom:8px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($biText); ?></div>
+      <div style="margin-bottom:4px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($biText); ?></div>
     <?php endif; ?>
     <?php if ($pricingType === 'per_invoice' || $ctType === 'on_demand'): ?>
-      <div style="font-size:16px;font-weight:700;color:#065f46">
+      <div style="font-size:14px;font-weight:700;color:#065f46">
         Amount Per Invoice: $<?php echo number_format($amtPerInv, 2); ?>
         <?php if ($ctType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($biUnit)); ?><?php endif; ?>
       </div>
     <?php elseif ($pricingType === 'fixed_total'): ?>
-      <div style="font-size:16px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
+      <div style="font-size:14px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
     <?php endif; ?>
   </div>
   <?php endif; ?>
@@ -584,13 +584,17 @@ if ($termsText === '') {
     <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?>
   </div>
   <?php foreach ($signatures as $sig): ?>
-  <table style="width:100%;border-collapse:collapse;margin-top:30px">
+  <table style="width:100%;border-collapse:collapse;margin-top:20px">
     <tr>
-      <td style="width:60%;height:60px;vertical-align:bottom;border-top:1px solid #333;padding-top:4px;padding-right:20px;font-size:12px;color:#4b5563">
+      <td style="width:65%;height:50px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
         <?php echo htmlspecialchars($sig['signer_title'] ?? 'Client Signature'); ?>
         <?php if (!empty($sig['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
       </td>
-      <td style="width:40%;height:60px;vertical-align:bottom;border-top:1px solid #333;padding-top:4px;font-size:12px;color:#4b5563">Date</td>
+      <td style="width:35%;height:50px;vertical-align:bottom;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        Date
+      </td>
     </tr>
   </table>
   <?php endforeach; ?>

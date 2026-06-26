@@ -465,6 +465,7 @@ if (!$aclTablesOk) {
         '026_acl_round3_user_role_safety.sql',
         '027_update_member_role_defaults_and_backfill_org_id.sql',
         '028_seed_payments_permissions.sql',
+        '029_invoice_notifications_unique.sql',
     ];
     $repaired = [];
     foreach ($aclMigrations as $mname) {

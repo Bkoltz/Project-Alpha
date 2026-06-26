@@ -35,6 +35,7 @@ try {
               AND contract_type = "long_term"
               AND next_invoice_date IS NOT NULL
               AND next_invoice_date <= ?
+              AND (signed_pdf_path IS NOT NULL AND signed_pdf_path != \'\')
               ORDER BY next_invoice_date ASC';
 
     $stmt = $pdo->prepare($query);
@@ -130,7 +131,7 @@ try {
                 try {
                     [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                     if ($ok) {
-                        $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
+                        $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'due_7']);
                     } else {
                         @error_log("$logPrefix Failed to send due-7 reminder for invoice $iid: $err");
@@ -180,7 +181,7 @@ try {
                 try {
                     [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                     if ($ok) {
-                        $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
+                        $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'overdue_weekly']);
                     } else {
                         @error_log("$logPrefix Failed to send overdue-weekly reminder for invoice $iid: $err");
@@ -193,7 +194,7 @@ try {
 
         // 3) Auto-email newly-generated long-term invoices (on generation)
         if (!empty($appConfig['invoice_auto_email_on_generate'])) {
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type='long_term' AND i.status IN ('unpaid','partial') AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type IN ('long_term','on_demand') AND i.status IN ('unpaid','partial') AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
             $stmt->execute();
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {
@@ -219,7 +220,7 @@ try {
                 try {
                     [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                     if ($ok) {
-                        $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
+                        $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'on_generate']);
                     } else {
                         @error_log("$logPrefix Failed to send on-generate email for invoice $iid: $err");

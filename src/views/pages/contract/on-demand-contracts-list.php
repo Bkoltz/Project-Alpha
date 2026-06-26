@@ -176,11 +176,15 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: small;">Signed PDF</a>
               <?php endif; ?>
               <?php if ($r['status'] === 'pending'): ?>
-                <form method="post" action="/?page=on-demand-contract-activate" style="display:inline">
-                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
-                </form>
+                <?php if (empty($r['signed_pdf_path'])): ?>
+                  <button type="button" disabled title="Upload signed contract first" style="padding:6px 10px;border:0;border-radius:8px;background:#9ca3af;color:#fff;font-size:small;cursor:not-allowed">Activate</button>
+                <?php else: ?>
+                  <form method="post" action="/?page=on-demand-contract-activate" style="display:inline">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                    <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
+                  </form>
+                <?php endif; ?>
               <?php endif; ?>
               <?php if ($r['status'] === 'active'): ?>
                 <?php 

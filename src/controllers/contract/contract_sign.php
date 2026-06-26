@@ -73,15 +73,18 @@ try {
   }
   $publicUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $name);
 
-  // Save path and activate. For long-term contracts, also seed next_invoice_date
-  // (from start_date) on activation so recurring billing can begin.
-  if (($contract['contract_type'] ?? 'regular') === 'long_term') {
-    $nextInvoiceDate = $contract['next_invoice_date'] ?: ($contract['start_date'] ?: date('Y-m-d'));
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=?, next_invoice_date=? WHERE id=?')
-        ->execute([$publicUrl, 'active', $nextInvoiceDate, $contract_id]);
-  } else {
+  // Save the signed PDF. For REGULAR contracts, auto-activate on upload (existing behavior).
+  // For LONG-TERM and ON-DEMAND, do NOT auto-activate — the user must explicitly click
+  // the Activate button after uploading the signed contract (council review #13 Position B).
+  // This preserves explicit user intent and prevents accidental activation.
+  $ctType = $contract['contract_type'] ?? 'regular';
+  if ($ctType === 'regular') {
     $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')
         ->execute([$publicUrl, 'active', $contract_id]);
+  } else {
+    // LT/OD: just save the path, don't change status. User clicks Activate separately.
+    $pdo->prepare('UPDATE contracts SET signed_pdf_path=? WHERE id=?')
+        ->execute([$publicUrl, $contract_id]);
   }
 
   $pdo->commit();
@@ -91,7 +94,7 @@ try {
   exit;
 }
 
-// Determine the contract type for a correct redirect target and any post-activation billing.
+// Determine the contract type for a correct redirect target.
 $contractType = 'regular';
 try {
   $tStmt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=?');
@@ -99,8 +102,9 @@ try {
   $contractType = (string)($tStmt->fetchColumn() ?: 'regular');
 } catch (Throwable $e) { /* default regular */ }
 
-// For long-term contracts, activating via signed upload should also send the first
-// invoice immediately if due (idempotent helper guards against double-billing).
+// For long-term contracts that are ALREADY active (e.g. re-uploading a signed PDF
+// on an already-active contract), generate the first invoice if due.
+// This does NOT run on first upload because LT contracts are not auto-activated.
 if ($contractType === 'long_term') {
   try {
     require_once __DIR__ . '/../../utils/recurring_billing.php';

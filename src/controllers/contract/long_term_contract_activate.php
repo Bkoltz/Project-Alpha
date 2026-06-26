@@ -26,6 +26,10 @@ try {
         throw new Exception('Only pending contracts can be activated');
     }
 
+    if (empty($contract['signed_pdf_path'])) {
+        throw new Exception('Upload signed contract first');
+    }
+
     // Set next invoice date to start date if not already set
     $nextInvoiceDate = $contract['next_invoice_date'] ?: $contract['start_date'];
 
