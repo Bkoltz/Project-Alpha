@@ -1,20 +1,20 @@
-# LTDS Contract Terms — Long-Term (Recurring Billing)
+# LTDS Contract Terms — Long-Term (Recurring Drone Services)
 
 > DRAFT — To be finalized. Based on regular terms with modifications for recurring billing.
 
-## Differences from Regular Terms
+## Differences from Regular
 
-- "Project completion" in term #2 changes to "billing period completion" — each invoice covers a specific period.
-- Add a cancellation clause: either party may terminate with 30 days written notice.
-- Add a pricing modification clause: LTDS may adjust pricing with 60 days written notice.
-- Add a payment method section: recurring billing via stored payment method (autopay) or invoice.
-- Marketing use term (#10) applies to all content captured across all billing periods.
+- "Project completion" changes to "billing period completion" — each invoice covers a specific period.
+- Adds cancellation clause: either party may terminate with 30 days written notice.
+- Adds pricing modification clause: LTDS may adjust pricing with 60 days written notice.
+- Adds payment method section for recurring billing.
+- Marketing use applies to all content captured across all billing periods.
 
 ## Default Terms (Draft)
 
 1. **Agreement**: This agreement is entered into between Ledge Top Drone Services (LTDS), a Sole Proprietorship organized and existing under the laws of Wisconsin with its principal place of business at 7039 County Road PP and the person(s) or business signed below.
 
-2. **Term and Billing**: This agreement shall remain in effect for the duration specified, billed [monthly/weekly/annually] as agreed. Each billing period is complete when photos/videos for that period are provided to Client, or 7 days have passed since Client has been notified of such completion. Interest in the amount of 18% will be applied if any invoice is not paid within 30 days.
+2. **Term and Billing**: This agreement shall remain in effect for the duration specified, billed monthly/weekly/annually as agreed. Each billing period is complete when photos/videos for that period are provided to Client, or 7 days have passed since Client has been notified of such completion. Interest in the amount of 18% will be applied if any invoice is not paid within 30 days.
 
 3. **Cancellation**: Either party may terminate this agreement with 30 days written notice. Upon termination, Client is responsible for payment of all services rendered through the termination date.
 
@@ -43,4 +43,4 @@
 - LTDS business address: 7039 County Road PP, Wisconsin
 - Legal jurisdiction: State of Wisconsin, USA
 - Late interest: 18% if not paid within 30 days
-- These terms apply to long-term (recurring billing) contracts.
+- These terms apply to long-term (recurring billing) drone service contracts.

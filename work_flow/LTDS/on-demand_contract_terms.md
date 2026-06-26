@@ -1,12 +1,12 @@
-# LTDS Contract Terms — On-Demand (Flexible/Manual Invoicing)
+# LTDS Contract Terms — On-Demand (Flexible Drone Services)
 
 > DRAFT — To be finalized. Based on regular terms with modifications for on-demand services.
 
-## Differences from Regular Terms
+## Differences from Regular
 
 - No fixed billing schedule — invoices generated manually as work is performed.
-- "Project completion" refers to each individual job/invoice, not a fixed contract end date.
-- Add a scope flexibility clause: each invoice defines its own scope of services.
+- "Project completion" refers to each individual job/invoice.
+- Each invoice defines its own scope of services.
 - Deposit terms may vary per invoice.
 
 ## Default Terms (Draft)
@@ -40,4 +40,4 @@
 - LTDS business address: 7039 County Road PP, Wisconsin
 - Legal jurisdiction: State of Wisconsin, USA
 - Late interest: 18% if not paid within 30 days
-- These terms apply to on-demand (flexible manual invoicing) contracts.
+- These terms apply to on-demand (flexible manual invoicing) drone service contracts.
