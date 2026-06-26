@@ -1,6 +1,6 @@
 <?php
-// src/views/pages/landing.php
-// Member landing page — shows quick-access cards for permitted modules
+// src/views/pages/user-dashboard.php
+// User dashboard — shows quick-access cards for permitted modules
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';

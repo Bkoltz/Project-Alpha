@@ -35,7 +35,11 @@ A PHP 8.3 business-document SaaS for quotes, contracts, invoices, receipts, and 
 - **Users, Auth, and Security**
   - Session-based login with CSRF protection.
   - Optional 2FA (TOTP) with backup codes.
-  - Role-based access (`admin` / `user`).
+  - Role-based access control with 4 system roles: `owner`, `admin`, `staff`, `member`.
+  - Per-user permission overrides (allow/deny specific permissions per user).
+  - Permission-filtered navigation (sidebar hides sections the user can't access).
+  - User dashboard for non-admin users (card-based module quick-access).
+  - Admin dashboard (financial dashboard with income/expense charts).
   - Login rate limiting (IP and per-account).
   - Password policy enforcement.
   - Router-level audit logging for sensitive actions.
@@ -557,7 +561,8 @@ Sensitive values (Stripe keys, SMTP password, encryption key) are **never stored
 - **First-admin registration**: When the `users` table is empty, the login page shows a "Create First Admin" form (no manual DB inserts needed). The Docker startup path also seeds the admin from `ADMIN_PASSWORD` in `docker-compose.yml`.
 - **Password policy**: Minimum 8 characters, mixed case, digit, and special character required; enforced on register, reset, and account update.
 - **Rate limiting**: IP-based (15 attempts / 10 min) and per-account (5 attempts / 15 min) lockout on failed logins.
-- **Role-based access**: Permission groups assigned by role (`owner`, `admin`, `staff`, `member`) with user-level overrides for sensitive pages and controllers.
+- **Role-based access**: Permission groups assigned by role (`owner`, `admin`, `staff`, `member`) with per-user overrides for granular control. Navigation sidebar is filtered by user permissions — users only see modules they can access.
+- **User dashboard**: Non-admin users get a card-based dashboard (`/?page=user-dashboard`) showing quick-access tiles for permitted modules. Admin users get the financial dashboard at `/`.
 - **2FA (TOTP)**: Optional two-factor authentication via authenticator app; backup codes provided.
 - **Audit middleware**: Router-level logging of all sensitive actions (payments, password resets, 2FA changes, API key create/revoke, deletes, contract sign/complete, email send, PDF export, Stripe webhooks).
 

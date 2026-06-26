@@ -53,3 +53,10 @@ Set `SKIP_MIGRATIONS_ON_BOOT=true` in the container environment to skip all migr
   forms/            ← Uploaded forms and documents (by category)
   signed_contracts/ ← Signed contract PDFs from clients
 ```
+
+## Dashboard Pages
+
+- **Admin dashboard** (`home.php` at `/?page=home`): Financial dashboard with income/expense charts, requires `financial.view` permission.
+- **User dashboard** (`user-dashboard.php` at `/?page=user-dashboard`): Card-based module quick-access for non-admin users, no specific permission required (authenticated users only).
+
+Non-admin users are automatically redirected to the user dashboard on login. The navigation sidebar shows "Dashboard" for both admin and user roles, linking to the appropriate dashboard.

@@ -89,7 +89,7 @@ function nav_can(string $permission): bool {
         <line x1="3" y1="18" x2="21" y2="18"></line>
       </svg>
     </button>
-    <a class="topbar-brand" href="<?php echo nav_can('financial.view') ? '/' : '/?page=landing'; ?>">
+    <a class="topbar-brand" href="<?php echo nav_can('financial.view') ? '/' : '/?page=user-dashboard'; ?>">
       <?php $brandTop = $appConfig['brand_name'] ?? 'Project Alpha';
       $logoTop = $appConfig['logo_path'] ?? null; ?>
       <?php if ($logoTop): ?>
@@ -102,7 +102,7 @@ function nav_can(string $permission): bool {
   <header class="site-shell">
     <aside class="side-nav" id="primary-sidebar" role="navigation" aria-label="Primary">
       <div class="nav-inner">
-        <a class="brand" href="<?php echo nav_can('financial.view') ? '/' : '/?page=landing'; ?>">
+        <a class="brand" href="<?php echo nav_can('financial.view') ? '/' : '/?page=user-dashboard'; ?>">
           <?php $brand = $appConfig['brand_name'] ?? 'Project Alpha';
           $logo = $appConfig['logo_path'] ?? null; ?>
           <?php if ($logo): ?>
@@ -119,6 +119,10 @@ function nav_can(string $permission): bool {
             <?php if ($showDashboard): ?>
             <li>
               <a href="/" data-page="home" class="active">Dashboard</a>
+            </li>
+            <?php else: ?>
+            <li>
+              <a href="/?page=user-dashboard" data-page="user-dashboard" class="active">Dashboard</a>
             </li>
             <?php endif; ?>
 
