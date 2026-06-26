@@ -5,9 +5,12 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
-require_record_ownership($pdo, 'quotes', $id);
+if (!defined('PDF_MODE')) {
+    require_record_ownership($pdo, 'quotes', $id);
+}
 $stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -31,10 +34,11 @@ $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_tot
 $items->execute([$id]);
 $items = $items->fetchAll();
 require_once __DIR__ . '/../../../utils/format.php';
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($quote['created_by']) ? (int)$quote['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 // Resolve terms: project-level terms override quote terms override app settings
 $termsText = '';
 if (!empty($quote['project_code'])) {
@@ -314,24 +318,7 @@ $isPdf = defined('PDF_MODE');
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-          $fromNameLine = trim((string)($fromName ?? ''));
-          $fromLines = [];
-          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-          $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-          if ($addr1 !== '') { $fromLines[] = $addr1; }
-          if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
-          $parts = [];
-          if ($city !== '') { $parts[] = $city; }
-          if ($state !== '') { $parts[] = $state; }
-          if ($postal !== '') { $parts[] = $postal; }
-          $cityLine = implode(', ', $parts);
-          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+          $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
@@ -380,6 +367,39 @@ $isPdf = defined('PDF_MODE');
     <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
   </div>
   <div style="page-break-after:always"></div>
+  <?php endif; ?>
+
+  <?php
+  // Long-term / on-demand billing summary for quote PDFs
+  $qtType = $quote['quote_type'] ?? 'regular';
+  if (in_array($qtType, ['long_term', 'on_demand'], true)):
+    $qBiCount = (int)($quote['billing_interval_count'] ?? 1);
+    $qBiUnit = $quote['billing_interval_unit'] ?? 'month';
+    $qBiText = $qBiCount . ' ' . ucfirst($qBiUnit);
+    if ($qBiCount > 1) $qBiText .= 's';
+    $qSvcDesc = trim((string)($quote['scope'] ?? ''));
+    $qAmtPerInv = (float)($quote['price_per_invoice'] ?? 0);
+    $qPricingType = $quote['pricing_type'] ?? null;
+  ?>
+  <div style="margin:16px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#065f46">
+      <?php echo $qtType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
+    </div>
+    <?php if ($qSvcDesc !== ''): ?>
+      <div style="margin-bottom:8px"><strong>Service:</strong> <?php echo htmlspecialchars($qSvcDesc); ?></div>
+    <?php endif; ?>
+    <?php if ($qtType === 'long_term'): ?>
+      <div style="margin-bottom:8px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($qBiText); ?></div>
+    <?php endif; ?>
+    <?php if ($qPricingType === 'per_invoice' || $qtType === 'on_demand'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">
+        Amount Per Invoice: $<?php echo number_format($qAmtPerInv, 2); ?>
+        <?php if ($qtType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($qBiUnit)); ?><?php endif; ?>
+      </div>
+    <?php elseif ($qPricingType === 'fixed_total'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">Total: $<?php echo number_format((float)($quote['total'] ?? 0), 2); ?></div>
+    <?php endif; ?>
+  </div>
   <?php endif; ?>
 
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">

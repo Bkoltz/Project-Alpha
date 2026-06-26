@@ -42,7 +42,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
+$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.subtotal, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, odc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY odc.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -158,17 +158,34 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($billingText); ?></td>
-            <td style="padding:10px">$<?php echo number_format((float)$r['price_per_invoice'], 2); ?></td>
+            <?php $displayPrice = (float)($r['price_per_invoice'] ?? 0) > 0 ? (float)$r['price_per_invoice'] : (float)($r['subtotal'] ?? 0); ?>
+            <td style="padding:10px">$<?php echo number_format($displayPrice, 2); ?></td>
             <td style="padding:10px"><?php echo (int)$r['invoice_count']; ?> ($<?php echo number_format((float)$r['total_invoiced'], 2); ?>)</td>
             <td style="padding:10px"><?php echo $r['last_invoice_date'] ? date('M j, Y', strtotime($r['last_invoice_date'])) : '—'; ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=contract/on-demand-invoices-list&contract_id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Invoices</a>
-              <?php if ($r['status'] === 'pending'): ?>
-                <form method="post" action="/?page=on-demand-contract-activate" style="display:inline">
+              <?php if ($r['status'] !== 'cancelled'): ?>
+                <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
+                  <input id="upl-od-<?php echo (int)$r['id']; ?>" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+                  <?php $uplLabel = empty($r['signed_pdf_path']) ? 'Upload' : 'New Upload'; ?>
+                  <button type="button" onclick="document.getElementById('upl-od-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;"><?php echo $uplLabel; ?></button>
                 </form>
+              <?php endif; ?>
+              <?php if (!empty($r['signed_pdf_path'])): ?>
+                <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: small;">Signed PDF</a>
+              <?php endif; ?>
+              <?php if ($r['status'] === 'pending'): ?>
+                <?php if (empty($r['signed_pdf_path'])): ?>
+                  <button type="button" disabled title="Upload signed contract first" style="padding:6px 10px;border:0;border-radius:8px;background:#9ca3af;color:#fff;font-size:small;cursor:not-allowed">Activate</button>
+                <?php else: ?>
+                  <form method="post" action="/?page=on-demand-contract-activate" style="display:inline">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                    <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
+                  </form>
+                <?php endif; ?>
               <?php endif; ?>
               <?php if ($r['status'] === 'active'): ?>
                 <?php 
@@ -179,10 +196,11 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   }
                 ?>
                 <?php if ($canGenerate): ?>
-                <form method="post" action="/?page=on-demand-invoice-generate" style="display:inline" onsubmit="return confirm('Generate invoice for this contract?')">
+                <form method="post" action="/?page=on-demand-invoice-generate" class="od-generate-form" style="display:inline">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#3b82f6;color:#fff; font-size: small;">Generate Invoice</button>
+                  <input type="hidden" name="send_email" value="0">
+                  <button type="button" onclick="openOdGenerateModal(this.form)" style="padding:6px 10px;border:0;border-radius:8px;background:#3b82f6;color:#fff; font-size: small;">Generate Invoice</button>
                 </form>
                 <?php endif; ?>
                 <form method="post" action="/?page=on-demand-contract-pause" style="display:inline">
@@ -210,6 +228,43 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
       </tbody>
     </table>
   </div>
+
+  <div id="odGenerateModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:1000;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#fff;border-radius:8px;max-width:440px;width:100%;box-shadow:0 24px 70px rgba(15,23,42,0.25);border:1px solid #e5e7eb">
+      <div style="padding:18px 20px;border-bottom:1px solid #e5e7eb">
+        <h3 style="margin:0;font-size:18px">Generate On-Demand Invoice</h3>
+        <p style="margin:6px 0 0;color:#6b7280;font-size:14px">Choose whether to send the invoice now or generate it for review and edits first.</p>
+      </div>
+      <div style="padding:18px 20px;display:grid;gap:10px">
+        <button type="button" onclick="submitOdGenerate(true)" style="width:100%;padding:11px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">Generate and Send Email</button>
+        <button type="button" onclick="submitOdGenerate(false)" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-weight:600;cursor:pointer">Generate Only</button>
+        <button type="button" onclick="closeOdGenerateModal()" style="width:100%;padding:11px 14px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;color:#6b7280;font-weight:600;cursor:pointer">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var odGenerateForm = null;
+    function openOdGenerateModal(form) {
+      odGenerateForm = form;
+      var modal = document.getElementById('odGenerateModal');
+      if (modal) modal.style.display = 'flex';
+    }
+    function closeOdGenerateModal() {
+      odGenerateForm = null;
+      var modal = document.getElementById('odGenerateModal');
+      if (modal) modal.style.display = 'none';
+    }
+    function submitOdGenerate(sendEmail) {
+      if (!odGenerateForm) return;
+      var input = odGenerateForm.querySelector('input[name="send_email"]');
+      if (input) input.value = sendEmail ? '1' : '0';
+      odGenerateForm.submit();
+    }
+    document.getElementById('odGenerateModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeOdGenerateModal();
+    });
+  </script>
 
   <?php
     $last=(int)ceil(max(1,$total)/$per);

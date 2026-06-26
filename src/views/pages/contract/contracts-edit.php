@@ -159,12 +159,7 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
       }
     }
     ?>
-    <?php if (!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])): ?>
-      <label>
-        <div>Scope of Work</div>
-        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables for this contract..."><?php echo htmlspecialchars($contract['scope'] ?? ''); ?></textarea>
-      </label>
-    <?php endif; ?>
+    <!-- Job Notes (shared across related docs) -->
     <label>
       <div>Job Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
@@ -172,6 +167,12 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
     <label>
       <div>Job Terms (override default terms for this job)</div>
       <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
+    </label>
+
+    <!-- Service Description -->
+    <label>
+      <div>Service Description</div>
+      <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="e.g. Website hosting, Google Ads management"><?php echo htmlspecialchars($contract['scope'] ?? ''); ?></textarea>
     </label>
 
     <div id="totalsCo" style="margin-top:8px;display:grid;gap:6px;justify-content:end">

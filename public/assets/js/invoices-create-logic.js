@@ -71,7 +71,8 @@ function initInvoiceClientDropdown() {
                 if (!Array.isArray(list) || list.length === 0) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
                 sugI.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
                 Array.from(sugI.children).forEach(el => {
-                    el.addEventListener('click', function () {
+                    el.addEventListener('click', function (e) {
+                        e.stopPropagation();
                         ciI.value = this.dataset.name; cidI.value = this.dataset.id;
                         if (this.dataset.taxexempt && taxBannerInv) { taxBannerInv.style.display = 'block'; } else if(taxBannerInv) { taxBannerInv.style.display = 'none'; }
                         loadProjectsForClientInv(this.dataset.id);
@@ -81,7 +82,6 @@ function initInvoiceClientDropdown() {
                 sugI.style.display = 'block';
             }).catch(() => { sugI.style.display = 'none' });
     });
-    document.addEventListener('click', function (e) { if (!sugI.contains(e.target) && e.target !== ciI) { sugI.style.display = 'none'; } });
 }
 
 initInvoiceClientDropdown();

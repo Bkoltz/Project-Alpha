@@ -13,7 +13,10 @@ use Monolog\Processor\WebProcessor;
 $logger = new Logger('project_alpha');
 
 // Create logs directory if it doesn't exist
-$logsDir = __DIR__ . '/../../logs';
+$logsDir = '/var/www/config/logs/system';
+if (!is_dir($logsDir)) {
+    $logsDir = __DIR__ . '/../../config/logs/system';
+}
 if (!is_dir($logsDir)) {
     mkdir($logsDir, 0755, true);
 }

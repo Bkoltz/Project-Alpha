@@ -12,9 +12,9 @@ if (!function_exists('app_logger')) {
     try {
       if (!class_exists(MonologLogger::class)) throw new \Exception('monolog not installed');
       $projectRoot = realpath(__DIR__ . '/../../') ?: __DIR__ . '/../../';
-      $logDir = '/var/www/config/logs/system-logs';
+      $logDir = '/var/www/config/logs/system';
       if (!is_dir($logDir)) {
-        $logDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'config/logs/system-logs';
+        $logDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'config/logs/system';
       }
       if (!is_dir($logDir)) @mkdir($logDir, 0775, true);
       $handler = new RotatingFileHandler($logDir . DIRECTORY_SEPARATOR . 'app.log', 30, MonologLogger::DEBUG);
@@ -28,9 +28,9 @@ if (!function_exists('app_logger')) {
     } catch (Throwable $e) {
       // fallback simple logger
       $projectRoot = realpath(__DIR__ . '/../../') ?: __DIR__ . '/../../';
-      $fbDir = '/var/www/config/logs/system-logs';
+      $fbDir = '/var/www/config/logs/system';
       if (!is_dir($fbDir)) {
-        $fbDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'config/logs/system-logs';
+        $fbDir = rtrim($projectRoot, '/\\') . DIRECTORY_SEPARATOR . 'config/logs/system';
       }
       $file = $fbDir . DIRECTORY_SEPARATOR . 'app.log';
       if (!is_dir(dirname($file))) @mkdir(dirname($file), 0775, true);
@@ -68,7 +68,7 @@ if (!function_exists('audit_event')) {
 }
 // <?php
 // src/utils/logger.php
-// Simple application logger writing to config/logs/system-logs/YYYY-MM-DD.log
+// Simple application logger writing to config/logs/system/YYYY-MM-DD.log
 
 if (!function_exists('app_log_safe')) {
     function app_log_safe(string $category, string $message, array $context = []): void {
@@ -86,12 +86,11 @@ if (!function_exists('app_log')) {
             $date = new DateTime('now');
             $day = $date->format('Y-m-d');
             $time = $date->format('Y-m-d H:i:s');
-            // System logs live under /config/logs/system-logs/ (external mount or project config)
+            // System logs live under /config/logs/system/ (external mount or project config)
             $candidates = [
-                ['/var/www/config/logs/system-logs', true],
-                [__DIR__ . '/../../config/logs/system-logs', false],
-                [__DIR__ . '/../config/../../config/logs/system-logs', false],
-                [__DIR__ . '/../uploads/logs', false],
+                ['/var/www/config/logs/system', true],
+                [__DIR__ . '/../../config/logs/system', false],
+                [__DIR__ . '/../config/../../config/logs/system', false],
             ];
             $logDir = null;
             foreach ($candidates as [$p, $ensure]) {

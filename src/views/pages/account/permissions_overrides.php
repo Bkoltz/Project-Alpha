@@ -60,7 +60,7 @@ function permLabel(string $perm): string {
 }
 ?>
 
-<div class="pa-permissions-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
+<div id="permissions-panel-edit" class="pa-permissions-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;transition:opacity 180ms ease,max-height 220ms ease,padding 180ms ease,margin 180ms ease,border-width 180ms ease;max-height:5000px;overflow:hidden;">
     <h3 style="margin:0 0 8px 0;">Permissions</h3>
     <p style="margin:0 0 16px 0;color:#6b7280;font-size:14px;">Set what this user can access. Admins always have full access — these settings apply to non-admin users only.</p>
 
@@ -74,11 +74,11 @@ function permLabel(string $perm): string {
         <div style="margin:0 0 16px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4;">Overrides saved.</div>
     <?php endif; ?>
 
-    <?php if ($targetRole === 'admin'): ?>
-        <div class="pa-admin-notice" style="padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;color:#0c4a6e;">
+        <div id="admin-permissions-note-edit" class="pa-admin-notice" style="display:<?php echo $targetRole === 'admin' ? 'block' : 'none'; ?>;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;color:#0c4a6e;">
             <p style="margin:0;">Admins have full access to everything. Per-permission settings don't apply to admin accounts.</p>
         </div>
-    <?php else: ?>
+
+        <div id="permissions-grid-edit" style="display:<?php echo $targetRole === 'admin' ? 'none' : 'block'; ?>;">
         <form method="post" action="/?page=settings/permissions-handler">
             <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
             <input type="hidden" name="action" value="save_user_overrides">
@@ -185,5 +185,5 @@ function permLabel(string $perm): string {
             });
         });
         </script>
-    <?php endif; ?>
+        </div>
 </div>

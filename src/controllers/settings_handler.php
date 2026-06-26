@@ -80,8 +80,9 @@ $settings = [
     'quote_auto_create_contract' => 1,
     'quote_auto_create_invoice' => 1,
     // Automatic invoice email settings
-    'invoice_auto_send_due_7days' => 0,
-    'invoice_auto_send_overdue_weekly' => 0,
+    'invoice_auto_send_due_7days' => 1,
+    'invoice_auto_send_overdue_weekly' => 1,
+    'invoice_auto_email_on_generate' => 1,
     // SMTP configuration (optional)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -312,7 +313,7 @@ $generalConfigKeys = [
     'terms', 'long_term_terms', 'on_demand_terms',
     'net_terms_days', 'documents_valid_days', 'payment_methods',
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
-    'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly',
+    'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
     'auto_terminate_contracts', 'link_expiration_checker',
     'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
     'payment_failure_alert', 'payment_received_notification',
@@ -353,6 +354,8 @@ if (!empty($generalConfigKeys)) {
 // Cron/recurring invoice settings
 if (isset($_POST['cron_enabled'])) {
     $settings['cron_enabled'] = !empty($_POST['cron_enabled']) ? 1 : 0;
+} else {
+    $settings['cron_enabled'] = 1;
 }
 if (isset($_POST['cron_schedule'])) {
     $sched = trim((string)$_POST['cron_schedule']);
@@ -368,6 +371,7 @@ if (isset($_POST['cron_custom'])) {
 // Automatic invoice email settings
 $settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
 $settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
+$settings['invoice_auto_email_on_generate'] = !empty($_POST['invoice_auto_email_on_generate']) ? 1 : 0;
 
 // System automation settings
 $settings['auto_terminate_contracts'] = !empty($_POST['auto_terminate_contracts']) ? 1 : 0;

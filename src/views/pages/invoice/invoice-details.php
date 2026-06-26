@@ -5,8 +5,11 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 $id = (int)($_GET['id'] ?? 0);
-require_record_ownership($pdo, 'invoices', $id);
+if (!defined('PDF_MODE')) {
+    require_record_ownership($pdo, 'invoices', $id);
+}
 $st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
@@ -14,10 +17,11 @@ if(!$inv){ echo '<p>Invoice not found</p>'; return; }
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($inv['created_by']) ? (int)$inv['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 // Load project notes if available and resolve terms fallback
 $projectNotes = null;
 $termsText = '';
@@ -286,24 +290,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-          $fromNameLine = trim((string)($fromName ?? ''));
-          $fromLines = [];
-          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-          $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-          if ($addr1 !== '') { $fromLines[] = $addr1; }
-          if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
-          $parts = [];
-          if ($city !== '') { $parts[] = $city; }
-          if ($state !== '') { $parts[] = $state; }
-          if ($postal !== '') { $parts[] = $postal; }
-          $cityLine = implode(', ', $parts);
-          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+          $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>

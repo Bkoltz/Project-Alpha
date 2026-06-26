@@ -114,7 +114,7 @@ Current cron service volumes:
 volumes:
   - ./src/uploads:/var/www/src/uploads
   - ./config:/var/www/config
-  - cron_logs:/var/log/cron
+  - config:/var/www/config/logs/cron
 ```
 
 Missing: `- ./src:/var/www/src` — this means cron runs stale built-in code, not live source.

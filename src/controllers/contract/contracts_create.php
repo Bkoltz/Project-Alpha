@@ -130,22 +130,29 @@ try{
   $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
   $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
-  // Save contract signatures
-  $signatureTitles = $_POST['signature_titles'] ?? [];
-  $signatureOrders = $_POST['signature_orders'] ?? [];
-  $signatureRequired = $_POST['signature_required'] ?? [];
-  
-  if (!empty($signatureTitles)) {
-      $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
-      foreach ($signatureTitles as $idx => $title) {
-          $title = trim($title);
-          if (empty($title)) continue;
-          
-          $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
-          $isRequired = in_array('sig_' . $idx, $signatureRequired) ? 1 : 0;
-          
-          $sigStmt->execute([$co_id, $title, $order, $isRequired]);
+  // Save contract signatures (non-critical; failures must not roll back contract creation)
+  try {
+      $signatureTitles = $_POST['signature_titles'] ?? [];
+      if (!empty($signatureTitles)) {
+          $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
+          foreach ($signatureTitles as $title) {
+              $title = trim((string)$title);
+              if ($title === '') continue;
+
+              $lower = strtolower($title);
+              if (strpos($lower, 'admin') !== false) {
+                  $signatoryType = 'admin';
+              } elseif (strpos($lower, 'witness') !== false) {
+                  $signatoryType = 'witness';
+              } else {
+                  $signatoryType = 'client';
+              }
+
+              $sigStmt->execute([$co_id, $signatoryType]);
+          }
       }
+  } catch (Throwable $sigErr) {
+      @error_log('contracts_create signature insert failed: ' . $sigErr->getMessage());
   }
 
   // Add to project_documents if project_id is set

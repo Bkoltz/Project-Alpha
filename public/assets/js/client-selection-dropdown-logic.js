@@ -6,6 +6,11 @@ function initClientDropdown() {
 
     // Only initialize if elements exist
     if (!ci || !cid || !sug) return;
+
+    // Guard against duplicate initialization (SPA navigation re-fires pageLoaded)
+    if (ci._clientDropdownReady) return;
+    ci._clientDropdownReady = true;
+
     // Remove any existing input listener to avoid duplicates
     ci.removeEventListener('input', ci._clientDropdownHandler);
     ci._clientDropdownHandler = function () {
@@ -31,7 +36,8 @@ function initClientDropdown() {
                 sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
 
                 Array.from(sug.children).forEach(el => {
-                    el.addEventListener('click', function () {
+                    el.addEventListener('click', function (e) {
+                        e.stopPropagation();
                         ci.value = this.dataset.name;
                         cid.value = this.dataset.id;
 
@@ -48,12 +54,24 @@ function initClientDropdown() {
     };
     ci.addEventListener('input', ci._clientDropdownHandler);
 
-    // Close dropdown on outside click
-    document.addEventListener('click', function (e) {
-        if (sug && !sug.contains(e.target) && e.target !== ci) {
-            sug.style.display = 'none';
-        }
-    });
+    // Close dropdown on outside click — use named handler so it can be cleaned up
+    if (!document._clientOutsideClickHandler) {
+        document._clientOutsideClickHandler = function (e) {
+            // Find the active suggestion div — check all known IDs
+            var allSug = ['clientSuggest', 'clientSuggestCo', 'clientSuggestInv', 'clientSuggestPL', 'clientSuggestODI'];
+            allSug.forEach(function (sid) {
+                var s = document.getElementById(sid);
+                var inputId = sid.replace('clientSuggest', 'clientInput').replace('Suggest', '');
+                // Map suggestion div to its input
+                var inputMap = { 'clientSuggest': 'clientInput', 'clientSuggestCo': 'clientInputCo', 'clientSuggestInv': 'clientInputInv', 'clientSuggestPL': 'clientInputPL', 'clientSuggestODI': 'clientInputODI' };
+                var inp = document.getElementById(inputMap[sid] || inputId);
+                if (s && !s.contains(e.target) && e.target !== inp) {
+                    s.style.display = 'none';
+                }
+            });
+        };
+        document.addEventListener('click', document._clientOutsideClickHandler);
+    }
 }
 
 // Auto-initialize on full page loads

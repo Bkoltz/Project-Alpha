@@ -5,7 +5,7 @@
 SHELL=/bin/bash
 
 # Unified log file for all cron jobs
-CRON_LOG=/var/www/logs/cron.log
+CRON_LOG=/var/www/config/logs/cron/cron.log
 
 # Generate recurring invoices - daily at 2:00 AM UTC
 0 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_invoices.php >> $CRON_LOG 2>&1

@@ -5,7 +5,10 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
-require_record_ownership($pdo, 'contracts', $id);
+require_once __DIR__ . '/../../../utils/document_sender.php';
+if (!defined('PDF_MODE')) {
+    require_record_ownership($pdo, 'contracts', $id);
+}
 $c = $pdo->prepare('SELECT ltc.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts ltc JOIN clients cl ON cl.id=ltc.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE ltc.id=? AND ltc.contract_type="long_term"');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
@@ -20,10 +23,11 @@ if ($contract['pricing_type'] === 'fixed_total') {
 }
 
 require_once __DIR__ . '/../../../utils/format.php';
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($contract['created_by']) ? (int)$contract['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 
 // Resolve terms
 $termsText = '';
@@ -82,10 +86,22 @@ $isOngoing = empty($contract['end_date']);
   <div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Recurring Billing Agreement</div>
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
+    <?php if (($contract['status'] ?? '') !== 'cancelled'): ?>
+      <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <input id="upload-signed-lt" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+        <?php $uplLabel = empty($contract['signed_pdf_path']) ? 'Upload Signed PDF' : 'Replace Signed PDF'; ?>
+        <button type="button" onclick="document.getElementById('upload-signed-lt').click()" class="btn btn-sm"><?php echo $uplLabel; ?></button>
+      </form>
+    <?php endif; ?>
+    <?php if (!empty($contract['signed_pdf_path'])): ?>
+      <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
+    <?php endif; ?>
   </div>
   <?php endif; ?>
 
@@ -184,24 +200,7 @@ $isOngoing = empty($contract['end_date']);
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">Service Provider</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-          $fromNameLine = trim((string)($fromName ?? ''));
-          $fromLines = [];
-          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-          $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-          if ($addr1 !== '') { $fromLines[] = $addr1; }
-          if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
-          $parts = [];
-          if ($city !== '') { $parts[] = $city; }
-          if ($state !== '') { $parts[] = $state; }
-          if ($postal !== '') { $parts[] = $postal; }
-          $cityLine = implode(', ', $parts);
-          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+          $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
@@ -256,7 +255,7 @@ $isOngoing = empty($contract['end_date']);
     <tbody>
       <?php if ($contract['pricing_type'] === 'per_invoice'): ?>
         <tr>
-          <td colspan="3" style="padding:12px">Recurring service fee (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
+          <td colspan="3" style="padding:12px"><?php echo !empty($contract['scope']) ? htmlspecialchars($contract['scope']) : 'Recurring service fee'; ?> (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
           <td style="padding:12px;text-align:right;font-weight:600">$<?php echo number_format($contract['price_per_invoice'], 2); ?></td>
         </tr>
       <?php else: ?>
@@ -317,13 +316,21 @@ $isOngoing = empty($contract['end_date']);
           <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.'); ?>
         </td>
       </tr>
-      <tr>
-        <td colspan="4" style="padding:20px 10px 40px">
-          <div style="border-top:2px solid #111;width:50%;margin-top:40px"></div>
-          <div style="margin-top:4px;color:#4b5563">Client Signature</div>
-        </td>
-      </tr>
     </tbody>
+  </table>
+
+  <!-- Signature block -->
+  <table style="width:100%;border-collapse:collapse;margin-top:20px">
+    <tr>
+      <td style="width:65%;height:50px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        Client Signature
+      </td>
+      <td style="width:35%;height:50px;vertical-align:bottom;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        Date
+      </td>
+    </tr>
   </table>
 
   <div style="page-break-after:always"></div>

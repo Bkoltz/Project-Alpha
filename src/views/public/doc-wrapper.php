@@ -34,9 +34,10 @@ $surchargeInfo = null;
 if ($type === 'invoice') {
     require_once __DIR__ . '/../../services/StripeService.php';
     require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
+    require_once __DIR__ . '/../../utils/document_sender.php';
     $stripeConfigured = StripeService::isConfigured($appConfig);
     try {
-        $invSt = $pdo->prepare('SELECT status, total, amount_paid, original_amount, surcharge_amount, surcharge_type FROM invoices WHERE id = ?');
+        $invSt = $pdo->prepare('SELECT status, total, amount_paid, original_amount, surcharge_amount, surcharge_type, created_by FROM invoices WHERE id = ?');
         $invSt->execute([$rid]);
         $invoiceData = $invSt->fetch(PDO::FETCH_ASSOC);
         if ($invoiceData) {
@@ -315,12 +316,14 @@ if ($type === 'invoice') {
       }
       
       if ($hasCheck):
-        $payeeName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-        $payeeAddress = [];
-        if (!empty($appConfig['from_address'])) $payeeAddress[] = $appConfig['from_address'];
-        if (!empty($appConfig['from_city'])) $payeeAddress[] = $appConfig['from_city'];
-        if (!empty($appConfig['from_state'])) $payeeAddress[] = $appConfig['from_state'];
-        if (!empty($appConfig['from_zip'])) $payeeAddress[] = $appConfig['from_zip'];
+        $payeeSender = function_exists('document_sender_for_creator')
+          ? document_sender_for_creator($pdo, $appConfig, !empty($invoiceData['created_by']) ? (int)$invoiceData['created_by'] : null)
+          : ['name' => (($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha'))];
+        $payeeName = $payeeSender['name'] ?? (($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha'));
+        $payeeAddress = function_exists('document_sender_lines') ? document_sender_lines($payeeSender) : [];
+        if (!empty($payeeAddress) && strcasecmp((string)$payeeAddress[0], (string)$payeeName) === 0) {
+          array_shift($payeeAddress);
+        }
       ?>
       <div class="payment-option">
         <div class="payment-option-icon">📄</div>

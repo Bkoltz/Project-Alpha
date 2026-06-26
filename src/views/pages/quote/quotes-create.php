@@ -164,10 +164,14 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
         </label>
       </div>
 
-      <div id="perInvoiceField" style="margin-top:12px">
+      <div id="perInvoiceField" style="display:grid;gap:12px;margin-top:12px">
         <label>
           <div>Amount Per Invoice * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
           <input id="pricePerInvoiceInput" type="number" step="0.01" name="lt_price_per_invoice" placeholder="20.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
+        </label>
+        <label>
+          <div>Service Description</div>
+          <textarea name="scope" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="e.g. Website hosting, Google Ads management"></textarea>
         </label>
       </div>
 
@@ -236,6 +240,10 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
           <div>Quote Amount * <span style="font-size:13px;color:#6b7280;font-weight:normal">(before tax & discount)</span></div>
           <input id="onDemandAmountInput" type="number" step="0.01" name="od_flat_amount" placeholder="0.00" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" oninput="recalc()">
         </label>
+        <label style="margin-top:12px">
+          <div>Service Description</div>
+          <textarea name="scope" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="e.g. Website hosting, Google Ads management"></textarea>
+        </label>
       </div>
 
       <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:13px">
@@ -249,18 +257,13 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
       <button type="button" onclick="addItem()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
 
-    <!-- Scope -->
-    <?php if (!isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled'])): ?>
-      <label>
-        <div>Scope of Work</div>
-        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."></textarea>
-      </label>
-    <?php endif; ?>
-
+    <!-- Job Notes (shared across related docs) -->
     <label>
       <div>Job Notes (shared across related docs)</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Notes visible to you (not the client PDF)"></textarea>
     </label>
+
+    <!-- Invoice preview (hidden by default) -->
 
     <div id="invoiceAmountRow" style="display:none;margin-top:8px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px">
       <div style="display:flex;justify-content:space-between;align-items:center">

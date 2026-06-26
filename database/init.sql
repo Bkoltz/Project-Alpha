@@ -20,6 +20,17 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) NULL,
     role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
     force_password_reset TINYINT(1) NOT NULL DEFAULT 0,
+    document_sender_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    document_sender_name VARCHAR(255) NULL,
+    document_sender_company VARCHAR(255) NULL,
+    document_sender_address_line1 VARCHAR(255) NULL,
+    document_sender_address_line2 VARCHAR(255) NULL,
+    document_sender_city VARCHAR(120) NULL,
+    document_sender_state VARCHAR(120) NULL,
+    document_sender_postal VARCHAR(40) NULL,
+    document_sender_country VARCHAR(120) NULL,
+    document_sender_phone VARCHAR(80) NULL,
+    document_sender_email VARCHAR(255) NULL,
     is_disabled TINYINT(1) NOT NULL DEFAULT 0,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     tos_accepted_at TIMESTAMP NULL DEFAULT NULL,
@@ -696,6 +707,7 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_inv_notif_invoice (invoice_id),
     INDEX idx_inv_notif_type (notification_type),
+    UNIQUE INDEX uq_invoice_notification (invoice_id, notification_type),
     CONSTRAINT fk_inv_notif_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1366,7 +1378,11 @@ ON DUPLICATE KEY UPDATE role = VALUES(role), is_default = VALUES(is_default);
 INSERT INTO app_config (config_key, config_value) VALUES
     ('brand_name', 'Project Alpha'),
     ('timezone', 'UTC'),
-    ('primary_state', '')
+    ('primary_state', ''),
+    ('cron_enabled', '1'),
+    ('invoice_auto_send_due_7days', '1'),
+    ('invoice_auto_send_overdue_weekly', '1'),
+    ('invoice_auto_email_on_generate', '1')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);
 
 -- ============================================================================

@@ -486,6 +486,10 @@ function initQuoteClientDropdown() {
         console.log('Quote client dropdown elements not found');
         return;
     }
+
+    // Guard against duplicate initialization (SPA navigation re-fires pageLoaded)
+    if (ci._quoteDropdownReady) return;
+    ci._quoteDropdownReady = true;
     
     ci.addEventListener('input', function () {
         cid.value = '';
@@ -497,7 +501,8 @@ function initQuoteClientDropdown() {
                 if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
                 sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
                 Array.from(sug.children).forEach(el => {
-                    el.addEventListener('click', function () {
+                    el.addEventListener('click', function (e) {
+                        e.stopPropagation();
                         ci.value = this.dataset.name; cid.value = this.dataset.id;
                         if (this.dataset.taxexempt && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
                         loadProjectsForClient(this.dataset.id);
@@ -507,7 +512,6 @@ function initQuoteClientDropdown() {
                 sug.style.display = 'block';
             }).catch(() => { sug.style.display = 'none' });
     });
-    document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
 }
 
 // Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)

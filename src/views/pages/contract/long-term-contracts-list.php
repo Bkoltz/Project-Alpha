@@ -42,7 +42,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, c.name client, c.id AS client_id FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
+$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, ltc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY ltc.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -167,12 +167,28 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px"><?php echo $r['next_invoice_date'] ? date('M j, Y', strtotime($r['next_invoice_date'])) : '—'; ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
-              <?php if ($r['status'] === 'pending'): ?>
-                <form method="post" action="/?page=long-term-contract-activate" style="display:inline">
+              <?php if ($r['status'] !== 'cancelled'): ?>
+                <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
+                  <input id="upl-lt-<?php echo (int)$r['id']; ?>" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
+                  <?php $uplLabel = empty($r['signed_pdf_path']) ? 'Upload' : 'New Upload'; ?>
+                  <button type="button" onclick="document.getElementById('upl-lt-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;"><?php echo $uplLabel; ?></button>
                 </form>
+              <?php endif; ?>
+              <?php if (!empty($r['signed_pdf_path'])): ?>
+                <a href="<?php echo htmlspecialchars($r['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: small;">Signed PDF</a>
+              <?php endif; ?>
+              <?php if ($r['status'] === 'pending'): ?>
+                <?php if (empty($r['signed_pdf_path'])): ?>
+                  <button type="button" disabled title="Upload signed contract first" style="padding:6px 10px;border:0;border-radius:8px;background:#9ca3af;color:#fff;font-size:small;cursor:not-allowed">Activate</button>
+                <?php else: ?>
+                  <form method="post" action="/?page=long-term-contract-activate" style="display:inline">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                    <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
+                  </form>
+                <?php endif; ?>
               <?php endif; ?>
               <?php if ($r['status'] === 'active'): ?>
                 <form method="post" action="/?page=long-term-contract-pause" style="display:inline">

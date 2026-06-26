@@ -16,11 +16,10 @@ function cron_log(string $jobName, string $message, array $context = [], string 
         $day = $date->format('Y-m-d');
         $time = $date->format('Y-m-d H:i:s');
         
-        // Cron logs live under /config/logs/cron-logs/
+        // Cron logs live under /config/logs/cron/
         $candidates = [
-            '/var/www/config/logs/cron-logs',
-            __DIR__ . '/../../config/logs/cron-logs',
-            __DIR__ . '/../../logs/cron',
+            '/var/www/config/logs/cron',
+            __DIR__ . '/../../config/logs/cron',
         ];
         
         $logDir = null;

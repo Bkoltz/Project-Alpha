@@ -74,7 +74,10 @@ if ($client_id <= 0) {
 
 // Items are required for regular quotes, on-demand itemized quotes, and long-term fixed totals.
 // Items are optional for long-term per-invoice pricing and on-demand flat pricing.
-$requires_items = !($is_long_term && $pricing_type === 'per_invoice') && !($is_on_demand && $od_pricing_mode === 'flat');
+// On-demand 'items' mode is also allowed to fall back to a flat amount when no line items are entered.
+$od_flat_amount = max(0.0, (float)($_POST['od_flat_amount'] ?? 0));
+$requires_items = !($is_long_term && $pricing_type === 'per_invoice')
+               && !($is_on_demand && ($od_pricing_mode === 'flat' || $od_flat_amount > 0));
 
 if ($requires_items && empty($item)) {
     header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -88,10 +91,28 @@ $subtotal = 0.0;
 if ($is_long_term && $pricing_type === 'per_invoice') {
     $subtotal = $price_per_invoice;
 } elseif ($is_on_demand && $od_pricing_mode === 'flat') {
-    $subtotal = max(0.0, (float)($_POST['od_flat_amount'] ?? 0));
+    $subtotal = $od_flat_amount;
     if ($subtotal <= 0) {
         header('Location: /?page=quote/quotes-create&error=Enter%20a%20flat%20quote%20amount');
         exit;
+    }
+} elseif ($is_on_demand) {
+    // On-demand with od_pricing_mode='items': first process any line items.
+    for ($i = 0; $i < count($item); $i++) {
+        $itm = trim((string)($item[$i] ?? ''));
+        $d = trim((string)($desc[$i] ?? ''));
+        $q = (float)($qty[$i] ?? 0);
+        $p = (float)($price[$i] ?? 0);
+        if ($itm === '' || $q <= 0 || $p < 0) continue;
+        $line = $q * $p;
+        $subtotal += $line;
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line];
+    }
+    // Fallback: if no valid line items were entered, use the flat amount if provided.
+    if (!$items) {
+        if ($od_flat_amount > 0) {
+            $subtotal = $od_flat_amount;
+        }
     }
 } else {
     // Process items for regular quotes or fixed_total long-term quotes

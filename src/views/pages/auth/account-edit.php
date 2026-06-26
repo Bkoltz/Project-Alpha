@@ -6,6 +6,8 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
+require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 
 // Require admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -22,7 +24,12 @@ if ($userId === 1) {
     exit;
 }
 
-$stmt = $pdo->prepare('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users WHERE id = ?');
+$stmt = $pdo->prepare('SELECT id, email, username, role, is_disabled, force_password_reset, created_at,
+    document_sender_enabled, document_sender_name, document_sender_company,
+    document_sender_address_line1, document_sender_address_line2,
+    document_sender_city, document_sender_state, document_sender_postal,
+    document_sender_country, document_sender_phone, document_sender_email
+    FROM users WHERE id = ?');
 $stmt->execute([$userId]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -42,8 +49,103 @@ try {
 $success = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
 
-// Pass the current target role to the permissions partial so it can hide the grid for admins.
+$activeOrgId = get_active_org_id();
+$availableRoles = [];
+$userAclRoleId = null;
+try {
+    $roleStmt = $pdo->prepare('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id <=> ? OR is_system = 1 ORDER BY CASE name WHEN "member" THEN 0 WHEN "staff" THEN 1 WHEN "owner" THEN 2 WHEN "admin" THEN 3 ELSE 4 END, is_system DESC, name');
+    $roleStmt->execute([$activeOrgId > 0 ? $activeOrgId : null]);
+    $availableRoles = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if ($activeOrgId > 0) {
+        $uoStmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? AND organization_id = ? LIMIT 1');
+        $uoStmt->execute([$userId, $activeOrgId]);
+    } else {
+        $uoStmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? ORDER BY is_default DESC LIMIT 1');
+        $uoStmt->execute([$userId]);
+    }
+    $roleCol = $uoStmt->fetchColumn();
+    $userAclRoleId = $roleCol !== false ? (int)$roleCol : null;
+} catch (Throwable $e) {
+    @error_log('[account-edit] role load failed: ' . $e->getMessage());
+}
+
+if (empty($availableRoles)) {
+    $availableRoles = [
+        ['id' => 0, 'name' => 'member', 'description' => 'Default user access.', 'is_system' => 1, 'organization_id' => null],
+        ['id' => -1, 'name' => 'admin', 'description' => 'Full administrative access.', 'is_system' => 1, 'organization_id' => null],
+    ];
+}
+
+if ($userAclRoleId === null) {
+    foreach ($availableRoles as $roleRow) {
+        if (($user['role'] === 'admin' && $roleRow['name'] === 'admin') || ($user['role'] !== 'admin' && $roleRow['name'] === 'member')) {
+            $userAclRoleId = (int)$roleRow['id'];
+            break;
+        }
+    }
+}
+
 $targetRole = $user['role'];
+foreach ($availableRoles as $roleRow) {
+    if ((int)$roleRow['id'] === (int)$userAclRoleId) {
+        $targetRole = (string)$roleRow['name'];
+        break;
+    }
+}
+
+require_once __DIR__ . '/../../../utils/permission_catalog.php';
+$permissionGroupsEdit = permission_catalog();
+$flatEditPerms = [];
+foreach ($permissionGroupsEdit as $group => $permissions) {
+    foreach ($permissions as $perm) {
+        $flatEditPerms[$perm] = true;
+    }
+}
+
+$roleDefaults = [];
+$roleMeta = [];
+foreach ($availableRoles as $roleRow) {
+    $roleId = (int)$roleRow['id'];
+    $roleName = (string)$roleRow['name'];
+    $roleMeta[(string)$roleId] = [
+        'name' => $roleName,
+        'isAdmin' => $roleName === 'admin',
+    ];
+    $roleDefaults[(string)$roleId] = [];
+    foreach ($flatEditPerms as $perm => $_) {
+        $roleDefaults[(string)$roleId][$perm] = $roleName === 'admin';
+    }
+}
+
+try {
+    $ids = array_values(array_filter(array_map(static fn($r) => (int)$r['id'], $availableRoles), static fn($id) => $id > 0));
+    if (!empty($ids)) {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $rpStmt = $pdo->prepare("SELECT role_id, permission, allowed FROM role_permissions WHERE role_id IN ($placeholders)");
+        $rpStmt->execute($ids);
+        $rawRolePerms = [];
+        foreach ($rpStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $rawRolePerms[(int)$row['role_id']][(string)$row['permission']] = (bool)$row['allowed'];
+        }
+        foreach ($availableRoles as $roleRow) {
+            $roleId = (int)$roleRow['id'];
+            $roleName = (string)$roleRow['name'];
+            if ($roleName === 'admin') {
+                continue;
+            }
+            foreach ($flatEditPerms as $perm => $_) {
+                $module = explode('.', $perm, 2)[0] ?? $perm;
+                $roleDefaults[(string)$roleId][$perm] =
+                    $rawRolePerms[$roleId][$perm]
+                    ?? $rawRolePerms[$roleId][$module . '.*']
+                    ?? false;
+            }
+        }
+    }
+} catch (Throwable $e) {
+    @error_log('[account-edit] role defaults load failed: ' . $e->getMessage());
+}
 ?>
 <section>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
@@ -67,15 +169,28 @@ $targetRole = $user['role'];
     .pa-edit-card h3 { margin: 0 0 16px 0; }
     .pa-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .pa-edit-grid label { display: flex; flex-direction: column; gap: 4px; }
+    .pa-edit-sender-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .pa-edit-sender-grid label { display: flex; flex-direction: column; gap: 4px; }
     .pa-edit-grid input,
-    .pa-edit-grid select { width: 100%; box-sizing: border-box; }
+    .pa-edit-grid select,
+    .pa-edit-sender-grid input { width: 100%; box-sizing: border-box; }
     .pa-edit-actionbar { margin-top: 4px; }
     .pa-edit-secondary { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+    #permissions-panel-edit.pa-hidden {
+      opacity: 0;
+      max-height: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      margin: 0 !important;
+      border-width: 0 !important;
+      pointer-events: none;
+    }
     @media (max-width: 960px) {
       .pa-edit-secondary { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
       .pa-edit-grid { grid-template-columns: 1fr; }
+      .pa-edit-sender-grid { grid-template-columns: 1fr; }
     }
   </style>
 
@@ -100,9 +215,18 @@ $targetRole = $user['role'];
 
           <label>
             <span style="font-weight:600">Role *</span>
-            <select required name="role" id="account-role-select" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
-              <option value="user" <?php echo $user['role'] === 'user' ? 'selected' : ''; ?>>User</option>
-              <option value="admin" <?php echo $user['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
+            <select required name="role_id" id="account-role-select" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;">
+              <?php foreach ($availableRoles as $roleRow): ?>
+                <?php
+                  $roleId = (int)$roleRow['id'];
+                  $roleName = (string)$roleRow['name'];
+                  $roleLabel = ucwords(str_replace('_', ' ', $roleName));
+                  $roleScope = (int)($roleRow['is_system'] ?? 0) === 1 ? 'System' : 'Custom';
+                ?>
+                <option value="<?php echo $roleId; ?>" <?php echo $roleId === (int)$userAclRoleId ? 'selected' : ''; ?>>
+                  <?php echo e($roleLabel . ' (' . $roleScope . ')'); ?>
+                </option>
+              <?php endforeach; ?>
             </select>
           </label>
         </div>
@@ -117,6 +241,60 @@ $targetRole = $user['role'];
           <span>Force password change on next login</span>
         </label>
 
+        <div style="margin-top:20px;padding-top:18px;border-top:1px solid #e5e7eb;">
+          <h3 style="margin:0 0 10px 0;font-size:16px;">Document Sender Info</h3>
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:14px;">
+            <input type="checkbox" name="document_sender_enabled" id="document-sender-enabled" value="1" <?php echo !empty($user['document_sender_enabled']) ? 'checked' : ''; ?> style="margin-top:3px;">
+            <span>
+              <span style="display:block;font-weight:600;">Use this user's info on documents they create</span>
+              <span style="display:block;color:#6b7280;font-size:13px;">When off, quotes, contracts, and invoices use the system default business info from Settings.</span>
+            </span>
+          </label>
+
+          <div id="document-sender-fields" class="pa-edit-sender-grid">
+            <label>
+              <span style="font-weight:600">Name</span>
+              <input type="text" name="document_sender_name" value="<?php echo e($user['document_sender_name'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">Company</span>
+              <input type="text" name="document_sender_company" value="<?php echo e($user['document_sender_company'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">Phone</span>
+              <input type="text" name="document_sender_phone" value="<?php echo e($user['document_sender_phone'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">Email</span>
+              <input type="email" name="document_sender_email" value="<?php echo e($user['document_sender_email'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">Address Line 1</span>
+              <input type="text" name="document_sender_address_line1" value="<?php echo e($user['document_sender_address_line1'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">Address Line 2</span>
+              <input type="text" name="document_sender_address_line2" value="<?php echo e($user['document_sender_address_line2'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">City</span>
+              <input type="text" name="document_sender_city" value="<?php echo e($user['document_sender_city'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">State</span>
+              <input type="text" name="document_sender_state" value="<?php echo e($user['document_sender_state'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">Postal Code</span>
+              <input type="text" name="document_sender_postal" value="<?php echo e($user['document_sender_postal'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+            <label>
+              <span style="font-weight:600">Country</span>
+              <input type="text" name="document_sender_country" value="<?php echo e($user['document_sender_country'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+            </label>
+          </div>
+        </div>
+
         <div class="pa-edit-actionbar">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save Changes</button>
         </div>
@@ -125,6 +303,78 @@ $targetRole = $user['role'];
 
     <!-- Permissions (full-width card) -->
     <?php include __DIR__ . '/../account/permissions_overrides.php'; ?>
+    <script>
+      window.PA_EDIT_ROLE_DEFAULTS = <?php echo json_encode($roleDefaults, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+      window.PA_EDIT_ROLE_META = <?php echo json_encode($roleMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+
+      document.addEventListener('DOMContentLoaded', function() {
+        var roleSelect = document.getElementById('account-role-select');
+        var panel = document.getElementById('permissions-panel-edit');
+        var grid = document.getElementById('permissions-grid-edit');
+        var adminNote = document.getElementById('admin-permissions-note-edit');
+        var senderToggle = document.getElementById('document-sender-enabled');
+        var senderFields = document.getElementById('document-sender-fields');
+
+        function selectedRoleMeta() {
+          if (!roleSelect || !window.PA_EDIT_ROLE_META) return {};
+          return window.PA_EDIT_ROLE_META[roleSelect.value] || {};
+        }
+
+        function selectedRoleDefaults() {
+          if (roleSelect && window.PA_EDIT_ROLE_DEFAULTS && window.PA_EDIT_ROLE_DEFAULTS[roleSelect.value]) {
+            return window.PA_EDIT_ROLE_DEFAULTS[roleSelect.value];
+          }
+          return {};
+        }
+
+        function applyRoleDefaults() {
+          var defaults = selectedRoleDefaults();
+          Object.keys(defaults).forEach(function(perm) {
+            var key = perm.replace(/\./g, '_');
+            var allowCb = document.querySelector('#permissions-panel-edit input[name="allow_' + key + '"]');
+            var denyCb = document.querySelector('#permissions-panel-edit input[name="deny_' + key + '"]');
+            if (allowCb && denyCb) {
+              var allowed = !!defaults[perm];
+              allowCb.checked = allowed;
+              denyCb.checked = !allowed;
+            }
+          });
+        }
+
+        function updatePermissionsForRole() {
+          if (!roleSelect || !panel) return;
+          var meta = selectedRoleMeta();
+          if (meta.isAdmin) {
+            panel.classList.add('pa-hidden');
+            if (adminNote) adminNote.style.display = 'block';
+            if (grid) grid.style.display = 'none';
+          } else {
+            panel.classList.remove('pa-hidden');
+            if (adminNote) adminNote.style.display = 'none';
+            if (grid) grid.style.display = 'block';
+            applyRoleDefaults();
+          }
+        }
+
+        if (roleSelect) {
+          roleSelect.addEventListener('change', updatePermissionsForRole);
+          updatePermissionsForRole();
+        }
+
+        function updateSenderFields() {
+          if (!senderToggle || !senderFields) return;
+          senderFields.style.opacity = senderToggle.checked ? '1' : '0.45';
+          senderFields.querySelectorAll('input').forEach(function(input) {
+            input.readOnly = !senderToggle.checked;
+          });
+        }
+
+        if (senderToggle) {
+          senderToggle.addEventListener('change', updateSenderFields);
+          updateSenderFields();
+        }
+      });
+    </script>
 
     <!-- Secondary actions: 2FA, Reset Password, Danger Zone -->
     <div class="pa-edit-secondary">

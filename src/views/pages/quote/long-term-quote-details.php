@@ -5,7 +5,10 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
-require_record_ownership($pdo, 'quotes', $id);
+require_once __DIR__ . '/../../../utils/document_sender.php';
+if (!defined('PDF_MODE')) {
+    require_record_ownership($pdo, 'quotes', $id);
+}
 $q = $pdo->prepare('SELECT q.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM quotes q JOIN clients cl ON cl.id=q.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE q.id=? AND q.quote_type="long_term"');
 $q->execute([$id]);
 $quote = $q->fetch(PDO::FETCH_ASSOC);
@@ -20,10 +23,11 @@ if ($quote['pricing_type'] === 'fixed_total') {
 }
 
 require_once __DIR__ . '/../../../utils/format.php';
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($quote['created_by']) ? (int)$quote['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 
 // Resolve terms
 $termsText = '';
@@ -194,24 +198,7 @@ $isOngoing = empty($quote['end_date']);
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-          $fromNameLine = trim((string)($fromName ?? ''));
-          $fromLines = [];
-          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-          $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-          if ($addr1 !== '') { $fromLines[] = $addr1; }
-          if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
-          $parts = [];
-          if ($city !== '') { $parts[] = $city; }
-          if ($state !== '') { $parts[] = $state; }
-          if ($postal !== '') { $parts[] = $postal; }
-          $cityLine = implode(', ', $parts);
-          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+          $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
@@ -266,7 +253,7 @@ $isOngoing = empty($quote['end_date']);
     <tbody>
       <?php if ($quote['pricing_type'] === 'per_invoice'): ?>
         <tr>
-          <td colspan="3" style="padding:12px">Recurring service fee (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
+          <td colspan="3" style="padding:12px"><?php echo !empty($quote['scope']) ? htmlspecialchars($quote['scope']) : 'Recurring service fee'; ?> (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
           <td style="padding:12px;text-align:right;font-weight:600">$<?php echo number_format($quote['price_per_invoice'], 2); ?></td>
         </tr>
       <?php else: ?>
@@ -322,6 +309,20 @@ $isOngoing = empty($quote['end_date']);
         <td style="padding:12px;font-weight:700;font-size:16px;color:#065f46;text-align:right">$<?php echo number_format($invoiceAmount,2); ?></td>
       </tr>
     </tbody>
+  </table>
+
+  <!-- Signature block -->
+  <table style="width:100%;border-collapse:collapse;margin-top:50px">
+    <tr>
+      <td style="width:60%;vertical-align:bottom;padding-right:24px">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Client Signature</div>
+      </td>
+      <td style="width:40%;vertical-align:bottom">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Date</div>
+      </td>
+    </tr>
   </table>
 
   <?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>

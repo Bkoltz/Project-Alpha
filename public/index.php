@@ -100,7 +100,11 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 // Log to a file OUTSIDE the public web root
-$errorLogDir = __DIR__ . '/../logs';
+$errorLogDir = '/var/www/config/logs/system';
+if (!is_dir($errorLogDir)) {
+    $fallbackLogDir = __DIR__ . '/../config/logs/system';
+    $errorLogDir = $fallbackLogDir;
+}
 if (!is_dir($errorLogDir)) { @mkdir($errorLogDir, 0750, true); }
 ini_set('error_log', $errorLogDir . '/error_log.txt');
 
@@ -488,6 +492,14 @@ if (in_array($page, ['quote/quote-pdf', 'quote-pdf'])) {
 }
 if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
     require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
+    exit;
+}
+if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
+    exit;
+}
+if (in_array($page, ['contract/long-term-contract-pdf', 'long-term-contract-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -121,7 +121,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'due_7']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent due-7 reminder for invoice I-{$inv['doc_number']} to {$to}");
@@ -196,7 +196,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'overdue_weekly']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}");

@@ -28,12 +28,14 @@ $appConfig = [
     'payment_methods' => ['Card','Cash','Bank Transfer'],
     'quotes_show_terms' => 0,
     // App preferences
+    'cron_enabled' => 1,
     'timezone' => 'UTC',
     'primary_state' => null,
     'documents_valid_days' => 14,
     // Automatic invoice email settings
-    'invoice_auto_send_due_7days' => 0,
-    'invoice_auto_send_overdue_weekly' => 0,
+    'invoice_auto_send_due_7days' => 1,
+    'invoice_auto_send_overdue_weekly' => 1,
+    'invoice_auto_email_on_generate' => 1,
     // SMTP (loaded from app_config with fallback to settings.json)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -148,7 +150,7 @@ try {
             'terms', 'long_term_terms', 'on_demand_terms',
             'net_terms_days', 'documents_valid_days', 'payment_methods',
             'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
-            'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly',
+            'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
             'auto_terminate_contracts', 'link_expiration_checker',
             'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
             'payment_failure_alert', 'payment_received_notification',

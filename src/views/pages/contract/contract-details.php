@@ -5,9 +5,12 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 
 $id = (int)($_GET['id'] ?? 0);
-require_record_ownership($pdo, 'contracts', $id);
+if (!defined('PDF_MODE')) {
+    require_record_ownership($pdo, 'contracts', $id);
+}
 $c = $pdo->prepare('SELECT co.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE co.id=?');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
@@ -20,17 +23,23 @@ $items->execute([$id]);
 $items = $items->fetchAll();
 
 // Fetch contract signatures
-$sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
-$sigStmt->execute([$id]);
-$signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+$signatures = [];
+try {
+    $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY id');
+    $sigStmt->execute([$id]);
+    $signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    // Column names may differ across schema versions — signatures are optional
+}
 // If no signatures defined, use a default
 if (empty($signatures)) {
   $signatures = [['signer_title' => 'Client Signature', 'is_required' => 1]];
 }
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '') . "\n" . ($appConfig['from_address_line2'] ?? '') . "\n" . ($appConfig['from_city'] ?? '') . ' ' . ($appConfig['from_state'] ?? '') . ' ' . ($appConfig['from_postal'] ?? '') . "\n" . ($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($contract['created_by']) ? (int)$contract['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 // Resolve terms: project-level terms override contract terms override app settings
 $termsText = '';
 if (!empty($contract['project_code'])) {
@@ -361,38 +370,7 @@ if ($termsText === '') {
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php
-        $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-        $fromNameLine = trim((string)($fromName ?? ''));
-        $fromLines = [];
-        if ($fromNameLine !== '') {
-          $fromLines[] = $fromNameLine;
-        }
-        $fromLines[] = $fromCompany;
-        $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-        $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-        if ($addr1 !== '') {
-          $fromLines[] = $addr1;
-        }
-        if ($addr2 !== '') {
-          $fromLines[] = $addr2;
-        }
-        $city = trim((string)($appConfig['from_city'] ?? ''));
-        $state = trim((string)($appConfig['from_state'] ?? ''));
-        $postal = trim((string)($appConfig['from_postal'] ?? ''));
-        $parts = [];
-        if ($city !== '') {
-          $parts[] = $city;
-        }
-        if ($state !== '') {
-          $parts[] = $state;
-        }
-        if ($postal !== '') {
-          $parts[] = $postal;
-        }
-        $cityLine = implode(', ', $parts);
-        if ($cityLine !== '') {
-          $fromLines[] = $cityLine;
-        }
+        $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) {
                 echo '<div>' . htmlspecialchars($ln) . '</div>';
@@ -456,11 +434,46 @@ if ($termsText === '') {
   $scopeEnabled = !isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled']);
   if ($scopeEnabled && $scopeText !== ''):
   ?>
-    <div style="page-break-before:auto;margin-top:20px">
+    <div style="page-break-before:auto;margin-top:12px">
       <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
       <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
     </div>
-    <div style="page-break-after:always"></div>
+  <?php endif; ?>
+
+  <?php
+  // Long-term / on-demand billing summary (shows what the client is buying)
+  $ctType = $contract['contract_type'] ?? 'regular';
+  if (in_array($ctType, ['long_term', 'on_demand'], true)):
+    $biCount = (int)($contract['billing_interval_count'] ?? 1);
+    $biUnit = $contract['billing_interval_unit'] ?? 'month';
+    $biText = $biCount . ' ' . ucfirst($biUnit);
+    if ($biCount > 1) $biText .= 's';
+    $svcDesc = trim((string)($contract['scope'] ?? ''));
+    $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
+    if ($ctType === 'on_demand' && $amtPerInv <= 0) {
+      $amtPerInv = (float)($contract['subtotal'] ?? 0);
+    }
+    $pricingType = $contract['pricing_type'] ?? null;
+  ?>
+  <div style="margin:8px 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#065f46">
+      <?php echo $ctType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
+    </div>
+    <?php if ($svcDesc !== ''): ?>
+      <div style="margin-bottom:4px"><strong>Service:</strong> <?php echo htmlspecialchars($svcDesc); ?></div>
+    <?php endif; ?>
+    <?php if ($ctType === 'long_term'): ?>
+      <div style="margin-bottom:4px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($biText); ?></div>
+    <?php endif; ?>
+    <?php if ($pricingType === 'per_invoice' || $ctType === 'on_demand'): ?>
+      <div style="font-size:14px;font-weight:700;color:#065f46">
+        Amount Per Invoice: $<?php echo number_format($amtPerInv, 2); ?>
+        <?php if ($ctType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($biUnit)); ?><?php endif; ?>
+      </div>
+    <?php elseif ($pricingType === 'fixed_total'): ?>
+      <div style="font-size:14px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
+    <?php endif; ?>
+  </div>
   <?php endif; ?>
 
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
@@ -491,6 +504,17 @@ if ($termsText === '') {
   $depType = $contract['deposit_type'] ?? 'none';
   $depValue = (float)($contract['deposit_amount'] ?? 0);
   $contractTotal = (float)($contract['total'] ?? 0);
+  if (($contract['contract_type'] ?? 'regular') === 'on_demand' && $contractTotal <= 0 && (float)($contract['subtotal'] ?? 0) > 0) {
+    $displaySubtotal = (float)($contract['subtotal'] ?? 0);
+    $displayDiscount = 0.0;
+    if (($contract['discount_type'] ?? 'none') === 'percent') {
+      $displayDiscount = max(0, min(100, (float)($contract['discount_value'] ?? 0))) * $displaySubtotal / 100;
+    } elseif (($contract['discount_type'] ?? 'none') === 'fixed') {
+      $displayDiscount = max(0, (float)($contract['discount_value'] ?? 0));
+    }
+    $displayTaxable = max(0, $displaySubtotal - $displayDiscount);
+    $contractTotal = max(0, $displayTaxable + (max(0, (float)($contract['tax_percent'] ?? 0)) * $displayTaxable / 100));
+  }
   $depositCalc = 0;
   if ($depType === 'percent') {
     $depositCalc = max(0, min(100, $depValue)) * $contractTotal / 100;
@@ -527,7 +551,7 @@ if ($termsText === '') {
           </tr>
           <tr style="border-top:1px solid #e5e7eb">
             <td style="padding:8px 10px;font-weight:700;text-align:right">Total</td>
-            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($contract['total'] ?? 0, 2); ?></td>
+            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($contractTotal, 2); ?></td>
           </tr>
           <?php if ($showDeposit): ?>
             <tr style="background:#f9fafb">
@@ -544,55 +568,21 @@ if ($termsText === '') {
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
     <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?>
   </div>
-  <table style="width:100%;border-collapse:collapse">
-    <?php
-    $sigCount = count($signatures);
-    for ($i = 0; $i < $sigCount; $i += 2):
-      $sig1 = $signatures[$i];
-      $sig2 = isset($signatures[$i + 1]) ? $signatures[$i + 1] : null;
-    ?>
-      <tr>
-        <td style="width:50%;vertical-align:top;padding:10px 16px 16px 10px">
-          <table style="width:100%;border-collapse:collapse;margin-top:20px">
-            <tr>
-              <td style="width:65%;vertical-align:bottom;padding-right:12px">
-                <div style="border-top:2px solid #111"></div>
-                <div style="margin-top:4px;color:#4b5563;font-size:12px">
-                  <?php echo htmlspecialchars($sig1['signer_title']); ?>
-                  <?php if (!empty($sig1['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
-                </div>
-              </td>
-              <td style="width:35%;vertical-align:bottom">
-                <div style="border-top:2px solid #111"></div>
-                <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
-              </td>
-            </tr>
-          </table>
-        </td>
-        <?php if ($sig2): ?>
-          <td style="width:50%;vertical-align:top;padding:10px 10px 16px 16px">
-            <table style="width:100%;border-collapse:collapse;margin-top:20px">
-              <tr>
-                <td style="width:65%;vertical-align:bottom;padding-right:12px">
-                  <div style="border-top:2px solid #111"></div>
-                  <div style="margin-top:4px;color:#4b5563;font-size:12px">
-                    <?php echo htmlspecialchars($sig2['signer_title']); ?>
-                    <?php if (!empty($sig2['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
-                  </div>
-                </td>
-                <td style="width:35%;vertical-align:bottom">
-                  <div style="border-top:2px solid #111"></div>
-                  <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        <?php else: ?>
-          <td style="width:50%"></td>
-        <?php endif; ?>
-      </tr>
-    <?php endfor; ?>
+  <?php foreach ($signatures as $sig): ?>
+  <table style="width:100%;border-collapse:collapse;margin-top:20px">
+    <tr>
+      <td style="width:65%;height:50px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        <?php echo htmlspecialchars($sig['signer_title'] ?? 'Client Signature'); ?>
+        <?php if (!empty($sig['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
+      </td>
+      <td style="width:35%;height:50px;vertical-align:bottom;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        Date
+      </td>
+    </tr>
   </table>
+  <?php endforeach; ?>
 
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
