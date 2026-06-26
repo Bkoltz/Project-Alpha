@@ -13,7 +13,7 @@ function page_permission_map(): array
     $map = [
         // Core authenticated pages (low bar)
         'home'                => 'financial.view',
-        'landing'             => 'profile.view',
+        'landing'             => null,
         'dashboard'           => 'financial.view',
         'account'             => 'profile.edit',
         'account-update'      => 'profile.edit',
@@ -261,7 +261,14 @@ function acl_middleware(PDO $pdo, string $page): void
     $map = page_permission_map();
     $perm = $map[$page] ?? null;
 
+    // null permission = authenticated users only, no specific permission needed
     if ($perm === null) {
+        // Check if the page is actually in the map (mapped with null intent)
+        // vs unmapped (not in the map at all)
+        if (array_key_exists($page, $map)) {
+            return; // Mapped as null = auth-only, allow
+        }
+        // Not in the map at all = unmapped page, deny
         audit_log($pdo, 'acl.denied_unmapped', 'permission', null, ['page' => $page, 'user_id' => $userId]);
         deny_response($page);
     }
