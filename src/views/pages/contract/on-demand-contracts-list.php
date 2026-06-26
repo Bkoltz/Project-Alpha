@@ -42,11 +42,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-<<<<<<< HEAD
 $sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.subtotal, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, odc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
-=======
-$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, odc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
->>>>>>> 52d13ad (feat(round4): fix contract create + LT/OD upload + invoice defaults + immediate LT billing)
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY odc.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();

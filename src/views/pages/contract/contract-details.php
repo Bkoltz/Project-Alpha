@@ -489,6 +489,9 @@ if ($termsText === '') {
     if ($biCount > 1) $biText .= 's';
     $svcDesc = trim((string)($contract['scope'] ?? ''));
     $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
+    if ($ctType === 'on_demand' && $amtPerInv <= 0) {
+      $amtPerInv = (float)($contract['subtotal'] ?? 0);
+    }
     $pricingType = $contract['pricing_type'] ?? null;
   ?>
   <div style="margin:8px 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
