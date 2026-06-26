@@ -89,7 +89,17 @@ $isOngoing = empty($contract['end_date']);
   <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
-    <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
+    <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
+    <?php $contractStatus = strtolower((string)($contract['status'] ?? '')); ?>
+    <?php if (!in_array($contractStatus, ['denied','cancelled','void'], true)): ?>
+      <form method="post" action="/?page=contract/email-send" style="display:inline">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="type" value="contract">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+        <button type="submit" class="btn btn-sm">Email</button>
+      </form>
+    <?php endif; ?>
     <?php if (($contract['status'] ?? '') !== 'cancelled'): ?>
       <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -103,6 +113,11 @@ $isOngoing = empty($contract['end_date']);
       <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
     <?php endif; ?>
   </div>
+  <?php if (!empty($_GET['emailed'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
+  <?php elseif (!empty($_GET['email_err'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
   <?php endif; ?>
 
   <?php

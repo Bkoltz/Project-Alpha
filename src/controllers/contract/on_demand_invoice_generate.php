@@ -147,9 +147,9 @@ try {
     
     @error_log("[on_demand_invoice_generate] Generated invoice I-$maxDoc for contract ODC-{$contract['doc_number']} (\${$total})");
 
-    // User-selected auto-email for on-demand generation. Unlike long-term
-    // cron invoices, on-demand invoices can be generated as drafts first.
-    if ($sendEmail) {
+    // User-selected auto-email for on-demand generation, with a config fallback.
+    // Unlike long-term cron invoices, on-demand invoices can be generated as drafts first.
+    if ($sendEmail || !empty($appConfig['invoice_auto_email_on_generate'])) {
         try {
             $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
             $clientStmt->execute([$clientId]);

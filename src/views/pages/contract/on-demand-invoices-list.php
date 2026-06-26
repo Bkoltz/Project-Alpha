@@ -37,6 +37,12 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 <section>
   <h2>On-Demand Contract Invoices</h2>
   
+  <?php if (!empty($_GET['emailed'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
+  <?php elseif (!empty($_GET['email_err'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
+
   <?php if ($contract_id > 0): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">
       Showing invoices for contract ODC-<?php 
@@ -125,7 +131,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
                 <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;text-decoration:none;color:inherit">Edit</a>
               <?php endif; ?>
               <?php if ($r['status'] !== 'void' && $r['status'] !== 'paid'): ?>
-              <form method="post" action="/?page=email-send" style="display:inline">
+              <form method="post" action="/?page=invoice/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="invoice">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

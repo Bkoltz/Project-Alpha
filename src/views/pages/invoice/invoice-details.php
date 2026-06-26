@@ -78,7 +78,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) !== 'void'): ?>
-    <form method="post" action="/?page=email-send" style="display:inline">
+    <form method="post" action="/?page=invoice/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">

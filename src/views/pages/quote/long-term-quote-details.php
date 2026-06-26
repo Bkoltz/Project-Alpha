@@ -86,20 +86,38 @@ $isOngoing = empty($quote['end_date']);
   <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
-    <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" download="longterm-quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
+    <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" download="longterm-quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
-    <form method="post" action="/?page=email-send" style="display:inline">
+    <form method="post" action="/?page=quote/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-      <input type="hidden" name="type" value="long_term_quote">
+      <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
       <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
+    <?php if (($quote['status'] ?? '') === 'pending'): ?>
+      <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
+      <form method="post" action="/?page=quote/quote-approve" style="display:inline">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Approve</button>
+      </form>
+      <form method="post" action="/?page=quote/quote-reject" style="display:inline" onsubmit="return confirm('Reject this quote?')">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Deny</button>
+      </form>
+    <?php endif; ?>
   </div>
+  <?php if (!empty($_GET['emailed'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
+  <?php elseif (!empty($_GET['email_err'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
   <?php endif; ?>
 
   <?php

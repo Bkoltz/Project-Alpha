@@ -45,6 +45,12 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
 <section>
   <h2>On-Demand Invoices</h2>
   
+  <?php if (!empty($_GET['emailed'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
+  <?php elseif (!empty($_GET['email_err'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
+
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
@@ -128,7 +134,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <?php if ($r['status'] !== 'void' && $r['status'] !== 'paid'): ?>
-              <form method="post" action="/?page=email-send" style="display:inline">
+              <form method="post" action="/?page=invoice/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="invoice">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
