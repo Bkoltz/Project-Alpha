@@ -1,5 +1,5 @@
 # ---------- Stage 1: Install PHP dependencies with Composer ----------
-FROM php:8.3-cli AS vendor
+FROM php:8.5-cli AS vendor
 WORKDIR /app
 
 # Copy only Composer manifests first for better layer caching
@@ -23,7 +23,7 @@ RUN composer install \
     --optimize-autoloader
 
 # ---------- Stage 2: Runtime image ----------
-FROM php:8.3-apache AS web
+FROM php:8.5-apache AS web
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
@@ -105,7 +105,7 @@ CMD ["start.sh"]
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
-FROM php:8.3-cli AS cron
+FROM php:8.5-cli AS cron
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
