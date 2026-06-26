@@ -19,8 +19,9 @@ $end_date = null; // On-demand contracts are always ongoing until terminated
 $billing_interval_count = 1;
 $billing_interval_unit = 'month';
 
-// Price can come from flat amount or line items
-$price_per_invoice = (float)($_POST['od_flat_amount'] ?? $_POST['price_per_invoice'] ?? 0);
+// Price can come from a flat amount or line items.
+$od_pricing_mode = in_array(($_POST['od_pricing_mode'] ?? 'items'), ['items', 'flat'], true) ? $_POST['od_pricing_mode'] : 'items';
+$price_per_invoice = max(0.0, (float)($_POST['od_flat_amount'] ?? $_POST['price_per_invoice'] ?? 0));
 $scope = trim((string)($_POST['scope'] ?? ''));
 
 if ($client_id <= 0) {
@@ -46,8 +47,15 @@ if ($client_id <= 0) {
     exit;
 }
 
-// On-demand contracts can have line items OR a flat price - check if we have either
-$hasLineItems = !empty($_POST['item']) && is_array($_POST['item']) && count(array_filter($_POST['item'], 'trim')) > 0;
+// On-demand contracts can have line items OR a flat price - check if we have either.
+$hasLineItems = $od_pricing_mode === 'items'
+    && !empty($_POST['item'])
+    && is_array($_POST['item'])
+    && count(array_filter($_POST['item'], static fn($value) => trim((string)$value) !== '')) > 0;
+if ($od_pricing_mode === 'flat' && $price_per_invoice <= 0) {
+    header('Location: /?page=contract/contracts-create&error=Enter%20a%20flat%20contract%20amount');
+    exit;
+}
 if (!$hasLineItems && $price_per_invoice <= 0) {
     header('Location: /?page=contract/contracts-create&error=Please%20add%20items%20or%20enter%20a%20flat%20amount');
     exit;
@@ -78,6 +86,8 @@ if ($hasLineItems) {
 // Fallback: if no valid line items were entered, use the flat amount if provided.
 if (empty($items)) {
     $subtotal = $price_per_invoice;
+} else {
+    $price_per_invoice = $subtotal;
 }
 
 $discount_amount = 0.0; 
@@ -119,16 +129,16 @@ try{
     // Insert on-demand contract into the unified contracts table
     $sql = 'INSERT INTO contracts (
         client_id, project_id, project_code, status, contract_type, start_date, end_date, 
-        billing_interval_count, billing_interval_unit, price_per_invoice,
-        discount_type, discount_value, tax_percent, subtotal,
+        billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
+        discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid,
         total_invoiced, invoice_count, scope, organization_id, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
         $client_id, $project_id, $projectCode, 'pending', 'on_demand', $start_date, $end_date,
-        $billing_interval_count, $billing_interval_unit, $price_per_invoice,
-        $discount_type, $discount_value, $tax_percent, $subtotal,
+        $billing_interval_count, $billing_interval_unit, 'on_demand', $price_per_invoice,
+        $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0,
         0, 0, $scope, $activeOrgId, $sessionUserId
     ]);

@@ -190,6 +190,8 @@ function toggleDocTypeFields() {
 
     // Show/hide the appropriate settings section
     document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
+    var onDemandSection = document.getElementById('onDemandFieldsCo');
+    if (onDemandSection) onDemandSection.style.display = isOnDemand ? 'block' : 'none';
 
     if (isLongTerm) {
         // Set start date to today when first enabling long-term
@@ -201,13 +203,20 @@ function toggleDocTypeFields() {
         togglePricingFields();
         updateDiscountWarning();
     } else if (isOnDemand) {
-        // On-demand: always show items for line-item billing
-        document.getElementById('itemsCo').parentElement.style.display = 'block';
+        var onDemandStartField = document.getElementById('onDemandStartDateCo');
+        if (onDemandStartField && !onDemandStartField.value) {
+            onDemandStartField.value = new Date().toISOString().split('T')[0];
+        }
+        toggleOnDemandEndDateCo();
+        toggleOnDemandPricingModeCo();
         document.getElementById('invoiceAmountRow').style.display = 'none';
     } else {
         // Regular contract - always show items
         document.getElementById('itemsCo').parentElement.style.display = 'block';
         document.getElementById('invoiceAmountRow').style.display = 'none';
+        var flatAmount = document.getElementById('onDemandFlatAmountCo');
+        if (flatAmount) flatAmount.style.display = 'none';
+        setItemsRequiredCo(true);
         // Show custom fields for regular contracts (if they exist)
         ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
             const el = document.getElementById(id);
@@ -215,6 +224,14 @@ function toggleDocTypeFields() {
         });
     }
     recalcCo();
+}
+
+function toggleOnDemandEndDateCo() {
+    var typeEl = document.getElementById('onDemandEndDateTypeCo');
+    var field = document.getElementById('onDemandEndDateFieldCo');
+    if (!typeEl || !field) return;
+
+    field.style.display = typeEl.value === 'fixed' ? 'block' : 'none';
 }
 
 function toggleEndDate() {
@@ -274,10 +291,7 @@ function togglePricingFields() {
     }
 
     if (isOnDemand) {
-        // On-demand contract - show items for line-item billing
-        document.getElementById('itemsCo').parentElement.style.display = 'block';
-        setItemsRequiredCo(true);
-        recalcCo();
+        toggleOnDemandPricingModeCo();
         return;
     }
 
@@ -315,19 +329,31 @@ function togglePricingFields() {
 }
 
 function toggleOnDemandPricingModeCo() {
+    var docType = document.querySelector('input[name="doc_type"]:checked')?.value || 'regular';
     var mode = document.querySelector('input[name="od_pricing_mode"]:checked');
     var modeVal = mode ? mode.value : 'items';
     var flatSection = document.getElementById('onDemandFlatAmountCo');
-    var itemsSection = document.getElementById('itemsCo');
-    if (modeVal === 'flat') {
+    var flatInput = document.getElementById('onDemandAmountInputCo');
+    var itemsWrap = document.getElementById('itemsCo')?.parentElement;
+    var useFlat = docType === 'on_demand' && modeVal === 'flat';
+
+    if (useFlat) {
         if (flatSection) flatSection.style.display = 'block';
-        if (itemsSection && itemsSection.parentElement) itemsSection.parentElement.style.display = 'none';
-        setItemsRequiredCo(false);
+        if (itemsWrap) itemsWrap.style.display = 'none';
     } else {
         if (flatSection) flatSection.style.display = 'none';
-        if (itemsSection && itemsSection.parentElement) itemsSection.parentElement.style.display = 'block';
-        setItemsRequiredCo(true);
+        if (itemsWrap) itemsWrap.style.display = 'block';
     }
+
+    if (flatInput) {
+        if (useFlat) {
+            flatInput.setAttribute('required', '');
+        } else {
+            flatInput.removeAttribute('required');
+        }
+    }
+
+    setItemsRequiredCo(!useFlat);
     recalcCo();
 }
 

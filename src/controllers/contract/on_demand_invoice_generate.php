@@ -47,8 +47,12 @@ try {
     $contractCreator = (int)($contract['created_by'] ?? 0) ?: $fallbackUserId;
     $contractOrgId   = (int)($contract['organization_id'] ?? 0) ?: $fallbackOrgId;
     
-    // Calculate invoice amount
-    $subtotal = (float)$contract['price_per_invoice'];
+    // Calculate invoice amount. Older on-demand contracts may have a zero
+    // price_per_invoice even though subtotal/contract_items were saved.
+    $subtotal = (float)($contract['price_per_invoice'] ?? 0);
+    if ($subtotal <= 0) {
+        $subtotal = (float)($contract['subtotal'] ?? 0);
+    }
     
     // Apply discount and tax
     $discountType = $contract['discount_type'] ?? 'none';
@@ -101,17 +105,35 @@ try {
     $docNumber = $maxDoc + 1;
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNumber, $invoiceId]);
     
-    // Add invoice item
-    $billingInterval = $contract['billing_interval_count'] . ' ' . ucfirst($contract['billing_interval_unit']);
-    if ($contract['billing_interval_count'] > 1) $billingInterval .= 's';
-    
-    $description = 'On-demand service fee (' . strtolower($billingInterval) . ')';
-    if (!empty($contract['scope'])) {
-        $description .= ' - ' . substr($contract['scope'], 0, 100);
+    // Add invoice items. Preserve itemized contracts; flat contracts get one line.
+    $contractItemsStmt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id = ? ORDER BY sort_order, id');
+    $contractItemsStmt->execute([$contract_id]);
+    $contractItems = $contractItemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($contractItems)) {
+        $insertItem = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        foreach ($contractItems as $item) {
+            $insertItem->execute([
+                $invoiceId,
+                $item['item'] ?? '',
+                $item['description'] ?? '',
+                (float)($item['quantity'] ?? 0),
+                (float)($item['unit_price'] ?? 0),
+                (float)($item['line_total'] ?? 0),
+            ]);
+        }
+    } else {
+        $billingInterval = $contract['billing_interval_count'] . ' ' . ucfirst($contract['billing_interval_unit']);
+        if ($contract['billing_interval_count'] > 1) $billingInterval .= 's';
+
+        $description = 'On-demand service fee (' . strtolower($billingInterval) . ')';
+        if (!empty($contract['scope'])) {
+            $description .= ' - ' . substr($contract['scope'], 0, 100);
+        }
+
+        $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)')
+            ->execute([$invoiceId, $description, 1, $subtotal, $subtotal]);
     }
-    
-    $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)')
-        ->execute([$invoiceId, $description, 1, $total, $total]);
     
     // Update contract
     $newTotalInvoiced = (float)$contract['total_invoiced'] + $total;

@@ -479,6 +479,9 @@ if ($termsText === '') {
     if ($biCount > 1) $biText .= 's';
     $svcDesc = trim((string)($contract['scope'] ?? ''));
     $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
+    if ($ctType === 'on_demand' && $amtPerInv <= 0) {
+      $amtPerInv = (float)($contract['subtotal'] ?? 0);
+    }
     $pricingType = $contract['pricing_type'] ?? null;
   ?>
   <div style="margin:8px 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
@@ -530,6 +533,17 @@ if ($termsText === '') {
   $depType = $contract['deposit_type'] ?? 'none';
   $depValue = (float)($contract['deposit_amount'] ?? 0);
   $contractTotal = (float)($contract['total'] ?? 0);
+  if (($contract['contract_type'] ?? 'regular') === 'on_demand' && $contractTotal <= 0 && (float)($contract['subtotal'] ?? 0) > 0) {
+    $displaySubtotal = (float)($contract['subtotal'] ?? 0);
+    $displayDiscount = 0.0;
+    if (($contract['discount_type'] ?? 'none') === 'percent') {
+      $displayDiscount = max(0, min(100, (float)($contract['discount_value'] ?? 0))) * $displaySubtotal / 100;
+    } elseif (($contract['discount_type'] ?? 'none') === 'fixed') {
+      $displayDiscount = max(0, (float)($contract['discount_value'] ?? 0));
+    }
+    $displayTaxable = max(0, $displaySubtotal - $displayDiscount);
+    $contractTotal = max(0, $displayTaxable + (max(0, (float)($contract['tax_percent'] ?? 0)) * $displayTaxable / 100));
+  }
   $depositCalc = 0;
   if ($depType === 'percent') {
     $depositCalc = max(0, min(100, $depValue)) * $contractTotal / 100;
@@ -566,7 +580,7 @@ if ($termsText === '') {
           </tr>
           <tr style="border-top:1px solid #e5e7eb">
             <td style="padding:8px 10px;font-weight:700;text-align:right">Total</td>
-            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($contract['total'] ?? 0, 2); ?></td>
+            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($contractTotal, 2); ?></td>
           </tr>
           <?php if ($showDeposit): ?>
             <tr style="background:#f9fafb">

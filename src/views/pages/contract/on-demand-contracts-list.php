@@ -42,7 +42,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, odc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
+$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.subtotal, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, odc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY odc.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -158,7 +158,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($billingText); ?></td>
-            <td style="padding:10px">$<?php echo number_format((float)$r['price_per_invoice'], 2); ?></td>
+            <?php $displayPrice = (float)($r['price_per_invoice'] ?? 0) > 0 ? (float)$r['price_per_invoice'] : (float)($r['subtotal'] ?? 0); ?>
+            <td style="padding:10px">$<?php echo number_format($displayPrice, 2); ?></td>
             <td style="padding:10px"><?php echo (int)$r['invoice_count']; ?> ($<?php echo number_format((float)$r['total_invoiced'], 2); ?>)</td>
             <td style="padding:10px"><?php echo $r['last_invoice_date'] ? date('M j, Y', strtotime($r['last_invoice_date'])) : '—'; ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
