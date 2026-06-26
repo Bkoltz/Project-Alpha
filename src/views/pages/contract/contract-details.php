@@ -438,6 +438,7 @@ if ($termsText === '') {
       <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
       <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
     </div>
+<<<<<<< HEAD
   <?php endif; ?>
 
   <?php
@@ -474,6 +475,8 @@ if ($termsText === '') {
       <div style="font-size:14px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
     <?php endif; ?>
   </div>
+=======
+>>>>>>> 261ec5f (fix: CSRF on approve/reject + on-demand $0 + PDF signature/page-break + client dropdown)
   <?php endif; ?>
 
   <?php
@@ -602,17 +605,13 @@ if ($termsText === '') {
     <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?>
   </div>
   <?php foreach ($signatures as $sig): ?>
-  <table style="width:100%;border-collapse:collapse;margin-top:20px">
+  <table style="width:100%;border-collapse:collapse;margin-top:30px">
     <tr>
-      <td style="width:65%;height:50px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
-        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+      <td style="width:60%;height:60px;vertical-align:bottom;border-top:1px solid #333;padding-top:4px;padding-right:20px;font-size:12px;color:#4b5563">
         <?php echo htmlspecialchars($sig['signer_title'] ?? 'Client Signature'); ?>
         <?php if (!empty($sig['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
       </td>
-      <td style="width:35%;height:50px;vertical-align:bottom;font-size:12px;color:#4b5563">
-        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
-        Date
-      </td>
+      <td style="width:40%;height:60px;vertical-align:bottom;border-top:1px solid #333;padding-top:4px;font-size:12px;color:#4b5563">Date</td>
     </tr>
   </table>
   <?php endforeach; ?>
