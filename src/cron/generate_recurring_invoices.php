@@ -192,9 +192,9 @@ try {
             }
         }
 
-        // 3) Auto-email newly-generated long-term invoices (on generation)
+        // 3) Auto-email newly-generated long-term and on-demand invoices (on generation)
         if (!empty($appConfig['invoice_auto_email_on_generate'])) {
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type = 'long_term' AND i.status IN ('unpaid','partial') AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type IN ('long_term','on_demand') AND i.status IN ('unpaid','partial') AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
             $stmt->execute();
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {

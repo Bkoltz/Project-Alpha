@@ -75,11 +75,13 @@ try {
 
   // Save the signed PDF. For REGULAR contracts, auto-activate on upload (existing behavior).
   // For LONG-TERM and ON-DEMAND, keep the contract pending until the user explicitly activates it.
+  // This preserves explicit user intent and prevents accidental activation.
   $ctType = $contract['contract_type'] ?? 'regular';
   if ($ctType === 'regular') {
     $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')
         ->execute([$publicUrl, 'active', $contract_id]);
   } else {
+    // LT/OD: just save the path and leave status unchanged; the user clicks Activate separately.
     $pdo->prepare('UPDATE contracts SET signed_pdf_path=? WHERE id=?')
         ->execute([$publicUrl, $contract_id]);
   }
@@ -100,7 +102,8 @@ try {
 } catch (Throwable $e) { /* default regular */ }
 
 // For long-term contracts that are already active, re-uploading a signed PDF can trigger
-// billing if the next invoice date is due.
+// billing if the next invoice date is due. This does not run on first upload because
+// long-term contracts are not auto-activated.
 if ($contractType === 'long_term') {
   try {
     require_once __DIR__ . '/../../utils/recurring_billing.php';
