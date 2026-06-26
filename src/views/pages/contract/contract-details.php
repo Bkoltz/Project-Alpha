@@ -96,7 +96,7 @@ if ($termsText === '') {
       <?php endif; ?>
       <?php $st = strtolower((string)($contract['status'] ?? ''));
       if (!in_array($st, ['denied', 'cancelled', 'void'], true)): ?>
-        <form method="post" action="/?page=email-send" style="display:inline">
+        <form method="post" action="/?page=contract/email-send" style="display:inline">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="type" value="contract">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
