@@ -490,6 +490,14 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
     require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
     exit;
 }
+if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
+    exit;
+}
+if (in_array($page, ['contract/long-term-contract-pdf', 'long-term-contract-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
+    exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Add a global per-IP rate-limit gate before routing. Endpoint-specific limits
     // (e.g. public links) may use tighter checks in their own controllers.
