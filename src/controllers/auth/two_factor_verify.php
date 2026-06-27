@@ -91,8 +91,11 @@ try {
     
     if (!$twofa) {
         // 2FA not enabled, clear pending state and proceed
+        $pendingUser = $_SESSION['2fa_pending']['user_data'] ?? null;
         unset($_SESSION['2fa_pending']);
-        $_SESSION['user'] = $_SESSION['2fa_pending']['user_data'];
+        if ($pendingUser) {
+            $_SESSION['user'] = $pendingUser;
+        }
         header('Location: /');
         exit;
     }

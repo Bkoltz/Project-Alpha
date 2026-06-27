@@ -6,6 +6,19 @@ require_once __DIR__ . '/../../../utils/document_fields.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
 $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
+$selectedProject = null;
+$selectedProjectId = (int)($_GET['project_id'] ?? 0);
+if ($selectedProjectId > 0) {
+  $projectStmt = $pdo->prepare('
+    SELECT p.id, p.client_id, p.organization_id, p.name, c.name AS client_name, o.name AS organization_name
+    FROM projects p
+    LEFT JOIN clients c ON c.id = p.client_id
+    LEFT JOIN organizations o ON o.id = p.organization_id
+    WHERE p.id = ?
+  ');
+  $projectStmt->execute([$selectedProjectId]);
+  $selectedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
 ?>
 <section>
   <h2>Create Invoice</h2>
@@ -14,11 +27,14 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
   </div>
   <form id="invoiceForm" method="post" action="/?page=invoices-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+    <?php if ($selectedProject): ?>
+      <input type="hidden" name="return_to_project" value="<?php echo (int)$selectedProject['id']; ?>">
+    <?php endif; ?>
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label style="position:relative">
         <div>Client</div>
-        <input id="clientInputInv" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <input id="clientIdInv" type="hidden" name="client_id">
+        <input id="clientInputInv" type="text" placeholder="Type client name..." autocomplete="off" value="<?php echo htmlspecialchars((string)($selectedProject['client_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientIdInv" type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>">
         <div id="clientSuggestInv" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
       <label>
@@ -61,13 +77,21 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
       </label>
     </div>
 
-    <div id="projectSectionInv" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+    <div id="projectSectionInv" style="<?php echo $selectedProject ? 'display:block' : 'display:none'; ?>;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
       <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
       <div style="display:grid;gap:12px">
         <label>
           <div>Add to Existing Project</div>
           <select id="projectSelectInv" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="">-- Select Project --</option>
+            <?php if ($selectedProject): ?>
+              <option value="<?php echo (int)$selectedProject['id']; ?>" selected>
+                <?php echo htmlspecialchars((string)$selectedProject['name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>
+                <?php if (!empty($selectedProject['organization_name'])): ?>
+                  (<?php echo htmlspecialchars((string)$selectedProject['organization_name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>)
+                <?php endif; ?>
+              </option>
+            <?php endif; ?>
           </select>
         </label>
         <div style="text-align:center;color:#6b7280;font-size:13px">or</div>

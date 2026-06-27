@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
-csrf_verify_post_or_redirect('time-tracking/create');
+csrf_verify_post_or_redirect('time-tracking');
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId === 0) { http_response_code(401); exit; }
@@ -28,19 +28,21 @@ if ($description === '' || !$entryDate) {
     exit;
 }
 
-if ($contractId && (!$clientId || !$projectCode)) {
-    $doc = $pdo->prepare('SELECT client_id, project_code FROM contracts WHERE id = ?');
+if ($contractId && (!$clientId || !$projectCode || !$projectId)) {
+    $doc = $pdo->prepare('SELECT client_id, project_id, project_code FROM contracts WHERE id = ?');
     $doc->execute([$contractId]);
     if ($row = $doc->fetch(PDO::FETCH_ASSOC)) {
         $clientId = $clientId ?: (int)$row['client_id'];
+        $projectId = $projectId ?: ((int)($row['project_id'] ?? 0) ?: null);
         $projectCode = $projectCode ?: ($row['project_code'] ?? null);
     }
 }
-if ($invoiceId && (!$clientId || !$projectCode || !$contractId)) {
-    $doc = $pdo->prepare('SELECT client_id, project_code, contract_id FROM invoices WHERE id = ?');
+if ($invoiceId && (!$clientId || !$projectCode || !$projectId || !$contractId)) {
+    $doc = $pdo->prepare('SELECT client_id, project_id, project_code, contract_id FROM invoices WHERE id = ?');
     $doc->execute([$invoiceId]);
     if ($row = $doc->fetch(PDO::FETCH_ASSOC)) {
         $clientId = $clientId ?: (int)$row['client_id'];
+        $projectId = $projectId ?: ((int)($row['project_id'] ?? 0) ?: null);
         $projectCode = $projectCode ?: ($row['project_code'] ?? null);
         $contractId = $contractId ?: ((int)($row['contract_id'] ?? 0) ?: null);
     }

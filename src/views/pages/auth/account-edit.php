@@ -392,7 +392,12 @@ try {
             <button type="submit" style="padding:8px 14px;border-radius:6px;border:1px solid #dc2626;background:#fee2e2;color:#dc2626;font-size:14px;cursor:pointer;font-weight:600;">Disable 2FA for this user</button>
           </form>
         <?php else: ?>
-          <p style="color:#6b7280;font-size:13px;margin:0;">The user has not set up two-factor authentication. They can enable it from their own Account page.</p>
+          <?php if ($userId === (int)($_SESSION['user']['id'] ?? 0)): ?>
+            <p style="color:#6b7280;font-size:13px;margin:0 0 12px;">Two-factor authentication is not enabled for your account. Set it up from My Account.</p>
+            <a href="/?page=2fa-setup" class="btn btn-sm btn-primary">Set Up 2FA</a>
+          <?php else: ?>
+            <p style="color:#6b7280;font-size:13px;margin:0;">The user has not set up two-factor authentication. They can enable it from their own Account page.</p>
+          <?php endif; ?>
         <?php endif; ?>
       </div>
 

@@ -88,7 +88,7 @@ if ($termsText === '') {
     <div class="no-print" style="padding:12px 16px;background:<?php echo $ccolors['bg']; ?>;color:<?php echo $ccolors['text']; ?>;border-left:4px solid <?php echo $ccolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
       Status: <?php echo htmlspecialchars($contract['status']); ?>
     </div>
-    <div class="no-print flex flex-wrap">
+    <div class="no-print document-actions">
       <a href="javascript:history.back()" class="btn btn-sm">Back</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" download="contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
@@ -115,27 +115,27 @@ if ($termsText === '') {
         </form>
       <?php endif; ?>
       <?php if (!empty($contract['signed_pdf_path'])): ?>
-        <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
+        <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-success">View Signed PDF</a>
       <?php endif; ?>
       <?php if ($needsDeposit && $contract['status'] === 'pending'): ?>
         <form method="post" action="/?page=contract/contract-deposit-received" style="display:inline" onsubmit="return confirm('Mark deposit as received ($<?php echo number_format($depositCalc, 2); ?>)?');">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;">Deposit Received ($<?php echo number_format($depositCalc, 2); ?>)</button>
+          <button type="submit" class="btn btn-sm btn-success">Deposit Received ($<?php echo number_format($depositCalc, 2); ?>)</button>
         </form>
       <?php endif; ?>
       <?php if ($contract['status'] === 'active'): ?>
         <form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?');">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: medium;">Complete</button>
+          <button type="submit" class="btn btn-sm btn-success">Complete</button>
         </form>
       <?php endif; ?>
       <?php if ($contract['status'] !== 'cancelled' && $contract['status'] !== 'completed'): ?>
         <form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#6b7280;color:#fff; font-size: medium;">Void</button>
+          <button type="submit" class="btn btn-sm btn-muted">Void</button>
         </form>
       <?php endif; ?>
       <?php if (in_array($st, ['denied', 'cancelled', 'void'], true)): ?>
@@ -143,17 +143,17 @@ if ($termsText === '') {
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="type" value="contract">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+          <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
         </form>
       <?php endif; ?>
       <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="type" value="contract">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+        <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
       </form>
       <?php if (!in_array($cstatus, ['denied', 'cancelled', 'void'], true)): ?>
-      <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #4f46e5;border-radius:8px;background:#eef2ff;color:#4f46e5; font-size: medium;">🔗 Share Link</button>
+      <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
       <?php endif; ?>
     </div>
     <?php if (!empty($_GET['reenabled'])): ?>
@@ -439,45 +439,6 @@ if ($termsText === '') {
       <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
       <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
     </div>
-<<<<<<< HEAD
-  <?php endif; ?>
-
-  <?php
-  // Long-term / on-demand billing summary (shows what the client is buying)
-  $ctType = $contract['contract_type'] ?? 'regular';
-  if (in_array($ctType, ['long_term', 'on_demand'], true)):
-    $biCount = (int)($contract['billing_interval_count'] ?? 1);
-    $biUnit = $contract['billing_interval_unit'] ?? 'month';
-    $biText = $biCount . ' ' . ucfirst($biUnit);
-    if ($biCount > 1) $biText .= 's';
-    $svcDesc = trim((string)($contract['scope'] ?? ''));
-    $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
-    if ($ctType === 'on_demand' && $amtPerInv <= 0) {
-      $amtPerInv = (float)($contract['subtotal'] ?? 0);
-    }
-    $pricingType = $contract['pricing_type'] ?? null;
-  ?>
-  <div style="margin:8px 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
-    <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#065f46">
-      <?php echo $ctType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
-    </div>
-    <?php if ($svcDesc !== ''): ?>
-      <div style="margin-bottom:4px"><strong>Service:</strong> <?php echo htmlspecialchars($svcDesc); ?></div>
-    <?php endif; ?>
-    <?php if ($ctType === 'long_term'): ?>
-      <div style="margin-bottom:4px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($biText); ?></div>
-    <?php endif; ?>
-    <?php if ($pricingType === 'per_invoice' || $ctType === 'on_demand'): ?>
-      <div style="font-size:14px;font-weight:700;color:#065f46">
-        Amount Per Invoice: $<?php echo number_format($amtPerInv, 2); ?>
-        <?php if ($ctType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($biUnit)); ?><?php endif; ?>
-      </div>
-    <?php elseif ($pricingType === 'fixed_total'): ?>
-      <div style="font-size:14px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
-    <?php endif; ?>
-  </div>
-=======
->>>>>>> 261ec5f (fix: CSRF on approve/reject + on-demand $0 + PDF signature/page-break + client dropdown)
   <?php endif; ?>
 
   <?php

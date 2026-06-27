@@ -42,6 +42,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
 
     initAutocomplete();
 
+    if (typeof updateHourlyModeUI === 'function') updateHourlyModeUI();
     recalc();
 }
 
@@ -179,6 +180,18 @@ function recalc() {
     updateDiscountWarning();
 }
 
+function updateHourlyModeUI() {
+    var hourly = !!document.getElementById('billingModeHourly')?.checked;
+    var hint = document.getElementById('hourlyBillingHint');
+    if (hint) hint.style.display = hourly ? 'block' : 'none';
+    document.querySelectorAll('#items input[name="item_billing_unit[]"]').forEach(function (el) {
+        el.value = hourly ? 'hour' : 'each';
+    });
+    document.querySelectorAll('#items input[name="item_qty[]"]').forEach(function (el) {
+        el.placeholder = hourly ? 'Est. hours' : 'Qty';
+    });
+}
+
 // Safely add event listeners only if elements exist
 ['discountType', 'discountValue', 'taxPercent'].forEach(id => {
     const el = document.getElementById(id);
@@ -189,6 +202,9 @@ function recalc() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', recalc);
 });
+
+var hourlyModeEl = document.getElementById('billingModeHourly');
+if (hourlyModeEl) hourlyModeEl.addEventListener('change', updateHourlyModeUI);
 
 var discountTypeEl = document.getElementById('discountType');
 if (discountTypeEl) discountTypeEl.addEventListener('change', updateDiscountWarning);
@@ -404,6 +420,7 @@ function updateDiscountWarning() {
 }
 
 addItem();
+updateHourlyModeUI();
 
 function loadProjectsForClient(clientId) {
     if (!clientId) {
@@ -426,7 +443,12 @@ function loadProjectsForClient(clientId) {
                 });
                 document.getElementById('projectSection').style.display = 'block';
             } else {
-                document.getElementById('projectSection').style.display = 'none';
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No active projects';
+                option.disabled = true;
+                projectSelect.appendChild(option);
+                document.getElementById('projectSection').style.display = 'block';
             }
         })
         .catch(() => {

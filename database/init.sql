@@ -354,6 +354,8 @@ CREATE TABLE IF NOT EXISTS projects (
     name VARCHAR(150) NOT NULL,
     description TEXT NULL,
     status ENUM('not_started', 'active', 'overdue', 'completed', 'cancelled') NOT NULL DEFAULT 'not_started',
+    invoice_billing_period ENUM('per_invoice','monthly') NOT NULL DEFAULT 'monthly',
+    invoice_net_terms_days INT NULL,
     start_date DATE NULL,
     end_date DATE NULL,
     estimated_start DATE NULL,

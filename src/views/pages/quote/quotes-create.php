@@ -4,6 +4,19 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+$selectedProject = null;
+$selectedProjectId = (int)($_GET['project_id'] ?? 0);
+if ($selectedProjectId > 0) {
+  $projectStmt = $pdo->prepare('
+    SELECT p.id, p.client_id, p.organization_id, p.name, c.name AS client_name, o.name AS organization_name
+    FROM projects p
+    LEFT JOIN clients c ON c.id = p.client_id
+    LEFT JOIN organizations o ON o.id = p.organization_id
+    WHERE p.id = ?
+  ');
+  $projectStmt->execute([$selectedProjectId]);
+  $selectedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
 ?>
 
 <section>
@@ -13,13 +26,16 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
   </div>
   <form id="quoteForm" method="post" action="/?page=quote/quotes-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+    <?php if ($selectedProject): ?>
+      <input type="hidden" name="return_to_project" value="<?php echo (int)$selectedProject['id']; ?>">
+    <?php endif; ?>
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 
       <!-- Client input -->
       <label style="grid-column:1/2;position:relative">
         <div>Client</div>
-        <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <input id="clientId" type="hidden" name="client_id">
+        <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" value="<?php echo htmlspecialchars((string)($selectedProject['client_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientId" type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>">
         <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
 
@@ -31,13 +47,21 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
 
       <!-- Project selection -->
       <label>
-        <div id="projectSection" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+        <div id="projectSection" style="<?php echo $selectedProject ? 'display:block' : 'display:none'; ?>;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
           <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
           <div style="display:grid;gap:12px">
             <label>
               <div>Add to Existing Project</div>
               <select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
                 <option value="">-- Select Project --</option>
+                <?php if ($selectedProject): ?>
+                  <option value="<?php echo (int)$selectedProject['id']; ?>" selected>
+                    <?php echo htmlspecialchars((string)$selectedProject['name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>
+                    <?php if (!empty($selectedProject['organization_name'])): ?>
+                      (<?php echo htmlspecialchars((string)$selectedProject['organization_name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>)
+                    <?php endif; ?>
+                  </option>
+                <?php endif; ?>
               </select>
             </label>
             <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
@@ -108,6 +132,7 @@ $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchA
           <div style="font-size:13px;color:#4b5563">Use line items as estimated hours and hourly rates. Actual invoice billing can come from tracked time.</div>
         </div>
       </label>
+      <div id="hourlyBillingHint" style="display:none;margin-top:10px;padding:10px;border-radius:8px;background:#fff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px">Enter the estimated hours below, then enter the hourly rate for each service.</div>
     </div>
 
     <!-- Recurring billing -->

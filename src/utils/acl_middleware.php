@@ -16,10 +16,10 @@ function page_permission_map(): array
         'landing'              => null,
         'user-dashboard'       => null,
         'dashboard'           => 'financial.view',
-        'account'             => 'profile.edit',
-        'account-update'      => 'profile.edit',
+        'account'             => null,
+        'account-update'      => null,
         'account/delete'      => 'users.manage',
-        'account-revoke-device' => 'profile.edit',
+        'account-revoke-device' => null,
         'auth'                => null,
         'logout'              => null,
         'logout-confirm'      => null,
@@ -51,8 +51,8 @@ function page_permission_map(): array
         'accounts-update'        => 'users.manage',
         'account-edit'           => 'users.manage',
         '2fa-admin-disable'      => '2fa.manage',
-        '2fa-setup'              => 'profile.edit',
-        '2fa-setup-action'       => 'profile.edit',
+        '2fa-setup'              => null,
+        '2fa-setup-action'       => null,
         '2fa-verify'             => null,
         '2fa-verify-action'      => null,
 
@@ -214,6 +214,7 @@ function page_permission_map(): array
         'time-tracking/start-timer' => 'time_tracking.manage',
         'time-tracking/stop-timer' => 'time_tracking.manage',
         'time-tracking/unbilled'   => 'time_tracking.view',
+        'time-tracking/options'    => 'time_tracking.view',
         'time-tracking/update'     => 'time_tracking.manage',
 
         // Public links
@@ -221,7 +222,7 @@ function page_permission_map(): array
         'public-link-revoke'  => 'public_links.revoke',
 
         // Legal / misc
-        'legal/tos-accept' => 'profile.edit',
+        'legal/tos-accept' => null,
         'links/link-management' => 'settings.manage',
         'links/manual-link-handler' => 'settings.manage',
         'forms-handler' => 'settings.manage',

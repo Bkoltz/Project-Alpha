@@ -87,7 +87,7 @@ $isOngoing = empty($contract['end_date']);
   <div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">Recurring Billing Agreement</div>
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+  <div class="no-print document-actions">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
@@ -114,7 +114,7 @@ $isOngoing = empty($contract['end_date']);
       </form>
     <?php endif; ?>
     <?php if (!empty($contract['signed_pdf_path'])): ?>
-      <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
+      <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-success">View Signed PDF</a>
     <?php endif; ?>
     <?php if (!in_array($contractStatus, ['cancelled', 'completed', 'void'], true)): ?>
       <form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">

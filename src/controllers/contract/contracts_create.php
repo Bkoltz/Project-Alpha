@@ -1,7 +1,9 @@
 <?php
 // src/controllers/contracts_create.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/project_id.php';
+require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
@@ -25,6 +27,7 @@ if ($doc_type === 'on_demand') {
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -122,7 +125,7 @@ try{
   foreach($items as $it){ $ins->execute([$co_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
 
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
-  $dueDate = null;
+  $dueDate = project_invoice_due_date($pdo, $project_id, $appConfig);
   $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       ->execute([$co_id, null, $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
   $invoice_id = (int)$pdo->lastInsertId();
@@ -174,5 +177,9 @@ try{
   header('Location: /?page=contract/contracts-create&error=' . urlencode($msg));
   exit;
 }
-header('Location: /?page=contract/contracts-list&created=1');
+if ($return_to_project > 0) {
+  header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=contract');
+} else {
+  header('Location: /?page=contract/contracts-list&created=1');
+}
 exit;

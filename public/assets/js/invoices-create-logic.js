@@ -111,7 +111,12 @@ function loadProjectsForClientInv(clientId) {
                 });
                 document.getElementById('projectSectionInv').style.display = 'block';
             } else {
-                document.getElementById('projectSectionInv').style.display = 'none';
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No active projects';
+                option.disabled = true;
+                projectSelect.appendChild(option);
+                document.getElementById('projectSectionInv').style.display = 'block';
             }
         })
         .catch(() => {

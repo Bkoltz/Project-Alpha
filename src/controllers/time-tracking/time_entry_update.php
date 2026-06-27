@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
-csrf_verify_post_or_redirect('time-tracking/update');
+csrf_verify_post_or_redirect('time-tracking');
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId === 0) { http_response_code(401); exit; }
@@ -47,6 +47,26 @@ if ($serviceItemId && $rate <= 0) {
     $svc = $pdo->prepare('SELECT unit_price FROM item_library WHERE id = ? AND is_active = 1');
     $svc->execute([$serviceItemId]);
     $rate = (float)($svc->fetchColumn() ?: $rate);
+}
+
+if ($contractId && (!$clientId || !$projectCode || !$projectId)) {
+    $doc = $pdo->prepare('SELECT client_id, project_id, project_code FROM contracts WHERE id = ?');
+    $doc->execute([$contractId]);
+    if ($docRow = $doc->fetch(PDO::FETCH_ASSOC)) {
+        $clientId = $clientId ?: (int)$docRow['client_id'];
+        $projectId = $projectId ?: ((int)($docRow['project_id'] ?? 0) ?: null);
+        $projectCode = $projectCode ?: ($docRow['project_code'] ?? null);
+    }
+}
+if ($invoiceId && (!$clientId || !$projectCode || !$projectId || !$contractId)) {
+    $doc = $pdo->prepare('SELECT client_id, project_id, project_code, contract_id FROM invoices WHERE id = ?');
+    $doc->execute([$invoiceId]);
+    if ($docRow = $doc->fetch(PDO::FETCH_ASSOC)) {
+        $clientId = $clientId ?: (int)$docRow['client_id'];
+        $projectId = $projectId ?: ((int)($docRow['project_id'] ?? 0) ?: null);
+        $projectCode = $projectCode ?: ($docRow['project_code'] ?? null);
+        $contractId = $contractId ?: ((int)($docRow['contract_id'] ?? 0) ?: null);
+    }
 }
 
 $startedAt = $entryDate . ' 00:00:00';

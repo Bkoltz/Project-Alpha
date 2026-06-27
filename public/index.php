@@ -405,6 +405,10 @@ if ($page === 'time-tracking/unbilled') {
     require_once __DIR__ . '/../src/controllers/time-tracking/time_entries_unbilled.php';
     exit;
 }
+if ($page === 'time-tracking/options') {
+    require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_options.php';
+    exit;
+}
 if ($page === 'financial/financial-api') {
     require_once __DIR__ . '/../src/controllers/financial/financial_api.php';
     exit;
@@ -688,7 +692,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   stripe-webhook-legacy        - tokenless: legacy Stripe webhook uses signature verification (HMAC + replay protection)
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }

@@ -29,6 +29,7 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
         });
     }
 
+    if (typeof updateHourlyModeUICo === 'function') updateHourlyModeUICo();
     recalcCo();
 }
 // Calculate number of billing periods between two dates
@@ -170,6 +171,18 @@ function recalcCo() {
     // Update discount warning
     updateDiscountWarning();
 }
+
+function updateHourlyModeUICo() {
+    var hourly = !!document.getElementById('billingModeHourlyCo')?.checked;
+    var hint = document.getElementById('hourlyBillingHintCo');
+    if (hint) hint.style.display = hourly ? 'block' : 'none';
+    document.querySelectorAll('#itemsCo input[name="item_billing_unit[]"]').forEach(function (el) {
+        el.value = hourly ? 'hour' : 'each';
+    });
+    document.querySelectorAll('#itemsCo input[name="item_qty[]"]').forEach(function (el) {
+        el.placeholder = hourly ? 'Est. hours' : 'Qty';
+    });
+}
 // Safely add event listeners only if elements exist
 ['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => {
     const el = document.getElementById(id);
@@ -181,6 +194,8 @@ function recalcCo() {
 });
 var discountTypeElCo = document.getElementById('discountTypeCo');
 if (discountTypeElCo) discountTypeElCo.addEventListener('change', updateDiscountWarning);
+var hourlyModeElCo = document.getElementById('billingModeHourlyCo');
+if (hourlyModeElCo) hourlyModeElCo.addEventListener('change', updateHourlyModeUICo);
 
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
@@ -398,6 +413,7 @@ function updateDiscountWarning() {
 }
 
 addItemCo();
+updateHourlyModeUICo();
 
 // Client typeahead
 function initContractClientDropdown() {
@@ -466,7 +482,12 @@ function loadProjectsForClientCo(clientId) {
                 });
                 document.getElementById('projectSectionCo').style.display = 'block';
             } else {
-                document.getElementById('projectSectionCo').style.display = 'none';
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No active projects';
+                option.disabled = true;
+                projectSelect.appendChild(option);
+                document.getElementById('projectSectionCo').style.display = 'block';
             }
         })
         .catch(() => {
