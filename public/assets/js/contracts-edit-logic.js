@@ -127,6 +127,4 @@ if (addItemBtn) addItemBtn.addEventListener('click', function(e) {addItemCo();})
     if (el) el.addEventListener('input', recalcCo);
 });
 
-if (itemData.length === 0) {
-    addItemCo();
-}
+['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => document.getElementById(id).addEventListener('input', recalcCo));

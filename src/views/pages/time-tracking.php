@@ -17,12 +17,16 @@ try {
 }
 
 // Time entries list
-$stmt = $pdo->prepare('SELECT te.*, c.name AS client_name, il.item_name AS service_name, p.name AS project_name FROM time_entries te LEFT JOIN clients c ON te.client_id = c.id LEFT JOIN item_library il ON il.id = te.service_item_id LEFT JOIN projects p ON p.id = te.project_id WHERE te.user_id = ? ORDER BY te.created_at DESC');
+$stmt = $pdo->prepare('SELECT te.*, c.name AS client_name, il.item_name AS service_name FROM time_entries te LEFT JOIN clients c ON te.client_id = c.id LEFT JOIN item_library il ON il.id = te.service_item_id WHERE te.user_id = ? ORDER BY te.created_at DESC');
 $stmt->execute([$userId]);
 $entries = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $services = $pdo->query("SELECT id, item_name, unit_price FROM item_library WHERE is_active = 1 AND category = 'Hourly' ORDER BY item_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$jobRows = $pdo->query("SELECT id, name, status, notes, description, client_id FROM projects WHERE status IN ('not_started','active','overdue') ORDER BY name ASC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
+$jobRows = $pdo->query("SELECT project_code, MIN(client_id) AS client_id FROM (
+  SELECT project_code, client_id FROM quotes WHERE project_code IS NOT NULL
+  UNION ALL SELECT project_code, client_id FROM contracts WHERE project_code IS NOT NULL
+  UNION ALL SELECT project_code, client_id FROM invoices WHERE project_code IS NOT NULL
+) jobs GROUP BY project_code ORDER BY project_code DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
 $hourlyContracts = $pdo->query("SELECT id, doc_number, project_code, client_id, contract_type FROM contracts WHERE billing_mode = 'hourly' ORDER BY created_at DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
 $hourlyInvoices = $pdo->query("SELECT id, doc_number, project_code, client_id FROM invoices WHERE billing_mode = 'hourly' ORDER BY created_at DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -135,10 +139,6 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
           <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
         </label>
         <label>
-          <span class="label">Manual Hours</span>
-          <input type="number" step="0.01" min="0" name="hours" class="input" value="" placeholder="Or total hours">
-        </label>
-        <label>
           <span class="label">Hourly Service</span>
           <select name="service_item_id" id="serviceItemId" class="input">
             <option value="">Manual rate</option>
@@ -146,6 +146,37 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
               <option value="<?php echo (int)$svc['id']; ?>" data-rate="<?php echo htmlspecialchars((string)$svc['unit_price']); ?>"><?php echo htmlspecialchars($svc['item_name']); ?> - $<?php echo number_format((float)$svc['unit_price'], 2); ?>/hr</option>
             <?php endforeach; ?>
           </select>
+        </label>
+        <label>
+          <span class="label">Job ID</span>
+          <select name="project_code" class="input">
+            <option value="">No job selected</option>
+            <?php foreach ($jobRows as $job): ?>
+              <option value="<?php echo htmlspecialchars($job['project_code']); ?>"><?php echo htmlspecialchars($job['project_code']); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <label>
+          <span class="label">Hourly Contract</span>
+          <select name="contract_id" class="input">
+            <option value="">No contract selected</option>
+            <?php foreach ($hourlyContracts as $co): ?>
+              <option value="<?php echo (int)$co['id']; ?>" data-client="<?php echo (int)$co['client_id']; ?>" data-project-code="<?php echo htmlspecialchars($co['project_code'] ?? ''); ?>">C-<?php echo htmlspecialchars((string)($co['doc_number'] ?? $co['id'])); ?><?php echo !empty($co['project_code']) ? ' / Job ' . htmlspecialchars($co['project_code']) : ''; ?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <label>
+          <span class="label">Hourly Invoice</span>
+          <select name="invoice_id" class="input">
+            <option value="">No invoice selected</option>
+            <?php foreach ($hourlyInvoices as $iv): ?>
+              <option value="<?php echo (int)$iv['id']; ?>" data-client="<?php echo (int)$iv['client_id']; ?>" data-project-code="<?php echo htmlspecialchars($iv['project_code'] ?? ''); ?>">I-<?php echo htmlspecialchars((string)($iv['doc_number'] ?? $iv['id'])); ?><?php echo !empty($iv['project_code']) ? ' / Job ' . htmlspecialchars($iv['project_code']) : ''; ?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <label>
+          <span class="label">Manual Hours</span>
+          <input type="number" step="0.01" min="0" name="hours" class="input" value="" placeholder="Optional if start/end set">
         </label>
         <label>
           <span class="label">Rate ($)</span>
@@ -217,7 +248,7 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
               <tr>
                 <td><?php echo htmlspecialchars(substr($e['started_at'], 0, 10)); ?></td>
                 <td><?php echo htmlspecialchars($e['client_name'] ?? ''); ?></td>
-                <td><?php echo htmlspecialchars($e['project_name'] ?? ($e['project_code'] ?? '')); ?></td>
+                <td><?php echo htmlspecialchars($e['project_code'] ?? ''); ?></td>
                 <td><?php echo htmlspecialchars($e['service_name'] ?? ''); ?></td>
                 <td><?php echo htmlspecialchars($e['description'] ?? ''); ?></td>
                 <td><?php echo number_format((float)$e['hours'], 2); ?></td>
@@ -312,13 +343,12 @@ if ($editId > 0) {
         </label>
         <label>
           <span class="label">Job ID</span>
-          <select name="project_id" class="input">
+          <select name="project_code" class="input">
             <option value="">No job selected</option>
             <?php foreach ($jobRows as $job): ?>
-              <option value="<?php echo (int)$job['id']; ?>" <?php echo (int)($entry['project_id'] ?? 0) === (int)$job['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($job['name']); ?> (<?php echo htmlspecialchars(str_replace('_', ' ', $job['status'])); ?>)</option>
+              <option value="<?php echo htmlspecialchars($job['project_code']); ?>" <?php echo ($entry['project_code'] ?? '') === $job['project_code'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($job['project_code']); ?></option>
             <?php endforeach; ?>
           </select>
-          <input type="hidden" name="project_code" value="<?php echo htmlspecialchars($entry['project_code'] ?? ''); ?>">
         </label>
         <label>
           <span class="label">Hourly Contract</span>

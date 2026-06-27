@@ -77,7 +77,7 @@ if ($selectedProjectId > 0) {
       </label>
     </div>
 
-    <div id="projectSectionInv" style="<?php echo $selectedProject ? 'display:block' : 'display:none'; ?>;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+    <div id="projectSectionInv" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
       <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
       <div style="display:grid;gap:12px">
         <label>

@@ -84,7 +84,7 @@
     if (banner) return;
     banner = document.createElement('div');
     banner.setAttribute('role', 'alert');
-    banner.style.cssText = 'position:fixed;left:16px;right:16px;top:16px;z-index:10000;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid #fecaca;border-radius:8px;background:#fff1f2;color:#7f1d1d;box-shadow:0 10px 30px rgba(15,23,42,.18);font-size:14px';
+    banner.style.cssText = 'position:fixed;left:16px;right:16px;bottom:16px;z-index:10000;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid #fecaca;border-radius:8px;background:#fff1f2;color:#7f1d1d;box-shadow:0 10px 30px rgba(15,23,42,.18);font-size:14px';
     banner.innerHTML = '<span><strong>Session expired.</strong> Please refresh and sign in again before continuing.</span><button type="button" style="padding:8px 12px;border:0;border-radius:6px;background:#991b1b;color:#fff;font-weight:600;cursor:pointer">Refresh</button>';
     banner.querySelector('button').addEventListener('click', function() {
       window.location.reload();

@@ -130,7 +130,6 @@ if ($selectedProjectId > 0) {
           <div style="font-size:13px;color:#4b5563">Use line items as estimated hours and hourly rates. Actual invoice billing can come from tracked time.</div>
         </div>
       </label>
-      <div id="hourlyBillingHintCo" style="display:none;margin-top:10px;padding:10px;border-radius:8px;background:#fff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px">Enter the estimated hours below, then enter the hourly rate for each service.</div>
     </div>
 
     <div id="longTermFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">

@@ -151,9 +151,5 @@ try {
     @error_log('[invoices_create] Client notification email failed: ' . $e->getMessage());
 }
 
-if ($return_to_project > 0) {
-    header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=invoice');
-} else {
-    header('Location: /?page=invoice/invoices-list&created=1');
-}
+header('Location: /?page=invoice/invoices-list&created=1');
 exit;
