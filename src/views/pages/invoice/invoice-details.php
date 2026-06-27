@@ -71,7 +71,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div class="no-print" style="padding:12px 16px;background:<?php echo $icolors['bg']; ?>;color:<?php echo $icolors['text']; ?>;border-left:4px solid <?php echo $icolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($inv['status']); ?>
   </div>
-  <div class="no-print flex flex-wrap">
+  <div class="no-print document-actions">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" class="btn btn-sm">Download</a>
@@ -89,23 +89,23 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <?php endif; ?>
     <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
       <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
-         style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;text-decoration:none;display:inline-block;margin-right:6px;">Mark as Paid</a>
+         class="btn btn-sm btn-success">Mark as Paid</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
     <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+      <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
     </form>
     <?php endif; ?>
     <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+      <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
-    <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#f0fdf4;color:#166534; font-size: medium;">🔗 Share Link</button>
+    <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php 
       require_once __DIR__ . '/../../../services/StripeService.php';
       if (StripeService::isConfigured($appConfig) && in_array(strtolower($inv['status']), ['unpaid', 'partial'])): 
@@ -113,7 +113,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <form method="post" action="/?page=stripe-charge" style="display:inline" target="_blank">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="invoice_id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#4f46e5;color:#fff; font-size: medium;cursor:pointer">💳 Charge Card</button>
+      <button type="submit" class="btn btn-sm btn-primary">Charge Card</button>
     </form>
     <?php endif; ?>
   </div>

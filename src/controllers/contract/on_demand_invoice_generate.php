@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/crypto.php';
+require_once __DIR__ . '/../../utils/project_billing.php';
 
 @error_log('[on_demand_invoice_generate] POST received', 0);
 
@@ -72,7 +73,8 @@ try {
     $total = max(0, $taxable + $tax);
     
     // Create invoice
-    $dueDate = date('Y-m-d', strtotime('+' . ($appConfig['net_terms_days'] ?? 30) . ' days'));
+    $projectMonthlyBilling = project_uses_monthly_invoice_billing($pdo, $projectId);
+    $dueDate = project_invoice_due_date($pdo, $projectId, $appConfig);
     
     $insertInvoice = $pdo->prepare('
         INSERT INTO invoices (
@@ -152,7 +154,7 @@ try {
 
     // User-selected auto-email for on-demand generation, with a config fallback.
     // Unlike long-term cron invoices, on-demand invoices can be generated as drafts first.
-    if ($sendEmail || !empty($appConfig['invoice_auto_email_on_generate'])) {
+    if ($sendEmail || (!$projectMonthlyBilling && !empty($appConfig['invoice_auto_email_on_generate']))) {
         try {
             $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
             $clientStmt->execute([$clientId]);

@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/project_id.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -225,5 +226,9 @@ try{
     exit;
 }
 
-header('Location: /?page=contract/long-term-contracts-list&created=1');
+if ($return_to_project > 0) {
+    header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=contract');
+} else {
+    header('Location: /?page=contract/long-term-contracts-list&created=1');
+}
 exit;
