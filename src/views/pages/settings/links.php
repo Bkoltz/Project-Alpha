@@ -6,7 +6,8 @@ require_once __DIR__ . '/../../../utils/escaper.php';
 // Fetch global app config
 $appConfig = [];
 try {
-    $stmt = $pdo->query('SELECT config_key, config_value FROM app_config');
+    $hasOrgColumn = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='app_config' AND COLUMN_NAME='organization_id'")->fetchColumn();
+    $stmt = $pdo->query($hasOrgColumn ? 'SELECT config_key, config_value FROM app_config WHERE organization_id = 0' : 'SELECT config_key, config_value FROM app_config');
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $appConfig[$row['config_key']] = $row['config_value'];
     }

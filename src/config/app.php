@@ -26,7 +26,7 @@ $appConfig = [
     'terms' => null,
     'net_terms_days' => 30,
     'payment_methods' => ['Card','Cash','Bank Transfer'],
-    'quotes_show_terms' => 0,
+    'quotes_show_terms' => 1,
     // App preferences
     'cron_enabled' => 1,
     'timezone' => 'UTC',
@@ -158,8 +158,11 @@ try {
             'invoice_show_terms', 'invoice_show_project_code', 'invoice_show_due_date',
             'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
             'signature_agreement', 'review_link', 'suppress_assets_warning',
-            'cron_enabled', 'cron_schedule', 'cron_custom',
+            'cron_enabled', 'cron_schedule', 'cron_custom', 'cron_last_run',
             'contract_custom_sections_json',
+            'backup_hour', 'backup_retention_days',
+            'link_resolver_enabled', 'default_link_expiration_days', 'org_level_links_only',
+            'link_expiration_email_enabled',
             // Surcharge settings (user-editable via billing settings)
             'stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed',
             'stripe_surcharge_split_percent', 'stripe_surcharge_message',
@@ -173,9 +176,7 @@ try {
             while ($row = $cfgStmt->fetch(PDO::FETCH_ASSOC)) {
                 $key = $row['config_key'];
                 $val = $row['config_value'];
-                if ($val !== '' && $val !== null) {
-                    $appConfig[$key] = $val;
-                }
+                $appConfig[$key] = $val;
             }
         }
 

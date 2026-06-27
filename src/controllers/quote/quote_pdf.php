@@ -37,7 +37,9 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 
 $id = (int)($_GET['id'] ?? 0);
-require_record_ownership($pdo, 'quotes', $id);
+if (!defined('PUBLIC_VIEW')) {
+    require_record_ownership($pdo, 'quotes', $id);
+}
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
 // Fetch document_date from the database

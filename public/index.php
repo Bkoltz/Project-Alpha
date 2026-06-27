@@ -248,7 +248,7 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-redirect', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -300,6 +300,10 @@ if (!empty($_SESSION['user'])) {
     if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $sessionTimeout) {
         $_SESSION = [];
         session_destroy();
+        if ($page === 'session-status') {
+            require_once __DIR__ . '/../src/controllers/auth/session_status.php';
+            exit;
+        }
         header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
         exit;
     }
@@ -1113,6 +1117,11 @@ if ($page === 'stripe-charge') {
     exit;
 }
 
+if ($page === 'session-status') {
+    require_once __DIR__ . '/../src/controllers/auth/session_status.php';
+    exit;
+}
+
 // Standalone login and reset pages use a minimal top header
 if ($page === 'login') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
@@ -1143,6 +1152,10 @@ if ($page === 'logout-confirm') {
 if ($page === 'public-doc') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/controllers/public_view/public_doc.php';
+    exit;
+}
+if ($page === 'public-doc-pdf') {
+    require_once __DIR__ . '/../src/controllers/public_view/public_doc_pdf.php';
     exit;
 }
 if ($page === 'public-redirect') {
