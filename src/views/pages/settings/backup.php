@@ -93,7 +93,7 @@ unset($_SESSION['flash_backup']);
         </div>
         <div class="status-item">
             <span class="status-label">Schedule:</span>
-            <span class="status-value">Daily at 2:30 AM UTC</span>
+            <span class="status-value">Daily at <?php echo str_pad((string)$backupHour, 2, '0', STR_PAD_LEFT); ?>:00 UTC</span>
         </div>
     </div>
 

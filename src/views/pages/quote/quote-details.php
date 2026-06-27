@@ -8,7 +8,7 @@ require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
-if (!defined('PDF_MODE')) {
+if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'quotes', $id);
 }
 $stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
@@ -30,9 +30,10 @@ if ($quoteType === 'long_term') {
     $quoteTypeLabel = 'On-Demand Quote';
     $approveConfirm = 'Approve this on-demand quote and generate contract?';
 }
-$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM quote_items WHERE quote_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
+$isHourlyBilling = ($quote['billing_mode'] ?? 'fixed') === 'hourly';
 require_once __DIR__ . '/../../../utils/format.php';
 $documentSender = document_sender_for_creator($pdo, $appConfig, !empty($quote['created_by']) ? (int)$quote['created_by'] : null);
 $fromName = $documentSender['name'] ?? '';
@@ -80,7 +81,7 @@ $isPdf = defined('PDF_MODE');
       <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
-    <form method="post" action="/?page=email-send" style="display:inline">
+    <form method="post" action="/?page=quote/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
@@ -407,8 +408,8 @@ $isPdf = defined('PDF_MODE');
       <tr style="text-align:left;border-bottom:1px solid #eee">
         <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
-        <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
-        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+        <th style="padding:10px;width:10%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Est. Hours' : 'Qty'; ?></th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit Price'; ?></th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
       </tr>
     </thead>
@@ -483,7 +484,7 @@ $isPdf = defined('PDF_MODE');
   <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
 
 <!-- Share Link Modal -->
-<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+<div id="shareLinkModal" data-doc-type="quote" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0;font-size:18px">🔗 Share Quote Link</h3>

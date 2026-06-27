@@ -126,8 +126,19 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
       </div>
     <?php endif; ?>
 
+    <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
+      <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
+      <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <input type="checkbox" name="billing_mode" value="hourly" <?php echo ($contract['billing_mode'] ?? 'fixed') === 'hourly' ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div style="font-weight:600;color:#1f2937">Hourly billing</div>
+          <div style="font-size:13px;color:#4b5563">Use line items as estimated hours and hourly rates.</div>
+        </div>
+      </label>
+    </div>
+
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items</div>
+      <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
 
       <div id="itemsCo" style="display:grid;gap:8px"></div>
       <button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>

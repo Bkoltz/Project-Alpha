@@ -4,6 +4,14 @@
 
 // Route specific tabs to dedicated handlers
 $tab = $_POST['tab'] ?? $_GET['tab'] ?? '';
+$docTab = isset($_POST['doc_tab']) ? (string)$_POST['doc_tab'] : (string)($_GET['doc_tab'] ?? '');
+$docTab = preg_replace('/[^a-z]/i', '', $docTab);
+$isSystemTab = $tab === 'system';
+$isDocumentsQuoteTab = $tab === 'documents' && $docTab === 'quotes';
+$isDocumentsContractTab = $tab === 'documents' && $docTab === 'contracts';
+$isDocumentsInvoiceTab = $tab === 'documents' && $docTab === 'invoices';
+$isDocumentsCustomizationTab = $tab === 'documents' && $docTab === 'customization';
+$isNotificationsTab = $tab === 'notifications';
 
 if ($tab === 'links') {
     require_once __DIR__ . '/settings/links_handler.php';
@@ -111,6 +119,44 @@ if (is_readable($settingsFile) && is_writable(dirname($settingsFile))) {
     }
 }
 
+// Production reads app_config with higher precedence than settings.json, so use it
+// as the base here too. Otherwise saving one tab can overwrite newer DB values
+// with older JSON defaults.
+try {
+    require_once __DIR__ . '/../config/db.php';
+    $pdo->exec("CREATE TABLE IF NOT EXISTS app_config (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        organization_id INT NOT NULL DEFAULT 0,
+        config_key VARCHAR(100) NOT NULL,
+        config_value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_app_config (organization_id, config_key),
+        INDEX idx_config_key (config_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $hasOrgColumn = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='app_config' AND COLUMN_NAME='organization_id'")->fetchColumn();
+    if (!$hasOrgColumn) {
+        $pdo->exec("ALTER TABLE app_config ADD COLUMN organization_id INT NOT NULL DEFAULT 0 AFTER id");
+    }
+    $cfgRows = $pdo->query('SELECT config_key, config_value FROM app_config WHERE organization_id=0')->fetchAll(PDO::FETCH_KEY_PAIR);
+    if (is_array($cfgRows)) {
+        foreach ($cfgRows as $key => $val) {
+            if ($key === 'payment_methods') {
+                $decoded = json_decode((string)$val, true);
+                $settings[$key] = is_array($decoded) ? $decoded : $val;
+            } elseif ($key === 'contract_custom_sections_json') {
+                $decoded = json_decode((string)$val, true);
+                if (is_array($decoded)) {
+                    $settings['contract_custom_sections'] = $decoded;
+                }
+            } else {
+                $settings[$key] = $val;
+            }
+        }
+    }
+} catch (Throwable $e) {
+    // app_config may not exist on a fresh install; settings.json remains the fallback.
+}
+
 // Prepare target and existing file contents early so we can ensure an encryption key
 $target = $settingsFile;
 $existing = [];
@@ -144,7 +190,9 @@ if (isset($_POST['app_host'])) {
     $settings['app_host'] = $h !== '' ? mb_substr($h, 0, 255) : null;
 }
 // Public links in email checkbox (was MISSING — never saved before)
-$settings['public_links_in_email'] = !empty($_POST['public_links_in_email']) ? 1 : 0;
+if ($isSystemTab || isset($_POST['app_host']) || isset($_POST['public_links_in_email'])) {
+    $settings['public_links_in_email'] = !empty($_POST['public_links_in_email']) ? 1 : 0;
+}
 
 // From and contact fields
 foreach (['from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
@@ -173,7 +221,9 @@ if (isset($_POST['documents_valid_days'])) {
     $settings['documents_valid_days'] = $dv;
 }
 // Toggle terms on quotes (moved to Documents → Quotes tab)
-$settings['quotes_show_terms'] = !empty($_POST['quotes_show_terms']) ? 1 : 0;
+if ($isDocumentsQuoteTab || isset($_POST['quotes_show_terms'])) {
+    $settings['quotes_show_terms'] = !empty($_POST['quotes_show_terms']) ? 1 : 0;
+}
 
 // On-demand document terms (new)
 if (isset($_POST['on_demand_terms'])) {
@@ -214,7 +264,9 @@ if (isset($_POST['net_terms_days'])) {
     $settings['net_terms_days'] = $nd;
 }
 // Suppress assets warning checkbox
-$settings['suppress_assets_warning'] = !empty($_POST['suppress_assets_warning']) ? 1 : 0;
+if (isset($_POST['suppress_assets_warning'])) {
+    $settings['suppress_assets_warning'] = !empty($_POST['suppress_assets_warning']) ? 1 : 0;
+}
 // Payment methods (JSON from modernized UI)
 if (isset($_POST['payment_methods_json'])) {
     $jsonData = json_decode((string)$_POST['payment_methods_json'], true);
@@ -352,10 +404,8 @@ if (!empty($generalConfigKeys)) {
 }
 
 // Cron/recurring invoice settings
-if (isset($_POST['cron_enabled'])) {
+if ($isNotificationsTab || isset($_POST['cron_enabled'])) {
     $settings['cron_enabled'] = !empty($_POST['cron_enabled']) ? 1 : 0;
-} else {
-    $settings['cron_enabled'] = 1;
 }
 if (isset($_POST['cron_schedule'])) {
     $sched = trim((string)$_POST['cron_schedule']);
@@ -369,50 +419,80 @@ if (isset($_POST['cron_custom'])) {
 }
 
 // Automatic invoice email settings
-$settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
-$settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
-$settings['invoice_auto_email_on_generate'] = !empty($_POST['invoice_auto_email_on_generate']) ? 1 : 0;
+if ($isNotificationsTab || isset($_POST['invoice_auto_send_due_7days'])) {
+    $settings['invoice_auto_send_due_7days'] = !empty($_POST['invoice_auto_send_due_7days']) ? 1 : 0;
+}
+if ($isNotificationsTab || isset($_POST['invoice_auto_send_overdue_weekly'])) {
+    $settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
+}
+if ($isNotificationsTab || isset($_POST['invoice_auto_email_on_generate'])) {
+    $settings['invoice_auto_email_on_generate'] = !empty($_POST['invoice_auto_email_on_generate']) ? 1 : 0;
+}
 
 // System automation settings
-$settings['auto_terminate_contracts'] = !empty($_POST['auto_terminate_contracts']) ? 1 : 0;
-$settings['link_expiration_checker'] = !empty($_POST['link_expiration_checker']) ? 1 : 0;
+if ($isNotificationsTab || isset($_POST['auto_terminate_contracts'])) {
+    $settings['auto_terminate_contracts'] = !empty($_POST['auto_terminate_contracts']) ? 1 : 0;
+}
+if ($isNotificationsTab || isset($_POST['link_expiration_checker'])) {
+    $settings['link_expiration_checker'] = !empty($_POST['link_expiration_checker']) ? 1 : 0;
+}
 
 // Contract notification settings
-$settings['contract_expiring_warning'] = !empty($_POST['contract_expiring_warning']) ? 1 : 0;
+if ($isNotificationsTab || isset($_POST['contract_expiring_warning'])) {
+    $settings['contract_expiring_warning'] = !empty($_POST['contract_expiring_warning']) ? 1 : 0;
+}
 if (isset($_POST['contract_expiring_days'])) {
     $settings['contract_expiring_days'] = max(1, min(90, (int)$_POST['contract_expiring_days']));
 }
-$settings['contract_expired_alert'] = !empty($_POST['contract_expired_alert']) ? 1 : 0;
+if ($isNotificationsTab || isset($_POST['contract_expired_alert'])) {
+    $settings['contract_expired_alert'] = !empty($_POST['contract_expired_alert']) ? 1 : 0;
+}
 
 // Payment notification settings
-$settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
-$settings['payment_received_notification'] = !empty($_POST['payment_received_notification']) ? 1 : 0;
+if ($isNotificationsTab || isset($_POST['payment_failure_alert'])) {
+    $settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
+}
+if ($isNotificationsTab || isset($_POST['payment_received_notification'])) {
+    $settings['payment_received_notification'] = !empty($_POST['payment_received_notification']) ? 1 : 0;
+}
 
 // Link expiration warning settings
-$settings['link_expiration_warning'] = !empty($_POST['link_expiration_warning']) ? 1 : 0;
+if ($isNotificationsTab || isset($_POST['link_expiration_warning'])) {
+    $settings['link_expiration_warning'] = !empty($_POST['link_expiration_warning']) ? 1 : 0;
+}
 if (isset($_POST['link_expiration_warning_days'])) {
     $settings['link_expiration_warning_days'] = max(1, min(90, (int)$_POST['link_expiration_warning_days']));
 }
 
 // Invoice document settings
-if (isset($_POST['invoice_show_terms'])) {
+if ($isDocumentsInvoiceTab || isset($_POST['invoice_show_terms'])) {
     $settings['invoice_show_terms'] = !empty($_POST['invoice_show_terms']) ? 1 : 0;
 }
-if (isset($_POST['invoice_show_project_code'])) {
+if ($isDocumentsInvoiceTab || isset($_POST['invoice_show_project_code'])) {
     $settings['invoice_show_project_code'] = !empty($_POST['invoice_show_project_code']) ? 1 : 0;
 }
-if (isset($_POST['invoice_show_due_date'])) {
+if ($isDocumentsInvoiceTab || isset($_POST['invoice_show_due_date'])) {
     $settings['invoice_show_due_date'] = !empty($_POST['invoice_show_due_date']) ? 1 : 0;
 }
 
-    // Quote settings — default to enabled unless explicitly unchecked
+// Quote settings: missing checkboxes mean "off" only when this subtab is saved.
+if ($isDocumentsQuoteTab || isset($_POST['quote_scope_enabled'])) {
     $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
+}
+if ($isDocumentsQuoteTab || isset($_POST['quote_auto_create_contract'])) {
     $settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
+}
+if ($isDocumentsQuoteTab || isset($_POST['quote_auto_create_invoice'])) {
     $settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
+}
 
 // Contract settings
-$settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;
-$settings['contract_memo_enabled'] = !empty($_POST['contract_memo_enabled']) ? 1 : 0;
+if ($isDocumentsContractTab || isset($_POST['contract_scope_enabled'])) {
+    $settings['contract_scope_enabled'] = !empty($_POST['contract_scope_enabled']) ? 1 : 0;
+}
+if ($isDocumentsContractTab || isset($_POST['contract_memo_enabled'])) {
+    $settings['contract_memo_enabled'] = !empty($_POST['contract_memo_enabled']) ? 1 : 0;
+}
 if (isset($_POST['signature_agreement'])) {
     $sig = trim((string)$_POST['signature_agreement']);
     $settings['signature_agreement'] = $sig !== '' ? mb_substr($sig, 0, 500) : 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.';
@@ -518,6 +598,35 @@ if (!empty($stripeConfigKeys)) {
 foreach (['stripe_publishable_key','stripe_secret_key_enc','stripe_webhook_secret_enc'] as $k) {
     unset($settings[$k]);
     unset($existing[$k]);
+}
+
+// Persist the final computed settings to app_config after all tab-specific handlers have run.
+// This keeps the database-backed config in sync with settings.json across deployments.
+if (isset($settings['contract_custom_sections'])) {
+    $settings['contract_custom_sections_json'] = json_encode($settings['contract_custom_sections']);
+    if (!in_array('contract_custom_sections_json', $generalConfigKeys, true)) {
+        $generalConfigKeys[] = 'contract_custom_sections_json';
+    }
+}
+if (!empty($generalConfigKeys)) {
+    require_once __DIR__ . '/../config/db.php';
+    try {
+        $stmtGenFinal = $pdo->prepare(
+            'INSERT INTO app_config (organization_id, config_key, config_value)
+             VALUES (0, ?, ?)
+             ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+        );
+        foreach ($generalConfigKeys as $key) {
+            if (array_key_exists($key, $settings)) {
+                $val = $settings[$key];
+                if (is_array($val)) { $val = json_encode($val); }
+                if ($val === null) { $val = ''; }
+                $stmtGenFinal->execute([$key, (string)$val]);
+            }
+        }
+    } catch (Throwable $e) {
+        @error_log('[settings] final app_config DB write failed: ' . $e->getMessage());
+    }
 }
 
 // Merge with existing file on target before writing to avoid overwriting unrelated fields

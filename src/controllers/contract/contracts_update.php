@@ -10,6 +10,7 @@ $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_amount = (float)($_POST['deposit_amount'] ?? 0);
 $deposit_paid = (float)($_POST['deposit_paid'] ?? 0);
@@ -18,11 +19,16 @@ $item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
+$billingUnits = $_POST['item_billing_unit'] ?? [];
 if ($id<=0 || $client_id<=0) { header('Location: /?page=contract/contracts-list&error=Invalid'); exit; }
+$contractTypeStmt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=? LIMIT 1');
+$contractTypeStmt->execute([$id]);
+$contractType = (string)($contractTypeStmt->fetchColumn() ?: '');
+$detailPage = $contractType === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){
   $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
-  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line];
+  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $unit=(($billingUnits[$i]??'each')==='hour'||$billing_mode==='hourly')?'hour':'each'; $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line,'u'=>$unit];
 }
 $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(100,$discount_value))*$subtotal/100;} elseif($discount_type==='fixed'){$discount_amount=max(0,$discount_value);} $tax=max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
 $terms = trim((string)($_POST['terms'] ?? '')) ?: null;
@@ -36,18 +42,18 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('UPDATE contracts SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
+  $pdo->prepare('UPDATE contracts SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
   
   // Sync changes to linked invoices
-  $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
+  $pdo->prepare('UPDATE invoices SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
   
   // Sync items to linked invoices
   $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
   $invoiceIds->execute([$id]);
   foreach($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invId) {
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invId]);
-    $insInv=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-    foreach($items as $it){ $insInv->execute([$invId,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
+    $insInv=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+    foreach($items as $it){ $insInv->execute([$invId,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
   }
   $row = $pdo->prepare('SELECT project_code FROM contracts WHERE id=?');
   $row->execute([$id]);
@@ -59,8 +65,8 @@ try{
     $up->execute([$pc, $client_id, $pn !== '' ? $pn : null, $pt !== '' ? $pt : null]);
   }
   $pdo->prepare('DELETE FROM contract_items WHERE contract_id=?')->execute([$id]);
-  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-  foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
+  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+  foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
   
   // Save contract signatures (non-critical; failures must not roll back contract update)
   try {
@@ -89,6 +95,6 @@ try{
   }
   
   $pdo->commit();
-}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=contract/contract-details&id=' . $id . '&error=Update%20failed'); exit; }
-header('Location: /?page=contract/contract-details&id=' . $id . '&updated=1');
+}catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=' . $detailPage . '&id=' . $id . '&error=Update%20failed'); exit; }
+header('Location: /?page=' . $detailPage . '&id=' . $id . '&updated=1');
 exit;

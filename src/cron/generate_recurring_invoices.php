@@ -114,10 +114,10 @@ try {
 
                 // create short-lived public link
                 $token = $createPublicLink($iid);
-                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
-                if ($link === '/?page=public_doc&type=invoice&token=' . rawurlencode($token)) {
+                $link = sprintf('%s/?page=public-doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
+                if ($link === '/?page=public-doc&type=invoice&token=' . rawurlencode($token)) {
                     // fallback to relative path if app_host not set
-                    $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                    $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                 }
 
                 $to = (string)$inv['email'];
@@ -165,9 +165,9 @@ try {
 
                 // create public link for convenience
                 $token = $createPublicLink($iid);
-                $link = sprintf('%s/?page=public_doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
-                if ($link === '/?page=public_doc&type=invoice&token=' . rawurlencode($token)) {
-                    $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = sprintf('%s/?page=public-doc&type=invoice&token=%s', rtrim(($appConfig['app_host'] ?? ''), '/'), rawurlencode($token));
+                if ($link === '/?page=public-doc&type=invoice&token=' . rawurlencode($token)) {
+                    $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                 }
 
                 $to = (string)$inv['email'];
@@ -192,7 +192,7 @@ try {
             }
         }
 
-        // 3) Auto-email newly-generated long-term invoices (on generation)
+        // 3) Auto-email newly-generated long-term and on-demand invoices (on generation)
         if (!empty($appConfig['invoice_auto_email_on_generate'])) {
             $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type = 'long_term' AND i.status IN ('unpaid','partial') AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
             $stmt->execute();
@@ -203,7 +203,7 @@ try {
                 if ($to === '') continue;
 
                 $token = $createPublicLink($iid);
-                $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                 $host = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($host !== '') { $link = $host . $link; }
 

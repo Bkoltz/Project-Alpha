@@ -2,7 +2,7 @@ var itemData = getItemData();
 var itemCounter = 0;
 
 itemData.forEach(item => {
-    addItem(item.item ?? '', item.description ?? '', Number(item.quantity), Number(item.unit_price));
+    addItem(item.item ?? '', item.description ?? '', Number(item.quantity), Number(item.unit_price), item.billing_unit || 'each');
 });
 
 function money(n) {
@@ -23,8 +23,7 @@ function getItemData() {
     }
 }
 
-function addItem(item = '', desc = '', qty = 1, price = 0) {
-    console.log(item);
+function addItem(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each') {
     var wrap = document.createElement('div');
     var itemId = 'item_' + (itemCounter++);
     var descId = 'desc_' + itemCounter;
@@ -75,6 +74,11 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     priceInput.value = price;
     priceInput.oninput = recalc;
 
+    var unitInput = document.createElement('input');
+    unitInput.type = 'hidden';
+    unitInput.name = 'item_billing_unit[]';
+    unitInput.value = billingUnit === 'hour' ? 'hour' : 'each';
+
     var removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.textContent = 'Remove';
@@ -84,6 +88,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
         recalc();
     };
 
+    wrap.appendChild(unitInput);
     wrap.appendChild(itemInput);
     wrap.appendChild(descTextarea);
     wrap.appendChild(qtyInput);

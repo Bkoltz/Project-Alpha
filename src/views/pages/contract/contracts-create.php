@@ -97,6 +97,17 @@ $csrf = csrf_sf_token('contracts-create');
       </div>
     </div>
 
+    <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
+      <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
+      <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <input type="checkbox" name="billing_mode" value="hourly" id="billingModeHourlyCo" style="margin-top:3px">
+        <div>
+          <div style="font-weight:600;color:#1f2937">Hourly billing</div>
+          <div style="font-size:13px;color:#4b5563">Use line items as estimated hours and hourly rates. Actual invoice billing can come from tracked time.</div>
+        </div>
+      </label>
+    </div>
+
     <div id="longTermFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
       <h3 style="margin:0 0 12px 0;color:#374151">Recurring Billing Settings</h3>
 
@@ -241,7 +252,7 @@ $csrf = csrf_sf_token('contracts-create');
     </div>
 
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items</div>
+      <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
       <div id="itemsCo" style="display:grid;gap:8px"></div>
       <button type="button" onclick="addItemCo()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>

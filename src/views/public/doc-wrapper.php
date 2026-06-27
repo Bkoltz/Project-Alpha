@@ -160,6 +160,11 @@ if ($type === 'invoice') {
 
   <!-- Header with expiration info -->
   <div class="public-header">
+    <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <a href="/?page=public-doc-pdf&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:600;font-size:14px">
+        Print / PDF
+      </a>
+    </div>
     <?php if ($expirationText): ?>
       <div class="link-expiry">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -499,9 +504,25 @@ if ($type === 'invoice') {
     <?php
       // Use the detail views - they check for PUBLIC_VIEW constant to hide admin controls
       if ($type === 'quote') {
-        require __DIR__ . '/../pages/quote/quote-details.php';
+        $quoteType = '';
+        try {
+          $typeSt = $pdo->prepare('SELECT quote_type FROM quotes WHERE id=? LIMIT 1');
+          $typeSt->execute([$rid]);
+          $quoteType = (string)($typeSt->fetchColumn() ?: '');
+        } catch (Throwable $e) { /* default to regular detail */ }
+        require $quoteType === 'long_term'
+          ? __DIR__ . '/../pages/quote/long-term-quote-details.php'
+          : __DIR__ . '/../pages/quote/quote-details.php';
       } elseif ($type === 'contract') {
-        require __DIR__ . '/../pages/contract/contract-details.php';
+        $contractType = '';
+        try {
+          $typeSt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=? LIMIT 1');
+          $typeSt->execute([$rid]);
+          $contractType = (string)($typeSt->fetchColumn() ?: '');
+        } catch (Throwable $e) { /* default to regular detail */ }
+        require $contractType === 'long_term'
+          ? __DIR__ . '/../pages/contract/long-term-contract-details.php'
+          : __DIR__ . '/../pages/contract/contract-details.php';
       } elseif ($type === 'invoice') {
         require __DIR__ . '/../pages/invoice/invoice-details.php';
       }

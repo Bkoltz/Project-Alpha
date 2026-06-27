@@ -8,7 +8,7 @@ require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 
 $id = (int)($_GET['id'] ?? 0);
-if (!defined('PDF_MODE')) {
+if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'contracts', $id);
 }
 $c = $pdo->prepare('SELECT co.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE co.id=?');
@@ -18,9 +18,10 @@ if (!$contract) {
   echo '<p>Contract not found</p>';
   return;
 }
-$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
+$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
+$isHourlyBilling = ($contract['billing_mode'] ?? 'fixed') === 'hourly';
 
 // Fetch contract signatures
 $signatures = [];
@@ -96,7 +97,7 @@ if ($termsText === '') {
       <?php endif; ?>
       <?php $st = strtolower((string)($contract['status'] ?? ''));
       if (!in_array($st, ['denied', 'cancelled', 'void'], true)): ?>
-        <form method="post" action="/?page=email-send" style="display:inline">
+        <form method="post" action="/?page=contract/email-send" style="display:inline">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="type" value="contract">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
@@ -438,6 +439,45 @@ if ($termsText === '') {
       <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
       <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
     </div>
+<<<<<<< HEAD
+  <?php endif; ?>
+
+  <?php
+  // Long-term / on-demand billing summary (shows what the client is buying)
+  $ctType = $contract['contract_type'] ?? 'regular';
+  if (in_array($ctType, ['long_term', 'on_demand'], true)):
+    $biCount = (int)($contract['billing_interval_count'] ?? 1);
+    $biUnit = $contract['billing_interval_unit'] ?? 'month';
+    $biText = $biCount . ' ' . ucfirst($biUnit);
+    if ($biCount > 1) $biText .= 's';
+    $svcDesc = trim((string)($contract['scope'] ?? ''));
+    $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
+    if ($ctType === 'on_demand' && $amtPerInv <= 0) {
+      $amtPerInv = (float)($contract['subtotal'] ?? 0);
+    }
+    $pricingType = $contract['pricing_type'] ?? null;
+  ?>
+  <div style="margin:8px 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#065f46">
+      <?php echo $ctType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
+    </div>
+    <?php if ($svcDesc !== ''): ?>
+      <div style="margin-bottom:4px"><strong>Service:</strong> <?php echo htmlspecialchars($svcDesc); ?></div>
+    <?php endif; ?>
+    <?php if ($ctType === 'long_term'): ?>
+      <div style="margin-bottom:4px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($biText); ?></div>
+    <?php endif; ?>
+    <?php if ($pricingType === 'per_invoice' || $ctType === 'on_demand'): ?>
+      <div style="font-size:14px;font-weight:700;color:#065f46">
+        Amount Per Invoice: $<?php echo number_format($amtPerInv, 2); ?>
+        <?php if ($ctType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($biUnit)); ?><?php endif; ?>
+      </div>
+    <?php elseif ($pricingType === 'fixed_total'): ?>
+      <div style="font-size:14px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
+    <?php endif; ?>
+  </div>
+=======
+>>>>>>> 261ec5f (fix: CSRF on approve/reject + on-demand $0 + PDF signature/page-break + client dropdown)
   <?php endif; ?>
 
   <?php
@@ -481,8 +521,8 @@ if ($termsText === '') {
       <tr style="text-align:left;border-bottom:1px solid #eee">
         <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
-        <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
-        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+        <th style="padding:10px;width:10%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Est. Hours' : 'Qty'; ?></th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit Price'; ?></th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
       </tr>
     </thead>
@@ -638,7 +678,7 @@ if ($termsText === '') {
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
 
 <!-- Share Link Modal -->
-<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+<div id="shareLinkModal" data-doc-type="contract" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0;font-size:18px">🔗 Share Contract Link</h3>

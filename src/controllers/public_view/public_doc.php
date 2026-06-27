@@ -29,12 +29,12 @@ try {
   
   // Try query with expire_when_paid column
   try {
-    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked, redirect, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
   } catch (Throwable $e) {
     // Fallback query without expire_when_paid column
-    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
+    $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked, redirect FROM public_links WHERE token=? LIMIT 1');
     $st->execute([$token]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if ($row) {
@@ -45,7 +45,14 @@ try {
   if (!$row) { throw new Exception('notfound'); }
   
   // Check if revoked
-  if ((int)($row['revoked'] ?? 0) === 1) { throw new Exception('expired'); }
+  if ((int)($row['revoked'] ?? 0) === 1) {
+    $redirect = trim((string)($row['redirect'] ?? ''));
+    if ($redirect !== '') {
+      header('Location: ' . $redirect);
+      exit;
+    }
+    throw new Exception('expired');
+  }
   
   // Check expiration - either by date or by payment status
   $expireWhenPaid = !empty($row['expire_when_paid']);

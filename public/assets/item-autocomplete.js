@@ -31,6 +31,9 @@ class ItemAutocomplete {
       display: none;
       z-index: 1000;
       min-width: 300px;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
     `;
     
     // Position dropdown relative to input
@@ -193,13 +196,24 @@ class ItemAutocomplete {
       this.priceField.value = parseFloat(item.unit_price).toFixed(2);
     }
 
-    // When an hourly item is selected, change the quantity placeholder to "Hours"
-    if (item.is_hourly) {
-      const row = this.input.closest('[style*="grid"]') || this.input.parentElement;
-      if (row) {
-        const qtyInput = row.querySelector('.qty-input') || row.querySelector('[name="item_qty[]"]');
+    // When an hourly item is selected, mark the row as hour-based.
+    const row = this.input.closest('[style*="grid"]') || this.input.parentElement;
+    if (row) {
+      const qtyInput = row.querySelector('.qty-input') || row.querySelector('[name="item_qty[]"]');
+      const unitInput = row.querySelector('[name="item_billing_unit[]"]');
+      if (item.is_hourly) {
         if (qtyInput) {
           qtyInput.placeholder = 'Hours';
+        }
+        if (unitInput) {
+          unitInput.value = 'hour';
+        }
+      } else {
+        if (qtyInput) {
+          qtyInput.placeholder = 'Qty';
+        }
+        if (unitInput) {
+          unitInput.value = 'each';
         }
       }
     }

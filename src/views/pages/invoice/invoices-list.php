@@ -208,7 +208,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
             <td style="padding:10px">
               <a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px; font-size: small;">View</a>
               <?php if (strtolower((string)$r['status']) !== 'void'): ?>
-              <form method="post" action="/?page=email-send" style="display:inline;margin-right:6px">
+              <form method="post" action="/?page=invoice/email-send" style="display:inline;margin-right:6px">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="invoice">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

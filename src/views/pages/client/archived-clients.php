@@ -29,11 +29,29 @@ $stc = $pdo->prepare('SELECT COUNT(*) FROM archived_clients ' . ($where));
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = "SELECT id, client_id, name, email, phone, organization_id, archived_at FROM archived_clients " . ($where) . " ORDER BY archived_at DESC LIMIT $per OFFSET $offset";
+$sql = "SELECT ac.id, ac.client_id, ac.name, ac.email, ac.phone, org.name AS organization, ac.archived_at
+        FROM archived_clients ac
+        LEFT JOIN organizations org ON ac.organization_id = org.id
+        " . ($where ? str_replace('WHERE name LIKE ?', 'WHERE ac.name LIKE ?', $where) : '') . "
+        ORDER BY ac.archived_at DESC LIMIT $per OFFSET $offset";
 
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+function archived_client_email_html(?string $email): string
+{
+  $email = trim((string)$email);
+  $placeholderEmails = ['[email protected]', 'email@example.com', 'noemail@example.com', 'n/a', 'na'];
+  if ($email === '' || in_array(strtolower($email), $placeholderEmails, true)) {
+    return '<span style="color:var(--muted)">None</span>';
+  }
+  if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $safe = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+    return '<a href="mailto:' . $safe . '">' . $safe . '</a>';
+  }
+  return htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+}
 ?>
 <section>
   <h2>Archived Clients</h2>
@@ -63,7 +81,7 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
           <tr style="border-top:1px solid #f3f4f6">
             <td style="padding:10px">#<?php echo (int)$r['client_id']; ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['name']); ?></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['email'] ?? ''); ?></td>
+            <td style="padding:10px"><?php echo archived_client_email_html($r['email'] ?? null); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['phone'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['organization'] ?? ''); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['archived_at']); ?></td>

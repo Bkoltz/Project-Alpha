@@ -41,6 +41,7 @@ try {
     $clientId = $contract['client_id'];
     $projectCode = $contract['project_code'];
     $projectId = !empty($contract['project_id']) ? (int)$contract['project_id'] : null;
+    $billingMode = ($contract['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
     
     // Resolve creator + organization for derived invoice (no session in on-demand generator)
     $fallbackUserId = 1;
@@ -75,10 +76,10 @@ try {
     
     $insertInvoice = $pdo->prepare('
         INSERT INTO invoices (
-            contract_id, client_id, project_id, project_code, invoice_type,
+            contract_id, client_id, project_id, project_code, invoice_type, billing_mode,
             discount_type, discount_value, tax_percent, 
             subtotal, total, status, due_date, created_at, organization_id, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ');
     
     $insertInvoice->execute([
@@ -87,6 +88,7 @@ try {
         $projectId,
         $projectCode,
         'on_demand',
+        $billingMode,
         $discountType,
         $discountValue,
         $contract['tax_percent'],
@@ -107,12 +109,12 @@ try {
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNumber, $invoiceId]);
     
     // Add invoice items. Preserve itemized contracts; flat contracts get one line.
-    $contractItemsStmt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id = ? ORDER BY sort_order, id');
+    $contractItemsStmt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM contract_items WHERE contract_id = ? ORDER BY sort_order, id');
     $contractItemsStmt->execute([$contract_id]);
     $contractItems = $contractItemsStmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (!empty($contractItems)) {
-        $insertItem = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        $insertItem = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach ($contractItems as $item) {
             $insertItem->execute([
                 $invoiceId,
@@ -121,6 +123,7 @@ try {
                 (float)($item['quantity'] ?? 0),
                 (float)($item['unit_price'] ?? 0),
                 (float)($item['line_total'] ?? 0),
+                $item['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),
             ]);
         }
     } else {
@@ -132,8 +135,8 @@ try {
             $description .= ' - ' . substr($contract['scope'], 0, 100);
         }
 
-        $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)')
-            ->execute([$invoiceId, $description, 1, $subtotal, $subtotal]);
+        $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?)')
+            ->execute([$invoiceId, $description, 1, $subtotal, $subtotal, $billingMode === 'hourly' ? 'hour' : 'each']);
     }
     
     // Update contract
@@ -147,9 +150,9 @@ try {
     
     @error_log("[on_demand_invoice_generate] Generated invoice I-$maxDoc for contract ODC-{$contract['doc_number']} (\${$total})");
 
-    // User-selected auto-email for on-demand generation. Unlike long-term
-    // cron invoices, on-demand invoices can be generated as drafts first.
-    if ($sendEmail) {
+    // User-selected auto-email for on-demand generation, with a config fallback.
+    // Unlike long-term cron invoices, on-demand invoices can be generated as drafts first.
+    if ($sendEmail || !empty($appConfig['invoice_auto_email_on_generate'])) {
         try {
             $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
             $clientStmt->execute([$clientId]);
@@ -187,7 +190,7 @@ try {
                     $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
                     $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())')
                         ->execute(['invoice', $invoiceId, $token, $expiresAt]);
-                    $link = '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                    $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
                     $host = rtrim(($appConfig['app_host'] ?? ''), '/');
                     if ($host !== '') { $link = $host . $link; }
 
