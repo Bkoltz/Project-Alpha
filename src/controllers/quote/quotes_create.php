@@ -14,6 +14,7 @@ $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none', 'percent', 'fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 // Check both direct field names and custom_field_ prefixed names (from dynamic rendering)
 $deposit_type = $_POST['deposit_type'] ?? $_POST['custom_field_deposit_type'] ?? 'none';
 $deposit_type = in_array($deposit_type, ['none','percent','fixed']) ? $deposit_type : 'none';
@@ -65,6 +66,7 @@ $item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
+$billingUnits = $_POST['item_billing_unit'] ?? [];
 
 // Validate client_id
 if ($client_id <= 0) {
@@ -106,7 +108,8 @@ if ($is_long_term && $pricing_type === 'per_invoice') {
         if ($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line];
+        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit];
     }
     // Fallback: if no valid line items were entered, use the flat amount if provided.
     if (!$items) {
@@ -124,7 +127,8 @@ if ($is_long_term && $pricing_type === 'per_invoice') {
         if ($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line];
+        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit];
     }
     if (!$items) {
         header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -151,8 +155,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, null, null, 'pending', $quote_type, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $__creator, date("Y-m-d H:i:s")]);
+    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, null, null, 'pending', $quote_type, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $__creator, date("Y-m-d H:i:s")]);
     $quote_id = (int)$pdo->lastInsertId();
 
     // Assign a new Project ID for this quote
@@ -176,9 +180,9 @@ try {
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {
-        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach ($items as $it) {
-            $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+            $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? 'each']);
         }
     }
 

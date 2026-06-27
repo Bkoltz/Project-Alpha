@@ -15,6 +15,65 @@
 </main>
 <script src="/assets/js/phone-formatter.js" defer></script>
 <script src="/assets/js/csrf-auto-link.js" defer></script>
+<script>
+(function() {
+  function inferShareContext(modal) {
+    var params = new URLSearchParams(window.location.search);
+    var page = params.get('page') || '';
+    var type = modal && modal.dataset.docType ? modal.dataset.docType : '';
+    if (!type) {
+      if (page.indexOf('quote/') === 0) type = 'quote';
+      else if (page.indexOf('invoice/') === 0) type = 'invoice';
+      else if (page.indexOf('contract/') === 0) type = 'contract';
+    }
+    return {
+      type: type || 'contract',
+      id: (modal && modal.dataset.docId) || params.get('id') || '',
+      days: (modal && modal.dataset.defaultDays) || '14',
+      csrf: (modal && modal.dataset.csrf) || ''
+    };
+  }
+  window.generatePublicLink = function() {
+    var modal = document.getElementById('shareLinkModal');
+    if (modal) modal.style.display = 'flex';
+  };
+  window.closeShareModal = function() {
+    var modal = document.getElementById('shareLinkModal');
+    if (modal) modal.style.display = 'none';
+  };
+  window.createPublicLink = function() {
+    var modal = document.getElementById('shareLinkModal');
+    if (!modal) return;
+    var ctx = inferShareContext(modal);
+    var formData = new FormData();
+    formData.append('type', ctx.type);
+    formData.append('id', ctx.id);
+    var daysInput = document.getElementById('linkDays');
+    formData.append('days', (daysInput && daysInput.value) || ctx.days);
+    if (ctx.csrf) formData.append('csrf', ctx.csrf);
+    fetch('/?page=public-link-create', { method: 'POST', body: formData })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.success) { alert(data.error || 'Failed to create link'); return; }
+        var content = document.getElementById('shareLinkContent');
+        var result = document.getElementById('shareLinkResult');
+        var link = document.getElementById('generatedLink');
+        var expiry = document.getElementById('linkExpiry');
+        if (content) content.style.display = 'none';
+        if (result) result.style.display = 'block';
+        if (link) link.value = data.url || '';
+        if (expiry) expiry.textContent = data.expires_at ? 'Expires: ' + data.expires_at : '';
+      })
+      .catch(function() { alert('Failed to create link'); });
+  };
+  window.copyLink = function() {
+    var input = document.getElementById('generatedLink');
+    if (!input) return;
+    input.select();
+    document.execCommand('copy');
+  };
+})();
+</script>
 <?php if (!empty($_SESSION['user']['id'])): ?>
 <script>
 (function() {

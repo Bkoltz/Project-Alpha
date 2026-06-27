@@ -10,6 +10,7 @@ $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_value = (float)($_POST['deposit_value'] ?? 0);
 
@@ -70,6 +71,7 @@ if ($hasLineItems) {
     $desc = $_POST['item_desc'] ?? [];
     $qty = $_POST['item_qty'] ?? [];
     $price = $_POST['item_price'] ?? [];
+    $billingUnits = $_POST['item_billing_unit'] ?? [];
     
     for ($i = 0; $i < count($item); $i++) {
         $itm = trim((string)($item[$i] ?? ''));
@@ -79,7 +81,8 @@ if ($hasLineItems) {
         if ($itm === '' || $q <= 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
+        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line, 'u' => $unit];
     }
 }
 
@@ -128,15 +131,15 @@ try{
 
     // Insert on-demand contract into the unified contracts table
     $sql = 'INSERT INTO contracts (
-        client_id, project_id, project_code, status, contract_type, start_date, end_date, 
+        client_id, project_id, project_code, status, contract_type, billing_mode, start_date, end_date,
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid,
         total_invoiced, invoice_count, scope, organization_id, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'pending', 'on_demand', $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'pending', 'on_demand', $billing_mode, $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, 'on_demand', $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0,
@@ -151,9 +154,9 @@ try{
 
     // Save line items if we have them
     if (!empty($items)) {
-        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach ($items as $it) {
-            $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
+            $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
         }
     }
 

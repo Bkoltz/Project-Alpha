@@ -53,16 +53,18 @@ try {
   $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
 
   $quoteType = $quote['quote_type'] ?? 'regular';
+  $billingMode = ($quote['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
   if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
     // For LT/OD quotes, only create contract if auto-create is enabled
     if ($autoCreateContract) {
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
           ->execute([
             $id,
             (int)$quote['client_id'],
             $projectId,
             'pending',
             $quoteType,
+            $billingMode,
             $quote['discount_type'],
             $quote['discount_value'],
             $quote['tax_percent'],
@@ -85,9 +87,9 @@ try {
       $contract_id = (int)$pdo->lastInsertId();
 
       if (!empty($qitems)) {
-        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach ($qitems as $it) {
-          $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+          $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each')]);
         }
       }
 
@@ -99,13 +101,13 @@ try {
   } else {
     // Regular quote: create contract and/or invoice based on settings
     if ($autoCreateContract) {
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $contract_id = (int)$pdo->lastInsertId();
 
-      $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+      $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
-        $ci->execute([$contract_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+        $ci->execute([$contract_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each')]);
       }
 
       $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "regular"')->fetchColumn();
@@ -113,13 +115,13 @@ try {
     }
 
     if ($autoCreateInvoice) {
-      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $invoice_id = (int)$pdo->lastInsertId();
 
-      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
-        $ii->execute([$invoice_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+        $ii->execute([$invoice_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each')]);
       }
 
       $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "regular"')->fetchColumn();

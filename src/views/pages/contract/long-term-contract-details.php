@@ -17,10 +17,11 @@ if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
 // Get items if fixed_total pricing
 $items = [];
 if ($contract['pricing_type'] === 'fixed_total') {
-    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
+    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM contract_items WHERE contract_id=?');
     $itemsQuery->execute([$id]);
     $items = $itemsQuery->fetchAll();
 }
+$isHourlyBilling = ($contract['billing_mode'] ?? 'fixed') === 'hourly';
 
 require_once __DIR__ . '/../../../utils/format.php';
 $documentSender = document_sender_for_creator($pdo, $appConfig, !empty($contract['created_by']) ? (int)$contract['created_by'] : null);
@@ -316,8 +317,8 @@ $isOngoing = empty($contract['end_date']);
         <?php if ($items): ?>
           <tr style="border-bottom:1px solid #eee">
             <th style="padding:10px">Description</th>
-            <th style="padding:10px">Qty</th>
-            <th style="padding:10px">Unit</th>
+            <th style="padding:10px"><?php echo $isHourlyBilling ? 'Est. Hours' : 'Qty'; ?></th>
+            <th style="padding:10px"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit'; ?></th>
             <th style="padding:10px">Line Total</th>
           </tr>
           <?php foreach ($items as $it): ?>
@@ -414,7 +415,7 @@ $isOngoing = empty($contract['end_date']);
 </style>
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
 <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+<div id="shareLinkModal" data-doc-type="contract" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0;font-size:18px">Share Long-term Contract Link</h3>

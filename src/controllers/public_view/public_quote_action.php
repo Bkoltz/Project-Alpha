@@ -74,15 +74,17 @@ try {
         $fallbackOrgId  = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
         $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
         $quoteOrgId   = (int)($quote['organization_id'] ?? 0) ?: $fallbackOrgId;
+        $billingMode = (($quote['billing_mode'] ?? 'fixed') === 'hourly') ? 'hourly' : 'fixed';
 
         // Create contract (pending)
-        $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
            ->execute([
              $qid,
              (int)$quote['client_id'],
              !empty($quote['project_id']) ? (int)$quote['project_id'] : null,
              'pending',
              $quoteType,
+             $billingMode,
              $quote['discount_type'],
              $quote['discount_value'],
              $quote['tax_percent'],
@@ -103,17 +105,37 @@ try {
            ]);
         $contract_id = (int)$pdo->lastInsertId();
 
-        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)');
-        foreach ($qitems as $it) { $ci->execute([$contract_id, $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+        foreach ($qitems as $it) {
+          $ci->execute([
+            $contract_id,
+            $it['item'] ?? ($it['description'] ?? 'Item'),
+            $it['description'],
+            $it['quantity'],
+            $it['unit_price'],
+            $it['line_total'],
+            ($it['billing_unit'] ?? 'each') === 'hour' ? 'hour' : 'each'
+          ]);
+        }
 
         if ($quoteType === 'regular') {
           // Create invoice (unpaid)
-          $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+          $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
           $invoice_id = (int)$pdo->lastInsertId();
 
-          $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-          foreach ($qitems as $it) { $ii->execute([$invoice_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]); }
+          $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+          foreach ($qitems as $it) {
+            $ii->execute([
+              $invoice_id,
+              $it['item'] ?? ($it['description'] ?? 'Item'),
+              $it['description'],
+              $it['quantity'],
+              $it['unit_price'],
+              $it['line_total'],
+              ($it['billing_unit'] ?? 'each') === 'hour' ? 'hour' : 'each'
+            ]);
+          }
         }
 
         // Assign doc_numbers

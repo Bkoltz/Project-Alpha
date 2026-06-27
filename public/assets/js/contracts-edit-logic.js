@@ -2,7 +2,7 @@ var itemData = getItemData();
 
 //Add loaded data
 itemData.forEach(item => {
-    addItemCo(item.item, item.description, Number(item.quantity), Number(item.unit_price));
+    addItemCo(item.item, item.description, Number(item.quantity), Number(item.unit_price), item.billing_unit || 'each');
 });
 
 function getItemData() {
@@ -24,7 +24,7 @@ function money(n) {
 }
 
 var itemCounterCo = 0;
-function addItemCo(item = '', desc = '', qty = 1, price = 0) {
+function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each') {
     var wrap = document.createElement('div');
     var itemId = 'itemCo_' + (itemCounterCo++);
     var descId = 'descCo_' + itemCounterCo;
@@ -72,12 +72,18 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
     priceInput.value = price;
     priceInput.oninput = recalcCo;
 
+    var unitInput = document.createElement('input');
+    unitInput.type = 'hidden';
+    unitInput.name = 'item_billing_unit[]';
+    unitInput.value = billingUnit === 'hour' ? 'hour' : 'each';
+
     var removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.textContent = 'Remove';
     removeBtn.style.cssText = 'border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px';
     removeBtn.onclick = function () { wrap.remove(); recalcCo(); };
 
+    wrap.appendChild(unitInput);
     wrap.appendChild(itemInput);
     wrap.appendChild(descTextarea);
     wrap.appendChild(qtyInput);

@@ -11,6 +11,7 @@ $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $due_date = $_POST['due_date'] ?? null;
 $fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
 if ($id<=0 || $client_id<=0) { header('Location: /?page=invoice/invoices-list&error=Invalid'); exit; }
@@ -50,6 +51,7 @@ $extraDescs = $_POST['extra_desc'] ?? [];
 $extraQtys = $_POST['extra_qty'] ?? [];
 $ExtraPrices = $_POST['extra_price'] ?? [];
 $extraIds = $_POST['extra_id'] ?? [];
+$extraUnits = $_POST['extra_billing_unit'] ?? [];
 
 $extraItemsArr = [];
 $subtotal = 0.0;
@@ -65,7 +67,8 @@ for ($i = 0; $i < count($extraItems); $i++) {
   
   $line = $q * $p;
   $subtotal += $line;
-  $extraItemsArr[] = ['id' => $eid, 'i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
+  $unit = (($extraUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+  $extraItemsArr[] = ['id' => $eid, 'i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line, 'u' => $unit];
 }
 
 // Fetch all existing items to calculate subtotal including contract items
@@ -98,8 +101,8 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 
 $pdo->beginTransaction();
 try {
-  $pdo->prepare('UPDATE invoices SET client_id=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=?, custom_fields=? WHERE id=?')
-    ->execute([$client_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $customFieldsJson, $id]);
+  $pdo->prepare('UPDATE invoices SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=?, custom_fields=? WHERE id=?')
+    ->execute([$client_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $customFieldsJson, $id]);
   
   $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');
   $row->execute([$id]);
@@ -115,15 +118,15 @@ try {
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=? AND is_extra_charge=1')->execute([$id]);
 
     // Insert new extra charges with the flag
-    $ins = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, is_extra_charge) VALUES (?,?,?,?,?,?,1)');
+    $ins = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit, is_extra_charge) VALUES (?,?,?,?,?,?,?,1)');
     foreach ($extraItemsArr as $it) {
-      $ins->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
+      $ins->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
     }
   } else {
     // Schema doesn't have is_extra_charge yet: append entries as regular invoice_items
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
     foreach ($extraItemsArr as $it) {
-      $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
+      $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
     }
   }
   
