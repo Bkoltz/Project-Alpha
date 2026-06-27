@@ -17,7 +17,7 @@ if (!empty($_GET['created'])) {
 }
 
 // Fetch all items
-$stmt = $pdo->prepare('SELECT * FROM item_library ORDER BY is_active DESC, name ASC');
+$stmt = $pdo->prepare('SELECT * FROM item_library ORDER BY is_active DESC, item_name ASC');
 $stmt->execute();
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>

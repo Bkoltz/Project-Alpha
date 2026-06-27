@@ -160,6 +160,11 @@ if ($type === 'invoice') {
 
   <!-- Header with expiration info -->
   <div class="public-header">
+    <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <a href="/?page=public-doc-pdf&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:600;font-size:14px">
+        Print / PDF
+      </a>
+    </div>
     <?php if ($expirationText): ?>
       <div class="link-expiry">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>

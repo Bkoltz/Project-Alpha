@@ -50,6 +50,17 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
     ?>
     </div>
 
+    <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
+      <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
+      <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <input type="checkbox" name="billing_mode" value="hourly" id="billingModeHourlyInv" style="margin-top:3px">
+        <div>
+          <div style="font-weight:600;color:#1f2937">Hourly billing</div>
+          <div style="font-size:13px;color:#4b5563">Use tracked time or hourly item rows. Fixed-price invoices can leave this off.</div>
+        </div>
+      </label>
+    </div>
+
     <div id="projectSectionInv" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
       <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
       <div style="display:grid;gap:12px">
@@ -67,7 +78,7 @@ $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
     </div>
 
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items</div>
+      <div style="font-weight:600;margin-bottom:8px">Items / Time</div>
       <div id="itemsInv" style="display:grid;gap:8px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" onclick="addItemInv()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>

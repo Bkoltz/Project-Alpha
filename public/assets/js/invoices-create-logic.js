@@ -1,13 +1,16 @@
 function money(n) { return '$' + (Number(n) || 0).toFixed(2) }
 var itemCounterInv = 0;
-function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null) {
+function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null, billingUnit = 'each') {
     var wrap = document.createElement('div');
+    var rowIndex = document.querySelectorAll('#itemsInv > div').length;
     var itemId = 'itemInv_' + (itemCounterInv++);
     var descId = 'descInv_' + itemCounterInv;
     var priceId = 'priceInv_' + itemCounterInv;
     wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
-    var teInput = timeEntryId ? `<input type="hidden" name="time_entry_id[]" value="${timeEntryId}">` : '';
+    var teIds = Array.isArray(timeEntryId) ? timeEntryId : (timeEntryId ? [timeEntryId] : []);
+    var teInput = teIds.map(id => `<input type="hidden" name="time_entry_ids[${rowIndex}][]" value="${id}">`).join('');
     wrap.innerHTML = teInput + `
+    <input type="hidden" name="item_billing_unit[]" value="${billingUnit === 'hour' ? 'hour' : 'each'}">
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalcInv()">${desc}</textarea>
     <input required type="number" step="0.01" min="0" name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcInv()">
@@ -159,7 +162,13 @@ document.getElementById('createProjectBtnInv').addEventListener('click', functio
         });
 });
 
-document.getElementById('invoiceForm').addEventListener('submit', function (e) { if (!cidI.value) { e.preventDefault(); alert('Please select a client from suggestions.'); } });
+document.getElementById('invoiceForm').addEventListener('submit', function (e) {
+    const clientId = document.getElementById('clientIdInv');
+    if (!clientId || !clientId.value) {
+        e.preventDefault();
+        alert('Please select a client from suggestions.');
+    }
+});
 
 // Tracked time integration
 (function () {
@@ -186,10 +195,12 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
         }
         entries.forEach(function (entry) {
             const tr = document.createElement('tr');
+            const serviceName = entry.service_name || 'Tracked Time';
+            const detail = entry.detail || [entry.started_at || '', entry.ended_at || '', entry.description || ''].filter(Boolean).join(' ');
             tr.innerHTML = `
-                <td><input type="checkbox" class="tt-checkbox" data-id="${entry.id}" data-desc="${(entry.description || '').replace(/"/g, '&quot;')}" data-hours="${entry.hours}" data-rate="${entry.rate}"></td>
+                <td><input type="checkbox" class="tt-checkbox" data-id="${entry.id}" data-service="${escapeAttr(serviceName)}" data-desc="${escapeAttr(entry.description || '')}" data-detail="${escapeAttr(detail)}" data-hours="${entry.hours}" data-rate="${entry.rate}"></td>
                 <td>${(entry.started_at || '').substr(0, 10)}</td>
-                <td>${escapeHtml(entry.description || '')}</td>
+                <td>${escapeHtml(serviceName)}${entry.description ? '<div style="font-size:12px;color:var(--muted)">' + escapeHtml(entry.description) + '</div>' : ''}</td>
                 <td>${Number(entry.hours).toFixed(2)}</td>
                 <td>$${Number(entry.rate).toFixed(2)}</td>
                 <td>$${(Number(entry.hours) * Number(entry.rate)).toFixed(2)}</td>
@@ -205,6 +216,10 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    function escapeAttr(text) {
+        return escapeHtml(text).replace(/"/g, '&quot;');
     }
 
     function loadTrackedTime() {
@@ -248,12 +263,30 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
                 alert('Please select at least one time entry.');
                 return;
             }
+            const itemWrap = document.getElementById('itemsInv');
+            if (itemWrap && itemWrap.children.length === 1) {
+                const firstItem = itemWrap.querySelector('[name="item[]"]');
+                if (firstItem && !firstItem.value.trim()) {
+                    itemWrap.innerHTML = '';
+                }
+            }
+            const groups = new Map();
             checked.forEach(function (cb) {
-                const id = cb.dataset.id;
-                const desc = cb.dataset.desc;
-                const hours = parseFloat(cb.dataset.hours) || 0;
                 const rate = parseFloat(cb.dataset.rate) || 0;
-                addItemInv(desc, '', hours, rate, id);
+                const service = cb.dataset.service || 'Tracked Time';
+                const key = service + '|' + rate.toFixed(2);
+                if (!groups.has(key)) {
+                    groups.set(key, { item: service, rate, hours: 0, ids: [], descriptions: [] });
+                }
+                const group = groups.get(key);
+                const hours = parseFloat(cb.dataset.hours) || 0;
+                group.hours += hours;
+                group.ids.push(cb.dataset.id);
+                group.descriptions.push(cb.dataset.detail || cb.dataset.desc || '');
+            });
+            groups.forEach(function (group) {
+                const detail = group.descriptions.filter(Boolean).join('\n');
+                addItemInv(group.item, detail, group.hours.toFixed(2), group.rate.toFixed(2), group.ids, 'hour');
             });
             modal.style.display = 'none';
             recalcInv();

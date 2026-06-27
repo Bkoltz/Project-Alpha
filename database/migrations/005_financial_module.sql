@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS tax_rates (
 CREATE TABLE IF NOT EXISTS item_library (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NULL,
-    name VARCHAR(255) NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
     description TEXT NULL,
     unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
     category VARCHAR(100) NULL,
@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS item_library (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_item_lib_org (organization_id),
-    INDEX idx_item_lib_name (name),
+    INDEX idx_item_lib_item_name (item_name),
     INDEX idx_item_lib_sku (sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

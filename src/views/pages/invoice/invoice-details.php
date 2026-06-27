@@ -14,9 +14,10 @@ $st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.ema
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
-$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
+$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
+$isHourlyBilling = ($inv['billing_mode'] ?? 'fixed') === 'hourly';
 $documentSender = document_sender_for_creator($pdo, $appConfig, !empty($inv['created_by']) ? (int)$inv['created_by'] : null);
 $fromName = $documentSender['name'] ?? '';
 $fromAddress = implode("\n", document_sender_lines($documentSender));
@@ -343,8 +344,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <tr style="text-align:left;border-bottom:1px solid #eee">
         <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
-        <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
-        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+        <th style="padding:10px;width:10%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hours' : 'Qty'; ?></th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit Price'; ?></th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
       </tr>
     </thead>
@@ -457,7 +458,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
 
 <!-- Share Link Modal -->
-<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+<div id="shareLinkModal" data-doc-type="invoice" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0;font-size:18px">🔗 Share Invoice Link</h3>

@@ -208,14 +208,15 @@ try {
 
                 // Parse amount (remove $ and commas)
                 $amount = (float)preg_replace('/[^0-9.\-]/', '', $amountStr);
-                if ($amount <= 0) {
+                if ($amount === 0.0) {
                     $skipped++;
                     $errors[] = "Row " . ($rowIdx + 2) . ": Invalid amount '$amountStr'";
                     continue;
                 }
+                $amount = abs($amount);
 
-                $taxAmount = $taxStr !== '' ? (float)preg_replace('/[^0-9.\-]/', '', $taxStr) : null;
-                $totalAmount = $totalStr !== '' ? (float)preg_replace('/[^0-9.\-]/', '', $totalStr) : ($taxAmount !== null ? $amount + $taxAmount : $amount);
+                $taxAmount = $taxStr !== '' ? abs((float)preg_replace('/[^0-9.\-]/', '', $taxStr)) : null;
+                $totalAmount = $totalStr !== '' ? abs((float)preg_replace('/[^0-9.\-]/', '', $totalStr)) : ($taxAmount !== null ? $amount + $taxAmount : $amount);
 
                 // Map payment method
                 $pmLower = strtolower($paymentMethod);

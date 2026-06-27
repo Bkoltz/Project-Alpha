@@ -35,6 +35,7 @@ function addExtraCharge() {
     wrap.style.borderRadius = '4px';
     wrap.style.border = '1px solid #fcd34d';
     wrap.innerHTML = `
+    <input type="hidden" name="extra_billing_unit[]" value="each">
     <input id="${itemId}" type="text" name="extra_item[]" placeholder="Item name..." style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" name="extra_desc[]" placeholder="Description (optional)" style="padding:8px;border-radius:4px;border:1px solid #ddd;resize:vertical;min-height:34px" oninput="recalcInv()"></textarea>
     <input type="number" step="0.01" min="0" name="extra_qty[]" value="1" class="qty-input" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
