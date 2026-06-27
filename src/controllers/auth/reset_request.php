@@ -3,9 +3,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
-require_once __DIR__ . '/../../utils/crypto.php';
-require_once __DIR__ . '/../../utils/mailer.php';
-require_once __DIR__ . '/../../utils/smtp.php';
+require_once __DIR__ . '/../../services/EmailService.php';
 
 // CSRF check (Symfony-backed)
 require_once __DIR__ . '/../../utils/csrf_sf.php';
@@ -57,34 +55,34 @@ if ($uid > 0) {
     $exp = date('Y-m-d H:i:s', time() + 10*60); // 10 minutes
     $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?,?)')->execute([$uid, $token, $exp]);
     // Log masked token creation for debugging (do not log full token in production)
+    $masked = substr($token, 0, 2) . '****' . substr($token, -2);
     if (function_exists('app_log')) {
-      $masked = substr($token, 0, 2) . '****' . substr($token, -2);
       app_log('auth', 'reset token created', ['user_id'=>$uid, 'token_mask'=>$masked]);
     }
-    // Temporary verbose debug log (enabled when APP_DEBUG env var is truthy).
-    // Writes to config/uploads/reset_debug.log (project config volume) and is intended for short-term debugging only.
+    // Debug logging is intentionally masked; never write full reset codes to disk.
     try {
       $dbg = getenv('APP_DEBUG') ?: getenv('DEBUG') ?: '';
       if ($dbg) {
-        $dbgDir = __DIR__ . '/../../config/uploads';
+        $dbgDir = __DIR__ . '/../../config/logs/system';
         if (!is_dir($dbgDir)) { @mkdir($dbgDir, 0775, true); }
         $dbgFile = realpath($dbgDir) ? realpath($dbgDir) . DIRECTORY_SEPARATOR . 'reset_debug.log' : $dbgDir . DIRECTORY_SEPARATOR . 'reset_debug.log';
-        $line = sprintf("[%s] create uid=%s token=%s expires=%s\n", date('c'), $uid, $token, $exp);
+        $line = sprintf("[%s] create uid=%s token=%s expires=%s\n", date('c'), $uid, $masked, $exp);
         @file_put_contents($dbgFile, $line, FILE_APPEND | LOCK_EX);
       }
     } catch (Throwable $e) { /* ignore debug logging failures */ }
 
     // Compose email
     $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
-    $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-    $fromName = (string)($appConfig['from_name'] ?? $brand);
 
-    $scheme = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')) ? 'https' : 'http';
-    $link = sprintf('%s://%s/?page=reset-verify&email=%s&token=%s',
-      $scheme,
-      $_SERVER['HTTP_HOST'] ?? 'localhost',
-      rawurlencode($email), rawurlencode($token)
-    );
+    $configuredHost = trim((string)($appConfig['app_host'] ?? ''));
+    if ($configuredHost !== '' && preg_match('#^https?://#i', $configuredHost)) {
+      $baseUrl = rtrim($configuredHost, '/');
+    } else {
+      $scheme = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')) ? 'https' : 'http';
+      $host = $configuredHost !== '' ? $configuredHost : ($_SERVER['HTTP_HOST'] ?? 'localhost');
+      $baseUrl = $scheme . '://' . rtrim((string)$host, '/');
+    }
+    $link = $baseUrl . '/?page=reset-verify&email=' . rawurlencode($email) . '&token=' . rawurlencode($token);
 
     $subject = $brand . ' password reset';
     $html = '<p>Here is your one-time reset code (valid for 10 minutes):</p>'
@@ -92,30 +90,9 @@ if ($uid > 0) {
           . '<p>Go to the code entry page below and enter the 6-digit code:</p>'
           . '<p><a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';
 
-    $cfg = [
-      'host' => (string)($appConfig['smtp_host'] ?? ''),
-      'port' => (int)($appConfig['smtp_port'] ?? 587),
-      'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-      'username' => (string)($appConfig['smtp_username'] ?? ''),
-      'password' => (string)(isset($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc']) ? (crypto_decrypt($appConfig['smtp_password_enc']) ?: '') : ''),
-    ];
-
-    $envelopeFrom = $fromEmail;
-    if (strtolower($cfg['host'] ?? '') === 'smtp.gmail.com' && !empty($cfg['username'])) {
-      $envelopeFrom = $cfg['username'];
-    }
-    $ok = false; $err = '';
-    if (!empty($cfg['host'])) {
-      [$ok, $err] = mailer_send($cfg, $email, $subject, $html, $fromEmail, $fromName, $envelopeFrom);
-      if (!$ok) {
-        [$ok2, $err2] = smtp_send($cfg, $email, $subject, $html, $fromEmail, $fromName, $envelopeFrom);
-        $ok = $ok2; $err = $ok2 ? '' : ($err2 ?: $err);
-      }
-    }
+    [$ok, $err] = EmailService::sendEmail($email, $subject, $html);
     if (!$ok) {
-      // Fallback to PHP mail
-      $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: ".$fromName.' <'.$fromEmail.'>'."\r\n";
-      @mail($email, $subject, $html, $headers);
+      @error_log('[reset_request] Password reset email failed for user_id=' . $uid . ': ' . $err);
     }
   } catch (Throwable $e) {
     // do not reveal errors to user

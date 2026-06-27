@@ -118,6 +118,7 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
     </div>
     <form id="manualEntryForm" method="post" action="/?page=time-tracking/create">
       <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+      <div style="margin:0 0 12px;color:var(--muted);font-size:13px">Enter a start and end time, or enter total manual hours.</div>
       <div class="expense-filter-grid" style="grid-template-columns:repeat(4,minmax(140px,1fr))">
         <label>
           <span class="label">Date</span>
@@ -180,6 +181,26 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
         <label>
           <span class="label">Rate ($)</span>
           <input type="number" step="0.01" min="0" name="rate" class="input" value="0">
+        </label>
+        <label>
+          <span class="label">Job ID</span>
+          <select name="project_id" id="timeProjectId" class="input" disabled>
+            <option value="">Select a client first</option>
+          </select>
+          <input type="hidden" name="project_code" id="timeProjectCode" value="">
+          <div id="timeProjectHelp" style="display:none;margin-top:4px;font-size:12px;color:var(--muted)"></div>
+        </label>
+        <label>
+          <span class="label">Hourly Contract</span>
+          <select name="contract_id" id="timeContractId" class="input" disabled>
+            <option value="">Select a client first</option>
+          </select>
+        </label>
+        <label>
+          <span class="label">Hourly Invoice</span>
+          <select name="invoice_id" id="timeInvoiceId" class="input" disabled>
+            <option value="">Select a client first</option>
+          </select>
         </label>
       </div>
       <div class="field" style="margin-top:8px">

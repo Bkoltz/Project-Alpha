@@ -16,6 +16,11 @@ function toggleNotesEdit() {
 (function () {
     const searchInput = document.getElementById('clientSearchInput');
     const searchResults = document.getElementById('clientSearchResults');
+    const viewData = window.organizationViewData || {};
+    const orgId = viewData.orgId;
+    const availableClients = Array.isArray(viewData.availableClients) ? viewData.availableClients : [];
+
+    if (!searchInput || !searchResults || !orgId) return;
     
     function debounce(fn, ms) {
         let timeout;
@@ -74,7 +79,7 @@ function toggleNotesEdit() {
         if (!confirm(`Add ${clientName} to this organization?`)) return;
 
         const formData = new FormData();
-        formData.append('csrf', '<?php echo csrf_token(); ?>');
+        formData.append('csrf', viewData.csrf || document.querySelector('meta[name="csrf-token"]')?.content || '');
         formData.append('organization_id', orgId);
         formData.append('client_id', clientId);
 

@@ -74,6 +74,7 @@
                         el.addEventListener('click', function () {
                             input.value = this.dataset.name;
                             hiddenInput.value = this.dataset.id;
+                            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
                             suggestBox.style.display = 'none';
                         });
                     });

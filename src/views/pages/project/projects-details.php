@@ -55,6 +55,30 @@ $stmt = $pdo->prepare('
 $stmt->execute([$projectId]);
 $formDocuments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$docScopeWhere = [];
+$docScopeParams = [];
+if (!empty($project['client_id'])) {
+    $docScopeWhere[] = 'client_id = ?';
+    $docScopeParams[] = (int)$project['client_id'];
+}
+if (!empty($project['organization_id'])) {
+    $docScopeWhere[] = 'organization_id = ?';
+    $docScopeParams[] = (int)$project['organization_id'];
+}
+$docScopeSql = $docScopeWhere ? '(' . implode(' OR ', $docScopeWhere) . ')' : '1=0';
+
+$stmt = $pdo->prepare("SELECT id, doc_number, status, total, created_at FROM quotes WHERE {$docScopeSql} AND project_id IS NULL ORDER BY created_at DESC LIMIT 50");
+$stmt->execute($docScopeParams);
+$availableQuotes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$stmt = $pdo->prepare("SELECT id, doc_number, status, total, created_at FROM contracts WHERE {$docScopeSql} AND project_id IS NULL ORDER BY created_at DESC LIMIT 50");
+$stmt->execute($docScopeParams);
+$availableContracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$stmt = $pdo->prepare("SELECT id, doc_number, status, total, created_at FROM invoices WHERE {$docScopeSql} AND project_id IS NULL ORDER BY created_at DESC LIMIT 50");
+$stmt->execute($docScopeParams);
+$availableInvoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 // Status colors
 $statusColors = [
     'not_started' => ['bg' => '#fef3c7', 'color' => '#92400e', 'text' => 'Not Started'],
@@ -66,6 +90,37 @@ $statusColors = [
 
 $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started'];
 
+?>
+
+<?php
+$projectReturnUrl = '/?page=project/projects-details&id=' . $projectId;
+$renderDocumentAttachForm = static function (string $type, string $label, array $documents) use ($projectId): void {
+    ?>
+    <form method="post" action="/?page=project/project-add-document" style="display:grid;gap:8px;margin:0">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="project_id" value="<?php echo (int)$projectId; ?>">
+        <input type="hidden" name="document_type" value="<?php echo htmlspecialchars($type); ?>">
+        <label>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px"><?php echo htmlspecialchars($label); ?></div>
+            <select name="document_id" <?php echo empty($documents) ? 'disabled' : ''; ?> style="width:100%;padding:9px;border-radius:8px;border:1px solid #ddd">
+                <?php if (empty($documents)): ?>
+                    <option value="">No available <?php echo htmlspecialchars(strtolower($label)); ?></option>
+                <?php else: ?>
+                    <option value="">Select <?php echo htmlspecialchars(strtolower($label)); ?></option>
+                    <?php foreach ($documents as $document): ?>
+                        <option value="<?php echo (int)$document['id']; ?>">
+                            #<?php echo htmlspecialchars((string)($document['doc_number'] ?? $document['id'])); ?>
+                            - <?php echo htmlspecialchars(ucfirst((string)$document['status'])); ?>
+                            - $<?php echo number_format((float)$document['total'], 2); ?>
+                        </option>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </select>
+        </label>
+        <button type="submit" class="btn btn-sm" <?php echo empty($documents) ? 'disabled' : ''; ?>>Add <?php echo htmlspecialchars($label); ?></button>
+    </form>
+    <?php
+};
 ?>
 
 <div style="max-width:1400px;margin:0 auto;padding:24px">
@@ -123,6 +178,20 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                         </div>
                     </div>
                     <?php endif; ?>
+
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Invoice Billing</div>
+                        <div class="font-600">
+                            <?php echo ($project['invoice_billing_period'] ?? 'per_invoice') === 'monthly' ? 'Monthly project billing' : 'Each invoice uses its own due date'; ?>
+                            <?php if (($project['invoice_billing_period'] ?? 'per_invoice') === 'monthly'): ?>
+                                <?php if ($project['invoice_net_terms_days'] !== null && $project['invoice_net_terms_days'] !== ''): ?>
+                                    - NET <?php echo (int)$project['invoice_net_terms_days']; ?>
+                                <?php else: ?>
+                                    - system NET terms
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
 
                     <?php if ($project['notes']): ?>
                     <div>
@@ -191,19 +260,29 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                     <h3 style="margin:0 0 12px 0;font-size:16px;color:#374151">Invoices (<?php echo count($invoices); ?>)</h3>
                     <div class="grid">
                         <?php foreach ($invoices as $invoice): ?>
-                        <a href="/?page=invoice/invoice-details&id=<?php echo (int)$invoice['id']; ?>" 
-                           style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:inherit;background:#f9fafb">
+                        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
                             <div>
                                 <div class="font-600">Invoice #<?php echo e($invoice['doc_number'] ?? $invoice['id']); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
                                     <?php echo e(ucfirst($invoice['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($invoice['created_at'])); ?>
                                 </div>
+                                <div class="document-actions" style="margin-top:8px">
+                                    <a href="/?page=invoice/invoice-details&id=<?php echo (int)$invoice['id']; ?>" class="btn btn-sm">View</a>
+                                    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$invoice['id']; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
+                                    <form method="post" action="/?page=invoice/email-send" style="display:inline">
+                                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                                        <input type="hidden" name="type" value="invoice">
+                                        <input type="hidden" name="id" value="<?php echo (int)$invoice['id']; ?>">
+                                        <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($projectReturnUrl); ?>">
+                                        <button type="submit" class="btn btn-sm btn-success">Email</button>
+                                    </form>
+                                </div>
                             </div>
-                            <div style="font-weight:600;color:var(--nav-accent)">
+                            <div style="font-weight:600;color:var(--nav-accent);white-space:nowrap">
                                 $<?php echo number_format($invoice['total'], 2); ?>
                             </div>
-                        </a>
+                        </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
@@ -281,6 +360,17 @@ $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started
                        style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
                         💰 Create Invoice
                     </a>
+                </div>
+            </div>
+
+            <!-- Attach Existing Documents -->
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px">
+                <div style="font-weight:600;margin-bottom:6px">Add Existing Document</div>
+                <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Available unassigned documents for this client or organization.</div>
+                <div class="grid">
+                    <?php $renderDocumentAttachForm('quote', 'Quote', $availableQuotes); ?>
+                    <?php $renderDocumentAttachForm('contract', 'Contract', $availableContracts); ?>
+                    <?php $renderDocumentAttachForm('invoice', 'Invoice', $availableInvoices); ?>
                 </div>
             </div>
 

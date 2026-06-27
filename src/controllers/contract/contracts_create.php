@@ -1,7 +1,9 @@
 <?php
 // src/controllers/contracts_create.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/project_id.php';
+require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
@@ -25,6 +27,7 @@ if ($doc_type === 'on_demand') {
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -174,5 +177,9 @@ try{
   header('Location: /?page=contract/contracts-create&error=' . urlencode($msg));
   exit;
 }
-header('Location: /?page=contract/contracts-list&created=1');
+if ($return_to_project > 0) {
+  header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=contract');
+} else {
+  header('Location: /?page=contract/contracts-list&created=1');
+}
 exit;

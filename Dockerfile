@@ -56,9 +56,10 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
   --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions (pdo_mysql, mysqli already required; add mbstring, gd, zip, dom)
+# PHP extensions. DOM is already enabled in the official php:* images;
+# PHP 8.5's bundled DOM depends on bundled Lexbor and should not be rebuilt here.
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" gd mbstring zip dom pdo_mysql mysqli \
+    && docker-php-ext-install -j"$(nproc)" gd mbstring zip pdo_mysql mysqli \
     && a2enmod rewrite
 
 # Create php ini file for error logging and future php customization

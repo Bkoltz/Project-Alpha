@@ -85,17 +85,19 @@ try {
     // Mask tokens in logs to avoid exposing full code
     $subMask = substr((string)$token, 0, 2) . '****' . substr((string)$token, -2);
     $storedMask = substr((string)$stored, 0, 2) . '****' . substr((string)$stored, -2);
-    app_log('auth', 'reset token mismatch', ['email'=>$email, 'submitted_mask'=>$subMask, 'stored_mask'=>$storedMask, 'storedNorm'=>$storedNorm]);
+    $storedNormMask = $storedNorm ? (substr((string)$storedNorm, 0, 2) . '****' . substr((string)$storedNorm, -2)) : '';
+    app_log('auth', 'reset token mismatch', ['email'=>$email, 'submitted_mask'=>$subMask, 'stored_mask'=>$storedMask, 'stored_norm_mask'=>$storedNormMask]);
 
     // Temporary verbose debug file output when APP_DEBUG is enabled to assist local debugging
     try {
       $dbg = getenv('APP_DEBUG') ?: getenv('DEBUG') ?: '';
       if ($dbg) {
-        $dbgDir = __DIR__ . '/../../config/uploads';
+        $dbgDir = __DIR__ . '/../../config/logs/system';
         if (!is_dir($dbgDir)) { @mkdir($dbgDir, 0775, true); }
         $dbgFile = realpath($dbgDir) ? realpath($dbgDir) . DIRECTORY_SEPARATOR . 'reset_debug.log' : $dbgDir . DIRECTORY_SEPARATOR . 'reset_debug.log';
+        $storedAltMask = $storedAlt ? (substr((string)$storedAlt, 0, 2) . '****' . substr((string)$storedAlt, -2)) : '';
         $line = sprintf("[%s] verify email=%s submitted=%s stored=%s storedNorm=%s storedAlt=%s expires=%s attempts=%s rowid=%s\n",
-          date('c'), $email, $token, $stored, $storedNorm, $storedAlt, $row['expires_at'] ?? '-', $row['attempts'] ?? '-', $row['id'] ?? '-');
+          date('c'), $email, $subMask, $storedMask, $storedNormMask, $storedAltMask, $row['expires_at'] ?? '-', $row['attempts'] ?? '-', $row['id'] ?? '-');
         @file_put_contents($dbgFile, $line, FILE_APPEND | LOCK_EX);
       }
     } catch (Throwable $e) { /* ignore */ }

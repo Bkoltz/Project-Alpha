@@ -19,9 +19,20 @@ $items = $items->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 
 // Fetch existing signatures
-$sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
-$sigStmt->execute([$id]);
-$existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+$existingSignatures = [];
+try {
+  $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
+  $sigStmt->execute([$id]);
+  $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+  try {
+    $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY id');
+    $sigStmt->execute([$id]);
+    $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Throwable $ignored) {
+    $existingSignatures = [];
+  }
+}
 ?>
 <section>
   <h2>Edit Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Project ' . htmlspecialchars($contract['project_code']) . ')'; ?></h2>

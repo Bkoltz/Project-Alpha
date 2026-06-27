@@ -73,7 +73,7 @@ $isPdf = defined('PDF_MODE');
   <div class="no-print" style="padding:12px 16px;background:<?php echo $colors['bg']; ?>;color:<?php echo $colors['text']; ?>;border-left:4px solid <?php echo $colors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($quote['status']); ?>
   </div>
-  <div class="no-print flex flex-wrap">
+  <div class="no-print document-actions">
     <a href="/?page=<?php echo htmlspecialchars($backPage); ?>" class="btn btn-sm">Back</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" class="btn btn-sm">Download</a>
@@ -93,12 +93,12 @@ $isPdf = defined('PDF_MODE');
       <form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('<?php echo htmlspecialchars($approveConfirm); ?>');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: medium;">Approve</button>
+        <button type="submit" class="btn btn-sm btn-success">Approve</button>
       </form>
       <form method="post" action="/?page=quote/quote-reject" style="display:inline" onsubmit="return confirm('Deny this quote?');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: medium;">Deny</button>
+        <button type="submit" class="btn btn-sm btn-danger">Deny</button>
       </form>
     <?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) === 'rejected'): ?>
@@ -106,17 +106,17 @@ $isPdf = defined('PDF_MODE');
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+      <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
     </form>
     <?php endif; ?>
     <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+      <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
     <?php if (strtolower($quote['status'] ?? '') !== 'rejected'): ?>
-    <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #4f46e5;border-radius:8px;background:#eef2ff;color:#4f46e5; font-size: medium;">🔗 Share Link</button>
+    <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php endif; ?>
   </div>
   <?php if (!empty($_GET['error'])): ?>

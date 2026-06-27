@@ -160,13 +160,14 @@ var quantities = document.querySelectorAll("#qunatity");
 var prices = document.querySelectorAll("#price");
 
 var confirmButton = document.getElementById("confirm");
-
-confirmButton.addEventListener("click", function () {
-  if (confirm('Remove this extra charge?')) {
-    this.parentElement.remove();
-    recalcInv()
-  }
-});
+if (confirmButton) {
+  confirmButton.addEventListener("click", function () {
+    if (confirm('Remove this extra charge?')) {
+      this.parentElement.remove();
+      recalcInv()
+    }
+  });
+}
 
 items.forEach(item => {
   item.addEventListener('input', recalcInv);

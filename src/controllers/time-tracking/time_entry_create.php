@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
-csrf_verify_post_or_redirect('time-tracking/create');
+csrf_verify_post_or_redirect('time-tracking');
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId === 0) { http_response_code(401); exit; }

@@ -11,6 +11,7 @@ $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none', 'percent', 'fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -204,7 +205,9 @@ try {
 }
 
 // Redirect to the appropriate list based on quote type
-if ($quote_type === 'long_term') {
+if ($return_to_project > 0) {
+    header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=quote');
+} elseif ($quote_type === 'long_term') {
     header('Location: /?page=quote/long-term-quotes-list&created=1');
 } elseif ($quote_type === 'on_demand') {
     header('Location: /?page=quote/on-demand-quotes-list&created=1');

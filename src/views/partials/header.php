@@ -244,6 +244,7 @@ function nav_can(string $permission): bool {
           <a class="settings" href="/?page=settings" data-page="settings">Settings</a>
           <?php endif; ?>
           <?php if (!empty($_SESSION['user']['role']) && $_SESSION['user']['role'] === 'admin'): ?>
+            <a class="settings" href="/?page=account" data-page="account" style="margin-top:8px;display:block">My Account</a>
             <a class="settings" href="/?page=accounts" data-page="accounts" style="margin-top:8px;display:block">Accounts</a>
           <?php else: ?>
             <a class="settings" href="/?page=account" data-page="account" style="margin-top:8px;display:block">My Account</a>
