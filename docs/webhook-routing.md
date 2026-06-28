@@ -1,77 +1,23 @@
-# Webhook Routing Strategy
+# Webhook Routing
 
-## Current Endpoints
+## Current Stripe Endpoints
 
-### Stripe Webhooks
-- **Primary:** `/?page=stripe-webhook` → `src/controllers/webhook/stripe_webhooks.php`
-  - Future-proof router that handles all Stripe event types
-  - Routes to individual handlers based on event type
-  - Can easily be extended for new event types
+| Route | Controller | Status |
+|---|---|---|
+| `/?page=stripe-webhook` | `src/controllers/webhook/stripe_webhooks.php` | Primary endpoint |
+| `/?page=stripe-webhook-legacy` | `src/controllers/stripe/stripe_webhook.php` | Compatibility endpoint |
 
-- **Legacy:** `/?page=stripe-webhook-legacy` → `src/controllers/stripe/stripe_webhook.php`
-  - Original monolithic webhook handler
-  - Kept for backward compatibility
-  - Can be removed after migration period
+New installations should configure only the primary endpoint.
 
-## Future Webhooks (Planned)
+Both routes are intentionally public and exempt from browser CSRF because Stripe cannot supply a session token. Authenticity instead depends on Stripe webhook signature validation. Configure the endpoint signing secret before production use.
 
-### PayPal Integration
-```
-/?page=webhook/paypal          → src/controllers/webhook/paypal_webhooks.php
-/?page=webhook/paypal/success  → src/controllers/webhook/paypal_payment_succeeded.php
-/?page=webhook/paypal/failed   → src/controllers/webhook/paypal_payment_failed.php
-```
+When adding a provider or event:
 
-### Square Integration
-```
-/?page=webhook/square          → src/controllers/webhook/square_webhooks.php
-```
+1. Add an explicit route in `public/index.php`.
+2. Verify provider authentication before trusting fields.
+3. Add replay and duplicate-delivery protection.
+4. Keep handlers idempotent.
+5. Log identifiers and outcomes without secrets or unnecessary personal data.
+6. Add provider test fixtures and duplicate-delivery tests.
 
-### QuickBooks Integration
-```
-/?page=webhook/quickbooks      → src/controllers/webhook/quickbooks_webhooks.php
-```
-
-### Generic Webhooks
-```
-/?page=webhook/generic         → src/controllers/webhook/generic_webhooks.php
-```
-
-## Event Types Handled
-
-### Stripe (Current)
-- ✅ `checkout.session.completed`
-- ✅ `checkout.session.expired`
-- ✅ `payment_intent.succeeded`
-- ✅ `payment_intent.payment_failed`
-- ✅ `payment_intent.canceled`
-- ✅ `payment_intent.requires_action`
-- 🔄 `invoice.payment_succeeded` (future: subscriptions)
-- 🔄 `invoice.payment_failed` (future: subscriptions)
-- 🔄 `customer.subscription.created` (future: subscriptions)
-- 🔄 `customer.subscription.updated` (future: subscriptions)
-- 🔄 `customer.subscription.deleted` (future: subscriptions)
-- 🔄 `charge.refunded` (future: refunds)
-- 🔄 `charge.dispute.created` (future: disputes)
-
-### PayPal (Future)
-- 🔄 `PAYMENT.CAPTURE.COMPLETED`
-- 🔄 `PAYMENT.CAPTURE.DENIED`
-- 🔄 `BILLING.SUBSCRIPTION.ACTIVATED`
-- 🔄 `BILLING.SUBSCRIPTION.CANCELLED`
-
-## Adding a New Webhook Provider
-
-1. Create router: `src/controllers/webhook/{provider}_webhooks.php`
-2. Create handlers: `src/controllers/webhook/{provider}_{event}.php`
-3. Add route in `public/index.php`
-4. Add to `$publicPages` array (no auth required)
-5. Add to `$skipCsrfFor` array (POST without CSRF)
-6. Document in this file
-
-## Security
-
-- All webhook endpoints are public (no auth required)
-- Each provider verifies their own signatures/tokens
-- Failed events are logged but don't block other events
-- Idempotency keys are checked to prevent duplicate processing
+See [Stripe Webhook Setup](stripe-webhook-setup.md).

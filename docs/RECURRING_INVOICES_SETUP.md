@@ -1,178 +1,56 @@
-# Recurring Invoices Setup Guide
+# Recurring Invoices
 
-This guide explains how to set up automatic invoice generation for long-term contracts with recurring billing.
+Long-term contracts generate invoices from their stored billing schedule. The dedicated cron service runs the generator daily at 02:00 UTC.
 
-## Overview
+## Prerequisites
 
-Long-term contracts can be configured with recurring billing intervals (daily, weekly, monthly, yearly). The system automatically generates invoices based on the billing schedule.
+A contract is eligible when it:
 
-## Cron Job Setup
+- Uses `contract_type='long_term'`
+- Has status `active`
+- Has a signed document path
+- Has a non-empty `next_invoice_date` that is due
+- Has valid billing interval and pricing configuration
+- Runs while `cron_enabled` is enabled
 
-### Option 1: Docker Container Cron (Recommended for Production)
+## Activation
 
-Add the following to your Docker container's crontab:
+Uploading a signed long-term contract records the document but does not activate the contract in the authenticated workflow. The operator must select **Activate**. The current public signing route activates the contract when it accepts the client's signed upload.
 
-```bash
-# Run every day at 2:00 AM
-0 2 * * * php /var/www/src/cron/generate_recurring_invoices.php >> /var/log/cron.log 2>&1
-```
+Activation sets `next_invoice_date` from its existing value or the contract start date. If that date is already due, Project Alpha attempts to generate the first invoice immediately.
 
-To set this up:
+## Invoice Generation
 
-1. Exec into your web container:
-   ```bash
-   docker compose exec web bash
-   ```
+The generator creates an invoice according to the contract's invoice-generation type and advances `next_invoice_date` by the configured interval.
 
-2. Install cron if not already installed:
-   ```bash
-   apt-get update && apt-get install -y cron
-   ```
+Supported interval units are day, week, month, and year. Billing can use a set amount, itemized content, or a general write-up where configured.
 
-3. Add the cron job:
-   ```bash
-   crontab -e
-   ```
-   
-4. Add the line above and save
+The generator uses idempotency checks to avoid duplicate periods. It refetches overdue contracts for up to 36 passes in one run, allowing a recovered installation to catch up missed periods while limiting runaway execution.
 
-5. Start cron service:
-   ```bash
-   service cron start
-   ```
+## Notifications and Auto-Pay
 
-### Option 2: Host Machine Cron
+When enabled:
 
-If you prefer to run the cron job from your host machine:
+- Newly generated invoices may be emailed with a public link.
+- A separate 02:15 UTC job attempts eligible recurring auto-pay charges.
+- Due and overdue reminders run on the invoice reminder schedule.
+- Stripe reconciliation runs every six hours to recover missed confirmations.
+
+## Manual Verification
 
 ```bash
-# Run every day at 2:00 AM
-0 2 * * * docker compose -f /path/to/Project-Alpha/docker-compose.yml exec -T web php /var/www/src/cron/generate_recurring_invoices.php >> /var/log/recurring-invoices.log 2>&1
+docker compose exec cron php /var/www/src/cron/generate_recurring_invoices.php
+docker compose exec cron tail -n 200 /var/www/config/logs/cron/cron.log
 ```
 
-Add this to your host's crontab with `crontab -e`.
-
-### Option 3: Manual Execution (Testing)
-
-For testing, you can manually run the script:
-
-```bash
-docker compose exec web php /var/www/src/cron/generate_recurring_invoices.php
-```
-
-## How It Works
-
-### Invoice Generation Logic
-
-1. **Active Contracts Only**: Only processes long-term contracts with status = 'active'
-
-2. **Due Date Check**: Generates invoices when `next_invoice_date <= today`
-
-3. **Pricing Types**:
-   - **Recurring Amount**: Same amount each invoice
-   - **Fixed Total**: Divides total across invoices until contract value is met
-
-4. **Automatic Completion**: 
-   - Fixed-total contracts complete when fully invoiced
-   - Contracts with end dates complete when end date is passed
-
-5. **Next Invoice Calculation**: Automatically calculates next billing date based on interval
-
-### What Gets Created
-
-For each due invoice:
-- New invoice record in `invoices` table
-- Invoice items (from contract items or generated description)
-- Updates contract's `next_invoice_date`, `last_invoice_date`, and `total_invoiced`
-
-### Contract Status Updates
-
-- **Active → Completed**: When fixed-total contract is fully invoiced OR end date is reached
-- **Paused contracts**: Skipped (no invoices generated)
-
-## Monitoring
-
-### Check Logs
-
-View cron execution logs:
-```bash
-docker compose exec web tail -f /var/log/cron.log
-```
-
-Or check PHP error log:
-```bash
-docker compose logs web | grep "generate_recurring_invoices"
-```
-
-### Log Messages
-
-- `Starting invoice generation run at [timestamp]`
-- `Generated invoice INV-XXX for contract LTC-XXX ($XXX.XX)`
-- `Contract LTC-XXX fully invoiced, marked as completed`
-- `Completed: X invoices generated, X errors`
+Also inspect `cron_job_runs`, the generated invoice, its billing period, and the contract's advanced `next_invoice_date`.
 
 ## Troubleshooting
 
-### No Invoices Being Generated
+- **No invoice generated:** confirm status, signature, due date, interval, pricing, and `cron_enabled`.
+- **Duplicate concern:** compare the invoice billing period and contract ID before deleting anything.
+- **Missed downtime periods:** run the generator once and review each catch-up invoice.
+- **Email missing:** verify SMTP, public application URL, notification setting, and `invoice_notifications`.
+- **Payment missing:** verify webhook delivery, then run Stripe reconciliation in test mode.
 
-1. **Check contract status**: Must be 'active'
-   ```sql
-   SELECT id, status, next_invoice_date FROM long_term_contracts WHERE status = 'active';
-   ```
-
-2. **Check next_invoice_date**: Must be today or earlier
-   ```sql
-   SELECT id, next_invoice_date FROM long_term_contracts WHERE next_invoice_date <= CURDATE();
-   ```
-
-3. **Check cron is running**:
-   ```bash
-   docker compose exec web service cron status
-   ```
-
-### Invoices Not Created Properly
-
-Check error logs:
-```bash
-docker compose exec web cat /var/log/cron.log
-```
-
-### Testing Invoice Generation
-
-Temporarily set a contract's `next_invoice_date` to today:
-```sql
-UPDATE long_term_contracts SET next_invoice_date = CURDATE() WHERE id = 1;
-```
-
-Then run the script manually to see results.
-
-## Recommended Cron Schedule
-
-- **Daily at 2 AM**: Recommended for most use cases
-  ```
-  0 2 * * * ...
-  ```
-
-- **Hourly**: For high-frequency billing (rare)
-  ```
-  0 * * * * ...
-  ```
-
-- **Weekly**: Less frequent check (not recommended)
-  ```
-  0 2 * * 0 ...
-  ```
-
-## Database Fields
-
-### long_term_contracts table
-- `next_invoice_date`: When the next invoice should be generated
-- `last_invoice_date`: When the last invoice was generated
-- `total_invoiced`: Cumulative amount invoiced so far
-- `status`: Must be 'active' for invoicing
-
-## Security Notes
-
-- The cron script requires database access
-- Logs may contain sensitive information - secure log files appropriately
-- Consider setting up monitoring/alerts for failed invoice generation
+See [Document Workflow](DOCUMENT_WORKFLOW.md) for the complete long-term lifecycle.

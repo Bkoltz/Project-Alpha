@@ -1,5 +1,7 @@
 # Project Alpha — Production Readiness Assessment
 
+> **Historical assessment.** This document is a June 21 point-in-time review, not a current certification or compliance statement. Revalidate every finding against the deployed version before acting on it.
+
 > Generated 2026-06-21. Combined codebase audit + 2026 web research.
 > This is a technical assessment, NOT legal advice. Legal documents must be reviewed by a licensed Wisconsin attorney.
 
