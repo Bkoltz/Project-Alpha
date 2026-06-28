@@ -1,120 +1,136 @@
-# Project Alpha — Context
+# Project Alpha Context
 
-Last updated: 2026-06-20 by Hermes
+Last reviewed: 2026-06-28
 
-## What This Is
-PHP 8.3 business document management system for quotes, contracts, invoices, receipts, and expenses with Stripe payment integration. Built for organizations requiring automated billing, secure document handling, and comprehensive financial reporting.
+Project Alpha is a self-hosted business operations application for quotes, contracts, invoices, payments, expenses, receipts, mileage, and supporting records. It is currently used internally by Ledge Top Technologies LLC and Ledge Top Drone Services.
 
-## Quick Start
+## Runtime
+
+- Production image: PHP 8.5 with Apache
+- Composer platform: PHP 8.3.31; package constraint PHP 8.1+
+- Database: MySQL 8
+- Templates: PHP views plus Twig components
+- Frontend: server-rendered HTML, CSS, and vanilla JavaScript
+- Payments: Stripe Checkout and Payment Intents
+- Deployment: Docker Compose with web, cron, and database services
+
+## Commands
+
+Published images:
+
 ```bash
-cd /home/bkoltz/Project-Alpha
-docker compose up -d --build    # Start containers
-# App at http://localhost:1627
-# Log in with admin@project-alpha.local / <ADMIN_PASSWORD from compose file>
-# Enter Stripe keys in Settings > Billing (stored encrypted in the DB)
+docker compose pull
+docker compose up -d
 ```
-Docker: Apache + MySQL 8 | Port: 1627
+
+Build the current checkout:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+```
+
+Tests and migration validation:
+
+```bash
+composer test
+docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web \
+  php /var/www/src/migrations/run_migrations.php --dry-run --verbose
+```
+
+## Sources of Truth
+
+Use these in order when documentation conflicts:
+
+1. Current application code and Docker files
+2. `database/init.sql` for fresh installs
+3. Active SQL files in `database/migrations/` for upgrades
+4. `docs/DOCUMENT_WORKFLOW.md` for user-facing document behavior
+5. Current operating guides listed in `docs/README.md`
+
+Point-in-time plans and audits in `docs/` are historical records, not current instructions.
 
 ## Architecture
-- PHP 8.3, no framework (custom routing via `page` query param)
-- MySQL 8 with direct PDO ($pdo global)
-- Docker Compose (Apache + MySQL + cron container)
-- Stripe Payment Intents (not Stripe Invoices)
-- Dompdf for PDF generation
-- Session-based auth (can be disabled via APP_AUTH_DISABLED=true)
-- Twig templates mixed with plain PHP views
 
-### Directory Structure
-```
-public/index.php       - Single entry point, routing
-public/assets/styles.css - Main's 113-line CSS + appended dev-only component classes
-public/assets/js/      - All page-logic JS files (consolidated from public/js/)
-src/config/            - DB connection, bootstrap
-src/controllers/        - POST handlers, API endpoints (by domain)
-src/services/           - Business logic (LinkResolver, StripeService)
-src/utils/              - CSRF, crypto, mailer, logger, twig, client_ip, upload_validator
-src/views/pages/        - Page templates (by domain)
-src/views/partials/     - Shared layout (header, footer)
-src/views/templates/    - Twig components (document-filter, list-view)
-cron/                   - Scheduled task scripts (daily at 2am)
-database/init.sql       - Unified schema with all modules + custom field seed data
-docs/                   - Technical documentation + AGENTS.md
-```
+- `public/index.php`: entry point, authentication gates, route dispatch, and middleware
+- `public/assets/`: stylesheets and browser assets
+- `public/js/`: page-specific browser logic
+- `src/config/`: application and database bootstrap
+- `src/controllers/`: request handlers grouped by domain
+- `src/services/`: payment, email, and link services
+- `src/utils/`: shared security, billing, logging, and rendering utilities
+- `src/views/pages/`: PHP page views
+- `src/views/templates/`: Twig components and layouts
+- `src/cron/`: scheduled job scripts
+- `database/init.sql`: complete current schema for a fresh database
+- `database/migrations/`: tracked upgrades for existing databases
+- `cron/`: cron image entrypoint and installed schedule
 
-## Database Schema (IMPORTANT)
+## Data Model
 
-The dev branch uses a UNIFIED schema. Do NOT query separate legacy tables.
+The current schema uses one table per primary document kind and type columns for workflow families:
 
-- **quotes** table: has `quote_type` column (values: `regular`, `long_term`, `on_demand`). Does NOT have `is_long_term` or `is_on_demand` columns. Has `fulfillment_date`.
-- **contracts** table: has `contract_type` column (values: `regular`, `long_term`, `on_demand`). Does NOT have separate `long_term_contracts` or `on_demand_contracts` tables. Has `start_date`, `end_date`, `billing_interval_count`, `billing_interval_unit`.
-- **invoices** table: has `invoice_type` column (values: `regular`, `on_demand`) and `contract_id`. Does NOT have `on_demand_contract_id`.
-- **clients** table: has `archived` column.
-- **document_custom_fields** table: seeded with `deposit` (Deposit Required) and `fulfillment_date` (Fulfillment Date Estimated) for all 3 document types.
+- `quotes.quote_type`: `regular`, `long_term`, `on_demand`
+- `contracts.contract_type`: `regular`, `long_term`, `on_demand`
+- `invoices.invoice_type`: `regular`, `long_term`, `on_demand`
 
-## CSS/Styling Rules (IMPORTANT)
+Do not introduce separate long-term or on-demand document tables.
 
-- **styles.css** = main branch's 113-line CSS + appended dev-only component classes (.btn, .input, .card, .pa-table, .filter-form, .dash-card, .dash-cols, .dash-panel, .dash-svg-chart, .mobile-topbar, .site-footer, etc.) using hardcoded color values.
-- **List pages** (invoices-list, quotes-list, contracts-list, etc.) = main branch versions with inline CSS styling. SQL WHERE clauses patched for dev unified schema (quote_type, contract_type, invoice_type).
-- **Create/edit pages** = main branch versions with inline CSS styling. JS paths fixed to `/assets/js/`.
-- **Dashboard** (home.php) = dev redesigned 466-line version with SVG charts, stat cards, health checks.
-- **Dev-only pages** (expenses, financial dashboard, legal, settings/backup) = dev versions using CSS component classes from the appended section.
-- Do NOT replace dev-only pages with main versions — they have features main doesn't have.
+Primary relationships:
 
-## JS Files (IMPORTANT)
+- Clients may belong to organizations.
+- Projects are manually managed parent records.
+- `project_code` is a job code propagated across related documents.
+- Quotes may generate contracts and invoices.
+- Contracts own scheduled or manually generated invoices.
+- Payments belong to invoices.
 
-- All JS files are in `public/assets/js/` (consolidated from `public/js/`).
-- Templates reference `/assets/js/*.js` (absolute path).
-- JS files are dev versions — they are SUPERSETS of main's functions (have all main functions plus extras like calcInvoiceCountFromDates, initQuoteClientDropdown, setItemsRequired).
-- Do NOT restore main's JS files.
+## Workflow Rules
 
-## Deployment Notes
+- A pending regular quote may create a pending contract and unpaid invoice on approval.
+- Long-term and on-demand quote approval creates the matching contract; invoices follow contract activation.
+- Uploading a signed regular contract activates it.
+- Long-term and on-demand contracts require an explicit activation step after a signed document exists.
+- Long-term invoices use `next_invoice_date` and billing interval fields.
+- On-demand invoices are generated manually from an active contract.
+- Completing a contract applies net terms to the newest related invoice when its due date is empty.
+- Voiding a contract voids related invoices and revokes their public links.
+- Recording full payment marks an invoice paid and may complete the linked contract.
 
-- `public/assets/styles.css` is BAKED INTO the Docker image (not bind-mounted). Changes require: `docker cp public/assets/styles.css project-alpha-web-1:/var/www/html/assets/styles.css`
-- `src/` directory IS bind-mounted — PHP template changes are live immediately.
-- `docker-compose.yml` has 3 bare passwords (MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, ADMIN_PASSWORD). No .env file needed. TRUSTED_PROXIES set for Cloudflare Tunnel. APP_ENCRYPTION_KEY auto-generated by start.sh. Stripe keys entered via Settings > Billing UI.
+See `docs/DOCUMENT_WORKFLOW.md` before changing these behaviors.
 
-## Pages to Keep as Dev Versions
-- `src/views/pages/home.php` — dev redesigned dashboard (466 lines)
-- `src/views/partials/header.php` — mobile topbar, role-based nav, consolidated Financial nav
-- `src/views/partials/footer.php` — ToS/Privacy/DMCA legal links footer
-- `src/views/pages/financial/*` — all expense tracking, financial dashboard, categories, vendors, mileage, CSV import, audit, receipts, forms
-- `src/views/pages/legal/*` — Terms of Service, Privacy Policy, AUP, DMCA, Data Retention
-- `src/views/pages/account/*` — GDPR data export, account deletion
-- `src/views/pages/settings/*` — backup, tax import, link management, document settings
-- `src/views/pages/auth/*` — ToS acceptance gate, 2FA, password policy, account management
+## Persistent Data and Secrets
 
-## Current State
-- Core features working: quotes, contracts, invoices, payments, receipts, expenses, mileage, vendors, categories
-- Stripe webhook handling live
-- Recurring invoice generation for long-term contracts
-- Auto-termination of expired contracts
-- Cron runs daily at 2:00am for automated tasks
-- No .env file required — all defaults live in docker-compose.yml
-- Security: CSRF (Symfony + legacy), rate limiting, ClamAV scanning, encrypted backups, password policy, 2FA, audit logging
+Named volumes hold uploads, application configuration, backups, and database data. The application encryption key is generated on first boot when not supplied and stored in the configuration volume.
 
-## Decisions
-- Session-based auth (not JWT) — simpler for this use case
-- Direct PDO instead of ORM — performance + simplicity
-- Stripe Payment Intents (not Stripe Invoices) — more flexible
-- No .env file required: docker-compose.yml uses inline defaults; encryption key auto-generated on first run
-- List/create pages use main's inline CSS styling; dev-only pages use CSS component classes
-- Unified schema: type columns (quote_type, contract_type, invoice_type) instead of separate tables
+Never commit:
 
-## Cross-Branch Restoration Warning
+- Application or database passwords
+- Stripe, SMTP, OAuth, or API credentials
+- The generated encryption key
+- Customer records, uploaded documents, or production logs
+- Production hostnames, private addresses, or access instructions that are not intended to be public
 
-When restoring files from the `main` branch to `dev`:
-1. **Schema check**: Main uses old schema (is_long_term, is_on_demand, separate long_term_contracts/on_demand_contracts tables). Dev uses unified schema (quote_type, contract_type, invoice_type, single contracts table). Always patch SQL WHERE/SELECT/JOIN clauses.
-2. **CSS check**: Main uses inline styles. Dev uses CSS classes. User prefers main's inline styling for list/create pages. Dev-only pages should stay as dev versions.
-3. **JS check**: Main's JS files are missing dev functions. Always use dev JS files (they're supersets).
-4. **Full audit required**: Every restored file must be render-tested via curl to catch schema/CSS/JS mismatches.
+Back up the configuration and backup volumes as well as MySQL. Encrypted values cannot be recovered without the original application encryption key.
+
+## Branch and Image Flow
+
+- `dev` publishes `:dev` for web and `:cron` for cron.
+- `main` publishes `:latest` for web and `:cron-latest` for cron.
+- `main` is protected and changes enter through pull requests.
+- Production and staging deployments use different databases, named volumes, and credentials.
+
+## Documentation
+
+- `README.md`: project overview and installation
+- `CONTRIBUTING.md`: issues, branches, pull requests, and validation
+- `docs/README.md`: documentation index
+- `docs/AGENTS.md`: coding-agent and contributor rules
+- `docs/DOCUMENT_WORKFLOW.md`: authoritative document workflow
+- `database/migrations/README.md`: schema migration rules
+- `cron/README.md`: installed scheduled jobs
 
 ## Contact
-Owner: Beau Koltz
-Company: Ledge Top Technologies LLC
-Legal jurisdiction: State of Wisconsin, USA
 
-## Subfolder Context Files
-- `api/CONTEXT.md` — API endpoints and data shapes
-- `src/controllers/CONTEXT.md` — Controller routing and business logic
-- `cron/CONTEXT.md` — Scheduled tasks reference
-- `docs/AGENTS.md` — AI agent guidance
+- Owner: Beau Koltz
+- Company: Ledge Top Technologies LLC
+- Security reports: see `docs/SECURITY.md`

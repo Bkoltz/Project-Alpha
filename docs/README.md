@@ -1,61 +1,47 @@
-Project Alpha
-===============
+# Project Alpha Documentation
 
-Project Alpha is a lightweight PHP application for managing clients, quotes, contracts, and invoices.
+This directory contains current operating guides and historical engineering records for Project Alpha.
 
-Core features
--------------
-- Create and manage clients, organizations and projects
- - Create and manage clients, organizations, Jobs (auto-generated project_codes), and Projects (manual parent groups)
-- Draft, approve and archive quotes
-- Generate contracts and invoices automatically from quotes
-- Generate downloadable PDFs for quotes, contracts, and invoices
-- Upload signed contracts (signed PDF files) and serve them securely
-- Long-term and on-demand document support (project-level configurations)
+## Start Here
 
-Docker / Development notes
---------------------------
-- This project is containerized using Docker. The runtime uses PHP 8.3 and Apache.
-- The main Compose file pulls images from GitHub Container Registry (`ghcr.io`).
-- The Dockerfile still builds PHP/vendor layers for the GHCR publish workflow.
+| Document | Audience | Purpose |
+|---|---|---|
+| [Project README](../README.md) | Everyone | Product overview, quick start, architecture, and project status |
+| [Document Workflow](DOCUMENT_WORKFLOW.md) | Operators and contributors | Quote, contract, invoice, payment, and public-link behavior |
+| [TrueNAS Scale Deployment](truenas-scale-deployment.md) | Operators | Production and staging deployment guidance |
+| [Stripe Webhook Setup](stripe-webhook-setup.md) | Operators | Stripe events, endpoint configuration, and verification |
+| [Recurring Invoices](RECURRING_INVOICES_SETUP.md) | Operators | Long-term contract scheduling and invoice generation |
+| [Migration Safety](MIGRATION_SAFETY.md) | Operators and developers | Safe schema updates, backups, and recovery |
+| [Security Policy](SECURITY.md) | Everyone | Private vulnerability reporting |
+| [Developer and Agent Guidance](AGENTS.md) | Contributors and coding agents | Repository conventions, commands, and high-risk areas |
 
-Running locally with Docker
---------------------------
-Pull and run (using Compose):
+## Technical References
 
-```cmd
-docker compose pull
-docker compose up -d
-```
+- [Encryption at Rest](ENCRYPTION_AT_REST.md)
+- [On-Demand Contracts](ON_DEMAND_CONTRACTS_README.md)
+- [Templating Strategy](TEMPLATING_STRATEGY.md)
+- [Webhook Routing](webhook-routing.md)
+- [Security Checklist](SECURITY_CHECKLIST.md)
+- [Database Migrations](../database/migrations/README.md)
+- [Cron Service](../cron/README.md)
+- [Twig Templates](../src/views/templates/README.md)
+- [Document Filter Component](../src/views/components/FILTER_COMPONENT_README.md)
 
-Open the app at http://localhost/ (the container runtime listens on port 80 by default)
+## Historical Records
 
-Documentation (workflow)
-------------------------
-Detailed workflow documentation, including lifecycles for Quotes, Contracts, Invoices, and Project guidance is available under the `work_flow/` directory in the repository. See:
-- `work_flow/document_types.md`
-- `work_flow/projects.md`
-- `work_flow/regular_docs.md`
-- `work_flow/long-term_docs.md`
-- `work_flow/settings.md`
-  
-Note: The UI previously had a 'Projects' listing for auto-generated Job codes. That listing is now labelled as **Jobs**; a new 'Projects' area has been added for manual, parent-level Projects you can create and manage. See `work_flow/projects.md` for details about Jobs vs Projects and how to associate documents.
+The following files document earlier implementation passes, audits, or plans. They are useful context but are not current operating instructions:
 
-Contributing and development
-----------------------------
-If you'd like to contribute or extend the project, please read through the `work_flow` docs first. The public-facing routes are routed through `public/index.php` where `page` query parameters map to controllers and views under `src/controllers` and `src/views/pages`.
+- [Implementation Summary - May 6, 2026](IMPLEMENTATION_SUMMARY.md)
+- [Supplemental Audit Findings - June 16, 2026](supplemental_audit_findings.md)
+- [Comprehensive Plan - June 21, 2026](pa-comprehensive-plan.md)
+- [Production Readiness Assessment - June 21, 2026](pa-production-readiness-assessment.md)
+- [CI/CD Next Steps - June 23, 2026](CI-CD-NEXT-STEPS.md)
 
-If you need help with setting up the dev environment, or want to run tests, run the test script (if installed) or run PHPUnit in a dev environment:
+When a historical record conflicts with the application, current source code, `database/init.sql`, active migrations, Docker files, and the current guides above take precedence.
 
-```cmd
-composer install
-vendor/bin/phpunit --colors=always
-```
+## Documentation Rules
 
-Issues and PRs
--------------
-Open issues/PRs in GitHub or raise a support request internally. Include a small reproduction with logs if your change is related to build/runtime issues.
-
-Contact
--------
-Project Alpha developer team
+- Do not commit passwords, API keys, tokens, customer information, private IP addresses, or production-only operational details.
+- Prefer links to one authoritative guide instead of copying the same instructions into several files.
+- Mark point-in-time audits and plans as historical once their implementation window closes.
+- Update documentation in the same pull request as behavior changes.

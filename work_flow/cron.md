@@ -1,13 +1,7 @@
-# Cron Overview:
-- Cron is used to automatically run tasks daily at 2:00am.
+# Scheduled Workflow
 
-## Admin weekly brief
-- We will send the admin email a weekly brief for upcoming contracts,
+The dedicated cron container runs background operations on a fixed UTC schedule. These include recurring invoice generation, recurring auto-charge attempts, rotating backups, contract expiration, public-link expiration, scheduled audits, invoice reminders, Stripe reconciliation, and merchant-rate synchronization.
 
-## Notifications
-- Send the admin user a email update if a file changes status from a public link.
-- Send reminders 7 days prior to invoice due date
-- Send weekly reminder for overdue invoices.
+Application settings enable or disable applicable notification and billing behavior; they do not rewrite the container's installed crontab.
 
-## Invoices
-- Generate invoices if they are part of a long term contract and are set up to be billed on a schedule.
+See [Cron Service](../cron/README.md) for the authoritative schedule and troubleshooting commands.

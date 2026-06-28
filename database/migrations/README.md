@@ -1,45 +1,56 @@
-# Project Alpha - Database Schema
+# Project Alpha Database Migrations
 
-## Overview
+Project Alpha maintains two schema paths:
 
-The active schema is split into 8 ordered module files and is also concatenated into `database/init.sql`, which Docker uses as the single source of truth for fresh databases.
+- `database/init.sql` is the complete current schema for a fresh database.
+- Numbered SQL files in `database/migrations/` upgrade existing databases.
 
-## Active Module Files
+The `deprecated/` directory is retained only for historical reference and is not part of the active migration path.
 
-| # | File | Description |
-|---|------|-------------|
-| 001 | `001_auth_module.sql` | Users, password resets, login attempts, 2FA, trusted devices/IPs |
-| 002 | `002_organizations_module.sql` | Organizations, memberships, API keys, API usage, webhooks |
-| 003 | `003_projects_clients_module.sql` | Clients, projects, project metadata, counters, project document links, entity links |
-| 004 | `004_documents_module.sql` | Separate `quotes`, `contracts`, `invoices`, and `recurring_invoices` tables |
-| 005 | `005_financial_module.sql` | Payments, auto-pay logs, payment methods, tax rates, item library, receipts, forms, discounts, financial records |
-| 006 | `006_audit_system_module.sql` | System audit, audit schedules, notifications, cron runs, app config |
-| 007 | `007_public_links_module.sql` | Public document links, link resolver config, document customization, archived entities |
-| 008 | `008_seed_data.sql` | Default organization, admin user, app config |
+## Startup Behavior
 
-## Document Model
+The web container entrypoint:
 
-Project Alpha intentionally uses separate tables for the three primary document families:
+1. Waits for MySQL.
+2. Loads `database/init.sql` when the primary document schema is missing.
+3. Ensures the initial administrator and default organization membership exist.
+4. Runs `src/migrations/run_migrations.php`.
+5. Starts Apache even when some migration failures are reported, so operators must inspect logs.
 
-- `quotes` with `quote_type ENUM('regular','long_term','on_demand')`
-- `contracts` with `contract_type ENUM('regular','long_term','on_demand')`
-- `invoices` with `invoice_type ENUM('regular','long_term','on_demand')`
+The runner records successful files and checksums in `schema_migrations`. Failed migrations are not marked as applied and are retried on a later run.
 
-This keeps the most common queries and foreign keys straightforward while still allowing each document table to support regular, long-term, and on-demand workflows.
+## Creating a Migration
 
-## Public Links
+1. Choose the next unused numeric prefix.
+2. Use a descriptive filename such as `033_add_invoice_delivery_state.sql`.
+3. Make forward operations idempotent where MySQL permits.
+4. Use nullable columns or safe defaults for existing rows.
+5. Update `database/init.sql` to represent the same final schema.
+6. Add or update tests and documentation.
 
-Public links use `document_type` and `document_id`. These names match `project_documents` and make the polymorphic relationship explicit.
+Rollback scripts must end in `_rollback.sql`; automatic migration discovery excludes them.
 
-## Deprecated Files
-
-The `deprecated/` folder contains old migration files kept for reference only. Do not run those files against a fresh database.
-
-## Rebuild
+## Validation
 
 ```bash
-docker compose down -v
-docker compose up --build
+# List pending migrations without applying them
+docker compose exec -T web \
+  php /var/www/src/migrations/run_migrations.php --dry-run --verbose
+
+# Apply pending migrations manually
+docker compose exec -T web \
+  php /var/www/src/migrations/run_migrations.php --verbose
 ```
 
-Fresh Docker databases execute `database/init.sql` via MySQL's `/docker-entrypoint-initdb.d`.
+Before applying pending files, the runner attempts a compressed MySQL backup in `/var/www/backups/pre-migration/`. Backup failure is logged but does not stop migration execution.
+
+## Production Rules
+
+- Test a fresh install and an upgrade from a representative staging backup.
+- Verify the pre-migration backup can be restored.
+- Do not modify live tables manually as a normal deployment step.
+- Do not delete or rewrite a migration that has already shipped.
+- Avoid destructive drop/rename changes in the same release that introduces replacements.
+- Review the post-migration ACL health check and container logs.
+
+Set `SKIP_MIGRATIONS_ON_BOOT=true` only as a temporary recovery measure while diagnosing a failed migration.

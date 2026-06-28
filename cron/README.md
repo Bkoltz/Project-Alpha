@@ -1,63 +1,65 @@
-# Project Alpha - Cron Service
+# Project Alpha Cron Service
 
-Docker image that runs scheduled background tasks for Project Alpha.
+The cron image runs Project Alpha's scheduled PHP jobs independently from Apache. The current schedule is installed from `cron/crontab` and uses UTC.
 
-## Cron Jobs
+## Installed Schedule
 
-| Schedule | Script | Description |
-|----------|--------|-------------|
-| Daily 2:00 AM UTC | `generate_recurring_invoices.php` | Creates invoices for active long-term contracts on their billing schedule |
-| Daily 2:15 AM UTC | `auto_charge_recurring.php` | Charges eligible auto-pay invoices after recurring invoices are generated |
-| Daily 2:30 AM UTC | `backup_database.php` | Creates rotating daily, weekly, and monthly database backups |
-| Daily 3:00 AM UTC | `auto_terminate_contracts.php` | Marks expired contracts as completed |
-| Daily 4:00 AM UTC | `link_expiration_checker.php` | Flags expired public links |
-| Daily 6:00 AM UTC | `process_audit_schedules.php` | Generates and emails scheduled financial audit CSVs |
-| Daily 8:00 AM UTC | `send_invoice_reminders.php` | Sends 7-day-due and weekly-overdue email reminders |
-| Every 6 hours | `stripe_reconciliation.php` | Reconciles Stripe payments missed during downtime |
-| Daily 5:00 AM UTC | `sync_merchant_rate.php` | Computes the actual blended Stripe merchant rate from recent balance transactions and stores it in `app_config` |
+| UTC schedule | Script | Purpose |
+|---|---|---|
+| Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
+| Daily 02:15 | `auto_charge_recurring.php` | Attempt eligible recurring auto-pay charges |
+| Daily 02:30 | `backup_database.php` | Create rotating daily, weekly, and monthly backups |
+| Daily 03:00 | `auto_terminate_contracts.php` | Complete contracts whose configured end date has passed |
+| Daily 04:00 | `link_expiration_checker.php` | Expire public document links |
+| Every 6 hours | `stripe_reconciliation.php` | Recover Stripe payments missed by webhooks or downtime |
+| Daily 05:00 | `sync_merchant_rate.php` | Calculate the observed Stripe processing rate |
+| Daily 06:00 | `process_audit_schedules.php` | Generate and deliver scheduled audit exports |
+| Daily 08:00 | `send_invoice_reminders.php` | Send enabled due and overdue reminders |
 
-All job output is appended to `/var/www/config/logs/cron/cron.log` inside the cron container.
+All output is appended to `/var/www/config/logs/cron/cron.log` in the cron container.
 
-## Environment Variables
+## Runtime
 
-Passed from `docker-compose.yml`:
+The multi-stage root `Dockerfile` builds the cron image and copies the current `src/`, Composer dependencies, migrations, crontab, and entrypoint into the image. Application source is not bind-mounted by the published Compose configuration; rebuild or pull a new cron image after PHP cron changes.
 
-- `MYSQL_DATABASE`
-- `MYSQL_USER`
-- `MYSQL_PASSWORD`
-- `MYSQL_ROOT_PASSWORD`
-- `DB_HOST`
-- `DB_PORT`
-- `APP_*`, `STRIPE_*`, and `SMTP_*` values when present
+Persistent volumes provide:
 
-The entrypoint writes these values to `/etc/environment` because cron jobs do not inherit the container environment automatically.
+- `/var/www/config`: settings, encryption key, and logs
+- `/var/www/backups`: generated backups
+- `/var/www/src/uploads`: shared user uploads
 
-## Build & Run
-
-Use Docker Compose from the Project Alpha repo root:
+## Commands
 
 ```bash
-docker compose up -d --build cron
-```
+# Check service state
+docker compose ps cron
 
-To inspect the installed schedule:
-
-```bash
+# Inspect the installed schedule
 docker compose exec cron cat /etc/cron.d/project-alpha
-```
 
-To follow logs:
-
-```bash
+# Follow cron output
 docker compose exec cron tail -f /var/www/config/logs/cron/cron.log
+
+# Run a job manually
+docker compose exec cron php /var/www/src/cron/generate_recurring_invoices.php
 ```
 
-## Source Files
+## Application Settings
 
-The cron container mounts the same live source tree as the web container:
+The container schedule always starts with the service. Individual scripts also honor application settings where applicable, including:
 
-```yaml
-- ./src:/var/www/src
-```
+- `cron_enabled`
+- invoice due and overdue reminder toggles
+- invoice email-on-generation toggle
+- Stripe and SMTP configuration
 
-Do not copy PHP source into this image. Rebuild the cron image when `cron/Dockerfile`, `cron/crontab`, `cron/entrypoint.sh`, or Composer dependencies change; ordinary PHP cron script changes are picked up through the mounted `src/` volume.
+## Troubleshooting
+
+1. Confirm the cron service is running and connected to MySQL.
+2. Review `/var/www/config/logs/cron/cron.log`.
+3. Check `cron_job_runs` for the last success or failure.
+4. Run the affected PHP script manually in the cron container.
+5. Confirm the configuration and encryption-key volumes are mounted.
+6. Confirm the deployed cron tag matches the intended branch.
+
+Do not paste production logs into a public issue without removing credentials and customer information.

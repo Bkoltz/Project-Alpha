@@ -1,5 +1,7 @@
 # PA Comprehensive Plan: Bug Fixes, QA, Features, Auto-Refresh
 
+> **Historical record.** This June 21 plan drove an earlier implementation pass. Its completed items and code excerpts are not current operating instructions. Open GitHub Issues are the current backlog.
+
 > Generated 2026-06-21. Combines quote approval bug investigation, API research, hourly billing research, and auto-refresh request.
 
 ---

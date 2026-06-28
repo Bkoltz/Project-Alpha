@@ -1,56 +1,62 @@
-# Project Alpha — Operational Context (detailed; memory points here)
+# Project Alpha Operational Context
 
-Updated 2026-06-23. Maintained by Hermes. Memory holds compact facts;
-this file holds the detail that's too long for the 2,200-char memory budget.
+Last reviewed: 2026-06-28
 
-## Deployment topology
-- Prod: TrueNAS 192.168.50.80:1627 (Custom App), admin pw Therockiscute2080!
-- Staging: TrueNAS 192.168.50.80:1628 (Custom App), admin pw Demo123!
-- Prod often unreachable from Hermes host (LAN/exposure varies)
-- dev == main at e902b22 (both identical). All fixes in :latest on GHCR.
-- GHCR packages MUST stay PUBLIC for anonymous TrueNAS pull.
-- start.sh re-upserts admin pw from env each boot via getenv() (special-char safe)
-- Lockout: 5 failed logins / 15 min per account (different error than "invalid creds")
-- TrueNAS Custom App re-reads its pasted compose each container start; edit env there + recreate (Pull+Up), NOT in the repo file
+This file records public, non-secret deployment conventions. Credentials, private addresses, customer information, and access instructions must remain outside the repository.
 
-## Production data rules (CRITICAL)
-Prod now has a LIVE database with real client data. Rules:
-1. All schema changes = scripted migrations (database/migrations/*.sql via run_migrations.php). NEVER direct edits to init.sql or live tables.
-2. All changes backward compatible (nullable/defaults for new cols; no drop-rename in one step).
-3. init.sql stays source of truth for fresh installs — any migration must ALSO update init.sql.
-4. Test migrations on staging first.
+## Deployment Topology
 
-## Organizations: ONE instance, TWO orgs
-Ledge Top Technologies LLC is one company; LTDS is a division/DBA, taxes cumulative at year end.
-PA multi-tenant model (organizations + user_organizations) supports this natively.
-Use ONE PA instance with two organizations ("Ledge Top Technologies" + "Ledge Top Drone Services").
-Toggle orgs in one admin login. Shared DB, backup, deploy, Stripe.
-CAVEAT: app_config.brand_name is GLOBAL, not per-org. Invoice headers currently show one brand for all.
-Per-brand headers (drone invoices say "Ledge Top Drone Services") = optional small enhancement.
+- Production runs as a TrueNAS Scale Custom App on host port `1627`.
+- Staging runs separately on host port `1628`.
+- Production uses `:latest` and `:cron-latest` images.
+- Staging uses `:dev` and `:cron` images.
+- Production and staging have different databases, named volumes, passwords, and encryption keys.
+- TrueNAS redeployment remains a manual operator action after an image is published.
+- GHCR packages must remain readable by the deployment environment.
 
-## Surcharge — DO NOT ENABLE YET (compliance gap)
-Split mode exists (StripeFeeCalculator, default 50% — client pays portion). But:
-- BUG: InvoiceSurcharge.php line 20 gates on paymentMethod in ['stripe','card'] — applies to ANY
-  Stripe payment including DEBIT cards. Federal law (Durbin Amendment) PROHIBITS debit surcharges.
-  Fix needed: restrict Stripe Checkout to credit-card-only payment methods, OR refund surcharge
-  if funding type turns out to be debit.
-- BUG: surcharge rate is a free-form config, not capped at actual merchant rate. Visa/Mastercard
-  rules say surcharge CANNOT exceed your actual merchant discount rate. Cap client_pays to real fee.
-- What's done right: surcharge is a separate line item labeled "Credit Card Processing Fee" (proper disclosure).
-- Before enabling: (1) fix debit gap, (2) cap rate, (3) register with Visa 30 days prior, (4) verify receipt itemization.
-- Contract clause for surcharge = optional good practice, NOT legally required. Disclosure + Visa registration is the bar.
+Do not add real hostnames, private IP addresses, passwords, tokens, or remote-access instructions to this file.
 
-## CI/CD
-- Pull-only GHCR (no build-on-NAS, no self-hosted runner).
-- CI builds :dev/:cron on dev push, :latest/:cron-latest on main push.
-- Smoke-test CI (ci.yml, job=smoke-test) guards web-image-identity, DB-over-TCP, CSP-clean-over-HTTP.
-- Promotion = GATED AUTO-MERGE (decided): dev->main merges only on green smoke-test; user redeploys TrueNAS manually.
-- PENDING: branch protection + auto-merge UI (token lacks admin scope; must do in GitHub UI).
-  See /home/bkoltz/Project-Alpha/docs/CI-CD-NEXT-STEPS.md for the exact steps.
+## Production Data Rules
 
-## Version display (shipped)
-APP_VERSION build-arg (git describe) baked into image. app_version() helper: env -> /var/www/APP_VERSION -> 'dev'.
-Footer shows vX.Y.Z. api-dashboard-summary returns 'version' key.
+1. Every schema change requires an idempotent migration in `database/migrations/`.
+2. Update `database/init.sql` to match the final schema for fresh installations.
+3. Use safe defaults or nullable columns for existing data.
+4. Test migrations against staging before production.
+5. Take and verify a restorable backup before deployment.
+6. Never edit production tables manually as part of normal deployment.
 
-## Dashboard fixes (shipped)
-- home.php: real system RAM from /proc/meminfo (was PHP process memory). Income(90d) card removed.
+## Persistent Data
+
+The deployment must preserve:
+
+- MySQL data volume
+- Upload volume
+- Configuration volume, including the application encryption key
+- Backup volume
+
+Losing the configuration encryption key can make encrypted settings unrecoverable. Back it up separately from the database while protecting it as a secret.
+
+## Image and Branch Flow
+
+| Branch | Web image | Cron image | Intended environment |
+|---|---|---|---|
+| `dev` | `:dev` | `:cron` | Staging |
+| `main` | `:latest` | `:cron-latest` | Production |
+
+Pull requests to `main` must pass the configured checks. Publishing an image does not automatically redeploy TrueNAS.
+
+## Release Checklist
+
+1. Confirm the linked GitHub issue and expected behavior.
+2. Verify CI and relevant local tests.
+3. Review migrations and backup requirements.
+4. Deploy to staging and complete the affected workflow.
+5. Review web, cron, and database logs without copying secrets into GitHub.
+6. Merge through protected `main`.
+7. Pull and redeploy production manually.
+8. Run a focused production smoke test with non-sensitive data.
+9. Confirm scheduled jobs and backups remain healthy.
+
+## Incident Notes
+
+Store operational incident details in an access-controlled system. A public GitHub issue may contain a sanitized summary, reproduction steps, affected version, and resolution, but must not contain credentials, customer data, private infrastructure details, or full production logs.

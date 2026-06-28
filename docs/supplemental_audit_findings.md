@@ -1,4 +1,6 @@
 # PROJECT ALPHA — SUPPLEMENTAL AUDIT FINDINGS
+
+> **Historical audit record.** These findings were captured on June 16 before the current multi-stage Docker and unified schema work. Do not assume a finding remains open; reproduce it against the current branch and create a GitHub Issue when still applicable.
 ## Discovered after subagent dispatch (2026-06-16)
 
 ---

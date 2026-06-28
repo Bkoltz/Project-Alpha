@@ -1,32 +1,19 @@
-# Settings Overview:
-- The settings as different tabs for the user to customize the appilcation to fit their needs.
+# Settings Overview
 
-### System
-- The user can enter their company name, logo, and user information which will show on all the documents in the *From* section.
-- The user can also enter in a email SMTP info so the system can emails automatically or on-demand. 
+Configure Project Alpha before sending documents or accepting payments.
 
-### Terms and conditions
-- The user can enter their terms and conditions for each document type if they are different.
-- The user can also specify the *Documents valid for* which will be displayed on the documents (also used in corn).
+| Area | Examples |
+|---|---|
+| System | Organization identity, public application URL, timezone, sender profile |
+| Billing | Stripe credentials, net terms, payment methods, surcharge options |
+| Email | SMTP server, encrypted password, sender name and address |
+| Terms | Document terms and validity period |
+| Documents | Custom fields, templates, quote auto-creation behavior |
+| Notifications | Cron enablement, due reminders, overdue reminders, invoice-on-generation email |
+| Permissions | Roles, permission assignments, and per-user overrides |
+| Taxes | Tax rates and jurisdiction imports |
+| Links | Public-link lifetime and external storage integrations |
 
-### Billing
-- Here the user can specify the *Net Days* which sets the auto due date on invoices. Default 30 days.
-- Payment methods can be modified, added, and removed based on the users needs.
+Credentials saved through supported settings are encrypted before database storage. The application encryption key is held in the persistent configuration volume; protect and back it up separately.
 
-### Notifications
-- Toggle weekly brief for the admin account
-- Toggle if the admin user wants email updates on files that changed status if they changed from the public links. For example, if a client accepts a quote proposal via the public link.
-
-### Quotes
-- User can specify if they want Project-Alpha to auto create a related contract and invoice.
-- Toggle the scope of project field.
-
-### Contracts
-- Toggle on and off Scope of project field
-- Toggle a memo field.
-- Edit the signature agreement text
-
-### Invoices
-- Enable automatic invoice generation for contracts and invoices on a schedule. 
-- Toggle 7 day reminder before invoices are over due
-- Toggle weekly reminders for overdue invoices.
+Use test credentials and test emails while validating a new installation.
