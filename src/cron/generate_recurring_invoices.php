@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/recurring_billing.php';
+require_once __DIR__ . '/../utils/project_invoice_billing.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
@@ -62,6 +63,15 @@ try {
     }
 
     @error_log("$logPrefix Completed: $invoicesGenerated invoices generated across $catchUpPasses catch-up pass(es), $errors errors");
+
+    $projectInvoicesGenerated = 0;
+    try {
+        $projectInvoicesGenerated = project_invoice_generate_due_monthly($pdo, $appConfig);
+        @error_log("$logPrefix Project monthly billing generated {$projectInvoicesGenerated} project invoice(s)");
+    } catch (Throwable $e) {
+        $errors++;
+        @error_log("$logPrefix Project monthly billing failed: " . $e->getMessage());
+    }
 
     // Automatic invoice notification deliveries (due reminders & overdue weekly reminders)
     try {
@@ -234,7 +244,7 @@ try {
         @error_log("$logPrefix Notification pass error: " . $e->getMessage());
     }
 
-    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} invoice(s); {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
+    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} recurring invoice(s), {$projectInvoicesGenerated} project invoice(s); {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
 
     // Update last run timestamp in settings (legacy support)
     $configMount = '/var/www/config';

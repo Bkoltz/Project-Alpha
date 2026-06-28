@@ -498,6 +498,10 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
     require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
     exit;
 }
+if ($page === 'project/project-invoice-pdf') {
+    require_once __DIR__ . '/../src/controllers/project/project_invoice_pdf.php';
+    exit;
+}
 if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
     require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
     exit;
@@ -568,6 +572,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'project/projects-delete',
         'project/project-add-document',
         'project/project-remove-document',
+        'project/project-invoice-generate',
+        'project/project-invoice-email',
+        'project/project-invoice-payment',
         'project/projects-update-status',
         'project-notes-update',
 
@@ -807,6 +814,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'project/project-remove-document') {
         require_once __DIR__ . '/../src/controllers/project/project_remove_document.php';
+        exit;
+    }
+    if ($page === 'project/project-invoice-generate') {
+        require_once __DIR__ . '/../src/controllers/project/project_invoice_generate.php';
+        exit;
+    }
+    if ($page === 'project/project-invoice-email') {
+        require_once __DIR__ . '/../src/controllers/project/project_invoice_email.php';
+        exit;
+    }
+    if ($page === 'project/project-invoice-payment') {
+        require_once __DIR__ . '/../src/controllers/project/project_invoice_payment.php';
         exit;
     }
     if ($page === 'project/projects-update-status') {

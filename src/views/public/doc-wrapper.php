@@ -525,6 +525,8 @@ if ($type === 'invoice') {
           : __DIR__ . '/../pages/contract/contract-details.php';
       } elseif ($type === 'invoice') {
         require __DIR__ . '/../pages/invoice/invoice-details.php';
+      } elseif ($type === 'project_invoice') {
+        require __DIR__ . '/../pages/project/project-invoice-details.php';
       }
     ?>
   </div>

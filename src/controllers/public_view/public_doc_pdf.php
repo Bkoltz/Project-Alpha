@@ -43,12 +43,13 @@ try {
 
     $type = (string)$row['document_type'];
     $id = (int)$row['document_id'];
-    if (!in_array($type, ['quote', 'contract', 'invoice'], true) || $id <= 0) {
+    if (!in_array($type, ['quote', 'contract', 'invoice', 'project_invoice'], true) || $id <= 0) {
         throw new Exception('Invalid document');
     }
 
-    if (!empty($row['expire_when_paid']) && $type === 'invoice') {
-        $inv = $pdo->prepare('SELECT status FROM invoices WHERE id=? LIMIT 1');
+    if (!empty($row['expire_when_paid']) && in_array($type, ['invoice', 'project_invoice'], true)) {
+        $table = $type === 'project_invoice' ? 'project_invoices' : 'invoices';
+        $inv = $pdo->prepare("SELECT status FROM {$table} WHERE id=? LIMIT 1");
         $inv->execute([$id]);
         $status = strtolower((string)($inv->fetchColumn() ?: ''));
         if (in_array($status, ['paid', 'void'], true)) {
@@ -68,6 +69,10 @@ try {
     } elseif ($type === 'contract') {
         require __DIR__ . '/../contract/contract_pdf.php';
     } else {
+        if ($type === 'project_invoice') {
+            require __DIR__ . '/../project/project_invoice_pdf.php';
+            exit;
+        }
         require __DIR__ . '/../invoice/invoice_pdf.php';
     }
 } catch (Throwable $e) {

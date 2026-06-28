@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'projects', $projectId);
@@ -40,9 +41,60 @@ $stmt->execute([$projectId]);
 $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch associated invoices
-$stmt = $pdo->prepare('SELECT id, doc_number, status, total, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC');
+$stmt = $pdo->prepare('SELECT id, doc_number, status, total, amount_paid, balance_due, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC');
 $stmt->execute([$projectId]);
 $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$invoiceStats = [
+    'paid_count' => 0,
+    'unpaid_count' => 0,
+    'paid_total' => 0.0,
+    'unpaid_total' => 0.0,
+];
+foreach ($invoices as $invoice) {
+    $total = (float)($invoice['total'] ?? 0);
+    $balanceDue = array_key_exists('balance_due', $invoice) && $invoice['balance_due'] !== null
+        ? (float)$invoice['balance_due']
+        : max(0.0, $total - (float)($invoice['amount_paid'] ?? 0));
+    if (($invoice['status'] ?? '') === 'paid') {
+        $invoiceStats['paid_count']++;
+        $invoiceStats['paid_total'] += $total;
+    } elseif (!in_array(($invoice['status'] ?? ''), ['void', 'cancelled'], true)) {
+        $invoiceStats['unpaid_count']++;
+        $invoiceStats['unpaid_total'] += $balanceDue;
+    }
+}
+
+$stmt = $pdo->prepare('
+    SELECT pi.*, COUNT(pii.id) AS child_count
+    FROM project_invoices pi
+    LEFT JOIN project_invoice_items pii ON pii.project_invoice_id = pi.id
+    WHERE pi.project_id = ?
+    GROUP BY pi.id
+    ORDER BY pi.billing_period_end DESC, pi.id DESC
+');
+$stmt->execute([$projectId]);
+$projectInvoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$projectClientsSendSelect = project_invoice_table_has_column($pdo, 'project_clients', 'send_project_invoices')
+    ? 'pc.send_project_invoices'
+    : '1 AS send_project_invoices';
+$stmt = $pdo->prepare("
+    SELECT c.id, c.name, c.email, pc.is_primary_billing, {$projectClientsSendSelect}
+    FROM project_clients pc
+    JOIN clients c ON c.id = pc.client_id
+    WHERE pc.project_id = ?
+    ORDER BY pc.is_primary_billing DESC, pc.sort_order ASC, c.name ASC
+");
+$stmt->execute([$projectId]);
+$projectClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$allClients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$selectedProjectClientIds = array_map(static fn($row) => (int)$row['id'], $projectClients);
+$selectedProjectInvoiceRecipientIds = array_map(
+    static fn($row) => (int)$row['id'],
+    array_values(array_filter($projectClients, static fn($row) => !empty($row['send_project_invoices'])))
+);
 
 // Fetch associated form documents
 $stmt = $pdo->prepare('
@@ -89,6 +141,10 @@ $statusColors = [
 ];
 
 $currentStatus = $statusColors[$project['status']] ?? $statusColors['not_started'];
+$autoEmailEnabled = !array_key_exists('project_invoice_auto_email', $project) || !empty($project['project_invoice_auto_email']);
+$lastProjectInvoice = $projectInvoices[0] ?? null;
+$monthlyBilling = ($project['invoice_billing_period'] ?? 'per_invoice') === 'monthly';
+$nextBillingLabel = $monthlyBilling ? date('M j, Y', strtotime('first day of next month')) : 'Per invoice';
 
 ?>
 
@@ -123,35 +179,48 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
 };
 ?>
 
-<div style="max-width:1400px;margin:0 auto;padding:24px">
+<style>
+.project-page{max-width:1440px;margin:0 auto;padding:24px}.project-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}.project-main,.project-sidebar{min-width:0}.project-panel{background:#fff;border:1px solid #dfe3e8;border-radius:8px;padding:20px;margin-bottom:18px;box-shadow:0 1px 2px rgba(15,23,42,.04)}.project-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.project-header h1{margin:0 0 6px;font-size:26px;line-height:1.2}.project-subtitle{color:var(--muted);font-size:13px}.project-status{display:inline-flex;align-items:center;padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap}.project-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px;padding-top:18px;margin-top:18px;border-top:1px solid #e5e7eb}.project-fact-label{font-size:12px;color:var(--muted);margin-bottom:3px}.project-fact-value{font-size:14px;font-weight:600}.project-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid #dfe3e8;border-radius:8px;background:#fff;margin-bottom:18px;overflow:hidden}.project-metric{padding:15px 16px;border-right:1px solid #e5e7eb}.project-metric:last-child{border-right:0}.project-metric-label{font-size:12px;color:var(--muted)}.project-metric-value{font-size:22px;font-weight:750;line-height:1.25;margin-top:2px}.project-metric-note{font-size:12px;margin-top:2px}.project-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.project-section-head h2{font-size:18px;margin:0}.project-doc-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 12px;border:1px solid #e5e7eb;border-radius:6px;background:#fafbfc;text-decoration:none;color:inherit}.project-doc-row:hover{border-color:#c9d1d9;background:#fff}.project-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.project-actions .btn{display:flex;align-items:center;justify-content:center;text-align:center;min-height:38px}.project-actions .project-action-wide{grid-column:1/-1}.project-field{display:grid;gap:5px}.project-field>span,.project-field>div:first-child{font-size:13px;font-weight:600}.project-field input,.project-field select,.project-field textarea{width:100%;padding:9px 10px;border:1px solid #cfd5dc;border-radius:6px;background:#fff}.project-field small{color:var(--muted);font-size:12px;line-height:1.4}.project-check-list{display:grid;gap:7px;padding:10px;border:1px solid #dfe3e8;border-radius:6px;max-height:180px;overflow:auto}.project-check{display:flex;align-items:flex-start;gap:8px;font-size:13px}.project-check input{width:auto;margin-top:2px}.project-sidebar-title{font-size:15px;font-weight:700;margin-bottom:12px}.project-muted{color:var(--muted);font-size:13px}.project-danger{border-color:#fecaca;background:#fffafa}.project-danger .project-sidebar-title{color:#991b1b}@media(max-width:1050px){.project-layout{grid-template-columns:1fr}.project-sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.project-sidebar>.project-panel{margin:0}.project-sidebar>.project-panel:nth-child(3),.project-sidebar>.project-panel:nth-child(4){grid-column:1/-1}}@media(max-width:760px){.site-shell{display:block!important}.main-content{width:100%!important;min-width:0!important}.project-page{width:100%;padding:16px}.project-header{display:grid}.project-facts{grid-template-columns:1fr}.project-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.project-metric{border-bottom:1px solid #e5e7eb}.project-metric:nth-child(2n){border-right:0}.project-metric:last-child{grid-column:1/-1;border-bottom:0}.project-sidebar{display:block}.project-sidebar>.project-panel{margin-bottom:16px}.project-actions{grid-template-columns:1fr}.project-actions .project-action-wide{grid-column:auto}.project-doc-row{align-items:flex-start;flex-direction:column}.project-doc-row>div:last-child{width:100%;justify-content:space-between}}
+</style>
+
+<div class="project-page">
     <div style="margin-bottom:24px">
         <a href="/?page=project/projects-list" style="color:var(--nav-accent);text-decoration:none;font-size:14px">
             ← Back to Projects
         </a>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 350px;gap:24px;align-items:start">
+    <div class="project-layout">
         <!-- Main Content -->
-        <div>
+        <div class="project-main">
             <!-- Project Header -->
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:24px">
-                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:16px">
+            <div class="project-panel">
+                <div class="project-header">
                     <div>
                         <h1 style="margin:0 0 8px 0;font-size:28px"><?php echo htmlspecialchars($project['name']); ?></h1>
-                        <div style="font-size:14px;color:var(--muted)">
+                        <div class="project-subtitle">
                             Created <?php echo date('F j, Y', strtotime($project['created_at'])); ?>
                         </div>
                     </div>
-                    <div style="padding:8px 16px;border-radius:8px;background:<?php echo $currentStatus['bg']; ?>;color:<?php echo $currentStatus['color']; ?>;font-weight:600">
+                    <div class="project-status" style="background:<?php echo $currentStatus['bg']; ?>;color:<?php echo $currentStatus['color']; ?>">
                         <?php echo $currentStatus['text']; ?>
                     </div>
                 </div>
 
-                <div style="display:grid;gap:16px;padding-top:16px;border-top:1px solid #e5e7eb">
+                <div class="project-facts">
                     <?php if ($project['client_name']): ?>
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Client</div>
                         <div class="font-600"><?php echo htmlspecialchars($project['client_name']); ?></div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($projectClients)): ?>
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Project Clients</div>
+                        <div class="font-600">
+                            <?php echo htmlspecialchars(implode(', ', array_map(static fn($c) => $c['name'] . (!empty($c['is_primary_billing']) ? ' (primary)' : ''), $projectClients))); ?>
+                        </div>
                     </div>
                     <?php endif; ?>
 
@@ -202,9 +271,66 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
                 </div>
             </div>
 
+            <div class="project-metrics">
+                <div class="project-metric">
+                    <div class="project-metric-label">Quotes</div>
+                    <div class="project-metric-value"><?php echo count($quotes); ?></div>
+                </div>
+                <div class="project-metric">
+                    <div class="project-metric-label">Contracts</div>
+                    <div class="project-metric-value"><?php echo count($contracts); ?></div>
+                </div>
+                <div class="project-metric">
+                    <div class="project-metric-label">Paid Invoices</div>
+                    <div class="project-metric-value"><?php echo (int)$invoiceStats['paid_count']; ?></div>
+                    <div class="project-metric-note" style="color:#067647">$<?php echo number_format((float)$invoiceStats['paid_total'], 2); ?></div>
+                </div>
+                <div class="project-metric">
+                    <div class="project-metric-label">Open Invoices</div>
+                    <div class="project-metric-value"><?php echo (int)$invoiceStats['unpaid_count']; ?></div>
+                    <div class="project-metric-note" style="color:#b54708">$<?php echo number_format((float)$invoiceStats['unpaid_total'], 2); ?></div>
+                </div>
+                <div class="project-metric">
+                    <div class="project-metric-label">Project Invoices</div>
+                    <div class="project-metric-value"><?php echo count($projectInvoices); ?></div>
+                </div>
+            </div>
+
+            <?php if (!empty($_GET['billing_msg'])): ?>
+                <div class="alert alert-info" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['billing_msg']); ?></div>
+            <?php endif; ?>
+
+            <?php if (!empty($projectInvoices)): ?>
+            <div class="project-panel">
+                <div class="project-section-head">
+                    <h2 style="margin:0;font-size:20px">Project Invoices</h2>
+                    <a class="btn btn-sm" href="/?page=project/project-invoices-list&project_id=<?php echo $projectId; ?>">View All</a>
+                </div>
+                <div style="display:grid;gap:10px">
+                    <?php foreach (array_slice($projectInvoices, 0, 5) as $projectInvoice): ?>
+                        <div class="project-doc-row">
+                            <div>
+                                <div class="font-600">PI-<?php echo htmlspecialchars((string)($projectInvoice['doc_number'] ?: $projectInvoice['id'])); ?></div>
+                                <div style="font-size:13px;color:var(--muted)">
+                                    <?php echo htmlspecialchars(date('M j', strtotime($projectInvoice['billing_period_start']))); ?> -
+                                    <?php echo htmlspecialchars(date('M j, Y', strtotime($projectInvoice['billing_period_end']))); ?>
+                                    · <?php echo (int)$projectInvoice['child_count']; ?> invoice(s)
+                                    · <?php echo htmlspecialchars(ucfirst((string)$projectInvoice['status'])); ?>
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:10px;align-items:center">
+                                <div style="font-weight:700">$<?php echo number_format((float)$projectInvoice['balance_due'], 2); ?> due</div>
+                                <a class="btn btn-sm" href="/?page=project/project-invoice-details&id=<?php echo (int)$projectInvoice['id']; ?>">View</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- Associated Documents Section -->
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px">
-                <h2 style="margin:0 0 16px 0;font-size:20px">Associated Documents</h2>
+            <div class="project-panel">
+                <div class="project-section-head"><h2>Associated Documents</h2></div>
 
                 <!-- Quotes -->
                 <?php if (!empty($quotes)): ?>
@@ -322,10 +448,10 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
         </div>
 
         <!-- Sidebar Actions -->
-        <div>
+        <div class="project-sidebar">
             <!-- Status Management -->
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px">
-                <div style="font-weight:600;margin-bottom:12px">Change Status</div>
+            <div class="project-panel">
+                <div class="project-sidebar-title">Change Status</div>
                 <div class="grid">
                     <?php foreach ($statusColors as $statusKey => $statusInfo): ?>
                         <?php if ($statusKey !== $project['status']): ?>
@@ -345,9 +471,27 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
             </div>
 
             <!-- Quick Actions -->
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px">
-                <div style="font-weight:600;margin-bottom:12px">Quick Actions</div>
-                <div class="grid">
+            <div class="project-panel">
+                <div class="project-sidebar-title">Billing Actions</div>
+                <div class="project-muted" style="margin-bottom:12px">
+                    <?php if ($monthlyBilling): ?>Next automatic cycle: <?php echo htmlspecialchars($nextBillingLabel); ?><?php else: ?>Monthly billing is currently disabled.<?php endif; ?>
+                </div>
+                <div class="project-actions">
+                    <form method="post" action="/?page=project/project-invoice-generate" onsubmit="return confirm('Generate a project invoice for the current month through today without emailing it?');" style="margin:0">
+                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                        <input type="hidden" name="project_id" value="<?php echo $projectId; ?>">
+                        <input type="hidden" name="period" value="current">
+                        <button type="submit" class="btn btn-sm" style="width:100%">Generate Only</button>
+                    </form>
+                    <form method="post" action="/?page=project/project-invoice-generate" onsubmit="return confirm('Generate this project invoice and email the selected default recipients?');" style="margin:0">
+                        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                        <input type="hidden" name="project_id" value="<?php echo $projectId; ?>">
+                        <input type="hidden" name="period" value="current">
+                        <input type="hidden" name="send_email" value="1">
+                        <button type="submit" class="btn btn-sm btn-success" style="width:100%">Generate &amp; Email</button>
+                    </form>
+                    <a href="/?page=project/project-invoices-list&project_id=<?php echo $projectId; ?>" class="btn btn-sm project-action-wide">View Project Invoices</a>
+                    <div class="project-sidebar-title project-action-wide" style="margin:10px 0 0">Create Document</div>
                     <a href="/?page=quote/quotes-create&project_id=<?php echo $projectId; ?>" 
                        style="display:block;padding:10px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-weight:600">
                         📄 Create Quote
@@ -363,9 +507,86 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
                 </div>
             </div>
 
+            <!-- Project Settings -->
+            <div class="project-panel">
+                <div class="project-sidebar-title">Project Billing &amp; Clients</div>
+                <form method="post" action="/?page=project/projects-update" style="display:grid;gap:10px">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="id" value="<?php echo $projectId; ?>">
+                    <label>
+                        <div style="font-size:13px;font-weight:600">Project Name</div>
+                        <input name="name" value="<?php echo htmlspecialchars($project['name']); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
+                    </label>
+                    <input type="hidden" name="organization_id" value="<?php echo (int)($project['organization_id'] ?? 0); ?>">
+                    <label>
+                        <div style="font-size:13px;font-weight:600">Primary Client</div>
+                        <select name="client_id" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
+                            <option value="">No primary client</option>
+                            <?php foreach ($allClients as $client): ?>
+                                <option value="<?php echo (int)$client['id']; ?>" <?php echo (int)($project['client_id'] ?? 0) === (int)$client['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($client['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label>
+                        <div style="font-size:13px;font-weight:600">Project Clients</div>
+                        <select name="project_client_ids[]" multiple size="5" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
+                            <?php foreach ($allClients as $client): ?>
+                                <option value="<?php echo (int)$client['id']; ?>" <?php echo in_array((int)$client['id'], $selectedProjectClientIds, true) ? 'selected' : ''; ?>><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <div class="project-field">
+                        <span>Default Invoice Recipients</span>
+                        <div class="project-check-list">
+                            <?php if (empty($projectClients)): ?>
+                                <div class="project-muted">Add project clients before choosing recipients.</div>
+                            <?php else: ?>
+                                <?php foreach ($projectClients as $client): ?>
+                                    <label class="project-check">
+                                        <input type="checkbox" name="project_invoice_email_client_ids[]" value="<?php echo (int)$client['id']; ?>" <?php echo in_array((int)$client['id'], $selectedProjectInvoiceRecipientIds, true) ? 'checked' : ''; ?> <?php echo empty($client['email']) ? 'disabled' : ''; ?>>
+                                        <span>
+                                            <?php echo htmlspecialchars($client['name']); ?><?php echo !empty($client['is_primary_billing']) ? ' (primary)' : ''; ?>
+                                            <small style="display:block"><?php echo !empty($client['email']) ? htmlspecialchars($client['email']) : 'No email address'; ?></small>
+                                        </span>
+                                    </label>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                        <small>These people receive automatic and Generate &amp; Email project invoices. You can choose different recipients when emailing an individual project invoice.</small>
+                    </div>
+                    <label>
+                        <div style="font-size:13px;font-weight:600">Billing Period</div>
+                        <select name="invoice_billing_period" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
+                            <option value="monthly" <?php echo ($project['invoice_billing_period'] ?? 'monthly') === 'monthly' ? 'selected' : ''; ?>>Monthly project billing</option>
+                            <option value="per_invoice" <?php echo ($project['invoice_billing_period'] ?? '') === 'per_invoice' ? 'selected' : ''; ?>>Each invoice on its own</option>
+                        </select>
+                    </label>
+                    <label class="project-check" style="padding:10px;border:1px solid #dfe3e8;border-radius:6px">
+                        <input type="checkbox" name="project_invoice_auto_email" value="1" <?php echo $autoEmailEnabled ? 'checked' : ''; ?>>
+                        <span>
+                            Automatically email monthly project invoices
+                            <small style="display:block">Uses the selected default recipients after the monthly invoice is generated.</small>
+                        </span>
+                    </label>
+                    <label>
+                        <div style="font-size:13px;font-weight:600">Project NET Days</div>
+                        <input type="number" min="0" step="1" name="invoice_net_terms_days" value="<?php echo htmlspecialchars((string)($project['invoice_net_terms_days'] ?? '')); ?>" placeholder="System default" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
+                    </label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                        <label><div style="font-size:13px;font-weight:600">Start</div><input type="date" name="estimated_start" value="<?php echo htmlspecialchars((string)($project['estimated_start'] ?? '')); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"></label>
+                        <label><div style="font-size:13px;font-weight:600">End</div><input type="date" name="estimated_end" value="<?php echo htmlspecialchars((string)($project['estimated_end'] ?? '')); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"></label>
+                    </div>
+                    <label>
+                        <div style="font-size:13px;font-weight:600">Notes</div>
+                        <textarea name="notes" rows="3" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"><?php echo htmlspecialchars((string)($project['notes'] ?? '')); ?></textarea>
+                    </label>
+                    <button type="submit" class="btn btn-sm">Save Project Settings</button>
+                </form>
+            </div>
+
             <!-- Attach Existing Documents -->
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px">
-                <div style="font-weight:600;margin-bottom:6px">Add Existing Document</div>
+            <div class="project-panel">
+                <div class="project-sidebar-title" style="margin-bottom:6px">Add Existing Document</div>
                 <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Available unassigned documents for this client or organization.</div>
                 <div class="grid">
                     <?php $renderDocumentAttachForm('quote', 'Quote', $availableQuotes); ?>
@@ -375,8 +596,8 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
             </div>
 
             <!-- Danger Zone -->
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
-                <div style="font-weight:600;margin-bottom:12px;color:#991b1b">Danger Zone</div>
+            <div class="project-panel project-danger">
+                <div class="project-sidebar-title">Danger Zone</div>
                 <form method="post" action="/?page=project/projects-delete" onsubmit="return confirm('Are you sure you want to delete this project?');" style="margin:0">
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                     <input type="hidden" name="id" value="<?php echo $projectId; ?>">

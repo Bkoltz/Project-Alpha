@@ -3,6 +3,8 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
+$clients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+
 // Organizations are selected via search in the form; no need to prefetch list.
 // no parent projects in this view — no need to fetch projects list
 
@@ -32,6 +34,26 @@ require_once __DIR__ . '/../../../utils/csrf.php';
         <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
 
+    <label>
+      <div>Additional Project Clients</div>
+      <select name="project_client_ids[]" multiple size="5" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+        <?php foreach ($clients as $client): ?>
+          <option value="<?php echo (int)$client['id']; ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option>
+        <?php endforeach; ?>
+      </select>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">The primary client above is included automatically. Project invoice emails go to all project clients with an email address.</div>
+    </label>
+
+    <label>
+      <div>Project Invoice Email Recipients</div>
+      <select name="project_invoice_email_client_ids[]" multiple size="5" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+        <?php foreach ($clients as $client): ?>
+          <option value="<?php echo (int)$client['id']; ?>" selected><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : ' - no email')); ?></option>
+        <?php endforeach; ?>
+      </select>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Only attached project clients with email addresses will receive project invoice emails.</div>
+    </label>
+
     <!-- Parent projects removed per spec: Projects have no parents -->
 
     <div style="display:flex;gap:8px">
@@ -57,6 +79,13 @@ require_once __DIR__ . '/../../../utils/csrf.php';
       <label>
         <div>Project NET Days</div>
         <input type="number" name="invoice_net_terms_days" min="0" step="1" placeholder="Use system default" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+      </label>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px">
+        <input type="checkbox" name="project_invoice_auto_email" value="1" checked style="margin-top:3px">
+        <span>
+          <span style="font-weight:600">Auto-email monthly project invoices</span>
+          <span style="display:block;font-size:12px;color:var(--muted)">Cron-generated project invoices are emailed to the selected project invoice recipients.</span>
+        </span>
       </label>
       <div style="font-size:13px;color:#4b5563;margin-top:8px">Monthly project billing sets invoice due dates from the end of the work month plus NET days.</div>
     </div>

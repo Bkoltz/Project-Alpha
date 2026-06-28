@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS clients (
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS projects (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    client_id INT NOT NULL,
+    client_id INT NULL,
     parent_id INT NULL,
     organization_id INT NULL,
     name VARCHAR(150) NOT NULL,
@@ -79,6 +79,21 @@ CREATE TABLE IF NOT EXISTS project_documents (
     INDEX idx_project_docs_project (project_id),
     INDEX idx_project_docs_type (document_type),
     CONSTRAINT fk_project_docs_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_clients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    client_id INT NOT NULL,
+    is_primary_billing TINYINT(1) NOT NULL DEFAULT 0,
+    send_project_invoices TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_project_client (project_id, client_id),
+    INDEX idx_project_clients_project (project_id),
+    INDEX idx_project_clients_client (client_id),
+    CONSTRAINT fk_project_clients_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_clients_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================

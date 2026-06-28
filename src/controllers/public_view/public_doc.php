@@ -58,8 +58,9 @@ try {
   $expireWhenPaid = !empty($row['expire_when_paid']);
   if ($expireWhenPaid) {
     // For expire_when_paid links, check if the invoice is paid
-    if ($row['document_type'] === 'invoice') {
-      $invCheck = $pdo->prepare('SELECT status FROM invoices WHERE id = ?');
+    if (in_array($row['document_type'], ['invoice', 'project_invoice'], true)) {
+      $table = $row['document_type'] === 'project_invoice' ? 'project_invoices' : 'invoices';
+      $invCheck = $pdo->prepare("SELECT status FROM {$table} WHERE id = ?");
       $invCheck->execute([(int)$row['document_id']]);
       $invStatus = strtolower($invCheck->fetchColumn() ?: '');
       if ($invStatus === 'paid' || $invStatus === 'void') {
@@ -118,7 +119,7 @@ try {
   // Prefer Twig template if available, otherwise include PHP view wrapper
   $twigTemplate = __DIR__ . '/../../views/public/doc-template.twig';
   $phpView = __DIR__ . '/../../views/public/doc-wrapper.php';
-  if (is_file($twigTemplate) && is_file(__DIR__ . '/../../vendor/autoload.php')) {
+  if ($type !== 'project_invoice' && is_file($twigTemplate) && is_file(__DIR__ . '/../../vendor/autoload.php')) {
     // Attempt to render Twig if installed (non-fatal)
     try {
       require_once __DIR__ . '/../../vendor/autoload.php';
