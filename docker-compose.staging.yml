@@ -14,6 +14,24 @@
 #   web : :dev      cron : :cron
 
 services:
+  migrate:
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:dev"
+    command: ["/usr/local/bin/migrate.sh"]
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: changeme_staging_pass
+      MYSQL_ROOT_PASSWORD: changeme_staging_root
+      ADMIN_PASSWORD: changeme_staging_admin
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    volumes:
+      - pa_staging_backups:/var/www/backups
+
   web:
     image: "ghcr.io/ledgetoptechnologies/project-alpha:dev"
     ports:
@@ -24,13 +42,11 @@ services:
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_staging_pass
-      MYSQL_ROOT_PASSWORD: changeme_staging_root
-      ADMIN_PASSWORD: changeme_staging_admin
       TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
       APP_ENV: staging
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/')!==false?0:1);"]
       interval: 10s
@@ -51,10 +67,11 @@ services:
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_staging_pass
-      MYSQL_ROOT_PASSWORD: changeme_staging_root
       BACKUP_RETENTION_DAYS: "5"
     depends_on:
-      db:
+      migrate:
+        condition: service_completed_successfully
+      web:
         condition: service_healthy
     restart: unless-stopped
     volumes:

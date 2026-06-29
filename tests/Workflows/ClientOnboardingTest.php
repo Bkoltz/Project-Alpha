@@ -15,10 +15,10 @@ final class ClientOnboardingTest extends TestCase
 
     public function testInvitationStoresOnlyTokenAndCodeHashes(): void
     {
-        $migration = file_get_contents($this->root . '/database/migrations/037_client_onboarding_portal.sql');
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
         $invite = file_get_contents($this->root . '/src/controllers/client/client_onboarding_invite.php');
         $utility = file_get_contents($this->root . '/src/utils/client_onboarding.php');
-        self::assertStringContainsString('token_hash CHAR(64)', (string)$migration);
+        self::assertStringContainsString('token_hash CHAR(64)', (string)$baseline);
         self::assertStringContainsString("hash('sha256', \$token)", (string)$invite);
         self::assertStringContainsString('password_hash($code, PASSWORD_DEFAULT)', (string)$utility);
     }

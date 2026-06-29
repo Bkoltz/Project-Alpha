@@ -50,9 +50,11 @@ Read [docs/AGENTS.md](docs/AGENTS.md) before making structural changes and [docs
 
 Every schema change must include:
 
-1. An idempotent forward migration in `database/migrations/`
-2. The same final schema in `database/init.sql`
+1. The next contiguous migration in `database/migrations/` using `0001_description.sql`
+2. An immutable checksum after the migration ships
 3. Safe defaults or nullable columns for existing installations
-4. Verification against staging before production deployment
+4. Fresh-install and upgrade verification against staging
+
+Do not edit `database/baseline.sql` for an ordinary schema change. A new baseline is a separately planned breaking release.
 
 Do not edit a live production database manually.

@@ -40,7 +40,7 @@ The following files document earlier implementation passes, audits, or plans. Th
 - [Production Readiness Assessment - June 21, 2026](pa-production-readiness-assessment.md)
 - [CI/CD Next Steps - June 23, 2026](CI-CD-NEXT-STEPS.md)
 
-When a historical record conflicts with the application, current source code, `database/init.sql`, active migrations, Docker files, and the current guides above take precedence.
+When a historical record conflicts with the application, current source code, `database/baseline.sql`, active migrations, Docker files, and the current guides above take precedence.
 
 ## Documentation Rules
 

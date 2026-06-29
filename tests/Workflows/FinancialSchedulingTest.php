@@ -15,9 +15,9 @@ final class FinancialSchedulingTest extends TestCase
 
     public function testScheduleSchemaSupportsAuditAndExpenseReports(): void
     {
-        $migration = file_get_contents($this->root . '/database/migrations/036_scheduled_financial_reports.sql');
-        self::assertStringContainsString('report_type', (string)$migration);
-        self::assertStringContainsString('filters JSON', (string)$migration);
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        self::assertStringContainsString('report_type', (string)$baseline);
+        self::assertStringContainsString('filters JSON', (string)$baseline);
     }
 
     public function testScheduleHandlerScopesMutationsToActiveOrganization(): void

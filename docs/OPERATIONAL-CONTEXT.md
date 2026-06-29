@@ -19,7 +19,7 @@ Do not add real hostnames, private IP addresses, passwords, tokens, or remote-ac
 ## Production Data Rules
 
 1. Every schema change requires an idempotent migration in `database/migrations/`.
-2. Update `database/init.sql` to match the final schema for fresh installations.
+2. Add the next immutable sequential file under `database/migrations/`; do not rewrite the 0.5.0 baseline.
 3. Use safe defaults or nullable columns for existing data.
 4. Test migrations against staging before production.
 5. Take and verify a restorable backup before deployment.

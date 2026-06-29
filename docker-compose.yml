@@ -13,10 +13,9 @@
 #   cron: ghcr.io/ledgetoptechnologies/project-alpha:cron-latest
 
 services:
-  web:
+  migrate:
     image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
-    ports:
-      - "1627:80"
+    command: ["/usr/local/bin/migrate.sh"]
     environment:
       DB_HOST: db
       DB_PORT: 3306
@@ -25,13 +24,30 @@ services:
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
       ADMIN_PASSWORD: changeme_admin_pass
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    volumes:
+      - pa_backups:/var/www/backups
+
+  web:
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
+    ports:
+      - "${PROJECT_ALPHA_PORT:-1627}:80"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: changeme_secure_pass
       APP_ENV: production
       AUTOPAY_BETA_ENABLED: "false"
       BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
       TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/')!==false?0:1);"]
       interval: 10s
@@ -52,13 +68,14 @@ services:
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_secure_pass
-      MYSQL_ROOT_PASSWORD: changeme_root_pass
       BACKUP_RETENTION_DAYS: "10"
       APP_ENV: production
       AUTOPAY_BETA_ENABLED: "false"
       BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
     depends_on:
-      db:
+      migrate:
+        condition: service_completed_successfully
+      web:
         condition: service_healthy
     restart: unless-stopped
     volumes:

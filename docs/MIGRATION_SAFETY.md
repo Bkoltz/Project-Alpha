@@ -1,39 +1,23 @@
 # Migration Safety
 
-Project Alpha initializes fresh databases from `database/init.sql` and upgrades existing databases with tracked files in `database/migrations/`.
+Project Alpha 0.5.0 initializes empty databases from `database/baseline.sql`. It does not recognize or upgrade pre-0.5.0 databases.
 
-## Choose the Correct Path
+Future schema changes are immutable files in `database/migrations/`. The runner enforces contiguous four-digit versions, filenames, checksums, backup success, and post-migration schema health. Any failure exits nonzero and prevents web and cron startup.
 
-- **Fresh disposable environment:** recreate volumes and verify `init.sql` produces the current schema.
-- **Environment with data:** keep the database, run pending migrations, and verify a backup first.
+## Before a Future Deployment
 
-Never destroy a production volume to apply a schema update.
-
-## Before Deployment
-
-1. Add an idempotent forward migration.
-2. Update `database/init.sql` to the same final state.
-3. Use safe defaults or nullable columns for existing rows.
+1. Add the next sequential forward migration.
+2. Use safe defaults or nullable columns for existing rows.
+3. Run PHPUnit against MySQL.
 4. Run the migration dry run.
-5. Test an upgrade using a representative staging backup.
-6. Verify application and ACL health checks.
+5. Test the upgrade using staging data.
+6. Restore the generated backup into a separate environment.
 
 ```bash
-docker compose exec -T web \
+docker compose run --rm migrate \
   php /var/www/src/migrations/run_migrations.php --dry-run --verbose
-
-docker compose exec -T web \
-  php /var/www/src/migrations/run_migrations.php --verbose
 ```
 
-The runner attempts a compressed pre-migration backup under `/var/www/backups/pre-migration/`. Backup failure is non-fatal, so read the output rather than assuming success.
+Never rewrite an applied migration or bypass a failed migrator by manually starting web or cron. Restore, correct the forward migration, and validate again.
 
-## Failure Recovery
-
-- A failed migration is not recorded as applied and is retried later.
-- MySQL DDL may auto-commit; do not assume transactional rollback.
-- `SKIP_MIGRATIONS_ON_BOOT=true` is an emergency startup valve, not a permanent setting.
-- Fix forward when a migration has shipped; do not silently rewrite its history.
-- Restore to a separate environment before replacing the affected database.
-
-See [Database Migrations](../database/migrations/README.md).
+For the breaking 0.5.0 transition, follow [0.5.0 Database Reset](0.5.0-database-reset.md).

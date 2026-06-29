@@ -29,7 +29,7 @@ composer install
 composer test
 
 # Validate pending migrations without applying them
-docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web \
+docker compose -f docker-compose.yml -f docker-compose.override.yml run --rm migrate \
   php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 
@@ -51,7 +51,7 @@ Allowed values are `regular`, `long_term`, and `on_demand`. Do not recreate lega
 
 Every schema change must update both:
 
-1. `database/init.sql` for fresh installs
+1. `database/baseline.sql` for fresh installs
 2. A new idempotent file in `database/migrations/` for existing databases
 
 Use nullable columns or safe defaults. Test fresh installation and upgrade paths. Rollback files must end in `_rollback.sql`; the migration runner excludes them from automatic execution.

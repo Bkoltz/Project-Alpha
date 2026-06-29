@@ -19,7 +19,7 @@ Users manage 2FA from their account page. Setup displays an authenticator URI or
 - `src/views/pages/auth/two_factor_verify.php`
 - `src/utils/two_factor_auth.php`
 
-The current schema is defined in `database/init.sql` and active migrations. Do not apply obsolete standalone 2FA migration instructions.
+The schema begins at `database/baseline.sql` and advances through active migrations. Do not apply obsolete standalone 2FA migration instructions.
 
 ## Security Requirements
 

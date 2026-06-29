@@ -14,5 +14,8 @@
         <testsuite name="Workflows">
             <directory>tests/Workflows</directory>
         </testsuite>
+        <testsuite name="Database">
+            <directory>tests/Database</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

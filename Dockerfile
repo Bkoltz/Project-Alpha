@@ -22,6 +22,14 @@ RUN composer install \
     --no-interaction \
     --optimize-autoloader
 
+# Development/test dependencies are isolated from production images.
+FROM vendor AS vendor-dev
+RUN composer install \
+    --prefer-dist \
+    --no-progress \
+    --no-interaction \
+    --optimize-autoloader
+
 # ---------- Stage 2: Runtime image ----------
 FROM php:8.5-apache AS web
 ARG APP_VERSION=dev
@@ -69,12 +77,8 @@ COPY php.ini /usr/local/etc/php/conf.d/php.ini
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/
 
-# Copy database initialization and migration files into the image
-# The init.sql is the single source of truth with all modules concatenated
-COPY ./database/init.sql /usr/local/share/app-migrations/init.sql
-COPY ./database/init.sql /docker-entrypoint-initdb.d/01-init.sql
-# Copy individual migration files so the migration runner can apply them
-# to existing databases (init.sql only runs on fresh DBs)
+# Copy the destructive 0.5.0 baseline and immutable forward migrations.
+COPY ./database/baseline.sql /usr/local/share/app-migrations/baseline.sql
 COPY ./database/migrations/ /var/www/database/migrations/
 
 # Copy Composer vendor from the builder stage
@@ -98,11 +102,23 @@ RUN mkdir -p /var/log && \
 # Entry script
 WORKDIR /var/www
 COPY ./docker/start.sh /usr/local/bin/start.sh
+COPY ./docker/migrate.sh /usr/local/bin/migrate.sh
 # Normalize Windows CRLF to LF to avoid "env: 'bash\r'" errors
-RUN sed -i 's/\r$//' /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
+RUN sed -i 's/\r$//' /usr/local/bin/start.sh /usr/local/bin/migrate.sh \
+    && chmod +x /usr/local/bin/start.sh /usr/local/bin/migrate.sh
 
 EXPOSE 80
 CMD ["start.sh"]
+
+# Local/CI target: production-equivalent web runtime plus PHPUnit and tests.
+FROM web AS test
+COPY --from=vendor-dev /app/vendor /var/www/vendor
+COPY ./tests/ /var/www/tests/
+COPY ./phpunit.xml /var/www/phpunit.xml
+COPY ./database/ /var/www/database/
+COPY ./public/ /var/www/public/
+COPY ./cron/ /var/www/cron/
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/phpunit.xml
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
@@ -121,10 +137,14 @@ WORKDIR /var/www
 COPY --from=vendor /app/vendor /var/www/vendor
 COPY ./src/ /var/www/src/
 COPY ./database/migrations/ /var/www/database/migrations/
+COPY ./database/baseline.sql /usr/local/share/app-migrations/baseline.sql
+COPY ./docker/migrate.sh /usr/local/bin/migrate.sh
 RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
     && mkdir -p /var/www/config/logs/cron /var/www/backups \
     && chown -R root:root /var/www \
-    && chmod -R 755 /var/www
+    && chmod -R 755 /var/www \
+    && sed -i 's/\r$//' /usr/local/bin/migrate.sh \
+    && chmod +x /usr/local/bin/migrate.sh
 
 RUN mkdir -p /var/log/cron && \
     touch /var/log/cron/generate_recurring_invoices.log \

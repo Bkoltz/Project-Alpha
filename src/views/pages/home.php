@@ -233,7 +233,7 @@ if ($disk_total !== false && $disk_total > 0) {
   <?php if (isset($db_error) && $db_error): ?>
     <div class="alert alert-warning">
       <strong>Database Not Initialized</strong> — the database tables haven't been created yet.
-      Initialize with <code>database/init.sql</code> or run the active module files in <code>database/migrations</code>.
+      Initialize with <code>database/baseline.sql</code>; later schema changes use sequential files in <code>database/migrations</code>.
     </div>
   <?php endif; ?>
 
@@ -334,24 +334,24 @@ if ($disk_total !== false && $disk_total > 0) {
     </div>
     <div class="dash-finance-snapshot__metrics">
       <div class="dash-finance-snapshot__metric">
-        <span>Income</span>
-        <strong>$<?php echo number_format($income_30, 2); ?></strong>
+        <span style="padding-left: 5px;">Income</span>
+        <strong style="padding-left: 5px;">$<?php echo number_format($income_30, 2); ?></strong>
       </div>
       <div class="dash-finance-snapshot__metric">
-        <span>Expenses</span>
-        <strong>$<?php echo number_format($expenses_30, 2); ?></strong>
+        <span style="padding-left: 5px;">Expenses</span>
+        <strong style="padding-left: 5px;">$<?php echo number_format($expenses_30, 2); ?></strong>
       </div>
       <div class="dash-finance-snapshot__metric">
-        <span>Net</span>
-        <strong class="<?php echo $net_30 < 0 ? 'danger' : 'success'; ?>"><?php echo $net_30 < 0 ? '-$' . number_format(abs($net_30), 2) : '$' . number_format($net_30, 2); ?></strong>
+        <span style="padding-left: 5px;">Net</span>
+        <strong  style="padding-left: 5px;" class="<?php echo $net_30 < 0 ? 'danger' : 'success'; ?>"><?php echo $net_30 < 0 ? '-$' . number_format(abs($net_30), 2) : '$' . number_format($net_30, 2); ?></strong>
       </div>
       <div class="dash-finance-snapshot__metric">
-        <span>Overdue invoices</span>
-        <strong><?php echo number_format($overdue_invoices); ?></strong>
+        <span style="padding-left: 5px;">Overdue invoices</span>
+        <strong style="padding-left: 5px;"><?php echo number_format($overdue_invoices); ?></strong>
       </div>
       <div class="dash-finance-snapshot__metric">
-        <span>Receipts</span>
-        <strong><?php echo number_format($receipts_30); ?></strong>
+        <span style="padding-left: 5px;">Receipts</span>
+        <strong style="padding-left: 5px;"><?php echo number_format($receipts_30); ?></strong>
       </div>
     </div>
   </div>

@@ -60,12 +60,7 @@ jobs:
             "find /var/www/src -name '*.php' -exec php -l {} \\; 2>&1 | grep -v 'No syntax errors' && exit 1 || exit 0"
 
       - name: PHPUnit
-        run: |
-          set +e
-          docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web vendor/bin/phpunit --colors=always
-          rc=$?
-          set -e
-          if [ $rc -ne 0 ] && [ -f vendor/bin/phpunit ]; then exit $rc; fi
+        run: docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web vendor/bin/phpunit --colors=always
 
       - name: Dump logs on failure
         if: failure()

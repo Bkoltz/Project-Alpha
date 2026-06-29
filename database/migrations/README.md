@@ -1,56 +1,35 @@
 # Project Alpha Database Migrations
 
-Project Alpha maintains two schema paths:
+Project Alpha 0.5.0 starts from the immutable `database/baseline.sql` schema. The baseline inserts version `0` into `schema_migrations`; this directory contains only later, forward-only changes.
 
-- `database/init.sql` is the complete current schema for a fresh database.
-- Numbered SQL files in `database/migrations/` upgrade existing databases.
+## File Contract
 
-The `deprecated/` directory is retained only for historical reference and is not part of the active migration path.
+- Name files `0001_description.sql`, `0002_description.sql`, and so on.
+- Versions must begin at `0001` and remain contiguous and unique.
+- Never edit or remove a migration after it ships. Stored SHA-256 checksums are enforced.
+- Rollback files, `DELIMITER` blocks, gaps, malformed names, and empty files are rejected.
+- Do not copy historical pre-0.5.0 SQL back into this directory.
 
-## Startup Behavior
+## Execution Contract
 
-The web container entrypoint:
+The one-shot Compose `migrate` service:
 
-1. Waits for MySQL.
-2. Loads `database/init.sql` when the primary document schema is missing.
-3. Ensures the initial administrator and default organization membership exist.
-4. Runs `src/migrations/run_migrations.php`.
-5. Starts Apache even when some migration failures are reported, so operators must inspect logs.
+1. Refuses to modify a non-empty database without the 0.5.0 baseline marker.
+2. Loads `database/baseline.sql` only into an empty database.
+3. Validates migration sequence and applied checksums.
+4. Requires a successful compressed backup before applying pending migrations.
+5. Applies pending migrations and validates critical schema invariants.
+6. Reconciles the Compose administrator password without logging it or its hash.
 
-The runner records successful files and checksums in `schema_migrations`. Failed migrations are not marked as applied and are retried on a later run.
-
-## Creating a Migration
-
-1. Choose the next unused numeric prefix.
-2. Use a descriptive filename such as `033_add_invoice_delivery_state.sql`.
-3. Make forward operations idempotent where MySQL permits.
-4. Use nullable columns or safe defaults for existing rows.
-5. Update `database/init.sql` to represent the same final schema.
-6. Add or update tests and documentation.
-
-Rollback scripts must end in `_rollback.sql`; automatic migration discovery excludes them.
+Web and cron depend on successful completion of this service.
 
 ## Validation
 
 ```bash
-# List pending migrations without applying them
-docker compose exec -T web \
-  php /var/www/src/migrations/run_migrations.php --dry-run --verbose
+php src/migrations/run_migrations.php --validate-files
 
-# Apply pending migrations manually
-docker compose exec -T web \
-  php /var/www/src/migrations/run_migrations.php --verbose
+docker compose run --rm migrate \
+  php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 
-Before applying pending files, the runner attempts a compressed MySQL backup in `/var/www/backups/pre-migration/`. Backup failure is logged but does not stop migration execution.
-
-## Production Rules
-
-- Test a fresh install and an upgrade from a representative staging backup.
-- Verify the pre-migration backup can be restored.
-- Do not modify live tables manually as a normal deployment step.
-- Do not delete or rewrite a migration that has already shipped.
-- Avoid destructive drop/rename changes in the same release that introduces replacements.
-- Review the post-migration ACL health check and container logs.
-
-Set `SKIP_MIGRATIONS_ON_BOOT=true` only as a temporary recovery measure while diagnosing a failed migration.
+Fix forward after a migration ships. MySQL DDL can auto-commit, so a failed change may require restoring the required pre-migration backup before deploying a corrected migration.

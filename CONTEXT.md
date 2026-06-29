@@ -33,7 +33,7 @@ Tests and migration validation:
 
 ```bash
 composer test
-docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web \
+docker compose -f docker-compose.yml -f docker-compose.override.yml run --rm migrate \
   php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 
@@ -42,7 +42,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web 
 Use these in order when documentation conflicts:
 
 1. Current application code and Docker files
-2. `database/init.sql` for fresh installs
+2. `database/baseline.sql` for fresh installs
 3. Active SQL files in `database/migrations/` for upgrades
 4. `docs/DOCUMENT_WORKFLOW.md` for user-facing document behavior
 5. Current operating guides listed in `docs/README.md`
@@ -61,8 +61,8 @@ Point-in-time plans and audits in `docs/` are historical records, not current in
 - `src/views/pages/`: PHP page views
 - `src/views/templates/`: Twig components and layouts
 - `src/cron/`: scheduled job scripts
-- `database/init.sql`: complete current schema for a fresh database
-- `database/migrations/`: tracked upgrades for existing databases
+- `database/baseline.sql`: immutable 0.5.0 schema for a fresh database
+- `database/migrations/`: immutable, sequential upgrades after the baseline
 - `cron/`: cron image entrypoint and installed schedule
 
 ## Data Model

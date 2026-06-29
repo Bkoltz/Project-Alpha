@@ -1,12 +1,7 @@
--- Project Alpha - Database Initialization
--- Single source of truth - all modules concatenated
--- 
--- To rebuild: docker compose down -v && docker compose up --build
+-- Project Alpha 0.5.0 - Database Baseline
+-- Destructive reset baseline. Databases from 0.4.x and earlier are not
+-- upgraded in place; initialize this file only against an empty database.
 -- ============================================================================
-
-CREATE DATABASE IF NOT EXISTS project_alpha CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE project_alpha;
 
 -- ============================================================================
 -- MODULE 001: Authentication & Identity
@@ -1442,25 +1437,6 @@ CREATE TABLE IF NOT EXISTS discounts (
     INDEX idx_discounts_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- FINANCIAL RECORDS
-CREATE TABLE IF NOT EXISTS financial_records (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NULL,
-    client_id INT NULL,
-    project_id INT NULL,
-    record_type ENUM('income', 'expense', 'refund', 'adjustment') NOT NULL DEFAULT 'income',
-    amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-    description TEXT NULL,
-    transaction_date DATE NULL,
-    payment_method ENUM('cash', 'check', 'card', 'bank_transfer', 'other') NULL,
-    reference_number VARCHAR(255) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_financial_org (organization_id),
-    INDEX idx_financial_client (client_id),
-    INDEX idx_financial_type (record_type),
-    INDEX idx_financial_date (transaction_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- ============================================================================
 -- MODULE 006: Audit, Notifications & System
 -- ============================================================================
@@ -1703,28 +1679,19 @@ CREATE TABLE IF NOT EXISTS archived_entities (
     INDEX idx_arch_entities_type (entity_type, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS migrations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE schema_migrations (
+    version INT UNSIGNED NOT NULL PRIMARY KEY,
     filename VARCHAR(255) NOT NULL UNIQUE,
-    run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    checksum VARCHAR(64) NULL,
-    INDEX idx_migrations_filename (filename)
+    checksum CHAR(64) NULL,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO schema_migrations (version, filename, checksum)
+VALUES (0, 'baseline.sql', NULL);
 
 -- ============================================================================
 -- MODULE 008: Seed Data
 -- ============================================================================
-
--- DEFAULT ADMIN USER
--- Password hash will be replaced by docker/start.sh runtime
-INSERT INTO users (email, password_hash, username, role, force_password_reset)
-VALUES ('admin@project-alpha.local', '{{ADMIN_PASSWORD_HASH}}', 'admin', 'admin', 0)
-ON DUPLICATE KEY UPDATE email = VALUES(email);
-
--- LINK ADMIN TO DEFAULT ORGANIZATION
-INSERT INTO user_organizations (user_id, organization_id, role, is_default)
-VALUES (1, 1, 'owner', 1)
-ON DUPLICATE KEY UPDATE role = VALUES(role), is_default = VALUES(is_default);
 
 -- DEFAULT APP CONFIG
 INSERT INTO app_config (config_key, config_value) VALUES

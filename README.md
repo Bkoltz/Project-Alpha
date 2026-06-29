@@ -96,7 +96,7 @@ Current boundaries include:
    - **Documents**: terms, custom fields, automatic document creation, and link lifetime
    - **Notifications**: cron and invoice-email options
 
-The web container initializes a fresh database and runs pending migrations during startup. Do not run deprecated migration files manually.
+The one-shot `migrate` service initializes and validates the database before web or cron can start. Project Alpha 0.5.0 is a destructive database reset and cannot upgrade a 0.4.x database in place; follow the [0.5.0 reset runbook](docs/0.5.0-database-reset.md).
 
 ### Staging
 
@@ -120,7 +120,7 @@ Useful checks:
 ```bash
 composer install
 composer test
-docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web \
+docker compose -f docker-compose.yml -f docker-compose.override.yml run --rm migrate \
   php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 
@@ -140,7 +140,7 @@ The production images use PHP 8.5. Composer currently targets PHP 8.3.31 for dep
 | Scheduling | Dedicated cron container |
 | Deployment | Multi-stage Docker image and Docker Compose |
 
-All HTTP requests enter through `public/index.php`. Application source is under `src/`, the fresh-install schema is `database/init.sql`, and incremental migrations live under `database/migrations/`.
+All HTTP requests enter through `public/index.php`. Application source is under `src/`, the immutable fresh-install schema is `database/baseline.sql`, and sequential forward migrations live under `database/migrations/`.
 
 ## Scheduled Operations
 
