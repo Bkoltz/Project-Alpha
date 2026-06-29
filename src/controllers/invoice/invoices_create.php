@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 
 $__orgId = get_active_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -18,6 +19,8 @@ $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent'
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
+$invoiceAction = (string)($_POST['invoice_action'] ?? 'draft');
+$finalizeAndSend = $invoiceAction === 'finalize_send';
 $due_date = $_POST['due_date'] ?? null;
 if (!$due_date || trim($due_date) === '') {
     $due_date = project_invoice_due_date($pdo, $project_id, $appConfig);
@@ -77,8 +80,11 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 $pdo->beginTransaction();
 try {
     $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
+    $stmt->execute([$client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'draft', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
     $invoice_id = (int)$pdo->lastInsertId();
+    if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
+        $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
+    }
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);
     $pdo->prepare('UPDATE invoices SET project_code=? WHERE id=?')->execute([$projectCode, $invoice_id]);
@@ -123,32 +129,15 @@ try {
     exit;
 }
 
-// Notify client that an invoice has been created (best-effort; don't fail creation)
-try {
-    $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
-    $clientStmt->execute([$client_id]);
-    $clientRow = $clientStmt->fetch(PDO::FETCH_ASSOC);
-    if ($clientRow && !empty($clientRow['email']) && filter_var($clientRow['email'], FILTER_VALIDATE_EMAIL)) {
-        require_once __DIR__ . '/../../services/EmailService.php';
-        $docnum = '';
-        $invStmt = $pdo->prepare('SELECT doc_number, total FROM invoices WHERE id = ?');
-        $invStmt->execute([$invoice_id]);
-        $invRow = $invStmt->fetch(PDO::FETCH_ASSOC);
-        if ($invRow) {
-            $docnum = (string)($invRow['doc_number'] ?? $invoice_id);
-            $total = (float)($invRow['total'] ?? 0);
-        }
-        $clientName = trim((string)($clientRow['name'] ?? ''));
-        $firstName = $clientName !== '' ? preg_split('/\s+/', $clientName)[0] : 'there';
-        $subject = 'Invoice I-' . $docnum . ' has been created';
-        $body = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
-              . '<p>Your invoice <strong>I-' . htmlspecialchars($docnum) . '</strong> has been created for <strong>$' . number_format($total, 2) . '</strong>.</p>'
-              . '<p>Due date: ' . htmlspecialchars($due_date) . '</p>'
-              . '<p>You can log in to view and pay the invoice. Thank you!</p>';
-        EmailService::sendEmail($clientRow['email'], $subject, $body);
+if ($finalizeAndSend) {
+    try {
+        invoice_finalize($pdo, $invoice_id, $appConfig, 'manual_create', $__creator);
+        invoice_send_finalized($pdo, $invoice_id, $appConfig);
+    } catch (Throwable $e) {
+        @error_log('[invoices_create] Finalization or delivery failed: ' . $e->getMessage());
+        header('Location: /?page=invoice/invoice-details&id=' . $invoice_id . '&error=' . urlencode('Invoice saved, but finalization or email failed.'));
+        exit;
     }
-} catch (Throwable $e) {
-    @error_log('[invoices_create] Client notification email failed: ' . $e->getMessage());
 }
 
 header('Location: /?page=invoice/invoices-list&created=1');

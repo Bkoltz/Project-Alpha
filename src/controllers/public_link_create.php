@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/acl.php';
 
 header('Content-Type: application/json');
 
@@ -61,12 +62,23 @@ try {
         exit;
     }
     $table = $validTables[$type];
-    $stmt = $pdo->prepare("SELECT id, status FROM {$table} WHERE id = ?");
+    $extra = $type === 'invoice'
+        ? ', finalized_at, collection_mode'
+        : ($type === 'project_invoice' ? ', finalized_at, project_id' : '');
+    $stmt = $pdo->prepare("SELECT id, status{$extra} FROM {$table} WHERE id = ?");
     $stmt->execute([$id]);
     $doc = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$doc) {
         echo json_encode(['success' => false, 'error' => ucfirst($type) . ' not found']);
+        exit;
+    }
+
+    $ownershipTable = $type === 'project_invoice' ? 'projects' : $table;
+    $ownershipId = $type === 'project_invoice' ? (int)($doc['project_id'] ?? 0) : $id;
+    if ($ownershipId <= 0 || !can_access_record($pdo, $ownershipTable, $ownershipId, (int)($_SESSION['user']['id'] ?? 0))) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Permission denied']);
         exit;
     }
     
@@ -77,9 +89,9 @@ try {
         $blocked = true;
     } elseif ($type === 'contract' && in_array($status, ['denied', 'cancelled', 'void'], true)) {
         $blocked = true;
-    } elseif ($type === 'invoice' && $status === 'void') {
+    } elseif ($type === 'invoice' && ($status === 'draft' || $status === 'void' || empty($doc['finalized_at']) || ($doc['collection_mode'] ?? 'direct') !== 'direct')) {
         $blocked = true;
-    } elseif ($type === 'project_invoice' && $status === 'void') {
+    } elseif ($type === 'project_invoice' && ($status === 'draft' || $status === 'void' || empty($doc['finalized_at']))) {
         $blocked = true;
     }
     
@@ -151,7 +163,7 @@ try {
     }
     
     // Generate new token
-    $token = bin2hex(random_bytes(16));
+    $token = bin2hex(random_bytes(32));
     
     // Calculate expiration
     $exp = null;

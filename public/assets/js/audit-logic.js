@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function () {
+function initAuditReportPage() {
     const presetButtons = document.querySelectorAll('.preset-btn');
     const startDateInput = document.querySelector('input[name="start_date"]');
     const endDateInput = document.querySelector('input[name="end_date"]');
@@ -6,6 +6,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const schedulingOptions = document.getElementById('schedulingOptions');
     const addEmailBtn = document.getElementById('addEmailBtn');
     const emailContainer = document.getElementById('emailContainer');
+    const form = document.getElementById('auditForm');
+
+    if (!enableSchedulingCheckbox || !schedulingOptions || !addEmailBtn || !emailContainer || !form) {
+        return;
+    }
+    if (form.dataset.scheduleInitialized === '1') {
+        return;
+    }
+    form.dataset.scheduleInitialized = '1';
 
     // Handle preset date buttons
     presetButtons.forEach(button => {
@@ -43,7 +52,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // Handle email scheduling toggle
-    const form = document.getElementById('auditForm');
     enableSchedulingCheckbox.addEventListener('change', function () {
         schedulingOptions.style.display = this.checked ? 'block' : 'none';
 
@@ -51,11 +59,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (this.checked) {
             form.action = '/?page=financial/audit-schedule-handler';
             document.getElementById('formAction').value = 'create';
-            document.querySelector('button[type="submit"]').textContent = 'Save Schedule';
+            form.querySelector('button[type="submit"]').textContent = 'Save Schedule';
         } else {
             form.action = '/?page=financial/audit-export';
             document.getElementById('formAction').value = 'generate';
-            document.querySelector('button[type="submit"]').textContent = 'Generate Audit Report';
+            form.querySelector('button[type="submit"]').textContent = 'Generate Audit Report';
         }
     });
 
@@ -93,4 +101,11 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     updateAddEmailButton();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAuditReportPage);
+} else {
+    initAuditReportPage();
+}
+document.addEventListener('pageLoaded', initAuditReportPage);

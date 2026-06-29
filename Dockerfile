@@ -111,10 +111,10 @@ ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        default-mysql-client cron curl \
+        default-mysql-client cron curl zlib1g-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli
+RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli
 
 WORKDIR /var/www
 
@@ -128,11 +128,11 @@ RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
 
 RUN mkdir -p /var/log/cron && \
     touch /var/log/cron/generate_recurring_invoices.log \
-          /var/log/cron/auto_charge_recurring.log \
           /var/log/cron/send_invoice_reminders.log \
           /var/log/cron/auto_terminate_contracts.log \
           /var/log/cron/link_expiration_checker.log \
-          /var/log/cron/stripe_reconciliation.log && \
+          /var/log/cron/stripe_reconciliation.log \
+          /var/log/cron/sync_merchant_rate.log && \
     chmod 666 /var/log/cron/*.log
 
 COPY cron/crontab /etc/cron.d/project-alpha

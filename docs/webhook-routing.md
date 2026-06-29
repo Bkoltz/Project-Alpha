@@ -5,7 +5,7 @@
 | Route | Controller | Status |
 |---|---|---|
 | `/?page=stripe-webhook` | `src/controllers/webhook/stripe_webhooks.php` | Primary endpoint |
-| `/?page=stripe-webhook-legacy` | `src/controllers/stripe/stripe_webhook.php` | Compatibility endpoint |
+| `/?page=stripe-webhook-legacy` | `src/controllers/webhook/stripe_webhooks.php` | Compatibility alias to the primary endpoint |
 
 New installations should configure only the primary endpoint.
 

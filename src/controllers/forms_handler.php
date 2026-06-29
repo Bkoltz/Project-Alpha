@@ -11,6 +11,7 @@ ini_set('display_errors', '0');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/csrf.php';
 require_once __DIR__ . '/../utils/upload_validator.php';
+require_once __DIR__ . '/../utils/acl.php';
 
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
@@ -24,22 +25,8 @@ if (!csrf_validate()) {
 }
 
 try {
-    // Get current org_id (default to 1 for now, should come from session/user context)
-    $orgId = 1;
-    $userId = $_SESSION['user_id'] ?? null;
-
-    // Ensure we have a valid user ID
-    if ($userId === null) {
-        // Get first admin user or create a default one if none exists
-        $stmt = $pdo->query("SELECT id FROM users WHERE role='admin' LIMIT 1");
-        $adminUser = $stmt->fetch();
-        if ($adminUser) {
-            $userId = $adminUser['id'];
-        } else {
-            // No admin user exists, use NULL for created_by
-            $userId = null;
-        }
-    }
+    $orgId = get_active_org_id() ?: 0;
+    $userId = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
     switch ($action) {
         case 'quick_upload':

@@ -2,7 +2,7 @@
 // src/views/pages/financial/financial-dashboard.php
 require_once __DIR__ . '/../../../config/db.php';
 
-$orgId = 1;
+$orgId = (int)(function_exists('get_active_org_id') ? get_active_org_id() : ($_SESSION['active_org_id'] ?? 0));
 
 // Date range filter (default: current year)
 $defaultStartDate = date('Y') . '-01-01';
@@ -12,8 +12,8 @@ $end = !empty($_GET['end']) ? $_GET['end'] : $defaultEndDate;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start)) $start = $defaultStartDate;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) $end = $defaultEndDate;
 
-$incomeStmt = $pdo->prepare("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE status='succeeded' AND payment_date BETWEEN ? AND ?");
-$incomeStmt->execute([$start, $end]);
+$incomeStmt = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)),0) as total FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id WHERE p.status='succeeded' AND (?=0 OR COALESCE(p.organization_id,i.organization_id,0)=?) AND p.payment_date BETWEEN ? AND ?");
+$incomeStmt->execute([$orgId, $orgId, $start, $end]);
 $totalIncome = (float)$incomeStmt->fetchColumn();
 
 $expenseStmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count FROM expenses WHERE organization_id=? AND status != 'void' AND expense_date BETWEEN ? AND ?");
@@ -84,12 +84,12 @@ $statusStmt->execute([$orgId, $start, $end]);
 $statusSummary = $statusStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $incomeTrendStmt = $pdo->prepare("
-    SELECT DATE_FORMAT(payment_date, '%Y-%m') as period, COALESCE(SUM(amount),0) as total
-    FROM payments
-    WHERE status='succeeded' AND payment_date BETWEEN ? AND ?
+    SELECT DATE_FORMAT(p.payment_date, '%Y-%m') as period, COALESCE(SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)),0) as total
+    FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id
+    WHERE p.status='succeeded' AND (?=0 OR COALESCE(p.organization_id,i.organization_id,0)=?) AND p.payment_date BETWEEN ? AND ?
     GROUP BY period
 ");
-$incomeTrendStmt->execute([$start, $end]);
+$incomeTrendStmt->execute([$orgId, $orgId, $start, $end]);
 $incomeByMonth = [];
 foreach ($incomeTrendStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $incomeByMonth[$row['period']] = (float)$row['total'];

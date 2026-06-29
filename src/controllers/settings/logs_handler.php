@@ -47,21 +47,32 @@ function allowed_log_path(string $requested): ?string
     return null;
 }
 
-header('Content-Type: application/json');
-
 if (isset($_GET['file'])) {
     $path = allowed_log_path((string)$_GET['file']);
     if ($path === null) {
+        header('Content-Type: application/json');
         http_response_code(403);
         echo json_encode(['error' => 'Invalid log file path']);
         exit;
     }
 
     if (!is_file($path) || !is_readable($path)) {
+        header('Content-Type: application/json');
         http_response_code(404);
         echo json_encode(['error' => 'Log file not found']);
         exit;
     }
+
+    if (!empty($_GET['download'])) {
+        header('Content-Type: text/plain; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('Content-Length: ' . filesize($path));
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        exit;
+    }
+
+    header('Content-Type: application/json');
 
     $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     if ($lines === false) {
@@ -88,6 +99,8 @@ if (isset($_GET['file'])) {
     ]);
     exit;
 }
+
+header('Content-Type: application/json');
 
 // Default: query system_audit rows with optional filters and pagination.
 $pageNum = isset($_GET['page_num']) && is_numeric($_GET['page_num']) ? max(1, (int)$_GET['page_num']) : 1;

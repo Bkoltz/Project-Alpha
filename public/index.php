@@ -238,7 +238,7 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'payment-receipt', 'client-onboarding', 'client-onboarding-send-code', 'client-onboarding-verify', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -297,7 +297,10 @@ if (!empty($_SESSION['user'])) {
         header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
         exit;
     }
-    $_SESSION['last_activity'] = time();
+    // Passive status polling must not keep an otherwise inactive session alive.
+    if ($page !== 'session-status') {
+        $_SESSION['last_activity'] = time();
+    }
 }
 
 // Enforce force-password-reset: lock user to account page until they change it
@@ -421,6 +424,10 @@ if ($page === 'settings/logs') {
     require_once __DIR__ . '/../src/views/pages/settings/logs.php';
     exit;
 }
+if ($page === 'settings/logs-handler' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    require_once __DIR__ . '/../src/controllers/settings/logs_handler.php';
+    exit;
+}
 if ($page === 'settings/permissions') {
     require_once __DIR__ . '/../src/views/pages/settings/permissions.php';
     exit;
@@ -522,6 +529,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Settings & system
         'settings',
         'settings-backup',
+        'settings/backup-download',
         'settings/tax-rates-handler',
         'settings/tax-import-handler',
         'settings/links-handler',
@@ -622,6 +630,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'invoice/invoices-update',
         'invoices-update',
         'invoice/invoices-mark-paid',
+        'invoice/invoice-finalize',
+        'invoice/invoice-reopen',
         'invoice/email-send',
         'payments/payments-create',
 
@@ -796,6 +806,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/client/clients_create.php';
         exit;
     }
+    if ($page === 'client/onboarding-invite') {
+        require_once __DIR__ . '/../src/controllers/client/client_onboarding_invite.php';
+        exit;
+    }
+    if ($page === 'client/onboarding-review') {
+        require_once __DIR__ . '/../src/controllers/client/client_onboarding_review.php';
+        exit;
+    }
+    if ($page === 'client-onboarding-send-code') {
+        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_send_code.php';
+        exit;
+    }
+    if ($page === 'client-onboarding-verify') {
+        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_verify.php';
+        exit;
+    }
+    if ($page === 'client-onboarding-submit') {
+        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_submit.php';
+        exit;
+    }
     if ($page === 'project/projects-create') {
         require_once __DIR__ . '/../src/controllers/project/projects_create.php';
         exit;
@@ -814,6 +844,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'project/project-remove-document') {
         require_once __DIR__ . '/../src/controllers/project/project_remove_document.php';
+        exit;
+    }
+    if ($page === 'settings/backup-download') {
+        require_once __DIR__ . '/../src/controllers/settings/backup_download.php';
         exit;
     }
     if ($page === 'project/project-invoice-generate') {
@@ -906,6 +940,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'invoice/invoices-mark-paid') {
         require_once __DIR__ . '/../src/controllers/invoice/invoices_mark_paid.php';
+        exit;
+    }
+    if ($page === 'invoice/invoice-finalize') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_finalize.php';
+        exit;
+    }
+    if ($page === 'invoice/invoice-reopen') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_reopen.php';
         exit;
     }
     if ($page === 'payments/payments-create') {
@@ -1119,9 +1161,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // Legacy webhook endpoint (kept for backward compatibility)
     if ($page === 'stripe-webhook-legacy') {
-        require_once __DIR__ . '/../src/controllers/stripe/stripe_webhook.php';
+        require_once __DIR__ . '/../src/controllers/webhook/stripe_webhooks.php';
         exit;
     }
+}
+
+if ($page === 'settings/backup-download') {
+    require_once __DIR__ . '/../src/controllers/settings/backup_download.php';
+    exit;
 }
 
 // Stripe charge endpoint (supports both GET and POST)
@@ -1169,6 +1216,15 @@ if ($page === 'public-doc') {
 }
 if ($page === 'public-doc-pdf') {
     require_once __DIR__ . '/../src/controllers/public_view/public_doc_pdf.php';
+    exit;
+}
+if ($page === 'payment-receipt') {
+    require_once __DIR__ . '/../src/controllers/public_view/payment_receipt.php';
+    exit;
+}
+if ($page === 'client-onboarding') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/controllers/public_view/client_onboarding.php';
     exit;
 }
 if ($page === 'public-redirect') {

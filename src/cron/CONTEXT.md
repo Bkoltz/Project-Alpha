@@ -7,7 +7,6 @@ These PHP scripts run unattended from `cron/crontab`. They use the same database
 ## Current Jobs
 
 - `generate_recurring_invoices.php`
-- `auto_charge_recurring.php`
 - `backup_database.php`
 - `auto_terminate_contracts.php`
 - `link_expiration_checker.php`

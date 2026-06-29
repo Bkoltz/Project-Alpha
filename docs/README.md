@@ -12,6 +12,7 @@ This directory contains current operating guides and historical engineering reco
 | [Stripe Webhook Setup](stripe-webhook-setup.md) | Operators | Stripe events, endpoint configuration, and verification |
 | [Recurring Invoices](RECURRING_INVOICES_SETUP.md) | Operators | Long-term contract scheduling and invoice generation |
 | [Migration Safety](MIGRATION_SAFETY.md) | Operators and developers | Safe schema updates, backups, and recovery |
+| [Backup and Recovery](BACKUP_RECOVERY.md) | Operators | Database/full backups, encryption, restore testing, and key custody |
 | [Security Policy](SECURITY.md) | Everyone | Private vulnerability reporting |
 | [Developer and Agent Guidance](AGENTS.md) | Contributors and coding agents | Repository conventions, commands, and high-risk areas |
 
@@ -22,6 +23,8 @@ This directory contains current operating guides and historical engineering reco
 - [Templating Strategy](TEMPLATING_STRATEGY.md)
 - [Webhook Routing](webhook-routing.md)
 - [Security Checklist](SECURITY_CHECKLIST.md)
+- [AutoPay Beta Foundation](AUTOPAY_BETA.md)
+- [Deferred Client Onboarding Portal](CLIENT_ONBOARDING_PORTAL_PLAN.md)
 - [Database Migrations](../database/migrations/README.md)
 - [Cron Service](../cron/README.md)
 - [Twig Templates](../src/views/templates/README.md)

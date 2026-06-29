@@ -39,6 +39,8 @@ class StripeService {
      */
     public function createOrGetCustomer($pdo, $clientId) {
         try {
+            require_once __DIR__ . '/../utils/autopay_beta.php';
+            require_autopay_beta();
             $stmt = $pdo->prepare("SELECT stripe_customer_id, name, email FROM clients WHERE id = ?");
             $stmt->execute([$clientId]);
             $clientData = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -79,6 +81,8 @@ class StripeService {
      */
     public function createSubscription($customerId, $amount, $currency, $interval, $description) {
         try {
+            require_once __DIR__ . '/../utils/autopay_beta.php';
+            require_autopay_beta();
             // Create a price for this subscription
             $price = $this->apiRequest('POST', 'prices', [
                 'unit_amount' => (int)($amount * 100), // Convert to cents
@@ -113,6 +117,8 @@ class StripeService {
      */
     public function createPaymentIntent($customerId, $amount, $currency, $description) {
         try {
+            require_once __DIR__ . '/../utils/autopay_beta.php';
+            require_autopay_beta();
             $paymentIntent = $this->apiRequest('POST', 'payment_intents', [
                 'amount' => (int)($amount * 100), // Convert to cents
                 'currency' => strtolower($currency ?? 'usd'),
@@ -157,6 +163,10 @@ class StripeService {
      */
     public function createCheckoutSessionWithSurcharge($amount, $surchargeAmount, $currency, $description, $successUrl, $cancelUrl, $metadata = [], $customerId = null) {
         try {
+            if ($customerId !== null && $customerId !== '') {
+                require_once __DIR__ . '/../utils/autopay_beta.php';
+                require_autopay_beta();
+            }
             $lineItems = [
                 [
                     'price_data' => [
@@ -221,7 +231,7 @@ class StripeService {
      * @param array $metadata Optional metadata to attach to the session
      * @return array Checkout session data including 'url' for redirect
      */
-    public function createCheckoutSession($amount, $currency, $description, $successUrl, $cancelUrl, $metadata = []) {
+    public function createCheckoutSession($amount, $currency, $description, $successUrl, $cancelUrl, $metadata = [], ?string $idempotencyKey = null) {
         try {
             $sessionData = [
                 'payment_method_types' => ['card'],
@@ -248,7 +258,7 @@ class StripeService {
                 $sessionData['payment_intent_data']['metadata'] = $metadata;
             }
             
-            $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData);
+            $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData, $idempotencyKey);
             
             return $session;
             
@@ -256,6 +266,16 @@ class StripeService {
             @error_log('[StripeService] Error creating checkout session: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    /** Retrieve a one-time Checkout session so concurrent payment clicks reuse it. */
+    public function getCheckoutSession(string $sessionId): array {
+        return $this->apiRequest('GET', 'checkout/sessions/' . rawurlencode($sessionId));
+    }
+
+    /** Expire an open one-time Checkout session. */
+    public function expireCheckoutSession(string $sessionId): array {
+        return $this->apiRequest('POST', 'checkout/sessions/' . rawurlencode($sessionId) . '/expire');
     }
     
     /**
@@ -368,6 +388,10 @@ class StripeService {
      */
     public function createPaymentIntentWithMetadata($amount, $currency, $metadata, $customerId = null, $paymentMethodId = null) {
         try {
+            if ($paymentMethodId !== null && $paymentMethodId !== '') {
+                require_once __DIR__ . '/../utils/autopay_beta.php';
+                require_autopay_beta();
+            }
             $params = [
                 'amount' => (int)round($amount * 100), // Convert to cents
                 'currency' => strtolower($currency ?? 'usd'),
@@ -460,7 +484,7 @@ class StripeService {
     /**
      * Make API request to Stripe
      */
-    private function apiRequest($method, $endpoint, $data = []) {
+    private function apiRequest($method, $endpoint, $data = [], ?string $idempotencyKey = null) {
         if (!$this->apiKey) {
             throw new \Exception('Stripe API key not configured');
         }
@@ -472,6 +496,9 @@ class StripeService {
             'Authorization: Bearer ' . $this->apiKey,
             'Content-Type: application/x-www-form-urlencoded'
         ];
+        if ($idempotencyKey !== null && $idempotencyKey !== '') {
+            $headers[] = 'Idempotency-Key: ' . substr($idempotencyKey, 0, 255);
+        }
         
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,

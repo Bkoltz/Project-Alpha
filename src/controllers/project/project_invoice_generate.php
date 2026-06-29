@@ -26,7 +26,7 @@ if ($period === 'previous') {
     $end = date('Y-m-d');
 }
 
-$projectInvoiceId = project_invoice_create_for_period($pdo, $projectId, $start, $end, $appConfig, $sendEmail);
+$projectInvoiceId = project_invoice_create_for_period($pdo, $projectId, $start, $end, $appConfig, $sendEmail, $sendEmail);
 if ($projectInvoiceId) {
     header('Location: /?page=project/project-invoice-details&id=' . $projectInvoiceId . '&generated=1' . ($sendEmail ? '&emailed=1' : ''));
     exit;

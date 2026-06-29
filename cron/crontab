@@ -7,14 +7,14 @@ SHELL=/bin/bash
 # Unified log file for all cron jobs
 CRON_LOG=/var/www/config/logs/cron/cron.log
 
+# Rotate system and cron logs above 10 MB - daily at 1:15 AM UTC
+15 1 * * * root . /etc/environment && php /var/www/src/cron/rotate_logs.php >> $CRON_LOG 2>&1
+
 # Generate recurring invoices - daily at 2:00 AM UTC
 0 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_invoices.php >> $CRON_LOG 2>&1
 
-# Auto-charge eligible recurring invoices - daily at 2:15 AM UTC
-15 2 * * * root . /etc/environment && php /var/www/src/cron/auto_charge_recurring.php >> $CRON_LOG 2>&1
-
-# Daily database backup - at 2:30 AM UTC (after recurring invoices)
-30 2 * * * root . /etc/environment && php /var/www/src/cron/backup_database.php >> $CRON_LOG 2>&1
+# Check hourly at :30; the script honors the configured UTC backup hour.
+30 * * * * root . /etc/environment && php /var/www/src/cron/backup_database.php --scheduled >> $CRON_LOG 2>&1
 
 # Auto-terminate expired contracts - daily at 3:00 AM UTC
 0 3 * * * root . /etc/environment && php /var/www/src/cron/auto_terminate_contracts.php >> $CRON_LOG 2>&1

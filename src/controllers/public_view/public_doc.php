@@ -86,14 +86,26 @@ try {
 
   // For invoice links, ensure invoice remains in public-viewable states
   if ($type === 'invoice') {
-    $vs = $pdo->prepare('SELECT status FROM invoices WHERE id=? LIMIT 1');
+    $vs = $pdo->prepare('SELECT status, finalized_at, collection_mode FROM invoices WHERE id=? LIMIT 1');
     $vs->execute([$rid]);
-    $invStatus = strtolower((string)($vs->fetchColumn() ?: ''));
+    $publicInvoice = $vs->fetch(PDO::FETCH_ASSOC);
+    $invStatus = strtolower((string)($publicInvoice['status'] ?? ''));
     if ($invStatus === '') {
       throw new Exception('invoice_not_found:' . $rid);
     }
     if (!in_array($invStatus, ['unpaid', 'partial'], true)) {
       throw new Exception('invoice_status_blocked:' . $invStatus);
+    }
+    if (empty($publicInvoice['finalized_at']) || ($publicInvoice['collection_mode'] ?? 'direct') !== 'direct') {
+      throw new Exception('invoice_not_public');
+    }
+  }
+  if ($type === 'project_invoice') {
+    $ps = $pdo->prepare('SELECT status, finalized_at FROM project_invoices WHERE id=? LIMIT 1');
+    $ps->execute([$rid]);
+    $projectInvoice = $ps->fetch(PDO::FETCH_ASSOC);
+    if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
+      throw new Exception('project_invoice_not_public');
     }
   }
 

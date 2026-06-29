@@ -1,1 +1,0 @@
-{"version":2,"defects":[],"times":{"PasswordPolicyTest::testValidPassword":0.003,"PasswordPolicyTest::testTooShort":0.001,"PasswordPolicyTest::testMissingUppercase":0,"PasswordPolicyTest::testMissingSpecial":0,"CsrfTest::testGenerateAndValidateToken":0.001,"CsrfTest::testInvalidToken":0}}

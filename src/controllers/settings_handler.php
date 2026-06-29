@@ -12,6 +12,7 @@ $isDocumentsContractTab = $tab === 'documents' && $docTab === 'contracts';
 $isDocumentsInvoiceTab = $tab === 'documents' && $docTab === 'invoices';
 $isDocumentsCustomizationTab = $tab === 'documents' && $docTab === 'customization';
 $isNotificationsTab = $tab === 'notifications';
+$isWorkflowTab = $tab === 'workflow';
 
 if ($tab === 'links') {
     require_once __DIR__ . '/settings/links_handler.php';
@@ -91,6 +92,7 @@ $settings = [
     'invoice_auto_send_due_7days' => 1,
     'invoice_auto_send_overdue_weekly' => 1,
     'invoice_auto_email_on_generate' => 1,
+    'invoice_auto_email_on_contract_complete' => 1,
     // SMTP configuration (optional)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -366,9 +368,10 @@ $generalConfigKeys = [
     'net_terms_days', 'documents_valid_days', 'payment_methods',
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
     'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
+    'invoice_auto_email_on_contract_complete',
     'auto_terminate_contracts', 'link_expiration_checker',
     'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
-    'payment_failure_alert', 'payment_received_notification',
+    'payment_failure_alert',
     'link_expiration_warning', 'link_expiration_warning_days',
     'invoice_show_terms', 'invoice_show_project_code', 'invoice_show_due_date',
     'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
@@ -425,8 +428,11 @@ if ($isNotificationsTab || isset($_POST['invoice_auto_send_due_7days'])) {
 if ($isNotificationsTab || isset($_POST['invoice_auto_send_overdue_weekly'])) {
     $settings['invoice_auto_send_overdue_weekly'] = !empty($_POST['invoice_auto_send_overdue_weekly']) ? 1 : 0;
 }
-if ($isNotificationsTab || isset($_POST['invoice_auto_email_on_generate'])) {
+if ($isWorkflowTab || isset($_POST['invoice_auto_email_on_generate'])) {
     $settings['invoice_auto_email_on_generate'] = !empty($_POST['invoice_auto_email_on_generate']) ? 1 : 0;
+}
+if ($isWorkflowTab || isset($_POST['invoice_auto_email_on_contract_complete'])) {
+    $settings['invoice_auto_email_on_contract_complete'] = !empty($_POST['invoice_auto_email_on_contract_complete']) ? 1 : 0;
 }
 
 // System automation settings
@@ -452,10 +458,6 @@ if ($isNotificationsTab || isset($_POST['contract_expired_alert'])) {
 if ($isNotificationsTab || isset($_POST['payment_failure_alert'])) {
     $settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
 }
-if ($isNotificationsTab || isset($_POST['payment_received_notification'])) {
-    $settings['payment_received_notification'] = !empty($_POST['payment_received_notification']) ? 1 : 0;
-}
-
 // Link expiration warning settings
 if ($isNotificationsTab || isset($_POST['link_expiration_warning'])) {
     $settings['link_expiration_warning'] = !empty($_POST['link_expiration_warning']) ? 1 : 0;
@@ -479,10 +481,10 @@ if ($isDocumentsInvoiceTab || isset($_POST['invoice_show_due_date'])) {
 if ($isDocumentsQuoteTab || isset($_POST['quote_scope_enabled'])) {
     $settings['quote_scope_enabled'] = !empty($_POST['quote_scope_enabled']) ? 1 : 0;
 }
-if ($isDocumentsQuoteTab || isset($_POST['quote_auto_create_contract'])) {
+if ($isWorkflowTab || isset($_POST['quote_auto_create_contract'])) {
     $settings['quote_auto_create_contract'] = !empty($_POST['quote_auto_create_contract']) ? 1 : 0;
 }
-if ($isDocumentsQuoteTab || isset($_POST['quote_auto_create_invoice'])) {
+if ($isWorkflowTab || isset($_POST['quote_auto_create_invoice'])) {
     $settings['quote_auto_create_invoice'] = !empty($_POST['quote_auto_create_invoice']) ? 1 : 0;
 }
 

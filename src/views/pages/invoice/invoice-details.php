@@ -75,10 +75,21 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" class="btn btn-sm">Download</a>
-    <?php if ($inv['status'] !== 'paid'): ?>
+    <?php if (strtolower((string)$inv['status']) === 'draft'): ?>
       <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
+      <form method="post" action="/?page=invoice/invoice-finalize" style="display:inline" onsubmit="return confirm('Finalize this invoice and email it to the client?');">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm btn-success">Finalize &amp; Send</button>
+      </form>
+    <?php elseif (in_array(strtolower((string)$inv['status']), ['sent','unpaid','overdue'], true)): ?>
+      <form method="post" action="/?page=invoice/invoice-reopen" style="display:inline" onsubmit="return confirm('Reopen this invoice as a draft? Existing public links will be revoked.');">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Reopen Draft</button>
+      </form>
     <?php endif; ?>
-    <?php if (!empty($inv['status']) && strtolower($inv['status']) !== 'void'): ?>
+    <?php if (!empty($inv['status']) && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && ($inv['collection_mode'] ?? 'direct') === 'direct'): ?>
     <form method="post" action="/?page=invoice/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
@@ -87,7 +98,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
-    <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
+    <?php if (in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
       <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
          class="btn btn-sm btn-success">Mark as Paid</a>
     <?php endif; ?>
@@ -105,16 +116,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
-    <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
-    <?php 
-      require_once __DIR__ . '/../../../services/StripeService.php';
-      if (StripeService::isConfigured($appConfig) && in_array(strtolower($inv['status']), ['unpaid', 'partial'])): 
-    ?>
-    <form method="post" action="/?page=stripe-charge" style="display:inline" target="_blank">
-      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-      <input type="hidden" name="invoice_id" value="<?php echo (int)$id; ?>">
-      <button type="submit" class="btn btn-sm btn-primary">Charge Card</button>
-    </form>
+    <?php if (!empty($inv['finalized_at']) && ($inv['collection_mode'] ?? 'direct') === 'direct' && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
+      <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php endif; ?>
   </div>
   <?php if (!empty($_GET['reenabled'])): ?>

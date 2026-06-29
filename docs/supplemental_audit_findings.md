@@ -5,7 +5,11 @@
 
 ---
 
-## CRITICAL BUG: `auto_charge_recurring.php` missing from cron container
+> Historical audit note: AutoPay was deliberately disabled in migration 035. The
+> legacy charge script must remain absent from the installed crontab and fails
+> closed outside development/test. Do not apply the old remediation below.
+
+## RESOLVED: `auto_charge_recurring.php` missing from cron container
 
 **Finding**: `auto_charge_recurring.php` exists in `src/cron/` but is **ABSENT** from `cron/src/cron/`.
 

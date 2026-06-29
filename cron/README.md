@@ -7,7 +7,6 @@ The cron image runs Project Alpha's scheduled PHP jobs independently from Apache
 | UTC schedule | Script | Purpose |
 |---|---|---|
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
-| Daily 02:15 | `auto_charge_recurring.php` | Attempt eligible recurring auto-pay charges |
 | Daily 02:30 | `backup_database.php` | Create rotating daily, weekly, and monthly backups |
 | Daily 03:00 | `auto_terminate_contracts.php` | Complete contracts whose configured end date has passed |
 | Daily 04:00 | `link_expiration_checker.php` | Expire public document links |

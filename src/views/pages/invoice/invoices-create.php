@@ -122,8 +122,9 @@ if ($selectedProjectId > 0) {
       <div style="display:flex;gap:16px;justify-content:flex-end;font-weight:700"><div style="min-width:140px;text-align:right">Total</div><div id="totalValInv" style="min-width:120px;text-align:right">$0.00</div></div>
     </div>
 
-    <div>
-      <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Create Invoice</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button type="submit" name="invoice_action" value="draft" class="btn">Save Draft</button>
+      <button type="submit" name="invoice_action" value="finalize_send" class="btn btn-primary">Finalize &amp; Send</button>
     </div>
   </form>
 </section>

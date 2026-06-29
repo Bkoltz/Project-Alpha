@@ -20,8 +20,15 @@ Configure at least:
 Useful additional events:
 
 - `payment_intent.payment_failed`
+- `refund.created`
+- `refund.updated`
+- `refund.failed`
 - `charge.refunded`
 - `charge.dispute.created`
+- `charge.dispute.updated`
+- `charge.dispute.closed`
+- `charge.dispute.funds_withdrawn`
+- `charge.dispute.funds_reinstated`
 
 Only behavior implemented by the deployed version will be applied; unhandled events are logged or ignored.
 
@@ -50,23 +57,28 @@ Project Alpha includes invoice identifiers in Stripe metadata. Preserve these fi
 
 `pa_invoice_id` is the primary reconciliation identifier.
 
+Project statement payments use `pa_project_invoice_id` and `project_invoice_id`. The aggregate payment is allocated to its child invoices; the project statement itself is never counted as additional revenue.
+
 ## Successful Payment Behavior
 
 The handler:
 
 1. Verifies the Stripe signature when a webhook secret is configured.
 2. Records or reconciles the payment idempotently.
-3. Recalculates the successful amount paid.
+3. Recalculates the successful amount paid, net of recorded refunds.
 4. Marks the invoice `partial` or `paid`.
 5. Revokes invoice links after full payment.
 6. May complete the linked contract.
+7. Records refunds and disputes and updates cash-basis reporting.
+8. Issues a branded Project Alpha receipt for ordinary invoice payments.
 
 ## Testing
 
 Verify both supported paths:
 
 - Public invoice payment through Stripe Checkout
-- Direct Payment Intent or auto-pay flow
+- Public project-statement payment and child-invoice allocation
+- Duplicate delivery and reconciliation of the same one-time Payment Intent
 
 Send duplicate test events and confirm they do not create duplicate payment records.
 

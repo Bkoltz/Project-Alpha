@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
@@ -27,8 +28,21 @@ try {
   if ($invoice && empty($invoice['due_date'])) {
     $pdo->prepare('UPDATE invoices SET due_date=? WHERE id=?')->execute([$due, (int)$invoice['id']]);
   }
+  if ($invoice) {
+    invoice_finalize(
+      $pdo,
+      (int)$invoice['id'],
+      $appConfig,
+      'contract_complete',
+      (int)($_SESSION['user']['id'] ?? 0) ?: null
+    );
+  }
 
   $pdo->commit();
+
+  if ($invoice && !empty($appConfig['invoice_auto_email_on_contract_complete'])) {
+    invoice_send_finalized($pdo, (int)$invoice['id'], $appConfig, 'contract_complete');
+  }
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
   header('Location: /?page=contract/contracts-list&error=' . urlencode($e->getMessage()));

@@ -5,6 +5,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csv.php';
 
 $userId = $_SESSION['user']['id'] ?? null;
 if (!$userId) {
@@ -61,10 +62,10 @@ header('Content-Disposition: attachment; filename="expenses-' . date('Y-m-d') . 
 $out = fopen('php://output', 'w');
 
 // Header row
-fputcsv($out, ['Date', 'Vendor', 'Description', 'Category', 'Amount', 'Tax', 'Total', 'Payment Method', 'Reference', 'Billable', 'Client', 'Project', 'Tax-Deductible', 'Reimbursed', 'Reconciled', 'Status', 'Notes']);
+csv_write_row($out, ['Date', 'Vendor', 'Description', 'Category', 'Amount', 'Tax', 'Total', 'Payment Method', 'Reference', 'Billable', 'Client', 'Project', 'Tax-Deductible', 'Reimbursed', 'Reconciled', 'Status', 'Notes']);
 
 foreach ($expenses as $e) {
-    fputcsv($out, [
+    csv_write_row($out, [
         $e['expense_date'],
         $e['vendor_name'] ?? '',
         $e['description'] ?? '',

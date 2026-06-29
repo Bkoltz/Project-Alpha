@@ -66,8 +66,10 @@ $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
     <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <a class="btn btn-sm" href="/?page=project/projects-details&id=<?php echo (int)$pi['project_id']; ?>">Back to Project</a>
       <a class="btn btn-sm" href="/?page=project/project-invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener">View PDF</a>
-      <button type="button" class="btn btn-sm" onclick="generatePublicLink()">Share Link</button>
-      <button type="button" class="btn btn-sm btn-success" onclick="openEmailPanel()">Email</button>
+      <?php if ($status !== 'draft'): ?>
+        <button type="button" class="btn btn-sm" onclick="generatePublicLink()">Share Link</button>
+      <?php endif; ?>
+      <button type="button" class="btn btn-sm btn-success" onclick="openEmailPanel()"><?php echo $status === 'draft' ? 'Finalize & Email' : 'Email'; ?></button>
     </div>
     <?php foreach (['generated' => 'Project invoice generated.', 'emailed' => 'Project invoice emailed.', 'paid' => 'Payment recorded.'] as $key => $msg): ?>
       <?php if (!empty($_GET[$key])): ?><div class="alert alert-success no-print"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
@@ -205,7 +207,7 @@ $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
     </div>
   <?php endforeach; ?>
 
-  <?php if (!$isPdf && !$isPublic && $status !== 'paid' && $status !== 'void'): ?>
+  <?php if (!$isPdf && !$isPublic && !in_array($status, ['draft','paid','void'], true)): ?>
     <div class="no-print" style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#fff;margin-top:18px">
       <h3 style="margin:0 0 10px">Record Project Invoice Payment</h3>
       <form method="post" action="/?page=project/project-invoice-payment" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end">

@@ -125,7 +125,7 @@ if ($termsText === '') {
         </form>
       <?php endif; ?>
       <?php if ($contract['status'] === 'active'): ?>
-        <form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?');">
+        <form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Complete this contract, finalize its invoice, and send it when automatic delivery is enabled?');">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
           <button type="submit" class="btn btn-sm btn-success">Complete</button>

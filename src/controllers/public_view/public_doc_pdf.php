@@ -59,6 +59,24 @@ try {
         throw new Exception('Link expired');
     }
 
+    if ($type === 'invoice') {
+        $eligibility = $pdo->prepare('SELECT status, finalized_at, collection_mode FROM invoices WHERE id=?');
+        $eligibility->execute([$id]);
+        $invoice = $eligibility->fetch(PDO::FETCH_ASSOC);
+        if (!$invoice || !in_array((string)$invoice['status'], ['sent','unpaid','partial','overdue'], true)
+            || empty($invoice['finalized_at']) || ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+            throw new Exception('Invoice is not public');
+        }
+    }
+    if ($type === 'project_invoice') {
+        $eligibility = $pdo->prepare('SELECT status, finalized_at FROM project_invoices WHERE id=?');
+        $eligibility->execute([$id]);
+        $projectInvoice = $eligibility->fetch(PDO::FETCH_ASSOC);
+        if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
+            throw new Exception('Project invoice is not public');
+        }
+    }
+
     if (!defined('PUBLIC_VIEW')) {
         define('PUBLIC_VIEW', true);
     }

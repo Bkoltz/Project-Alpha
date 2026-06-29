@@ -1,6 +1,9 @@
 <?php
 // src/controllers/stripe/stripe_webhook.php
-// Handles Stripe webhook events (checkout.session.completed, etc.)
+// Compatibility entry point. All Stripe webhook traffic must use the hardened,
+// idempotent handler; keep this file fail-closed against legacy execution.
+require __DIR__ . '/../webhook/stripe_webhooks.php';
+exit;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';

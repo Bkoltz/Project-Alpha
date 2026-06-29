@@ -108,14 +108,6 @@
         </div>
       </label>
 
-      <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
-        <input type="checkbox" name="invoice_auto_email_on_generate" value="1" <?php echo !empty($appConfig['invoice_auto_email_on_generate']) ? 'checked' : ''; ?> style="margin-top:3px">
-        <div>
-          <div class="font-600">Automatically email invoices to clients when generated</div>
-          <div style="font-size:13px;color:var(--muted)">Email clients an invoice immediately after it is created</div>
-        </div>
-      </label>
-
       <label style="display:flex;align-items:start;gap:10px">
         <input type="checkbox" name="invoice_auto_send_overdue_weekly" value="1" <?php echo !empty($appConfig['invoice_auto_send_overdue_weekly']) ? 'checked' : ''; ?> style="margin-top:3px">
         <div>
@@ -147,27 +139,6 @@
         <div>
           <div class="font-600">Contract expired alert</div>
           <div style="font-size:13px;color:var(--muted)">Send notification when contract has expired</div>
-        </div>
-      </label>
-    </div>
-
-    <!-- Payment Notifications -->
-    <div style="padding-top:16px;border-top:1px solid #eee;margin-bottom:16px">
-      <h3 style="margin:0 0 12px 0;font-size:15px">Payment Notifications</h3>
-      
-      <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
-        <input type="checkbox" name="payment_failure_alert" value="1" <?php echo !empty($appConfig['payment_failure_alert']) ? 'checked' : ''; ?> style="margin-top:3px">
-        <div>
-          <div class="font-600">Auto-pay failure alert</div>
-          <div style="font-size:13px;color:var(--muted)">Notify when automatic payment fails</div>
-        </div>
-      </label>
-
-      <label style="display:flex;align-items:start;gap:10px">
-        <input type="checkbox" name="payment_received_notification" value="1" <?php echo !empty($appConfig['payment_received_notification']) ? 'checked' : ''; ?> style="margin-top:3px">
-        <div>
-          <div class="font-600">Payment received confirmation</div>
-          <div style="font-size:13px;color:var(--muted)">Send confirmation email to clients when payment is received</div>
         </div>
       </label>
     </div>

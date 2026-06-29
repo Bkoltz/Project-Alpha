@@ -88,6 +88,14 @@ async function loadPageContent(page) {
         const doc = parser.parseFromString(html, 'text/html');
         const newMainContent = doc.querySelector('.main-content');
 
+        const redirectedPage = (() => {
+            try { return new URL(response.url).searchParams.get('page'); } catch (err) { return null; }
+        })();
+        const looksLikeLogin = redirectedPage === 'login' || !!doc.querySelector('form[action*="login"], .auth-wrap input[type="password"]');
+        if (looksLikeLogin) {
+            return { authRequired: true, url: response.url || '/?page=login' };
+        }
+
         if (!newMainContent) {
             console.error('ERROR: .main-content not found in response!');
             console.log('Document body:', document.body ? document.body.innerHTML.substring(0, 500) : 'No body');
@@ -114,10 +122,10 @@ async function loadPageContent(page) {
             // Cache the content
             contentCache.set(page, newMainContent.innerHTML);
             return { html: newMainContent.innerHTML, scripts: inlineScripts };
-        } else {
-            // If no main content found, use the full response (fallback)
-            return { html, scripts: [] };
         }
+
+        // A full document must never be injected inside the authenticated shell.
+        return null;
     } catch (error) {
         console.error('Failed to load page content:', error);
         // Fall back to full page reload
@@ -141,6 +149,11 @@ async function navigateToPage(page, updateHistory = true) {
 
     try {
         const content = await loadPageContent(page);
+
+        if (content && content.authRequired) {
+            window.location.href = content.url || '/?page=login';
+            return;
+        }
 
         if (content === null) {
             // Fallback to full page reload using canonical builder
@@ -244,7 +257,7 @@ function updatePageTitle(page) {
         'api-keys': 'API Keys',
         'settings': 'Settings',
         'financial/financial-dashboard': 'Financial Dashboard',
-        'financial/audit': 'Audit',
+        'financial/audit': 'Audit & Reports',
         'account': 'My Account',
         'account-edit': 'Edit Account'
     };

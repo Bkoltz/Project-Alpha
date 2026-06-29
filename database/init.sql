@@ -323,6 +323,7 @@ CREATE TABLE IF NOT EXISTS clients (
     postal_code VARCHAR(20) NULL,
     country VARCHAR(100) NULL DEFAULT 'US',
     organization_id INT NULL,
+    client_type ENUM('unknown','business','consumer') NOT NULL DEFAULT 'unknown',
     created_by INT NULL,
     config JSON NULL,
     stripe_customer_id VARCHAR(255) NULL,
@@ -342,6 +343,51 @@ CREATE TABLE IF NOT EXISTS clients (
     INDEX idx_clients_archived (archived),
     INDEX idx_clients_deleted (deleted_at),
     CONSTRAINT fk_clients_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- CLIENT ONBOARDING
+CREATE TABLE IF NOT EXISTS client_onboarding_invitations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    target_organization_id INT NULL,
+    client_id INT NULL,
+    invited_email VARCHAR(255) NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    status ENUM('pending','verified','submitted','approved','rejected','revoked','expired') NOT NULL DEFAULT 'pending',
+    expires_at DATETIME NOT NULL,
+    verification_code_hash VARCHAR(255) NULL,
+    code_expires_at DATETIME NULL,
+    verification_attempts SMALLINT NOT NULL DEFAULT 0,
+    last_code_sent_at DATETIME NULL,
+    email_verified_at DATETIME NULL,
+    consumed_at DATETIME NULL,
+    sent_at DATETIME NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_client_onboarding_token (token_hash),
+    INDEX idx_client_onboarding_owner (organization_id,status,created_at),
+    INDEX idx_client_onboarding_email (invited_email),
+    CONSTRAINT fk_client_onboarding_owner FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_client_onboarding_target_org FOREIGN KEY (target_organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_client_onboarding_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_client_onboarding_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS client_onboarding_submissions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    invitation_id BIGINT NOT NULL,
+    proposed_data JSON NOT NULL,
+    status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    reviewed_by INT NULL,
+    reviewed_at DATETIME NULL,
+    review_notes VARCHAR(1000) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_client_onboarding_submission (invitation_id),
+    INDEX idx_client_onboarding_review (status,created_at),
+    CONSTRAINT fk_client_onboarding_submission_invite FOREIGN KEY (invitation_id) REFERENCES client_onboarding_invitations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_client_onboarding_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PROJECTS
@@ -454,6 +500,10 @@ CREATE TABLE IF NOT EXISTS project_invoices (
     amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
     balance_due DECIMAL(12,2) NOT NULL DEFAULT 0,
     sent_at TIMESTAMP NULL DEFAULT NULL,
+    finalized_at TIMESTAMP NULL DEFAULT NULL,
+    finalization_source VARCHAR(50) NULL,
+    stripe_session_id VARCHAR(255) NULL,
+    stripe_checkout_expires_at DATETIME NULL,
     paid_at TIMESTAMP NULL DEFAULT NULL,
     generated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     created_by INT NULL,
@@ -483,8 +533,7 @@ CREATE TABLE IF NOT EXISTS project_invoice_items (
     UNIQUE KEY uq_project_invoice_child_invoice (invoice_id),
     INDEX idx_project_invoice_items_parent (project_invoice_id),
     INDEX idx_project_invoice_items_invoice (invoice_id),
-    CONSTRAINT fk_project_invoice_items_parent FOREIGN KEY (project_invoice_id) REFERENCES project_invoices(id) ON DELETE CASCADE,
-    CONSTRAINT fk_project_invoice_items_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    CONSTRAINT fk_project_invoice_items_parent FOREIGN KEY (project_invoice_id) REFERENCES project_invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS project_invoice_notifications (
@@ -497,6 +546,25 @@ CREATE TABLE IF NOT EXISTS project_invoice_notifications (
     UNIQUE KEY uq_project_invoice_notification (project_invoice_id, notification_type, email_to),
     INDEX idx_project_invoice_notif_parent (project_invoice_id),
     CONSTRAINT fk_project_invoice_notif_parent FOREIGN KEY (project_invoice_id) REFERENCES project_invoices(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_invoice_payments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    project_invoice_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    refunded_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    disputed_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    payment_method VARCHAR(30) NOT NULL DEFAULT 'stripe',
+    stripe_session_id VARCHAR(255) NULL,
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    status ENUM('processing','succeeded','failed') NOT NULL DEFAULT 'processing',
+    payment_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_project_payment_session (stripe_session_id),
+    UNIQUE KEY uq_project_payment_intent (stripe_payment_intent_id),
+    INDEX idx_project_payment_parent (project_invoice_id),
+    CONSTRAINT fk_project_payment_parent FOREIGN KEY (project_invoice_id) REFERENCES project_invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ENTITY LINKS
@@ -730,11 +798,16 @@ CREATE TABLE IF NOT EXISTS invoices (
     estimated_completion VARCHAR(200) NULL,
     paid_at TIMESTAMP NULL,
     sent_at TIMESTAMP NULL,
+    finalized_at TIMESTAMP NULL,
+    finalized_by INT NULL,
+    finalization_source VARCHAR(50) NULL,
+    collection_mode ENUM('direct','project_aggregate') NOT NULL DEFAULT 'direct',
     terms TEXT NULL,
     notes TEXT NULL,
     scope TEXT NULL,
     custom_fields JSON NULL,
     stripe_session_id VARCHAR(255) NULL,
+    stripe_checkout_expires_at DATETIME NULL,
     stripe_payment_intent_id VARCHAR(255) NULL,
     last_auto_pay_attempt TIMESTAMP NULL,
     document_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -797,6 +870,25 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
     CONSTRAINT fk_inv_notif_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- project_invoice_items is created with the Projects module, before invoices.
+-- Add its cross-module foreign key only after both tables exist, and keep init
+-- safe to rerun against an existing installation.
+SET @has_project_invoice_fk := (
+    SELECT COUNT(*) FROM information_schema.table_constraints
+    WHERE constraint_schema = DATABASE()
+      AND table_name = 'project_invoice_items'
+      AND constraint_name = 'fk_project_invoice_items_invoice'
+      AND constraint_type = 'FOREIGN KEY'
+);
+SET @project_invoice_fk_sql := IF(
+    @has_project_invoice_fk = 0,
+    'ALTER TABLE project_invoice_items ADD CONSTRAINT fk_project_invoice_items_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE',
+    'SELECT 1'
+);
+PREPARE project_invoice_fk_stmt FROM @project_invoice_fk_sql;
+EXECUTE project_invoice_fk_stmt;
+DEALLOCATE PREPARE project_invoice_fk_stmt;
+
 -- RECURRING INVOICES
 -- RECURRING INVOICE ITEMS
 -- QUOTE HISTORY
@@ -811,9 +903,12 @@ CREATE TABLE IF NOT EXISTS payments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     client_id INT NOT NULL,
     invoice_id INT NULL,
+    project_invoice_payment_id BIGINT NULL,
     contract_id INT NULL,
     organization_id INT NULL,
     amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    refunded_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    disputed_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
     surcharge_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
     surcharge_refunded TINYINT(1) NOT NULL DEFAULT 0,
     surcharge_refund_amount DECIMAL(10,2) NULL,
@@ -829,12 +924,14 @@ CREATE TABLE IF NOT EXISTS payments (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_payments_client (client_id),
     INDEX idx_payments_invoice (invoice_id),
+    INDEX idx_payments_project_payment (project_invoice_payment_id),
     INDEX idx_payments_contract (contract_id),
     INDEX idx_payments_date (payment_date),
-    INDEX idx_payments_stripe_session (stripe_session_id),
-    INDEX idx_payments_stripe_pi (stripe_payment_intent_id),
+    UNIQUE KEY uq_payments_stripe_session (stripe_session_id),
+    UNIQUE KEY uq_payments_stripe_pi (stripe_payment_intent_id),
     CONSTRAINT fk_payments_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payments_project_payment FOREIGN KEY (project_invoice_payment_id) REFERENCES project_invoice_payments(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -867,6 +964,164 @@ CREATE TABLE IF NOT EXISTS auto_pay_log (
     INDEX idx_auto_pay_status (status),
     CONSTRAINT fk_auto_pay_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_auto_pay_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- AUTO PAY BETA FOUNDATION
+-- Unavailable in production. No route, UI, cron job, or enabled processor uses these tables.
+CREATE TABLE IF NOT EXISTS autopay_authorizations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL,
+    client_id INT NOT NULL,
+    scope_type ENUM('account','contract','project') NOT NULL,
+    contract_id INT NULL,
+    project_id INT NULL,
+    status ENUM('pending','active','revoked','expired') NOT NULL DEFAULT 'pending',
+    stripe_customer_id VARCHAR(255) NULL,
+    stripe_payment_method_id VARCHAR(255) NULL,
+    consent_version VARCHAR(50) NOT NULL,
+    consent_snapshot MEDIUMTEXT NOT NULL,
+    consent_email VARCHAR(255) NOT NULL,
+    consent_ip VARCHAR(45) NULL,
+    consent_user_agent VARCHAR(500) NULL,
+    amount_limit DECIMAL(12,2) NULL,
+    variable_notice_days SMALLINT NOT NULL DEFAULT 10,
+    confirmed_at TIMESTAMP NULL,
+    revoked_at TIMESTAMP NULL,
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_autopay_auth_client (client_id),
+    INDEX idx_autopay_auth_scope (scope_type,contract_id,project_id),
+    INDEX idx_autopay_auth_status (status),
+    CONSTRAINT fk_autopay_auth_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_autopay_auth_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_autopay_auth_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS autopay_authorization_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    authorization_id BIGINT NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    metadata JSON NULL,
+    ip_address VARCHAR(45) NULL,
+    user_agent VARCHAR(500) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_autopay_event_auth (authorization_id),
+    CONSTRAINT fk_autopay_event_auth FOREIGN KEY (authorization_id) REFERENCES autopay_authorizations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS autopay_scheduled_attempts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    authorization_id BIGINT NOT NULL,
+    invoice_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    scheduled_for DATETIME NOT NULL,
+    status ENUM('scheduled','processing','succeeded','failed','cancelled') NOT NULL DEFAULT 'scheduled',
+    idempotency_key VARCHAR(100) NOT NULL,
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    last_error TEXT NULL,
+    attempted_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_autopay_attempt_idempotency (idempotency_key),
+    INDEX idx_autopay_attempt_due (status,scheduled_for),
+    INDEX idx_autopay_attempt_invoice (invoice_id),
+    CONSTRAINT fk_autopay_attempt_auth FOREIGN KEY (authorization_id) REFERENCES autopay_authorizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_autopay_attempt_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS autopay_advance_notices (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    scheduled_attempt_id BIGINT NOT NULL,
+    email_to VARCHAR(255) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    charge_date DATE NOT NULL,
+    sent_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_autopay_notice_attempt (scheduled_attempt_id,email_to),
+    CONSTRAINT fk_autopay_notice_attempt FOREIGN KEY (scheduled_attempt_id) REFERENCES autopay_scheduled_attempts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS autopay_access_tokens (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    authorization_id BIGINT NOT NULL,
+    purpose ENUM('confirm','manage','revoke','recover') NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    consumed_at TIMESTAMP NULL,
+    attempts SMALLINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_autopay_token_hash (token_hash),
+    INDEX idx_autopay_token_auth (authorization_id),
+    CONSTRAINT fk_autopay_token_auth FOREIGN KEY (authorization_id) REFERENCES autopay_authorizations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS stripe_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stripe_event_id VARCHAR(255) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    status ENUM('processing','processed','failed') NOT NULL DEFAULT 'processing',
+    attempts SMALLINT NOT NULL DEFAULT 1,
+    last_error TEXT NULL,
+    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_stripe_event_id (stripe_event_id),
+    INDEX idx_stripe_event_status (status,received_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS payment_receipts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    payment_id INT NOT NULL,
+    invoice_id INT NULL,
+    receipt_number VARCHAR(50) NOT NULL,
+    public_token VARCHAR(64) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    email_to VARCHAR(255) NULL,
+    emailed_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_payment_receipt_payment (payment_id),
+    UNIQUE KEY uq_payment_receipt_number (receipt_number),
+    UNIQUE KEY uq_payment_receipt_token (public_token),
+    CONSTRAINT fk_payment_receipt_payment FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_payment_receipt_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS stripe_refunds (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stripe_refund_id VARCHAR(255) NOT NULL,
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    payment_id INT NULL,
+    project_invoice_payment_id BIGINT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    status VARCHAR(50) NOT NULL,
+    reason VARCHAR(100) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_stripe_refund_id (stripe_refund_id),
+    INDEX idx_stripe_refund_payment (payment_id),
+    INDEX idx_stripe_refund_project_payment (project_invoice_payment_id),
+    CONSTRAINT fk_stripe_refund_payment FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_stripe_refund_project_payment FOREIGN KEY (project_invoice_payment_id) REFERENCES project_invoice_payments(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS stripe_disputes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stripe_dispute_id VARCHAR(255) NOT NULL,
+    stripe_payment_intent_id VARCHAR(255) NULL,
+    payment_id INT NULL,
+    project_invoice_payment_id BIGINT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    status VARCHAR(50) NOT NULL,
+    reason VARCHAR(100) NULL,
+    evidence_due_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_stripe_dispute_id (stripe_dispute_id),
+    INDEX idx_stripe_dispute_payment (payment_id),
+    INDEX idx_stripe_dispute_project_payment (project_invoice_payment_id),
+    CONSTRAINT fk_stripe_dispute_payment FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_stripe_dispute_project_payment FOREIGN KEY (project_invoice_payment_id) REFERENCES project_invoice_payments(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PAYMENT METHODS
@@ -914,7 +1169,7 @@ CREATE TABLE IF NOT EXISTS tax_rates (
 CREATE TABLE IF NOT EXISTS item_library (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NULL,
-    name VARCHAR(255) NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
     description TEXT NULL,
     unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
     category VARCHAR(100) NULL,
@@ -1234,8 +1489,10 @@ CREATE TABLE IF NOT EXISTS system_audit (
 CREATE TABLE IF NOT EXISTS audit_schedules (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NULL,
+    report_type ENUM('audit','expense') NOT NULL DEFAULT 'audit',
     frequency ENUM('weekly', 'monthly', 'quarterly', 'annually') NOT NULL DEFAULT 'monthly',
     date_range_type VARCHAR(50) NOT NULL DEFAULT 'current_year',
+    accounting_basis ENUM('cash','accrual') NOT NULL DEFAULT 'cash',
     email_addresses TEXT NOT NULL,
     include_invoices TINYINT(1) NOT NULL DEFAULT 1,
     include_unpaid_invoices TINYINT(1) NOT NULL DEFAULT 0,
@@ -1244,12 +1501,14 @@ CREATE TABLE IF NOT EXISTS audit_schedules (
     generate_csv TINYINT(1) NOT NULL DEFAULT 1,
     include_pdfs TINYINT(1) NOT NULL DEFAULT 0,
     options JSON NULL,
+    filters JSON NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     next_run_at DATETIME NULL,
     last_run_at DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_audit_sched_org (organization_id),
+    INDEX idx_audit_sched_type (organization_id, report_type, is_active),
     INDEX idx_audit_sched_active (is_active),
     INDEX idx_audit_sched_next (next_run_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

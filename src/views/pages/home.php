@@ -10,7 +10,7 @@ try {
   $pending_quotes     = (int)$pdo->query("SELECT COUNT(*) FROM quotes WHERE status='pending'")->fetchColumn();
   $active_contracts   = (int)$pdo->query("SELECT COUNT(*) FROM contracts WHERE status IN ('draft','active')")->fetchColumn();
   $unpaid_invoices    = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial')")->fetchColumn();
-  $income_30          = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM payments WHERE created_at >= NOW() - INTERVAL 30 DAY AND status='succeeded'")->fetchColumn();
+  $income_30          = (float)$pdo->query("SELECT COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) FROM payments WHERE created_at >= NOW() - INTERVAL 30 DAY AND status='succeeded'")->fetchColumn();
   $expenses_30        = (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM expenses WHERE status != 'void' AND expense_date >= CURDATE() - INTERVAL 29 DAY")->fetchColumn();
   $net_30             = $income_30 - $expenses_30;
   $overdue_invoices   = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial','overdue') AND due_date IS NOT NULL AND due_date < CURDATE()")->fetchColumn();
@@ -21,7 +21,7 @@ try {
   // Charts data — monthly income last 6 months
   $income_monthly = $pdo->query("
     SELECT DATE_FORMAT(created_at, '%Y-%m') AS month,
-           COALESCE(SUM(amount),0) AS total
+           COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) AS total
     FROM payments
     WHERE created_at >= DATE_FORMAT(NOW() - INTERVAL 5 MONTH, '%Y-%m-01')
       AND status='succeeded'
@@ -132,7 +132,7 @@ $daily_labels = [];
 $daily_values = [];
 try {
   $income_daily_rows = $pdo->query("
-    SELECT DATE(created_at) AS d, COALESCE(SUM(amount),0) AS total
+    SELECT DATE(created_at) AS d, COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) AS total
     FROM payments
     WHERE created_at >= CURDATE() - INTERVAL 29 DAY
       AND status='succeeded'

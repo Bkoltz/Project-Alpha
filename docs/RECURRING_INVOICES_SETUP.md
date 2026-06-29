@@ -27,14 +27,15 @@ Supported interval units are day, week, month, and year. Billing can use a set a
 
 The generator uses idempotency checks to avoid duplicate periods. It refetches overdue contracts for up to 36 passes in one run, allowing a recovered installation to catch up missed periods while limiting runaway execution.
 
-## Notifications and Auto-Pay
+## Notifications and Payment
 
 When enabled:
 
 - Newly generated invoices may be emailed with a public link.
-- A separate 02:15 UTC job attempts eligible recurring auto-pay charges.
 - Due and overdue reminders run on the invoice reminder schedule.
 - Stripe reconciliation runs every six hours to recover missed confirmations.
+
+Recurring billing means automatic invoice generation and delivery. Every online payment remains a client-initiated, one-time Stripe Checkout payment. AutoPay is unavailable; see [AutoPay Beta Foundation](AUTOPAY_BETA.md).
 
 ## Manual Verification
 

@@ -4,6 +4,20 @@
 - TrueNAS SCALE 24.10 (Electric Eel) or later
 - A dataset for PA data (recommended: `apps/project-alpha`)
 
+## Catalog Status
+
+The included `docker-compose.truenas.yml` installs Project Alpha as a TrueNAS
+**Custom App**. It does not by itself add Project Alpha to Discover Apps.
+
+An official catalog listing is submitted separately to the
+[`truenas/apps`](https://github.com/truenas/apps) repository under
+`ix-dev/community/project-alpha`. That submission requires `app.yaml`,
+`ix_values.yaml`, `questions.yaml`, `README.md`, a Jinja
+`templates/docker-compose.yaml`, and at least one `templates/test_values` file.
+Follow the upstream
+[`CONTRIBUTIONS.md`](https://github.com/truenas/apps/blob/master/CONTRIBUTIONS.md)
+and run its render/deployment tests before opening the catalog pull request.
+
 ## Quick Install via Custom App (Docker Compose)
 
 1. **Create datasets** on your TrueNAS pool:
@@ -16,13 +30,17 @@
 
 3. **Paste** the contents of `docker-compose.truenas.yml` (in this repo)
 
-4. **Change all passwords** — search for `changeme` and replace with strong passwords
+4. **Change all passwords** — search for `changeme` and replace with strong, unique passwords
 
-5. **Deploy** — PA will be available at `http://your-truenas-ip:1627`
+5. **Optional encrypted backups:** Set the same strong `BACKUP_ENCRYPTION_KEY`
+   value on both the `web` and `cron` services. Keep a protected copy outside
+   TrueNAS; an encrypted backup cannot be restored without it.
 
-6. **First login:** Use `admin@project-alpha.local` with your `ADMIN_PASSWORD`
+6. **Deploy** — PA will be available at `http://your-truenas-ip:1627`
 
-7. **Configure Stripe:** Go to Settings > Billing to enter your Stripe API keys
+7. **First login:** Use `admin@project-alpha.local` with your `ADMIN_PASSWORD`
+
+8. **Configure Stripe:** Go to Settings > Billing to enter your Stripe API keys
 
 ## Manual Install via Docker Compose (SSH)
 
@@ -63,6 +81,8 @@ PA data is stored in the datasets you created. Use TrueNAS snapshot and replicat
 - `tank/apps/project-alpha/config` (configuration)
 
 The built-in cron container also performs daily MySQL dumps to the backups volume.
+Snapshots are not a substitute for application-consistent database backups;
+retain both and test restoring them periodically.
 
 ## Support
 - GitHub: https://github.com/ledgetoptechnologies/Project-Alpha/issues

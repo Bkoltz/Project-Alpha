@@ -144,7 +144,7 @@ All HTTP requests enter through `public/index.php`. Application source is under 
 
 ## Scheduled Operations
 
-The cron image runs recurring invoice generation, recurring auto-charge attempts, backups, contract expiration, public-link expiration, audit schedules, invoice reminders, Stripe reconciliation, and merchant-rate synchronization.
+The cron image runs recurring invoice generation, backups, contract expiration, public-link expiration, audit schedules, invoice reminders, Stripe reconciliation, and merchant-rate synchronization. AutoPay is an unavailable beta foundation and is not scheduled or exposed.
 
 See [Cron Service](cron/README.md) for the installed schedule and [Recurring Invoices](docs/RECURRING_INVOICES_SETUP.md) for billing behavior.
 

@@ -178,7 +178,7 @@ function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
         LEFT JOIN project_invoice_items pii ON pii.project_invoice_id = pi.id
         LEFT JOIN invoices i ON i.id = pii.invoice_id
         LEFT JOIN (
-            SELECT invoice_id, SUM(amount) AS paid
+            SELECT invoice_id, SUM(GREATEST(amount-refunded_amount,0)) AS paid
             FROM payments
             WHERE status = "succeeded"
             GROUP BY invoice_id
@@ -208,9 +208,10 @@ function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
         ->execute([$status, $paid, $balance, $projectInvoiceId]);
 }
 
-function project_invoice_create_for_period(PDO $pdo, int $projectId, string $periodStart, string $periodEnd, array $appConfig, bool $sendEmail = false): ?int
+function project_invoice_create_for_period(PDO $pdo, int $projectId, string $periodStart, string $periodEnd, array $appConfig, bool $sendEmail = false, bool $finalize = false): ?int
 {
     $createdBy = (int)($_SESSION['user']['id'] ?? 0) ?: null;
+    $shouldFinalize = $sendEmail || $finalize;
 
     try {
         $pdo->beginTransaction();
@@ -227,6 +228,10 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
         $existing->execute([$projectId, $periodStart, $periodEnd]);
         $existingId = (int)($existing->fetchColumn() ?: 0);
         if ($existingId > 0) {
+            if ($shouldFinalize) {
+                $pdo->prepare('UPDATE project_invoices SET status=IF(status="draft","unpaid",status), finalized_at=COALESCE(finalized_at,NOW()), finalization_source=COALESCE(finalization_source,"project_billing") WHERE id=? AND status<>"void"')
+                    ->execute([$existingId]);
+            }
             $pdo->commit();
             if ($sendEmail) {
                 project_invoice_send_email($pdo, $existingId, $appConfig);
@@ -240,7 +245,7 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
                    COALESCE(p.paid, 0) AS paid
             FROM invoices i
             LEFT JOIN (
-                SELECT invoice_id, SUM(amount) AS paid
+                SELECT invoice_id, SUM(GREATEST(amount-refunded_amount,0)) AS paid
                 FROM payments
                 WHERE status = "succeeded"
                 GROUP BY invoice_id
@@ -284,7 +289,7 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
             !empty($project['organization_id']) ? (int)$project['organization_id'] : null,
             $primaryClientId,
             $docNumber,
-            'unpaid',
+            $shouldFinalize ? 'unpaid' : 'draft',
             $periodStart,
             $periodEnd,
             $dueDate,
@@ -295,6 +300,10 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
             $createdBy,
         ]);
         $projectInvoiceId = (int)$pdo->lastInsertId();
+        if ($shouldFinalize) {
+            $pdo->prepare('UPDATE project_invoices SET finalized_at=NOW(), finalization_source="project_billing" WHERE id=?')
+                ->execute([$projectInvoiceId]);
+        }
 
         $item = $pdo->prepare('
             INSERT INTO project_invoice_items
@@ -317,6 +326,10 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
                 (float)$child['paid'],
                 $due,
             ]);
+            $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')
+                ->execute([(int)$child['id']]);
+            $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="invoice" AND document_id=? AND revoked=0')
+                ->execute([(int)$child['id']]);
         }
 
         $pdo->commit();
@@ -347,6 +360,12 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
     $projectInvoice = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'void') {
         return 0;
+    }
+    if (($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
+        $pdo->prepare('UPDATE project_invoices SET status="unpaid", finalized_at=COALESCE(finalized_at,NOW()), finalization_source=COALESCE(finalization_source,"manual_email") WHERE id=? AND status="draft"')
+            ->execute([$projectInvoiceId]);
+        $projectInvoice['status'] = 'unpaid';
+        $projectInvoice['finalized_at'] = date('Y-m-d H:i:s');
     }
 
     $recipients = project_invoice_client_recipients($pdo, $projectInvoiceId, $clientIds);
@@ -405,7 +424,7 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
     return $sent;
 }
 
-function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float $amount, string $method, string $reference = '', string $notes = ''): bool
+function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float $amount, string $method, string $reference = '', string $notes = '', ?int $projectPaymentId = null): bool
 {
     if ($amount <= 0) {
         return false;
@@ -422,13 +441,22 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             return false;
         }
 
+        if ($projectPaymentId) {
+            $allocated = $pdo->prepare('SELECT COUNT(*) FROM payments WHERE project_invoice_payment_id=?');
+            $allocated->execute([$projectPaymentId]);
+            if ((int)$allocated->fetchColumn() > 0) {
+                $pdo->rollBack();
+                return true;
+            }
+        }
+
         $children = $pdo->prepare('
             SELECT i.id, i.client_id, i.contract_id, i.organization_id, i.total,
                    COALESCE(p.paid, 0) AS paid
             FROM project_invoice_items pii
             JOIN invoices i ON i.id = pii.invoice_id
             LEFT JOIN (
-                SELECT invoice_id, SUM(amount) AS paid
+                SELECT invoice_id, SUM(GREATEST(amount-refunded_amount,0)) AS paid
                 FROM payments
                 WHERE status = "succeeded"
                 GROUP BY invoice_id
@@ -438,14 +466,24 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
         ');
         $children->execute([$projectInvoiceId]);
 
+        $childRows = $children->fetchAll(PDO::FETCH_ASSOC);
+        $available = 0.0;
+        foreach ($childRows as $child) {
+            $available += max(0.0, (float)$child['total'] - (float)$child['paid']);
+        }
+        if ($amount > $available + 0.005) {
+            $pdo->rollBack();
+            return false;
+        }
+
         $remaining = $amount;
         $pay = $pdo->prepare('
-            INSERT INTO payments (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
-            VALUES (?,?,?,?,?,?,?,?, "succeeded", CURDATE())
+            INSERT INTO payments (client_id, invoice_id, project_invoice_payment_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
+            VALUES (?,?,?,?,?,?,?,?,?, "succeeded", CURDATE())
         ');
         $updateInvoice = $pdo->prepare('UPDATE invoices SET status=?, amount_paid=?, balance_due=?, paid_at = IF(? = "paid", COALESCE(paid_at, NOW()), paid_at) WHERE id=?');
 
-        foreach ($children->fetchAll(PDO::FETCH_ASSOC) as $child) {
+        foreach ($childRows as $child) {
             if ($remaining <= 0.005) {
                 break;
             }
@@ -460,6 +498,7 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
             $pay->execute([
                 (int)$child['client_id'],
                 (int)$child['id'],
+                $projectPaymentId,
                 !empty($child['contract_id']) ? (int)$child['contract_id'] : null,
                 !empty($child['organization_id']) ? (int)$child['organization_id'] : null,
                 $apply,
@@ -489,6 +528,71 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
     }
 }
 
+function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): bool
+{
+    $metadata = $stripeObject['metadata'] ?? [];
+    $projectInvoiceId = (int)($metadata['pa_project_invoice_id'] ?? $metadata['project_invoice_id'] ?? 0);
+    if ($projectInvoiceId <= 0) {
+        return false;
+    }
+    $sessionId = str_starts_with((string)($stripeObject['id'] ?? ''), 'cs_') ? (string)$stripeObject['id'] : null;
+    $paymentIntentId = $sessionId
+        ? (is_string($stripeObject['payment_intent'] ?? null) ? $stripeObject['payment_intent'] : null)
+        : (string)($stripeObject['id'] ?? '');
+    $amountCents = $sessionId ? ($stripeObject['amount_total'] ?? 0) : ($stripeObject['amount_received'] ?? $stripeObject['amount'] ?? 0);
+    $amount = ((float)$amountCents) / 100;
+    if ($amount <= 0 || (!$sessionId && $paymentIntentId === '')) {
+        return false;
+    }
+
+    $pdo->prepare(
+        'INSERT IGNORE INTO project_invoice_payments
+         (project_invoice_id,amount,payment_method,stripe_session_id,stripe_payment_intent_id,status,payment_date)
+         VALUES (?,? ,"stripe",?,? ,"processing",CURDATE())'
+    )->execute([$projectInvoiceId, $amount, $sessionId, $paymentIntentId ?: null]);
+    $lookup = $pdo->prepare(
+        'SELECT id,status FROM project_invoice_payments
+         WHERE (stripe_payment_intent_id IS NOT NULL AND stripe_payment_intent_id=?)
+            OR (stripe_session_id IS NOT NULL AND stripe_session_id=?) LIMIT 1'
+    );
+    $lookup->execute([$paymentIntentId ?: '', $sessionId ?: '']);
+    $projectPayment = $lookup->fetch(PDO::FETCH_ASSOC);
+    if (!$projectPayment) {
+        return false;
+    }
+    $projectPaymentId = (int)$projectPayment['id'];
+    if (($projectPayment['status'] ?? '') === 'succeeded') {
+        return true;
+    }
+    $pdo->prepare('UPDATE project_invoice_payments SET stripe_session_id=COALESCE(stripe_session_id,?),stripe_payment_intent_id=COALESCE(stripe_payment_intent_id,?),amount=? WHERE id=?')
+        ->execute([$sessionId, $paymentIntentId ?: null, $amount, $projectPaymentId]);
+
+    $ok = project_invoice_allocate_payment(
+        $pdo,
+        $projectInvoiceId,
+        $amount,
+        'stripe',
+        $paymentIntentId ?: ($sessionId ?: ''),
+        'Client-approved one-time Stripe payment',
+        $projectPaymentId
+    );
+    $pdo->prepare('UPDATE project_invoice_payments SET status=? WHERE id=?')
+        ->execute([$ok ? 'succeeded' : 'failed', $projectPaymentId]);
+    if ($ok) {
+        require_once __DIR__ . '/stripe_financial_events.php';
+        stripe_link_pending_project_financial_events($pdo, $projectPaymentId, $paymentIntentId ?: null);
+        $pdo->prepare('UPDATE project_invoices SET stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE id=?')
+            ->execute([$projectInvoiceId]);
+        $status = $pdo->prepare('SELECT status FROM project_invoices WHERE id=?');
+        $status->execute([$projectInvoiceId]);
+        if ($status->fetchColumn() === 'paid') {
+            $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="project_invoice" AND document_id=? AND revoked=0')
+                ->execute([$projectInvoiceId]);
+        }
+    }
+    return $ok;
+}
+
 function project_invoice_generate_due_monthly(PDO $pdo, array $appConfig): int
 {
     [$start, $end] = project_invoice_period_for_date(date('Y-m-d'), true);
@@ -498,7 +602,7 @@ function project_invoice_generate_due_monthly(PDO $pdo, array $appConfig): int
     $count = 0;
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $project) {
         $sendEmail = $hasAutoEmail ? !empty($project['project_invoice_auto_email']) : true;
-        $id = project_invoice_create_for_period($pdo, (int)$project['id'], $start, $end, $appConfig, $sendEmail);
+        $id = project_invoice_create_for_period($pdo, (int)$project['id'], $start, $end, $appConfig, $sendEmail, true);
         if ($id) {
             $count++;
         }

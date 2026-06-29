@@ -1,7 +1,9 @@
 <?php
 // src/controllers/payments_create.php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/audit.php';
+require_once __DIR__ . '/../utils/invoice_lifecycle.php';
 
 $invoice_id = (int)($_POST['invoice_id'] ?? 0);
 $amount = (float)($_POST['amount'] ?? 0);
@@ -25,13 +27,34 @@ if ($invoice_id <= 0 || $amount <= 0) {
 }
 
 // Fetch invoice details to get client_id and contract_id
-$invStmt = $pdo->prepare('SELECT client_id, contract_id, organization_id FROM invoices WHERE id = ?');
+$invStmt = $pdo->prepare('SELECT client_id,contract_id,organization_id,status,finalized_at,total,collection_mode FROM invoices WHERE id=?');
 $invStmt->execute([$invoice_id]);
 $invoice = $invStmt->fetch(PDO::FETCH_ASSOC);
+if (!$invoice || ($invoice['status'] ?? '') === 'draft' || empty($invoice['finalized_at'])) {
+  header('Location: /?page=payments/payments-create&error=' . urlencode('Finalize the invoice before recording payment.'));
+  exit;
+}
+if (($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+  header('Location: /?page=payments/payments-create&error=' . urlencode('Record payment from the project invoice so it is allocated correctly.'));
+  exit;
+}
 
 $client_id = (int)($invoice['client_id'] ?? 0);
 $contract_id = !empty($invoice['contract_id']) ? (int)$invoice['contract_id'] : null;
 $organization_id = !empty($invoice['organization_id']) ? (int)$invoice['organization_id'] : null;
+$paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
+$paidStmt->execute([$invoice_id]);
+$outstanding = max(0.0, (float)$invoice['total'] - (float)$paidStmt->fetchColumn());
+if ($amount > $outstanding + 0.005) {
+  header('Location: /?page=payments/payments-create&error=' . urlencode('Payment cannot exceed the outstanding balance.'));
+  exit;
+}
+try {
+  invoice_expire_active_checkout($pdo, 'invoices', $invoice_id, $appConfig);
+} catch (Throwable $e) {
+  header('Location: /?page=payments/payments-create&error=' . urlencode($e->getMessage()));
+  exit;
+}
 
 // Validate check number if method is check
 if (strtolower($method) === 'check' && empty($check_number)) {
@@ -41,11 +64,21 @@ if (strtolower($method) === 'check' && empty($check_number)) {
 
 $pdo->beginTransaction();
 try {
+  $lock = $pdo->prepare('SELECT total,status,finalized_at,collection_mode FROM invoices WHERE id=? FOR UPDATE');
+  $lock->execute([$invoice_id]);
+  $lockedInvoice = $lock->fetch(PDO::FETCH_ASSOC) ?: [];
+  $lockedPaid = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
+  $lockedPaid->execute([$invoice_id]);
+  $lockedOutstanding = max(0.0, (float)($lockedInvoice['total'] ?? 0) - (float)$lockedPaid->fetchColumn());
+  if (!$lockedInvoice || empty($lockedInvoice['finalized_at']) || ($lockedInvoice['collection_mode'] ?? 'direct') !== 'direct' || $amount > $lockedOutstanding + 0.005) {
+    throw new RuntimeException('Invoice balance changed before the payment was recorded.');
+  }
   $pdo->prepare('INSERT INTO payments (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, status, payment_date) VALUES (?,?,?,?,?,?,?,?,CURDATE())')
       ->execute([$client_id, $invoice_id, $contract_id, $organization_id, $amount, $method ?: null, $check_number ?: null, 'succeeded']);
+  $paymentId = (int)$pdo->lastInsertId();
 
   // Update invoice status by total paid
-  $sum = $pdo->prepare('SELECT COALESCE(SUM(amount),0) AS paid FROM payments WHERE invoice_id=? AND status="succeeded"');
+  $sum = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)),0) AS paid FROM payments WHERE invoice_id=? AND status="succeeded"');
   $sum->execute([$invoice_id]);
   $paid = (float)$sum->fetchColumn();
 
@@ -81,35 +114,11 @@ try {
 
   audit_log($pdo, 'payment.recorded', 'invoice', $invoice_id, ['amount' => $amount, 'method' => $method, 'status' => $status]);
 
-  // Send payment received confirmation email if enabled
   try {
-    require_once __DIR__ . '/../config/app.php';
-    if (!empty($appConfig['payment_received_notification'])) {
-      // Get client email and invoice details
-      $clientStmt = $pdo->prepare('SELECT c.email, c.name, i.doc_number, i.total FROM clients c JOIN invoices i ON i.client_id = c.id WHERE i.id = ?');
-      $clientStmt->execute([$invoice_id]);
-      $clientInfo = $clientStmt->fetch(PDO::FETCH_ASSOC);
-      
-      if ($clientInfo && !empty($clientInfo['email']) && filter_var($clientInfo['email'], FILTER_VALIDATE_EMAIL)) {
-        require_once __DIR__ . '/../services/EmailService.php';
-        
-        $subject = 'Payment Received - Invoice I-' . ($clientInfo['doc_number'] ?? $invoice_id);
-        $body = '<p>Dear ' . htmlspecialchars($clientInfo['name'] ?? 'Valued Client') . ',</p>';
-        $body .= '<p>We have received your payment of <strong>$' . number_format($amount, 2) . '</strong> ';
-        $body .= 'for invoice <strong>I-' . htmlspecialchars($clientInfo['doc_number'] ?? $invoice_id) . '</strong>.</p>';
-        if ($status === 'paid') {
-          $body .= '<p>This invoice is now <strong>paid in full</strong>. Thank you!</p>';
-        } else {
-          $body .= '<p>Remaining balance: <strong>$' . number_format($balanceDue, 2) . '</strong>.</p>';
-        }
-        $body .= '<p>Thank you for your payment!</p>';
-        
-        EmailService::sendEmail($clientInfo['email'], $subject, $body);
-      }
-    }
-  } catch (Throwable $e) {
-    @error_log('[PaymentsCreate] Payment confirmation email error: ' . $e->getMessage());
-    // Don't fail the payment because of email
+    require_once __DIR__ . '/../utils/payment_receipts.php';
+    payment_receipt_issue($pdo, $paymentId, $appConfig ?? []);
+  } catch (Throwable $receiptError) {
+    @error_log('[PaymentsCreate] Receipt issue failed: ' . $receiptError->getMessage());
   }
 
 } catch (Throwable $e) {

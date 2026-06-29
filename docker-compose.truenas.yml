@@ -26,6 +26,9 @@ services:
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
       ADMIN_PASSWORD: changeme_admin_pass
+      APP_ENV: production
+      AUTOPAY_BETA_ENABLED: "false"
+      BACKUP_ENCRYPTION_KEY: ""
       TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
     depends_on:
       db:
@@ -52,6 +55,9 @@ services:
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
       BACKUP_RETENTION_DAYS: "10"
+      APP_ENV: production
+      AUTOPAY_BETA_ENABLED: "false"
+      BACKUP_ENCRYPTION_KEY: ""
     depends_on:
       db:
         condition: service_healthy
@@ -62,7 +68,7 @@ services:
       - /mnt/tank/apps/project-alpha/backups:/var/www/backups
 
   db:
-    image: "mysql:8"
+    image: "mysql:8.4"
     restart: unless-stopped
     command: --log-error-verbosity=1
     environment:

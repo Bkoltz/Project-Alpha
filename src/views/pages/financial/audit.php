@@ -12,6 +12,10 @@ $endDate = $currentYear . '-12-31';
 ?>
 
 <section style="padding: 24px;">
+  <div style="display:flex;gap:8px;margin-bottom:18px">
+    <a class="btn btn-primary" href="/?page=financial/audit">Audit Export</a>
+    <a class="btn" href="/?page=financial/expense-report">Expense Reports</a>
+  </div>
   <div style="margin-bottom: 24px;">
     <h2 style="margin: 0 0 8px 0;">Financial Audit Export</h2>
     <p style="color: #6b7280; margin: 0;">Generate and download a complete financial audit report with invoices, contracts, and optional PDFs.</p>
@@ -21,6 +25,15 @@ $endDate = $currentYear . '-12-31';
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('audit')); ?>">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="action" id="formAction" value="generate">
+    <input type="hidden" name="report_type" value="audit">
+
+    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:24px">
+      <legend style="padding:0 8px;font-weight:600;color:#1f2937">Accounting Basis</legend>
+      <select name="accounting_basis" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+        <option value="cash" selected>Cash basis - use successful payment dates and amounts</option>
+        <option value="accrual">Accrual basis - use finalized invoice dates and totals</option>
+      </select>
+    </fieldset>
 
     <!-- Date Range Section -->
     <fieldset style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
@@ -157,7 +170,10 @@ $endDate = $currentYear . '-12-31';
 
   <!-- Active Schedules -->
   <?php
-  $schedules = $pdo->query('SELECT * FROM audit_schedules ORDER BY created_at DESC LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
+  $auditOrgId = (int)(function_exists('get_active_org_id') ? get_active_org_id() : ($_SESSION['active_org_id'] ?? 0));
+  $scheduleStmt = $pdo->prepare('SELECT * FROM audit_schedules WHERE (?=0 OR organization_id=?) AND report_type="audit" ORDER BY created_at DESC LIMIT 10');
+  $scheduleStmt->execute([$auditOrgId, $auditOrgId]);
+  $schedules = $scheduleStmt->fetchAll(PDO::FETCH_ASSOC);
   ?>
   <div style="margin-top: 32px;">
     <h3 style="margin: 0 0 16px 0; color: #1f2937;">Active Schedules</h3>
@@ -172,6 +188,7 @@ $endDate = $currentYear . '-12-31';
             <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
               <th style="padding: 12px; text-align: left; font-weight: 600;">Frequency</th>
               <th style="padding: 12px; text-align: left; font-weight: 600;">Date Range</th>
+              <th style="padding: 12px; text-align: left; font-weight: 600;">Basis</th>
               <th style="padding: 12px; text-align: left; font-weight: 600;">Recipients</th>
               <th style="padding: 12px; text-align: center; font-weight: 600;">Next Run</th>
               <th style="padding: 12px; text-align: center; font-weight: 600;">Status</th>
@@ -188,6 +205,7 @@ $endDate = $currentYear . '-12-31';
               <tr style="border-bottom: 1px solid #f3f4f6;">
                 <td style="padding: 12px; text-transform: capitalize;"><?php echo htmlspecialchars($schedule['frequency']); ?></td>
                 <td style="padding: 12px; text-transform: capitalize; color: #6b7280;"><?php echo str_replace('_', ' ', htmlspecialchars($schedule['date_range_type'])); ?></td>
+                <td style="padding: 12px; text-transform: capitalize; color: #6b7280;"><?php echo htmlspecialchars($schedule['accounting_basis'] ?? 'cash'); ?></td>
                 <td style="padding: 12px; color: #6b7280; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?php echo htmlspecialchars($emailList); ?></td>
                 <td style="padding: 12px; text-align: center; color: #374151; font-weight: 500;"><?php echo htmlspecialchars($nextRun); ?></td>
                 <td style="padding: 12px; text-align: center;">

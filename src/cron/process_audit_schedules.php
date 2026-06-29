@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/cron_state.php';
+require_once __DIR__ . '/../utils/csv.php';
 
 $logPrefix = '[process_audit_schedules]';
 $jobName = 'process_audit_schedules';
@@ -66,10 +67,30 @@ try {
             // Calculate date range based on schedule settings
             [$startDate, $endDate] = calculateDateRange($schedule['date_range_type']);
 
+            $reportType = ($schedule['report_type'] ?? 'audit') === 'expense' ? 'expense' : 'audit';
+            $organizationId = (int)($schedule['organization_id'] ?? 0);
+            if ($reportType === 'expense') {
+                $result = processExpenseSchedule(
+                    $pdo,
+                    $schedule,
+                    $startDate,
+                    $endDate,
+                    $mailCfg,
+                    $fromEmail,
+                    $fromName
+                );
+                $pdo->prepare('INSERT INTO audit_schedule_logs (schedule_id,status,started_at,completed_at,result_summary) VALUES (?,"completed",?,NOW(),?)')
+                    ->execute([$schedId, $now, $result]);
+                advanceSchedule($pdo, $schedule);
+                $processed++;
+                continue;
+            }
+
             $includeInvoices = (bool)$schedule['include_invoices'];
             $includeUnpaidInvoices = (bool)$schedule['include_unpaid_invoices'];
             $includeContracts = (bool)$schedule['include_contracts'];
             $includeQuotes = (bool)$schedule['include_quotes'];
+            $accountingBasis = ($schedule['accounting_basis'] ?? 'cash') === 'accrual' ? 'accrual' : 'cash';
 
             // Fetch invoices
             $invoices = [];
@@ -78,22 +99,47 @@ try {
                     ? "i.status IN ('paid', 'partial', 'unpaid')"
                     : "i.status IN ('paid', 'partial')";
 
-                $stmt = $pdo->prepare("
+                if ($accountingBasis === 'cash') {
+                    $stmt = $pdo->prepare("
+                    SELECT
+                        i.id, i.doc_number, c.name as client_name, i.project_code,
+                        i.subtotal, i.tax_percent, i.tax_amount as tax, i.tax_county,
+                        i.discount_value, i.total, i.status, MIN(p.payment_date) AS created_at, i.due_date,
+                        SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)) as amount_paid,
+                        GROUP_CONCAT(DISTINCT p.payment_method SEPARATOR ', ') as payment_methods
+                    FROM invoices i
+                    JOIN clients c ON i.client_id = c.id
+                    JOIN payments p ON i.id = p.invoice_id AND p.status='succeeded'
+                    WHERE p.payment_date BETWEEN ? AND ? AND (?=0 OR i.organization_id=?)
+                    GROUP BY i.id
+                    ORDER BY created_at ASC
+                ");
+                    $stmt->execute([$startDate, $endDate, $organizationId, $organizationId]);
+                } else {
+                    $stmt = $pdo->prepare("
                     SELECT 
                         i.id, i.doc_number, c.name as client_name, i.project_code,
                         i.subtotal, i.tax_percent, i.tax_amount as tax, i.tax_county,
-                        i.discount_value, i.total, i.status, i.created_at, i.due_date,
+                        i.discount_value, i.total, i.status, COALESCE(i.finalized_at,i.created_at) AS created_at, i.due_date,
                         COALESCE(SUM(CASE WHEN p.status = 'succeeded' THEN p.amount ELSE 0 END), 0) as amount_paid,
                         GROUP_CONCAT(DISTINCT p.payment_method SEPARATOR ', ') as payment_methods
                     FROM invoices i
                     LEFT JOIN clients c ON i.client_id = c.id
                     LEFT JOIN payments p ON i.id = p.invoice_id
-                    WHERE i.created_at BETWEEN ? AND ? AND {$statusFilter}
+                    WHERE COALESCE(i.finalized_at,i.created_at) BETWEEN ? AND ? AND {$statusFilter}
+                      AND i.status <> 'draft' AND (?=0 OR i.organization_id=?)
                     GROUP BY i.id
                     ORDER BY i.created_at ASC
                 ");
-                $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                    $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59', $organizationId, $organizationId]);
+                }
                 $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                if ($accountingBasis === 'accrual') {
+                    foreach ($invoices as &$invoiceRow) {
+                        $invoiceRow['amount_paid'] = (float)$invoiceRow['total'];
+                    }
+                    unset($invoiceRow);
+                }
             }
 
             // Fetch contracts
@@ -103,10 +149,10 @@ try {
                     SELECT c.id, c.doc_number, cl.name as client_name, c.project_code,
                            c.contract_type, c.total, c.status, c.created_at, c.start_date, c.end_date
                     FROM contracts c LEFT JOIN clients cl ON c.client_id = cl.id
-                    WHERE c.created_at BETWEEN ? AND ?
+                    WHERE c.created_at BETWEEN ? AND ? AND (?=0 OR c.organization_id=?)
                     ORDER BY c.created_at ASC
                 ");
-                $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59', $organizationId, $organizationId]);
                 $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             }
 
@@ -117,10 +163,10 @@ try {
                     SELECT q.id, q.doc_number, cl.name as client_name, q.project_code,
                            q.quote_type, q.total, q.status, q.created_at
                     FROM quotes q LEFT JOIN clients cl ON q.client_id = cl.id
-                    WHERE q.created_at BETWEEN ? AND ?
+                    WHERE q.created_at BETWEEN ? AND ? AND (?=0 OR q.organization_id=?)
                     ORDER BY q.created_at ASC
                 ");
-                $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59', $organizationId, $organizationId]);
                 $quotes = $stmt->fetchAll(PDO::FETCH_ASSOC);
             }
 
@@ -138,13 +184,13 @@ try {
             $csvFile = $tmpDir . DIRECTORY_SEPARATOR . 'audit_report.csv';
             $fp = fopen($csvFile, 'w');
             fwrite($fp, "\xEF\xBB\xBF"); // BOM
-            fputcsv($fp, ['Date', 'Client', 'Doc Number', 'Document Type', 'Status', 'Tax %', 'Tax County', 'Amount Paid', 'Payment Method', 'Discount', 'Total', 'Running Total']);
+            csv_write_row($fp, ['Date', 'Client', 'Doc Number', 'Document Type', 'Status', 'Tax %', 'Tax County', 'Amount Paid', 'Payment Method', 'Discount', 'Total', 'Running Total']);
 
             $runningTotal = 0;
             foreach ($invoices as $inv) {
                 $amountPaid = (float)($inv['amount_paid'] ?? 0);
                 $runningTotal += $amountPaid;
-                fputcsv($fp, [
+                csv_write_row($fp, [
                     substr($inv['created_at'] ?? '', 0, 10),
                     $inv['client_name'] ?? '',
                     $inv['doc_number'] ?? $inv['id'],
@@ -160,7 +206,7 @@ try {
                 ]);
             }
             foreach ($contracts as $c) {
-                fputcsv($fp, [
+                csv_write_row($fp, [
                     substr($c['created_at'] ?? '', 0, 10), $c['client_name'] ?? '',
                     $c['doc_number'] ?? $c['id'], 'Contract (' . ($c['contract_type'] ?? 'regular') . ')',
                     ucfirst($c['status'] ?? ''), '', '', '', '', '',
@@ -168,7 +214,7 @@ try {
                 ]);
             }
             foreach ($quotes as $q) {
-                fputcsv($fp, [
+                csv_write_row($fp, [
                     substr($q['created_at'] ?? '', 0, 10), $q['client_name'] ?? '',
                     $q['doc_number'] ?? $q['id'], 'Quote (' . ($q['quote_type'] ?? 'regular') . ')',
                     ucfirst($q['status'] ?? ''), '', '', '', '', '',
@@ -177,12 +223,12 @@ try {
             }
 
             // Summary
-            fputcsv($fp, []);
-            fputcsv($fp, ['SUMMARY']);
-            fputcsv($fp, ['Period:', $startDate . ' to ' . $endDate]);
-            fputcsv($fp, ['Total Invoices:', count($invoices), '', '', '', '', '', 'Total Collected:', '$' . number_format($runningTotal, 2)]);
-            if ($includeContracts) fputcsv($fp, ['Total Contracts:', count($contracts)]);
-            if ($includeQuotes) fputcsv($fp, ['Total Quotes:', count($quotes)]);
+            csv_write_row($fp, []);
+            csv_write_row($fp, ['SUMMARY']);
+            csv_write_row($fp, ['Period:', $startDate . ' to ' . $endDate]);
+            csv_write_row($fp, ['Total Invoices:', count($invoices), '', '', '', '', '', 'Total Collected:', '$' . number_format($runningTotal, 2)]);
+            if ($includeContracts) csv_write_row($fp, ['Total Contracts:', count($contracts)]);
+            if ($includeQuotes) csv_write_row($fp, ['Total Quotes:', count($quotes)]);
             fclose($fp);
 
             // Email the CSV to all recipients
@@ -200,6 +246,14 @@ try {
             $csvContent = file_get_contents($csvFile);
             $attachmentName = 'audit_' . str_replace('-', '', $startDate) . '-' . str_replace('-', '', $endDate) . '.csv';
             $attachments = [['filename' => $attachmentName, 'content' => $csvContent, 'mime' => 'text/csv']];
+
+            $artifactDir = '/var/www/config/audits/' . $organizationId . '/scheduled';
+            if (!is_dir($artifactDir)) {
+                @mkdir($artifactDir, 0750, true);
+            }
+            if (is_dir($artifactDir) && is_writable($artifactDir)) {
+                @copy($csvFile, $artifactDir . DIRECTORY_SEPARATOR . date('Ymd_His') . '_schedule_' . $schedId . '_' . $attachmentName);
+            }
 
             $sentCount = 0;
             foreach ($emails as $email) {
@@ -221,7 +275,7 @@ try {
             // Log the run
             try {
                 $pdo->prepare('INSERT INTO audit_schedule_logs (schedule_id, status, started_at, completed_at, result_summary) VALUES (?, ?, ?, NOW(), ?)')
-                    ->execute([$schedId, 'completed', $now, "Sent to {$sentCount}/" . count($emails) . " recipients. Invoices: " . count($invoices) . ", Collected: \${$runningTotal}"]);
+                    ->execute([$schedId, 'completed', $now, "{$accountingBasis} basis; sent to {$sentCount}/" . count($emails) . " recipients. Invoices: " . count($invoices) . ", Total: \${$runningTotal}"]);
             } catch (Throwable $e) { /* ignore logging failures */ }
 
             // Advance to next run
@@ -252,6 +306,131 @@ try {
 }
 
 exit(0);
+
+function processExpenseSchedule(
+    PDO $pdo,
+    array $schedule,
+    string $startDate,
+    string $endDate,
+    array $mailCfg,
+    string $fromEmail,
+    string $fromName
+): string {
+    $organizationId = (int)($schedule['organization_id'] ?? 0);
+    if ($organizationId <= 0) {
+        throw new RuntimeException('Expense schedule is missing its organization.');
+    }
+
+    $filters = json_decode((string)($schedule['filters'] ?? ''), true);
+    $filters = is_array($filters) ? $filters : [];
+    $where = ['e.organization_id=?', 'e.expense_date BETWEEN ? AND ?'];
+    $params = [$organizationId, $startDate, $endDate];
+    foreach (['category_id', 'vendor_id', 'client_id'] as $field) {
+        $value = max(0, (int)($filters[$field] ?? 0));
+        if ($value > 0) {
+            $where[] = 'e.' . $field . '=?';
+            $params[] = $value;
+        }
+    }
+    if (in_array((string)($filters['billable'] ?? ''), ['0', '1'], true)) {
+        $where[] = 'e.is_billable=?';
+        $params[] = (int)$filters['billable'];
+    }
+    if (in_array((string)($filters['tax_deductible'] ?? ''), ['0', '1'], true)) {
+        $where[] = 'e.is_tax_deductible=?';
+        $params[] = (int)$filters['tax_deductible'];
+    }
+    if (in_array((string)($filters['status'] ?? ''), ['pending', 'confirmed', 'reimbursed', 'void'], true)) {
+        $where[] = 'e.status=?';
+        $params[] = $filters['status'];
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT e.expense_date,e.description,e.amount,e.tax_amount,e.total_amount,e.payment_method,
+                e.is_billable,e.is_tax_deductible,e.status,
+                v.name AS vendor_name,ec.name AS category_name,c.name AS client_name
+         FROM expenses e
+         LEFT JOIN vendors v ON v.id=e.vendor_id
+         LEFT JOIN expense_categories ec ON ec.id=e.category_id
+         LEFT JOIN clients c ON c.id=e.client_id
+         WHERE ' . implode(' AND ', $where) . '
+         ORDER BY e.expense_date,e.id'
+    );
+    $stmt->execute($params);
+    $expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $tmpDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'expense_sched_' . (int)$schedule['id'] . '_' . bin2hex(random_bytes(4));
+    if (!mkdir($tmpDir, 0750, true) && !is_dir($tmpDir)) {
+        throw new RuntimeException('Could not create expense report workspace.');
+    }
+    $csvFile = $tmpDir . DIRECTORY_SEPARATOR . 'expense_report.csv';
+    $fp = fopen($csvFile, 'wb');
+    if ($fp === false) {
+        throw new RuntimeException('Could not create expense report.');
+    }
+    fwrite($fp, "\xEF\xBB\xBF");
+    csv_write_row($fp, ['Date', 'Vendor', 'Description', 'Category', 'Client', 'Amount', 'Tax', 'Total', 'Payment Method', 'Billable', 'Tax Deductible', 'Status']);
+    $total = 0.0;
+    foreach ($expenses as $expense) {
+        $rowTotal = (float)($expense['total_amount'] ?? $expense['amount'] ?? 0);
+        $total += $rowTotal;
+        csv_write_row($fp, [
+            $expense['expense_date'] ?? '',
+            $expense['vendor_name'] ?? '',
+            $expense['description'] ?? '',
+            $expense['category_name'] ?? '',
+            $expense['client_name'] ?? '',
+            number_format((float)($expense['amount'] ?? 0), 2, '.', ''),
+            number_format((float)($expense['tax_amount'] ?? 0), 2, '.', ''),
+            number_format($rowTotal, 2, '.', ''),
+            $expense['payment_method'] ?? '',
+            !empty($expense['is_billable']) ? 'Yes' : 'No',
+            !empty($expense['is_tax_deductible']) ? 'Yes' : 'No',
+            $expense['status'] ?? '',
+        ]);
+    }
+    csv_write_row($fp, []);
+    csv_write_row($fp, ['Summary', '', count($expenses) . ' expenses', '', '', '', '', number_format($total, 2, '.', '')]);
+    fclose($fp);
+
+    $attachmentName = 'expenses_' . str_replace('-', '', $startDate) . '-' . str_replace('-', '', $endDate) . '.csv';
+    $content = file_get_contents($csvFile);
+    if ($content === false) {
+        throw new RuntimeException('Could not read generated expense report.');
+    }
+    $attachments = [['filename' => $attachmentName, 'content' => $content, 'mime' => 'text/csv']];
+    $subject = ucfirst((string)$schedule['frequency']) . ' Expense Report - ' . $startDate . ' to ' . $endDate;
+    $body = '<h2>Expense Report</h2><p><strong>Period:</strong> ' . htmlspecialchars($startDate) . ' to ' . htmlspecialchars($endDate) . '</p>'
+        . '<p><strong>Expenses:</strong> ' . count($expenses) . ' | <strong>Total:</strong> $' . number_format($total, 2) . '</p>'
+        . '<p>The CSV report is attached.</p>';
+    $emails = json_decode((string)($schedule['email_addresses'] ?? ''), true);
+    $emails = is_array($emails) ? $emails : [];
+    $sent = 0;
+    foreach ($emails as $email) {
+        $email = trim((string)$email);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            continue;
+        }
+        [$ok, $error] = mailer_send($mailCfg, $email, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail), $attachments);
+        if ($ok) {
+            $sent++;
+        } else {
+            @error_log('[process_audit_schedules] Expense report email failed: ' . $error);
+        }
+    }
+
+    $artifactDir = '/var/www/config/reports/' . $organizationId . '/scheduled';
+    if (!is_dir($artifactDir)) {
+        @mkdir($artifactDir, 0750, true);
+    }
+    if (is_dir($artifactDir) && is_writable($artifactDir)) {
+        @copy($csvFile, $artifactDir . DIRECTORY_SEPARATOR . date('Ymd_His') . '_schedule_' . (int)$schedule['id'] . '_' . $attachmentName);
+    }
+    @unlink($csvFile);
+    @rmdir($tmpDir);
+
+    return 'Expense report sent to ' . $sent . '/' . count($emails) . ' recipients; ' . count($expenses) . ' expenses; total $' . number_format($total, 2);
+}
 
 /**
  * Calculate date range based on schedule type

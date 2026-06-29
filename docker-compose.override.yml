@@ -13,9 +13,15 @@ services:
       context: .
       target: web
     image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:latest}
+    environment:
+      APP_ENV: development
+      AUTOPAY_BETA_ENABLED: ${AUTOPAY_BETA_ENABLED:-false}
 
   cron:
     build:
       context: .
       target: cron
     image: ${PROJECT_ALPHA_CRON_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:cron-latest}
+    environment:
+      APP_ENV: development
+      AUTOPAY_BETA_ENABLED: ${AUTOPAY_BETA_ENABLED:-false}
