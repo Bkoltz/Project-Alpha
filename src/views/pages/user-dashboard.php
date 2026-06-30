@@ -7,6 +7,25 @@ require_once __DIR__ . '/../../utils/acl.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $orgId = get_active_org_id();
+$displayName = '';
+if ($userId > 0) {
+    try {
+        $nameStmt = $pdo->prepare('SELECT username, email FROM users WHERE id = ? LIMIT 1');
+        $nameStmt->execute([$userId]);
+        $nameRow = $nameStmt->fetch(PDO::FETCH_ASSOC);
+        $displayName = trim((string)($nameRow['username'] ?? ''));
+        if ($displayName === '') {
+            $email = (string)($nameRow['email'] ?? ($_SESSION['user']['email'] ?? ''));
+            $displayName = trim(strtok($email, '@') ?: $email);
+        }
+    } catch (Throwable $e) {
+        $email = (string)($_SESSION['user']['email'] ?? '');
+        $displayName = trim(strtok($email, '@') ?: $email);
+    }
+}
+if ($displayName === '') {
+    $displayName = 'there';
+}
 
 $modules = [
     ['perm' => 'quotes.view',      'label' => 'Quotes',      'icon' => '📋', 'url' => '/?page=quote/quotes-list',          'desc' => 'View and manage quotes'],
@@ -23,7 +42,7 @@ $modules = [
 $visible = array_filter($modules, fn($m) => user_can($pdo, $userId, $m['perm'], $orgId));
 ?>
 <section>
-  <h2>Welcome, <?php echo htmlspecialchars($_SESSION['user']['email'] ?? ''); ?></h2>
+  <h2>Hi <?php echo htmlspecialchars($displayName); ?></h2>
   <p style="color:#6b7280;margin-bottom:24px;">Select a module below to get started.</p>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
     <?php foreach ($visible as $mod): ?>

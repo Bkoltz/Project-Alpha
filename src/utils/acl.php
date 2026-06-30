@@ -184,6 +184,49 @@ function user_can(PDO $pdo, int $userId, string $permission, ?int $activeOrgId =
     return false;
 }
 
+function acl_user_has_org_wide_scope(PDO $pdo, int $userId, ?int $activeOrgId = null): bool
+{
+    if (($_SESSION['user']['role'] ?? '') === 'admin') {
+        return true;
+    }
+
+    $activeOrgId = $activeOrgId ?: get_active_org_id();
+    if ($activeOrgId === 0) {
+        return false;
+    }
+
+    $roleName = user_role_on_org($pdo, $userId, $activeOrgId);
+    return in_array($roleName, ['admin', 'owner'], true);
+}
+
+function acl_table_has_column(PDO $pdo, string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . ':' . $column;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+        $cache[$key] = false;
+        return false;
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$table, $column]);
+        $cache[$key] = $stmt->fetchColumn() !== false;
+    } catch (Throwable $e) {
+        $cache[$key] = false;
+    }
+
+    return $cache[$key];
+}
+
 function scope_clause(PDO $pdo, string $tableAlias, int $userId): array
 {
     if (($_SESSION['user']['role'] ?? '') === 'admin') {
@@ -193,26 +236,40 @@ function scope_clause(PDO $pdo, string $tableAlias, int $userId): array
     if ($activeOrgId === 0) {
         return ['1=0', []];
     }
-    // All non-admin roles (owner, staff, member) get org-level scoping.
-    // Record-level scoping (created_by) is reserved for future per-user restrictions
-    // via explicit permission overrides, not the default member role.
+    if (acl_user_has_org_wide_scope($pdo, $userId, $activeOrgId)) {
+        return [
+            "{$tableAlias}.organization_id = ?",
+            [$activeOrgId]
+        ];
+    }
+
     return [
-        "{$tableAlias}.organization_id = ?",
-        [$activeOrgId]
+        "{$tableAlias}.organization_id = ? AND {$tableAlias}.created_by = ?",
+        [$activeOrgId, $userId]
     ];
 }
 
 function can_access_record(PDO $pdo, string $table, int $recordId, int $userId): bool
 {
     if (($_SESSION['user']['role'] ?? '') === 'admin') return true;
+    if ($table === 'clients') return true;
     $activeOrgId = get_active_org_id();
     if ($activeOrgId === 0) return false;
-    $stmt = $pdo->prepare("SELECT organization_id FROM {$table} WHERE id = ? LIMIT 1");
+
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table)) return false;
+
+    $select = 'organization_id';
+    if (acl_table_has_column($pdo, $table, 'created_by')) {
+        $select .= ', created_by';
+    }
+
+    $stmt = $pdo->prepare("SELECT {$select} FROM {$table} WHERE id = ? LIMIT 1");
     $stmt->execute([$recordId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$row) return false;
     if ((int)$row['organization_id'] !== $activeOrgId) return false;
-    return true;
+    if (acl_user_has_org_wide_scope($pdo, $userId, $activeOrgId)) return true;
+    return isset($row['created_by']) && (int)$row['created_by'] === $userId;
 }
 
 function role_id_by_name(PDO $pdo, string $roleName, ?int $orgId = null): ?int

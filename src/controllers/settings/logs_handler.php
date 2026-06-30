@@ -14,7 +14,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 
 /**
- * Resolve a requested log filename to a safe, real path under logs/.
+ * Resolve a requested log filename to a safe, real path under config/logs.
  * Returns null if the request is invalid or attempts traversal.
  */
 function allowed_log_path(string $requested): ?string
@@ -27,22 +27,24 @@ function allowed_log_path(string $requested): ?string
     if (!preg_match('/^[a-zA-Z0-9_.\-]+\.log$/', $requested)) {
         return null;
     }
-    $base = realpath(__DIR__ . '/../../../logs') ?: __DIR__ . '/../../../logs';
-    $candidate = $base . DIRECTORY_SEPARATOR . $requested;
-    $realCandidate = realpath($candidate);
-    if ($realCandidate === false) {
-        // File does not exist yet; ensure the canonical path still lives under the logs directory
-        $realBase = realpath($base) ?: $base;
-        $candidateRealBase = realpath(dirname($candidate));
-        if ($candidateRealBase === false || !str_starts_with($candidateRealBase . DIRECTORY_SEPARATOR, $realBase . DIRECTORY_SEPARATOR)) {
-            return null;
+    $bases = [
+        '/var/www/config/logs/system',
+        '/var/www/config/logs/cron',
+        __DIR__ . '/../../../config/logs/system',
+        __DIR__ . '/../../../config/logs/cron',
+    ];
+    foreach ($bases as $base) {
+        $realBase = realpath($base);
+        if ($realBase === false) {
+            continue;
         }
-        return $candidate;
+        $candidate = $realBase . DIRECTORY_SEPARATOR . $requested;
+        $realCandidate = realpath($candidate);
+        if ($realCandidate !== false && str_starts_with($realCandidate, $realBase . DIRECTORY_SEPARATOR)) {
+            return $realCandidate;
+        }
     }
-    if (!str_starts_with($realCandidate, $base . DIRECTORY_SEPARATOR)) {
-        return null;
-    }
-    return $realCandidate;
+    return null;
 }
 
 header('Content-Type: application/json');

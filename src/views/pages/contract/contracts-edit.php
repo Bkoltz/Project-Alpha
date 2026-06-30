@@ -19,9 +19,20 @@ $items = $items->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 
 // Fetch existing signatures
-$sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
-$sigStmt->execute([$id]);
-$existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+$existingSignatures = [];
+try {
+  $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
+  $sigStmt->execute([$id]);
+  $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+  try {
+    $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY id');
+    $sigStmt->execute([$id]);
+    $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Throwable $ignored) {
+    $existingSignatures = [];
+  }
+}
 ?>
 <section>
   <h2>Edit Contract C-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?><?php if (!empty($contract['project_code'])) echo ' (Project ' . htmlspecialchars($contract['project_code']) . ')'; ?></h2>
@@ -126,8 +137,19 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
       </div>
     <?php endif; ?>
 
+    <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
+      <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
+      <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <input type="checkbox" name="billing_mode" value="hourly" <?php echo ($contract['billing_mode'] ?? 'fixed') === 'hourly' ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div style="font-weight:600;color:#1f2937">Hourly billing</div>
+          <div style="font-size:13px;color:#4b5563">Use line items as estimated hours and hourly rates.</div>
+        </div>
+      </label>
+    </div>
+
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items</div>
+      <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
 
       <div id="itemsCo" style="display:grid;gap:8px"></div>
       <button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
@@ -159,12 +181,7 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
       }
     }
     ?>
-    <?php if (!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])): ?>
-      <label>
-        <div>Scope of Work</div>
-        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables for this contract..."><?php echo htmlspecialchars($contract['scope'] ?? ''); ?></textarea>
-      </label>
-    <?php endif; ?>
+    <!-- Job Notes (shared across related docs) -->
     <label>
       <div>Job Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
@@ -172,6 +189,12 @@ $existingSignatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
     <label>
       <div>Job Terms (override default terms for this job)</div>
       <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
+    </label>
+
+    <!-- Service Description -->
+    <label>
+      <div>Service Description</div>
+      <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="e.g. Website hosting, Google Ads management"><?php echo htmlspecialchars($contract['scope'] ?? ''); ?></textarea>
     </label>
 
     <div id="totalsCo" style="margin-top:8px;display:grid;gap:6px;justify-content:end">

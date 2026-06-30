@@ -5,6 +5,19 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 $csrf = csrf_sf_token('contracts-create');
+$selectedProject = null;
+$selectedProjectId = (int)($_GET['project_id'] ?? 0);
+if ($selectedProjectId > 0) {
+  $projectStmt = $pdo->prepare('
+    SELECT p.id, p.client_id, p.organization_id, p.name, c.name AS client_name, o.name AS organization_name
+    FROM projects p
+    LEFT JOIN clients c ON c.id = p.client_id
+    LEFT JOIN organizations o ON o.id = p.organization_id
+    WHERE p.id = ?
+  ');
+  $projectStmt->execute([$selectedProjectId]);
+  $selectedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
 // TODO: We need to update the logic for the long-term contracts as follows:
 //When selecting the start and end date, we should only be able to select the days that are relative to the billing period. For example:
 //If the billing period is every week, and the start date is a friday, the user should only be able to select the end date which is a friday. Same goes for billing every month, and year.
@@ -21,11 +34,14 @@ $csrf = csrf_sf_token('contracts-create');
   <form id="coCreateForm" method="post" action="/?page=contract/contracts-create" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+    <?php if ($selectedProject): ?>
+      <input type="hidden" name="return_to_project" value="<?php echo (int)$selectedProject['id']; ?>">
+    <?php endif; ?>
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label style="position:relative">
         <div>Client</div>
-        <input id="clientInputCo" name="client" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <input id="clientIdCo" type="hidden" name="client_id">
+        <input id="clientInputCo" name="client" type="text" placeholder="Type client name..." autocomplete="off" value="<?php echo htmlspecialchars((string)($selectedProject['client_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientIdCo" type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>">
         <div id="clientSuggestCo" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
       <label>
@@ -46,13 +62,21 @@ $csrf = csrf_sf_token('contracts-create');
       </label>
     </div>
 
-    <div id="projectSectionCo" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+    <div id="projectSectionCo" style="<?php echo $selectedProject ? 'display:block' : 'display:none'; ?>;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
       <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
       <div style="display:grid;gap:12px">
         <label>
           <div>Add to Existing Project</div>
           <select id="projectSelectCo" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             <option value="">-- Select Project --</option>
+            <?php if ($selectedProject): ?>
+              <option value="<?php echo (int)$selectedProject['id']; ?>" selected>
+                <?php echo htmlspecialchars((string)$selectedProject['name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>
+                <?php if (!empty($selectedProject['organization_name'])): ?>
+                  (<?php echo htmlspecialchars((string)$selectedProject['organization_name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>)
+                <?php endif; ?>
+              </option>
+            <?php endif; ?>
           </select>
         </label>
         <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
@@ -95,6 +119,17 @@ $csrf = csrf_sf_token('contracts-create');
           </div>
         </label>
       </div>
+    </div>
+
+    <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
+      <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
+      <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <input type="checkbox" name="billing_mode" value="hourly" id="billingModeHourlyCo" style="margin-top:3px">
+        <div>
+          <div style="font-weight:600;color:#1f2937">Hourly billing</div>
+          <div style="font-size:13px;color:#4b5563">Use line items as estimated hours and hourly rates. Actual invoice billing can come from tracked time.</div>
+        </div>
+      </label>
     </div>
 
     <div id="longTermFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
@@ -241,7 +276,7 @@ $csrf = csrf_sf_token('contracts-create');
     </div>
 
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items</div>
+      <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
       <div id="itemsCo" style="display:grid;gap:8px"></div>
       <button type="button" onclick="addItemCo()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>

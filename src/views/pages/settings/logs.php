@@ -63,7 +63,25 @@ try {
 }
 
 // --- Available log files ---
-$logFiles = ['app.log', 'error.log', 'security.log', 'audit.log'];
+$logDirs = [
+    '/var/www/config/logs/system',
+    '/var/www/config/logs/cron',
+    __DIR__ . '/../../../../config/logs/system',
+    __DIR__ . '/../../../../config/logs/cron',
+];
+$logFileMap = [];
+foreach ($logDirs as $dir) {
+    if (!is_dir($dir) || !is_readable($dir)) {
+        continue;
+    }
+    foreach (glob(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '*.{log,txt}', GLOB_BRACE) ?: [] as $filePath) {
+        if (is_file($filePath) && is_readable($filePath)) {
+            $logFileMap[basename($filePath)] = $filePath;
+        }
+    }
+}
+ksort($logFileMap, SORT_NATURAL | SORT_FLAG_CASE);
+$logFiles = array_keys($logFileMap);
 $selectedFile = '';
 $levelFilter = '';
 $logContent = '';
@@ -73,7 +91,7 @@ if (!empty($_GET['file'])) {
     $selectedFile = basename(preg_replace('/[^a-zA-Z0-9_.\-]/', '', (string)$_GET['file']));
     $levelFilter = isset($_GET['level']) ? strtoupper(preg_replace('/[^A-Z]/', '', (string)$_GET['level'])) : '';
 
-    $path = __DIR__ . '/../../../../logs/' . $selectedFile;
+    $path = $logFileMap[$selectedFile] ?? '';
     if (!str_contains($selectedFile, '..') && !str_contains($selectedFile, '/') && !str_contains($selectedFile, '\\')
         && is_file($path) && is_readable($path)
     ) {
@@ -250,6 +268,9 @@ try {
                     <?php echo htmlspecialchars($file); ?>
                 </a>
             <?php endforeach; ?>
+            <?php if (empty($logFiles)): ?>
+                <span style="color:var(--muted);font-size:13px">No log files found yet.</span>
+            <?php endif; ?>
         </div>
 
         <?php if ($selectedFile): ?>

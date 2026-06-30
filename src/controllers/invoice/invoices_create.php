@@ -2,6 +2,7 @@
 // src/controllers/invoices_create.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
+require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
@@ -12,20 +13,23 @@ $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $due_date = $_POST['due_date'] ?? null;
 if (!$due_date || trim($due_date) === '') {
-    $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
-    $due_date = date('Y-m-d', strtotime('+' . $netDays . ' days'));
+    $due_date = project_invoice_due_date($pdo, $project_id, $appConfig);
 }
 
 $item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
-$timeEntryIds = $_POST['time_entry_id'] ?? [];
+$billingUnits = $_POST['item_billing_unit'] ?? [];
+$timeEntryIdsByRow = $_POST['time_entry_ids'] ?? [];
+$legacyTimeEntryIds = $_POST['time_entry_id'] ?? [];
 
 if ($client_id <= 0 || empty($item)) {
     header('Location: /?page=invoice/invoices-create&error=Invalid%20input');
@@ -48,7 +52,8 @@ for ($i=0; $i<count($item); $i++) {
         'quantity' => $q,
         'unit_price' => $p,
         'line_total' => $line,
-        'time_entry_id' => (int)($timeEntryIds[$i] ?? 0) ?: null
+        'billing_unit' => (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each',
+        'time_entry_ids' => array_values(array_filter(array_map('intval', $timeEntryIdsByRow[$i] ?? [($legacyTimeEntryIds[$i] ?? 0)])))
     ];
 }
 if (!$items) {
@@ -71,8 +76,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
+    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'unpaid', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
     $invoice_id = (int)$pdo->lastInsertId();
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);
@@ -86,13 +91,21 @@ try {
     $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, time_entry_id, hours) VALUES (?,?,?,?,?,?,?,?)');
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit, time_entry_id, hours) VALUES (?,?,?,?,?,?,?,?,?)');
     foreach ($items as $idx => $it) {
-        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['time_entry_id'] ?? null, $it['quantity'] ?? null]);
-        if (!empty($it['time_entry_id'])) {
-            $teId = (int)$it['time_entry_id'];
+        $primaryTimeEntryId = !empty($it['time_entry_ids']) ? (int)$it['time_entry_ids'][0] : null;
+        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'], $primaryTimeEntryId, $it['billing_unit'] === 'hour' ? ($it['quantity'] ?? null) : null]);
+        if (!empty($it['time_entry_ids'])) {
             $itemId = (int)$pdo->lastInsertId();
-            $pdo->prepare('UPDATE time_entries SET billed = 1, invoice_item_id = ? WHERE id = ?')->execute([$itemId, $teId]);
+            $check = $pdo->prepare('SELECT id FROM time_entries WHERE id = ? AND client_id = ? AND billed = 0');
+            $mark = $pdo->prepare('UPDATE time_entries SET billed = 1, invoice_item_id = ?, invoice_id = ? WHERE id = ?');
+            foreach ($it['time_entry_ids'] as $teId) {
+                $check->execute([(int)$teId, $client_id]);
+                if (!$check->fetchColumn()) {
+                    throw new RuntimeException('Invalid or already billed time entry selected.');
+                }
+                $mark->execute([$itemId, $invoice_id, (int)$teId]);
+            }
         }
     }
     

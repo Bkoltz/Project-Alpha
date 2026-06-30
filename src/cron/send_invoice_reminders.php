@@ -107,7 +107,7 @@ try {
                 $token = $createPublicLink($iid);
                 $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($baseUrl === '') $baseUrl = 'http://localhost';
-                $link = $baseUrl . '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
 
                 // Build email
                 $subject = sprintf('Invoice I-%s due %s', $inv['doc_number'] ?? $iid, date('M j, Y', strtotime($inv['due_date'])));
@@ -121,7 +121,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'due_7']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent due-7 reminder for invoice I-{$inv['doc_number']} to {$to}");
@@ -182,7 +182,7 @@ try {
                 $token = $createPublicLink($iid);
                 $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($baseUrl === '') $baseUrl = 'http://localhost';
-                $link = $baseUrl . '/?page=public_doc&type=invoice&token=' . rawurlencode($token);
+                $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
 
                 // Build email
                 $subject = sprintf('Action Required: Overdue invoice I-%s', $inv['doc_number'] ?? $iid);
@@ -196,7 +196,7 @@ try {
                 [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
                 
                 if ($ok) {
-                    $insn = $pdo->prepare('INSERT INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
+                    $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'overdue_weekly']);
                     $remindersSent++;
                     @error_log("$logPrefix Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}");

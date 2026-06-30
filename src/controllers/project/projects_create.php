@@ -14,10 +14,13 @@ csrf_verify_post_or_redirect('project/projects-create');
 $name = trim($_POST['name'] ?? '');
 $client_id = (int)($_POST['client_id'] ?? 0);
 $parent_id = null; // Parent projects are not supported any more
-$organization_id = (int)($_POST['organization_id'] ?? 0) ?: $__orgId;
+$organization_id = (int)($_POST['organization_id'] ?? 0);
 $estimated_start = trim($_POST['estimated_start'] ?? '');
 $estimated_end = trim($_POST['estimated_end'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
+$invoiceBillingPeriod = ($_POST['invoice_billing_period'] ?? 'per_invoice') === 'monthly' ? 'monthly' : 'per_invoice';
+$invoiceNetTermsDays = trim((string)($_POST['invoice_net_terms_days'] ?? ''));
+$invoiceNetTermsDays = $invoiceNetTermsDays === '' ? null : max(0, (int)$invoiceNetTermsDays);
 
 if ($name === '') { header('Location: /?page=project/projects-list&error=Name%20required'); exit; }
 
@@ -28,11 +31,13 @@ if ($estimated_start !== '' && $estimated_end !== '') {
 	}
 }
 
-$ins = $pdo->prepare('INSERT INTO projects (name, client_id, organization_id, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,NOW())');
+$ins = $pdo->prepare('INSERT INTO projects (name, client_id, organization_id, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())');
 $ins->execute([
 	$name,
 	$client_id > 0 ? $client_id : null,
 	$organization_id > 0 ? $organization_id : null,
+	$invoiceBillingPeriod,
+	$invoiceNetTermsDays,
 	$estimated_start !== '' ? $estimated_start : null,
 	$estimated_end !== '' ? $estimated_end : null,
 	$notes ?: null,

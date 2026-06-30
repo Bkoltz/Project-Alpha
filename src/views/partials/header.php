@@ -205,7 +205,7 @@ function nav_can(string $permission): bool {
             </li>
             <?php endif; ?>
 
-            <?php if (nav_can('jobs.view') || nav_can('projects.view')): ?>
+            <?php if (nav_can('jobs.view') || nav_can('projects.view') || nav_can('time_tracking.view')): ?>
             <li class="nav-section">
               <div class="section-label">Jobs</div>
               <ul>
@@ -215,11 +215,14 @@ function nav_can(string $permission): bool {
                 <?php if (nav_can('projects.view')): ?>
                 <li><a href="/?page=project/projects-list" data-page="project/projects-list">Projects</a></li>
                 <?php endif; ?>
+                <?php if (nav_can('time_tracking.view')): ?>
+                <li><a href="/?page=time-tracking" data-page="time-tracking">Time Tracking</a></li>
+                <?php endif; ?>
               </ul>
             </li>
             <?php endif; ?>
 
-            <?php if (nav_can('financial.view') || nav_can('time_tracking.view')): ?>
+            <?php if (nav_can('financial.view')): ?>
             <li class="nav-section">
               <div class="section-label">Financial</div>
               <ul>
@@ -229,9 +232,6 @@ function nav_can(string $permission): bool {
                 <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
                 <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
                 <li><a href="/?page=financial/expense-report" data-page="financial/expense-report">Reports</a></li>
-                <?php endif; ?>
-                <?php if (nav_can('time_tracking.view')): ?>
-                <li><a href="/?page=time-tracking" data-page="time-tracking">Time Tracking</a></li>
                 <?php endif; ?>
               </ul>
             </li>
@@ -244,6 +244,7 @@ function nav_can(string $permission): bool {
           <a class="settings" href="/?page=settings" data-page="settings">Settings</a>
           <?php endif; ?>
           <?php if (!empty($_SESSION['user']['role']) && $_SESSION['user']['role'] === 'admin'): ?>
+            <a class="settings" href="/?page=account" data-page="account" style="margin-top:8px;display:block">My Account</a>
             <a class="settings" href="/?page=accounts" data-page="accounts" style="margin-top:8px;display:block">Accounts</a>
           <?php else: ?>
             <a class="settings" href="/?page=account" data-page="account" style="margin-top:8px;display:block">My Account</a>

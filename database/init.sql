@@ -20,6 +20,17 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) NULL,
     role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
     force_password_reset TINYINT(1) NOT NULL DEFAULT 0,
+    document_sender_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    document_sender_name VARCHAR(255) NULL,
+    document_sender_company VARCHAR(255) NULL,
+    document_sender_address_line1 VARCHAR(255) NULL,
+    document_sender_address_line2 VARCHAR(255) NULL,
+    document_sender_city VARCHAR(120) NULL,
+    document_sender_state VARCHAR(120) NULL,
+    document_sender_postal VARCHAR(40) NULL,
+    document_sender_country VARCHAR(120) NULL,
+    document_sender_phone VARCHAR(80) NULL,
+    document_sender_email VARCHAR(255) NULL,
     is_disabled TINYINT(1) NOT NULL DEFAULT 0,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     tos_accepted_at TIMESTAMP NULL DEFAULT NULL,
@@ -256,7 +267,7 @@ CREATE TABLE IF NOT EXISTS user_organizations (
 CREATE TABLE IF NOT EXISTS api_keys (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NULL,
-    name VARCHAR(255) NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
     key_prefix VARCHAR(32) NOT NULL,
     key_hash CHAR(64) NOT NULL,
     scopes VARCHAR(1024) NULL,
@@ -343,6 +354,8 @@ CREATE TABLE IF NOT EXISTS projects (
     name VARCHAR(150) NOT NULL,
     description TEXT NULL,
     status ENUM('not_started', 'active', 'overdue', 'completed', 'cancelled') NOT NULL DEFAULT 'not_started',
+    invoice_billing_period ENUM('per_invoice','monthly') NOT NULL DEFAULT 'monthly',
+    invoice_net_terms_days INT NULL,
     start_date DATE NULL,
     end_date DATE NULL,
     estimated_start DATE NULL,
@@ -444,6 +457,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     project_code VARCHAR(64) NULL,
     status ENUM('draft','pending','approved','denied','rejected','expired') NOT NULL DEFAULT 'draft',
     quote_type ENUM('regular','long_term','on_demand') NOT NULL DEFAULT 'regular',
+    billing_mode ENUM('fixed','hourly') NOT NULL DEFAULT 'fixed',
     discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
     discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
     tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
@@ -491,6 +505,7 @@ CREATE TABLE IF NOT EXISTS quote_items (
     quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+    billing_unit ENUM('each','hour') NOT NULL DEFAULT 'each',
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -511,6 +526,7 @@ CREATE TABLE IF NOT EXISTS contracts (
     project_code VARCHAR(64) NULL,
     status ENUM('draft','pending','active','paused','completed','cancelled','denied','void') NOT NULL DEFAULT 'pending',
     contract_type ENUM('regular','long_term','on_demand') NOT NULL DEFAULT 'regular',
+    billing_mode ENUM('fixed','hourly') NOT NULL DEFAULT 'fixed',
     discount_type ENUM('none','percent','fixed') NOT NULL DEFAULT 'none',
     discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
     tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
@@ -578,6 +594,7 @@ CREATE TABLE IF NOT EXISTS contract_items (
     quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+    billing_unit ENUM('each','hour') NOT NULL DEFAULT 'each',
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -617,6 +634,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     project_code VARCHAR(64) NULL,
     status ENUM('draft','sent','unpaid','partial','paid','overdue','cancelled','void') NOT NULL DEFAULT 'draft',
     invoice_type ENUM('regular','long_term','on_demand') NOT NULL DEFAULT 'regular',
+    billing_mode ENUM('fixed','hourly') NOT NULL DEFAULT 'fixed',
     is_deposit_invoice TINYINT(1) NOT NULL DEFAULT 0,
     parent_contract_type ENUM('contract','long_term_contract','on_demand_contract') NULL,
     subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -673,6 +691,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+    billing_unit ENUM('each','hour') NOT NULL DEFAULT 'each',
     hours DECIMAL(10,2) DEFAULT NULL,
     time_entry_id INT DEFAULT NULL,
     is_extra_charge TINYINT(1) NOT NULL DEFAULT 0,
@@ -696,6 +715,7 @@ CREATE TABLE IF NOT EXISTS invoice_notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_inv_notif_invoice (invoice_id),
     INDEX idx_inv_notif_type (notification_type),
+    UNIQUE INDEX uq_invoice_notification (invoice_id, notification_type),
     CONSTRAINT fk_inv_notif_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -825,7 +845,7 @@ CREATE TABLE IF NOT EXISTS item_library (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_item_lib_org (organization_id),
-    INDEX idx_item_lib_name (name),
+    INDEX idx_item_lib_item_name (item_name),
     INDEX idx_item_lib_sku (sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -977,6 +997,10 @@ CREATE TABLE IF NOT EXISTS time_entries (
     user_id INT NOT NULL,
     client_id INT NULL,
     project_id INT NULL,
+    project_code VARCHAR(64) NULL,
+    contract_id INT NULL,
+    invoice_id INT NULL,
+    service_item_id INT NULL,
     description TEXT NULL,
     started_at DATETIME NULL,
     ended_at DATETIME NULL,
@@ -990,6 +1014,9 @@ CREATE TABLE IF NOT EXISTS time_entries (
     INDEX idx_time_entries_user (user_id),
     INDEX idx_time_entries_client (client_id),
     INDEX idx_time_entries_project (project_id),
+    INDEX idx_time_entries_project_code (project_code),
+    INDEX idx_time_entries_contract (contract_id),
+    INDEX idx_time_entries_invoice (invoice_id),
     INDEX idx_time_entries_billable (billable),
     INDEX idx_time_entries_billed (billed)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1366,7 +1393,11 @@ ON DUPLICATE KEY UPDATE role = VALUES(role), is_default = VALUES(is_default);
 INSERT INTO app_config (config_key, config_value) VALUES
     ('brand_name', 'Project Alpha'),
     ('timezone', 'UTC'),
-    ('primary_state', '')
+    ('primary_state', ''),
+    ('cron_enabled', '1'),
+    ('invoice_auto_send_due_7days', '1'),
+    ('invoice_auto_send_overdue_weekly', '1'),
+    ('invoice_auto_email_on_generate', '1')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);
 
 -- ============================================================================

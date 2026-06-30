@@ -152,7 +152,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=contract/contract-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <?php $cst = strtolower((string)$r['status']); if (!in_array($cst, ['denied','cancelled','void'], true)): ?>
-              <form method="post" action="/?page=email-send" style="display:inline">
+              <form method="post" action="/?page=contract/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="contract">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

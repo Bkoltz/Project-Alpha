@@ -59,7 +59,7 @@ switch ($action) {
         $pdo->exec("INSERT INTO app_config (organization_id, config_key, config_value) VALUES (0, 'backup_hour', '{$backupHour}') ON DUPLICATE KEY UPDATE config_value = '{$backupHour}'");
 
         // Update the crontab in the cron container if possible
-        $newCronLine = sprintf("%d 2 * * * root . /etc/environment && php /var/www/src/cron/backup_database.php >> /var/www/logs/cron.log 2>&1", $backupHour);
+        $newCronLine = sprintf("%d 2 * * * root . /etc/environment && php /var/www/src/cron/backup_database.php >> /var/www/config/logs/cron/cron.log 2>&1", $backupHour);
         // Note: the cron container's crontab is baked into the image, but we can write a override file
         // that the entrypoint could read. For now, just inform the user.
 

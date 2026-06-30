@@ -1,5 +1,5 @@
 # ---------- Stage 1: Install PHP dependencies with Composer ----------
-FROM php:8.3-cli AS vendor
+FROM php:8.5-cli AS vendor
 WORKDIR /app
 
 # Copy only Composer manifests first for better layer caching
@@ -23,7 +23,7 @@ RUN composer install \
     --optimize-autoloader
 
 # ---------- Stage 2: Runtime image ----------
-FROM php:8.3-apache AS web
+FROM php:8.5-apache AS web
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
@@ -56,9 +56,10 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
   --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions (pdo_mysql, mysqli already required; add mbstring, gd, zip, dom)
+# PHP extensions. DOM is already enabled in the official php:* images;
+# PHP 8.5's bundled DOM depends on bundled Lexbor and should not be rebuilt here.
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" gd mbstring zip dom pdo_mysql mysqli \
+    && docker-php-ext-install -j"$(nproc)" gd mbstring zip pdo_mysql mysqli \
     && a2enmod rewrite
 
 # Create php ini file for error logging and future php customization
@@ -105,7 +106,7 @@ CMD ["start.sh"]
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
-FROM php:8.3-cli AS cron
+FROM php:8.5-cli AS cron
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
@@ -121,7 +122,7 @@ COPY --from=vendor /app/vendor /var/www/vendor
 COPY ./src/ /var/www/src/
 COPY ./database/migrations/ /var/www/database/migrations/
 RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
-    && mkdir -p /var/www/logs /var/www/backups \
+    && mkdir -p /var/www/config/logs/cron /var/www/backups \
     && chown -R root:root /var/www \
     && chmod -R 755 /var/www
 

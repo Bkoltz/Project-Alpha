@@ -11,9 +11,11 @@ $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none', 'percent', 'fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 // Check both direct field names and custom_field_ prefixed names (from dynamic rendering)
 $deposit_type = $_POST['deposit_type'] ?? $_POST['custom_field_deposit_type'] ?? 'none';
 $deposit_type = in_array($deposit_type, ['none','percent','fixed']) ? $deposit_type : 'none';
@@ -65,6 +67,7 @@ $item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
+$billingUnits = $_POST['item_billing_unit'] ?? [];
 
 // Validate client_id
 if ($client_id <= 0) {
@@ -74,7 +77,10 @@ if ($client_id <= 0) {
 
 // Items are required for regular quotes, on-demand itemized quotes, and long-term fixed totals.
 // Items are optional for long-term per-invoice pricing and on-demand flat pricing.
-$requires_items = !($is_long_term && $pricing_type === 'per_invoice') && !($is_on_demand && $od_pricing_mode === 'flat');
+// On-demand 'items' mode is also allowed to fall back to a flat amount when no line items are entered.
+$od_flat_amount = max(0.0, (float)($_POST['od_flat_amount'] ?? 0));
+$requires_items = !($is_long_term && $pricing_type === 'per_invoice')
+               && !($is_on_demand && ($od_pricing_mode === 'flat' || $od_flat_amount > 0));
 
 if ($requires_items && empty($item)) {
     header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -88,10 +94,29 @@ $subtotal = 0.0;
 if ($is_long_term && $pricing_type === 'per_invoice') {
     $subtotal = $price_per_invoice;
 } elseif ($is_on_demand && $od_pricing_mode === 'flat') {
-    $subtotal = max(0.0, (float)($_POST['od_flat_amount'] ?? 0));
+    $subtotal = $od_flat_amount;
     if ($subtotal <= 0) {
         header('Location: /?page=quote/quotes-create&error=Enter%20a%20flat%20quote%20amount');
         exit;
+    }
+} elseif ($is_on_demand) {
+    // On-demand with od_pricing_mode='items': first process any line items.
+    for ($i = 0; $i < count($item); $i++) {
+        $itm = trim((string)($item[$i] ?? ''));
+        $d = trim((string)($desc[$i] ?? ''));
+        $q = (float)($qty[$i] ?? 0);
+        $p = (float)($price[$i] ?? 0);
+        if ($itm === '' || $q <= 0 || $p < 0) continue;
+        $line = $q * $p;
+        $subtotal += $line;
+        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit];
+    }
+    // Fallback: if no valid line items were entered, use the flat amount if provided.
+    if (!$items) {
+        if ($od_flat_amount > 0) {
+            $subtotal = $od_flat_amount;
+        }
     }
 } else {
     // Process items for regular quotes or fixed_total long-term quotes
@@ -103,7 +128,8 @@ if ($is_long_term && $pricing_type === 'per_invoice') {
         if ($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line];
+        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit];
     }
     if (!$items) {
         header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -130,8 +156,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, null, null, 'pending', $quote_type, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $__creator, date("Y-m-d H:i:s")]);
+    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, null, null, 'pending', $quote_type, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $__creator, date("Y-m-d H:i:s")]);
     $quote_id = (int)$pdo->lastInsertId();
 
     // Assign a new Project ID for this quote
@@ -155,9 +181,9 @@ try {
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {
-        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach ($items as $it) {
-            $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total']]);
+            $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? 'each']);
         }
     }
 
@@ -179,7 +205,9 @@ try {
 }
 
 // Redirect to the appropriate list based on quote type
-if ($quote_type === 'long_term') {
+if ($return_to_project > 0) {
+    header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=quote');
+} elseif ($quote_type === 'long_term') {
     header('Location: /?page=quote/long-term-quotes-list&created=1');
 } elseif ($quote_type === 'on_demand') {
     header('Location: /?page=quote/on-demand-quotes-list&created=1');

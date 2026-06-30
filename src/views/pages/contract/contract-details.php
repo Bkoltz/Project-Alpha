@@ -5,9 +5,12 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 
 $id = (int)($_GET['id'] ?? 0);
-require_record_ownership($pdo, 'contracts', $id);
+if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
+    require_record_ownership($pdo, 'contracts', $id);
+}
 $c = $pdo->prepare('SELECT co.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE co.id=?');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
@@ -15,22 +18,29 @@ if (!$contract) {
   echo '<p>Contract not found</p>';
   return;
 }
-$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM contract_items WHERE contract_id=?');
+$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
+$isHourlyBilling = ($contract['billing_mode'] ?? 'fixed') === 'hourly';
 
 // Fetch contract signatures
-$sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
-$sigStmt->execute([$id]);
-$signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+$signatures = [];
+try {
+    $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY id');
+    $sigStmt->execute([$id]);
+    $signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    // Column names may differ across schema versions — signatures are optional
+}
 // If no signatures defined, use a default
 if (empty($signatures)) {
   $signatures = [['signer_title' => 'Client Signature', 'is_required' => 1]];
 }
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '') . "\n" . ($appConfig['from_address_line2'] ?? '') . "\n" . ($appConfig['from_city'] ?? '') . ' ' . ($appConfig['from_state'] ?? '') . ' ' . ($appConfig['from_postal'] ?? '') . "\n" . ($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($contract['created_by']) ? (int)$contract['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 // Resolve terms: project-level terms override contract terms override app settings
 $termsText = '';
 if (!empty($contract['project_code'])) {
@@ -78,7 +88,7 @@ if ($termsText === '') {
     <div class="no-print" style="padding:12px 16px;background:<?php echo $ccolors['bg']; ?>;color:<?php echo $ccolors['text']; ?>;border-left:4px solid <?php echo $ccolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
       Status: <?php echo htmlspecialchars($contract['status']); ?>
     </div>
-    <div class="no-print flex flex-wrap">
+    <div class="no-print document-actions">
       <a href="javascript:history.back()" class="btn btn-sm">Back</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" download="contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
@@ -87,7 +97,7 @@ if ($termsText === '') {
       <?php endif; ?>
       <?php $st = strtolower((string)($contract['status'] ?? ''));
       if (!in_array($st, ['denied', 'cancelled', 'void'], true)): ?>
-        <form method="post" action="/?page=email-send" style="display:inline">
+        <form method="post" action="/?page=contract/email-send" style="display:inline">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="type" value="contract">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
@@ -105,27 +115,27 @@ if ($termsText === '') {
         </form>
       <?php endif; ?>
       <?php if (!empty($contract['signed_pdf_path'])): ?>
-        <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" style="padding:6px 10px;border:1px solid #10b981;border-radius:8px;background:#ecfdf5;color:#065f46; font-size: medium;">View Signed PDF</a>
+        <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-success">View Signed PDF</a>
       <?php endif; ?>
       <?php if ($needsDeposit && $contract['status'] === 'pending'): ?>
         <form method="post" action="/?page=contract/contract-deposit-received" style="display:inline" onsubmit="return confirm('Mark deposit as received ($<?php echo number_format($depositCalc, 2); ?>)?');">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;">Deposit Received ($<?php echo number_format($depositCalc, 2); ?>)</button>
+          <button type="submit" class="btn btn-sm btn-success">Deposit Received ($<?php echo number_format($depositCalc, 2); ?>)</button>
         </form>
       <?php endif; ?>
       <?php if ($contract['status'] === 'active'): ?>
         <form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?');">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: medium;">Complete</button>
+          <button type="submit" class="btn btn-sm btn-success">Complete</button>
         </form>
       <?php endif; ?>
       <?php if ($contract['status'] !== 'cancelled' && $contract['status'] !== 'completed'): ?>
         <form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#6b7280;color:#fff; font-size: medium;">Void</button>
+          <button type="submit" class="btn btn-sm btn-muted">Void</button>
         </form>
       <?php endif; ?>
       <?php if (in_array($st, ['denied', 'cancelled', 'void'], true)): ?>
@@ -133,17 +143,17 @@ if ($termsText === '') {
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="type" value="contract">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+          <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
         </form>
       <?php endif; ?>
       <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="type" value="contract">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+        <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
       </form>
       <?php if (!in_array($cstatus, ['denied', 'cancelled', 'void'], true)): ?>
-      <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #4f46e5;border-radius:8px;background:#eef2ff;color:#4f46e5; font-size: medium;">🔗 Share Link</button>
+      <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
       <?php endif; ?>
     </div>
     <?php if (!empty($_GET['reenabled'])): ?>
@@ -361,38 +371,7 @@ if ($termsText === '') {
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php
-        $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-        $fromNameLine = trim((string)($fromName ?? ''));
-        $fromLines = [];
-        if ($fromNameLine !== '') {
-          $fromLines[] = $fromNameLine;
-        }
-        $fromLines[] = $fromCompany;
-        $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-        $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-        if ($addr1 !== '') {
-          $fromLines[] = $addr1;
-        }
-        if ($addr2 !== '') {
-          $fromLines[] = $addr2;
-        }
-        $city = trim((string)($appConfig['from_city'] ?? ''));
-        $state = trim((string)($appConfig['from_state'] ?? ''));
-        $postal = trim((string)($appConfig['from_postal'] ?? ''));
-        $parts = [];
-        if ($city !== '') {
-          $parts[] = $city;
-        }
-        if ($state !== '') {
-          $parts[] = $state;
-        }
-        if ($postal !== '') {
-          $parts[] = $postal;
-        }
-        $cityLine = implode(', ', $parts);
-        if ($cityLine !== '') {
-          $fromLines[] = $cityLine;
-        }
+        $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) {
                 echo '<div>' . htmlspecialchars($ln) . '</div>';
@@ -456,11 +435,46 @@ if ($termsText === '') {
   $scopeEnabled = !isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled']);
   if ($scopeEnabled && $scopeText !== ''):
   ?>
-    <div style="page-break-before:auto;margin-top:20px">
+    <div style="page-break-before:auto;margin-top:12px">
       <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
       <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
     </div>
-    <div style="page-break-after:always"></div>
+  <?php endif; ?>
+
+  <?php
+  // Long-term / on-demand billing summary (shows what the client is buying)
+  $ctType = $contract['contract_type'] ?? 'regular';
+  if (in_array($ctType, ['long_term', 'on_demand'], true)):
+    $biCount = (int)($contract['billing_interval_count'] ?? 1);
+    $biUnit = $contract['billing_interval_unit'] ?? 'month';
+    $biText = $biCount . ' ' . ucfirst($biUnit);
+    if ($biCount > 1) $biText .= 's';
+    $svcDesc = trim((string)($contract['scope'] ?? ''));
+    $amtPerInv = (float)($contract['price_per_invoice'] ?? 0);
+    if ($ctType === 'on_demand' && $amtPerInv <= 0) {
+      $amtPerInv = (float)($contract['subtotal'] ?? 0);
+    }
+    $pricingType = $contract['pricing_type'] ?? null;
+  ?>
+  <div style="margin:8px 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#065f46">
+      <?php echo $ctType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
+    </div>
+    <?php if ($svcDesc !== ''): ?>
+      <div style="margin-bottom:4px"><strong>Service:</strong> <?php echo htmlspecialchars($svcDesc); ?></div>
+    <?php endif; ?>
+    <?php if ($ctType === 'long_term'): ?>
+      <div style="margin-bottom:4px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($biText); ?></div>
+    <?php endif; ?>
+    <?php if ($pricingType === 'per_invoice' || $ctType === 'on_demand'): ?>
+      <div style="font-size:14px;font-weight:700;color:#065f46">
+        Amount Per Invoice: $<?php echo number_format($amtPerInv, 2); ?>
+        <?php if ($ctType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($biUnit)); ?><?php endif; ?>
+      </div>
+    <?php elseif ($pricingType === 'fixed_total'): ?>
+      <div style="font-size:14px;font-weight:700;color:#065f46">Contract Total: $<?php echo number_format((float)($contract['total'] ?? 0), 2); ?></div>
+    <?php endif; ?>
+  </div>
   <?php endif; ?>
 
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
@@ -468,8 +482,8 @@ if ($termsText === '') {
       <tr style="text-align:left;border-bottom:1px solid #eee">
         <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
-        <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
-        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+        <th style="padding:10px;width:10%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Est. Hours' : 'Qty'; ?></th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit Price'; ?></th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
       </tr>
     </thead>
@@ -491,6 +505,17 @@ if ($termsText === '') {
   $depType = $contract['deposit_type'] ?? 'none';
   $depValue = (float)($contract['deposit_amount'] ?? 0);
   $contractTotal = (float)($contract['total'] ?? 0);
+  if (($contract['contract_type'] ?? 'regular') === 'on_demand' && $contractTotal <= 0 && (float)($contract['subtotal'] ?? 0) > 0) {
+    $displaySubtotal = (float)($contract['subtotal'] ?? 0);
+    $displayDiscount = 0.0;
+    if (($contract['discount_type'] ?? 'none') === 'percent') {
+      $displayDiscount = max(0, min(100, (float)($contract['discount_value'] ?? 0))) * $displaySubtotal / 100;
+    } elseif (($contract['discount_type'] ?? 'none') === 'fixed') {
+      $displayDiscount = max(0, (float)($contract['discount_value'] ?? 0));
+    }
+    $displayTaxable = max(0, $displaySubtotal - $displayDiscount);
+    $contractTotal = max(0, $displayTaxable + (max(0, (float)($contract['tax_percent'] ?? 0)) * $displayTaxable / 100));
+  }
   $depositCalc = 0;
   if ($depType === 'percent') {
     $depositCalc = max(0, min(100, $depValue)) * $contractTotal / 100;
@@ -527,7 +552,7 @@ if ($termsText === '') {
           </tr>
           <tr style="border-top:1px solid #e5e7eb">
             <td style="padding:8px 10px;font-weight:700;text-align:right">Total</td>
-            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($contract['total'] ?? 0, 2); ?></td>
+            <td style="padding:8px 10px;font-weight:700;text-align:right">$<?php echo number_format($contractTotal, 2); ?></td>
           </tr>
           <?php if ($showDeposit): ?>
             <tr style="background:#f9fafb">
@@ -544,55 +569,21 @@ if ($termsText === '') {
   <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
     <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the terms and conditions.'); ?>
   </div>
-  <table style="width:100%;border-collapse:collapse">
-    <?php
-    $sigCount = count($signatures);
-    for ($i = 0; $i < $sigCount; $i += 2):
-      $sig1 = $signatures[$i];
-      $sig2 = isset($signatures[$i + 1]) ? $signatures[$i + 1] : null;
-    ?>
-      <tr>
-        <td style="width:50%;vertical-align:top;padding:10px 16px 16px 10px">
-          <table style="width:100%;border-collapse:collapse;margin-top:20px">
-            <tr>
-              <td style="width:65%;vertical-align:bottom;padding-right:12px">
-                <div style="border-top:2px solid #111"></div>
-                <div style="margin-top:4px;color:#4b5563;font-size:12px">
-                  <?php echo htmlspecialchars($sig1['signer_title']); ?>
-                  <?php if (!empty($sig1['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
-                </div>
-              </td>
-              <td style="width:35%;vertical-align:bottom">
-                <div style="border-top:2px solid #111"></div>
-                <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
-              </td>
-            </tr>
-          </table>
-        </td>
-        <?php if ($sig2): ?>
-          <td style="width:50%;vertical-align:top;padding:10px 10px 16px 16px">
-            <table style="width:100%;border-collapse:collapse;margin-top:20px">
-              <tr>
-                <td style="width:65%;vertical-align:bottom;padding-right:12px">
-                  <div style="border-top:2px solid #111"></div>
-                  <div style="margin-top:4px;color:#4b5563;font-size:12px">
-                    <?php echo htmlspecialchars($sig2['signer_title']); ?>
-                    <?php if (!empty($sig2['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
-                  </div>
-                </td>
-                <td style="width:35%;vertical-align:bottom">
-                  <div style="border-top:2px solid #111"></div>
-                  <div style="margin-top:4px;color:#4b5563;font-size:12px">Date</div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        <?php else: ?>
-          <td style="width:50%"></td>
-        <?php endif; ?>
-      </tr>
-    <?php endfor; ?>
+  <?php foreach ($signatures as $sig): ?>
+  <table style="width:100%;border-collapse:collapse;margin-top:20px">
+    <tr>
+      <td style="width:65%;height:50px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        <?php echo htmlspecialchars($sig['signer_title'] ?? 'Client Signature'); ?>
+        <?php if (!empty($sig['is_required'])): ?><span style="color:#dc2626">*</span><?php endif; ?>
+      </td>
+      <td style="width:35%;height:50px;vertical-align:bottom;font-size:12px;color:#4b5563">
+        <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
+        Date
+      </td>
+    </tr>
   </table>
+  <?php endforeach; ?>
 
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
@@ -648,7 +639,7 @@ if ($termsText === '') {
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
 
 <!-- Share Link Modal -->
-<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+<div id="shareLinkModal" data-doc-type="contract" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0;font-size:18px">🔗 Share Contract Link</h3>

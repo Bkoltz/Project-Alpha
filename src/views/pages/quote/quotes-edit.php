@@ -119,8 +119,19 @@
       </div>
     <?php endif; ?>
 
+    <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
+      <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
+      <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <input type="checkbox" name="billing_mode" value="hourly" <?php echo ($quote['billing_mode'] ?? 'fixed') === 'hourly' ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div style="font-weight:600;color:#1f2937">Hourly billing</div>
+          <div style="font-size:13px;color:#4b5563">Use line items as estimated hours and hourly rates.</div>
+        </div>
+      </label>
+    </div>
+
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items</div>
+      <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
       <div id="items" style="display:grid;gap:8px"></div>
       <button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
     </div>
@@ -150,12 +161,7 @@
       }
     }
     ?>
-    <?php if (!isset($appConfig['quote_scope_enabled']) || !empty($appConfig['quote_scope_enabled'])): ?>
-      <label>
-        <div>Scope of Work</div>
-        <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional: Describe the scope of work and deliverables..."><?php echo htmlspecialchars($quote['scope'] ?? ''); ?></textarea>
-      </label>
-    <?php endif; ?>
+    <!-- Job Notes (shared across related docs) -->
     <label>
       <div>Job Notes</div>
       <textarea name="project_notes" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Shared across related docs"><?php echo htmlspecialchars($pn ?? ''); ?></textarea>
@@ -163,6 +169,12 @@
     <label>
       <div>Job Terms (override default terms for this job)</div>
       <textarea name="project_terms" rows="6" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="If set, used for all quotes/contracts under this project"><?php echo htmlspecialchars($pt ?? ''); ?></textarea>
+    </label>
+
+    <!-- Service Description -->
+    <label>
+      <div>Service Description</div>
+      <textarea name="scope" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="e.g. Website hosting, Google Ads management"><?php echo htmlspecialchars($quote['scope'] ?? ''); ?></textarea>
     </label>
 
     <div id="totals" style="margin-top:8px;display:grid;gap:6px;justify-content:end">

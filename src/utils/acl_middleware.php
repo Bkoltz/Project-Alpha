@@ -16,10 +16,10 @@ function page_permission_map(): array
         'landing'              => null,
         'user-dashboard'       => null,
         'dashboard'           => 'financial.view',
-        'account'             => 'profile.edit',
-        'account-update'      => 'profile.edit',
+        'account'             => null,
+        'account-update'      => null,
         'account/delete'      => 'users.manage',
-        'account-revoke-device' => 'profile.edit',
+        'account-revoke-device' => null,
         'auth'                => null,
         'logout'              => null,
         'logout-confirm'      => null,
@@ -51,8 +51,8 @@ function page_permission_map(): array
         'accounts-update'        => 'users.manage',
         'account-edit'           => 'users.manage',
         '2fa-admin-disable'      => '2fa.manage',
-        '2fa-setup'              => 'profile.edit',
-        '2fa-setup-action'       => 'profile.edit',
+        '2fa-setup'              => null,
+        '2fa-setup-action'       => null,
         '2fa-verify'             => null,
         '2fa-verify-action'      => null,
 
@@ -70,6 +70,8 @@ function page_permission_map(): array
         'quote/quotes-edit'   => 'quotes.edit',
         'quote/quotes-update' => 'quotes.edit',
         'quote/quote-details' => 'quotes.view',
+        'quote/quote-pdf'     => 'quotes.view',
+        'quote/long-term-quote-pdf' => 'quotes.view',
         'quote/quote-approve' => 'quotes.approve',
         'quote/quote-reject'  => 'quotes.reject',
         'quote/email-send'    => 'quotes.send',
@@ -89,6 +91,8 @@ function page_permission_map(): array
         'contract/contracts-create' => 'contracts.create',
         'contract/contracts-edit'   => 'contracts.edit',
         'contract/contract-details' => 'contracts.view',
+        'contract/contract-pdf'     => 'contracts.view',
+        'contract/long-term-contract-pdf' => 'contracts.view',
         'contract/contract-sign'    => 'contracts.sign',
         'contract/contract-complete' => 'contracts.complete',
         'contract/contract-deny'    => 'contracts.edit',
@@ -120,6 +124,7 @@ function page_permission_map(): array
         'invoice/invoices-edit'     => 'invoices.edit',
         'invoice/invoices-update'   => 'invoices.edit',
         'invoice/invoice-details'   => 'invoices.view',
+        'invoice/invoice-pdf'       => 'invoices.view',
         'invoice/invoices-mark-paid' => 'invoices.mark_paid',
         'invoice/email-send'        => 'invoices.send',
         'invoices-create'           => 'invoices.create',
@@ -209,6 +214,7 @@ function page_permission_map(): array
         'time-tracking/start-timer' => 'time_tracking.manage',
         'time-tracking/stop-timer' => 'time_tracking.manage',
         'time-tracking/unbilled'   => 'time_tracking.view',
+        'time-tracking/options'    => 'time_tracking.view',
         'time-tracking/update'     => 'time_tracking.manage',
 
         // Public links
@@ -216,7 +222,7 @@ function page_permission_map(): array
         'public-link-revoke'  => 'public_links.revoke',
 
         // Legal / misc
-        'legal/tos-accept' => 'profile.edit',
+        'legal/tos-accept' => null,
         'links/link-management' => 'settings.manage',
         'links/manual-link-handler' => 'settings.manage',
         'forms-handler' => 'settings.manage',
@@ -239,7 +245,7 @@ function page_permission_map(): array
 
 function acl_middleware(PDO $pdo, string $page): void
 {
-    $publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+    $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
     if (in_array($page, $publicPages, true)) return;
 
     $userId = (int)($_SESSION['user']['id'] ?? 0);

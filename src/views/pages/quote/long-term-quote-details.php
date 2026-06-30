@@ -5,7 +5,10 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
-require_record_ownership($pdo, 'quotes', $id);
+require_once __DIR__ . '/../../../utils/document_sender.php';
+if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
+    require_record_ownership($pdo, 'quotes', $id);
+}
 $q = $pdo->prepare('SELECT q.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM quotes q JOIN clients cl ON cl.id=q.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE q.id=? AND q.quote_type="long_term"');
 $q->execute([$id]);
 $quote = $q->fetch(PDO::FETCH_ASSOC);
@@ -14,16 +17,18 @@ if(!$quote){ echo '<p>Long-term quote not found</p>'; return; }
 // Get items if fixed_total pricing
 $items = [];
 if ($quote['pricing_type'] === 'fixed_total') {
-    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+    $itemsQuery = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM quote_items WHERE quote_id=?');
     $itemsQuery->execute([$id]);
     $items = $itemsQuery->fetchAll();
 }
+$isHourlyBilling = ($quote['billing_mode'] ?? 'fixed') === 'hourly';
 
 require_once __DIR__ . '/../../../utils/format.php';
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($quote['created_by']) ? (int)$quote['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 
 // Resolve terms
 $termsText = '';
@@ -82,20 +87,61 @@ $isOngoing = empty($quote['end_date']);
   <div style="text-align:center;color:#6b7280;margin-bottom:6px;font-size:13px">Valid for <?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?> days</div>
   
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
-  <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px">
+  <div class="no-print document-actions">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
-    <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" download="longterm-quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: medium; margin-left:4px;">Download</a>
+    <a href="/?page=quote/long-term-quote-pdf&id=<?php echo (int)$id; ?>" download="longterm-quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
-    <form method="post" action="/?page=email-send" style="display:inline">
+    <form method="post" action="/?page=quote/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-      <input type="hidden" name="type" value="long_term_quote">
+      <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
       <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
+    <?php if (($quote['status'] ?? '') === 'pending'): ?>
+      <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
+      <form method="post" action="/?page=quote/quote-approve" style="display:inline">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Approve</button>
+      </form>
+      <form method="post" action="/?page=quote/quote-reject" style="display:inline" onsubmit="return confirm('Reject this quote?')">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Deny</button>
+      </form>
+    <?php endif; ?>
+    <?php if (!empty($quote['status']) && strtolower($quote['status']) === 'rejected'): ?>
+      <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this quote? It will be set back to pending status.');">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="type" value="quote">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Re-enable</button>
+      </form>
+    <?php endif; ?>
+    <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="type" value="quote">
+      <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+      <button type="submit" class="btn btn-sm">Update Document Date</button>
+    </form>
+    <?php if (strtolower($quote['status'] ?? '') !== 'rejected'): ?>
+      <button type="button" onclick="generatePublicLink()" class="btn btn-sm">Share Link</button>
+    <?php endif; ?>
   </div>
+  <?php if (!empty($_GET['emailed'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
+  <?php elseif (!empty($_GET['email_err'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['reenabled'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Quote re-enabled successfully.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['date_updated'])): ?>
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#dbeafe;color:#1e3a8a;border:1px solid #93c5fd">Document date updated successfully.</div>
+  <?php endif; ?>
   <?php endif; ?>
 
   <?php
@@ -194,24 +240,7 @@ $isOngoing = empty($quote['end_date']);
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-          $fromNameLine = trim((string)($fromName ?? ''));
-          $fromLines = [];
-          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-          $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-          if ($addr1 !== '') { $fromLines[] = $addr1; }
-          if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
-          $parts = [];
-          if ($city !== '') { $parts[] = $city; }
-          if ($state !== '') { $parts[] = $state; }
-          if ($postal !== '') { $parts[] = $postal; }
-          $cityLine = implode(', ', $parts);
-          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+          $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
@@ -266,15 +295,15 @@ $isOngoing = empty($quote['end_date']);
     <tbody>
       <?php if ($quote['pricing_type'] === 'per_invoice'): ?>
         <tr>
-          <td colspan="3" style="padding:12px">Recurring service fee (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
+          <td colspan="3" style="padding:12px"><?php echo !empty($quote['scope']) ? htmlspecialchars($quote['scope']) : 'Recurring service fee'; ?> (billed <?php echo htmlspecialchars(strtolower($billingInterval)); ?>)</td>
           <td style="padding:12px;text-align:right;font-weight:600">$<?php echo number_format($quote['price_per_invoice'], 2); ?></td>
         </tr>
       <?php else: ?>
         <?php if ($items): ?>
           <tr style="border-bottom:1px solid #eee">
             <th style="padding:10px">Description</th>
-            <th style="padding:10px">Qty</th>
-            <th style="padding:10px">Unit</th>
+            <th style="padding:10px"><?php echo $isHourlyBilling ? 'Est. Hours' : 'Qty'; ?></th>
+            <th style="padding:10px"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit'; ?></th>
             <th style="padding:10px">Line Total</th>
           </tr>
           <?php foreach ($items as $it): ?>
@@ -324,6 +353,20 @@ $isOngoing = empty($quote['end_date']);
     </tbody>
   </table>
 
+  <!-- Signature block -->
+  <table style="width:100%;border-collapse:collapse;margin-top:50px">
+    <tr>
+      <td style="width:60%;vertical-align:bottom;padding-right:24px">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Client Signature</div>
+      </td>
+      <td style="width:40%;vertical-align:bottom">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Date</div>
+      </td>
+    </tr>
+  </table>
+
   <?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
@@ -352,3 +395,58 @@ $isOngoing = empty($quote['end_date']);
   }
 </style>
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
+<?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
+<div id="shareLinkModal" data-doc-type="quote" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:18px">Share Long-term Quote Link</h3>
+      <button onclick="closeShareModal()" style="border:0;background:none;font-size:20px;cursor:pointer;color:#6b7280">&times;</button>
+    </div>
+    <div id="shareLinkContent">
+      <p style="color:#6b7280;margin:0 0 16px">Generate a public link that clients can use to view and approve or deny this quote.</p>
+      <label style="display:block;margin-bottom:12px">
+        <div style="font-weight:600;margin-bottom:6px">Expires in days</div>
+        <input type="number" id="linkDays" value="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" min="1" max="365" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+      </label>
+      <button onclick="createPublicLink()" style="width:100%;padding:12px;background:#4f46e5;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer">Generate Link</button>
+    </div>
+    <div id="shareLinkResult" style="display:none">
+      <div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;margin-bottom:12px">
+        <div style="font-weight:600;color:#166534;margin-bottom:4px">Link Generated</div>
+        <div style="font-size:13px;color:#15803d" id="linkExpiry"></div>
+      </div>
+      <div style="position:relative">
+        <input type="text" id="generatedLink" readonly style="width:100%;padding:10px;padding-right:80px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#f9fafb">
+        <button onclick="copyLink()" style="position:absolute;right:4px;top:4px;padding:6px 12px;border:0;border-radius:6px;background:#4f46e5;color:#fff;cursor:pointer">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function generatePublicLink() { document.getElementById('shareLinkModal').style.display = 'flex'; }
+function closeShareModal() { document.getElementById('shareLinkModal').style.display = 'none'; }
+function createPublicLink() {
+  const formData = new FormData();
+  formData.append('type', 'quote');
+  formData.append('id', '<?php echo (int)$id; ?>');
+  formData.append('days', document.getElementById('linkDays').value || '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>');
+  formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
+  fetch('/?page=public-link-create', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) { alert(data.error || 'Failed to create link'); return; }
+      document.getElementById('shareLinkContent').style.display = 'none';
+      document.getElementById('shareLinkResult').style.display = 'block';
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkExpiry').textContent = data.expires_at ? 'Expires: ' + data.expires_at : '';
+    })
+    .catch(() => alert('Failed to create link'));
+}
+function copyLink() {
+  const input = document.getElementById('generatedLink');
+  input.select();
+  document.execCommand('copy');
+}
+document.getElementById('shareLinkModal').addEventListener('click', function(e) { if (e.target === this) closeShareModal(); });
+</script>
+<?php endif; ?>

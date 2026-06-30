@@ -36,6 +36,10 @@ try {
     <span style="padding:4px 10px;border-radius:4px;font-size:13px;font-weight:600;background:#dbeafe;color:#1e40af;"><?php echo htmlspecialchars(ucfirst($myRole)); ?></span>
   </div>
 
+  <?php if ($myRole === 'admin'): ?>
+    <div class="alert alert-info">Use this page to manage your own password and two-factor authentication. Use Accounts to manage other users.</div>
+  <?php endif; ?>
+
   <?php if (!empty($_GET['pwd']) && $_GET['pwd']==='1'): ?>
     <div class="alert alert-success">Password updated.</div>
   <?php elseif (!empty($_GET['pwd_error'])): ?>

@@ -16,7 +16,7 @@ Docker image that runs scheduled background tasks for Project Alpha.
 | Every 6 hours | `stripe_reconciliation.php` | Reconciles Stripe payments missed during downtime |
 | Daily 5:00 AM UTC | `sync_merchant_rate.php` | Computes the actual blended Stripe merchant rate from recent balance transactions and stores it in `app_config` |
 
-All job output is appended to `/var/www/logs/cron.log` inside the cron container.
+All job output is appended to `/var/www/config/logs/cron/cron.log` inside the cron container.
 
 ## Environment Variables
 
@@ -49,7 +49,7 @@ docker compose exec cron cat /etc/cron.d/project-alpha
 To follow logs:
 
 ```bash
-docker compose exec cron tail -f /var/www/logs/cron.log
+docker compose exec cron tail -f /var/www/config/logs/cron/cron.log
 ```
 
 ## Source Files

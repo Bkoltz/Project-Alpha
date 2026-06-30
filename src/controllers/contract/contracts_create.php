@@ -1,7 +1,9 @@
 <?php
 // src/controllers/contracts_create.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/project_id.php';
+require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
@@ -25,9 +27,11 @@ if ($doc_type === 'on_demand') {
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 // Check both direct field names and custom_field_ prefixed names (from dynamic rendering)
 $deposit_type = $_POST['deposit_type'] ?? $_POST['custom_field_deposit_type'] ?? 'none';
 $deposit_type = in_array($deposit_type, ['none','percent','fixed']) ? $deposit_type : 'none';
@@ -38,6 +42,7 @@ $item = $_POST['item'] ?? [];
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
+$billingUnits = $_POST['item_billing_unit'] ?? [];
 
 if ($client_id <= 0) {
     // Fallback: try resolving by posted client name
@@ -66,7 +71,7 @@ if ($client_id <= 0) {
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){
   $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
-  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line];
+  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $unit=(($billingUnits[$i]??'each')==='hour'||$billing_mode==='hourly')?'hour':'each'; $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line,'u'=>$unit];
 }
 if(!$items){
     @error_log('[contracts_create] no valid items', 0);
@@ -92,8 +97,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields, organization_id, created_by) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, $project_id, 'pending', $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $__creator]);
+  $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields, organization_id, created_by) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      ->execute([$client_id, $project_id, 'pending', $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $__creator]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
@@ -116,36 +121,43 @@ try{
   $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $co_id]);
 
   // Save contract items
-  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-  foreach($items as $it){ $ins->execute([$co_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
+  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+  foreach($items as $it){ $ins->execute([$co_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
 
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $project_id, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$co_id, null, $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
   $invoice_id = (int)$pdo->lastInsertId();
-  $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
-  foreach($items as $it){ $ii->execute([$invoice_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t']]); }
+  $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+  foreach($items as $it){ $ii->execute([$invoice_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
   // Assign per-type doc_number for invoices
   $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
   $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
 
-  // Save contract signatures
-  $signatureTitles = $_POST['signature_titles'] ?? [];
-  $signatureOrders = $_POST['signature_orders'] ?? [];
-  $signatureRequired = $_POST['signature_required'] ?? [];
-  
-  if (!empty($signatureTitles)) {
-      $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signer_title, display_order, is_required) VALUES (?, ?, ?, ?)');
-      foreach ($signatureTitles as $idx => $title) {
-          $title = trim($title);
-          if (empty($title)) continue;
-          
-          $order = (int)($signatureOrders[$idx] ?? ($idx + 1));
-          $isRequired = in_array('sig_' . $idx, $signatureRequired) ? 1 : 0;
-          
-          $sigStmt->execute([$co_id, $title, $order, $isRequired]);
+  // Save contract signatures (non-critical; failures must not roll back contract creation)
+  try {
+      $signatureTitles = $_POST['signature_titles'] ?? [];
+      if (!empty($signatureTitles)) {
+          $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
+          foreach ($signatureTitles as $title) {
+              $title = trim((string)$title);
+              if ($title === '') continue;
+
+              $lower = strtolower($title);
+              if (strpos($lower, 'admin') !== false) {
+                  $signatoryType = 'admin';
+              } elseif (strpos($lower, 'witness') !== false) {
+                  $signatoryType = 'witness';
+              } else {
+                  $signatoryType = 'client';
+              }
+
+              $sigStmt->execute([$co_id, $signatoryType]);
+          }
       }
+  } catch (Throwable $sigErr) {
+      @error_log('contracts_create signature insert failed: ' . $sigErr->getMessage());
   }
 
   // Add to project_documents if project_id is set
@@ -165,5 +177,9 @@ try{
   header('Location: /?page=contract/contracts-create&error=' . urlencode($msg));
   exit;
 }
-header('Location: /?page=contract/contracts-list&created=1');
+if ($return_to_project > 0) {
+  header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=contract');
+} else {
+  header('Location: /?page=contract/contracts-list&created=1');
+}
 exit;

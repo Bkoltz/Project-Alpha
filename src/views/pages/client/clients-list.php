@@ -19,13 +19,8 @@ if ($org !== '') { $where[] = 'o.name LIKE ?'; $params[] = '%'.$org.'%'; }
 $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clients' AND COLUMN_NAME='archived'")->fetchColumn();
 $activeFilter = $hasArchived ? 'archived=0' : '1=1';
 
-[$scopeWhere, $scopeParams] = scope_clause($pdo, 'c', (int)$_SESSION['user']['id']);
-
 // Build WHERE clause
 $whereClause = 'WHERE '.$activeFilter;
-if ($scopeWhere) {
-    $whereClause .= ' AND '.$scopeWhere;
-}
 if (!empty($where)) {
   $whereClause .= ' AND ('.implode(' AND ', $where).')';
 }
@@ -37,9 +32,22 @@ $sql = "SELECT c.id, c.name, c.email, c.phone, c.created_at, o.name as organizat
         $whereClause
         ORDER BY c.name ASC";
 $st = $pdo->prepare($sql);
-$stmtParams = array_merge($params, $scopeParams);
-$st->execute($stmtParams);
+$st->execute($params);
 $clients = $st->fetchAll();
+
+function client_list_email_html(?string $email): string
+{
+    $email = trim((string)$email);
+    $placeholderEmails = ['[email protected]', 'email@example.com', 'noemail@example.com', 'n/a', 'na'];
+    if ($email === '' || in_array(strtolower($email), $placeholderEmails, true)) {
+        return '<span style="color:var(--muted)">None</span>';
+    }
+    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $safe = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+        return '<a href="mailto:' . $safe . '">' . $safe . '</a>';
+    }
+    return htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+}
 ?>
 <section>
   <h2>Clients</h2>
@@ -97,7 +105,7 @@ $clients = $st->fetchAll();
         <?php foreach ($clients as $c): ?>
           <tr style="border-top:1px solid #f3f4f6">
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$c['id']; ?>" style="text-decoration:none;color:inherit;"><?php echo htmlspecialchars($c['name']); ?></a></td>
-            <td style="padding:10px"><?php echo htmlspecialchars($c['email'] ?? ''); ?></td>
+            <td style="padding:10px"><?php echo client_list_email_html($c['email'] ?? null); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization_name'] ?? ''); ?></td>
             <!-- <td style="padding:10px"><?php echo htmlspecialchars($c['created_at']); ?></td> -->

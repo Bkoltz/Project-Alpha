@@ -6,6 +6,9 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $clientId = (int)($_GET['client_id'] ?? 0);
+$projectCode = trim((string)($_GET['project_code'] ?? ''));
+$contractId = (int)($_GET['contract_id'] ?? 0);
+$invoiceId = (int)($_GET['invoice_id'] ?? 0);
 
 header('Content-Type: application/json');
 
@@ -16,14 +19,47 @@ if ($userId === 0) {
 }
 
 $params = [$userId, 1, 0];
-$sql = 'SELECT te.id, te.started_at, te.description, te.hours, te.rate, (te.hours * te.rate) AS amount, c.name AS client_name FROM time_entries te LEFT JOIN clients c ON te.client_id = c.id WHERE te.user_id = ? AND te.billable = ? AND te.billed = ?';
+$sql = 'SELECT te.id, te.started_at, te.ended_at, te.project_code, te.contract_id, te.invoice_id, te.description, te.hours, te.rate, (te.hours * te.rate) AS amount, c.name AS client_name, COALESCE(il.item_name, "Tracked Time") AS service_name
+        FROM time_entries te
+        LEFT JOIN clients c ON te.client_id = c.id
+        LEFT JOIN item_library il ON il.id = te.service_item_id
+        WHERE te.user_id = ? AND te.billable = ? AND te.billed = ?';
 if ($clientId > 0) {
     $sql .= ' AND te.client_id = ?';
     $params[] = $clientId;
+}
+if ($projectCode !== '') {
+    $sql .= ' AND te.project_code = ?';
+    $params[] = $projectCode;
+}
+if ($contractId > 0) {
+    $sql .= ' AND te.contract_id = ?';
+    $params[] = $contractId;
+}
+if ($invoiceId > 0) {
+    $sql .= ' AND te.invoice_id = ?';
+    $params[] = $invoiceId;
 }
 $sql .= ' ORDER BY te.started_at DESC';
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
-echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+foreach ($rows as &$row) {
+    $start = $row['started_at'] ? date('M j, g:i A', strtotime($row['started_at'])) : '';
+    $end = $row['ended_at'] ? date('g:i A', strtotime($row['ended_at'])) : '';
+    $bits = [];
+    if ($start !== '') {
+        $bits[] = $end !== '' ? ($start . '-' . $end) : $start;
+    }
+    if (!empty($row['project_code'])) {
+        $bits[] = 'Job ' . $row['project_code'];
+    }
+    if (!empty($row['description'])) {
+        $bits[] = $row['description'];
+    }
+    $row['detail'] = implode(' | ', $bits);
+}
+unset($row);
+echo json_encode($rows);
 exit;

@@ -1,0 +1,132 @@
+{#
+  Shared document detail shell for quote/contract/invoice-style pages.
+  Intended for gradually migrating PHP detail pages to one consistent action bar,
+  flash area, document body, and public-link modal.
+
+  Expected context:
+  - title: page/document heading
+  - subtitle: optional supporting text
+  - status: optional status text
+  - statusTone: pending|success|danger|neutral
+  - actions: [{ label, href?, method?, page?, fields?, style?, confirm? }]
+  - flashes: [{ tone: success|error|info|neutral, message }]
+  - bodyHtml: rendered document HTML
+  - share: { enabled, type, id, title, description, csrf, defaultDays }
+  - printFooter: optional footer HTML
+#}
+
+{% set tones = {
+  pending: {'bg': '#fffbeb', 'text': '#92400e', 'border': '#fbbf24'},
+  success: {'bg': '#ecfdf5', 'text': '#065f46', 'border': '#10b981'},
+  danger: {'bg': '#fef2f2', 'text': '#991b1b', 'border': '#ef4444'},
+  neutral: {'bg': '#f3f4f6', 'text': '#374151', 'border': '#9ca3af'}
+} %}
+{% set flashTones = {
+  success: {'bg': '#ecfdf5', 'text': '#065f46', 'border': '#a7f3d0'},
+  error: {'bg': '#fff1f2', 'text': '#881337', 'border': '#fca5a5'},
+  info: {'bg': '#dbeafe', 'text': '#1e3a8a', 'border': '#93c5fd'},
+  neutral: {'bg': '#f3f4f6', 'text': '#374151', 'border': '#d1d5db'}
+} %}
+
+<section class="document-detail-page">
+  {% if title %}
+    <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">{{ title }}</div>
+  {% endif %}
+  {% if subtitle %}
+    <div style="text-align:center;color:#6b7280;margin-bottom:16px;font-size:13px">{{ subtitle }}</div>
+  {% endif %}
+
+  {% if status %}
+    {% set statusColors = tones[statusTone|default('neutral')]|default(tones.neutral) %}
+    <div class="no-print" style="padding:12px 16px;background:{{ statusColors.bg }};color:{{ statusColors.text }};border-left:4px solid {{ statusColors.border }};border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0">
+      Status: {{ status }}
+    </div>
+  {% endif %}
+
+  {% if actions %}
+    <div class="no-print" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+      {% for action in actions %}
+        {% if action.href %}
+          <a href="{{ action.href }}" class="btn btn-sm">{{ action.label }}</a>
+        {% elseif action.method|default('post') == 'post' %}
+          <form method="post" action="{{ action.page }}" style="display:inline"{% if action.confirm %} onsubmit="return confirm('{{ action.confirm|e('js') }}')"{% endif %}>
+            {% for name, value in action.fields|default({}) %}
+              <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endfor %}
+            <button type="submit" class="btn btn-sm">{{ action.label }}</button>
+          </form>
+        {% endif %}
+      {% endfor %}
+      {% if share.enabled|default(false) %}
+        <button type="button" onclick="generatePublicLink()" class="btn btn-sm">Share Link</button>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% for flash in flashes|default([]) %}
+    {% set fc = flashTones[flash.tone|default('neutral')]|default(flashTones.neutral) %}
+    <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:{{ fc.bg }};color:{{ fc.text }};border:1px solid {{ fc.border }}">{{ flash.message }}</div>
+  {% endfor %}
+
+  {{ bodyHtml|raw }}
+</section>
+
+{% if share.enabled|default(false) %}
+<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:18px">{{ share.title|default('Share Document Link') }}</h3>
+      <button onclick="closeShareModal()" style="border:0;background:none;font-size:20px;cursor:pointer;color:#6b7280">&times;</button>
+    </div>
+    <div id="shareLinkContent">
+      <p style="color:#6b7280;margin:0 0 16px">{{ share.description|default('Generate a public link for this document.') }}</p>
+      <label style="display:block;margin-bottom:12px">
+        <div style="font-weight:600;margin-bottom:6px">Expires in days</div>
+        <input type="number" id="linkDays" value="{{ share.defaultDays|default(14) }}" min="1" max="365" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+      </label>
+      <button onclick="createPublicLink()" style="width:100%;padding:12px;background:#4f46e5;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer">Generate Link</button>
+    </div>
+    <div id="shareLinkResult" style="display:none">
+      <div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;margin-bottom:12px">
+        <div style="font-weight:600;color:#166534;margin-bottom:4px">Link Generated</div>
+        <div style="font-size:13px;color:#15803d" id="linkExpiry"></div>
+      </div>
+      <div style="position:relative">
+        <input type="text" id="generatedLink" readonly style="width:100%;padding:10px;padding-right:80px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#f9fafb">
+        <button onclick="copyLink()" style="position:absolute;right:4px;top:4px;padding:6px 12px;border:0;border-radius:6px;background:#4f46e5;color:#fff;cursor:pointer">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function generatePublicLink() { document.getElementById('shareLinkModal').style.display = 'flex'; }
+function closeShareModal() { document.getElementById('shareLinkModal').style.display = 'none'; }
+function createPublicLink() {
+  const formData = new FormData();
+  formData.append('type', '{{ share.type }}');
+  formData.append('id', '{{ share.id }}');
+  formData.append('days', document.getElementById('linkDays').value || '{{ share.defaultDays|default(14) }}');
+  formData.append('csrf', '{{ share.csrf }}');
+  fetch('/?page=public-link-create', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) { alert(data.error || 'Failed to create link'); return; }
+      document.getElementById('shareLinkContent').style.display = 'none';
+      document.getElementById('shareLinkResult').style.display = 'block';
+      document.getElementById('generatedLink').value = data.url;
+      document.getElementById('linkExpiry').textContent = data.expires_at ? 'Expires: ' + data.expires_at : '';
+    })
+    .catch(() => alert('Failed to create link'));
+}
+function copyLink() {
+  const input = document.getElementById('generatedLink');
+  input.select();
+  document.execCommand('copy');
+}
+document.getElementById('shareLinkModal').addEventListener('click', function(e) { if (e.target === this) closeShareModal(); });
+</script>
+{% endif %}
+
+{% if printFooter %}
+  {{ printFooter|raw }}
+{% endif %}

@@ -166,10 +166,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               <?php endif; ?>
               <?php if ($r['status'] === 'pending'): ?>
                 <form method="post" action="/?page=quote/quote-approve" onsubmit="return confirm('Approve this quote and generate contract + invoice?')">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: small;">Approve</button>
                 </form>
                 <form method="post" action="/?page=quote/quote-reject" onsubmit="return confirm('Deny this quote?')">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
               </form>

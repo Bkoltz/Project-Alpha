@@ -11,6 +11,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
     var priceId = 'price_' + itemCounter;
     wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
     wrap.innerHTML = `
+    <input type="hidden" name="item_billing_unit[]" value="each">
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalc()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalc()">${desc}</textarea>
     <input required type="number" step="0.01" min="0" name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalc()">
@@ -41,6 +42,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0) {
 
     initAutocomplete();
 
+    if (typeof updateHourlyModeUI === 'function') updateHourlyModeUI();
     recalc();
 }
 
@@ -178,6 +180,18 @@ function recalc() {
     updateDiscountWarning();
 }
 
+function updateHourlyModeUI() {
+    var hourly = !!document.getElementById('billingModeHourly')?.checked;
+    var hint = document.getElementById('hourlyBillingHint');
+    if (hint) hint.style.display = hourly ? 'block' : 'none';
+    document.querySelectorAll('#items input[name="item_billing_unit[]"]').forEach(function (el) {
+        el.value = hourly ? 'hour' : 'each';
+    });
+    document.querySelectorAll('#items input[name="item_qty[]"]').forEach(function (el) {
+        el.placeholder = hourly ? 'Est. hours' : 'Qty';
+    });
+}
+
 // Safely add event listeners only if elements exist
 ['discountType', 'discountValue', 'taxPercent'].forEach(id => {
     const el = document.getElementById(id);
@@ -188,6 +202,9 @@ function recalc() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', recalc);
 });
+
+var hourlyModeEl = document.getElementById('billingModeHourly');
+if (hourlyModeEl) hourlyModeEl.addEventListener('change', updateHourlyModeUI);
 
 var discountTypeEl = document.getElementById('discountType');
 if (discountTypeEl) discountTypeEl.addEventListener('change', updateDiscountWarning);
@@ -403,6 +420,7 @@ function updateDiscountWarning() {
 }
 
 addItem();
+updateHourlyModeUI();
 
 function loadProjectsForClient(clientId) {
     if (!clientId) {
@@ -425,7 +443,12 @@ function loadProjectsForClient(clientId) {
                 });
                 document.getElementById('projectSection').style.display = 'block';
             } else {
-                document.getElementById('projectSection').style.display = 'none';
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No active projects';
+                option.disabled = true;
+                projectSelect.appendChild(option);
+                document.getElementById('projectSection').style.display = 'block';
             }
         })
         .catch(() => {
@@ -486,6 +509,10 @@ function initQuoteClientDropdown() {
         console.log('Quote client dropdown elements not found');
         return;
     }
+
+    // Guard against duplicate initialization (SPA navigation re-fires pageLoaded)
+    if (ci._quoteDropdownReady) return;
+    ci._quoteDropdownReady = true;
     
     ci.addEventListener('input', function () {
         cid.value = '';
@@ -497,7 +524,8 @@ function initQuoteClientDropdown() {
                 if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
                 sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
                 Array.from(sug.children).forEach(el => {
-                    el.addEventListener('click', function () {
+                    el.addEventListener('click', function (e) {
+                        e.stopPropagation();
                         ci.value = this.dataset.name; cid.value = this.dataset.id;
                         if (this.dataset.taxexempt && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
                         loadProjectsForClient(this.dataset.id);
@@ -507,7 +535,6 @@ function initQuoteClientDropdown() {
                 sug.style.display = 'block';
             }).catch(() => { sug.style.display = 'none' });
     });
-    document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
 }
 
 // Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)

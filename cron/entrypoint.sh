@@ -21,7 +21,7 @@ fi
 printenv | grep -E '^(MYSQL_|DB_|APP_|STRIPE_|SMTP_)' | sed 's/=\(.*\)/="\1"/' > /etc/environment
 
 # ── Create log directory if it doesn't exist ──
-LOG_DIR="/var/www/logs"
+LOG_DIR="/var/www/config/logs/cron"
 if [ ! -d "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR"
     echo "[cron-entrypoint] Created log directory: $LOG_DIR"

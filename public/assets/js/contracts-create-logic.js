@@ -9,9 +9,10 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
     var priceId = 'priceCo_' + itemCounterCo;
     wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
     wrap.innerHTML = `
+    <input type="hidden" name="item_billing_unit[]" value="each">
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalcCo()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalcCo()">${desc}</textarea>
-    <input required type="number" step="0.01" min="0" name="item_qty[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcCo()">
+    <input required type="number" step="0.01" min="0" name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcCo()">
     <input id="${priceId}" required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalcCo()">
     <button type="button" onclick="this.parentElement.remove();recalcCo()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
@@ -28,6 +29,7 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0) {
         });
     }
 
+    if (typeof updateHourlyModeUICo === 'function') updateHourlyModeUICo();
     recalcCo();
 }
 // Calculate number of billing periods between two dates
@@ -86,6 +88,15 @@ function recalcCo() {
     if (isLongTerm && (pricingType === 'per_invoice' || pricingType === 'on_demand')) {
         // Use price per invoice
         subtotal = parseFloat(document.getElementById('pricePerInvoiceInput').value) || 0;
+    } else if (isOnDemand) {
+        var odMode = document.querySelector('input[name="od_pricing_mode"]:checked');
+        if (odMode && odMode.value === 'flat') {
+            subtotal = parseFloat(document.getElementById('onDemandAmountInputCo').value) || 0;
+        } else {
+            var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
+            var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
+            for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
+        }
     } else {
         // Use line items
         var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
@@ -160,6 +171,18 @@ function recalcCo() {
     // Update discount warning
     updateDiscountWarning();
 }
+
+function updateHourlyModeUICo() {
+    var hourly = !!document.getElementById('billingModeHourlyCo')?.checked;
+    var hint = document.getElementById('hourlyBillingHintCo');
+    if (hint) hint.style.display = hourly ? 'block' : 'none';
+    document.querySelectorAll('#itemsCo input[name="item_billing_unit[]"]').forEach(function (el) {
+        el.value = hourly ? 'hour' : 'each';
+    });
+    document.querySelectorAll('#itemsCo input[name="item_qty[]"]').forEach(function (el) {
+        el.placeholder = hourly ? 'Est. hours' : 'Qty';
+    });
+}
 // Safely add event listeners only if elements exist
 ['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => {
     const el = document.getElementById(id);
@@ -171,6 +194,8 @@ function recalcCo() {
 });
 var discountTypeElCo = document.getElementById('discountTypeCo');
 if (discountTypeElCo) discountTypeElCo.addEventListener('change', updateDiscountWarning);
+var hourlyModeElCo = document.getElementById('billingModeHourlyCo');
+if (hourlyModeElCo) hourlyModeElCo.addEventListener('change', updateHourlyModeUICo);
 
 // No need for DOMContentLoaded start date setting - now handled in toggleDocTypeFields
 
@@ -181,6 +206,8 @@ function toggleDocTypeFields() {
 
     // Show/hide the appropriate settings section
     document.getElementById('longTermFields').style.display = isLongTerm ? 'block' : 'none';
+    var onDemandSection = document.getElementById('onDemandFieldsCo');
+    if (onDemandSection) onDemandSection.style.display = isOnDemand ? 'block' : 'none';
 
     if (isLongTerm) {
         // Set start date to today when first enabling long-term
@@ -192,13 +219,20 @@ function toggleDocTypeFields() {
         togglePricingFields();
         updateDiscountWarning();
     } else if (isOnDemand) {
-        // On-demand: always show items for line-item billing
-        document.getElementById('itemsCo').parentElement.style.display = 'block';
+        var onDemandStartField = document.getElementById('onDemandStartDateCo');
+        if (onDemandStartField && !onDemandStartField.value) {
+            onDemandStartField.value = new Date().toISOString().split('T')[0];
+        }
+        toggleOnDemandEndDateCo();
+        toggleOnDemandPricingModeCo();
         document.getElementById('invoiceAmountRow').style.display = 'none';
     } else {
         // Regular contract - always show items
         document.getElementById('itemsCo').parentElement.style.display = 'block';
         document.getElementById('invoiceAmountRow').style.display = 'none';
+        var flatAmount = document.getElementById('onDemandFlatAmountCo');
+        if (flatAmount) flatAmount.style.display = 'none';
+        setItemsRequiredCo(true);
         // Show custom fields for regular contracts (if they exist)
         ['depositTypeLabelCo', 'depositValueLabelCo', 'fulfillmentDateLabelCo'].forEach(id => {
             const el = document.getElementById(id);
@@ -206,6 +240,14 @@ function toggleDocTypeFields() {
         });
     }
     recalcCo();
+}
+
+function toggleOnDemandEndDateCo() {
+    var typeEl = document.getElementById('onDemandEndDateTypeCo');
+    var field = document.getElementById('onDemandEndDateFieldCo');
+    if (!typeEl || !field) return;
+
+    field.style.display = typeEl.value === 'fixed' ? 'block' : 'none';
 }
 
 function toggleEndDate() {
@@ -265,10 +307,7 @@ function togglePricingFields() {
     }
 
     if (isOnDemand) {
-        // On-demand contract - show items for line-item billing
-        document.getElementById('itemsCo').parentElement.style.display = 'block';
-        setItemsRequiredCo(true);
-        recalcCo();
+        toggleOnDemandPricingModeCo();
         return;
     }
 
@@ -302,6 +341,35 @@ function togglePricingFields() {
         // Re-enable required attributes on items
         setItemsRequiredCo(true);
     }
+    recalcCo();
+}
+
+function toggleOnDemandPricingModeCo() {
+    var docType = document.querySelector('input[name="doc_type"]:checked')?.value || 'regular';
+    var mode = document.querySelector('input[name="od_pricing_mode"]:checked');
+    var modeVal = mode ? mode.value : 'items';
+    var flatSection = document.getElementById('onDemandFlatAmountCo');
+    var flatInput = document.getElementById('onDemandAmountInputCo');
+    var itemsWrap = document.getElementById('itemsCo')?.parentElement;
+    var useFlat = docType === 'on_demand' && modeVal === 'flat';
+
+    if (useFlat) {
+        if (flatSection) flatSection.style.display = 'block';
+        if (itemsWrap) itemsWrap.style.display = 'none';
+    } else {
+        if (flatSection) flatSection.style.display = 'none';
+        if (itemsWrap) itemsWrap.style.display = 'block';
+    }
+
+    if (flatInput) {
+        if (useFlat) {
+            flatInput.setAttribute('required', '');
+        } else {
+            flatInput.removeAttribute('required');
+        }
+    }
+
+    setItemsRequiredCo(!useFlat);
     recalcCo();
 }
 
@@ -345,6 +413,7 @@ function updateDiscountWarning() {
 }
 
 addItemCo();
+updateHourlyModeUICo();
 
 // Client typeahead
 function initContractClientDropdown() {
@@ -357,6 +426,10 @@ function initContractClientDropdown() {
         console.log('Contract client dropdown elements not found');
         return;
     }
+
+    // Guard against duplicate initialization (SPA navigation re-fires pageLoaded)
+    if (ci._contractDropdownReady) return;
+    ci._contractDropdownReady = true;
     
     ci.addEventListener('input', function () {
         cid.value = '';
@@ -368,7 +441,8 @@ function initContractClientDropdown() {
                 if (!Array.isArray(list) || list.length === 0) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
                 sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
                 Array.from(sug.children).forEach(el => {
-                    el.addEventListener('click', function () {
+                    el.addEventListener('click', function (e) {
+                        e.stopPropagation();
                         ci.value = this.dataset.name; cid.value = this.dataset.id;
                         if (this.dataset.taxexempt && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
                         loadProjectsForClientCo(this.dataset.id);
@@ -378,7 +452,6 @@ function initContractClientDropdown() {
                 sug.style.display = 'block';
             }).catch(() => { sug.style.display = 'none' });
     });
-    document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== ci) { sug.style.display = 'none'; } });
 }
 
 // Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)
@@ -409,7 +482,12 @@ function loadProjectsForClientCo(clientId) {
                 });
                 document.getElementById('projectSectionCo').style.display = 'block';
             } else {
-                document.getElementById('projectSectionCo').style.display = 'none';
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No active projects';
+                option.disabled = true;
+                projectSelect.appendChild(option);
+                document.getElementById('projectSectionCo').style.display = 'block';
             }
         })
         .catch(() => {

@@ -33,7 +33,7 @@ require_once __DIR__ . '/../../config/app.php';
 <body>
   <?php
   // Check if we're on a public page (public-doc or stripe pages)
-  $isPublicPage = isset($_GET['page']) && in_array($_GET['page'], ['public-doc', 'stripe-checkout', 'stripe-success']);
+  $isPublicPage = isset($_GET['page']) && in_array($_GET['page'], ['public-doc', 'public_doc', 'public-redirect', 'public_redirect', 'stripe-checkout', 'stripe-success'], true);
   ?>
   <div class="auth-topbar">
     <a class="auth-brand" href="<?php echo $isPublicPage ? 'javascript:void(0)' : '/'; ?>">

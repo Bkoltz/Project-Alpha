@@ -18,11 +18,10 @@ $orgId = $clientData['organization_id'] ?? null;
 
 $userId = (int)$_SESSION['user']['id'];
 
-// Get projects for this client (direct) OR their organization
-// Show active and in_progress projects
+// Get active projects for this client (direct) OR their organization.
 if ($orgId) {
     // Client has an organization - show both client projects and org projects
-    $where = ['(p.client_id = ? OR p.organization_id = ?)', 'p.status IN ("not_started", "active", "overdue")'];
+    $where = ['(p.client_id = ? OR p.organization_id = ?)', 'p.status = "active"'];
     $params = [$clientId, $orgId];
     [$scopeWhere, $scopeParams] = scope_clause($pdo, 'p', $userId);
     if ($scopeWhere !== '') {
@@ -34,7 +33,7 @@ if ($orgId) {
     $st->execute($params);
 } else {
     // Client has no organization - show only direct client projects
-    $where = ['p.client_id = ?', 'p.status IN ("not_started", "active", "overdue")'];
+    $where = ['p.client_id = ?', 'p.status = "active"'];
     $params = [$clientId];
     [$scopeWhere, $scopeParams] = scope_clause($pdo, 'p', $userId);
     if ($scopeWhere !== '') {

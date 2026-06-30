@@ -45,8 +45,8 @@ Set `SKIP_MIGRATIONS_ON_BOOT=true` in the container environment to skip all migr
 ```
 /config/
   logs/
-    system-logs/    ← Application logs (app_log, Monolog)
-    cron-logs/      ← Cron job logs (cron_log)
+    system/         ← Application logs (app_log, Monolog)
+    cron/           ← Cron job logs (cron_log)
   .encryption_key   ← Auto-generated encryption key
 /uploads/
   receipts/         ← Uploaded receipt images (by year/month)

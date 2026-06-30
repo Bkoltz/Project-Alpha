@@ -7,9 +7,11 @@ require_once __DIR__ . '/../../utils/project_id.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_value = (float)($_POST['deposit_value'] ?? 0);
 
@@ -81,6 +83,8 @@ if (!$start_date) {
 $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
+$item = $_POST['item'] ?? [];
+$billingUnits = $_POST['item_billing_unit'] ?? [];
 
 // Calculate subtotal and total based on pricing type
 $items = [];
@@ -89,13 +93,15 @@ $subtotal = 0.0;
 if ($pricing_type === 'fixed_total') {
     // Use line items
     for($i=0; $i<count($desc); $i++){
+        $itm = trim((string)($item[$i] ?? ''));
         $d = trim((string)($desc[$i]??'')); 
         $q = (float)($qty[$i]??0); 
         $p = (float)($price[$i]??0);
-        if($d === '' || $q <= 0 || $p < 0) continue; 
+        if($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p; 
         $subtotal += $line; 
-        $items[] = ['d'=>$d, 'q'=>$q, 'p'=>$p, 't'=>$line];
+        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $items[] = ['i'=>$itm, 'd'=>$d, 'q'=>$q, 'p'=>$p, 't'=>$line, 'u'=>$unit];
     }
     if(!$items){
         header('Location: /?page=contract/contracts-create&error=Add%20at%20least%20one%20item%20for%20fixed%20total%20pricing');
@@ -151,15 +157,15 @@ try{
 
     // Insert long-term contract into the unified contracts table
     $sql = 'INSERT INTO contracts (
-        client_id, project_id, project_code, status, contract_type, start_date, end_date, 
+        client_id, project_id, project_code, status, contract_type, billing_mode, start_date, end_date,
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid, total_invoiced,
         next_invoice_date, invoice_count, invoices_generated, scope, organization_id, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'pending', 'long_term', $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'pending', 'long_term', $billing_mode, $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0, 0,
@@ -174,9 +180,9 @@ try{
 
     // Save items if fixed_total pricing
     if ($pricing_type === 'fixed_total' && $items) {
-        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach($items as $it){ 
-            $ins->execute([$contract_id, $it['d'], $it['d'], $it['q'], $it['p'], $it['t']]); 
+            $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
         }
     }
 
@@ -220,5 +226,9 @@ try{
     exit;
 }
 
-header('Location: /?page=contract/long-term-contracts-list&created=1');
+if ($return_to_project > 0) {
+    header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=contract');
+} else {
+    header('Location: /?page=contract/long-term-contracts-list&created=1');
+}
 exit;

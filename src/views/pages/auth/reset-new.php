@@ -6,11 +6,15 @@ require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $csrf = csrf_sf_token('reset_update');
 $email = isset($_GET['email']) ? (string)$_GET['email'] : '';
+$error = isset($_GET['error']) ? (string)$_GET['error'] : '';
 ?>
 <main>
   <div class="auth-wrap">
     <h1 style="margin:0 0 12px">Set a new password</h1>
-<form method="post" action="/?page=reset-update" style="display:grid;gap:12px">
+    <?php if ($error): ?>
+      <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars($error); ?></div>
+    <?php endif; ?>
+    <form method="post" action="/?page=reset-update" style="display:grid;gap:12px">
       <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
       <input type="hidden" name="email" value="<?php echo htmlspecialchars($email); ?>">
       <?php if (empty($_SESSION['reset_user_id'])): ?>

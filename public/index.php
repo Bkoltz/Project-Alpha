@@ -28,6 +28,8 @@ send_security_headers();
 // Split on any stray '&' and recover additional params into $_GET so
 // the router sees the intended `page` and other GET values like `id`.
 $pageRaw = isset($_GET['page']) ? (string)$_GET['page'] : 'home';
+$isAjaxEarly = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+    && strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'])) === 'xmlhttprequest';
 if (strpos($pageRaw, '&') !== false) {
     [$pagePart, $rest] = explode('&', $pageRaw, 2);
     // Merge any parsed params into $_GET if they're not already present
@@ -40,10 +42,13 @@ if (strpos($pageRaw, '&') !== false) {
     $page = preg_replace('#[^a-z0-9/\-]#i', '', $pagePart);
 } else {
     $page = preg_replace('#[^a-z0-9/\-]#i', '', $pageRaw);
-
-    // Determine if request is AJAX early so we can selectively return minimal view content
-    $isAjaxEarly = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'])) === 'xmlhttprequest';
 }
+
+$pageAliases = [
+    'public_doc' => 'public-doc',
+    'public_redirect' => 'public-redirect',
+];
+$page = $pageAliases[$page] ?? $page;
 
 // Helper: Resolve view path with case-insensitive subfolder checks
 function resolve_view_path(string $page): string
@@ -100,18 +105,13 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 // Log to a file OUTSIDE the public web root
-$errorLogDir = __DIR__ . '/../logs';
+$errorLogDir = '/var/www/config/logs/system';
+if (!is_dir($errorLogDir)) {
+    $fallbackLogDir = __DIR__ . '/../config/logs/system';
+    $errorLogDir = $fallbackLogDir;
+}
 if (!is_dir($errorLogDir)) { @mkdir($errorLogDir, 0750, true); }
 ini_set('error_log', $errorLogDir . '/error_log.txt');
-
-function error_handler($errorno, $errorstr, $errorfile, $errorline)
-{
-    $errorMessage = "Error[$errorno]: $errorstr ($errorfile:$errorline)";
-    error_log($errorMessage);
-    return true;
-}
-
-set_error_handler("error_handler");
 
 // Temporary debug logging: record incoming page parsing to server error log
 // (remove or narrow this later once the issue is fixed)
@@ -238,7 +238,7 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-quote-action', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -290,6 +290,10 @@ if (!empty($_SESSION['user'])) {
     if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $sessionTimeout) {
         $_SESSION = [];
         session_destroy();
+        if ($page === 'session-status') {
+            require_once __DIR__ . '/../src/controllers/auth/session_status.php';
+            exit;
+        }
         header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
         exit;
     }
@@ -401,6 +405,10 @@ if ($page === 'time-tracking/unbilled') {
     require_once __DIR__ . '/../src/controllers/time-tracking/time_entries_unbilled.php';
     exit;
 }
+if ($page === 'time-tracking/options') {
+    require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_options.php';
+    exit;
+}
 if ($page === 'financial/financial-api') {
     require_once __DIR__ . '/../src/controllers/financial/financial_api.php';
     exit;
@@ -488,6 +496,14 @@ if (in_array($page, ['quote/quote-pdf', 'quote-pdf'])) {
 }
 if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
     require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
+    exit;
+}
+if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
+    exit;
+}
+if (in_array($page, ['contract/long-term-contract-pdf', 'long-term-contract-pdf'])) {
+    require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -676,7 +692,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   stripe-webhook-legacy        - tokenless: legacy Stripe webhook uses signature verification (HMAC + replay protection)
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -1095,6 +1111,11 @@ if ($page === 'stripe-charge') {
     exit;
 }
 
+if ($page === 'session-status') {
+    require_once __DIR__ . '/../src/controllers/auth/session_status.php';
+    exit;
+}
+
 // Standalone login and reset pages use a minimal top header
 if ($page === 'login') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
@@ -1125,6 +1146,15 @@ if ($page === 'logout-confirm') {
 if ($page === 'public-doc') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/controllers/public_view/public_doc.php';
+    exit;
+}
+if ($page === 'public-doc-pdf') {
+    require_once __DIR__ . '/../src/controllers/public_view/public_doc_pdf.php';
+    exit;
+}
+if ($page === 'public-redirect') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/controllers/public_view/public_redirect.php';
     exit;
 }
 if ($page === 'legal/tos-accept') {

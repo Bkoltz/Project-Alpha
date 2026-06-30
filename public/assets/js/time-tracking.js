@@ -74,6 +74,7 @@
                         el.addEventListener('click', function () {
                             input.value = this.dataset.name;
                             hiddenInput.value = this.dataset.id;
+                            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
                             suggestBox.style.display = 'none';
                         });
                     });
@@ -102,22 +103,36 @@
         document.getElementById('editClientSuggest')
     );
 
+    document.querySelectorAll('[name="service_item_id"]').forEach(function (select) {
+        select.addEventListener('change', function () {
+            const option = this.options[this.selectedIndex];
+            const rate = option ? option.getAttribute('data-rate') : '';
+            if (!rate) return;
+            const form = this.closest('form');
+            const rateInput = form ? form.querySelector('[name="rate"]') : null;
+            if (rateInput) rateInput.value = Number(rate).toFixed(2);
+        });
+    });
+
     // Form validation for manual entry
     const manualForm = document.getElementById('manualEntryForm');
     if (manualForm) {
         manualForm.addEventListener('submit', function (e) {
             const hoursEl = manualForm.querySelector('[name="hours"]');
+            const startEl = manualForm.querySelector('[name="start_time"]');
+            const endEl = manualForm.querySelector('[name="end_time"]');
             const descEl = manualForm.querySelector('[name="description"]');
             const hours = hoursEl ? (parseFloat(hoursEl.value) || 0) : 0;
+            const hasStartEnd = startEl && endEl && startEl.value && endEl.value;
             const desc = descEl ? (descEl.value || '').trim() : '';
             if (!desc) {
                 e.preventDefault();
                 alert('Please enter a description.');
                 return false;
             }
-            if (hours <= 0) {
+            if (!hasStartEnd && hours <= 0) {
                 e.preventDefault();
-                alert('Hours must be greater than 0.');
+                alert('Enter start/end times or manual hours greater than 0.');
                 return false;
             }
         });

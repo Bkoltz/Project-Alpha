@@ -5,19 +5,24 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 $id = (int)($_GET['id'] ?? 0);
-require_record_ownership($pdo, 'invoices', $id);
+if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
+    require_record_ownership($pdo, 'invoices', $id);
+}
 $st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
-$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, is_extra_charge FROM invoice_items WHERE invoice_id=?');
+$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$isHourlyBilling = ($inv['billing_mode'] ?? 'fixed') === 'hourly';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($inv['created_by']) ? (int)$inv['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 // Load project notes if available and resolve terms fallback
 $projectNotes = null;
 $termsText = '';
@@ -66,7 +71,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div class="no-print" style="padding:12px 16px;background:<?php echo $icolors['bg']; ?>;color:<?php echo $icolors['text']; ?>;border-left:4px solid <?php echo $icolors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($inv['status']); ?>
   </div>
-  <div class="no-print flex flex-wrap">
+  <div class="no-print document-actions">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" class="btn btn-sm">Download</a>
@@ -74,7 +79,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) !== 'void'): ?>
-    <form method="post" action="/?page=email-send" style="display:inline">
+    <form method="post" action="/?page=invoice/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
@@ -84,23 +89,23 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <?php endif; ?>
     <?php if ($inv['status'] !== 'paid' && $inv['status'] !== 'void'): ?>
       <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
-         style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: medium;text-decoration:none;display:inline-block;margin-right:6px;">Mark as Paid</a>
+         class="btn btn-sm btn-success">Mark as Paid</a>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
     <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+      <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
     </form>
     <?php endif; ?>
     <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+      <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
-    <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#f0fdf4;color:#166534; font-size: medium;">🔗 Share Link</button>
+    <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php 
       require_once __DIR__ . '/../../../services/StripeService.php';
       if (StripeService::isConfigured($appConfig) && in_array(strtolower($inv['status']), ['unpaid', 'partial'])): 
@@ -108,7 +113,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <form method="post" action="/?page=stripe-charge" style="display:inline" target="_blank">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="invoice_id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#4f46e5;color:#fff; font-size: medium;cursor:pointer">💳 Charge Card</button>
+      <button type="submit" class="btn btn-sm btn-primary">Charge Card</button>
     </form>
     <?php endif; ?>
   </div>
@@ -286,24 +291,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-          $fromNameLine = trim((string)($fromName ?? ''));
-          $fromLines = [];
-          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-          $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-          if ($addr1 !== '') { $fromLines[] = $addr1; }
-          if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
-          $parts = [];
-          if ($city !== '') { $parts[] = $city; }
-          if ($state !== '') { $parts[] = $state; }
-          if ($postal !== '') { $parts[] = $postal; }
-          $cityLine = implode(', ', $parts);
-          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+          $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
@@ -356,8 +344,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <tr style="text-align:left;border-bottom:1px solid #eee">
         <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
-        <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
-        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+        <th style="padding:10px;width:10%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hours' : 'Qty'; ?></th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit Price'; ?></th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
       </tr>
     </thead>
@@ -470,7 +458,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
 <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
 
 <!-- Share Link Modal -->
-<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+<div id="shareLinkModal" data-doc-type="invoice" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0;font-size:18px">🔗 Share Invoice Link</h3>

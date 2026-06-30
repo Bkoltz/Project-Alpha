@@ -166,8 +166,11 @@ $availableClients = $availableStmt->fetchAll();
 </section>
 
 <script>
-  const orgId = <?php echo $id; ?>;
-  const availableClients = <?php echo json_encode($availableClients, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+  window.organizationViewData = {
+    orgId: <?php echo $id; ?>,
+    csrf: <?php echo json_encode(csrf_token(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>,
+    availableClients: <?php echo json_encode($availableClients, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>
+  };
 </script>
 
 <script src="/assets/js/organization-view-logic.js" defer></script>

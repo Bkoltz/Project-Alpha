@@ -156,7 +156,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               <?php if (strtolower((string)$r['status']) !== 'rejected'): ?>
               <form method="post" action="/?page=quote/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-                <input type="hidden" name="type" value="long_term_quote">
+                <input type="hidden" name="type" value="quote">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
@@ -164,10 +164,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               <?php endif; ?>
               <?php if ($r['status'] === 'pending'): ?>
                 <form method="post" action="/?page=quote/quote-approve" onsubmit="return confirm('Approve this long-term quote and generate long-term contract?')">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: small;">Approve</button>
                 </form>
                 <form method="post" action="/?page=quote/quote-reject" onsubmit="return confirm('Deny this quote?')">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: small;">Deny</button>
               </form>

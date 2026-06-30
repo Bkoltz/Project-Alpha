@@ -26,14 +26,16 @@ $appConfig = [
     'terms' => null,
     'net_terms_days' => 30,
     'payment_methods' => ['Card','Cash','Bank Transfer'],
-    'quotes_show_terms' => 0,
+    'quotes_show_terms' => 1,
     // App preferences
+    'cron_enabled' => 1,
     'timezone' => 'UTC',
     'primary_state' => null,
     'documents_valid_days' => 14,
     // Automatic invoice email settings
-    'invoice_auto_send_due_7days' => 0,
-    'invoice_auto_send_overdue_weekly' => 0,
+    'invoice_auto_send_due_7days' => 1,
+    'invoice_auto_send_overdue_weekly' => 1,
+    'invoice_auto_email_on_generate' => 1,
     // SMTP (loaded from app_config with fallback to settings.json)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -148,7 +150,7 @@ try {
             'terms', 'long_term_terms', 'on_demand_terms',
             'net_terms_days', 'documents_valid_days', 'payment_methods',
             'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
-            'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly',
+            'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
             'auto_terminate_contracts', 'link_expiration_checker',
             'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
             'payment_failure_alert', 'payment_received_notification',
@@ -156,8 +158,11 @@ try {
             'invoice_show_terms', 'invoice_show_project_code', 'invoice_show_due_date',
             'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
             'signature_agreement', 'review_link', 'suppress_assets_warning',
-            'cron_enabled', 'cron_schedule', 'cron_custom',
+            'cron_enabled', 'cron_schedule', 'cron_custom', 'cron_last_run',
             'contract_custom_sections_json',
+            'backup_hour', 'backup_retention_days',
+            'link_resolver_enabled', 'default_link_expiration_days', 'org_level_links_only',
+            'link_expiration_email_enabled',
             // Surcharge settings (user-editable via billing settings)
             'stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed',
             'stripe_surcharge_split_percent', 'stripe_surcharge_message',
@@ -171,9 +176,7 @@ try {
             while ($row = $cfgStmt->fetch(PDO::FETCH_ASSOC)) {
                 $key = $row['config_key'];
                 $val = $row['config_value'];
-                if ($val !== '' && $val !== null) {
-                    $appConfig[$key] = $val;
-                }
+                $appConfig[$key] = $val;
             }
         }
 

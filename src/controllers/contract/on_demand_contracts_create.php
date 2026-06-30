@@ -7,9 +7,11 @@ require_once __DIR__ . '/../../utils/project_id.php';
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
+$billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $deposit_type = in_array(($_POST['deposit_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['deposit_type'] : 'none';
 $deposit_value = (float)($_POST['deposit_value'] ?? 0);
 
@@ -19,8 +21,9 @@ $end_date = null; // On-demand contracts are always ongoing until terminated
 $billing_interval_count = 1;
 $billing_interval_unit = 'month';
 
-// Price can come from flat amount or line items
-$price_per_invoice = (float)($_POST['price_per_invoice'] ?? $_POST['od_flat_amount'] ?? 0);
+// Price can come from a flat amount or line items.
+$od_pricing_mode = in_array(($_POST['od_pricing_mode'] ?? 'items'), ['items', 'flat'], true) ? $_POST['od_pricing_mode'] : 'items';
+$price_per_invoice = max(0.0, (float)($_POST['od_flat_amount'] ?? $_POST['price_per_invoice'] ?? 0));
 $scope = trim((string)($_POST['scope'] ?? ''));
 
 if ($client_id <= 0) {
@@ -46,8 +49,15 @@ if ($client_id <= 0) {
     exit;
 }
 
-// On-demand contracts can have line items OR a flat price - check if we have either
-$hasLineItems = !empty($_POST['item']) && is_array($_POST['item']) && count(array_filter($_POST['item'], 'trim')) > 0;
+// On-demand contracts can have line items OR a flat price - check if we have either.
+$hasLineItems = $od_pricing_mode === 'items'
+    && !empty($_POST['item'])
+    && is_array($_POST['item'])
+    && count(array_filter($_POST['item'], static fn($value) => trim((string)$value) !== '')) > 0;
+if ($od_pricing_mode === 'flat' && $price_per_invoice <= 0) {
+    header('Location: /?page=contract/contracts-create&error=Enter%20a%20flat%20contract%20amount');
+    exit;
+}
 if (!$hasLineItems && $price_per_invoice <= 0) {
     header('Location: /?page=contract/contracts-create&error=Please%20add%20items%20or%20enter%20a%20flat%20amount');
     exit;
@@ -62,6 +72,7 @@ if ($hasLineItems) {
     $desc = $_POST['item_desc'] ?? [];
     $qty = $_POST['item_qty'] ?? [];
     $price = $_POST['item_price'] ?? [];
+    $billingUnits = $_POST['item_billing_unit'] ?? [];
     
     for ($i = 0; $i < count($item); $i++) {
         $itm = trim((string)($item[$i] ?? ''));
@@ -71,10 +82,16 @@ if ($hasLineItems) {
         if ($itm === '' || $q <= 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line];
+        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line, 'u' => $unit];
     }
-} else {
+}
+
+// Fallback: if no valid line items were entered, use the flat amount if provided.
+if (empty($items)) {
     $subtotal = $price_per_invoice;
+} else {
+    $price_per_invoice = $subtotal;
 }
 
 $discount_amount = 0.0; 
@@ -115,17 +132,17 @@ try{
 
     // Insert on-demand contract into the unified contracts table
     $sql = 'INSERT INTO contracts (
-        client_id, project_id, project_code, status, contract_type, start_date, end_date, 
-        billing_interval_count, billing_interval_unit, price_per_invoice,
-        discount_type, discount_value, tax_percent, subtotal,
+        client_id, project_id, project_code, status, contract_type, billing_mode, start_date, end_date,
+        billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
+        discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid,
         total_invoiced, invoice_count, scope, organization_id, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'pending', 'on_demand', $start_date, $end_date,
-        $billing_interval_count, $billing_interval_unit, $price_per_invoice,
-        $discount_type, $discount_value, $tax_percent, $subtotal,
+        $client_id, $project_id, $projectCode, 'pending', 'on_demand', $billing_mode, $start_date, $end_date,
+        $billing_interval_count, $billing_interval_unit, 'on_demand', $price_per_invoice,
+        $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0,
         0, 0, $scope, $activeOrgId, $sessionUserId
     ]);
@@ -138,9 +155,9 @@ try{
 
     // Save line items if we have them
     if (!empty($items)) {
-        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach ($items as $it) {
-            $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t']]);
+            $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
         }
     }
 
@@ -184,5 +201,9 @@ try{
     exit;
 }
 
-header('Location: /?page=contract/on-demand-contracts-list&created=1');
+if ($return_to_project > 0) {
+    header('Location: /?page=project/projects-details&id=' . $return_to_project . '&created=contract');
+} else {
+    header('Location: /?page=contract/on-demand-contracts-list&created=1');
+}
 exit;

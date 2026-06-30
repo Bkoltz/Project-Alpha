@@ -5,9 +5,12 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
+require_once __DIR__ . '/../../../utils/document_sender.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
-require_record_ownership($pdo, 'quotes', $id);
+if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
+    require_record_ownership($pdo, 'quotes', $id);
+}
 $stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -27,14 +30,16 @@ if ($quoteType === 'long_term') {
     $quoteTypeLabel = 'On-Demand Quote';
     $approveConfirm = 'Approve this on-demand quote and generate contract?';
 }
-$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total FROM quote_items WHERE quote_id=?');
+$items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM quote_items WHERE quote_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
+$isHourlyBilling = ($quote['billing_mode'] ?? 'fixed') === 'hourly';
 require_once __DIR__ . '/../../../utils/format.php';
-$fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
-$fromAddress = trim(($appConfig['from_address_line1'] ?? '')."\n".($appConfig['from_address_line2'] ?? '')."\n".($appConfig['from_city'] ?? '').' '.($appConfig['from_state'] ?? '').' '.($appConfig['from_postal'] ?? '')."\n".($appConfig['from_country'] ?? ''));
-$fromPhone = $appConfig['from_phone'] ?? '';
-$fromEmail = $appConfig['from_email'] ?? '';
+$documentSender = document_sender_for_creator($pdo, $appConfig, !empty($quote['created_by']) ? (int)$quote['created_by'] : null);
+$fromName = $documentSender['name'] ?? '';
+$fromAddress = implode("\n", document_sender_lines($documentSender));
+$fromPhone = $documentSender['phone'] ?? '';
+$fromEmail = $documentSender['email'] ?? '';
 // Resolve terms: project-level terms override quote terms override app settings
 $termsText = '';
 if (!empty($quote['project_code'])) {
@@ -68,7 +73,7 @@ $isPdf = defined('PDF_MODE');
   <div class="no-print" style="padding:12px 16px;background:<?php echo $colors['bg']; ?>;color:<?php echo $colors['text']; ?>;border-left:4px solid <?php echo $colors['border']; ?>;border-radius:6px;margin-bottom:12px;font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:0.5px">
     Status: <?php echo htmlspecialchars($quote['status']); ?>
   </div>
-  <div class="no-print flex flex-wrap">
+  <div class="no-print document-actions">
     <a href="/?page=<?php echo htmlspecialchars($backPage); ?>" class="btn btn-sm">Back</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" class="btn btn-sm">Download</a>
@@ -76,7 +81,7 @@ $isPdf = defined('PDF_MODE');
       <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
-    <form method="post" action="/?page=email-send" style="display:inline">
+    <form method="post" action="/?page=quote/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
@@ -88,12 +93,12 @@ $isPdf = defined('PDF_MODE');
       <form method="post" action="/?page=quote/quote-approve" style="display:inline" onsubmit="return confirm('<?php echo htmlspecialchars($approveConfirm); ?>');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#16a34a;color:#fff; font-size: medium;">Approve</button>
+        <button type="submit" class="btn btn-sm btn-success">Approve</button>
       </form>
       <form method="post" action="/?page=quote/quote-reject" style="display:inline" onsubmit="return confirm('Deny this quote?');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#ef4444;color:#fff; font-size: medium;">Deny</button>
+        <button type="submit" class="btn btn-sm btn-danger">Deny</button>
       </form>
     <?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) === 'rejected'): ?>
@@ -101,17 +106,17 @@ $isPdf = defined('PDF_MODE');
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fef3c7;color:#92400e; font-size: medium;">Re-enable</button>
+      <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
     </form>
     <?php endif; ?>
     <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#dbeafe;color:#1e40af; font-size: medium;">Update Document Date</button>
+      <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
     <?php if (strtolower($quote['status'] ?? '') !== 'rejected'): ?>
-    <button type="button" onclick="generatePublicLink()" style="padding:6px 10px;border:1px solid #4f46e5;border-radius:8px;background:#eef2ff;color:#4f46e5; font-size: medium;">🔗 Share Link</button>
+    <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php endif; ?>
   </div>
   <?php if (!empty($_GET['error'])): ?>
@@ -314,24 +319,7 @@ $isPdf = defined('PDF_MODE');
       <td style="vertical-align:top;width:50%;padding-right:12px">
         <div class="font-600">From</div>
         <?php 
-          $fromCompany = $appConfig['brand_name'] ?? 'Project Alpha';
-          $fromNameLine = trim((string)($fromName ?? ''));
-          $fromLines = [];
-          if ($fromNameLine !== '') { $fromLines[] = $fromNameLine; }
-          $fromLines[] = $fromCompany;
-          $addr1 = trim((string)($appConfig['from_address_line1'] ?? ''));
-          $addr2 = trim((string)($appConfig['from_address_line2'] ?? ''));
-          if ($addr1 !== '') { $fromLines[] = $addr1; }
-          if ($addr2 !== '') { $fromLines[] = $addr2; }
-          $city = trim((string)($appConfig['from_city'] ?? ''));
-          $state = trim((string)($appConfig['from_state'] ?? ''));
-          $postal = trim((string)($appConfig['from_postal'] ?? ''));
-          $parts = [];
-          if ($city !== '') { $parts[] = $city; }
-          if ($state !== '') { $parts[] = $state; }
-          if ($postal !== '') { $parts[] = $postal; }
-          $cityLine = implode(', ', $parts);
-          if ($cityLine !== '') { $fromLines[] = $cityLine; }
+          $fromLines = document_sender_lines($documentSender);
         ?>
         <div><?php foreach ($fromLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
         <?php if ($fromPhone || $fromEmail): ?>
@@ -382,13 +370,46 @@ $isPdf = defined('PDF_MODE');
   <div style="page-break-after:always"></div>
   <?php endif; ?>
 
+  <?php
+  // Long-term / on-demand billing summary for quote PDFs
+  $qtType = $quote['quote_type'] ?? 'regular';
+  if (in_array($qtType, ['long_term', 'on_demand'], true)):
+    $qBiCount = (int)($quote['billing_interval_count'] ?? 1);
+    $qBiUnit = $quote['billing_interval_unit'] ?? 'month';
+    $qBiText = $qBiCount . ' ' . ucfirst($qBiUnit);
+    if ($qBiCount > 1) $qBiText .= 's';
+    $qSvcDesc = trim((string)($quote['scope'] ?? ''));
+    $qAmtPerInv = (float)($quote['price_per_invoice'] ?? 0);
+    $qPricingType = $quote['pricing_type'] ?? null;
+  ?>
+  <div style="margin:16px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#065f46">
+      <?php echo $qtType === 'long_term' ? 'Recurring Billing Summary' : 'On-Demand Billing Summary'; ?>
+    </div>
+    <?php if ($qSvcDesc !== ''): ?>
+      <div style="margin-bottom:8px"><strong>Service:</strong> <?php echo htmlspecialchars($qSvcDesc); ?></div>
+    <?php endif; ?>
+    <?php if ($qtType === 'long_term'): ?>
+      <div style="margin-bottom:8px"><strong>Billing Cycle:</strong> Every <?php echo htmlspecialchars($qBiText); ?></div>
+    <?php endif; ?>
+    <?php if ($qPricingType === 'per_invoice' || $qtType === 'on_demand'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">
+        Amount Per Invoice: $<?php echo number_format($qAmtPerInv, 2); ?>
+        <?php if ($qtType === 'long_term'): ?>/<?php echo htmlspecialchars(strtolower($qBiUnit)); ?><?php endif; ?>
+      </div>
+    <?php elseif ($qPricingType === 'fixed_total'): ?>
+      <div style="font-size:16px;font-weight:700;color:#065f46">Total: $<?php echo number_format((float)($quote['total'] ?? 0), 2); ?></div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
   <table style="width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
     <thead>
       <tr style="text-align:left;border-bottom:1px solid #eee">
         <th style="padding:10px;width:25%;vertical-align:top;text-align:center">Item</th>
         <th style="padding:10px;width:35%;vertical-align:top">Description</th>
-        <th style="padding:10px;width:10%;text-align:right;vertical-align:top">Qty</th>
-        <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Unit Price</th>
+        <th style="padding:10px;width:10%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Est. Hours' : 'Qty'; ?></th>
+        <th style="padding:10px;width:15%;text-align:right;vertical-align:top"><?php echo $isHourlyBilling ? 'Hourly Rate' : 'Unit Price'; ?></th>
         <th style="padding:10px;width:15%;text-align:right;vertical-align:top">Line Total</th>
       </tr>
     </thead>
@@ -463,7 +484,7 @@ $isPdf = defined('PDF_MODE');
   <div class="print-footer"><a href="https://project-alpha.tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Powered by Project Alpha</a></div>
 
 <!-- Share Link Modal -->
-<div id="shareLinkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+<div id="shareLinkModal" data-doc-type="quote" data-doc-id="<?php echo (int)$id; ?>" data-default-days="<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>" data-csrf="<?php echo htmlspecialchars(csrf_token()); ?>" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="margin:0;font-size:18px">🔗 Share Quote Link</h3>

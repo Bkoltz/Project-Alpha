@@ -101,8 +101,8 @@ $organizations = $stmt->fetchAll();
               <td style="padding:10px"><?php echo (int)$org['client_count']; ?> client<?php echo $org['client_count'] != 1 ? 's' : ''; ?></td>
               <td style="padding:10px"><?php echo htmlspecialchars(date('M j, Y', strtotime($org['created_at']))); ?></td>
               <td style="padding:10px">
-                <a href="/?page=organization/organizations-edit&id=<?php echo (int)$org['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;text-decoration:none">Edit</a>
-                <a href="/?page=organization/organization-view&id=<?php echo (int)$org['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;margin-left:4px;text-decoration:none">View</a>
+                <a href="/?page=organization/organization-view&id=<?php echo (int)$org['id']; ?>" class="btn btn-sm">View</a>
+                <a href="/?page=organization/organizations-edit&id=<?php echo (int)$org['id']; ?>" class="btn btn-sm">Edit</a>
               </td>
             </tr>
           <?php endforeach; ?>

@@ -7,11 +7,17 @@ try {
     // Ensure app_config table exists
     $pdo->exec("CREATE TABLE IF NOT EXISTS app_config (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        config_key VARCHAR(100) NOT NULL UNIQUE,
+        organization_id INT NOT NULL DEFAULT 0,
+        config_key VARCHAR(100) NOT NULL,
         config_value TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_app_config (organization_id, config_key),
         INDEX idx_config_key (config_key)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $hasOrgColumn = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='app_config' AND COLUMN_NAME='organization_id'")->fetchColumn();
+    if (!$hasOrgColumn) {
+        $pdo->exec("ALTER TABLE app_config ADD COLUMN organization_id INT NOT NULL DEFAULT 0 AFTER id");
+    }
     
     // Ensure link_resolver_config table exists
     $pdo->exec("CREATE TABLE IF NOT EXISTS link_resolver_config (
@@ -24,22 +30,35 @@ try {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     
-    // Save global settings to app_config
+    $readConfig = function (string $key, $default = null) use ($pdo) {
+        $stmt = $pdo->prepare('SELECT config_value FROM app_config WHERE organization_id = 0 AND config_key = ? LIMIT 1');
+        $stmt->execute([$key]);
+        $value = $stmt->fetchColumn();
+        return $value === false ? $default : $value;
+    };
+
+    // Save only the global settings that are currently present on this form.
     $globalSettings = [
         'link_resolver_enabled' => isset($_POST['link_resolver_enabled']) ? 1 : 0,
-        'default_link_expiration_days' => (int)($_POST['default_link_expiration_days'] ?? 365),
         'org_level_links_only' => isset($_POST['org_level_links_only']) ? 1 : 0,
-        'link_expiration_checker' => isset($_POST['link_expiration_checker_enabled']) ? 1 : 0,
-        'link_expiration_email_enabled' => isset($_POST['link_expiration_email_enabled']) ? 1 : 0
     ];
+    if (isset($_POST['default_link_expiration_days'])) {
+        $globalSettings['default_link_expiration_days'] = max(1, (int)$_POST['default_link_expiration_days']);
+    }
+    if (isset($_POST['link_expiration_checker_enabled'])) {
+        $globalSettings['link_expiration_checker'] = 1;
+    }
+    if (isset($_POST['link_expiration_email_enabled'])) {
+        $globalSettings['link_expiration_email_enabled'] = 1;
+    }
     
     foreach ($globalSettings as $key => $value) {
         $stmt = $pdo->prepare("
-            INSERT INTO app_config (config_key, config_value) 
-            VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE config_value = ?
+            INSERT INTO app_config (organization_id, config_key, config_value)
+            VALUES (0, ?, ?)
+            ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
         ");
-        $stmt->execute([$key, $value, $value]);
+        $stmt->execute([$key, $value]);
     }
     
     // Process provider configurations
@@ -108,7 +127,7 @@ try {
         ");
         
         $credentialsJson = json_encode($credentials);
-        $expirationDays = $globalSettings['default_link_expiration_days'];
+        $expirationDays = (int)($globalSettings['default_link_expiration_days'] ?? $readConfig('default_link_expiration_days', 365));
         
         $stmt->execute([
             $provider,

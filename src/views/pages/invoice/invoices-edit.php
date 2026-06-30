@@ -114,6 +114,17 @@ foreach ($clients as $c) {
       </div>
     <?php endif; ?>
 
+    <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
+      <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
+      <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+        <input type="checkbox" name="billing_mode" value="hourly" <?php echo ($inv['billing_mode'] ?? 'fixed') === 'hourly' ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div style="font-weight:600;color:#1f2937">Hourly billing</div>
+          <div style="font-size:13px;color:#4b5563">Use tracked time or hourly rows for this invoice.</div>
+        </div>
+      </label>
+    </div>
+
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items (from contract - read only)</div>
       <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px">
@@ -168,6 +179,7 @@ foreach ($clients as $c) {
           <div id="extraChargesContainer" style="display:grid;gap:8px">
             <?php foreach ($extraCharges as $idx => $it): ?>
               <div style="display:grid;grid-template-columns:3fr 3fr 1fr 1fr auto;gap:8px;padding:8px;background:#fff;border-radius:4px;border:1px solid #fcd34d">
+                <input type="hidden" name="extra_billing_unit[]" value="<?php echo htmlspecialchars($it['billing_unit'] ?? 'each'); ?>">
                 <input id="item" type="text" name="extra_item[]" value="<?php echo htmlspecialchars($it['item'] ?? ''); ?>" placeholder="Item name..." style="padding:8px;border-radius:4px;border:1px solid #ddd" data-item-autocomplete data-description-field="extra_desc_<?php echo $idx; ?>" data-price-field="extra_price_<?php echo $idx; ?>">
                 <textarea id="description" name="extra_desc[]" placeholder="Description (optional)" style="padding:8px;border-radius:4px;border:1px solid #ddd;resize:vertical;min-height:34px"><?php echo htmlspecialchars($it['description'] ?? ''); ?></textarea>
                 <input id="quantity" type="number" step="0.01" min="0" name="extra_qty[]" value="<?php echo htmlspecialchars($it['quantity']); ?>" placeholder="Qty" style="padding:8px;border-radius:4px;border:1px solid #ddd">

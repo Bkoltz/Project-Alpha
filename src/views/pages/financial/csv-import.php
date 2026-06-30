@@ -20,11 +20,33 @@ $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
     <a href="/?page=financial/expenses-list" class="btn btn-sm">Back to Expenses</a>
   </div>
 
+  <div class="card" style="margin-bottom:16px">
+    <h3 class="card-title" style="margin-bottom:10px">CSV Requirements</h3>
+    <p class="muted-note" style="margin:0 0 12px">The first row must contain column headers. At minimum, each row needs a date and an amount. Vendor and description are strongly recommended.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div>
+        <div class="font-600" style="margin-bottom:6px">Supported fields</div>
+        <ul class="muted-note" style="margin:0;padding-left:18px;line-height:1.6">
+          <li>Date: <code>date</code>, <code>transaction date</code>, <code>order date</code></li>
+          <li>Amount: <code>amount</code>, <code>debit</code>, <code>withdrawal</code>, <code>purchase price</code></li>
+          <li>Vendor: <code>vendor</code>, <code>merchant</code>, <code>payee</code>, <code>seller</code></li>
+          <li>Optional: tax, total, reference/order ID, payment method</li>
+          <li>Negative debit amounts are accepted and imported as positive expenses</li>
+        </ul>
+      </div>
+      <div>
+        <div class="font-600" style="margin-bottom:6px">Example</div>
+        <pre style="margin:0;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;overflow:auto;font-size:12px">date,vendor,description,amount,tax,total,reference,payment_method
+2026-06-01,Acme Supply,Cable clips,42.50,2.34,44.84,INV-1001,Card</pre>
+      </div>
+    </div>
+  </div>
+
   <!-- Step 1: Upload -->
   <div class="card" id="uploadStep">
     <h3 class="card-title" style="margin-bottom:16px">Step 1: Upload CSV File</h3>
     <form id="csvUploadForm" enctype="multipart/form-data">
-      <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('csv')); ?>">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('csv_import')); ?>">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="phase" value="upload">
 
@@ -74,7 +96,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 
 <script>
 const csrfToken = '<?php echo htmlspecialchars(csrf_token()); ?>';
-const csrfSfToken = '<?php echo htmlspecialchars(csrf_sf_token('csv')); ?>';
+const csrfSfToken = '<?php echo htmlspecialchars(csrf_sf_token('csv_import')); ?>';
 
 function appendToken(formData) {
   formData.append('csrf', csrfToken);

@@ -73,8 +73,18 @@ try {
   }
   $publicUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $name);
 
-  // Save path and activate
-  $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')->execute([$publicUrl, 'active', $contract_id]);
+  // Save the signed PDF. For REGULAR contracts, auto-activate on upload (existing behavior).
+  // For LONG-TERM and ON-DEMAND, keep the contract pending until the user explicitly activates it.
+  // This preserves explicit user intent and prevents accidental activation.
+  $ctType = $contract['contract_type'] ?? 'regular';
+  if ($ctType === 'regular') {
+    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')
+        ->execute([$publicUrl, 'active', $contract_id]);
+  } else {
+    // LT/OD: just save the path and leave status unchanged; the user clicks Activate separately.
+    $pdo->prepare('UPDATE contracts SET signed_pdf_path=? WHERE id=?')
+        ->execute([$publicUrl, $contract_id]);
+  }
 
   $pdo->commit();
 } catch (Throwable $e) {
@@ -83,5 +93,37 @@ try {
   exit;
 }
 
-header('Location: /?page=contract/contracts-list&signed=1');
+// Determine the contract type for a correct redirect target.
+$contractType = 'regular';
+try {
+  $tStmt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=?');
+  $tStmt->execute([$contract_id]);
+  $contractType = (string)($tStmt->fetchColumn() ?: 'regular');
+} catch (Throwable $e) { /* default regular */ }
+
+// For long-term contracts that are already active, re-uploading a signed PDF can trigger
+// billing if the next invoice date is due. This does not run on first upload because
+// long-term contracts are not auto-activated.
+if ($contractType === 'long_term') {
+  try {
+    require_once __DIR__ . '/../../utils/recurring_billing.php';
+    $cStmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? AND contract_type="long_term"');
+    $cStmt->execute([$contract_id]);
+    $ltContract = $cStmt->fetch(PDO::FETCH_ASSOC);
+    if ($ltContract && $ltContract['status'] === 'active' && !empty($ltContract['next_invoice_date']) && $ltContract['next_invoice_date'] <= date('Y-m-d')) {
+      generate_recurring_invoice($pdo, $ltContract, $appConfig);
+    }
+  } catch (Throwable $e) {
+    @error_log('[contract_sign] LT first-invoice generation failed: ' . $e->getMessage());
+  }
+}
+
+// Type-aware redirect so the user lands back on the correct list.
+$listPage = 'contract/contracts-list';
+if ($contractType === 'long_term') {
+  $listPage = 'contract/long-term-contracts-list';
+} elseif ($contractType === 'on_demand') {
+  $listPage = 'contract/on-demand-contracts-list';
+}
+header('Location: /?page=' . $listPage . '&signed=1');
 exit;
