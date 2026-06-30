@@ -71,6 +71,12 @@ try {
     if (isset($_POST['link_expiration_email_enabled'])) {
         $globalSettings['link_expiration_email_enabled'] = 1;
     }
+    if (isset($_POST['dropbox_app_key'])) {
+        $globalSettings['dropbox_app_key'] = trim((string)$_POST['dropbox_app_key']);
+    }
+    if (isset($_POST['dropbox_app_secret']) && trim((string)$_POST['dropbox_app_secret']) !== '') {
+        $globalSettings['dropbox_app_secret'] = trim((string)$_POST['dropbox_app_secret']);
+    }
     
     foreach ($globalSettings as $key => $value) {
         $stmt = $pdo->prepare("
