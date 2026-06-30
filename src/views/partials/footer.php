@@ -34,15 +34,15 @@
       csrf: (modal && modal.dataset.csrf) || ''
     };
   }
-  window.generatePublicLink = function() {
+  if (!window.generatePublicLink) window.generatePublicLink = function() {
     var modal = document.getElementById('shareLinkModal');
     if (modal) modal.style.display = 'flex';
   };
-  window.closeShareModal = function() {
+  if (!window.closeShareModal) window.closeShareModal = function() {
     var modal = document.getElementById('shareLinkModal');
     if (modal) modal.style.display = 'none';
   };
-  window.createPublicLink = function() {
+  if (!window.createPublicLink) window.createPublicLink = function() {
     var modal = document.getElementById('shareLinkModal');
     if (!modal) return;
     var ctx = inferShareContext(modal);
@@ -67,7 +67,7 @@
       })
       .catch(function() { alert('Failed to create link'); });
   };
-  window.copyLink = function() {
+  if (!window.copyLink) window.copyLink = function() {
     var input = document.getElementById('generatedLink');
     if (!input) return;
     input.select();

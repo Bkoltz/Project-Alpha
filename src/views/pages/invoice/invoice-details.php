@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/invoice_content_links.php';
+require_once __DIR__ . '/../../../services/StripeService.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'invoices', $id);
@@ -52,6 +53,10 @@ if ($termsText === '' && ($inv['invoice_type'] ?? '') === 'on_demand') { $termsT
 $total = (float) ($inv['total'] ?? 0);
 $paid = (float) ($inv['amount_paid'] ?? 0);
 $outstanding = max(0, $total - $paid);
+$invoiceCollectionMode = trim((string)($inv['collection_mode'] ?? ''));
+if ($invoiceCollectionMode === '') {
+  $invoiceCollectionMode = 'direct';
+}
 
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
@@ -90,7 +95,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
         <button type="submit" class="btn btn-sm">Reopen Draft</button>
       </form>
     <?php endif; ?>
-    <?php if (!empty($inv['status']) && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && ($inv['collection_mode'] ?? 'direct') === 'direct'): ?>
+    <?php if (!empty($inv['status']) && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && $invoiceCollectionMode === 'direct'): ?>
     <form method="post" action="/?page=invoice/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
@@ -102,6 +107,14 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <?php if (in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
       <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
          class="btn btn-sm btn-success">Mark as Paid</a>
+    <?php endif; ?>
+    <?php if ($outstanding > 0 && StripeService::isConfigured($appConfig) && !empty($inv['finalized_at']) && $invoiceCollectionMode === 'direct' && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
+      <form method="post" action="/?page=stripe-charge" target="_blank" rel="noopener" style="display:inline" onsubmit="return confirm('Open Stripe Checkout so you can enter this client payment on Stripe? PA will not store card details.');">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="invoice_id" value="<?php echo (int)$id; ?>">
+        <input type="hidden" name="return_url" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+        <button type="submit" class="btn btn-sm btn-info">Open Stripe Checkout</button>
+      </form>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
     <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">
@@ -117,7 +130,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
-    <?php if (!empty($inv['finalized_at']) && ($inv['collection_mode'] ?? 'direct') === 'direct' && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
+    <?php if (!empty($inv['finalized_at']) && $invoiceCollectionMode === 'direct' && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
       <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php endif; ?>
   </div>
@@ -655,7 +668,7 @@ function revokeAndCreateNew() {
       document.getElementById('linkExpiry').textContent = '';
       // Reset to default days
       document.getElementById('linkDays').value = '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>';
-      document.getElementById('expireWhenPaid').checked = true;
+      document.getElementById('expireWhenPaid').checked = false;
       toggleDaysInput();
     } else {
       alert('Error: ' + (data.error || 'Failed to revoke link'));

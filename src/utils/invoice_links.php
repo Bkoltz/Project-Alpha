@@ -81,8 +81,8 @@ function pa_invoice_links_for_invoice(PDO $pdo, int $invoiceId): array
                c.organization_id AS client_organization_id,
                {$projectDepartmentSelect}
         FROM invoices i
-        LEFT JOIN clients c ON c.id = i.client_id
         LEFT JOIN projects p ON p.id = i.project_id
+        LEFT JOIN clients c ON c.id = i.client_id
         WHERE i.id = ?
         LIMIT 1
     ");

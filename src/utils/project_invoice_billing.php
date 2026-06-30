@@ -149,14 +149,15 @@ function project_invoice_client_recipients(PDO $pdo, int $projectInvoiceId, ?arr
 
 function project_invoice_create_public_link(PDO $pdo, int $projectInvoiceId, array $appConfig): string
 {
+    $token = bin2hex(random_bytes(16));
     try {
         $pdo->exec('ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL');
-    } catch (Throwable $e) { /* ignore */ }
+    } catch (Throwable $e) {
+    }
     try {
         $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
-    } catch (Throwable $e) { /* ignore */ }
-
-    $token = bin2hex(random_bytes(16));
+    } catch (Throwable $e) {
+    }
     $stmt = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, expire_when_paid, revoked) VALUES ("project_invoice", ?, ?, NULL, 1, 0)');
     $stmt->execute([$projectInvoiceId, $token]);
     return $token;

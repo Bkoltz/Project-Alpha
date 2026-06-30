@@ -21,11 +21,14 @@ function sync() {
     }
 
     // Show/hide Stripe config based on whether Stripe is in the list
-    var hasStripe = items.some(function (i) {
-        return i.name.toLowerCase() === 'stripe';
-    });
     var stripeConfig = document.getElementById('stripeConfig');
     if (stripeConfig) {
+        var hasStripe = items.some(function (i) {
+            var name = i.name.toLowerCase();
+            return name === 'stripe' || name === 'card' || name === 'credit card';
+        });
+        var stripeAlreadyConfigured = stripeConfig.getAttribute('data-configured') === '1';
+        hasStripe = hasStripe || stripeAlreadyConfigured;
         stripeConfig.style.display = hasStripe ? 'block' : 'none';
     }
 }

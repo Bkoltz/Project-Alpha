@@ -56,6 +56,8 @@ $appConfig = [
     'smtp_from_name' => null,
     // Stripe (loaded from environment/.env, not stored in settings.json)
     'stripe_publishable_key' => null,
+    '_stripe_secret_key' => null,
+    '_stripe_webhook_secret' => null,
     'stripe_secret_key_enc' => null,
     'stripe_webhook_secret_enc' => null,
     'stripe_surcharge_type' => 'split',
@@ -109,7 +111,9 @@ foreach ($secretKeys as $key) {
 $secretEnvAliases = [
     'STRIPE_PUBLISHABLE_KEY' => 'stripe_publishable_key',
     'STRIPE_SECRET_KEY' => '_stripe_secret_key',
+    'stripe_secret_key' => '_stripe_secret_key',
     'STRIPE_WEBHOOK_SECRET' => '_stripe_webhook_secret',
+    'stripe_webhook_secret' => '_stripe_webhook_secret',
 ];
 foreach ($secretEnvAliases as $envKey => $configKey) {
     $envValue = $_ENV[$envKey] ?? $_SERVER[$envKey] ?? getenv($envKey) ?? false;
@@ -200,6 +204,10 @@ try {
             while ($row = $cfgStmt->fetch(PDO::FETCH_ASSOC)) {
                 $key = $row['config_key'];
                 $val = $row['config_value'];
+                if (in_array($key, ['stripe_secret_key_enc', 'stripe_webhook_secret_enc', 'smtp_password_enc'], true)
+                    && trim((string)$val) === '') {
+                    continue;
+                }
                 $appConfig[$key] = $val;
             }
         }

@@ -149,7 +149,7 @@ try {
                     WHERE document_type = ? AND document_id = ? AND revoked = 0
                 ');
                 $upgrade->execute([$type, $id]);
-            } catch (Throwable $e) { /* older schemas are handled by the existing query fallback */ }
+            } catch (Throwable $e) { /* older schemas are handled by the query fallback */ }
         }
         $existingStmt = $pdo->prepare('
             SELECT token, expires_at, expire_when_paid 

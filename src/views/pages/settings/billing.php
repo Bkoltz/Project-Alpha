@@ -2,6 +2,11 @@
 // src/views/pages/settings/billing.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../services/StripeService.php';
+
+$stripeSecretConfigured = StripeService::hasSecretKey($appConfig ?? []);
+$stripeWebhookConfigured = !empty($appConfig['_stripe_webhook_secret']) || !empty($appConfig['stripe_webhook_secret_enc']);
+$stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || !empty($appConfig['stripe_publishable_key']);
 ?>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
@@ -56,7 +61,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   <div style="margin-top:8px;color:#1e40af">Tax rate management has been moved to the <a href="/?page=settings&tab=taxes" style="color:var(--nav-accent);font-weight:600">Taxes</a> tab for better organization.</div>
 </div>
 
-<fieldset id="stripeConfig" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;display:none">
+<fieldset id="stripeConfig" data-configured="<?php echo $stripePanelConfigured ? '1' : '0'; ?>" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;display:none">
   <legend style="padding:0 6px;color:var(--muted)">Stripe Configuration</legend>
   <div style="color:#666;font-size:0.9em;margin-bottom:12px">Configure your Stripe API keys to enable automatic payment processing. Get your keys from the Stripe dashboard.</div>
   
@@ -67,12 +72,15 @@ require_once __DIR__ . '/../../../utils/csrf.php';
   
   <label style="display:block;margin-bottom:12px">
     <div style="margin-bottom:4px;font-weight:500">Secret Key</div>
-    <input type="password" name="stripe_secret_key" value="<?php echo htmlspecialchars($appConfig['stripe_secret_key'] ?? ''); ?>" placeholder="sk_live_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <input type="password" name="stripe_secret_key" value="" placeholder="<?php echo $stripeSecretConfigured ? 'Saved - enter a new key to replace' : 'sk_live_...'; ?>" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <div style="font-size:0.85em;color:<?php echo $stripeSecretConfigured ? '#166534' : '#92400e'; ?>;margin-top:4px">
+      <?php echo $stripeSecretConfigured ? 'Secret key is saved on the server.' : 'Secret key is not configured.'; ?>
+    </div>
   </label>
   
   <label style="display:block">
     <div style="margin-bottom:4px;font-weight:500">Webhook Secret <span style="font-weight:normal;color:#666">(Optional)</span></div>
-    <input type="password" name="stripe_webhook_secret" value="<?php echo htmlspecialchars($appConfig['stripe_webhook_secret'] ?? ''); ?>" placeholder="whsec_..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <input type="password" name="stripe_webhook_secret" value="" placeholder="<?php echo $stripeWebhookConfigured ? 'Saved - enter a new secret to replace' : 'whsec_...'; ?>" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     <div style="font-size:0.85em;color:#666;margin-top:4px">Required only if you want to receive webhook events from Stripe</div>
   </label>
 </fieldset>

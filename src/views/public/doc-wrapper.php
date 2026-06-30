@@ -2,6 +2,14 @@
 // src/views/public/doc-wrapper.php
 // Expects variables set by controller: $type, $rid, $token, $notice, $err, $pdo, $appConfig, $row (link data)
 
+$type = isset($type) ? (string)$type : '';
+$rid = isset($rid) ? (int)$rid : 0;
+$token = isset($token) ? (string)$token : '';
+$notice = isset($notice) ? $notice : false;
+$err = isset($err) ? $err : '';
+$row = (isset($row) && is_array($row)) ? $row : [];
+$appConfig = (isset($appConfig) && is_array($appConfig)) ? $appConfig : [];
+
 // Get link expiration info
 $linkExpiresAt = isset($row['expires_at']) && $row['expires_at'] !== null && $row['expires_at'] !== '' ? $row['expires_at'] : null;
 $linkExpireWhenPaid = isset($row['expire_when_paid']) && (int)$row['expire_when_paid'] === 1;
@@ -79,8 +87,7 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
                     'collection_mode' => $collectionMode,
                     'finalized' => !empty($invoiceData['finalized_at']),
                     'amount_due' => $calculatedAmountDue,
-                    'stripe_publishable_key' => !empty($appConfig['stripe_publishable_key']),
-                    'stripe_secret_available' => method_exists('StripeService', 'hasSecretKey') ? StripeService::hasSecretKey($appConfig) : !empty($appConfig['stripe_secret_key_enc']),
+                    'stripe_secret_available' => method_exists('StripeService', 'hasSecretKey') ? StripeService::hasSecretKey($appConfig) : false,
                 ]));
             }
             

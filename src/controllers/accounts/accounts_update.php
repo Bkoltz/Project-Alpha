@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/permission_catalog.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -93,6 +94,8 @@ if ($stmt->fetch()) {
 
 // Update user
 try {
+    $pdo->beginTransaction();
+
     $stmt = $pdo->prepare('UPDATE users SET
         email = ?,
         username = ?,
@@ -131,9 +134,35 @@ try {
         $userId
     ]);
 
+    if (!empty($_POST['save_account_permissions'])) {
+        $allPermissions = permission_catalog_flat();
+        $wipeStmt = $pdo->prepare('DELETE FROM user_permissions_overrides WHERE user_id = ? AND organization_id IS NULL AND permission = ?');
+        foreach ($allPermissions as $perm => $_group) {
+            $wipeStmt->execute([$userId, $perm]);
+        }
+
+        if ($role !== 'admin') {
+            $insertStmt = $pdo->prepare('INSERT INTO user_permissions_overrides (user_id, organization_id, permission, allowed) VALUES (?, ?, ?, ?)');
+            foreach ($allPermissions as $perm => $_group) {
+                $allowKey = 'allow_' . str_replace('.', '_', $perm);
+                $denyKey  = 'deny_' . str_replace('.', '_', $perm);
+                if (!empty($_POST[$allowKey])) {
+                    $insertStmt->execute([$userId, $orgId, $perm, 1]);
+                } elseif (!empty($_POST[$denyKey])) {
+                    $insertStmt->execute([$userId, $orgId, $perm, 0]);
+                }
+            }
+        }
+    }
+
+    $pdo->commit();
+
     audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $isDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0]);
     header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log('Failed to update user: ' . $e->getMessage());
     header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Failed to update user'));
 }

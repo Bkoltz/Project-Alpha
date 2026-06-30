@@ -53,6 +53,8 @@ function permLabel(string $perm): string {
     [$module, $action] = explode('.', $perm, 2);
     return ucfirst(str_replace('_', ' ', $action));
 }
+
+$permissionsEmbedInParentForm = !empty($permissionsEmbedInParentForm);
 ?>
 
 <div id="permissions-panel-edit" class="pa-permissions-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;transition:opacity 180ms ease,max-height 220ms ease,padding 180ms ease,margin 180ms ease,border-width 180ms ease;max-height:5000px;overflow:hidden;">
@@ -74,11 +76,15 @@ function permLabel(string $perm): string {
         </div>
 
         <div id="permissions-grid-edit" style="display:<?php echo $targetRole === 'admin' ? 'none' : 'block'; ?>;">
+        <?php if ($permissionsEmbedInParentForm): ?>
+            <input type="hidden" name="save_account_permissions" value="1">
+        <?php else: ?>
         <form method="post" action="/?page=settings/permissions-handler">
             <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
             <input type="hidden" name="action" value="save_user_overrides">
             <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
             <input type="hidden" name="referer" value="account-edit">
+        <?php endif; ?>
 
             <div style="display:grid;gap:16px;">
                 <?php foreach ($permissionGroups as $group => $permissions): ?>
@@ -127,9 +133,11 @@ function permLabel(string $perm): string {
             </div>
 
             <div style="margin-top:20px;">
-                <button type="submit" style="padding:10px 20px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save Permissions</button>
+                <button type="submit" style="padding:10px 20px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;"><?php echo $permissionsEmbedInParentForm ? 'Save Changes' : 'Save Permissions'; ?></button>
             </div>
+        <?php if (!$permissionsEmbedInParentForm): ?>
         </form>
+        <?php endif; ?>
         <script>
         function selectAllInSection(btn, type) {
             var fieldset = btn.closest('fieldset');

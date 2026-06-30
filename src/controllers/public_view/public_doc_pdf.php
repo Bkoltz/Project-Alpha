@@ -80,11 +80,14 @@ try {
         $eligibility = $pdo->prepare('SELECT status, finalized_at, collection_mode FROM invoices WHERE id=?');
         $eligibility->execute([$id]);
         $invoice = $eligibility->fetch(PDO::FETCH_ASSOC);
+        if (!$invoice) {
+            throw new Exception('Invoice is not public');
+        }
         $collectionMode = trim((string)($invoice['collection_mode'] ?? ''));
         if ($collectionMode === '') {
             $collectionMode = 'direct';
         }
-        if (!$invoice || !in_array((string)$invoice['status'], ['sent','unpaid','partial','overdue'], true)
+        if (!in_array((string)$invoice['status'], ['sent','unpaid','partial','overdue'], true)
             || empty($invoice['finalized_at']) || $collectionMode !== 'direct') {
             throw new Exception('Invoice is not public');
         }
