@@ -107,6 +107,54 @@ class DropboxLinkResolver
             'Use Test Connection in Settings > Links and review the Dropbox app credentials/scopes.',
         ];
     }
+
+    private function normalizeDropboxPath(string $path): string
+    {
+        $path = trim(str_replace('\\', '/', $path));
+        if ($path === '' || $path === '/') {
+            return '/';
+        }
+        $path = '/' . ltrim($path, '/');
+        return strtolower(rtrim($path, '/'));
+    }
+
+    private function sharedLinkMatchesPath(array $link, string $folderPath): bool
+    {
+        $actualPath = (string)($link['path_lower'] ?? $link['path'] ?? $link['path_display'] ?? '');
+        if ($actualPath === '') {
+            return false;
+        }
+        return $this->normalizeDropboxPath($actualPath) === $this->normalizeDropboxPath($folderPath);
+    }
+
+    private function exactSharedLinkUrl(array $links, string $folderPath): ?string
+    {
+        foreach ($links as $link) {
+            if (!is_array($link) || empty($link['url'])) {
+                continue;
+            }
+            if ($this->sharedLinkMatchesPath($link, $folderPath)) {
+                return (string)$link['url'];
+            }
+        }
+        return null;
+    }
+
+    private function findExactSharedLinkInError(array $value, string $folderPath): ?string
+    {
+        if (!empty($value['url']) && $this->sharedLinkMatchesPath($value, $folderPath)) {
+            return (string)$value['url'];
+        }
+        foreach ($value as $child) {
+            if (is_array($child)) {
+                $url = $this->findExactSharedLinkInError($child, $folderPath);
+                if ($url !== null) {
+                    return $url;
+                }
+            }
+        }
+        return null;
+    }
     
     /**
      * Refresh the access token using the refresh token
@@ -273,12 +321,17 @@ class DropboxLinkResolver
     public function generatePublicLink(string $folderPath): ?string
     {
         try {
+            $folderPath = $this->normalizeDropboxPath($folderPath);
+
             // First, try to get existing shared link
             $ch = curl_init('https://api.dropboxapi.com/2/sharing/list_shared_links');
             
             curl_setopt_array($ch, [
                 CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode(['path' => $folderPath]),
+                CURLOPT_POSTFIELDS => json_encode([
+                    'path' => $folderPath,
+                    'direct_only' => true,
+                ]),
                 CURLOPT_HTTPHEADER => [
                     'Authorization: Bearer ' . $this->accessToken,
                     'Content-Type: application/json'
@@ -299,7 +352,11 @@ class DropboxLinkResolver
             if ($httpCode === 200) {
                 $data = json_decode($response, true);
                 if (!empty($data['links'])) {
-                    return $data['links'][0]['url'];
+                    $exactUrl = $this->exactSharedLinkUrl((array)$data['links'], $folderPath);
+                    if ($exactUrl !== null) {
+                        return $exactUrl;
+                    }
+                    @error_log('[Dropbox] Ignored shared link result because it did not match exact folder path: ' . $folderPath);
                 }
             } elseif ($httpCode !== 409) {
                 [$message, $tip] = $this->dropboxApiErrorMessage($httpCode, 'shared-link lookup', (string)$response);
@@ -337,6 +394,13 @@ class DropboxLinkResolver
             }
             
             if ($httpCode !== 200) {
+                $data = json_decode((string)$response, true);
+                if ($httpCode === 409 && is_array($data)) {
+                    $exactUrl = $this->findExactSharedLinkInError($data, $folderPath);
+                    if ($exactUrl !== null) {
+                        return $exactUrl;
+                    }
+                }
                 [$message, $tip] = $this->dropboxApiErrorMessage($httpCode, 'shared-link creation', (string)$response);
                 @error_log('[Dropbox] Create link failed HTTP ' . $httpCode . ': ' . substr((string)$response, 0, 500));
                 $this->fail('create shared link', $message, $tip, $httpCode, (string)$response);
@@ -344,6 +408,14 @@ class DropboxLinkResolver
             }
             
             $data = json_decode($response, true);
+            if (is_array($data) && !$this->sharedLinkMatchesPath($data, $folderPath)) {
+                $this->fail(
+                    'create shared link',
+                    'Dropbox returned a shared link for a different folder than the exact resolver match.',
+                    'The resolver refused to attach this link to avoid sharing a parent folder. Check the Dropbox root path and existing shared links.'
+                );
+                return null;
+            }
             return $data['url'] ?? null;
             
         } catch (\Throwable $e) {
