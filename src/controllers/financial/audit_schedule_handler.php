@@ -1,147 +1,145 @@
 <?php
-// src/controllers/financial/audit_schedule_handler.php
+
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
-csrf_verify_post_or_redirect('financial/audit');
+$requestedType = ($_POST['report_type'] ?? 'audit') === 'expense' ? 'expense' : 'audit';
+$redirectPage = $requestedType === 'expense' ? 'financial/expense-report' : 'financial/audit';
+csrf_verify_post_or_redirect($redirectPage);
 
-$action = $_POST['action'] ?? 'create';
+$action = (string)($_POST['action'] ?? 'create');
+$organizationId = get_active_org_id();
+if ($organizationId <= 0) {
+    header('Location: /?page=' . $redirectPage . '&error=' . urlencode('Select an organization before managing schedules.'));
+    exit;
+}
+$requiredPermission = $requestedType === 'expense' ? 'financial.manage' : 'financial.audit';
+if (($_SESSION['user']['role'] ?? '') !== 'admin'
+    && !user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), $requiredPermission, $organizationId)) {
+    require_once __DIR__ . '/../../utils/acl_middleware.php';
+    deny_response($redirectPage);
+}
 
 try {
     if ($action === 'create') {
-        // Get schedule parameters
-        $frequency = $_POST['schedule_frequency'] ?? 'monthly';
-        $dateRangeType = $_POST['schedule_date_range'] ?? 'current_year';
-        $emailAddresses = array_filter($_POST['schedule_email'] ?? [], function($email) {
-            return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
-        });
-        $emailAddresses = array_slice($emailAddresses, 0, 5); // Limit to 5
-        
-        if (empty($emailAddresses)) {
-            throw new Exception('At least one valid email address is required for scheduling.');
-        }
-        
-        // Validate frequency
-        if (!in_array($frequency, ['weekly', 'monthly', 'quarterly', 'annually'])) {
-            throw new Exception('Invalid schedule frequency.');
-        }
-        
-        // Validate date range type
+        $frequency = (string)($_POST['schedule_frequency'] ?? 'monthly');
+        $dateRangeType = (string)($_POST['schedule_date_range'] ?? 'current_year');
+        $validFrequencies = ['weekly', 'monthly', 'quarterly', 'annually'];
         $validDateRanges = ['last_week', 'last_month', 'last_quarter', 'last_year', 'current_year', 'all_time'];
-        if (!in_array($dateRangeType, $validDateRanges)) {
-            throw new Exception('Invalid date range type.');
+        if (!in_array($frequency, $validFrequencies, true) || !in_array($dateRangeType, $validDateRanges, true)) {
+            throw new RuntimeException('Invalid report schedule.');
         }
-        
-        // Build options JSON
-        $options = [
-            'include_contracts' => isset($_POST['include_contracts']) && $_POST['include_contracts'] === '1',
-            'include_quotes' => isset($_POST['include_quotes']) && $_POST['include_quotes'] === '1',
-            'include_pdfs' => isset($_POST['include_pdfs']) && $_POST['include_pdfs'] === '1',
-            'include_unpaid_invoices' => isset($_POST['include_unpaid_invoices']) && $_POST['include_unpaid_invoices'] === '1'
-        ];
-        
-        // Calculate next run time based on frequency
-        $nextRunAt = calculateNextRunTime($frequency);
-        
-        // Insert schedule
-        $stmt = $pdo->prepare('
-            INSERT INTO audit_schedules 
-            (frequency, date_range_type, email_addresses, options, next_run_at) 
-            VALUES (?, ?, ?, ?, ?)
-        ');
-        
+
+        $emails = array_values(array_unique(array_slice(array_filter(array_map(
+            static fn($email) => trim((string)$email),
+            $_POST['schedule_email'] ?? []
+        ), static fn($email) => filter_var($email, FILTER_VALIDATE_EMAIL) !== false), 0, 5)));
+        if (!$emails) {
+            throw new RuntimeException('At least one valid recipient email is required.');
+        }
+
+        $accountingBasis = ($_POST['accounting_basis'] ?? 'cash') === 'accrual' ? 'accrual' : 'cash';
+        $includeInvoices = $requestedType === 'audit' ? !empty($_POST['include_invoices']) : false;
+        $includeUnpaid = $requestedType === 'audit' && !empty($_POST['include_unpaid_invoices']);
+        $includeContracts = $requestedType === 'audit' && !empty($_POST['include_contracts']);
+        $includeQuotes = $requestedType === 'audit' && !empty($_POST['include_quotes']);
+        $includePdfs = $requestedType === 'audit' && !empty($_POST['include_pdfs']);
+
+        $filters = null;
+        if ($requestedType === 'expense') {
+            $billable = (string)($_POST['billable'] ?? '');
+            $taxDeductible = (string)($_POST['tax_deductible'] ?? '');
+            $status = (string)($_POST['status'] ?? '');
+            $filters = [
+                'category_id' => max(0, (int)($_POST['category_id'] ?? 0)),
+                'vendor_id' => max(0, (int)($_POST['vendor_id'] ?? 0)),
+                'client_id' => max(0, (int)($_POST['client_id'] ?? 0)),
+                'billable' => in_array($billable, ['0', '1'], true) ? $billable : '',
+                'tax_deductible' => in_array($taxDeductible, ['0', '1'], true) ? $taxDeductible : '',
+                'status' => in_array($status, ['pending', 'confirmed', 'reimbursed', 'void'], true) ? $status : '',
+            ];
+        }
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO audit_schedules
+             (organization_id,report_type,frequency,date_range_type,accounting_basis,email_addresses,
+              include_invoices,include_unpaid_invoices,include_contracts,include_quotes,generate_csv,
+              include_pdfs,filters,next_run_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        );
         $stmt->execute([
+            $organizationId,
+            $requestedType,
             $frequency,
             $dateRangeType,
-            json_encode($emailAddresses),
-            json_encode($options),
-            $nextRunAt
+            $accountingBasis,
+            json_encode($emails),
+            $includeInvoices ? 1 : 0,
+            $includeUnpaid ? 1 : 0,
+            $includeContracts ? 1 : 0,
+            $includeQuotes ? 1 : 0,
+            1,
+            $includePdfs ? 1 : 0,
+            $filters === null ? null : json_encode($filters),
+            calculateNextRunTime($frequency),
         ]);
-        
-        header('Location: /?page=financial/audit&success=Schedule%20created%20successfully');
-        exit;
-        
-    } elseif ($action === 'delete') {
-        $id = (int)($_POST['id'] ?? 0);
-        if ($id <= 0) {
-            throw new Exception('Invalid schedule ID.');
-        }
-        
-        $stmt = $pdo->prepare('DELETE FROM audit_schedules WHERE id = ?');
-        $stmt->execute([$id]);
-        
-        header('Location: /?page=financial/audit&success=Schedule%20deleted%20successfully');
-        exit;
-        
-    } elseif ($action === 'toggle') {
-        $id = (int)($_POST['id'] ?? 0);
-        if ($id <= 0) {
-            throw new Exception('Invalid schedule ID.');
-        }
-        
-        // Toggle is_active status
-        $stmt = $pdo->prepare('UPDATE audit_schedules SET is_active = NOT is_active WHERE id = ?');
-        $stmt->execute([$id]);
-        
-        header('Location: /?page=financial/audit&success=Schedule%20status%20updated');
+
+        header('Location: /?page=' . $redirectPage . '&scheduled=1');
         exit;
     }
-    
+
+    $id = (int)($_POST['id'] ?? 0);
+    if ($id <= 0) {
+        throw new RuntimeException('Invalid schedule.');
+    }
+    $existing = $pdo->prepare('SELECT report_type FROM audit_schedules WHERE id=? AND organization_id=?');
+    $existing->execute([$id, $organizationId]);
+    $storedType = $existing->fetchColumn();
+    if ($storedType === false) {
+        throw new RuntimeException('Schedule not found.');
+    }
+    $redirectPage = $storedType === 'expense' ? 'financial/expense-report' : 'financial/audit';
+
+    if ($action === 'delete') {
+        $pdo->prepare('DELETE FROM audit_schedules WHERE id=? AND organization_id=?')->execute([$id, $organizationId]);
+        header('Location: /?page=' . $redirectPage . '&schedule_deleted=1');
+        exit;
+    }
+    if ($action === 'toggle') {
+        $pdo->prepare('UPDATE audit_schedules SET is_active=NOT is_active WHERE id=? AND organization_id=?')
+            ->execute([$id, $organizationId]);
+        header('Location: /?page=' . $redirectPage . '&schedule_updated=1');
+        exit;
+    }
+
+    throw new RuntimeException('Unsupported schedule action.');
 } catch (Throwable $e) {
-    error_log('Audit schedule handler error: ' . $e->getMessage());
-    header('Location: /?page=financial/audit&error=' . urlencode($e->getMessage()));
+    @error_log('[scheduled_reports] ' . $e->getMessage());
+    header('Location: /?page=' . $redirectPage . '&error=' . urlencode($e->getMessage()));
     exit;
 }
 
-/**
- * Calculate next run time based on frequency
- */
-function calculateNextRunTime(string $frequency): string {
-    $now = new DateTime();
-    
-    switch ($frequency) {
-        case 'weekly':
-            // Next Monday
-            $next = new DateTime('next monday');
-            if ($next <= $now) {
-                $next->modify('+1 week');
-            }
-            break;
-            
-        case 'monthly':
-            // First day of next month
-            $next = new DateTime('first day of next month');
-            break;
-            
-        case 'quarterly':
-            // Next quarter start (Jan, Apr, Jul, Oct)
-            $currentMonth = (int)$now->format('n');
-            $quarterStartMonths = [1, 4, 7, 10];
-            $nextQuarterMonth = null;
-            
-            foreach ($quarterStartMonths as $month) {
-                if ($month > $currentMonth) {
-                    $nextQuarterMonth = $month;
-                    break;
-                }
-            }
-            
-            if ($nextQuarterMonth === null) {
-                // Next quarter is in next year
-                $next = new DateTime(($now->format('Y') + 1) . '-01-01');
-            } else {
-                $next = new DateTime($now->format('Y') . '-' . str_pad($nextQuarterMonth, 2, '0', STR_PAD_LEFT) . '-01');
-            }
-            break;
-            
-        case 'annually':
-            // Next January 1st
-            $next = new DateTime(($now->format('Y') + 1) . '-01-01');
-            break;
-            
-        default:
-            $next = new DateTime('+1 month');
+function calculateNextRunTime(string $frequency): string
+{
+    $now = new DateTimeImmutable();
+    $next = match ($frequency) {
+        'weekly' => $now->modify('next monday'),
+        'quarterly' => nextQuarterStart($now),
+        'annually' => new DateTimeImmutable(((int)$now->format('Y') + 1) . '-01-01'),
+        default => $now->modify('first day of next month'),
+    };
+    return $next->setTime(6, 0)->format('Y-m-d H:i:s');
+}
+
+function nextQuarterStart(DateTimeImmutable $now): DateTimeImmutable
+{
+    $year = (int)$now->format('Y');
+    $month = (int)$now->format('n');
+    foreach ([1, 4, 7, 10] as $quarterMonth) {
+        if ($quarterMonth > $month) {
+            return new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $quarterMonth));
+        }
     }
-    
-    return $next->format('Y-m-d H:i:s');
+    return new DateTimeImmutable(($year + 1) . '-01-01');
 }

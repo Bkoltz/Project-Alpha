@@ -23,14 +23,15 @@ try {
     $st->execute([$token]);
     $linkRow = $st->fetch(PDO::FETCH_ASSOC);
     
-    if (!$linkRow || $linkRow['document_type'] !== 'invoice') {
+    if (!$linkRow || !in_array((string)$linkRow['document_type'], ['invoice','project_invoice'], true)) {
         throw new Exception('Invalid payment link');
     }
+    $isProjectInvoice = $linkRow['document_type'] === 'project_invoice';
     
     $invoiceId = (int)$linkRow['document_id'];
     
     // Get invoice details
-    $invSt = $pdo->prepare('SELECT * FROM invoices WHERE id = ?');
+    $invSt = $pdo->prepare('SELECT * FROM ' . ($isProjectInvoice ? 'project_invoices' : 'invoices') . ' WHERE id=?');
     $invSt->execute([$invoiceId]);
     $invoice = $invSt->fetch(PDO::FETCH_ASSOC);
     
@@ -52,10 +53,12 @@ try {
     }
     
     $docNumber = $invoice['doc_number'] ?? $invoiceId;
+    $documentPrefix = $isProjectInvoice ? 'PI-' : 'I-';
     
 } catch (Throwable $e) {
     @error_log('[StripeSuccess] Error: ' . $e->getMessage());
     $docNumber = 'Unknown';
+    $documentPrefix = '';
 }
 ?>
 <!DOCTYPE html>
@@ -158,17 +161,17 @@ try {
         <p class="subtitle">Thank you for your payment.</p>
         
         <div class="invoice-ref">
-            <strong>Invoice I-<?php echo htmlspecialchars($docNumber); ?></strong>
+            <strong>Invoice <?php echo htmlspecialchars($documentPrefix . $docNumber); ?></strong>
         </div>
         
-        <p>Your payment has been processed successfully. You will receive a confirmation email shortly.</p>
+        <p>Your payment has been submitted successfully. The invoice will update as soon as Stripe confirms it.</p>
         
         <?php if ($token): ?>
         <a href="/?page=public-doc&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" class="back-link">View Invoice</a>
         <?php endif; ?>
         
         <div class="note">
-            <strong>Note:</strong> If you don't receive a confirmation email within 24 hours, please contact us.
+            <strong>Note:</strong> If the invoice does not update shortly, please contact us before attempting another payment.
         </div>
     </div>
 </body>

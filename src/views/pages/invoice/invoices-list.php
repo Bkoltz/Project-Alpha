@@ -78,7 +78,7 @@ $stc = $pdo->prepare($sqlCount);
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
+$sql = 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.collection_mode,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
 if ($where) {
   $sql .= ' WHERE ' . implode(' AND ', $where);
 }
@@ -207,7 +207,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
             <td style="padding:10px"><?php echo (!empty($r['due_date'])) ? date('m/d/Y', strtotime($r['due_date'])) : ''; ?></td>
             <td style="padding:10px">
               <a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-right:6px; font-size: small;">View</a>
-              <?php if (strtolower((string)$r['status']) !== 'void'): ?>
+              <?php if (in_array(strtolower((string)$r['status']), ['sent','unpaid','partial','overdue'], true) && ($r['collection_mode'] ?? 'direct') === 'direct'): ?>
               <form method="post" action="/?page=invoice/email-send" style="display:inline;margin-right:6px">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="invoice">
@@ -216,7 +216,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                 <button type="submit" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Email</button>
               </form>
               <?php endif; ?>
-              <?php if ($r['status'] !== 'paid' && $r['status'] !== 'void'): ?>
+              <?php if (in_array(strtolower((string)$r['status']), ['sent','unpaid','partial','overdue'], true)): ?>
                 <form method="post" action="/?page=invoice/invoices-mark-paid" onsubmit="return confirm('Mark invoice paid?')" style="display:inline">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Paid</button>
@@ -224,7 +224,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
               <?php endif; ?>
             </td>
             <td style="padding:10px">
-              <?php if ($r['status'] !== 'paid'): ?>
+              <?php if (strtolower((string)$r['status']) === 'draft'): ?>
                 <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
               <?php else: ?>
                 <span style="color:#9ca3af;font-size:small">—</span>

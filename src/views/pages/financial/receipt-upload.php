@@ -2,8 +2,9 @@
 // src/views/pages/financial/receipt-upload.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = 1;
+$orgId = get_active_org_id();
 
 // Get all existing stores for autocomplete
 $stmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');

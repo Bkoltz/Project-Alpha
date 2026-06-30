@@ -5,6 +5,7 @@ class GdriveLinkResolver
     private $serviceAccount;
     private $accessToken;
     private $rootPath;
+    private array $metadataCache = [];
     
     public function __construct(array $credentials)
     {
@@ -93,14 +94,10 @@ class GdriveLinkResolver
         try {
             $query = "name = '" . addslashes($folderName) . "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
             
-            if ($this->rootPath) {
-                $query .= " and '" . addslashes($this->rootPath) . "' in parents";
-            }
-            
             $url = 'https://www.googleapis.com/drive/v3/files?' . http_build_query([
                 'q' => $query,
-                'fields' => 'files(id,name)',
-                'pageSize' => 10
+                'fields' => 'files(id,name,parents)',
+                'pageSize' => 100
             ]);
             
             $ch = curl_init($url);
@@ -125,16 +122,111 @@ class GdriveLinkResolver
             if (empty($data['files'])) {
                 return ['success' => false, 'message' => 'Folder not found'];
             }
+
+            $matches = [];
+            foreach ($data['files'] as $file) {
+                if (strtolower((string)($file['name'] ?? '')) !== strtolower($folderName)) {
+                    continue;
+                }
+                if ($this->rootPath && !$this->isDescendantOfRoot($file, (string)$this->rootPath)) {
+                    continue;
+                }
+
+                $parentId = (string)($file['parents'][0] ?? '');
+                $parentName = $parentId !== '' ? $this->getFolderName($parentId) : '';
+                $matches[] = [
+                    'folder_id' => (string)$file['id'],
+                    'name' => (string)$file['name'],
+                    'parent_name' => $parentName,
+                    'path' => ($parentName !== '' ? $parentName . '/' : '') . (string)$file['name'],
+                ];
+            }
+
+            if (!$matches) {
+                return ['success' => false, 'message' => 'Exact folder match not found'];
+            }
             
             return [
                 'success' => true,
-                'folder_id' => $data['files'][0]['id']
+                'matches' => $matches,
+                'folder_id' => $matches[0]['folder_id'],
+                'name' => $matches[0]['name'],
+                'path' => $matches[0]['path'],
+                'parent_name' => $matches[0]['parent_name'],
             ];
             
         } catch (\Throwable $e) {
             @error_log('[GDrive] Search error: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    private function getFolderName(string $folderId): string
+    {
+        $metadata = $this->getFileMetadata($folderId);
+        return (string)($metadata['name'] ?? '');
+    }
+
+    private function getFileMetadata(string $fileId): array
+    {
+        if (isset($this->metadataCache[$fileId])) {
+            return $this->metadataCache[$fileId];
+        }
+
+        $url = 'https://www.googleapis.com/drive/v3/files/' . rawurlencode($fileId) . '?' . http_build_query([
+            'fields' => 'id,name,parents'
+        ]);
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken
+            ],
+            CURLOPT_RETURNTRANSFER => true
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200) {
+            @error_log('[GDrive] Metadata lookup failed: ' . $response);
+            $this->metadataCache[$fileId] = [];
+            return [];
+        }
+
+        $metadata = json_decode((string)$response, true);
+        if (!is_array($metadata)) {
+            $metadata = [];
+        }
+        $this->metadataCache[$fileId] = $metadata;
+        return $metadata;
+    }
+
+    private function isDescendantOfRoot(array $file, string $rootId): bool
+    {
+        $parents = array_map('strval', $file['parents'] ?? []);
+        $seen = [];
+
+        while ($parents) {
+            $parentId = array_shift($parents);
+            if ($parentId === $rootId) {
+                return true;
+            }
+            if (isset($seen[$parentId])) {
+                continue;
+            }
+            $seen[$parentId] = true;
+
+            $metadata = $this->getFileMetadata($parentId);
+            foreach (array_map('strval', $metadata['parents'] ?? []) as $ancestorId) {
+                if (!isset($seen[$ancestorId])) {
+                    $parents[] = $ancestorId;
+                }
+            }
+        }
+
+        return false;
     }
     
     /**

@@ -62,45 +62,10 @@ audit_log($pdo, 'user.account_deleted', 'user', $userId);
 try {
     $pdo->beginTransaction();
 
-    // Fetch user's organization IDs
-    $orgStmt = $pdo->prepare('SELECT organization_id FROM user_organizations WHERE user_id = ?');
-    $orgStmt->execute([$userId]);
-    $orgIds = $orgStmt->fetchAll(PDO::FETCH_COLUMN);
-
-    foreach ($orgIds as $orgId) {
-        $orgId = (int)$orgId;
-
-        // Organization child data: payments -> invoices -> quotes -> contracts -> forms/receipts/projects/clients
-
-        $pdo->prepare('DELETE FROM payments WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?)')->execute([$orgId]);
-
-        $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id IN (SELECT id FROM invoices WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?))')->execute([$orgId]);
-        $pdo->prepare('DELETE FROM invoice_notifications WHERE invoice_id IN (SELECT id FROM invoices WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?))')->execute([$orgId]);
-        $pdo->prepare('DELETE FROM invoices WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?)')->execute([$orgId]);
-
-        $pdo->prepare('DELETE FROM quote_items WHERE quote_id IN (SELECT id FROM quotes WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?))')->execute([$orgId]);
-        $pdo->prepare('DELETE FROM quotes WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?)')->execute([$orgId]);
-
-        $pdo->prepare('DELETE FROM contract_items WHERE contract_id IN (SELECT id FROM contracts WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?))')->execute([$orgId]);
-        $pdo->prepare('DELETE FROM contract_signatures WHERE contract_id IN (SELECT id FROM contracts WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?))')->execute([$orgId]);
-        $pdo->prepare('DELETE FROM contracts WHERE client_id IN (SELECT id FROM clients WHERE org_id = ?)')->execute([$orgId]);
-
-        $pdo->prepare('DELETE FROM form_documents WHERE category_id IN (SELECT id FROM form_categories WHERE org_id = ?)')->execute([$orgId]);
-        $pdo->prepare('DELETE FROM form_categories WHERE org_id = ?')->execute([$orgId]);
-
-        $pdo->prepare('DELETE FROM receipts WHERE org_id = ?')->execute([$orgId]);
-
-        $pdo->prepare('DELETE FROM project_documents WHERE project_id IN (SELECT id FROM projects WHERE org_id = ?)')->execute([$orgId]);
-        $pdo->prepare('DELETE FROM projects WHERE org_id = ?')->execute([$orgId]);
-
-        $pdo->prepare('DELETE FROM clients WHERE org_id = ?')->execute([$orgId]);
-    }
-
-    // User-specific data. We keep the deletion audit row by inserting it after purging system_audit.
+    // User-specific data. Business/customer records remain intact.
     $pdo->prepare('DELETE FROM system_audit WHERE user_id = ?')->execute([$userId]);
     $pdo->prepare('DELETE FROM user_2fa WHERE user_id = ?')->execute([$userId]);
     $pdo->prepare('DELETE FROM trusted_devices WHERE user_id = ?')->execute([$userId]);
-    $pdo->prepare('DELETE FROM user_organizations WHERE user_id = ?')->execute([$userId]);
 
     // Re-insert a single audit record documenting the erasure after clearing system_audit
     audit_log($pdo, 'user.account_deleted', 'user', $userId);

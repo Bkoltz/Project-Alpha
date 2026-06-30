@@ -12,6 +12,7 @@ ini_set('display_errors', '0');
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
 $action = $_POST['action'] ?? null;
@@ -40,8 +41,15 @@ if (empty($_SESSION['user']['id'])) {
 }
 
 try {
-    $orgId = 1; // organization context (default for now)
     $userId = (int)$_SESSION['user']['id'];
+    $orgId = get_active_org_id();
+    if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
+        http_response_code(403);
+        $response['message'] = 'Permission denied';
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
 
     // Make sure mileage_logs table exists
     $pdo->exec("CREATE TABLE IF NOT EXISTS mileage_logs (

@@ -1,6 +1,8 @@
 <?php
 // src/controllers/contract/contract_deposit_received.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -8,10 +10,12 @@ if ($id <= 0) {
     exit;
 }
 
+require_record_ownership($pdo, 'contracts', $id);
+
 $pdo->beginTransaction();
 try {
     // Get contract info
-    $stmt = $pdo->prepare('SELECT client_id, deposit_type, deposit_amount, total, deposit_paid FROM contracts WHERE id=? FOR UPDATE');
+    $stmt = $pdo->prepare('SELECT id, client_id, organization_id, deposit_type, deposit_amount, total, deposit_paid FROM contracts WHERE id=? FOR UPDATE');
     $stmt->execute([$id]);
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -29,47 +33,49 @@ try {
         throw new Exception('No deposit required for this contract');
     }
     
-    // Check if already paid
     $alreadyPaid = (float)($contract['deposit_paid'] ?? 0);
     if ($alreadyPaid >= $depositCalc) {
         throw new Exception('Deposit has already been received');
     }
+    $depositRemaining = max(0.0, $depositCalc - $alreadyPaid);
     
-    // Mark deposit as paid on contract
-    $pdo->prepare('UPDATE contracts SET deposit_paid=? WHERE id=?')
-        ->execute([$depositCalc, $id]);
-    
-    // Get the linked invoice and record the deposit as a payment
-    $invStmt = $pdo->prepare('SELECT id, total FROM invoices WHERE contract_id = ? LIMIT 1');
+    // Get the linked direct-collection invoice and record the deposit as a payment.
+    // Long-term/project aggregate invoices are handled by their own invoice/payment flows.
+    $invStmt = $pdo->prepare('
+        SELECT id, total, collection_mode, finalized_at
+        FROM invoices
+        WHERE contract_id = ?
+        ORDER BY id ASC
+        LIMIT 1
+    ');
     $invStmt->execute([$id]);
     $linkedInvoice = $invStmt->fetch(PDO::FETCH_ASSOC);
     
     if ($linkedInvoice) {
         $linkedInvoiceId = (int)$linkedInvoice['id'];
-        $invoiceTotal = (float)$linkedInvoice['total'];
-        
-        // Record deposit as a succeeded payment so it counts toward amount paid
-        $pdo->prepare('
-            INSERT INTO payments (client_id, invoice_id, amount, payment_method, status, reference_number, notes, payment_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())
-        ')->execute([(int)$contract['client_id'], $linkedInvoiceId, $depositCalc, 'other', 'succeeded', 'Contract Deposit', 'Contract deposit received']);
-        
-        // Calculate total paid on this invoice
-        $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
-        $paidStmt->execute([$linkedInvoiceId]);
-        $totalPaid = (float)$paidStmt->fetchColumn();
-        
-        // Update invoice status (and amount_paid if column exists)
-        $newStatus = ($totalPaid >= $invoiceTotal) ? 'paid' : 'partial';
-        try {
-            $pdo->prepare('UPDATE invoices SET amount_paid = ?, status = ? WHERE id = ?')
-                ->execute([$totalPaid, $newStatus, $linkedInvoiceId]);
-        } catch (Throwable $e) {
-            // amount_paid column might not exist, just update status
-            $pdo->prepare('UPDATE invoices SET status = ? WHERE id = ?')
-                ->execute([$newStatus, $linkedInvoiceId]);
+        $outstanding = max(0.0, (float)$linkedInvoice['total'] - invoice_effective_paid_total($pdo, $linkedInvoiceId));
+        if ($depositRemaining > $outstanding + 0.005) {
+            throw new Exception('Deposit exceeds the outstanding invoice balance');
         }
+
+        invoice_record_locked_payment(
+            $pdo,
+            $linkedInvoiceId,
+            $depositRemaining,
+            'other',
+            'Contract Deposit',
+            'Contract deposit received',
+            [
+                'organization_id' => !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null,
+                'allow_unfinalized' => true,
+                'source' => 'contract_deposit',
+            ]
+        );
     }
+
+    // Mark deposit as paid only after the linked payment, if any, was recorded safely.
+    $pdo->prepare('UPDATE contracts SET deposit_paid=? WHERE id=?')
+        ->execute([$depositCalc, $id]);
     
     $pdo->commit();
 } catch (Throwable $e) {

@@ -13,14 +13,22 @@ function toggleNotesEdit() {
 }
 
 // Client search
-(function () {
+function initOrganizationClientSearch() {
     const searchInput = document.getElementById('clientSearchInput');
     const searchResults = document.getElementById('clientSearchResults');
-    const viewData = window.organizationViewData || {};
-    const orgId = viewData.orgId;
-    const availableClients = Array.isArray(viewData.availableClients) ? viewData.availableClients : [];
+    const dataElement = document.getElementById('organizationViewData');
+    if (!searchInput || !searchResults || !dataElement || searchInput.dataset.initialized === '1') return;
 
-    if (!searchInput || !searchResults || !orgId) return;
+    const orgId = Number(dataElement.dataset.orgId || 0);
+    let availableClients = [];
+    try {
+        availableClients = JSON.parse(dataElement.dataset.availableClients || '[]');
+    } catch (error) {
+        availableClients = [];
+    }
+
+    if (!orgId || !Array.isArray(availableClients)) return;
+    searchInput.dataset.initialized = '1';
     
     function debounce(fn, ms) {
         let timeout;
@@ -79,7 +87,7 @@ function toggleNotesEdit() {
         if (!confirm(`Add ${clientName} to this organization?`)) return;
 
         const formData = new FormData();
-        formData.append('csrf', viewData.csrf || document.querySelector('meta[name="csrf-token"]')?.content || '');
+        formData.append('csrf', dataElement.dataset.csrf || document.querySelector('meta[name="csrf-token"]')?.content || '');
         formData.append('organization_id', orgId);
         formData.append('client_id', clientId);
 
@@ -107,4 +115,11 @@ function toggleNotesEdit() {
             clearResults();
         }
     });
-})();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initOrganizationClientSearch);
+} else {
+    initOrganizationClientSearch();
+}
+document.addEventListener('pageLoaded', initOrganizationClientSearch);

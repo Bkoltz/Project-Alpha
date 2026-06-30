@@ -55,6 +55,15 @@ try {
 
   $quoteType = $quote['quote_type'] ?? 'regular';
   $billingMode = ($quote['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
+  $depositType = $quote['deposit_type'] ?? 'none';
+  $depositValue = (float)($quote['deposit_amount'] ?? 0);
+  $quoteTotal = (float)($quote['total'] ?? 0);
+  $contractDepositAmount = 0.0;
+  if ($depositType === 'percent') {
+    $contractDepositAmount = max(0, min(100, $depositValue)) * $quoteTotal / 100;
+  } elseif ($depositType === 'fixed') {
+    $contractDepositAmount = min(max(0, $depositValue), $quoteTotal);
+  }
   if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
     // For LT/OD quotes, only create contract if auto-create is enabled
     if ($autoCreateContract) {
@@ -72,8 +81,8 @@ try {
             $quote['subtotal'],
             $quote['total'],
             $projectCode,
-            $quote['deposit_type'] ?? 'none',
-            $quote['deposit_amount'] ?? 0,
+            $depositType,
+            $contractDepositAmount,
             0,
             $quote['start_date'] ?? null,
             $quote['end_date'] ?? null,
@@ -103,7 +112,7 @@ try {
     // Regular quote: create contract and/or invoice based on settings
     if ($autoCreateContract) {
       $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $depositType, $contractDepositAmount, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $contract_id = (int)$pdo->lastInsertId();
 
       $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
@@ -117,8 +126,11 @@ try {
 
     if ($autoCreateInvoice) {
       $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $invoice_id = (int)$pdo->lastInsertId();
+      if ($projectId && project_uses_monthly_invoice_billing($pdo, $projectId)) {
+        $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
+      }
 
       $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
@@ -149,25 +161,7 @@ try {
               . '<p>We will be in touch shortly with the next steps. Thank you for your business!</p>';
         EmailService::sendEmail($clientRow['email'], $subject, $body);
 
-        // If an invoice was auto-created, notify the client about it too
-        if (!empty($invoice_id)) {
-          $invStmt = $pdo->prepare('SELECT doc_number, total, due_date FROM invoices WHERE id = ?');
-          $invStmt->execute([$invoice_id]);
-          $invRow = $invStmt->fetch(PDO::FETCH_ASSOC);
-          if ($invRow) {
-            $invDocnum = (string)($invRow['doc_number'] ?? $invoice_id);
-            $invTotal = (float)($invRow['total'] ?? 0);
-            $invDue = (string)($invRow['due_date'] ?? '');
-            $invSubject = 'Invoice I-' . $invDocnum . ' has been created';
-            $invBody = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
-                     . '<p>Your invoice <strong>I-' . htmlspecialchars($invDocnum) . '</strong> has been created for <strong>$' . number_format($invTotal, 2) . '</strong>.</p>';
-            if ($invDue !== '') {
-              $invBody .= '<p>Due date: ' . htmlspecialchars($invDue) . '</p>';
-            }
-            $invBody .= '<p>You can log in to view and pay the invoice. Thank you!</p>';
-            EmailService::sendEmail($clientRow['email'], $invSubject, $invBody);
-          }
-        }
+        // Derived invoices remain private drafts until the contract is completed.
       }
     }
   } catch (Throwable $e) {

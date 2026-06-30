@@ -14,6 +14,7 @@ if (!rate_limit_check($pdo, 'public_contract_sign', 30, 60)) {
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/notifications.php';
+require_once __DIR__ . '/../../utils/upload_validator.php';
 
 // Verify CSRF
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
@@ -83,10 +84,12 @@ try {
         throw new Exception('Contract not found');
     }
     
-    // Check contract status
+    // Check contract status. Public signing is intentionally one-time:
+    // a contract must still be pending and unsigned at the moment the upload
+    // is accepted.
     $status = strtolower($contract['status'] ?? '');
-    if (in_array($status, ['cancelled', 'void', 'denied'], true)) {
-        throw new Exception('This contract is no longer active');
+    if ($status !== 'pending' || !empty($contract['signed_pdf_path'])) {
+        throw new Exception('This contract has already been signed or is no longer pending');
     }
     
     // Build allowed MIME → extension map for signed contracts.
@@ -95,6 +98,7 @@ try {
 
     // Centralized validation, malware scan, and secure storage.
     $uploadDir = __DIR__ . '/../../uploads/signed_contracts';
+    $uploadError = null;
     $filename = validate_and_store_upload(
         $file,
         $allowedMap,
@@ -111,9 +115,27 @@ try {
     
     $pdo->beginTransaction();
     
-    // Update contract with signed file path and set to active
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path = ?, status = ? WHERE id = ?')
-        ->execute([$fileUrl, 'active', $contractId]);
+    // Update contract with signed file path and set to active. Keep the
+    // pending/unsigned predicate inside the write so concurrent submissions
+    // cannot race and overwrite the first signature.
+    $update = $pdo->prepare("
+        UPDATE contracts
+        SET signed_pdf_path = ?, status = ?
+        WHERE id = ?
+          AND status = 'pending'
+          AND (signed_pdf_path IS NULL OR signed_pdf_path = '')
+    ");
+    $update->execute([$fileUrl, 'active', $contractId]);
+    if ($update->rowCount() !== 1) {
+        $storedFile = $uploadDir . DIRECTORY_SEPARATOR . $filename;
+        if (is_file($storedFile)) {
+            @unlink($storedFile);
+        }
+        throw new Exception('This contract has already been signed or is no longer pending');
+    }
+
+    $revoke = $pdo->prepare('UPDATE public_links SET revoked = 1 WHERE token = ? AND document_type = ? AND document_id = ? AND revoked = 0');
+    $revoke->execute([$token, 'contract', $contractId]);
     
     $pdo->commit();
     

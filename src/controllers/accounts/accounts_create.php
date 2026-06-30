@@ -33,14 +33,13 @@ if ($pwdErr !== null) {
     exit;
 }
 
-$activeOrgId = (int)($_SESSION['user']['active_org_id'] ?? 0);
-$orgId = $activeOrgId > 0 ? $activeOrgId : null;
+$orgId = null;
 
 $selectedRole = null;
 if ($postedRoleId > 0) {
     try {
-        $roleStmt = $pdo->prepare('SELECT id, name, organization_id FROM roles WHERE id = ? AND (organization_id <=> ? OR is_system = 1) LIMIT 1');
-        $roleStmt->execute([$postedRoleId, $orgId]);
+        $roleStmt = $pdo->prepare('SELECT id, name, organization_id FROM roles WHERE id = ? AND (organization_id IS NULL OR is_system = 1) LIMIT 1');
+        $roleStmt->execute([$postedRoleId]);
         $selectedRole = $roleStmt->fetch(PDO::FETCH_ASSOC) ?: null;
     } catch (Throwable $e) {
         $selectedRole = null;
@@ -61,7 +60,7 @@ if (!$selectedRole) {
 
 $roleName = (string)($selectedRole['name'] ?? 'member');
 $roleId = isset($selectedRole['id']) ? (int)$selectedRole['id'] : null;
-$role = $roleName === 'admin' ? 'admin' : 'user';
+$role = in_array($roleName, ['admin', 'owner', 'staff', 'member'], true) ? $roleName : 'member';
 
 // Check if email already exists
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ?');
@@ -79,19 +78,6 @@ try {
     $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role, force_password_reset) VALUES (?, ?, ?, ?, ?)');
     $stmt->execute([$email, $username ?: null, $passwordHash, $role, $forceReset ? 1 : 0]);
     $newUserId = (int)$pdo->lastInsertId();
-
-    // Save permission overrides if provided
-    // Assign the user to the default organization with the mapped DB role and role_id
-    try {
-        $defaultOrg = $orgId ?: $pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn();
-        if ($defaultOrg) {
-            if ($roleId === null) { $roleId = role_id_by_name($pdo, $roleName, (int)$defaultOrg); }
-            if ($roleId === null) { $roleId = role_id_by_name($pdo, $roleName, null); }
-            if ($roleId === null) { @error_log('[accounts_create] CRITICAL: cannot resolve role_id for '.$roleName); }
-            $stmtOrg = $pdo->prepare('INSERT INTO user_organizations (user_id, organization_id, role, role_id, is_default) VALUES (?, ?, ?, ?, 1)');
-            $stmtOrg->execute([$newUserId, (int)$defaultOrg, $roleName, $roleId]);
-        }
-    } catch (Throwable $e) { /* non-fatal */ }
 
     require_once __DIR__ . '/../../utils/permission_catalog.php';
     if ($role !== 'admin') {

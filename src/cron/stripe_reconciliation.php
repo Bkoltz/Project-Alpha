@@ -11,6 +11,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../services/StripeService.php';
 require_once __DIR__ . '/../utils/cron_state.php';
+require_once __DIR__ . '/../utils/stripe_financial_events.php';
 
 $logPrefix = '[stripe_reconciliation]';
 $jobName = 'stripe_reconciliation';
@@ -58,6 +59,16 @@ try {
                 $skipped++;
                 continue;
             }
+
+            if (!empty($pi['metadata']['pa_project_invoice_id']) || !empty($pi['metadata']['project_invoice_id'])) {
+                require_once __DIR__ . '/../utils/project_invoice_billing.php';
+                if (project_invoice_record_stripe_payment($pdo, $pi)) {
+                    $reconciled++;
+                } else {
+                    $errors++;
+                }
+                continue;
+            }
             
             // Get invoice ID from metadata
             $invoiceId = $pi['metadata']['pa_invoice_id'] ?? $pi['metadata']['invoice_id'] ?? null;
@@ -100,14 +111,16 @@ try {
             // Record the payment
             $pdo->beginTransaction();
             
-            $isAutoPay = !empty($pi['metadata']['auto_pay']) ? 1 : 0;
+            $isAutoPay = 0;
             $pdo->prepare('
                 INSERT INTO payments (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), NOW())
             ')->execute([(int)$invoice['client_id'], $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $piId, $isAutoPay, 'succeeded']);
+            $paymentId = (int)$pdo->lastInsertId();
+            stripe_link_pending_financial_events($pdo, $paymentId, $piId);
             
             // Update invoice status
-            $sumStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+            $sumStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
             $sumStmt->execute([$invoiceId]);
             $totalPaid = (float)$sumStmt->fetchColumn();
             
@@ -116,8 +129,8 @@ try {
             
             // Update invoice (with graceful handling of amount_paid column)
             try {
-                $pdo->prepare('UPDATE invoices SET status = ?, amount_paid = ? WHERE id = ?')
-                    ->execute([$newStatus, $totalPaid, $invoiceId]);
+                $pdo->prepare('UPDATE invoices SET status=?,amount_paid=?,balance_due=GREATEST(total-?,0),stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE id=?')
+                    ->execute([$newStatus, $totalPaid, $totalPaid, $invoiceId]);
             } catch (Throwable $e) {
                 $pdo->prepare('UPDATE invoices SET status = ? WHERE id = ?')
                     ->execute([$newStatus, $invoiceId]);
@@ -142,6 +155,13 @@ try {
             
             $pdo->commit();
             $reconciled++;
+
+            try {
+                require_once __DIR__ . '/../utils/payment_receipts.php';
+                payment_receipt_issue($pdo, $paymentId, $appConfig);
+            } catch (Throwable $receiptError) {
+                @error_log("$logPrefix Receipt issue failed for payment $paymentId: " . $receiptError->getMessage());
+            }
             
             @error_log("$logPrefix Reconciled payment $piId for invoice $invoiceId: \$$paymentAmount");
             

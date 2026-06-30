@@ -101,9 +101,41 @@ function validate_and_store_upload(
  */
 function validate_upload(array $file, array $allowedMimes, int $maxBytes = 5 * 1024 * 1024): ?string
 {
-    $error = null;
-    validate_and_store_upload($file, array_fill_keys($allowedMimes, ['bin']), $maxBytes, sys_get_temp_dir(), $error);
-    return $error;
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return 'Upload failed with error code ' . (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    }
+    if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+        return 'Invalid upload';
+    }
+    if ((int)($file['size'] ?? 0) <= 0 || (int)$file['size'] > $maxBytes) {
+        return 'File is empty or exceeds the size limit';
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = (string)$finfo->file($file['tmp_name']);
+    if (!in_array($mime, $allowedMimes, true)) {
+        return 'File type is not allowed';
+    }
+
+    $mimeExtensions = [
+        'application/pdf' => ['pdf'],
+        'image/jpeg' => ['jpg', 'jpeg'],
+        'image/png' => ['png'],
+        'image/gif' => ['gif'],
+        'text/csv' => ['csv'],
+        'text/plain' => ['txt', 'csv'],
+    ];
+    $extension = strtolower(pathinfo((string)($file['name'] ?? ''), PATHINFO_EXTENSION));
+    if (isset($mimeExtensions[$mime]) && !in_array($extension, $mimeExtensions[$mime], true)) {
+        return 'File extension does not match its detected type';
+    }
+
+    $scanError = scan_clamav($file['tmp_name']);
+    if ($scanError !== null) {
+        return $scanError;
+    }
+
+    return null;
 }
 
 /**

@@ -28,6 +28,7 @@ function page_permission_map(): array
         // Settings module
         'settings'                         => 'settings.view',
         'settings-backup'                  => 'settings.manage',
+        'settings/backup-download'         => 'settings.manage',
         'settings/custom-fields-handler'     => 'settings.manage',
         'settings/document-custom-fields-handler' => 'settings.manage',
         'settings/document-customization-save'    => 'settings.manage',
@@ -126,6 +127,8 @@ function page_permission_map(): array
         'invoice/invoice-details'   => 'invoices.view',
         'invoice/invoice-pdf'       => 'invoices.view',
         'invoice/invoices-mark-paid' => 'invoices.mark_paid',
+        'invoice/invoice-finalize'  => 'invoices.send',
+        'invoice/invoice-reopen'    => 'invoices.edit',
         'invoice/email-send'        => 'invoices.send',
         'invoices-create'           => 'invoices.create',
         'invoices-edit'             => 'invoices.edit',
@@ -145,6 +148,9 @@ function page_permission_map(): array
         'client/clients-create'  => 'clients.create',
         'client/clients-edit'    => 'clients.edit',
         'client/clients-update'  => 'clients.edit',
+        'client/onboarding'      => 'clients.view',
+        'client/onboarding-invite' => 'clients.create',
+        'client/onboarding-review' => 'clients.edit',
         'client/clients-delete'  => 'clients.delete',
         'client/clients-purge'   => 'clients.purge',
         'client/clients-restore' => 'clients.restore',
@@ -163,6 +169,12 @@ function page_permission_map(): array
         'project/projects-delete'        => 'projects.delete',
         'project/project-add-document'   => 'projects.edit',
         'project/project-remove-document' => 'projects.edit',
+        'project/project-invoices-list'   => 'projects.view',
+        'project/project-invoice-details' => 'projects.view',
+        'project/project-invoice-pdf'     => 'projects.view',
+        'project/project-invoice-generate' => 'invoices.create',
+        'project/project-invoice-email'   => 'invoices.send',
+        'project/project-invoice-payment' => 'invoices.mark_paid',
         'project-notes'                  => 'projects.view',
         'project-notes-update'           => 'projects.edit',
         'projects-search'                => 'projects.search',
@@ -202,7 +214,7 @@ function page_permission_map(): array
         'financial/category-handler'       => 'financial.manage',
         'financial/audit'                  => 'financial.audit',
         'financial/audit-export'           => 'financial.export',
-        'financial/audit-schedule-handler' => 'financial.audit',
+        'financial/audit-schedule-handler' => 'financial.view',
         'financial/financial-api'          => 'financial.view',
         'financial/forms-list'     => 'financial.view',
         'financial/expense-report' => 'financial.view',
@@ -245,7 +257,7 @@ function page_permission_map(): array
 
 function acl_middleware(PDO $pdo, string $page): void
 {
-    $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+    $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'payment-receipt', 'client-onboarding', 'client-onboarding-send-code', 'client-onboarding-verify', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
     if (in_array($page, $publicPages, true)) return;
 
     $userId = (int)($_SESSION['user']['id'] ?? 0);

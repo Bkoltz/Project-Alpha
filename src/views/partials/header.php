@@ -136,8 +136,11 @@ function nav_can(string $permission): bool {
                 <?php if (nav_can('organizations.view')): ?>
                 <li><a href="/?page=organization/organizations-list" data-page="organization/organizations-list">Organizations</a></li>
                 <?php endif; ?>
+                <?php if (nav_can('clients.view')): ?>
+                <li><a href="/?page=client/onboarding" data-page="client/onboarding">Onboarding</a></li>
+                <?php endif; ?>
                 <?php if (nav_can('clients.create')): ?>
-                <li><a href="/?page=client/clients-create" data-page="client/clients-create">Create Client</a></li>
+                <li><a href="/?page=client/clients-create" data-page="client/clients-create">Create Clients</a></li>
                 <?php endif; ?>
               </ul>
             </li>
@@ -228,10 +231,9 @@ function nav_can(string $permission): bool {
               <ul>
                 <?php if (nav_can('financial.view')): ?>
                 <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Dashboard</a></li>
+                <li><a href="/?page=financial/audit" data-page="financial/audit">Audit &amp; Reports</a></li>
                 <li><a href="/?page=financial/expenses-list" data-page="financial/expenses-list">Expenses</a></li>
-                <li><a href="/?page=financial/audit" data-page="financial/audit">Audit</a></li>
                 <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
-                <li><a href="/?page=financial/expense-report" data-page="financial/expense-report">Reports</a></li>
                 <?php endif; ?>
               </ul>
             </li>
@@ -255,4 +257,31 @@ function nav_can(string $permission): bool {
     </aside>
 
     <main class="main-content" role="main">
+      <?php if (!empty($_SESSION['user']['auth_bypass'])): ?>
+        <div style="margin:0 0 14px;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px">
+          Development auth bypass is active for this session. Do not expose this environment publicly.
+        </div>
+      <?php endif; ?>
+
+      <?php if (!empty($_SESSION['two_factor_warning_required'])): ?>
+        <div role="dialog" aria-live="polite" aria-label="Two-factor authentication recommended" style="margin:0 0 16px;padding:14px 16px;border-radius:12px;background:#fffbeb;border:1px solid #fbbf24;color:#78350f;box-shadow:0 8px 24px rgba(120,53,15,.08)">
+          <div style="display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap">
+            <div style="max-width:760px">
+              <div style="font-weight:800;margin-bottom:4px">Two-factor authentication is strongly recommended</div>
+              <div style="font-size:13px;line-height:1.45">
+                Your account has admin or privileged access. 2FA helps protect payments, financial imports, settings, and user management if a password is ever exposed.
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <a href="/?page=2fa-setup" class="btn btn-sm btn-primary">Set up 2FA</a>
+              <form method="post" action="/?page=2fa-warning-dismiss" style="margin:0">
+                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'] ?? ''); ?>">
+                <input type="hidden" name="return_to" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI'] ?? '/'); ?>">
+                <button type="submit" class="btn btn-sm" style="background:#fff;border:1px solid #f59e0b;color:#78350f">Dismiss</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      <?php endif; ?>
+
       <!-- existing page content will be injected here -->

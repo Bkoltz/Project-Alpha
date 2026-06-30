@@ -1,9 +1,15 @@
 # PROJECT ALPHA — SUPPLEMENTAL AUDIT FINDINGS
+
+> **Historical audit record.** These findings were captured on June 16 before the current multi-stage Docker and unified schema work. Do not assume a finding remains open; reproduce it against the current branch and create a GitHub Issue when still applicable.
 ## Discovered after subagent dispatch (2026-06-16)
 
 ---
 
-## CRITICAL BUG: `auto_charge_recurring.php` missing from cron container
+> Historical audit note: AutoPay was deliberately disabled in migration 035. The
+> legacy charge script must remain absent from the installed crontab and fails
+> closed outside development/test. Do not apply the old remediation below.
+
+## RESOLVED: `auto_charge_recurring.php` missing from cron container
 
 **Finding**: `auto_charge_recurring.php` exists in `src/cron/` but is **ABSENT** from `cron/src/cron/`.
 

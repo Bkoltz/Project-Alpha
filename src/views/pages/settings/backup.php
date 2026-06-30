@@ -5,8 +5,10 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
-// Get existing backups (also check .gpg encrypted backups)
+// Get existing database-only and full backups.
 $backupsDir = '/var/www/backups';
+$backupMode = 'database';
+$backupEncryptionEnabled = trim((string)(getenv('BACKUP_ENCRYPTION_KEY') ?: '')) !== '';
 
 // Read retention from env (matches backup_database.php)
 $retentionDays = (int)(getenv('BACKUP_RETENTION_DAYS') ?: '10');
@@ -20,6 +22,12 @@ try {
     $cfgRow = $cfgStmt->fetch(PDO::FETCH_ASSOC);
     if ($cfgRow) $backupHour = (int)$cfgRow['config_value'];
 } catch (Exception $e) {}
+
+try {
+    $modeStmt = $pdo->prepare("SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='backup_mode'");
+    $modeStmt->execute();
+    $backupMode = $modeStmt->fetchColumn() === 'full' ? 'full' : 'database';
+} catch (Throwable $e) {}
 
 // Also check if retention is overridden in app_config
 try {
@@ -36,18 +44,29 @@ if (is_dir($backupsDir)) {
         $backupsDir . '/daily',
         $backupsDir . '/weekly',
         $backupsDir . '/monthly',
-        $backupsDir, // root level (legacy backups)
     ];
     foreach ($searchDirs as $searchDir) {
         if (!is_dir($searchDir)) continue;
-        foreach (glob($searchDir . '/*.sql.gz*') as $file) {
+        $files = array_merge(glob($searchDir . '/*.sql.gz') ?: [], glob($searchDir . '/*.zip') ?: []);
+        foreach ($files as $file) {
             if (is_file($file)) {
+                $isZip = str_ends_with(strtolower($file), '.zip');
+                $isEncrypted = false;
+                if ($isZip) {
+                    $archive = new ZipArchive();
+                    if ($archive->open($file) === true) {
+                        $isEncrypted = $archive->getFromName('manifest.json') === false;
+                        $archive->close();
+                    }
+                }
                 $backups[] = [
                     'file' => basename($file),
                     'path' => $file,
+                    'relative' => basename($searchDir) . '/' . basename($file),
                     'size' => round(filesize($file) / 1024, 1),
                     'created' => date('Y-m-d H:i:s', filemtime($file)),
-                    'encrypted' => substr($file, -4) === '.gpg',
+                    'mode' => str_ends_with(strtolower($file), '.full.zip') ? 'Full' : 'Database',
+                    'encrypted' => $isEncrypted,
                 ];
             }
         }
@@ -70,7 +89,7 @@ unset($_SESSION['flash_backup']);
 ?>
 
 <div class="settings-section" id="settings-backup">
-    <h3>Database Backups</h3>
+    <h3>Backups</h3>
     
     <?php if ($flash): ?>
     <div class="alert alert-<?php echo htmlspecialchars($flash['type']); ?>">
@@ -93,7 +112,11 @@ unset($_SESSION['flash_backup']);
         </div>
         <div class="status-item">
             <span class="status-label">Schedule:</span>
-            <span class="status-value">Daily at <?php echo str_pad((string)$backupHour, 2, '0', STR_PAD_LEFT); ?>:00 UTC</span>
+            <span class="status-value">Daily at <?php echo str_pad((string)$backupHour, 2, '0', STR_PAD_LEFT); ?>:30 UTC</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Encryption:</span>
+            <span class="status-value"><?php echo $backupEncryptionEnabled ? 'AES-256 enabled' : 'Not configured'; ?></span>
         </div>
     </div>
 
@@ -104,13 +127,22 @@ unset($_SESSION['flash_backup']);
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="action" value="update_settings">
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; padding:1rem; background:#f8f9fa; border-radius:8px; margin-bottom:1rem;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1.5rem; padding:1rem; background:#f8f9fa; border-radius:8px; margin-bottom:1rem;">
             <div class="form-group" style="margin:0;">
                 <label for="retention_days" style="font-size:0.85rem; color:#6c757d; margin-bottom:0.35rem; display:block;">Retention (days)</label>
                 <input type="number" name="retention_days" id="retention_days"
                        value="<?php echo htmlspecialchars($retentionDays); ?>"
                        min="0" max="365" class="input" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;">
                 <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">Keep this many daily backups. 0 = keep all (no auto-cleanup).</span>
+            </div>
+
+            <div class="form-group" style="margin:0;">
+                <label for="backup_mode" style="font-size:0.85rem; color:#6c757d; margin-bottom:0.35rem; display:block;">Backup Mode</label>
+                <select name="backup_mode" id="backup_mode" class="input" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;">
+                    <option value="database" <?php echo $backupMode === 'database' ? 'selected' : ''; ?>>Database only</option>
+                    <option value="full" <?php echo $backupMode === 'full' ? 'selected' : ''; ?>>Full: database, uploads, and configuration</option>
+                </select>
+                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">Set BACKUP_ENCRYPTION_KEY on both web and cron services to encrypt archive contents.</span>
             </div>
 
             <div class="form-group" style="margin:0;">
@@ -122,27 +154,28 @@ unset($_SESSION['flash_backup']);
                     </option>
                     <?php endfor; ?>
                 </select>
-                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">Daily backup runs at this hour. Restart cron container to apply.</span>
+                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">The cron service checks this setting hourly at :30.</span>
             </div>
         </div>
 
         <div style="display:flex; gap:0.75rem; align-items:center;">
             <button type="submit" class="btn btn-primary">Save Settings</button>
-            </form>
-            <form method="POST" action="/?page=settings-backup" style="display:inline;">
-                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-                <input type="hidden" name="action" value="backup_now">
-                <button type="submit" class="btn btn-primary">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;margin-right:0.3rem;">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    Backup Now
-                </button>
-            </form>
-            <span class="help-text" style="font-size:0.8rem;">Creates a new backup immediately.</span>
         </div>
+    </form>
+
+    <form method="POST" action="/?page=settings-backup" class="backup-form" style="display:flex;gap:0.75rem;align-items:center;">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="action" value="backup_now">
+        <button type="submit" class="btn btn-primary">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;margin-right:0.3rem;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Backup Now
+        </button>
+        <span class="help-text" style="font-size:0.8rem;">Creates a new backup immediately.</span>
+    </form>
 
     <hr>
 
@@ -156,7 +189,7 @@ unset($_SESSION['flash_backup']);
             <select name="backup_file" class="input">
                 <option value="">-- Select a backup --</option>
                 <?php foreach ($backups as $b): ?>
-                <option value="<?php echo htmlspecialchars($b['path']); ?>">
+                <option value="<?php echo htmlspecialchars($b['relative']); ?>">
                     <?php echo htmlspecialchars($b['file']); ?> (<?php echo $b['size']; ?>KB, <?php echo htmlspecialchars($b['created']); ?><?php echo $b['encrypted'] ? ', encrypted' : ''; ?>)
                 </option>
                 <?php endforeach; ?>
@@ -164,7 +197,7 @@ unset($_SESSION['flash_backup']);
         </div>
         <div class="form-group">
             <label>Or upload a backup file</label>
-            <input type="file" name="backup_upload" accept=".sql,.sql.gz,.sql.gz.gpg" class="input">
+            <input type="file" name="backup_upload" accept=".sql,.sql.gz,.zip" class="input">
         </div>
         
         <div class="form-group">
@@ -193,6 +226,7 @@ unset($_SESSION['flash_backup']);
                         <th>Filename</th>
                         <th>Size</th>
                         <th>Created</th>
+                        <th>Mode</th>
                         <th>Encrypted</th>
                         <th>Action</th>
                     </tr>
@@ -203,9 +237,10 @@ unset($_SESSION['flash_backup']);
                         <td><?php echo htmlspecialchars($b['file']); ?></td>
                         <td><?php echo $b['size']; ?> KB</td>
                         <td><?php echo htmlspecialchars($b['created']); ?></td>
+                        <td><?php echo htmlspecialchars($b['mode']); ?></td>
                         <td><?php echo $b['encrypted'] ? 'Yes' : 'No'; ?></td>
                         <td>
-                            <a href="/?page=settings/backup&download=<?php echo urlencode($b['path']); ?>" class="btn btn-sm">Download</a>
+                            <a href="/?page=settings/backup-download&amp;file=<?php echo urlencode($b['relative']); ?>" class="btn btn-sm" data-skip-nav>Download</a>
                         </td>
                     </tr>
                     <?php endforeach; ?>

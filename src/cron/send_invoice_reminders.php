@@ -62,7 +62,7 @@ try {
 
     // Helper: create a public link for invoice viewing (short-lived)
     $createPublicLink = function(int $invoiceId) use ($pdo, $appConfig) {
-        $token = bin2hex(random_bytes(16));
+        $token = bin2hex(random_bytes(32));
         $days = (int)($appConfig['documents_valid_days'] ?? 14);
         $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
         $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
@@ -81,6 +81,7 @@ try {
             FROM invoices i 
             JOIN clients c ON c.id = i.client_id 
             WHERE i.due_date BETWEEN ? AND ? AND i.status IN ('unpaid', 'partial')
+              AND i.finalized_at IS NOT NULL AND i.collection_mode = 'direct'
         ");
         $stmt->execute([$dueWindowStart, $dueWindowEnd]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -144,6 +145,7 @@ try {
             FROM invoices i 
             JOIN clients c ON c.id = i.client_id 
             WHERE i.due_date < ? AND i.status IN ('unpaid', 'partial')
+              AND i.finalized_at IS NOT NULL AND i.collection_mode = 'direct'
         ");
         $stmt->execute([$todayDate]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);

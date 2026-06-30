@@ -11,6 +11,7 @@ if (!isset($_SESSION['user'])) {
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/two_factor_auth.php';
+require_once __DIR__ . '/../../../utils/two_factor_policy.php';
 
 use App\Utils\TwoFactorAuth;
 
@@ -27,6 +28,7 @@ try {
 } catch (Throwable $e) {}
 
 $isEnabled = $twofa && $twofa['enabled'];
+$isRequired = two_factor_required_for_user($pdo, $userId);
 $step = $_GET['step'] ?? 'main';
 $error = $_GET['error'] ?? '';
 $success = $_GET['success'] ?? '';
@@ -74,6 +76,12 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
     <div class="alert alert-success">Backup codes have been regenerated. Save them securely!</div>
   <?php endif; ?>
   
+  <?php if ($isRequired && !$isEnabled): ?>
+    <div class="alert alert-warning">Two-factor authentication is required for administrators and users with privileged settings, user-management, payment, or financial-import access. Enable it to continue.</div>
+  <?php elseif ($isRequired): ?>
+    <div class="alert alert-warning">Two-factor authentication is strongly recommended for this account because it has admin or privileged access.</div>
+  <?php endif; ?>
+
   <?php if ($step === 'main'): ?>
     <!-- Main 2FA status page -->
     <div style="display: flex; align-items: center; gap: 12px; margin: 20px 0;">
@@ -100,7 +108,11 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
       <!-- Disable 2FA or regenerate backup codes -->
       <div style="border-top: 1px solid #e5e7eb; padding-top: 24px; margin-top: 24px;">
         <h3>Disable Two-Factor Authentication</h3>
-        <p style="color: #6b7280; margin: 12px 0;">Enter your password to disable 2FA.</p>
+        <?php if ($isRequired): ?>
+          <p style="color: #92400e; margin: 12px 0;">Your account has elevated privileges, so PA will keep recommending 2FA if you disable it.</p>
+        <?php else: ?>
+          <p style="color: #6b7280; margin: 12px 0;">Enter your password to disable 2FA.</p>
+        <?php endif; ?>
         <form method="post" action="/?page=2fa-setup-action" style="margin-top: 16px;">
           <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
           <input type="hidden" name="action" value="disable">

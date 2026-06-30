@@ -5,7 +5,7 @@
 // The application does not use Doctrine ORM - it uses plain PDO with MySQL.
 //
 // The link table is defined in:
-// - database/init.sql
+// - database/baseline.sql
 // - database/migrations/007_public_links_module.sql
 //
 // Links are managed through:

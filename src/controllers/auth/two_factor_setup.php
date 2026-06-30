@@ -9,6 +9,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
+require_once __DIR__ . '/../../utils/two_factor_policy.php';
 
 use App\Utils\TwoFactorAuth;
 

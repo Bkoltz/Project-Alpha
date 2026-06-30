@@ -142,15 +142,6 @@ if ($action === 'login') {
         // Build the full session user data before storing or redirecting
         require_once __DIR__ . '/../../utils/acl.php';
         $defaultOrgId = 0;
-        $stmt = $pdo->prepare('SELECT organization_id FROM user_organizations WHERE user_id = ? AND is_default = 1 LIMIT 1');
-        $stmt->execute([(int)$u['id']]);
-        $defaultOrgId = (int)$stmt->fetchColumn();
-        if ($defaultOrgId === 0) {
-            $stmt = $pdo->prepare('SELECT organization_id FROM user_organizations WHERE user_id = ? ORDER BY organization_id ASC LIMIT 1');
-            $stmt->execute([(int)$u['id']]);
-            $defaultOrgId = (int)$stmt->fetchColumn();
-        }
-
         $userSession = [
             'id'               => (int)$u['id'],
             'email'            => $u['email'],

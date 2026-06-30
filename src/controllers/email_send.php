@@ -6,6 +6,8 @@ require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/smtp.php';
 require_once __DIR__ . '/../utils/logger.php';
 require_once __DIR__ . '/../utils/mailer.php';
+require_once __DIR__ . '/../utils/acl.php';
+require_once __DIR__ . '/../utils/invoice_content_links.php';
 
 // Determine if Dompdf is available
 $dompdfAvailable = is_file(__DIR__ . '/../../vendor/autoload.php');
@@ -18,6 +20,9 @@ if (!in_array($type, ['quote','contract','invoice'], true) || $id <= 0) {
   header('Location: ' . $toUrl . (strpos($toUrl,'?')!==false?'&':'?') . 'email_err=' . urlencode('Invalid email request'));
   exit;
 }
+
+$ownershipTable = ['quote' => 'quotes', 'contract' => 'contracts', 'invoice' => 'invoices'][$type];
+require_record_ownership($pdo, $ownershipTable, $id);
 
 try {
   if ($type === 'quote') {
@@ -55,10 +60,20 @@ try {
 
   // Block emailing for non-emailable statuses
   $st = strtolower((string)($row['status'] ?? ''));
-  if (($type==='quote' && $st==='rejected') || ($type==='invoice' && $st==='void') || ($type==='contract' && in_array($st, ['denied','cancelled','void'], true))) {
+  if (($type==='quote' && $st==='rejected') || ($type==='invoice' && in_array($st, ['draft','void','cancelled'], true)) || ($type==='contract' && in_array($st, ['denied','cancelled','void'], true))) {
     $toUrl = $redirectTo ?: $baseView;
     header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('Document status does not allow emailing'));
     exit;
+  }
+  if ($type === 'invoice') {
+    $eligibility = $pdo->prepare('SELECT finalized_at, collection_mode FROM invoices WHERE id=?');
+    $eligibility->execute([$id]);
+    $invoiceEligibility = $eligibility->fetch(PDO::FETCH_ASSOC);
+    if (!$invoiceEligibility || empty($invoiceEligibility['finalized_at']) || ($invoiceEligibility['collection_mode'] ?? 'direct') !== 'direct') {
+      $toUrl = $redirectTo ?: $baseView;
+      header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('Finalize this invoice before emailing it. Project-billed invoices are sent through the project statement.'));
+      exit;
+    }
   }
 
   $to = $row['email'];
@@ -124,6 +139,12 @@ try {
 
   // Add Pay via Credit Card button for invoices if Stripe is configured
   if ($type === 'invoice') {
+    $contentLinks = invoice_content_links_for_invoice($pdo, $id, $appConfig);
+    $contentLinksHtml = invoice_content_links_html($contentLinks);
+    if ($contentLinksHtml !== '') {
+      $body .= $contentLinksHtml;
+    }
+
     require_once __DIR__ . '/../services/StripeService.php';
     if (StripeService::isConfigured($appConfig)) {
       // Check if invoice is payable

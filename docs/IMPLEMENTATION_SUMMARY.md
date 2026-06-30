@@ -1,5 +1,7 @@
 # Implementation Summary - May 6, 2026
 
+> **Historical record.** This file describes the May 6 implementation state and contains obsolete paths and schema references. Use [docs/README.md](README.md), current source code, and `database/init.sql` for current instructions.
+
 ## Changes Made
 
 ### 1. ✅ 2FA with TOTP + Authenticator App Support

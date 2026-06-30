@@ -58,8 +58,9 @@ try {
   $expireWhenPaid = !empty($row['expire_when_paid']);
   if ($expireWhenPaid) {
     // For expire_when_paid links, check if the invoice is paid
-    if ($row['document_type'] === 'invoice') {
-      $invCheck = $pdo->prepare('SELECT status FROM invoices WHERE id = ?');
+    if (in_array($row['document_type'], ['invoice', 'project_invoice'], true)) {
+      $table = $row['document_type'] === 'project_invoice' ? 'project_invoices' : 'invoices';
+      $invCheck = $pdo->prepare("SELECT status FROM {$table} WHERE id = ?");
       $invCheck->execute([(int)$row['document_id']]);
       $invStatus = strtolower($invCheck->fetchColumn() ?: '');
       if ($invStatus === 'paid' || $invStatus === 'void') {
@@ -85,14 +86,26 @@ try {
 
   // For invoice links, ensure invoice remains in public-viewable states
   if ($type === 'invoice') {
-    $vs = $pdo->prepare('SELECT status FROM invoices WHERE id=? LIMIT 1');
+    $vs = $pdo->prepare('SELECT status, finalized_at, collection_mode FROM invoices WHERE id=? LIMIT 1');
     $vs->execute([$rid]);
-    $invStatus = strtolower((string)($vs->fetchColumn() ?: ''));
+    $publicInvoice = $vs->fetch(PDO::FETCH_ASSOC);
+    $invStatus = strtolower((string)($publicInvoice['status'] ?? ''));
     if ($invStatus === '') {
       throw new Exception('invoice_not_found:' . $rid);
     }
     if (!in_array($invStatus, ['unpaid', 'partial'], true)) {
       throw new Exception('invoice_status_blocked:' . $invStatus);
+    }
+    if (empty($publicInvoice['finalized_at']) || ($publicInvoice['collection_mode'] ?? 'direct') !== 'direct') {
+      throw new Exception('invoice_not_public');
+    }
+  }
+  if ($type === 'project_invoice') {
+    $ps = $pdo->prepare('SELECT status, finalized_at FROM project_invoices WHERE id=? LIMIT 1');
+    $ps->execute([$rid]);
+    $projectInvoice = $ps->fetch(PDO::FETCH_ASSOC);
+    if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
+      throw new Exception('project_invoice_not_public');
     }
   }
 
@@ -118,7 +131,7 @@ try {
   // Prefer Twig template if available, otherwise include PHP view wrapper
   $twigTemplate = __DIR__ . '/../../views/public/doc-template.twig';
   $phpView = __DIR__ . '/../../views/public/doc-wrapper.php';
-  if (is_file($twigTemplate) && is_file(__DIR__ . '/../../vendor/autoload.php')) {
+  if ($type !== 'project_invoice' && is_file($twigTemplate) && is_file(__DIR__ . '/../../vendor/autoload.php')) {
     // Attempt to render Twig if installed (non-fatal)
     try {
       require_once __DIR__ . '/../../vendor/autoload.php';

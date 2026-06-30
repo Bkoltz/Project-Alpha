@@ -29,7 +29,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM invoices i LEFT JOIN clients c ON c.id=i.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.total, i.due_date, i.contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN contracts odc ON odc.id=i.contract_id AND odc.contract_type='on_demand'";
+$sql="SELECT i.id, i.doc_number, i.project_code, i.status, i.collection_mode, i.total, i.due_date, i.contract_id, i.created_at, c.name client, c.id AS client_id, odc.doc_number AS contract_doc_number FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN contracts odc ON odc.id=i.contract_id AND odc.contract_type='on_demand'";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY i.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -127,10 +127,10 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
             <td style="padding:10px"><?php echo date('M j, Y', strtotime($r['created_at'])); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
-              <?php if ($r['status'] !== 'void' && $r['status'] !== 'paid'): ?>
+              <?php if (strtolower((string)$r['status']) === 'draft'): ?>
                 <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;text-decoration:none;color:inherit">Edit</a>
               <?php endif; ?>
-              <?php if ($r['status'] !== 'void' && $r['status'] !== 'paid'): ?>
+              <?php if (in_array(strtolower((string)$r['status']), ['sent','unpaid','partial','overdue'], true) && ($r['collection_mode'] ?? 'direct') === 'direct'): ?>
               <form method="post" action="/?page=invoice/email-send" style="display:inline">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                 <input type="hidden" name="type" value="invoice">

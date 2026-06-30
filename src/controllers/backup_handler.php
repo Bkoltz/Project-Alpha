@@ -8,16 +8,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/backup_archive.php';
 
 $action = $_POST['action'] ?? '';
 $backupsDir = '/var/www/backups';
+$settingsUrl = '/?page=settings&tab=backup';
 
 switch ($action) {
     case 'backup_now':
         // Run the backup script
         $output = [];
         $returnCode = 0;
-        exec('php /var/www/src/cron/backup_database.php 2>&1', $output, $returnCode);
+        $backupScript = __DIR__ . '/../cron/backup_database.php';
+        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($backupScript) . ' 2>&1', $output, $returnCode);
         if ($returnCode === 0) {
             $_SESSION['flash_backup'] = [
                 'type' => 'success',
@@ -30,19 +33,20 @@ switch ($action) {
                 'message' => 'Backup failed: ' . ($errorOutput ?: 'Unknown error (exit code ' . $returnCode . ')')
             ];
         }
-        header('Location: /?page=settings-backup');
+        header('Location: ' . $settingsUrl);
         exit;
 
     case 'update_settings':
         $retentionDays = (int)($_POST['retention_days'] ?? 10);
         $backupHour = (int)($_POST['backup_hour'] ?? 2);
+        $backupMode = ($_POST['backup_mode'] ?? 'database') === 'full' ? 'full' : 'database';
 
         if ($retentionDays < 0 || $retentionDays > 365) {
             $_SESSION['flash_backup'] = [
                 'type' => 'error',
                 'message' => 'Retention days must be between 0 and 365.'
             ];
-            header('Location: /?page=settings-backup');
+            header('Location: ' . $settingsUrl);
             exit;
         }
         if ($backupHour < 0 || $backupHour > 23) {
@@ -50,24 +54,21 @@ switch ($action) {
                 'type' => 'error',
                 'message' => 'Backup hour must be between 0 and 23.'
             ];
-            header('Location: /?page=settings-backup');
+            header('Location: ' . $settingsUrl);
             exit;
         }
 
         // Save to app_config
-        $pdo->exec("INSERT INTO app_config (organization_id, config_key, config_value) VALUES (0, 'backup_retention_days', '{$retentionDays}') ON DUPLICATE KEY UPDATE config_value = '{$retentionDays}'");
-        $pdo->exec("INSERT INTO app_config (organization_id, config_key, config_value) VALUES (0, 'backup_hour', '{$backupHour}') ON DUPLICATE KEY UPDATE config_value = '{$backupHour}'");
-
-        // Update the crontab in the cron container if possible
-        $newCronLine = sprintf("%d 2 * * * root . /etc/environment && php /var/www/src/cron/backup_database.php >> /var/www/config/logs/cron/cron.log 2>&1", $backupHour);
-        // Note: the cron container's crontab is baked into the image, but we can write a override file
-        // that the entrypoint could read. For now, just inform the user.
+        $setting = $pdo->prepare('INSERT INTO app_config (organization_id,config_key,config_value) VALUES (0,?,?) ON DUPLICATE KEY UPDATE config_value=VALUES(config_value)');
+        $setting->execute(['backup_retention_days', (string)$retentionDays]);
+        $setting->execute(['backup_hour', (string)$backupHour]);
+        $setting->execute(['backup_mode', $backupMode]);
 
         $_SESSION['flash_backup'] = [
             'type' => 'success',
-            'message' => "Backup settings saved. Retention: {$retentionDays} days, Schedule: " . str_pad($backupHour, 2, '0', STR_PAD_LEFT) . ":00 UTC. Restart the cron container for schedule changes to take effect."
+                'message' => "Backup settings saved. Mode: {$backupMode}; retention: {$retentionDays} backups; schedule check: " . str_pad($backupHour, 2, '0', STR_PAD_LEFT) . ":30 UTC."
         ];
-        header('Location: /?page=settings-backup');
+        header('Location: ' . $settingsUrl);
         exit;
 
     case 'restore':
@@ -80,15 +81,23 @@ switch ($action) {
                 'type' => 'error',
                 'message' => 'You must confirm the restore operation.'
             ];
-            header('Location: /?page=settings-backup');
+            header('Location: ' . $settingsUrl);
             exit;
         }
 
         $sourceFile = '';
-        if (!empty($backupFile) && file_exists($backupFile)) {
-            $sourceFile = $backupFile;
+        $backupRoot = realpath($backupsDir);
+        $relative = str_replace('\\', '/', (string)$backupFile);
+        if ($backupRoot && $relative !== '' && !str_contains($relative, '..') && preg_match('#^(daily|weekly|monthly)/[A-Za-z0-9._-]+(?:\.sql\.gz|\.(?:db|full)\.zip)$#', $relative)) {
+            $candidate = realpath($backupRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
+            if ($candidate && is_file($candidate) && str_starts_with($candidate, $backupRoot . DIRECTORY_SEPARATOR)) {
+                $sourceFile = $candidate;
+            }
         } elseif (!empty($uploadFile['tmp_name']) && is_uploaded_file($uploadFile['tmp_name'])) {
-            $sourceFile = $uploadFile['tmp_name'];
+            $name = strtolower((string)($uploadFile['name'] ?? ''));
+            if (preg_match('/(?:\.sql(?:\.gz)?|\.(?:db|full)\.zip)$/', $name) && (int)($uploadFile['size'] ?? 0) <= 500 * 1024 * 1024) {
+                $sourceFile = $uploadFile['tmp_name'];
+            }
         }
 
         if (empty($sourceFile)) {
@@ -96,13 +105,36 @@ switch ($action) {
                 'type' => 'error',
                 'message' => 'No backup file selected or uploaded.'
             ];
-            header('Location: /?page=settings-backup');
+            header('Location: ' . $settingsUrl);
             exit;
         }
 
         // Create emergency backup before restore
-        $emergencyFile = $backupsDir . '/emergency_pre_restore_' . date('Ymd_His') . '.sql.gz';
-        require_once __DIR__ . '/../cron/backup_database.php';
+        $backupOutput = [];
+        $backupCode = 0;
+        $backupScript = __DIR__ . '/../cron/backup_database.php';
+        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($backupScript) . ' 2>&1', $backupOutput, $backupCode);
+        if ($backupCode !== 0) {
+            $_SESSION['flash_backup'] = ['type' => 'error', 'message' => 'Restore stopped because the pre-restore backup failed.'];
+            header('Location: ' . $settingsUrl);
+            exit;
+        }
+
+        $restoreWorkspace = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pa_restore_' . bin2hex(random_bytes(8));
+        if (!mkdir($restoreWorkspace, 0700, true)) {
+            $_SESSION['flash_backup'] = ['type' => 'error', 'message' => 'Could not create a secure restore workspace.'];
+            header('Location: ' . $settingsUrl);
+            exit;
+        }
+        try {
+            $restoreSource = backup_open_restore_source($sourceFile, $restoreWorkspace, backup_archive_key());
+            $databaseSource = $restoreSource['database_file'];
+        } catch (Throwable $e) {
+            @rmdir($restoreWorkspace);
+            $_SESSION['flash_backup'] = ['type' => 'error', 'message' => $e->getMessage()];
+            header('Location: ' . $settingsUrl);
+            exit;
+        }
         
         // Apply restore
         $db = getenv('MYSQL_DATABASE') ?: 'project_alpha';
@@ -111,10 +143,10 @@ switch ($action) {
         $host = getenv('DB_HOST') ?: 'db';
 
         $cmd = '';
-        if (pathinfo($sourceFile, PATHINFO_EXTENSION) === 'gz') {
+        if (pathinfo($databaseSource, PATHINFO_EXTENSION) === 'gz') {
             $cmd = sprintf(
                 'gunzip -c %s | mysql -h%s -u%s -p%s %s 2>&1',
-                escapeshellarg($sourceFile),
+                escapeshellarg($databaseSource),
                 escapeshellarg($host),
                 escapeshellarg($user),
                 escapeshellarg($pass),
@@ -127,7 +159,7 @@ switch ($action) {
                 escapeshellarg($user),
                 escapeshellarg($pass),
                 escapeshellarg($db),
-                escapeshellarg($sourceFile)
+                escapeshellarg($databaseSource)
             );
         }
 
@@ -135,10 +167,28 @@ switch ($action) {
         $returnCode = 0;
         exec($cmd, $output, $returnCode);
 
+        if ($returnCode === 0 && !empty($restoreSource['full']) && $restoreSource['zip'] instanceof ZipArchive) {
+            try {
+                backup_restore_full_files($restoreSource['zip']);
+            } catch (Throwable $e) {
+                $returnCode = 1;
+                $output[] = 'Database restored, but application files failed: ' . $e->getMessage();
+            }
+        }
+        if ($restoreSource['zip'] instanceof ZipArchive) {
+            $restoreSource['zip']->close();
+        }
+        if ($databaseSource !== $sourceFile) {
+            @unlink($databaseSource);
+        }
+        @rmdir($restoreWorkspace);
+
         if ($returnCode === 0) {
             $_SESSION['flash_backup'] = [
                 'type' => 'success',
-                'message' => 'Database restored successfully. An emergency backup was created before restore.'
+                'message' => !empty($restoreSource['full'])
+                    ? 'Database, uploads, and configuration restored successfully. An emergency backup was created first.'
+                    : 'Database restored successfully. An emergency backup was created before restore.'
             ];
         } else {
             $_SESSION['flash_backup'] = [
@@ -146,6 +196,6 @@ switch ($action) {
                 'message' => 'Restore failed. Error: ' . implode(' ', $output)
             ];
         }
-        header('Location: /?page=settings-backup');
+        header('Location: ' . $settingsUrl);
         exit;
 }

@@ -54,8 +54,9 @@ try {
         }
     }
     
-    if ($linkRow['document_type'] !== 'invoice') {
-        throw new Exception('Payment is only available for invoices');
+    $documentType = (string)$linkRow['document_type'];
+    if (!in_array($documentType, ['invoice', 'project_invoice'], true)) {
+        throw new Exception('Payment is only available for finalized invoices');
     }
     
     $invoiceId = (int)$linkRow['document_id'];
@@ -66,12 +67,9 @@ try {
     }
     
     // Get invoice details
-    $invSt = $pdo->prepare('
-        SELECT i.*, c.name as client_name, c.email as client_email 
-        FROM invoices i 
-        JOIN clients c ON c.id = i.client_id 
-        WHERE i.id = ?
-    ');
+    $invSt = $documentType === 'project_invoice'
+        ? $pdo->prepare('SELECT pi.*,p.name AS project_name,p.name AS client_name,NULL AS client_email FROM project_invoices pi JOIN projects p ON p.id=pi.project_id WHERE pi.id=?')
+        : $pdo->prepare('SELECT i.*,c.name AS client_name,c.email AS client_email FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
     $invSt->execute([$invoiceId]);
     $invoice = $invSt->fetch(PDO::FETCH_ASSOC);
     
@@ -84,12 +82,22 @@ try {
     if (!in_array($status, ['unpaid', 'partial'], true)) {
         throw new Exception('This invoice cannot be paid online. Status: ' . $status);
     }
+    if (empty($invoice['finalized_at'])) {
+        throw new Exception('This invoice has not been finalized for payment.');
+    }
+    if ($documentType === 'invoice' && ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+        throw new Exception('This invoice is collected through its project billing statement.');
+    }
     
     // Calculate amount due from payments table for accuracy
     $total = (float)($invoice['total'] ?? 0);
-    $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
-    $paidStmt->execute([$invoiceId]);
-    $amountPaid = (float)$paidStmt->fetchColumn();
+    if ($documentType === 'project_invoice') {
+        $amountPaid = (float)($invoice['amount_paid'] ?? 0);
+    } else {
+        $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+        $paidStmt->execute([$invoiceId]);
+        $amountPaid = (float)$paidStmt->fetchColumn();
+    }
     $amountDue = $total - $amountPaid;
     
     if ($amountDue <= 0) {
@@ -108,6 +116,7 @@ try {
     $baseUrl = $scheme . '://' . $host;
     
     $docNumber = $invoice['doc_number'] ?? $invoiceId;
+    $documentLabel = $documentType === 'project_invoice' ? 'Project invoice PI-' : 'Invoice I-';
     $successUrl = $baseUrl . '/?page=stripe-success&token=' . rawurlencode($token) . '&session_id={CHECKOUT_SESSION_ID}';
     $cancelUrl = $baseUrl . '/?page=public-doc&token=' . rawurlencode($token) . '&cancelled=1';
     
@@ -118,7 +127,52 @@ try {
     }
     
     $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
-    $description = "Invoice I-{$docNumber} from {$brandName}";
+    $description = "{$documentLabel}{$docNumber} from {$brandName}";
+
+    $expectedCents = (int)round($amountDue * 100);
+    $existingSessionId = trim((string)($invoice['stripe_session_id'] ?? ''));
+    $existingExpiresAt = !empty($invoice['stripe_checkout_expires_at'])
+        ? strtotime((string)$invoice['stripe_checkout_expires_at'])
+        : 0;
+    if ($existingSessionId !== '' && $existingExpiresAt > time()) {
+        try {
+            $existing = $stripe->getCheckoutSession($existingSessionId);
+            $existingInvoiceId = $documentType === 'project_invoice'
+                ? (int)($existing['metadata']['pa_project_invoice_id'] ?? $existing['metadata']['project_invoice_id'] ?? 0)
+                : (int)($existing['metadata']['pa_invoice_id'] ?? $existing['metadata']['invoice_id'] ?? 0);
+            if (($existing['status'] ?? '') === 'open'
+                && ($existing['payment_status'] ?? '') === 'unpaid'
+                && (int)($existing['amount_total'] ?? 0) === $expectedCents
+                && $existingInvoiceId === $invoiceId
+                && !empty($existing['url'])) {
+                header('Location: ' . $existing['url']);
+                exit;
+            }
+            if (($existing['payment_status'] ?? '') === 'paid') {
+                throw new Exception('This payment is already being processed. Please refresh the invoice shortly.');
+            }
+        } catch (Throwable $sessionError) {
+            if (str_contains($sessionError->getMessage(), 'already being processed')) {
+                throw $sessionError;
+            }
+            @error_log('[StripeCheckout] Existing session could not be reused: ' . $sessionError->getMessage());
+        }
+    }
+
+    $idempotencyKey = 'pa-' . str_replace('_', '-', $documentType) . '-' . $invoiceId . '-' . $expectedCents . '-' . date('YmdH');
+    $checkoutMetadata = $documentType === 'project_invoice'
+        ? [
+            'pa_project_invoice_id' => (string)$invoiceId,
+            'project_invoice_id' => (string)$invoiceId,
+            'doc_number' => (string)$docNumber,
+            'token' => $token,
+        ]
+        : [
+            'pa_invoice_id' => (string)$invoiceId,
+            'invoice_id' => (string)$invoiceId,
+            'doc_number' => (string)$docNumber,
+            'token' => $token,
+        ];
     
     $session = $stripe->createCheckoutSession(
         $amountDue,
@@ -126,17 +180,20 @@ try {
         $description,
         $successUrl,
         $cancelUrl,
-        [
-            'pa_invoice_id' => (string)$invoiceId,
-            'invoice_id' => (string)$invoiceId, // Legacy support
-            'doc_number' => $docNumber,
-            'token' => $token
-        ]
+        $checkoutMetadata,
+        $idempotencyKey
     );
     
     if (empty($session['url'])) {
         throw new Exception('Failed to create payment session');
     }
+
+    $expiresAt = !empty($session['expires_at'])
+        ? date('Y-m-d H:i:s', (int)$session['expires_at'])
+        : date('Y-m-d H:i:s', strtotime('+24 hours'));
+    $checkoutTable = $documentType === 'project_invoice' ? 'project_invoices' : 'invoices';
+    $pdo->prepare("UPDATE {$checkoutTable} SET stripe_session_id=?,stripe_checkout_expires_at=? WHERE id=?")
+        ->execute([(string)$session['id'], $expiresAt, $invoiceId]);
     
     // Log the checkout initiation
     @error_log('[StripeCheckout] Session created for invoice ' . $invoiceId . ': ' . ($session['id'] ?? 'unknown'));

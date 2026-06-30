@@ -3,8 +3,9 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = 1; // default organization
+$orgId = get_active_org_id();
 
 // Filters
 $start = $_GET['start'] ?? '';

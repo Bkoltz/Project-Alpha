@@ -54,6 +54,9 @@ if (empty($_SESSION['csrf'])) {
 $csrfToken = $_SESSION['csrf'];
 
 $providers = ['dropbox', 'gdrive', 's3'];
+$helpIcon = static function (string $text): string {
+    return '<span class="pa-help" tabindex="0" aria-label="' . e($text) . '" title="' . e($text) . '">?</span>';
+};
 ?>
 <div style="max-width:1000px">
     <!-- CSRF token for JavaScript -->
@@ -63,8 +66,29 @@ $providers = ['dropbox', 'gdrive', 's3'];
     })();
     </script>
 
+    <style>
+    .pa-help{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:800;margin-left:6px;cursor:help}
+    .pa-help:focus{outline:2px solid #93c5fd;outline-offset:2px}
+    .pa-setting-note{font-size:12px;color:var(--muted);line-height:1.4;margin-top:4px}
+    .pa-setup-card{padding:14px;border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;margin-bottom:20px}
+    .pa-setup-card h3{margin:0 0 8px;font-size:15px;color:#1e3a8a}
+    .pa-setup-card ol{margin:0;padding-left:20px;color:#1f2937;font-size:13px;line-height:1.55}
+    .pa-provider-note{padding:10px 12px;border:1px solid #e5e7eb;background:#f9fafb;border-radius:8px;font-size:12px;color:#4b5563;line-height:1.45}
+    </style>
+
     <h2 style="margin:0 0 8px 0">Link Resolver</h2>
-    <p style="margin:0 0 24px 0;color:var(--muted)">Auto-generate and manage links for client/organization file storage</p>
+    <p style="margin:0 0 24px 0;color:var(--muted)">Connect cloud storage, create manual content links, and optionally let PA find exact organization or department folders.</p>
+
+    <div class="pa-setup-card">
+        <h3>Recommended setup flow</h3>
+        <ol>
+            <li>Keep the resolver disabled unless your business delivers files or external links with invoices.</li>
+            <li>Create organization and department records first, including folder names or aliases where needed.</li>
+            <li>Connect one provider and test it before enabling automatic generation.</li>
+            <li>Use manual links for custom URLs, maps, models, or providers that cannot be scanned automatically.</li>
+            <li>PA auto-attaches only one exact safe match. Ambiguous matches require review.</li>
+        </ol>
+    </div>
 
     <!-- Stats Banner -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
@@ -96,17 +120,62 @@ $providers = ['dropbox', 'gdrive', 's3'];
         <div style="display:grid;gap:16px">
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="link_resolver_enabled" value="1" <?php echo !empty($appConfig['link_resolver_enabled']) ? 'checked' : ''; ?>>
-                <span class="font-600">Enable Link Resolver System</span>
+                <span class="font-600">Enable Link Resolver System<?php echo $helpIcon('Disabled by default. Turn this on only if PA should look for cloud folders automatically.'); ?></span>
             </label>
 
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="org_level_links_only" value="1" <?php echo !empty($appConfig['org_level_links_only']) ? 'checked' : ''; ?>>
-                <span class="font-600">Organization-level links only</span>
-                <span style="font-size:13px;color:var(--muted);margin-left:4px">(If client belongs to organization, manage links at org level)</span>
+                <span class="font-600">Prefer organization and department links<?php echo $helpIcon('Clients inside an organization should normally use organization or department links instead of direct client-level automatic links.'); ?></span>
+                <span style="font-size:13px;color:var(--muted);margin-left:4px">Safer default for grouped clients</span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="link_resolver_daily_scan_enabled" value="1" <?php echo !empty($appConfig['link_resolver_daily_scan_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Daily folder scan<?php echo $helpIcon('Optional background scan. It stays off unless your business wants PA to refresh resolver candidates automatically.'); ?></span>
+                    <span class="pa-setting-note">Runs only when the resolver and a provider are enabled.</span>
+                </span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="link_resolver_invoice_auto_attach_enabled" value="1" <?php echo !empty($appConfig['link_resolver_invoice_auto_attach_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Just-in-time invoice link scan<?php echo $helpIcon('Before emailing an invoice, PA may check only the relevant org/department if the invoice has no content links.'); ?></span>
+                    <span class="pa-setting-note">Ambiguous matches must be reviewed instead of auto-attached.</span>
+                </span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="project_specific_links_enabled" value="1" <?php echo !empty($appConfig['project_specific_links_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Allow project-specific invoice links<?php echo $helpIcon('Disabled by default. Most projects should use the higher-level org or department folder link.'); ?></span>
+                    <span class="pa-setting-note">Manual project links can override the normal org/department link flow when this is enabled.</span>
+                </span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="invoice_content_links_enabled" value="1" <?php echo !empty($appConfig['invoice_content_links_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Show content links on invoices<?php echo $helpIcon('When enabled, invoices can show a “View your content here” section using links marked for invoices.'); ?></span>
+                    <span class="pa-setting-note">This is off by default so businesses that do not deliver files are not affected.</span>
+                </span>
+            </label>
+
+            <label>
+                <div style="font-weight:600;margin-bottom:4px">If invoice content links are missing<?php echo $helpIcon('Controls email behavior when a project invoice has no eligible content links.'); ?></div>
+                <?php $missingBehavior = (string)($appConfig['invoice_missing_content_links_behavior'] ?? 'warn'); ?>
+                <select name="invoice_missing_content_links_behavior" style="max-width:280px;width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
+                    <option value="send" <?php echo $missingBehavior === 'send' ? 'selected' : ''; ?>>Send anyway</option>
+                    <option value="warn" <?php echo $missingBehavior === 'warn' ? 'selected' : ''; ?>>Warn before sending</option>
+                    <option value="block" <?php echo $missingBehavior === 'block' ? 'selected' : ''; ?>>Block sending</option>
+                </select>
             </label>
             
             <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
                 <strong>ℹ️ Link Expiration:</strong> Set expiration dates per-client or per-organization in their respective storage sections, not globally.
+            </div>
+            <div class="pa-provider-note">
+                Folder matching is intentionally strict: organization folders match by organization name, department folders match by department folder name or alias under the parent organization folder, and project-specific links stay disabled unless explicitly enabled.
             </div>
         </div>
     </fieldset>
@@ -136,8 +205,11 @@ $providers = ['dropbox', 'gdrive', 's3'];
                 <input type="checkbox" name="provider_enabled_<?php echo e($provider); ?>" value="1"
                        <?php echo $isEnabled ? 'checked' : ''; ?>
                        onchange="toggleProviderFields('<?php echo e($provider); ?>')">
-                <span class="font-600">Enable <?php echo e($providerName); ?> Auto-Generation</span>
+                <span class="font-600">Enable <?php echo e($providerName); ?> auto-generation</span>
             </label>
+            <div class="pa-provider-note">
+                Manual links do not require auto-generation. Enable this provider only when PA should scan for exact organization or department folders and create share links automatically.
+            </div>
 
             <div id="fields_<?php echo e($provider); ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
                 <?php if ($provider === 'dropbox'): ?>
@@ -196,9 +268,9 @@ $providers = ['dropbox', 'gdrive', 's3'];
                         <textarea name="<?php echo e($provider); ?>_credentials" rows="4"
                                   placeholder='Paste Google Service Account JSON here'
                                   style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px"><?php echo e($credentials['service_account'] ?? ''); ?></textarea>
-                        <div style="margin-top:4px;font-size:12px;color:var(--muted)">
-                            Get credentials from <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--nav-accent)">Google Cloud Console</a>
-                        </div>
+	                        <div style="margin-top:4px;font-size:12px;color:var(--muted)">
+	                            Get credentials from <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--nav-accent)">Google Cloud Console</a>. Share the target folders with this service account.
+	                        </div>
                     </label>
 
                 <?php elseif ($provider === 's3'): ?>
@@ -234,16 +306,20 @@ $providers = ['dropbox', 'gdrive', 's3'];
                     </label>
                 <?php endif; ?>
 
-                <label>
-                    <div style="margin-bottom:4px;font-weight:600">Root Folder Path</div>
-                    <input type="text" name="<?php echo e($provider); ?>_root_path"
-                           value="<?php echo e($credentials['root_path'] ?? '/'); ?>"
-                           placeholder="/"
-                           style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
-                    <div style="margin-top:4px;font-size:12px;color:var(--muted)">
-                        Base path where client/org folders are located
-                    </div>
-                </label>
+	                <label>
+	                    <div style="margin-bottom:4px;font-weight:600"><?php echo $provider === 'gdrive' ? 'Root Folder ID' : 'Root Folder Path'; ?></div>
+	                    <input type="text" name="<?php echo e($provider); ?>_root_path"
+	                           value="<?php echo e($credentials['root_path'] ?? '/'); ?>"
+	                           placeholder="<?php echo $provider === 'gdrive' ? 'Optional Google Drive folder ID' : '/'; ?>"
+	                           style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
+	                    <div style="margin-top:4px;font-size:12px;color:var(--muted)">
+	                        <?php if ($provider === 'gdrive'): ?>
+	                            Optional parent folder ID used to limit searches. Leave blank to search all folders visible to the service account.
+	                        <?php else: ?>
+	                            Base path where organization, department, or standalone client folders are located.
+	                        <?php endif; ?>
+	                    </div>
+	                </label>
 
                 <button type="button" onclick="testConnection('<?php echo e($provider); ?>')"
                         style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
@@ -298,7 +374,8 @@ function testConnection(provider) {
     formData.append('csrf', window.csrfToken || '');  // Add CSRF token
     
     if (provider === 'dropbox') {
-        formData.append('access_token', document.querySelector(`input[name="${provider}_access_token"]`).value);
+        const tokenField = document.querySelector(`input[name="${provider}_access_token"]`);
+        formData.append('access_token', tokenField ? tokenField.value : '');
     } else if (provider === 'gdrive') {
         formData.append('credentials', document.querySelector(`textarea[name="${provider}_credentials"]`).value);
     } else if (provider === 's3') {

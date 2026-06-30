@@ -2,6 +2,17 @@
 // src/controllers/settings/links_handler.php
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+
+if (empty($_SESSION['user'])) {
+    http_response_code(401);
+    exit('Authentication required');
+}
+
+if (!csrf_validate()) {
+    http_response_code(403);
+    exit('Invalid CSRF token');
+}
 
 try {
     // Ensure app_config table exists
@@ -41,7 +52,16 @@ try {
     $globalSettings = [
         'link_resolver_enabled' => isset($_POST['link_resolver_enabled']) ? 1 : 0,
         'org_level_links_only' => isset($_POST['org_level_links_only']) ? 1 : 0,
+        'link_resolver_daily_scan_enabled' => isset($_POST['link_resolver_daily_scan_enabled']) ? 1 : 0,
+        'link_resolver_invoice_auto_attach_enabled' => isset($_POST['link_resolver_invoice_auto_attach_enabled']) ? 1 : 0,
+        'project_specific_links_enabled' => isset($_POST['project_specific_links_enabled']) ? 1 : 0,
+        'invoice_content_links_enabled' => isset($_POST['invoice_content_links_enabled']) ? 1 : 0,
     ];
+    $missingLinksBehavior = (string)($_POST['invoice_missing_content_links_behavior'] ?? 'warn');
+    if (!in_array($missingLinksBehavior, ['send', 'warn', 'block'], true)) {
+        $missingLinksBehavior = 'warn';
+    }
+    $globalSettings['invoice_missing_content_links_behavior'] = $missingLinksBehavior;
     if (isset($_POST['default_link_expiration_days'])) {
         $globalSettings['default_link_expiration_days'] = max(1, (int)$_POST['default_link_expiration_days']);
     }

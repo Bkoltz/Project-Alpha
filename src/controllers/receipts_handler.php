@@ -10,6 +10,7 @@ ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/csrf.php';
+require_once __DIR__ . '/../utils/acl.php';
 
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
@@ -23,19 +24,14 @@ if (!csrf_validate()) {
 }
 
 try {
-    // Get current org_id (default to 1 for now, should come from session/user context)
-    $orgId = 1;
-    $userId = $_SESSION['user_id'] ?? null;
-    
-    // Ensure we have a valid user ID or NULL
-    if ($userId === null) {
-        // Get first admin user if exists
-        $stmt = $pdo->query("SELECT id FROM users WHERE role='admin' LIMIT 1");
-        $adminUser = $stmt->fetch();
-        if ($adminUser) {
-            $userId = $adminUser['id'];
-        }
-        // Otherwise $userId remains NULL which is acceptable for uploaded_by
+    $userId = (int)($_SESSION['user']['id'] ?? 0);
+    $orgId = get_active_org_id();
+    if ($userId <= 0 || $orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
+        http_response_code(403);
+        $response['message'] = 'Permission denied';
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
     }
 
     $resolveStoreId = static function (PDO $pdo, int $orgId, string $storeName): ?int {
