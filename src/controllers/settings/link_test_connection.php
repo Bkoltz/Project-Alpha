@@ -4,6 +4,9 @@
 
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/link_provider_config.php';
+require_once __DIR__ . '/../../link_resolvers/auto_resolver/google_drive_link_resolver.php';
+require_once __DIR__ . '/../../link_resolvers/auto_resolver/s3_link_resolver.php';
 
 header('Content-Type: application/json');
 
@@ -26,12 +29,15 @@ $provider = $_POST['provider'] ?? '';
 try {
     if ($provider === 'dropbox') {
         $accessToken = $_POST['access_token'] ?? '';
+        $rootPath = trim((string)($_POST['root_path'] ?? '/'));
         if ($accessToken === '') {
-            $stmt = $pdo->prepare('SELECT credentials FROM link_resolver_config WHERE provider = ? LIMIT 1');
-            $stmt->execute(['dropbox']);
-            $credentials = json_decode((string)($stmt->fetchColumn() ?: ''), true);
-            if (is_array($credentials)) {
+            $row = pa_link_provider_best_row($pdo, 'dropbox');
+            $credentials = $row ? pa_link_provider_credentials_from_row($row) : [];
+            if ($credentials) {
                 $accessToken = (string)($credentials['access_token'] ?? '');
+                if ($rootPath === '') {
+                    $rootPath = (string)($credentials['root_path'] ?? '/');
+                }
             }
         }
         
@@ -59,7 +65,6 @@ try {
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
         $redirectUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
-        curl_close($ch);
         
         // Debug: log full response for troubleshooting
         if ($httpCode !== 200) {
@@ -74,6 +79,36 @@ try {
         if ($httpCode === 200) {
             $data = json_decode($response, true);
             $accountName = $data['name']['display_name'] ?? 'Unknown';
+            $normalizedRoot = $rootPath === '' ? '/' : $rootPath;
+            if ($normalizedRoot !== '/') {
+                $metadataPath = '/' . ltrim($normalizedRoot, '/');
+                $ch = curl_init('https://api.dropboxapi.com/2/files/get_metadata');
+                curl_setopt_array($ch, [
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => json_encode(['path' => $metadataPath]),
+                    CURLOPT_HTTPHEADER => [
+                        'Authorization: Bearer ' . $accessToken,
+                        'Content-Type: application/json'
+                    ],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 15
+                ]);
+                $metadataResponse = curl_exec($ch);
+                $metadataHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $metadataCurlError = curl_error($ch);
+
+                if ($metadataCurlError) {
+                    echo json_encode(['success' => false, 'error' => 'Connected to Dropbox, but root path check failed: ' . $metadataCurlError]);
+                    exit;
+                }
+                if ($metadataHttpCode !== 200) {
+                    $metadataError = json_decode((string)$metadataResponse, true);
+                    $summary = is_array($metadataError) ? (string)($metadataError['error_summary'] ?? '') : '';
+                    echo json_encode(['success' => false, 'error' => 'Connected to Dropbox, but the root folder path was not found or is not accessible' . ($summary !== '' ? ': ' . $summary : '')]);
+                    exit;
+                }
+            }
+
             echo json_encode(['success' => true, 'message' => "Connected to Dropbox account: {$accountName}"]);
         } elseif ($httpCode === 401) {
             echo json_encode(['success' => false, 'error' => 'Invalid or expired access token']);
@@ -91,6 +126,7 @@ try {
         
     } elseif ($provider === 'gdrive') {
         $credentials = $_POST['credentials'] ?? '';
+        $rootPath = trim((string)($_POST['root_path'] ?? ''));
         
         if (empty($credentials)) {
             echo json_encode(['success' => false, 'error' => 'Service account credentials are required']);
@@ -109,58 +145,45 @@ try {
             echo json_encode(['success' => false, 'error' => 'Service account JSON must contain client_email and private_key']);
             exit;
         }
-        
-        echo json_encode(['success' => true, 'message' => "Service account credentials validated for: {$credData['client_email']}"]);
+
+        $resolver = new GdriveLinkResolver([
+            'service_account' => $credentials,
+            'root_path' => $rootPath,
+        ]);
+        $result = $resolver->testConnection();
+        echo json_encode([
+            'success' => !empty($result['success']),
+            'message' => $result['message'] ?? null,
+            'error' => empty($result['success']) ? ($result['message'] ?? 'Google Drive connection failed') : null,
+            'tip' => $result['tip'] ?? null,
+        ]);
         
     } elseif ($provider === 's3') {
         $accessKey = $_POST['access_key'] ?? '';
         $secretKey = $_POST['secret_key'] ?? '';
         $bucket = $_POST['bucket'] ?? '';
         $region = $_POST['region'] ?? 'us-east-1';
+        $rootPath = trim((string)($_POST['root_path'] ?? ''), '/');
         
         if (empty($accessKey) || empty($secretKey) || empty($bucket)) {
             echo json_encode(['success' => false, 'error' => 'Access key, secret key, and bucket are required']);
             exit;
         }
-        
-        // Test S3 connection by listing bucket (HEAD request)
-        $host = "{$bucket}.s3.{$region}.amazonaws.com";
-        $date = gmdate('D, d M Y H:i:s T');
-        $stringToSign = "HEAD\n\n\n{$date}\n/{$bucket}/";
-        $signature = base64_encode(hash_hmac('sha1', $stringToSign, $secretKey, true));
-        
-        $ch = curl_init("https://{$host}/");
-        curl_setopt_array($ch, [
-            CURLOPT_CUSTOMREQUEST => 'HEAD',
-            CURLOPT_HTTPHEADER => [
-                "Host: {$host}",
-                "Date: {$date}",
-                "Authorization: AWS {$accessKey}:{$signature}"
-            ],
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_NOBODY => true,
-            CURLOPT_TIMEOUT => 15
+
+        $resolver = new S3LinkResolver([
+            'access_key' => $accessKey,
+            'secret_key' => $secretKey,
+            'bucket' => $bucket,
+            'region' => $region,
+            'root_path' => $rootPath,
         ]);
-        
-        curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-        
-        if ($curlError) {
-            echo json_encode(['success' => false, 'error' => 'Connection error: ' . $curlError]);
-            exit;
-        }
-        
-        if ($httpCode === 200) {
-            echo json_encode(['success' => true, 'message' => "Connected to S3 bucket: {$bucket}"]);
-        } elseif ($httpCode === 403) {
-            echo json_encode(['success' => false, 'error' => 'Access denied - check your credentials and bucket permissions']);
-        } elseif ($httpCode === 404) {
-            echo json_encode(['success' => false, 'error' => "Bucket '{$bucket}' not found"]);
-        } else {
-            echo json_encode(['success' => false, 'error' => "S3 returned HTTP {$httpCode}"]);
-        }
+        $result = $resolver->testConnection();
+        echo json_encode([
+            'success' => !empty($result['success']),
+            'message' => $result['message'] ?? null,
+            'error' => empty($result['success']) ? ($result['message'] ?? 'S3 connection failed') : null,
+            'tip' => $result['tip'] ?? null,
+        ]);
         
     } else {
         echo json_encode(['success' => false, 'error' => 'Unknown provider: ' . $provider]);

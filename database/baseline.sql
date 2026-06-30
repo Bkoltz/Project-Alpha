@@ -245,7 +245,7 @@ ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
 CREATE TABLE IF NOT EXISTS api_keys (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NULL,
-    item_name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
     key_prefix VARCHAR(32) NOT NULL,
     key_hash CHAR(64) NOT NULL,
     scopes VARCHAR(1024) NULL,

@@ -224,6 +224,7 @@ function migration_schema_health(PDO $pdo): void
         'users', 'organizations', 'roles', 'role_permissions',
         'clients', 'organization_departments', 'organization_department_contacts',
         'projects', 'quotes', 'contracts', 'invoices', 'payments',
+        'api_keys', 'client_onboarding_invitations', 'client_onboarding_submissions',
         'rate_limits', 'schema_migrations',
     ];
     $deadTables = [
@@ -257,7 +258,10 @@ function migration_schema_health(PDO $pdo): void
         'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
         'quotes' => ['organization_id', 'created_by'],
         'contracts' => ['organization_id', 'created_by'],
-        'invoices' => ['organization_id', 'created_by'],
+        'invoices' => ['organization_id', 'created_by', 'collection_mode'],
+        'api_keys' => ['name', 'key_hash', 'scopes', 'revoked_at'],
+        'client_onboarding_invitations' => ['organization_id', 'invited_email', 'token_hash', 'status'],
+        'client_onboarding_submissions' => ['invitation_id', 'proposed_data', 'status'],
     ];
     $columnQuery = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.columns

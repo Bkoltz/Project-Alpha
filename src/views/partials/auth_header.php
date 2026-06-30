@@ -23,6 +23,7 @@ require_once __DIR__ . '/../../config/app.php';
   <?php endif; ?>
   
   <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/js/phone-formatter.js" defer></script>
   <style>
     .auth-topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #eee;background:#fff}
     .auth-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}

@@ -2,6 +2,7 @@
 // src/views/pages/settings/links.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
+require_once __DIR__ . '/../../../utils/link_provider_config.php';
 
 // Fetch global app config
 $appConfig = [];
@@ -18,10 +19,7 @@ try {
 // Fetch link resolver configurations
 $linkConfigs = [];
 try {
-    $stmt = $pdo->query('SELECT * FROM link_resolver_config ORDER BY provider');
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $linkConfigs[$row['provider']] = $row;
-    }
+    $linkConfigs = pa_link_provider_best_rows($pdo);
 } catch (Throwable $e) {
     // Table may not exist yet
 }
@@ -57,6 +55,15 @@ $providers = ['dropbox', 'gdrive', 's3'];
 $helpIcon = static function (string $text): string {
     return '<span class="pa-help" tabindex="0" aria-label="' . e($text) . '" title="' . e($text) . '">?</span>';
 };
+$dropboxAppKey = trim((string)($appConfig['dropbox_app_key'] ?? ''));
+$dropboxHasAppSecret = trim((string)($appConfig['dropbox_app_secret'] ?? '')) !== '';
+$dropboxCanConnect = $dropboxAppKey !== '' && $dropboxHasAppSecret;
+$configuredAppHost = trim((string)($appConfig['app_host'] ?? ''));
+$dropboxCallbackBase = $configuredAppHost !== '' ? $configuredAppHost : ($_SERVER['HTTP_HOST'] ?? '');
+if ($dropboxCallbackBase !== '' && !preg_match('#^https?://#i', $dropboxCallbackBase)) {
+    $dropboxCallbackBase = 'https://' . preg_replace('#/.*$#', '', $dropboxCallbackBase);
+}
+$dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbox-oauth&action=callback';
 ?>
 <div style="max-width:1000px">
     <!-- CSRF token for JavaScript -->
@@ -214,6 +221,32 @@ $helpIcon = static function (string $text): string {
             <div id="fields_<?php echo e($provider); ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">
                 <?php if ($provider === 'dropbox'): ?>
                     <div class="grid">
+                        <fieldset style="border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:12px">
+                            <legend style="padding:0 6px;font-weight:600;color:#1e3a8a">Dropbox App</legend>
+                            <div style="display:grid;gap:12px">
+                                <label>
+                                    <div style="margin-bottom:4px;font-weight:600">App Key<?php echo $helpIcon('Create or open your Dropbox app in the Dropbox App Console, then paste the App key here.'); ?></div>
+                                    <input type="text" name="dropbox_app_key"
+                                           value="<?php echo e($dropboxAppKey); ?>"
+                                           placeholder="Dropbox app key"
+                                           autocomplete="off"
+                                           style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
+                                </label>
+                                <label>
+                                    <div style="margin-bottom:4px;font-weight:600">App Secret<?php echo $helpIcon('Paste the Dropbox app secret. For safety, a saved secret is not shown again; leave blank to keep it.'); ?></div>
+                                    <input type="password" name="dropbox_app_secret"
+                                           value=""
+                                           placeholder="<?php echo $dropboxHasAppSecret ? 'Saved - leave blank to keep existing secret' : 'Dropbox app secret'; ?>"
+                                           autocomplete="new-password"
+                                           style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
+                                </label>
+                                <div class="pa-setting-note">
+                                    Add this exact redirect URI in the Dropbox app console:
+                                    <code style="display:block;margin-top:4px;padding:6px;background:#fff;border:1px solid #dbeafe;border-radius:6px;white-space:normal;word-break:break-all"><?php echo e($dropboxCallbackUri); ?></code>
+                                </div>
+                            </div>
+                        </fieldset>
+
                         <?php if (!empty($credentials['refresh_token'])): ?>
                             <!-- OAuth Connected State -->
                             <div style="padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;display:flex;align-items:center;gap:12px">
@@ -238,10 +271,14 @@ $helpIcon = static function (string $text): string {
                                 <span style="font-size:20px">🔗</span>
                                 <div style="flex:1">
                                     <div style="font-weight:600;color:#991b1b">Dropbox Not Connected</div>
-                                    <div style="font-size:12px;color:#6b7280">Connect via OAuth for a secure, permanent connection.</div>
+                                    <div style="font-size:12px;color:#6b7280"><?php echo $dropboxCanConnect ? 'Connect via OAuth for a secure, permanent connection.' : 'Enter and save the Dropbox app key and secret first.'; ?></div>
                                 </div>
-                                <a href="/?page=settings/dropbox-oauth&action=start" 
-                                   style="padding:8px 16px;border-radius:6px;border:0;background:#2563eb;color:#fff;font-size:13px;text-decoration:none;font-weight:600">Connect Dropbox</a>
+                                <?php if ($dropboxCanConnect): ?>
+                                    <a href="/?page=settings/dropbox-oauth&action=start"
+                                       style="padding:8px 16px;border-radius:6px;border:0;background:#2563eb;color:#fff;font-size:13px;text-decoration:none;font-weight:600">Connect Dropbox</a>
+                                <?php else: ?>
+                                    <span style="padding:8px 16px;border-radius:6px;border:1px solid #d1d5db;background:#f3f4f6;color:#6b7280;font-size:13px;font-weight:600">Save credentials first</span>
+                                <?php endif; ?>
                             </div>
                         <?php endif; ?>
                         
@@ -304,6 +341,9 @@ $helpIcon = static function (string $text): string {
                                placeholder="us-east-1"
                                style="width:200px;padding:8px;border-radius:6px;border:1px solid #ddd">
                     </label>
+                    <div class="pa-setting-note">
+                        S3 does not create folder share links automatically. PA verifies the exact prefix and returns its HTTPS URL; the bucket, prefix, or CDN must already allow customer access.
+                    </div>
                 <?php endif; ?>
 
 	                <label>
@@ -321,10 +361,16 @@ $helpIcon = static function (string $text): string {
 	                    </div>
 	                </label>
 
-                <button type="button" onclick="testConnection('<?php echo e($provider); ?>')"
-                        style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
-                    Test Connection
-                </button>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                    <button type="button" onclick="testConnection(event, '<?php echo e($provider); ?>')"
+                            style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
+                        Test Connection
+                    </button>
+                    <button type="button" onclick="runProviderScan(event, '<?php echo e($provider); ?>')"
+                            style="padding:8px 16px;border-radius:6px;border:0;background:#0f766e;color:#fff;font-size:13px;font-weight:600;cursor:pointer">
+                        Run <?php echo e($providerName); ?> Now
+                    </button>
+                </div>
             </div>
         </div>
     </fieldset>
@@ -363,8 +409,8 @@ function toggleProviderFields(provider) {
     fields.style.display = checkbox.checked ? 'block' : 'none';
 }
 
-function testConnection(provider) {
-    const btn = event.target;
+function testConnection(event, provider) {
+    const btn = event.currentTarget;
     btn.disabled = true;
     btn.textContent = 'Testing...';
     
@@ -372,6 +418,8 @@ function testConnection(provider) {
     const formData = new FormData();
     formData.append('provider', provider);
     formData.append('csrf', window.csrfToken || '');  // Add CSRF token
+    const rootPathField = document.querySelector(`input[name="${provider}_root_path"]`);
+    formData.append('root_path', rootPathField ? rootPathField.value : '');
     
     if (provider === 'dropbox') {
         const tokenField = document.querySelector(`input[name="${provider}_access_token"]`);
@@ -403,6 +451,42 @@ function testConnection(provider) {
         btn.disabled = false;
         btn.textContent = 'Test Connection';
         alert('❌ Connection test failed: ' + err.message);
+    });
+}
+
+function runProviderScan(event, provider) {
+    const btn = event.currentTarget;
+    const originalText = btn.textContent;
+    if (!confirm('Run the ' + originalText.replace(/^Run\s+|\s+Now$/g, '') + ' resolver scan now?')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+
+    const formData = new FormData();
+    formData.append('provider', provider);
+    formData.append('csrf', window.csrfToken || '');
+
+    fetch('/?page=settings/link-resolver-run', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        if (data.success) {
+            const details = Array.isArray(data.details) && data.details.length ? '\n\n' + data.details.join('\n') : '';
+            alert('Scan complete. ' + (data.message || '') + details);
+        } else {
+            alert('Scan failed: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        alert('Scan failed: ' + err.message);
     });
 }
 </script>
