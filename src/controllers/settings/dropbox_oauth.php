@@ -21,6 +21,33 @@ $userId = (int)$_SESSION['user']['id'];
 // CSRF check
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 
+function dropbox_oauth_is_secure_request(): bool
+{
+    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+        || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+        || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
+}
+
+function dropbox_oauth_state_cookie_options(int $expires): array
+{
+    return [
+        'expires' => $expires,
+        'path' => '/',
+        'domain' => '',
+        'secure' => dropbox_oauth_is_secure_request(),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ];
+}
+
+function dropbox_oauth_redirect_uri(): string
+{
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $scheme = dropbox_oauth_is_secure_request() ? 'https' : 'http';
+    return $scheme . '://' . $host . '/?page=settings/dropbox-oauth&action=callback';
+}
+
 // Dropbox app credentials (stored in app_config)
 $dropboxAppKey = null;
 $dropboxAppSecret = null;
@@ -40,13 +67,16 @@ if ($action === 'start') {
         header('Location: /?page=settings&tab=links&error=' . urlencode('Dropbox App Key not configured. Please add it in the settings.'));
         exit;
     }
+
+    session_regenerate_id(false);
     
     // Generate state token for CSRF protection
     $state = bin2hex(random_bytes(32));
     $_SESSION['dropbox_oauth_state'] = $state;
+    setcookie('pa_dropbox_oauth_state', $state, dropbox_oauth_state_cookie_options(time() + 600));
     
     // Build authorization URL
-    $redirectUri = 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/?page=settings/dropbox-oauth&action=callback';
+    $redirectUri = dropbox_oauth_redirect_uri();
     $authUrl = 'https://www.dropbox.com/oauth2/authorize';
     $params = http_build_query([
         'client_id' => $dropboxAppKey,
@@ -66,12 +96,19 @@ if ($action === 'callback') {
     $state = $_GET['state'] ?? '';
     
     // Verify state
-    if (empty($state) || !isset($_SESSION['dropbox_oauth_state']) || !hash_equals($_SESSION['dropbox_oauth_state'], $state)) {
+    $hadSessionState = isset($_SESSION['dropbox_oauth_state']);
+    $hadCookieState = isset($_COOKIE['pa_dropbox_oauth_state']);
+    $expectedState = (string)($_SESSION['dropbox_oauth_state'] ?? ($_COOKIE['pa_dropbox_oauth_state'] ?? ''));
+    unset($_SESSION['dropbox_oauth_state']);
+    setcookie('pa_dropbox_oauth_state', '', dropbox_oauth_state_cookie_options(time() - 3600));
+    if (empty($state) || $expectedState === '' || !hash_equals($expectedState, $state)) {
+        app_log('dropbox_oauth', 'Invalid OAuth state', [
+            'has_session_state' => $hadSessionState,
+            'has_cookie_state' => $hadCookieState,
+        ]);
         header('Location: /?page=settings&tab=links&error=' . urlencode('Invalid OAuth state'));
         exit;
     }
-    
-    unset($_SESSION['dropbox_oauth_state']);
     
     if (empty($code)) {
         $error = $_GET['error_description'] ?? 'OAuth authorization failed';
@@ -85,7 +122,7 @@ if ($action === 'callback') {
     }
     
     // Exchange code for tokens
-    $redirectUri = 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/?page=settings/dropbox-oauth&action=callback';
+    $redirectUri = dropbox_oauth_redirect_uri();
     
     $ch = curl_init('https://api.dropboxapi.com/oauth2/token');
     curl_setopt_array($ch, [
@@ -102,11 +139,17 @@ if ($action === 'callback') {
     ]);
     
     $response = curl_exec($ch);
+    $curlError = curl_error($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     
-    if ($httpCode !== 200) {
-        app_log('dropbox_oauth', 'Token exchange failed', ['http_code' => $httpCode, 'response' => $response]);
+    if ($response === false || $httpCode !== 200) {
+        app_log('dropbox_oauth', 'Token exchange failed', [
+            'http_code' => $httpCode,
+            'curl_error' => $curlError,
+            'redirect_uri' => $redirectUri,
+            'response' => is_string($response) ? substr($response, 0, 1000) : null,
+        ]);
         header('Location: /?page=settings&tab=links&error=' . urlencode('Failed to connect to Dropbox'));
         exit;
     }

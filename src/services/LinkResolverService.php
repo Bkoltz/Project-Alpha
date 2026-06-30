@@ -199,6 +199,7 @@ class LinkResolverService
         $generated = [];
         $review = [];
         $errors = [];
+        $tips = [];
 
         foreach ($this->config['providers'] as $provider => $providerConfig) {
             $result = $this->generateLinkForProvider($provider, $context, $providerConfig);
@@ -209,6 +210,17 @@ class LinkResolverService
             } else {
                 $errors[$provider] = $result['message'] ?? 'No safe match';
             }
+            if (!empty($result['tip'])) {
+                $tips[$provider] = (string)$result['tip'];
+            }
+        }
+
+        $message = count($generated) > 0
+            ? 'Resolver attached exact folder links.'
+            : ($review ? 'Resolver found matches that require review.' : 'No safe resolver matches found.');
+        if (!$generated && !$review && $errors) {
+            $firstProvider = (string)array_key_first($errors);
+            $message = $firstProvider . ': ' . $errors[$firstProvider];
         }
 
         return [
@@ -216,9 +228,8 @@ class LinkResolverService
             'generated' => $generated,
             'review_required' => $review,
             'errors' => $errors,
-            'message' => count($generated) > 0
-                ? 'Resolver attached exact folder links.'
-                : ($review ? 'Resolver found matches that require review.' : 'No safe resolver matches found.'),
+            'tips' => $tips,
+            'message' => $message,
         ];
     }
 
@@ -236,10 +247,19 @@ class LinkResolverService
 
         try {
             $resolver = $this->makeProvider($provider, $providerConfig['credentials'] ?? []);
-            $matches = $this->findSafeMatches($resolver, $context);
+            $diagnostics = [];
+            $matches = $this->findSafeMatches($resolver, $context, $diagnostics);
             $mode = (string)($context['resolver_mode'] ?? 'auto_attach');
 
             if (!$matches) {
+                if ($diagnostics) {
+                    $this->logProviderIssue($provider, $context, $diagnostics[0]);
+                    return [
+                        'success' => false,
+                        'message' => $diagnostics[0]['message'] ?? 'Provider lookup failed',
+                        'tip' => $diagnostics[0]['tip'] ?? null,
+                    ];
+                }
                 return ['success' => false, 'message' => 'No exact folder match found'];
             }
             if ($mode === 'review') {
@@ -252,6 +272,15 @@ class LinkResolverService
             $match = $matches[0];
             $publicLink = $resolver->generatePublicLink((string)$match['folder_id']);
             if (!$publicLink) {
+                $lastError = method_exists($resolver, 'getLastError') ? $resolver->getLastError() : null;
+                if (is_array($lastError)) {
+                    $this->logProviderIssue($provider, $context, $lastError);
+                    return [
+                        'success' => false,
+                        'message' => $lastError['message'] ?? 'Could not generate public link',
+                        'tip' => $lastError['tip'] ?? null,
+                    ];
+                }
                 return ['success' => false, 'message' => 'Could not generate public link'];
             }
 
@@ -264,6 +293,24 @@ class LinkResolverService
             @error_log("[LinkResolverService] Error generating {$provider} link: " . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    private function logProviderIssue(string $provider, array $context, array $issue): void
+    {
+        $payload = [
+            'provider' => $provider,
+            'entity_type' => $context['entity_type'] ?? null,
+            'entity_id' => $context['entity_id'] ?? null,
+            'operation' => $issue['operation'] ?? null,
+            'message' => $issue['message'] ?? null,
+            'tip' => $issue['tip'] ?? null,
+            'http_code' => $issue['http_code'] ?? null,
+        ];
+
+        if (function_exists('app_log')) {
+            app_log('link_resolver', 'Provider issue', $payload);
+        }
+        @error_log('[LinkResolverService] Provider issue: ' . json_encode($payload));
     }
 
     private function makeProvider(string $provider, array $credentials): object
@@ -304,7 +351,7 @@ class LinkResolverService
     /**
      * @return list<array{folder_id:string,name:string,path:string}>
      */
-    private function findSafeMatches(object $resolver, array $context): array
+    private function findSafeMatches(object $resolver, array $context, array &$diagnostics = []): array
     {
         $safe = [];
         $seen = [];
@@ -313,6 +360,16 @@ class LinkResolverService
 
         foreach ($candidateNames as $candidateName) {
             $result = $resolver->searchFolder($candidateName);
+            if (empty($result['success']) && !empty($result['message'])) {
+                $message = (string)$result['message'];
+                if (!in_array($message, ['Folder not found', 'Exact folder match not found'], true)) {
+                    $diagnostics[] = [
+                        'operation' => 'folder search',
+                        'message' => $message,
+                        'tip' => $result['tip'] ?? null,
+                    ];
+                }
+            }
             $rawMatches = [];
             if (!empty($result['matches']) && is_array($result['matches'])) {
                 $rawMatches = $result['matches'];

@@ -11,6 +11,7 @@ class DropboxLinkResolver
     private $rootPath;
     private $tokenExpiresAt;
     private $pdo; // Database connection for updating tokens
+    private ?array $lastError = null;
     
     public function __construct(array $credentials, ?PDO $pdo = null)
     {
@@ -21,6 +22,10 @@ class DropboxLinkResolver
         $this->rootPath = $credentials['root_path'] ?? '/';
         $this->tokenExpiresAt = $credentials['token_expires_at'] ?? null;
         $this->pdo = $pdo;
+
+        if ((!$this->appKey || !$this->appSecret) && $this->pdo) {
+            $this->loadAppCredentials();
+        }
         
         if (!$this->accessToken) {
             throw new \Exception('Dropbox access token not configured');
@@ -33,6 +38,72 @@ class DropboxLinkResolver
                 $this->refreshAccessToken();
             }
         }
+    }
+
+    public function getLastError(): ?array
+    {
+        return $this->lastError;
+    }
+
+    private function loadAppCredentials(): void
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT config_key, config_value FROM app_config WHERE config_key IN ('dropbox_app_key', 'dropbox_app_secret')");
+            $stmt->execute();
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                if ((string)$row['config_key'] === 'dropbox_app_key' && !$this->appKey) {
+                    $this->appKey = (string)$row['config_value'];
+                }
+                if ((string)$row['config_key'] === 'dropbox_app_secret' && !$this->appSecret) {
+                    $this->appSecret = (string)$row['config_value'];
+                }
+            }
+        } catch (\Throwable $e) {
+            @error_log('[Dropbox] Failed to load app credentials for token refresh: ' . $e->getMessage());
+        }
+    }
+
+    private function fail(string $operation, string $message, ?string $tip = null, ?int $httpCode = null, ?string $response = null): array
+    {
+        $this->lastError = [
+            'operation' => $operation,
+            'message' => $message,
+            'tip' => $tip,
+            'http_code' => $httpCode,
+            'response' => $response ? substr($response, 0, 1000) : null,
+        ];
+        return ['success' => false, 'message' => $message, 'tip' => $tip];
+    }
+
+    private function dropboxApiErrorMessage(int $httpCode, string $operation, string $response): array
+    {
+        $decoded = json_decode($response, true);
+        $summary = is_array($decoded) && !empty($decoded['error_summary']) ? (string)$decoded['error_summary'] : '';
+        $detail = $summary !== '' ? ' Dropbox said: ' . $summary : '';
+
+        if ($httpCode === 401) {
+            return [
+                'Dropbox authentication failed.' . $detail,
+                'Reconnect Dropbox in Settings > Links, then test the connection again.',
+            ];
+        }
+        if ($httpCode === 403) {
+            return [
+                'Dropbox denied permission for ' . $operation . '.' . $detail,
+                'Check the Dropbox app scopes. Folder search needs files.metadata.read; shared links need sharing.read and sharing.write. Reconnect Dropbox after changing scopes.',
+            ];
+        }
+        if ($httpCode === 409) {
+            return [
+                'Dropbox could not find or access the configured folder path.' . $detail,
+                'Check the resolver root path and make sure the connected Dropbox account can see that folder.',
+            ];
+        }
+
+        return [
+            'Dropbox ' . $operation . ' failed with HTTP ' . $httpCode . '.' . $detail,
+            'Use Test Connection in Settings > Links and review the Dropbox app credentials/scopes.',
+        ];
     }
     
     /**
@@ -139,12 +210,18 @@ class DropboxLinkResolver
             ]);
             
             $response = curl_exec($ch);
+            $curlError = curl_error($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
+
+            if ($response === false) {
+                return $this->fail('folder search', 'Dropbox folder search could not reach Dropbox: ' . $curlError, 'Check outbound network access from the PA container/server.');
+            }
             
             if ($httpCode !== 200) {
-                @error_log('[Dropbox] Search failed: ' . $response);
-                return ['success' => false, 'message' => 'Search request failed'];
+                [$message, $tip] = $this->dropboxApiErrorMessage($httpCode, 'folder search', (string)$response);
+                @error_log('[Dropbox] Search failed HTTP ' . $httpCode . ': ' . substr((string)$response, 0, 500));
+                return $this->fail('folder search', $message, $tip, $httpCode, (string)$response);
             }
             
             $data = json_decode($response, true);
@@ -207,14 +284,25 @@ class DropboxLinkResolver
             ]);
             
             $response = curl_exec($ch);
+            $curlError = curl_error($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
+
+            if ($response === false) {
+                $this->fail('list shared links', 'Dropbox shared-link lookup could not reach Dropbox: ' . $curlError, 'Check outbound network access from the PA container/server.');
+                return null;
+            }
             
             if ($httpCode === 200) {
                 $data = json_decode($response, true);
                 if (!empty($data['links'])) {
                     return $data['links'][0]['url'];
                 }
+            } elseif ($httpCode !== 409) {
+                [$message, $tip] = $this->dropboxApiErrorMessage($httpCode, 'shared-link lookup', (string)$response);
+                @error_log('[Dropbox] List shared links failed HTTP ' . $httpCode . ': ' . substr((string)$response, 0, 500));
+                $this->fail('list shared links', $message, $tip, $httpCode, (string)$response);
+                return null;
             }
             
             // Create new shared link
@@ -236,11 +324,19 @@ class DropboxLinkResolver
             ]);
             
             $response = curl_exec($ch);
+            $curlError = curl_error($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
+
+            if ($response === false) {
+                $this->fail('create shared link', 'Dropbox shared-link creation could not reach Dropbox: ' . $curlError, 'Check outbound network access from the PA container/server.');
+                return null;
+            }
             
             if ($httpCode !== 200) {
-                @error_log('[Dropbox] Create link failed: ' . $response);
+                [$message, $tip] = $this->dropboxApiErrorMessage($httpCode, 'shared-link creation', (string)$response);
+                @error_log('[Dropbox] Create link failed HTTP ' . $httpCode . ': ' . substr((string)$response, 0, 500));
+                $this->fail('create shared link', $message, $tip, $httpCode, (string)$response);
                 return null;
             }
             

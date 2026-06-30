@@ -260,11 +260,26 @@ function linkManagementRequest(action, entityType, entityId) {
     }).then(r => r.json());
 }
 
+function linkResolverErrorMessage(data, fallback) {
+    let message = data && data.message ? data.message : fallback;
+    if (data && data.tips && typeof data.tips === 'object') {
+        const tips = Object.values(data.tips).filter(Boolean);
+        if (tips.length) message += '\n\nTip: ' + tips[0];
+    }
+    if (data && data.errors && typeof data.errors === 'object') {
+        const details = Object.entries(data.errors)
+            .map(([provider, error]) => provider + ': ' + error)
+            .join('\n');
+        if (details) message += '\n\nDetails:\n' + details;
+    }
+    return message;
+}
+
 function generateLinks(entityType, entityId) {
     if (!confirm('Generate storage links for this ' + entityType + '?')) return;
     linkManagementRequest('generate', entityType, entityId).then(data => {
         if (data.success) location.reload();
-        else alert('Error: ' + (data.message || 'Failed to generate links'));
+        else alert('Error: ' + linkResolverErrorMessage(data, 'Failed to generate links'));
     }).catch(err => alert('Network error: ' + err.message));
 }
 
@@ -272,7 +287,7 @@ function refreshLinks(entityType, entityId) {
     if (!confirm('Refresh all links for this ' + entityType + '?')) return;
     linkManagementRequest('refresh', entityType, entityId).then(data => {
         if (data.success) location.reload();
-        else alert('Error: ' + (data.message || 'Failed to refresh links'));
+        else alert('Error: ' + linkResolverErrorMessage(data, 'Failed to refresh links'));
     }).catch(err => alert('Network error: ' + err.message));
 }
 

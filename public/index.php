@@ -11,7 +11,7 @@ session_set_cookie_params([
     'domain' => '',
     'secure' => $isSecure,
     'httponly' => true,
-    'samesite' => 'Strict',
+    'samesite' => 'Lax',
 ]);
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -589,6 +589,10 @@ if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
 }
 if (in_array($page, ['contract/long-term-contract-pdf', 'long-term-contract-pdf'])) {
     require_once __DIR__ . '/../src/controllers/contract/contract_pdf.php';
+    exit;
+}
+if ($page === 'settings/dropbox-oauth') {
+    require_once __DIR__ . '/../src/controllers/settings/dropbox_oauth.php';
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
