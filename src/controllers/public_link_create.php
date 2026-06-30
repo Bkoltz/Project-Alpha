@@ -87,12 +87,16 @@ try {
     
     // Check if document is in a shareable state
     $status = strtolower($doc['status'] ?? '');
+    $collectionMode = trim((string)($doc['collection_mode'] ?? ''));
+    if ($collectionMode === '') {
+        $collectionMode = 'direct';
+    }
     $blocked = false;
     if ($type === 'quote' && $status === 'rejected') {
         $blocked = true;
     } elseif ($type === 'contract' && in_array($status, ['denied', 'cancelled', 'void'], true)) {
         $blocked = true;
-    } elseif ($type === 'invoice' && ($status === 'draft' || $status === 'void' || empty($doc['finalized_at']) || ($doc['collection_mode'] ?? 'direct') !== 'direct')) {
+    } elseif ($type === 'invoice' && ($status === 'draft' || $status === 'void' || empty($doc['finalized_at']) || $collectionMode !== 'direct')) {
         $blocked = true;
     } elseif ($type === 'project_invoice' && ($status === 'draft' || $status === 'void' || empty($doc['finalized_at']))) {
         $blocked = true;

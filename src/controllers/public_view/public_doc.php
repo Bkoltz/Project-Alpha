@@ -108,7 +108,11 @@ try {
     if (!in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true)) {
       throw new Exception('invoice_status_blocked:' . $invStatus);
     }
-    if (empty($publicInvoice['finalized_at']) || ($publicInvoice['collection_mode'] ?? 'direct') !== 'direct') {
+    $collectionMode = trim((string)($publicInvoice['collection_mode'] ?? ''));
+    if ($collectionMode === '') {
+      $collectionMode = 'direct';
+    }
+    if (empty($publicInvoice['finalized_at']) || $collectionMode !== 'direct') {
       throw new Exception('invoice_not_public');
     }
   }
