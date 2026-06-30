@@ -16,7 +16,7 @@ try {
             email VARCHAR(255) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
             username VARCHAR(50) NULL,
-            role ENUM('admin','user') NOT NULL DEFAULT 'user',
+            role ENUM('admin','owner','staff','member','user') NOT NULL DEFAULT 'member',
             force_password_reset TINYINT(1) NOT NULL DEFAULT 0,
             document_sender_enabled TINYINT(1) NOT NULL DEFAULT 0,
             document_sender_name VARCHAR(255) NULL,

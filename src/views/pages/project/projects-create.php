@@ -42,6 +42,18 @@ if ($isAdmin) {
 // Organizations are selected via search in the form; no need to prefetch list.
 // no parent projects in this view — no need to fetch projects list
 
+$departments = [];
+if ($activeOrgId > 0) {
+    $deptStmt = $pdo->prepare('
+        SELECT id, name, folder_name
+        FROM organization_departments
+        WHERE organization_id = ?
+        ORDER BY name
+    ');
+    $deptStmt->execute([$activeOrgId]);
+    $departments = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 ?>
 <section>
   <h2>Create Project</h2>
@@ -61,6 +73,21 @@ if ($isAdmin) {
       <div id="orgSuggestProject" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
     </label>
 
+    <label>
+      <div>Department</div>
+      <select id="projectDepartmentSelect" name="department_id" data-empty-label="No department / org-level project" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+        <option value="">No department / org-level project</option>
+        <?php foreach ($departments as $department): ?>
+          <option value="<?php echo (int)$department['id']; ?>">
+            <?php echo htmlspecialchars($department['name'] . (!empty($department['folder_name']) ? ' — ' . $department['folder_name'] : '')); ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">
+        Choose a department only when this project belongs to a specific group within the organization. Leave blank for organization-level work.
+      </div>
+    </label>
+
      <label style="grid-column:1/2;position:relative">
         <div>Client</div>
         <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -75,7 +102,7 @@ if ($isAdmin) {
           <option value="<?php echo (int)$client['id']; ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option>
         <?php endforeach; ?>
       </select>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">The primary client above is included automatically. Project invoice emails go to all project clients with an email address.</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">The primary client above is included automatically. This project will not automatically include every contact in the organization.</div>
     </label>
 
     <label>
@@ -85,7 +112,7 @@ if ($isAdmin) {
           <option value="<?php echo (int)$client['id']; ?>" selected><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : ' - no email')); ?></option>
         <?php endforeach; ?>
       </select>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">Only attached project clients with email addresses will receive project invoice emails.</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Only attached project contacts with email addresses can receive project invoice emails. You can fine-tune recipients on the project details page.</div>
     </label>
 
     <!-- Parent projects removed per spec: Projects have no parents -->

@@ -3,6 +3,7 @@
 // Tests connection to storage providers (Dropbox, Google Drive, S3)
 
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../config/db.php';
 
 header('Content-Type: application/json');
 
@@ -25,9 +26,17 @@ $provider = $_POST['provider'] ?? '';
 try {
     if ($provider === 'dropbox') {
         $accessToken = $_POST['access_token'] ?? '';
+        if ($accessToken === '') {
+            $stmt = $pdo->prepare('SELECT credentials FROM link_resolver_config WHERE provider = ? LIMIT 1');
+            $stmt->execute(['dropbox']);
+            $credentials = json_decode((string)($stmt->fetchColumn() ?: ''), true);
+            if (is_array($credentials)) {
+                $accessToken = (string)($credentials['access_token'] ?? '');
+            }
+        }
         
         if (empty($accessToken)) {
-            echo json_encode(['success' => false, 'error' => 'Access token is required']);
+            echo json_encode(['success' => false, 'error' => 'Dropbox is not connected yet. Use Connect Dropbox or provide a legacy access token.']);
             exit;
         }
         

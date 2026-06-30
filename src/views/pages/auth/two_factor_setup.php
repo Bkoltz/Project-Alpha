@@ -79,7 +79,7 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
   <?php if ($isRequired && !$isEnabled): ?>
     <div class="alert alert-warning">Two-factor authentication is required for administrators and users with privileged settings, user-management, payment, or financial-import access. Enable it to continue.</div>
   <?php elseif ($isRequired): ?>
-    <div class="alert alert-warning">Two-factor authentication is required for this account and cannot be disabled while these privileges remain assigned.</div>
+    <div class="alert alert-warning">Two-factor authentication is strongly recommended for this account because it has admin or privileged access.</div>
   <?php endif; ?>
 
   <?php if ($step === 'main'): ?>
@@ -106,21 +106,23 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
       
     <?php else: ?>
       <!-- Disable 2FA or regenerate backup codes -->
-      <?php if (!$isRequired): ?>
-        <div style="border-top: 1px solid #e5e7eb; padding-top: 24px; margin-top: 24px;">
-          <h3>Disable Two-Factor Authentication</h3>
+      <div style="border-top: 1px solid #e5e7eb; padding-top: 24px; margin-top: 24px;">
+        <h3>Disable Two-Factor Authentication</h3>
+        <?php if ($isRequired): ?>
+          <p style="color: #92400e; margin: 12px 0;">Your account has elevated privileges, so PA will keep recommending 2FA if you disable it.</p>
+        <?php else: ?>
           <p style="color: #6b7280; margin: 12px 0;">Enter your password to disable 2FA.</p>
-          <form method="post" action="/?page=2fa-setup-action" style="margin-top: 16px;">
-            <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
-            <input type="hidden" name="action" value="disable">
-            <div class="form-group">
-              <label>Password</label>
-              <input type="password" name="password" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn btn-danger">Disable 2FA</button>
-          </form>
-        </div>
-      <?php endif; ?>
+        <?php endif; ?>
+        <form method="post" action="/?page=2fa-setup-action" style="margin-top: 16px;">
+          <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
+          <input type="hidden" name="action" value="disable">
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" name="password" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-danger">Disable 2FA</button>
+        </form>
+      </div>
       
       <div style="border-top: 1px solid #e5e7eb; padding-top: 24px; margin-top: 24px;">
         <h3>Regenerate Backup Codes</h3>

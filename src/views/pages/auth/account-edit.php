@@ -49,23 +49,11 @@ try {
 $success = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
 
-$activeOrgId = get_active_org_id();
 $availableRoles = [];
 $userAclRoleId = null;
 try {
-    $roleStmt = $pdo->prepare('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id <=> ? OR is_system = 1 ORDER BY CASE name WHEN "member" THEN 0 WHEN "staff" THEN 1 WHEN "owner" THEN 2 WHEN "admin" THEN 3 ELSE 4 END, is_system DESC, name');
-    $roleStmt->execute([$activeOrgId > 0 ? $activeOrgId : null]);
+    $roleStmt = $pdo->query('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id IS NULL OR is_system = 1 ORDER BY CASE name WHEN "member" THEN 0 WHEN "staff" THEN 1 WHEN "owner" THEN 2 WHEN "admin" THEN 3 ELSE 4 END, is_system DESC, name');
     $availableRoles = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    if ($activeOrgId > 0) {
-        $uoStmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? AND organization_id = ? LIMIT 1');
-        $uoStmt->execute([$userId, $activeOrgId]);
-    } else {
-        $uoStmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? ORDER BY is_default DESC LIMIT 1');
-        $uoStmt->execute([$userId]);
-    }
-    $roleCol = $uoStmt->fetchColumn();
-    $userAclRoleId = $roleCol !== false ? (int)$roleCol : null;
 } catch (Throwable $e) {
     @error_log('[account-edit] role load failed: ' . $e->getMessage());
 }
@@ -78,8 +66,9 @@ if (empty($availableRoles)) {
 }
 
 if ($userAclRoleId === null) {
+    $currentRoleName = in_array($user['role'], ['admin', 'owner', 'staff', 'member'], true) ? $user['role'] : 'member';
     foreach ($availableRoles as $roleRow) {
-        if (($user['role'] === 'admin' && $roleRow['name'] === 'admin') || ($user['role'] !== 'admin' && $roleRow['name'] === 'member')) {
+        if ($roleRow['name'] === $currentRoleName) {
             $userAclRoleId = (int)$roleRow['id'];
             break;
         }

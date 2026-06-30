@@ -20,6 +20,7 @@ $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? [];
 if (!is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
 $parent_id = null; // Parent projects not supported any more
 $organization_id = (int)($_POST['organization_id'] ?? 0);
+$department_id = (int)($_POST['department_id'] ?? 0);
 $estimated_start = trim($_POST['estimated_start'] ?? '');
 $estimated_end = trim($_POST['estimated_end'] ?? '');
 $invoiceBillingPeriod = ($_POST['invoice_billing_period'] ?? 'per_invoice') === 'monthly' ? 'monthly' : 'per_invoice';
@@ -34,6 +35,16 @@ $projectStmt->execute([$id]);
 $storedOrganizationId = (int)($projectStmt->fetchColumn() ?: 0);
 if ($storedOrganizationId > 0) {
 	$organization_id = $storedOrganizationId;
+}
+if ($department_id > 0) {
+	$departmentStmt = $pdo->prepare('SELECT organization_id FROM organization_departments WHERE id = ? LIMIT 1');
+	$departmentStmt->execute([$department_id]);
+	$departmentOrgId = (int)($departmentStmt->fetchColumn() ?: 0);
+	if ($departmentOrgId <= 0 || ($organization_id > 0 && $departmentOrgId !== $organization_id)) {
+		header('Location: /?page=project/projects-details&id='.$id.'&error=' . urlencode('Selected department does not belong to the project organization.'));
+		exit;
+	}
+	$organization_id = $departmentOrgId;
 }
 
 $projectClientIds = array_values(array_unique(array_filter(array_map('intval', $projectClientIds), static fn($clientId) => $clientId > 0)));
@@ -74,12 +85,19 @@ if ($estimated_start !== '' && $estimated_end !== '' && strtotime($estimated_sta
 }
 
 $hasAutoEmailColumn = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
+$hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'department_id');
 if ($hasAutoEmailColumn) {
-	$stmt = $pdo->prepare('UPDATE projects SET name=?, client_id=?, organization_id=?, invoice_billing_period=?, invoice_net_terms_days=?, project_invoice_auto_email=?, estimated_start=?, estimated_end=?, notes=?, updated_at=NOW() WHERE id=?');
-	$stmt->execute([
+	$departmentSet = $hasDepartmentColumn ? 'department_id=?,' : '';
+	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} invoice_billing_period=?, invoice_net_terms_days=?, project_invoice_auto_email=?, estimated_start=?, estimated_end=?, notes=?, updated_at=NOW() WHERE id=?");
+	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
 		$organization_id > 0 ? $organization_id : null,
+	];
+	if ($hasDepartmentColumn) {
+		$params[] = $department_id > 0 ? $department_id : null;
+	}
+	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
 		$projectInvoiceAutoEmail,
@@ -88,12 +106,19 @@ if ($hasAutoEmailColumn) {
 		$notes ?: null,
 		$id
 	]);
+	$stmt->execute($params);
 } else {
-	$stmt = $pdo->prepare('UPDATE projects SET name=?, client_id=?, organization_id=?, invoice_billing_period=?, invoice_net_terms_days=?, estimated_start=?, estimated_end=?, notes=?, updated_at=NOW() WHERE id=?');
-	$stmt->execute([
+	$departmentSet = $hasDepartmentColumn ? 'department_id=?,' : '';
+	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} invoice_billing_period=?, invoice_net_terms_days=?, estimated_start=?, estimated_end=?, notes=?, updated_at=NOW() WHERE id=?");
+	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
 		$organization_id > 0 ? $organization_id : null,
+	];
+	if ($hasDepartmentColumn) {
+		$params[] = $department_id > 0 ? $department_id : null;
+	}
+	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
 		$estimated_start !== '' ? $estimated_start : null,
@@ -101,6 +126,7 @@ if ($hasAutoEmailColumn) {
 		$notes ?: null,
 		$id
 	]);
+	$stmt->execute($params);
 }
 project_invoice_sync_clients($pdo, $id, $client_id > 0 ? $client_id : null, $projectClientIds, $projectInvoiceRecipientIds, $projectInvoiceLinkClientIds);
 header('Location: /?page=project/projects-details&id='.$id.'&updated=1');

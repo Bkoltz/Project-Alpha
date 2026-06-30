@@ -47,7 +47,6 @@ try {
     $pdo->prepare('DELETE FROM user_2fa WHERE user_id = ?')->execute([$userId]);
     $pdo->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$userId]);
     $pdo->prepare('DELETE FROM login_2fa_attempts WHERE user_id = ?')->execute([$userId]);
-    $pdo->prepare('DELETE FROM user_organizations WHERE user_id = ?')->execute([$userId]);
 
     // Set creator references to NULL so business records remain intact
     $pdo->prepare('UPDATE receipts SET uploaded_by = NULL WHERE uploaded_by = ?')->execute([$userId]);

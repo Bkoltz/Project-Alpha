@@ -15,10 +15,11 @@ require_record_ownership($pdo, 'projects', $projectId);
 
 // Fetch project details
 $stmt = $pdo->prepare('
-    SELECT p.*, c.name AS client_name, o.name AS organization_name
+    SELECT p.*, c.name AS client_name, o.name AS organization_name, od.name AS department_name
     FROM projects p
     LEFT JOIN clients c ON c.id = p.client_id
     LEFT JOIN organizations o ON o.id = p.organization_id
+    LEFT JOIN organization_departments od ON od.id = p.department_id
     WHERE p.id = ?
 ');
 $stmt->execute([$projectId]);
@@ -92,6 +93,17 @@ $stmt->execute([$projectId]);
 $projectClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $projectOrganizationId = (int)($project['organization_id'] ?? 0);
+$projectDepartments = [];
+if ($projectOrganizationId > 0) {
+    $deptStmt = $pdo->prepare('
+        SELECT id, name, folder_name
+        FROM organization_departments
+        WHERE organization_id = ?
+        ORDER BY name
+    ');
+    $deptStmt->execute([$projectOrganizationId]);
+    $projectDepartments = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
+}
 if ($projectOrganizationId > 0) {
     $allClientsStmt = $pdo->prepare('
         SELECT id, name, email
@@ -134,6 +146,22 @@ $selectedProjectInvoiceLinkClientIds = array_map(
     static fn($row) => (int)$row['id'],
     array_values(array_filter($projectClients, static fn($row) => !empty($row['can_view_invoice_links'])))
 );
+$projectDepartmentContactIds = [];
+if (!empty($project['department_id'])) {
+    $deptContactStmt = $pdo->prepare('SELECT client_id FROM organization_department_contacts WHERE department_id = ?');
+    $deptContactStmt->execute([(int)$project['department_id']]);
+    $projectDepartmentContactIds = array_map('intval', $deptContactStmt->fetchAll(PDO::FETCH_COLUMN));
+    if ($projectDepartmentContactIds) {
+        usort($allClients, static function (array $a, array $b) use ($projectDepartmentContactIds): int {
+            $aDept = in_array((int)$a['id'], $projectDepartmentContactIds, true) ? 0 : 1;
+            $bDept = in_array((int)$b['id'], $projectDepartmentContactIds, true) ? 0 : 1;
+            if ($aDept !== $bDept) {
+                return $aDept <=> $bDept;
+            }
+            return strcasecmp((string)$a['name'], (string)$b['name']);
+        });
+    }
+}
 
 // Fetch associated form documents
 $stmt = $pdo->prepare('
@@ -221,6 +249,9 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
 <style>
 .project-page{max-width:1440px;margin:0 auto;padding:24px}.project-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}.project-main,.project-sidebar{min-width:0}.project-panel{background:#fff;border:1px solid #dfe3e8;border-radius:8px;padding:20px;margin-bottom:18px;box-shadow:0 1px 2px rgba(15,23,42,.04)}.project-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.project-header h1{margin:0 0 6px;font-size:26px;line-height:1.2}.project-subtitle{color:var(--muted);font-size:13px}.project-status{display:inline-flex;align-items:center;padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap}.project-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px;padding-top:18px;margin-top:18px;border-top:1px solid #e5e7eb}.project-fact-label{font-size:12px;color:var(--muted);margin-bottom:3px}.project-fact-value{font-size:14px;font-weight:600}.project-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid #dfe3e8;border-radius:8px;background:#fff;margin-bottom:18px;overflow:hidden}.project-metric{padding:15px 16px;border-right:1px solid #e5e7eb}.project-metric:last-child{border-right:0}.project-metric-label{font-size:12px;color:var(--muted)}.project-metric-value{font-size:22px;font-weight:750;line-height:1.25;margin-top:2px}.project-metric-note{font-size:12px;margin-top:2px}.project-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.project-section-head h2{font-size:18px;margin:0}.project-doc-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 12px;border:1px solid #e5e7eb;border-radius:6px;background:#fafbfc;text-decoration:none;color:inherit}.project-doc-row:hover{border-color:#c9d1d9;background:#fff}.project-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.project-actions .btn{display:flex;align-items:center;justify-content:center;text-align:center;min-height:38px}.project-actions .project-action-wide{grid-column:1/-1}.project-field{display:grid;gap:5px}.project-field>span,.project-field>div:first-child{font-size:13px;font-weight:600}.project-field input,.project-field select,.project-field textarea{width:100%;padding:9px 10px;border:1px solid #cfd5dc;border-radius:6px;background:#fff}.project-field small{color:var(--muted);font-size:12px;line-height:1.4}.project-check-list{display:grid;gap:7px;padding:10px;border:1px solid #dfe3e8;border-radius:6px;max-height:180px;overflow:auto}.project-check{display:flex;align-items:flex-start;gap:8px;font-size:13px}.project-check input{width:auto;margin-top:2px}.project-sidebar-title{font-size:15px;font-weight:700;margin-bottom:12px}.project-muted{color:var(--muted);font-size:13px}.project-danger{border-color:#fecaca;background:#fffafa}.project-danger .project-sidebar-title{color:#991b1b}@media(max-width:1050px){.project-layout{grid-template-columns:1fr}.project-sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.project-sidebar>.project-panel{margin:0}.project-sidebar>.project-panel:nth-child(3),.project-sidebar>.project-panel:nth-child(4){grid-column:1/-1}}@media(max-width:760px){.site-shell{display:block!important}.main-content{width:100%!important;min-width:0!important}.project-page{width:100%;padding:16px}.project-header{display:grid}.project-facts{grid-template-columns:1fr}.project-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.project-metric{border-bottom:1px solid #e5e7eb}.project-metric:nth-child(2n){border-right:0}.project-metric:last-child{grid-column:1/-1;border-bottom:0}.project-sidebar{display:block}.project-sidebar>.project-panel{margin-bottom:16px}.project-actions{grid-template-columns:1fr}.project-actions .project-action-wide{grid-column:auto}.project-doc-row{align-items:flex-start;flex-direction:column}.project-doc-row>div:last-child{width:100%;justify-content:space-between}}
 </style>
+<style>
+.project-settings-form{display:grid;gap:14px}.project-settings-card{border:1px solid #dfe3e8;border-radius:10px;background:#fbfcfd;padding:14px;display:grid;gap:11px}.project-settings-card h3{margin:0;font-size:14px;color:#111827}.project-settings-card p{margin:0;color:var(--muted);font-size:12px;line-height:1.45}.project-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.project-help-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;cursor:help}.project-contact-card{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:11px;border:1px solid #dfe3e8;border-radius:10px;background:#fff}.project-contact-card.is-primary{border-color:#93c5fd;background:#eff6ff}.project-contact-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.project-pill{display:inline-flex;align-items:center;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:700;background:#dbeafe;color:#1d4ed8;white-space:nowrap}.project-contact-options{display:grid;gap:6px;margin-top:9px}.project-add-contact-list{display:grid;gap:7px;max-height:190px;overflow:auto;padding:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fff}.project-info-box{padding:10px 12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;color:#1e3a8a;font-size:12px;line-height:1.45}.project-settings-save{position:sticky;bottom:12px;z-index:1;box-shadow:0 10px 24px rgba(15,23,42,.12)}@media(max-width:760px){.project-settings-grid{grid-template-columns:1fr}.project-settings-save{position:static}}
+</style>
 
 <div class="project-page">
     <div style="margin-bottom:24px">
@@ -269,6 +300,11 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
                         <div class="font-600"><?php echo htmlspecialchars($project['organization_name']); ?></div>
                     </div>
                     <?php endif; ?>
+
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Department</div>
+                        <div class="font-600"><?php echo htmlspecialchars((string)($project['department_name'] ?? '') !== '' ? (string)$project['department_name'] : 'Org-level / no department'); ?></div>
+                    </div>
 
                     <?php if ($project['estimated_start'] || $project['estimated_end']): ?>
                     <div>
@@ -548,36 +584,77 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
 
             <!-- Project Settings -->
             <div class="project-panel">
-                <div class="project-sidebar-title">Project Billing &amp; Clients</div>
-                <form method="post" action="/?page=project/projects-update" style="display:grid;gap:10px">
+                <div class="project-section-head" style="margin-bottom:10px">
+                    <div>
+                        <div class="project-sidebar-title" style="margin-bottom:3px">Project Settings</div>
+                        <div class="project-muted">Control this project’s scope, contact list, invoice recipients, and content-link access.</div>
+                    </div>
+                </div>
+                <form method="post" action="/?page=project/projects-update" class="project-settings-form">
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                     <input type="hidden" name="id" value="<?php echo $projectId; ?>">
-                    <label>
-                        <div style="font-size:13px;font-weight:600">Project Name</div>
-                        <input name="name" value="<?php echo htmlspecialchars($project['name']); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-                    </label>
                     <input type="hidden" name="organization_id" value="<?php echo (int)($project['organization_id'] ?? 0); ?>">
-                    <div class="project-field">
-                        <div>Project Contacts <span title="These contacts belong to this project only. Removing someone here does not delete the client record." style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;cursor:help">?</span></div>
-                        <div style="display:grid;gap:8px">
+
+                    <section class="project-settings-card">
+                        <h3>1. Project scope</h3>
+                        <p>This decides the project’s organization or department context. Department links attach to invoices for department projects; organization links only inherit when the link explicitly allows it.</p>
+                        <label class="project-field">
+                            <span>Project Name</span>
+                            <input name="name" value="<?php echo htmlspecialchars($project['name']); ?>">
+                        </label>
+                        <label class="project-field">
+                            <span>Department <span class="project-help-icon" title="Leave this blank for organization-level work. Choose a department only when this project belongs to a specific group within the organization.">?</span></span>
+                            <select name="department_id">
+                                <option value="">No department / org-level project</option>
+                                <?php foreach ($projectDepartments as $department): ?>
+                                    <?php $departmentId = (int)$department['id']; ?>
+                                    <option value="<?php echo $departmentId; ?>" <?php echo (int)($project['department_id'] ?? 0) === $departmentId ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($department['name'] . (!empty($department['folder_name']) ? ' — ' . $department['folder_name'] : '')); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small>Leave blank if the organization has no departments or this project should use organization-level settings.</small>
+                        </label>
+                    </section>
+
+                    <section class="project-settings-card">
+                        <h3>2. Project contacts</h3>
+                        <p>This is a project-only contact list. It does not automatically include every contact in the organization or department.</p>
+                        <div class="project-info-box">
+                            Uncheck a current contact to remove them from this project only. Choose the primary invoice receiver separately. Invoice email recipients and content-link viewers are also separate checkboxes.
+                        </div>
+                        <div style="display:grid;gap:9px">
                             <?php if (empty($projectClients)): ?>
                                 <div class="project-muted" style="padding:10px;border:1px dashed #d1d5db;border-radius:8px">No project contacts attached yet.</div>
                             <?php else: ?>
                                 <?php foreach ($projectClients as $client): ?>
-                                    <?php $clientId = (int)$client['id']; ?>
-                                    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;padding:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fff">
+                                    <?php
+                                        $clientId = (int)$client['id'];
+                                        $isPrimaryClient = (int)($project['client_id'] ?? 0) === $clientId;
+                                    ?>
+                                    <div class="project-contact-card <?php echo $isPrimaryClient ? 'is-primary' : ''; ?>">
                                         <input type="checkbox" name="project_client_ids[]" value="<?php echo $clientId; ?>" checked style="margin-top:3px" title="Uncheck to remove from this project">
                                         <div>
-                                            <div style="font-weight:700"><?php echo htmlspecialchars($client['name']); ?><?php echo !empty($client['is_primary_billing']) ? ' (primary)' : ''; ?></div>
-                                            <div style="font-size:12px;color:var(--muted)"><?php echo !empty($client['email']) ? htmlspecialchars($client['email']) : 'No email address'; ?></div>
-                                            <div style="display:grid;gap:5px;margin-top:8px">
+                                            <div class="project-contact-heading">
+                                                <div>
+                                                    <div style="font-weight:700"><?php echo htmlspecialchars($client['name']); ?></div>
+                                                    <div style="font-size:12px;color:var(--muted)"><?php echo !empty($client['email']) ? htmlspecialchars($client['email']) : 'No email address'; ?></div>
+                                                </div>
+                                                <?php if ($isPrimaryClient || !empty($client['is_primary_billing'])): ?>
+                                                    <span class="project-pill">Primary</span>
+                                                <?php endif; ?>
+                                                <?php if (in_array($clientId, $projectDepartmentContactIds, true)): ?>
+                                                    <span class="project-pill">Department</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="project-contact-options">
                                                 <label class="project-check">
-                                                    <input type="radio" name="client_id" value="<?php echo $clientId; ?>" <?php echo (int)($project['client_id'] ?? 0) === $clientId ? 'checked' : ''; ?>>
+                                                    <input type="radio" name="client_id" value="<?php echo $clientId; ?>" <?php echo $isPrimaryClient ? 'checked' : ''; ?>>
                                                     <span>Primary invoice receiver</span>
                                                 </label>
                                                 <label class="project-check">
                                                     <input type="checkbox" name="project_invoice_email_client_ids[]" value="<?php echo $clientId; ?>" <?php echo in_array($clientId, $selectedProjectInvoiceRecipientIds, true) ? 'checked' : ''; ?> <?php echo empty($client['email']) ? 'disabled' : ''; ?>>
-                                                    <span>Receives project invoice emails</span>
+                                                    <span>Receives project invoice emails<?php echo empty($client['email']) ? ' (no email saved)' : ''; ?></span>
                                                 </label>
                                                 <label class="project-check">
                                                     <input type="checkbox" name="project_invoice_link_client_ids[]" value="<?php echo $clientId; ?>" <?php echo in_array($clientId, $selectedProjectInvoiceLinkClientIds, true) ? 'checked' : ''; ?>>
@@ -589,45 +666,73 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </div>
-                        <small>Uncheck a contact to remove them from this project. They stay in PA and can be added again later.</small>
-                    </div>
-                    <label>
-                        <div style="font-size:13px;font-weight:600">Add Contacts</div>
-                        <select name="project_client_ids[]" multiple size="5" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-                            <?php foreach ($allClients as $client): ?>
-                                <?php if (in_array((int)$client['id'], $selectedProjectClientIds, true)) { continue; } ?>
-                                <option value="<?php echo (int)$client['id']; ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <small style="display:block;color:var(--muted);font-size:12px;margin-top:4px">New contacts are added when you save. Use the rows above to control invoice and link access after they are attached.</small>
-                    </label>
-                    <label>
-                        <div style="font-size:13px;font-weight:600">Billing Period</div>
-                        <select name="invoice_billing_period" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-                            <option value="monthly" <?php echo ($project['invoice_billing_period'] ?? 'monthly') === 'monthly' ? 'selected' : ''; ?>>Monthly project billing</option>
-                            <option value="per_invoice" <?php echo ($project['invoice_billing_period'] ?? '') === 'per_invoice' ? 'selected' : ''; ?>>Each invoice on its own</option>
-                        </select>
-                    </label>
-                    <label class="project-check" style="padding:10px;border:1px solid #dfe3e8;border-radius:6px">
-                        <input type="checkbox" name="project_invoice_auto_email" value="1" <?php echo $autoEmailEnabled ? 'checked' : ''; ?>>
-                        <span>
-                            Automatically email monthly project invoices
-                            <small style="display:block">Uses the selected default recipients after the monthly invoice is generated.</small>
-                        </span>
-                    </label>
-                    <label>
-                        <div style="font-size:13px;font-weight:600">Project NET Days</div>
-                        <input type="number" min="0" step="1" name="invoice_net_terms_days" value="<?php echo htmlspecialchars((string)($project['invoice_net_terms_days'] ?? '')); ?>" placeholder="System default" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-                    </label>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                        <label><div style="font-size:13px;font-weight:600">Start</div><input type="date" name="estimated_start" value="<?php echo htmlspecialchars((string)($project['estimated_start'] ?? '')); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"></label>
-                        <label><div style="font-size:13px;font-weight:600">End</div><input type="date" name="estimated_end" value="<?php echo htmlspecialchars((string)($project['estimated_end'] ?? '')); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"></label>
-                    </div>
-                    <label>
-                        <div style="font-size:13px;font-weight:600">Notes</div>
-                        <textarea name="notes" rows="3" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"><?php echo htmlspecialchars((string)($project['notes'] ?? '')); ?></textarea>
-                    </label>
-                    <button type="submit" class="btn btn-sm">Save Project Settings</button>
+                        <label class="project-field">
+                            <span>Add contacts from this project’s scope</span>
+                            <?php if (empty($allClients) || count($allClients) === count($selectedProjectClientIds)): ?>
+                                <div class="project-muted" style="padding:10px;border:1px dashed #d1d5db;border-radius:8px">No additional contacts are available in this scope.</div>
+                            <?php else: ?>
+                            <div class="project-add-contact-list">
+                                <?php foreach ($allClients as $client): ?>
+                                    <?php if (in_array((int)$client['id'], $selectedProjectClientIds, true)) { continue; } ?>
+                                    <label class="project-check">
+                                        <input type="checkbox" name="project_client_ids[]" value="<?php echo (int)$client['id']; ?>">
+                                        <span>
+                                            <?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?>
+                                            <?php if (in_array((int)$client['id'], $projectDepartmentContactIds, true)): ?>
+                                                <span class="project-pill" style="margin-left:4px">Department</span>
+                                            <?php endif; ?>
+                                        </span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php endif; ?>
+                            <small>Checked contacts are added when you save. After they are attached, use their row above to enable invoice emails or content-link access.</small>
+                        </label>
+                    </section>
+
+                    <section class="project-settings-card">
+                        <h3>3. Invoice defaults</h3>
+                        <p>Generated project invoices use the primary invoice receiver as the billed client. Emails only go to attached project contacts checked above as invoice recipients.</p>
+                        <label class="project-field">
+                            <span>Billing Period</span>
+                            <select name="invoice_billing_period">
+                                <option value="monthly" <?php echo ($project['invoice_billing_period'] ?? 'monthly') === 'monthly' ? 'selected' : ''; ?>>Monthly project billing</option>
+                                <option value="per_invoice" <?php echo ($project['invoice_billing_period'] ?? '') === 'per_invoice' ? 'selected' : ''; ?>>Each invoice on its own</option>
+                            </select>
+                        </label>
+                        <label class="project-check" style="padding:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fff">
+                            <input type="checkbox" name="project_invoice_auto_email" value="1" <?php echo $autoEmailEnabled ? 'checked' : ''; ?>>
+                            <span>
+                                Automatically email monthly project invoices
+                                <small style="display:block">Uses the selected project invoice email recipients after the monthly invoice is generated.</small>
+                            </span>
+                        </label>
+                        <label class="project-field">
+                            <span>Project NET Days</span>
+                            <input type="number" min="0" step="1" name="invoice_net_terms_days" value="<?php echo htmlspecialchars((string)($project['invoice_net_terms_days'] ?? '')); ?>" placeholder="System default">
+                            <small>Leave blank to use the system default due-date terms.</small>
+                        </label>
+                    </section>
+
+                    <section class="project-settings-card">
+                        <h3>4. Schedule &amp; notes</h3>
+                        <div class="project-settings-grid">
+                            <label class="project-field">
+                                <span>Start</span>
+                                <input type="date" name="estimated_start" value="<?php echo htmlspecialchars((string)($project['estimated_start'] ?? '')); ?>">
+                            </label>
+                            <label class="project-field">
+                                <span>End</span>
+                                <input type="date" name="estimated_end" value="<?php echo htmlspecialchars((string)($project['estimated_end'] ?? '')); ?>">
+                            </label>
+                        </div>
+                        <label class="project-field">
+                            <span>Notes</span>
+                            <textarea name="notes" rows="3"><?php echo htmlspecialchars((string)($project['notes'] ?? '')); ?></textarea>
+                        </label>
+                    </section>
+
+                    <button type="submit" class="btn btn-sm project-settings-save">Save Project Settings</button>
                 </form>
             </div>
 

@@ -178,7 +178,7 @@ foreach ($links as $link) {
             <input type="hidden" id="manualLinkEntityId" name="entity_id">
             <label>
                 <div style="margin-bottom:4px;font-weight:600">Link Title *</div>
-                <input type="text" id="manualLinkTitle" name="title" required placeholder="e.g., Football Dropbox Folder, WebODM Map"
+                <input type="text" id="manualLinkTitle" name="title" required placeholder="e.g., Shared folder, map, model, or client files"
                        style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
             </label>
             <label>

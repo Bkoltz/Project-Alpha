@@ -1,13 +1,11 @@
 <?php
 // src/views/pages/account/permissions_overrides.php
 // Partial: per-user permission overrides on account-edit page.
-// Expects: $userId (int), $pdo (PDO), $csrf (string), get_active_org_id() available.
+// Expects: $userId (int), $pdo (PDO), $csrf (string).
 // Optionally: $targetRole (string) — if 'admin', render admin notice instead of the grid.
 
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
-
-$activeOrgId = get_active_org_id();
 
 // Permission groups exposed in the matrix — canonical catalog
 require_once __DIR__ . '/../../../utils/permission_catalog.php';
@@ -20,15 +18,15 @@ foreach ($permissionGroups as $group => $keys) {
     }
 }
 
-// Role context: defaults to 'user' if not supplied by including page.
-$targetRole = $targetRole ?? ($user['role'] ?? 'user');
+// Role context: defaults to member if not supplied by including page.
+$targetRole = $targetRole ?? ($user['role'] ?? 'member');
+$targetRole = in_array($targetRole, ['admin', 'owner', 'staff', 'member'], true) ? $targetRole : 'member';
 
-// Load existing overrides for this user / org
+// Load existing app-level overrides for this user
 $overrides = [];
 try {
-    $orgId = $activeOrgId > 0 ? $activeOrgId : null;
-    $stmt = $pdo->prepare('SELECT permission, allowed FROM user_permissions_overrides WHERE user_id = ? AND organization_id <=> ?');
-    $stmt->execute([(int)$userId, $orgId]);
+    $stmt = $pdo->prepare('SELECT permission, allowed FROM user_permissions_overrides WHERE user_id = ? AND organization_id IS NULL');
+    $stmt->execute([(int)$userId]);
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $overrides[$row['permission']] = (int)$row['allowed'];
     }
@@ -39,10 +37,7 @@ try {
 // Load the user's current role permissions to show as inherited baseline
 $inheritedPerms = [];
 try {
-    $roleId = null;
-    $stmt = $pdo->prepare('SELECT role_id FROM user_organizations WHERE user_id = ? AND (organization_id = ? OR (organization_id IS NULL AND ? = 0)) ORDER BY is_default DESC LIMIT 1');
-    $stmt->execute([(int)$userId, $activeOrgId, $activeOrgId]);
-    $roleId = $stmt->fetchColumn();
+    $roleId = role_id_by_name($pdo, $targetRole, null);
     if ($roleId) {
         $rpStmt = $pdo->prepare('SELECT permission, allowed FROM role_permissions WHERE role_id = ?');
         $rpStmt->execute([(int)$roleId]);
@@ -64,7 +59,7 @@ function permLabel(string $perm): string {
     <h3 style="margin:0 0 8px 0;">Permissions</h3>
     <p style="margin:0 0 16px 0;color:#6b7280;font-size:14px;">Set what this user can access. Admins always have full access — these settings apply to non-admin users only.</p>
 
-    <?php if ($activeOrgId <= 0): ?>
+    <?php if (false): ?>
         <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;color:#92400e;font-size:13px;margin-bottom:16px;">
             ⚠️ No active organization selected. Select an organization to manage overrides for that org.
         </div>

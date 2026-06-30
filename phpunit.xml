@@ -17,5 +17,8 @@
         <testsuite name="Database">
             <directory>tests/Database</directory>
         </testsuite>
+        <testsuite name="Accounts">
+            <directory>tests/Accounts</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

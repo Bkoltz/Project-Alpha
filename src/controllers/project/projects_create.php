@@ -22,6 +22,7 @@ $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? null
 if ($projectInvoiceLinkClientIds !== null && !is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
 $parent_id = null; // Parent projects are not supported any more
 $organization_id = (int)($_POST['organization_id'] ?? 0);
+$department_id = (int)($_POST['department_id'] ?? 0);
 $estimated_start = trim($_POST['estimated_start'] ?? '');
 $estimated_end = trim($_POST['estimated_end'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
@@ -34,6 +35,19 @@ if ($name === '') { header('Location: /?page=project/projects-list&error=Name%20
 
 if ($organization_id <= 0 && $__orgId !== null) {
 	$organization_id = (int)$__orgId;
+}
+if ($organization_id > 0) {
+	require_record_ownership($pdo, 'organizations', $organization_id);
+}
+if ($department_id > 0) {
+	$departmentStmt = $pdo->prepare('SELECT organization_id FROM organization_departments WHERE id = ? LIMIT 1');
+	$departmentStmt->execute([$department_id]);
+	$departmentOrgId = (int)($departmentStmt->fetchColumn() ?: 0);
+	if ($departmentOrgId <= 0 || ($organization_id > 0 && $departmentOrgId !== $organization_id)) {
+		header('Location: /?page=project/projects-create&error=' . urlencode('Selected department does not belong to the selected organization.'));
+		exit;
+	}
+	$organization_id = $departmentOrgId;
 }
 if ($organization_id > 0) {
 	require_record_ownership($pdo, 'organizations', $organization_id);
@@ -77,12 +91,20 @@ if ($estimated_start !== '' && $estimated_end !== '') {
 }
 
 $hasAutoEmailColumn = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
+$hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'department_id');
 if ($hasAutoEmailColumn) {
-	$ins = $pdo->prepare('INSERT INTO projects (name, client_id, organization_id, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW())');
-	$ins->execute([
+	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
+	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,NOW())");
+	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
 		$organization_id > 0 ? $organization_id : null,
+	];
+	if ($hasDepartmentColumn) {
+		$params[] = $department_id > 0 ? $department_id : null;
+	}
+	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
 		$projectInvoiceAutoEmail,
@@ -91,12 +113,20 @@ if ($hasAutoEmailColumn) {
 		$notes ?: null,
 		$__creator
 	]);
+	$ins->execute($params);
 } else {
-	$ins = $pdo->prepare('INSERT INTO projects (name, client_id, organization_id, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())');
-	$ins->execute([
+	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
+	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,NOW())");
+	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
 		$organization_id > 0 ? $organization_id : null,
+	];
+	if ($hasDepartmentColumn) {
+		$params[] = $department_id > 0 ? $department_id : null;
+	}
+	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
 		$estimated_start !== '' ? $estimated_start : null,
@@ -104,6 +134,7 @@ if ($hasAutoEmailColumn) {
 		$notes ?: null,
 		$__creator
 	]);
+	$ins->execute($params);
 }
 
 $project_id = (int)$pdo->lastInsertId();
@@ -115,6 +146,6 @@ project_invoice_sync_clients(
 	$projectInvoiceRecipientIds,
 	$projectInvoiceLinkClientIds
 );
-audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'created_by' => $__creator]);
+audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'department_id' => $department_id > 0 ? $department_id : null, 'created_by' => $__creator]);
 header('Location: /?page=project/projects-details&id=' . $project_id . '&created=1');
 exit;

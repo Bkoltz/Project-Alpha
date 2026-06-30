@@ -37,7 +37,6 @@ final class SecurityHardeningTest extends TestCase
         }
         foreach ($this->userIds as $id) {
             $this->pdo->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$id]);
-            $this->pdo->prepare('DELETE FROM user_organizations WHERE user_id = ?')->execute([$id]);
             $this->pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
         }
         foreach ($this->orgIds as $id) {
@@ -53,16 +52,13 @@ final class SecurityHardeningTest extends TestCase
         $orgB = $this->insertOrganization("Security Org B {$suffix}");
         $userId = $this->insertUser("security-client-{$suffix}@example.invalid");
 
-        $pdo->prepare('INSERT INTO user_organizations (user_id, organization_id, role, is_default) VALUES (?, ?, ?, 1)')
-            ->execute([$userId, $orgA, 'member']);
-
         $sameOrgClient = $this->insertClient('Same Org Client', $orgA, $userId);
         $otherOrgClient = $this->insertClient('Other Org Client', $orgB, $userId);
 
         $_SESSION['user'] = [
             'id' => $userId,
             'email' => "security-client-{$suffix}@example.invalid",
-            'role' => 'user',
+            'role' => 'member',
             'active_org_id' => $orgA,
         ];
 
@@ -109,8 +105,11 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('expense_categories WHERE id = ? AND organization_id = ?', $csv);
 
         $payments = $this->read('src/controllers/payments_create.php');
+        $invoiceLifecycle = $this->read('src/utils/invoice_lifecycle.php');
         self::assertStringContainsString("can_access_record(\$pdo, 'invoices'", $payments);
-        self::assertStringContainsString('WHERE id=? AND organization_id=? FOR UPDATE', $payments);
+        self::assertStringContainsString('invoice_record_locked_payment', $payments);
+        self::assertStringContainsString('FOR UPDATE', $invoiceLifecycle);
+        self::assertStringContainsString('organization_id = ?', $invoiceLifecycle);
 
         $revoke = $this->read('src/controllers/public_link_revoke.php');
         self::assertStringContainsString('document_access_require_manage', $revoke);
@@ -155,12 +154,17 @@ final class SecurityHardeningTest extends TestCase
     public function testOperatorHardeningPoliciesAreEnabled(): void
     {
         $front = $this->read('public/index.php');
-        self::assertStringContainsString('AUTH_DISABLED ignored because APP_ENV is production', $front);
-        self::assertStringContainsString('two_factor_enforce_required', $front);
+        self::assertStringContainsString('AUTH_DISABLED ignored because APP_ENV is production or not explicitly development/test', $front);
+        self::assertStringContainsString('two_factor_warning_needed', $front);
+        self::assertStringContainsString('Development auth bypass', $this->read('src/views/partials/header.php'));
+        self::assertStringContainsString('2fa-warning-dismiss', $front);
 
         $setup = $this->read('src/controllers/auth/two_factor_setup.php');
-        self::assertStringContainsString('two_factor_required_for_user', $setup);
-        self::assertStringContainsString('Two-factor authentication is required for your account', $setup);
+        $policy = $this->read('src/utils/two_factor_policy.php');
+        self::assertStringContainsString('two_factor_required_for_user', $policy);
+        self::assertStringContainsString('two_factor_warning_needed', $policy);
+        self::assertStringNotContainsString('Two-factor authentication is required for your account', $setup);
+        self::assertStringContainsString('Disable 2FA', $this->read('src/views/pages/auth/two_factor_setup.php'));
 
         $docker = $this->read('docker/start.sh');
         self::assertStringContainsString('Production readiness checks:', $docker);

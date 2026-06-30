@@ -50,21 +50,6 @@ function sync_compose_admin(PDO $pdo, array $environment): string
         }
     }
 
-    $organizationId = (int) $pdo->query('SELECT id FROM organizations ORDER BY id LIMIT 1')->fetchColumn();
-    if ($organizationId < 1) {
-        throw new RuntimeException('No organization exists for the administrator membership.');
-    }
-    $roleStmt = $pdo->prepare("SELECT id FROM roles WHERE name = 'owner' AND is_system = 1 LIMIT 1");
-    $roleStmt->execute();
-    $roleId = $roleStmt->fetchColumn();
-
-    $membership = $pdo->prepare(
-        "INSERT INTO user_organizations (user_id, organization_id, role, role_id, is_default)
-         VALUES (?, ?, 'owner', ?, 1)
-         ON DUPLICATE KEY UPDATE role = 'owner', role_id = VALUES(role_id), is_default = 1"
-    );
-    $membership->execute([$adminId, $organizationId, $roleId !== false ? (int) $roleId : null]);
-
     return $status;
 }
 

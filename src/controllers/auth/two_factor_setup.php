@@ -89,11 +89,6 @@ try {
     }
     
     if ($action === 'disable') {
-        if (two_factor_required_for_user($pdo, $userId)) {
-            header('Location: /?page=2fa-setup&required=1&error=' . urlencode('Two-factor authentication is required for your account.'));
-            exit;
-        }
-
         // Verify password before disabling
         $password = $_POST['password'] ?? '';
         

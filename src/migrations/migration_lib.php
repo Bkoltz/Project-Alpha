@@ -221,7 +221,7 @@ function migration_connection(): PDO
 function migration_schema_health(PDO $pdo): void
 {
     $requiredTables = [
-        'users', 'organizations', 'roles', 'role_permissions', 'user_organizations',
+        'users', 'organizations', 'roles', 'role_permissions',
         'clients', 'organization_departments', 'organization_department_contacts',
         'projects', 'quotes', 'contracts', 'invoices', 'payments',
         'rate_limits', 'schema_migrations',
@@ -251,7 +251,6 @@ function migration_schema_health(PDO $pdo): void
 
     $requiredColumns = [
         'users' => ['email', 'password_hash', 'role'],
-        'user_organizations' => ['user_id', 'organization_id', 'role_id'],
         'clients' => ['organization_id', 'created_by'],
         'projects' => ['organization_id', 'department_id', 'created_by'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
@@ -270,16 +269,6 @@ function migration_schema_health(PDO $pdo): void
             if ((int) $columnQuery->fetchColumn() !== 1) {
                 $issues[] = "missing column $table.$column";
             }
-        }
-    }
-
-    $foreignKeys = $pdo->query(
-        "SELECT constraint_name FROM information_schema.referential_constraints
-         WHERE constraint_schema = DATABASE()"
-    )->fetchAll(PDO::FETCH_COLUMN);
-    foreach (['fk_uo_user', 'fk_uo_org', 'fk_user_orgs_role_id'] as $foreignKey) {
-        if (!in_array($foreignKey, $foreignKeys, true)) {
-            $issues[] = "missing foreign key $foreignKey";
         }
     }
 

@@ -55,6 +55,15 @@ try {
 
   $quoteType = $quote['quote_type'] ?? 'regular';
   $billingMode = ($quote['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
+  $depositType = $quote['deposit_type'] ?? 'none';
+  $depositValue = (float)($quote['deposit_amount'] ?? 0);
+  $quoteTotal = (float)($quote['total'] ?? 0);
+  $contractDepositAmount = 0.0;
+  if ($depositType === 'percent') {
+    $contractDepositAmount = max(0, min(100, $depositValue)) * $quoteTotal / 100;
+  } elseif ($depositType === 'fixed') {
+    $contractDepositAmount = min(max(0, $depositValue), $quoteTotal);
+  }
   if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
     // For LT/OD quotes, only create contract if auto-create is enabled
     if ($autoCreateContract) {
@@ -72,8 +81,8 @@ try {
             $quote['subtotal'],
             $quote['total'],
             $projectCode,
-            $quote['deposit_type'] ?? 'none',
-            $quote['deposit_amount'] ?? 0,
+            $depositType,
+            $contractDepositAmount,
             0,
             $quote['start_date'] ?? null,
             $quote['end_date'] ?? null,
@@ -103,7 +112,7 @@ try {
     // Regular quote: create contract and/or invoice based on settings
     if ($autoCreateContract) {
       $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $quote['deposit_type'] ?? 'none', $quote['deposit_amount'] ?? 0, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $depositType, $contractDepositAmount, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $contract_id = (int)$pdo->lastInsertId();
 
       $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');

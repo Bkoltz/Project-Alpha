@@ -22,6 +22,7 @@ services:
     environment:
       APP_ENV: development
       AUTOPAY_BETA_ENABLED: ${AUTOPAY_BETA_ENABLED:-false}
+      APP_AUTH_DISABLED: ${APP_AUTH_DISABLED:-false}
 
   cron:
     build:

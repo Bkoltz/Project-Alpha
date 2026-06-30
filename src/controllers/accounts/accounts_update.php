@@ -54,14 +54,13 @@ if ($documentSenderEmail !== '' && !filter_var($documentSenderEmail, FILTER_VALI
     exit;
 }
 
-$activeOrgId = (int)($_SESSION['user']['active_org_id'] ?? 0);
-$orgId = $activeOrgId > 0 ? $activeOrgId : null;
+$orgId = null;
 
 $selectedRole = null;
 if ($postedRoleId > 0) {
     try {
-        $roleStmt = $pdo->prepare('SELECT id, name, organization_id FROM roles WHERE id = ? AND (organization_id <=> ? OR is_system = 1) LIMIT 1');
-        $roleStmt->execute([$postedRoleId, $orgId]);
+        $roleStmt = $pdo->prepare('SELECT id, name, organization_id FROM roles WHERE id = ? AND (organization_id IS NULL OR is_system = 1) LIMIT 1');
+        $roleStmt->execute([$postedRoleId]);
         $selectedRole = $roleStmt->fetch(PDO::FETCH_ASSOC) ?: null;
     } catch (Throwable $e) {
         $selectedRole = null;
@@ -82,7 +81,7 @@ if (!$selectedRole) {
 
 $roleName = (string)($selectedRole['name'] ?? 'member');
 $roleId = isset($selectedRole['id']) ? (int)$selectedRole['id'] : null;
-$role = $roleName === 'admin' ? 'admin' : 'user';
+$role = in_array($roleName, ['admin', 'owner', 'staff', 'member'], true) ? $roleName : 'member';
 
 // Check if email is taken by another user
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? AND id != ?');
@@ -132,22 +131,6 @@ try {
         $userId
     ]);
 
-    $targetOrg = $orgId ?: $pdo->query('SELECT organization_id FROM user_organizations WHERE user_id = ' . (int)$userId . ' ORDER BY is_default DESC LIMIT 1')->fetchColumn();
-    if ($targetOrg) {
-        if ($roleId === null) { $roleId = role_id_by_name($pdo, $roleName, (int)$targetOrg); }
-        if ($roleId === null) { $roleId = role_id_by_name($pdo, $roleName, null); }
-        $exists = $pdo->prepare('SELECT id FROM user_organizations WHERE user_id = ? AND organization_id = ? LIMIT 1');
-        $exists->execute([$userId, (int)$targetOrg]);
-        $uoId = $exists->fetchColumn();
-        if ($uoId) {
-            $updOrg = $pdo->prepare('UPDATE user_organizations SET role = ?, role_id = ? WHERE id = ?');
-            $updOrg->execute([$roleName, $roleId, (int)$uoId]);
-        } else {
-            $insOrg = $pdo->prepare('INSERT INTO user_organizations (user_id, organization_id, role, role_id, is_default) VALUES (?, ?, ?, ?, 1)');
-            $insOrg->execute([$userId, (int)$targetOrg, $roleName, $roleId]);
-        }
-    }
-    
     audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $isDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0]);
     header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
 } catch (PDOException $e) {

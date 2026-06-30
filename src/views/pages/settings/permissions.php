@@ -1,33 +1,20 @@
 <?php
 // src/views/pages/settings/permissions.php
-// Permissions tab: role matrix, role CRUD, and user role assignment.
+// Permissions tab: app-level role matrix and role CRUD.
 
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
+require_once __DIR__ . '/../../../utils/permission_catalog.php';
 
 $csrf = csrf_token();
-$activeOrgId = get_active_org_id();
-
-// Permission groups exposed in the matrix — canonical catalog
-require_once __DIR__ . '/../../../utils/permission_catalog.php';
 $permissionGroups = permission_catalog();
 
-// Flat list for lookups
-$allPermissions = [];
-foreach ($permissionGroups as $group => $keys) {
-    foreach ($keys as $key) {
-        $allPermissions[$key] = $group;
-    }
-}
-
-// Load roles for this org and global system roles
 $roles = [];
 try {
-    $roleStmt = $pdo->prepare('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id <=> ? OR is_system = 1 ORDER BY is_system DESC, name');
-    $roleStmt->execute([$activeOrgId > 0 ? $activeOrgId : null]);
+    $roleStmt = $pdo->query('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id IS NULL OR is_system = 1 ORDER BY is_system DESC, name');
     $roles = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     @error_log('[permissions view] roles load failed: ' . $e->getMessage());
@@ -35,14 +22,13 @@ try {
 
 $selectedRoleId = (int)($_GET['role_id'] ?? 0);
 $selectedRole = null;
-foreach ($roles as $r) {
-    if ((int)$r['id'] === $selectedRoleId) {
-        $selectedRole = $r;
+foreach ($roles as $role) {
+    if ((int)$role['id'] === $selectedRoleId) {
+        $selectedRole = $role;
         break;
     }
 }
 
-// Load current permissions for selected role
 $rolePerms = [];
 if ($selectedRole) {
     try {
@@ -56,50 +42,16 @@ if ($selectedRole) {
     }
 }
 
-// User-organization rows with current role per org for the selected org
-$userOrgs = [];
-$orgUsers = [];
-$roleIdToName = [];
-foreach ($roles as $r) {
-    $roleIdToName[(int)$r['id']] = $r['name'];
-}
-try {
-    if ($activeOrgId > 0) {
-        $uoStmt = $pdo->prepare('SELECT uo.id AS uo_id, uo.user_id, uo.role_id, u.email, u.username FROM user_organizations uo JOIN users u ON u.id = uo.user_id WHERE uo.organization_id = ? ORDER BY u.email');
-        $uoStmt->execute([$activeOrgId]);
-        $userOrgs = $uoStmt->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        // No active org: show all memberships across all orgs, grouped by user
-        $uoStmt = $pdo->prepare('SELECT uo.id AS uo_id, uo.user_id, uo.organization_id, uo.role_id, u.email, u.username, o.name AS org_name FROM user_organizations uo JOIN users u ON u.id = uo.user_id LEFT JOIN organizations o ON o.id = uo.organization_id ORDER BY u.email, o.name');
-        $uoStmt->execute();
-        $userOrgs = $uoStmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-    $orgUsers = $userOrgs;
-} catch (Throwable $e) {
-    @error_log('[permissions view] user orgs load failed: ' . $e->getMessage());
-}
-
-// For display when there is no active org, group rows by user
-$usersMap = [];
-foreach ($orgUsers as $row) {
-    $uid = (int)$row['user_id'];
-    if (!isset($usersMap[$uid])) {
-        $usersMap[$uid] = ['user_id' => $uid, 'email' => $row['email'], 'username' => $row['username'], 'rows' => []];
-    }
-    $usersMap[$uid]['rows'][] = $row;
-}
-
-// Helper: human permission label
-function permLabel(string $perm): string {
+function permLabel(string $perm): string
+{
     [$module, $action] = explode('.', $perm, 2);
     return ucfirst(str_replace('_', ' ', $action));
 }
 ?>
 
-
 <div style="max-width:1100px">
     <h2 style="margin:0 0 8px 0">Permissions</h2>
-    <p style="margin:0 0 20px 0;color:var(--muted)">Manage custom roles, permission matrices, and user-role assignments.</p>
+    <p style="margin:0 0 20px 0;color:var(--muted)">Manage app-level roles and permission matrices for this PA install.</p>
 
     <?php if (isset($_GET['saved']) && $_GET['saved'] === '1'): ?>
         <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Saved.</div>
@@ -109,7 +61,6 @@ function permLabel(string $perm): string {
         <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo e($_GET['error']); ?></div>
     <?php endif; ?>
 
-    <!-- Roles list -->
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-bottom:24px">
         <h3 style="margin:0 0 16px 0">Roles</h3>
         <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
@@ -128,9 +79,9 @@ function permLabel(string $perm): string {
                         <a href="/?page=settings&tab=permissions&role_id=<?php echo (int)$role['id']; ?>" style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151;font-size:13px">Edit permissions</a>
                         <?php if ((int)$role['is_system'] === 0 && (int)$role['id'] !== 1): ?>
                             <form method="post" action="/?page=settings/permissions-handler" onsubmit="return confirm('Delete this role?')" style="display:inline">
-                                <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"
+                                <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
                                 <input type="hidden" name="action" value="delete_role">
-                                <input type="hidden" name="role_id" value="<?php echo (int)$role['id']; ?>"
+                                <input type="hidden" name="role_id" value="<?php echo (int)$role['id']; ?>">
                                 <button type="submit" style="padding:6px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fee2e2;color:#991b1b;font-size:13px;cursor:pointer">Delete</button>
                             </form>
                         <?php endif; ?>
@@ -147,7 +98,7 @@ function permLabel(string $perm): string {
 
         <h4 style="margin:0 0 12px 0">Create Role</h4>
         <form method="post" action="/?page=settings/permissions-handler" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-            <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"
+            <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
             <input type="hidden" name="action" value="create_role">
             <label style="flex:1 1 220px">
                 <div style="margin-bottom:4px;font-weight:600">Role name *</div>
@@ -161,7 +112,6 @@ function permLabel(string $perm): string {
         </form>
     </div>
 
-    <!-- Permission matrix -->
     <?php if ($selectedRole): ?>
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-bottom:24px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
@@ -175,7 +125,7 @@ function permLabel(string $perm): string {
             <p style="color:#6b7280">The admin role grants all permissions and cannot be changed.</p>
         <?php else: ?>
             <form method="post" action="/?page=settings/permissions-handler">
-                <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"
+                <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="save_role_permissions">
                 <input type="hidden" name="role_id" value="<?php echo (int)$selectedRole['id']; ?>">
                 <input type="hidden" name="referer" value="settings/permissions">
@@ -205,86 +155,11 @@ function permLabel(string $perm): string {
     </div>
     <?php endif; ?>
 
-    <!-- User role assignment -->
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px">
-        <h3 style="margin:0 0 16px 0">User Role Assignment</h3>
-
-        <?php if ($activeOrgId <= 0): ?>
-            <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;color:#92400e;font-size:13px;margin-bottom:16px">
-                ⚠️ No active organization selected. Select an organization to assign roles per org.
-            </div>
-        <?php endif; ?>
-
-        <form method="post" action="/?page=settings/permissions-handler">
-            <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"
-            <input type="hidden" name="action" value="save_user_role">
-            <input type="hidden" name="referer" value="settings/permissions">
-
-            <div style="overflow-x:auto">
-                <table class="pa-table" style="width:100%;min-width:600px">
-                    <thead>
-                        <tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb">
-                            <th style="padding:12px;text-align:left;font-weight:600">User</th>
-                            <?php if ($activeOrgId <= 0): ?>
-                                <th style="padding:12px;text-align:left;font-weight:600">Organization</th>
-                            <?php endif; ?>
-                            <th style="padding:12px;text-align:left;font-weight:600">Current Role</th>
-                            <th style="padding:12px;text-align:left;font-weight:600">Assign Role</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if ($activeOrgId > 0): ?>
-                            <?php foreach ($orgUsers as $row): ?>
-                                <tr style="border-bottom:1px solid #e5e7eb">
-                                    <td style="padding:12px"><?php echo e($row['email']); ?></td>
-                                    <td style="padding:12px"><?php echo e($roleIdToName[(int)($row['role_id'] ?? 0)] ?? 'None'); ?></td>
-                                    <td style="padding:12px">
-                                        <select name="user_orgs[<?php echo (int)$row['uo_id']; ?>]" style="padding:6px;border-radius:6px;border:1px solid #ddd">
-                                            <option value="0">— No role —</option>
-                                            <?php foreach ($roles as $r): ?>
-                                                <option value="<?php echo (int)$r['id']; ?>" <?php echo (int)($row['role_id'] ?? 0) === (int)$r['id'] ? 'selected' : ''; ?>><?php echo e($r['name']); ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                            <?php if (empty($orgUsers)): ?>
-                                <tr><td colspan="3" style="padding:24px;text-align:center;color:#6b7280">No users in this organization.</td></tr>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <?php foreach ($usersMap as $u): ?>
-                                <?php $rowSpan = count($u['rows']); ?>
-                                <?php $first = true; foreach ($u['rows'] as $row): ?>
-                                    <tr style="border-bottom:1px solid #e5e7eb">
-                                        <?php if ($first): ?>
-                                            <td style="padding:12px" rowspan="<?php echo $rowSpan; ?>"><?php echo e($u['email']); ?></td>
-                                        <?php endif; ?>
-                                        <td style="padding:12px"><?php echo e($row['org_name'] ?? 'Default'); ?></td>
-                                        <td style="padding:12px"><?php echo e($roleIdToName[(int)($row['role_id'] ?? 0)] ?? 'None'); ?></td>
-                                        <td style="padding:12px">
-                                            <select name="user_orgs[<?php echo (int)$row['uo_id']; ?>]" style="padding:6px;border-radius:6px;border:1px solid #ddd">
-                                                <option value="0">— No role —</option>
-                                                <?php foreach ($roles as $r): ?>
-                                                    <option value="<?php echo (int)$r['id']; ?>" <?php echo (int)($row['role_id'] ?? 0) === (int)$r['id'] ? 'selected' : ''; ?>><?php echo e($r['name']); ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </td>
-                                    </tr>
-                                    <?php $first = false; ?>
-                                <?php endforeach; ?>
-                            <?php endforeach; ?>
-                            <?php if (empty($usersMap)): ?>
-                                <tr><td colspan="4" style="padding:24px;text-align:center;color:#6b7280">No users found.</td></tr>
-                            <?php endif; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-
-            <div style="margin-top:16px">
-                <button type="submit" style="padding:10px 20px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">Save Assignments</button>
-            </div>
-        </form>
+        <h3 style="margin:0 0 8px 0">User Role Assignment</h3>
+        <p style="margin:0;color:#6b7280">
+            User roles are app-level in this version. Assign roles and user-specific permission overrides from
+            <a href="/?page=accounts">Account Management</a>.
+        </p>
     </div>
-
 </div>

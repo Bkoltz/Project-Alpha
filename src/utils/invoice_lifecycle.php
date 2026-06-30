@@ -55,6 +55,155 @@ function invoice_expire_active_checkout(PDO $pdo, string $table, int $id, array 
         ->execute([$id]);
 }
 
+function invoice_effective_paid_total(PDO $pdo, int $invoiceId): float
+{
+    $stmt = $pdo->prepare('
+        SELECT COALESCE(SUM(GREATEST(amount - refunded_amount - disputed_amount, 0)), 0)
+        FROM payments
+        WHERE invoice_id = ? AND status = "succeeded"
+    ');
+    $stmt->execute([$invoiceId]);
+    return (float)$stmt->fetchColumn();
+}
+
+function invoice_status_for_balance(float $total, float $paid): array
+{
+    $paid = max(0.0, $paid);
+    $balance = max(0.0, $total - $paid);
+    if ($total > 0 && $balance <= 0.005) {
+        return ['paid', min($paid, $total), 0.0];
+    }
+    if ($paid > 0.005) {
+        return ['partial', $paid, $balance];
+    }
+    return ['unpaid', 0.0, max(0.0, $total)];
+}
+
+function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePaidPublicLinks = true): array
+{
+    $totalStmt = $pdo->prepare('SELECT total FROM invoices WHERE id = ?');
+    $totalStmt->execute([$invoiceId]);
+    $total = (float)$totalStmt->fetchColumn();
+    $paid = invoice_effective_paid_total($pdo, $invoiceId);
+    [$status, $storedPaid, $balanceDue] = invoice_status_for_balance($total, $paid);
+
+    $paidAtSql = $status === 'paid'
+        ? ', paid_at = COALESCE(paid_at, NOW())'
+        : '';
+    $pdo->prepare("UPDATE invoices SET status = ?, amount_paid = ?, balance_due = ?{$paidAtSql} WHERE id = ?")
+        ->execute([$status, $storedPaid, $balanceDue, $invoiceId]);
+
+    if ($revokePaidPublicLinks && !in_array($status, ['unpaid', 'partial'], true)) {
+        $redirect = '/?page=public-redirect&type=invoice&reason=' . rawurlencode($status);
+        $pdo->prepare('
+            UPDATE public_links
+            SET revoked = 1, redirect = ?
+            WHERE document_type = "invoice" AND document_id = ? AND revoked = 0
+        ')->execute([$redirect, $invoiceId]);
+    }
+
+    return [
+        'status' => $status,
+        'amount_paid' => $storedPaid,
+        'balance_due' => $balanceDue,
+        'total' => $total,
+    ];
+}
+
+function invoice_record_locked_payment(
+    PDO $pdo,
+    int $invoiceId,
+    float $amount,
+    string $method,
+    ?string $reference,
+    ?string $notes,
+    array $options = []
+): array {
+    if ($amount <= 0) {
+        throw new RuntimeException('Payment amount must be greater than zero.');
+    }
+
+    $activeOrgId = $options['organization_id'] ?? null;
+    $completeContractWhenPaid = (bool)($options['complete_contract_when_paid'] ?? false);
+    $allowUnfinalized = (bool)($options['allow_unfinalized'] ?? false);
+    $source = substr((string)($options['source'] ?? 'manual'), 0, 50);
+
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+        $where = 'id = ?';
+        $params = [$invoiceId];
+        if ($activeOrgId !== null) {
+            $where .= ' AND organization_id = ?';
+            $params[] = (int)$activeOrgId;
+        }
+
+        $lock = $pdo->prepare("
+            SELECT id, client_id, contract_id, organization_id, status, finalized_at, total, collection_mode
+            FROM invoices
+            WHERE {$where}
+            FOR UPDATE
+        ");
+        $lock->execute($params);
+        $invoice = $lock->fetch(PDO::FETCH_ASSOC);
+        if (!$invoice) {
+            throw new RuntimeException('Invoice not found.');
+        }
+
+        if (!$allowUnfinalized && (empty($invoice['finalized_at']) || strtolower((string)$invoice['status']) === 'draft')) {
+            throw new RuntimeException('Finalize the invoice before recording payment.');
+        }
+        if (($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+            throw new RuntimeException('Record payment from the project invoice so it is allocated correctly.');
+        }
+
+        $paid = invoice_effective_paid_total($pdo, $invoiceId);
+        $outstanding = max(0.0, (float)$invoice['total'] - $paid);
+        if ($amount > $outstanding + 0.005) {
+            throw new RuntimeException('Payment cannot exceed the outstanding balance.');
+        }
+
+        $insert = $pdo->prepare('
+            INSERT INTO payments
+                (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, "succeeded", CURDATE())
+        ');
+        $insert->execute([
+            (int)$invoice['client_id'],
+            $invoiceId,
+            !empty($invoice['contract_id']) ? (int)$invoice['contract_id'] : null,
+            !empty($invoice['organization_id']) ? (int)$invoice['organization_id'] : null,
+            $amount,
+            $method !== '' ? $method : 'cash',
+            $reference !== '' ? $reference : null,
+            $notes !== '' ? $notes : null,
+        ]);
+        $paymentId = (int)$pdo->lastInsertId();
+
+        $totals = invoice_refresh_payment_totals($pdo, $invoiceId);
+        if ($completeContractWhenPaid && $totals['status'] === 'paid' && !empty($invoice['contract_id'])) {
+            $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')
+                ->execute(['completed', (int)$invoice['contract_id']]);
+        }
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+
+        $totals['payment_id'] = $paymentId;
+        $totals['source'] = $source;
+        return $totals;
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
 /**
  * Finalize an invoice exactly once. Finalization is the boundary that permits
  * client delivery, public links, reminders, and one-time Checkout payments.

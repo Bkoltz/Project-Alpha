@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     username VARCHAR(50) NULL,
-    role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
+    role ENUM('admin', 'owner', 'staff', 'member', 'user') NOT NULL DEFAULT 'member',
     force_password_reset TINYINT(1) NOT NULL DEFAULT 0,
     document_sender_enabled TINYINT(1) NOT NULL DEFAULT 0,
     document_sender_name VARCHAR(255) NULL,
@@ -240,23 +240,6 @@ ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
 INSERT INTO role_permissions (role_id, permission, allowed)
 SELECT id, 'invoices.void', CASE WHEN name IN ('owner','staff','member') THEN 1 ELSE 0 END FROM roles WHERE is_system = 1
 ON DUPLICATE KEY UPDATE allowed = VALUES(allowed);
-
--- USER-ORGANIZATION MEMBERSHIP
-CREATE TABLE IF NOT EXISTS user_organizations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    organization_id INT NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'member',
-    role_id INT NULL,
-    is_default TINYINT(1) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_user_org (user_id, organization_id),
-    INDEX idx_uo_org (organization_id),
-    INDEX idx_user_orgs_role_id (role_id),
-    CONSTRAINT fk_uo_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_uo_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    CONSTRAINT fk_user_orgs_role_id FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- API KEYS
 CREATE TABLE IF NOT EXISTS api_keys (

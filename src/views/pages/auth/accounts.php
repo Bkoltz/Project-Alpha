@@ -15,18 +15,11 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
     return;
 }
 
-// CSRF token
 $csrf = csrf_token();
-$activeOrgId = get_active_org_id();
 
 // Fetch all users
 try {
-    if ($activeOrgId > 0) {
-        $stmt = $pdo->prepare('SELECT u.id, u.email, u.username, u.role, u.is_disabled, u.force_password_reset, u.created_at, r.name AS acl_role_name FROM users u LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.organization_id = ? LEFT JOIN roles r ON r.id = uo.role_id ORDER BY u.created_at DESC');
-        $stmt->execute([$activeOrgId]);
-    } else {
-        $stmt = $pdo->query('SELECT u.id, u.email, u.username, u.role, u.is_disabled, u.force_password_reset, u.created_at, r.name AS acl_role_name FROM users u LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_default = 1 LEFT JOIN roles r ON r.id = uo.role_id ORDER BY u.created_at DESC');
-    }
+    $stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
@@ -39,8 +32,7 @@ $permissionGroupsCreate = permission_catalog();
 
 $availableRoles = [];
 try {
-    $roleStmt = $pdo->prepare('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id <=> ? OR is_system = 1 ORDER BY CASE name WHEN "member" THEN 0 WHEN "staff" THEN 1 WHEN "owner" THEN 2 WHEN "admin" THEN 3 ELSE 4 END, is_system DESC, name');
-    $roleStmt->execute([$activeOrgId > 0 ? $activeOrgId : null]);
+    $roleStmt = $pdo->query('SELECT id, name, description, is_system, organization_id FROM roles WHERE organization_id IS NULL OR is_system = 1 ORDER BY CASE name WHEN "member" THEN 0 WHEN "staff" THEN 1 WHEN "owner" THEN 2 WHEN "admin" THEN 3 ELSE 4 END, is_system DESC, name');
     $availableRoles = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     @error_log('[accounts] role load failed: ' . $e->getMessage());
@@ -425,7 +417,7 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
             <td style="padding:12px"><?php echo htmlspecialchars($user['username'] ?? '-'); ?></td>
             <td style="padding:12px">
               <?php
-                $displayRole = $user['role'] === 'admin' ? 'admin' : ($user['acl_role_name'] ?? $user['role']);
+                $displayRole = $user['role'] === 'user' ? 'member' : $user['role'];
                 $displayRoleLabel = ucwords(str_replace('_', ' ', (string)$displayRole));
               ?>
               <span style="padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;

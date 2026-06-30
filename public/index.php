@@ -243,8 +243,9 @@ $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 're
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
 $appEnv = strtolower(trim((string)(getenv('APP_ENV') ?: 'production')));
-if ($authDisabled && in_array($appEnv, ['production', 'prod'], true)) {
-    error_log('[security] AUTH_DISABLED ignored because APP_ENV is production');
+$authBypassAllowed = in_array($appEnv, ['development', 'dev', 'local', 'test', 'testing'], true);
+if ($authDisabled && !$authBypassAllowed) {
+    error_log('[security] AUTH_DISABLED ignored because APP_ENV is production or not explicitly development/test');
     $authDisabled = false;
 }
 
@@ -280,6 +281,54 @@ if (false && empty($_SESSION['user']) && isset($_COOKIE['remember'])) {
                 }
             }
         }
+    }
+}
+
+// Development/test auth bypass: create a real session for the first active admin
+// so the application behaves normally without weakening production deployments.
+if ($authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    try {
+        require_once __DIR__ . '/../src/config/db.php';
+        $stmt = $pdo->query('
+            SELECT id, email, role
+            FROM users
+            WHERE COALESCE(is_disabled, 0) = 0
+            ORDER BY (role = "admin") DESC, id ASC
+            LIMIT 1
+        ');
+        $bypassUser = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : false;
+        if ($bypassUser) {
+            $activeOrgId = 0;
+            try {
+                $orgStmt = $pdo->prepare('SELECT organization_id FROM user_organizations WHERE user_id = ? ORDER BY id ASC LIMIT 1');
+                $orgStmt->execute([(int)$bypassUser['id']]);
+                $activeOrgId = (int)($orgStmt->fetchColumn() ?: 0);
+            } catch (Throwable $e) {
+                $activeOrgId = 0;
+            }
+            if ($activeOrgId <= 0) {
+                try {
+                    $activeOrgId = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 0);
+                } catch (Throwable $e) {
+                    $activeOrgId = 0;
+                }
+            }
+            session_regenerate_id(true);
+            $_SESSION['user'] = [
+                'id' => (int)$bypassUser['id'],
+                'email' => (string)$bypassUser['email'],
+                'role' => (string)$bypassUser['role'],
+                'active_org_id' => $activeOrgId,
+                'auth_bypass' => true,
+            ];
+            $_SESSION['last_activity'] = time();
+            if (empty($_SESSION['auth_bypass_logged'])) {
+                error_log('[security] Development auth bypass signed in user id ' . (int)$bypassUser['id']);
+                $_SESSION['auth_bypass_logged'] = 1;
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[security] AUTH_DISABLED could not create a development session: ' . $e->getMessage());
     }
 }
 
@@ -324,12 +373,14 @@ if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     }
 }
 
-// Enforce required 2FA for administrators and privileged operators.
+// Evaluate 2FA policy for administrators and privileged operators. Enforcement is
+// intentionally non-blocking: the layout renders a dismissible warning instead
+// of redirecting users away from their work.
 if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     try {
         require_once __DIR__ . '/../src/config/db.php';
         require_once __DIR__ . '/../src/utils/two_factor_policy.php';
-        two_factor_enforce_required($pdo, $page);
+        $_SESSION['two_factor_warning_required'] = two_factor_warning_needed($pdo, $page) ? 1 : 0;
     } catch (Throwable $e) {
         // Do not lock users out if the policy check cannot be evaluated during
         // installation/recovery. The production readiness check warns loudly
@@ -421,6 +472,10 @@ if ($page === 'projects-search') {
 // Organization search for client creation (AJAX)
 if ($page === 'org-search' || $page === 'organization/org-search') {
     require_once __DIR__ . '/../src/controllers/organization/org_search.php';
+    exit;
+}
+if ($page === 'organization/organization-departments-options') {
+    require_once __DIR__ . '/../src/controllers/organization/organization_departments_options.php';
     exit;
 }
 if ($page === 'time-tracking/unbilled') {
@@ -572,6 +627,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         '2fa-setup-action',
         '2fa-verify-action',
         '2fa-admin-disable',
+        '2fa-warning-dismiss',
 
         // API keys
         'api-keys-create',
@@ -792,6 +848,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === '2fa-admin-disable') {
         require_once __DIR__ . '/../src/controllers/auth/admin_2fa_disable.php';
+        exit;
+    }
+    if ($page === '2fa-warning-dismiss') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_warning_dismiss.php';
         exit;
     }
     if ($page === 'reset-request') {
@@ -1120,6 +1180,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === '2fa-verify-action') {
         require_once __DIR__ . '/../src/controllers/auth/two_factor_verify.php';
+        exit;
+    }
+    if ($page === '2fa-warning-dismiss') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_warning_dismiss.php';
         exit;
     }
     if ($page === 'receipts-handler') {

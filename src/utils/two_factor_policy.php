@@ -67,3 +67,27 @@ function two_factor_enforce_required(PDO $pdo, string $page): void
         exit;
     }
 }
+
+function two_factor_warning_needed(PDO $pdo, string $page): bool
+{
+    if (empty($_SESSION['user']['id']) || !empty($_SESSION['two_factor_warning_dismissed'])) {
+        return false;
+    }
+
+    $quietPages = [
+        '2fa-setup',
+        '2fa-setup-action',
+        '2fa-verify',
+        '2fa-verify-action',
+        '2fa-warning-dismiss',
+        'logout',
+        'logout-confirm',
+        'session-status',
+    ];
+    if (in_array($page, $quietPages, true)) {
+        return false;
+    }
+
+    $userId = (int)$_SESSION['user']['id'];
+    return two_factor_required_for_user($pdo, $userId) && !two_factor_enabled_for_user($pdo, $userId);
+}

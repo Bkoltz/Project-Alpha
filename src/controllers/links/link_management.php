@@ -73,8 +73,10 @@ try {
                 $result = $linkService->autoGenerateForClient($entityId);
             } elseif ($entityType === 'organization') {
                 $result = $linkService->autoGenerateForOrganization($entityId);
+            } elseif ($entityType === 'department') {
+                $result = $linkService->autoGenerateForDepartment($entityId);
             } else {
-                $result = ['success' => false, 'message' => 'Automatic generation currently supports clients and organizations only'];
+                $result = ['success' => false, 'message' => 'Automatic generation currently supports clients, organizations, and departments only'];
             }
             break;
             

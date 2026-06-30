@@ -76,6 +76,15 @@ try {
         $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
         $quoteOrgId   = (int)($quote['organization_id'] ?? 0) ?: $fallbackOrgId;
         $billingMode = (($quote['billing_mode'] ?? 'fixed') === 'hourly') ? 'hourly' : 'fixed';
+        $depositType = $quote['deposit_type'] ?? 'none';
+        $depositValue = (float)($quote['deposit_amount'] ?? 0);
+        $quoteTotal = (float)($quote['total'] ?? 0);
+        $contractDepositAmount = 0.0;
+        if ($depositType === 'percent') {
+          $contractDepositAmount = max(0, min(100, $depositValue)) * $quoteTotal / 100;
+        } elseif ($depositType === 'fixed') {
+          $contractDepositAmount = min(max(0, $depositValue), $quoteTotal);
+        }
 
         // Create contract (pending)
         $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -92,8 +101,8 @@ try {
              $quote['subtotal'],
              $quote['total'],
              $projectCode,
-             $quote['deposit_type'] ?? 'none',
-             $quote['deposit_amount'] ?? 0,
+             $depositType,
+             $contractDepositAmount,
              $quote['start_date'] ?? null,
              $quote['end_date'] ?? null,
              $quote['billing_interval_count'] ?? 1,

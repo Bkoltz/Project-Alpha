@@ -31,7 +31,6 @@ final class SchemaBaselineTest extends TestCase
         $find->execute([$this->email]);
         $id = $find->fetchColumn();
         if ($id !== false) {
-            $this->pdo->prepare('DELETE FROM user_organizations WHERE user_id = ?')->execute([(int) $id]);
             $this->pdo->prepare('DELETE FROM users WHERE id = ?')->execute([(int) $id]);
         }
     }

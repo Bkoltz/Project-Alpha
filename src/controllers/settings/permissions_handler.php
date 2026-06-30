@@ -39,8 +39,6 @@ foreach ($permissionGroups as $group => $keys) {
     }
 }
 
-$activeOrgId = get_active_org_id();
-
 try {
     switch ($action) {
         case 'save_role_permissions':
@@ -90,8 +88,8 @@ try {
                 throw new Exception('Role name required');
             }
 
-            // Unique by org; NULL means global (matches roles schema uq_role_name_org)
-            $orgId = $activeOrgId > 0 ? $activeOrgId : null;
+            // PA is single-business per install in 0.5.0; custom roles are app-level.
+            $orgId = null;
             $stmt = $pdo->prepare('INSERT INTO roles (name, description, is_system, organization_id) VALUES (?, ?, 0, ?)');
             try {
                 $stmt->execute([$name, $description, $orgId]);
@@ -120,36 +118,21 @@ try {
             exit;
 
         case 'save_user_role':
-            // POST arrays: user_orgs[uo_id] = role_id
-            $assignments = $_POST['user_orgs'] ?? [];
-            if (!is_array($assignments) || empty($assignments)) {
-                throw new Exception('No assignments provided');
-            }
-            $stmt = $pdo->prepare('UPDATE user_organizations SET role_id = ? WHERE id = ?');
-            foreach ($assignments as $uoId => $roleId) {
-                $uoId = (int)$uoId;
-                $roleId = (int)$roleId;
-                if ($uoId <= 0) {
-                    continue;
-                }
-                $stmt->execute([$roleId > 0 ? $roleId : null, $uoId]);
-            }
-            header('Location: /?page=settings&tab=permissions&saved=1');
-            exit;
+            throw new Exception('User roles are managed from Account Management in this version.');
 
         case 'save_user_overrides':
             $userId = (int)($_POST['user_id'] ?? 0);
             if ($userId <= 0) {
                 throw new Exception('User required');
             }
-            $orgId = $activeOrgId > 0 ? $activeOrgId : null;
+            $orgId = null;
 
             $pdo->beginTransaction();
 
             // Wipe existing overrides for this user/org combo for known permissions
-            $wipeStmt = $pdo->prepare('DELETE FROM user_permissions_overrides WHERE user_id = ? AND organization_id <=> ? AND permission = ?');
+            $wipeStmt = $pdo->prepare('DELETE FROM user_permissions_overrides WHERE user_id = ? AND organization_id IS NULL AND permission = ?');
             foreach ($allPermissions as $perm => $_group) {
-                $wipeStmt->execute([$userId, $orgId, $perm]);
+                $wipeStmt->execute([$userId, $perm]);
             }
 
             // Insert allow/deny overrides

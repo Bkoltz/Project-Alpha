@@ -10,6 +10,7 @@
 
         input.addEventListener('input', function () {
             hidden.value = '';
+            loadDepartments('');
             var term = input.value.trim();
             if (!term) {
                 suggest.style.display = 'none';
@@ -31,6 +32,7 @@
                         el.addEventListener('click', function () {
                             input.value = this.dataset.name;
                             hidden.value = this.dataset.id;
+                            loadDepartments(this.dataset.id);
                             suggest.style.display = 'none';
                         });
                     });
@@ -46,6 +48,28 @@
                 suggest.style.display = 'none';
             }
         });
+    }
+
+    function loadDepartments(orgId) {
+        var select = document.getElementById('projectDepartmentSelect');
+        if (!select) return;
+        var emptyLabel = select.dataset.emptyLabel || 'No department / org-level project';
+        select.innerHTML = '<option value="">' + escapeHtml(emptyLabel) + '</option>';
+        if (!orgId) return;
+        fetch('/?page=organization/organization-departments-options&organization_id=' + encodeURIComponent(orgId), {
+            credentials: 'same-origin'
+        })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                if (!Array.isArray(list)) return;
+                list.forEach(function (dept) {
+                    var option = document.createElement('option');
+                    option.value = String(dept.id || '');
+                    option.textContent = (dept.name || 'Department') + (dept.folder_name ? ' — ' + dept.folder_name : '');
+                    select.appendChild(option);
+                });
+            })
+            .catch(function () { /* leave only the org-level option */ });
     }
 
     function escapeHtml(text) {
