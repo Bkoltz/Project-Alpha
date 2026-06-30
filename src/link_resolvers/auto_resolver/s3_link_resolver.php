@@ -93,7 +93,14 @@ class S3LinkResolver
             
             return [
                 'success' => true,
-                'folder_id' => $prefix
+                'matches' => [[
+                    'folder_id' => $prefix,
+                    'name' => $folderName,
+                    'path' => $prefix,
+                ]],
+                'folder_id' => $prefix,
+                'name' => $folderName,
+                'path' => $prefix,
             ];
             
         } catch (\Throwable $e) {

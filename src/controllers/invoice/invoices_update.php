@@ -7,6 +7,12 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'invoices', $id);
+$statusStmt = $pdo->prepare('SELECT status FROM invoices WHERE id=?');
+$statusStmt->execute([$id]);
+if (strtolower((string)$statusStmt->fetchColumn()) !== 'draft') {
+  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode('Reopen the invoice as a draft before editing it.'));
+  exit;
+}
 $client_id = (int)($_POST['client_id'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);

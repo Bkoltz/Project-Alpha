@@ -4,8 +4,9 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = 1;
+$orgId = get_active_org_id() ?: 0;
 
 // Fetch filter options
 $catStmt = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');
@@ -114,6 +115,10 @@ $detailStmt = $pdo->prepare("
 $detailStmt->execute($params);
 $details = $detailStmt->fetchAll(PDO::FETCH_ASSOC);
 
+$scheduleStmt = $pdo->prepare('SELECT * FROM audit_schedules WHERE organization_id=? AND report_type="expense" ORDER BY created_at DESC');
+$scheduleStmt->execute([$orgId]);
+$expenseSchedules = $scheduleStmt->fetchAll(PDO::FETCH_ASSOC);
+
 // Build export URL with current filters
 $exportParams = http_build_query(array_filter([
     'start' => $start, 'end' => $end, 'category_id' => $categoryId,
@@ -123,6 +128,10 @@ $exportParams = http_build_query(array_filter([
 ?>
 
 <div style="max-width:1400px;margin:0 auto;padding:24px">
+  <div style="display:flex;gap:8px;margin-bottom:18px">
+    <a class="btn" href="/?page=financial/audit">Audit Export</a>
+    <a class="btn btn-primary" href="/?page=financial/expense-report">Expense Reports</a>
+  </div>
   <div class="page-head">
     <h2>Expense Report</h2>
     <a href="/?page=financial/expense-export&<?php echo htmlspecialchars($exportParams); ?>" class="btn btn-sm">Export CSV</a>
@@ -184,6 +193,15 @@ $exportParams = http_build_query(array_filter([
         </select>
       </div>
       <div class="field">
+        <label class="label-muted">Status</label>
+        <select name="status" class="input">
+          <option value="">All statuses</option>
+          <?php foreach (['pending' => 'Pending', 'confirmed' => 'Confirmed', 'reimbursed' => 'Reimbursed', 'void' => 'Void'] as $value => $label): ?>
+            <option value="<?php echo $value; ?>" <?php echo $status === $value ? 'selected' : ''; ?>><?php echo $label; ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="field">
         <label class="label-muted">Group By</label>
         <select name="group_by" class="input">
           <option value="none" <?php echo $groupBy === 'none' ? 'selected' : ''; ?>>No Grouping</option>
@@ -218,6 +236,77 @@ $exportParams = http_build_query(array_filter([
       <div class="font-600" style="font-size:20px"><?php echo money_format_total($summary['deductible_total']); ?></div>
     </div>
   </div>
+
+  <section style="margin-bottom:20px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:20px 0">
+    <div class="page-head" style="margin-bottom:16px">
+      <h3 style="margin:0">Scheduled Expense Reports</h3>
+    </div>
+    <form method="post" action="/?page=financial/audit-schedule-handler" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
+      <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+      <input type="hidden" name="action" value="create">
+      <input type="hidden" name="report_type" value="expense">
+      <input type="hidden" name="category_id" value="<?php echo $categoryId; ?>">
+      <input type="hidden" name="vendor_id" value="<?php echo $vendorId; ?>">
+      <input type="hidden" name="client_id" value="<?php echo $clientId; ?>">
+      <input type="hidden" name="billable" value="<?php echo htmlspecialchars($billable); ?>">
+      <input type="hidden" name="tax_deductible" value="<?php echo htmlspecialchars($taxDeductible); ?>">
+      <input type="hidden" name="status" value="<?php echo htmlspecialchars($status); ?>">
+      <label class="field">
+        <span class="label-muted">Frequency</span>
+        <select name="schedule_frequency" class="input">
+          <option value="weekly">Weekly</option>
+          <option value="monthly" selected>Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="annually">Annually</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="label-muted">Report Period</span>
+        <select name="schedule_date_range" class="input">
+          <option value="last_week">Previous week</option>
+          <option value="last_month" selected>Previous month</option>
+          <option value="last_quarter">Previous quarter</option>
+          <option value="last_year">Previous year</option>
+          <option value="current_year">Current year to date</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="label-muted">Recipient</span>
+        <input type="email" name="schedule_email[]" class="input" required placeholder="name@example.com">
+      </label>
+      <button type="submit" class="btn btn-primary">Create Schedule</button>
+    </form>
+
+    <?php if ($expenseSchedules): ?>
+      <div class="pa-table-wrap" style="margin-top:18px">
+        <table class="pa-table">
+          <thead><tr><th>Frequency</th><th>Period</th><th>Recipients</th><th>Next Run</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+          <?php foreach ($expenseSchedules as $schedule): ?>
+            <?php $scheduleEmails = json_decode((string)$schedule['email_addresses'], true) ?: []; ?>
+            <tr>
+              <td><?php echo htmlspecialchars(ucfirst((string)$schedule['frequency'])); ?></td>
+              <td><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string)$schedule['date_range_type']))); ?></td>
+              <td><?php echo htmlspecialchars(implode(', ', $scheduleEmails)); ?></td>
+              <td><?php echo !empty($schedule['next_run_at']) ? htmlspecialchars(date('M j, Y', strtotime((string)$schedule['next_run_at']))) : 'Not scheduled'; ?></td>
+              <td><span class="status-pill <?php echo !empty($schedule['is_active']) ? 'status-pill--active' : ''; ?>"><?php echo !empty($schedule['is_active']) ? 'Active' : 'Paused'; ?></span></td>
+              <td style="white-space:nowrap">
+                <form method="post" action="/?page=financial/audit-schedule-handler" style="display:inline">
+                  <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="action" value="toggle"><input type="hidden" name="report_type" value="expense"><input type="hidden" name="id" value="<?php echo (int)$schedule['id']; ?>">
+                  <button type="submit" class="btn btn-sm"><?php echo !empty($schedule['is_active']) ? 'Pause' : 'Resume'; ?></button>
+                </form>
+                <form method="post" action="/?page=financial/audit-schedule-handler" style="display:inline" onsubmit="return confirm('Delete this schedule?')">
+                  <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="report_type" value="expense"><input type="hidden" name="id" value="<?php echo (int)$schedule['id']; ?>">
+                  <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
+  </section>
 
   <?php if (!empty($grouped)): ?>
   <!-- Grouped Summary -->

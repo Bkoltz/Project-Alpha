@@ -1,6 +1,7 @@
 <?php
 // src/controllers/organization/org_search.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 header('Content-Type: application/json');
 $term = isset($_GET['term']) ? trim((string)$_GET['term']) : '';
@@ -10,9 +11,20 @@ if ($term === '') {
 }
 
 try {
-    $st = $pdo->prepare('SELECT id, name FROM organizations WHERE name LIKE ? ORDER BY name ASC LIMIT 15');
     $like = '%' . str_replace('%','\\%',$term) . '%';
-    $st->execute([$like]);
+    $params = [$like];
+    $where = ['name LIKE ?'];
+    if (($_SESSION['user']['role'] ?? '') !== 'admin') {
+        $orgIds = user_org_ids($pdo, (int)($_SESSION['user']['id'] ?? 0));
+        if (!$orgIds) {
+            echo json_encode([]);
+            exit;
+        }
+        $where[] = 'id IN (' . implode(',', array_fill(0, count($orgIds), '?')) . ')';
+        $params = array_merge($params, $orgIds);
+    }
+    $st = $pdo->prepare('SELECT id, name FROM organizations WHERE ' . implode(' AND ', $where) . ' ORDER BY name ASC LIMIT 15');
+    $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode(array_values($rows));
 } catch (Throwable $e) {

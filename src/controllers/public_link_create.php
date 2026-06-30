@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/acl.php';
 
 header('Content-Type: application/json');
 
@@ -13,13 +14,35 @@ $days = (int)($_POST['days'] ?? 0);
 $expireWhenPaid = isset($_POST['expire_when_paid']) && $_POST['expire_when_paid'] === '1';
 $forceNew = isset($_POST['force_new']) && $_POST['force_new'] === '1';
 
-if (!in_array($type, ['quote', 'contract', 'invoice'], true) || $id <= 0) {
+if (!function_exists('public_link_absolute_url')) {
+    function public_link_absolute_url(array $appConfig, string $token): string
+    {
+        $host = trim((string)($appConfig['app_host'] ?? ''));
+        if ($host !== '' && preg_match('#^https?://#i', $host)) {
+            $base = rtrim($host, '/');
+        } else {
+            if ($host === '') {
+                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            }
+            $scheme = 'http';
+            if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+                $scheme = 'https';
+            } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos((string)$_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') === 0) {
+                $scheme = 'https';
+            }
+            $base = $scheme . '://' . rtrim($host, '/');
+        }
+        return $base . '/?page=public-doc&token=' . rawurlencode($token);
+    }
+}
+
+if (!in_array($type, ['quote', 'contract', 'invoice', 'project_invoice'], true) || $id <= 0) {
     echo json_encode(['success' => false, 'error' => 'Invalid request']);
     exit;
 }
 
 // "Expire when paid" only applies to invoices
-if ($expireWhenPaid && $type !== 'invoice') {
+if ($expireWhenPaid && !in_array($type, ['invoice', 'project_invoice'], true)) {
     $expireWhenPaid = false;
 }
 
@@ -33,18 +56,29 @@ if (!$expireWhenPaid && $days <= 0) {
 
 try {
     // Verify the document exists
-    $validTables = ['quote' => 'quotes', 'contract' => 'contracts', 'invoice' => 'invoices'];
+    $validTables = ['quote' => 'quotes', 'contract' => 'contracts', 'invoice' => 'invoices', 'project_invoice' => 'project_invoices'];
     if (!isset($validTables[$type])) {
         echo json_encode(['success' => false, 'error' => 'Invalid document type']);
         exit;
     }
     $table = $validTables[$type];
-    $stmt = $pdo->prepare("SELECT id, status FROM {$table} WHERE id = ?");
+    $extra = $type === 'invoice'
+        ? ', finalized_at, collection_mode'
+        : ($type === 'project_invoice' ? ', finalized_at, project_id' : '');
+    $stmt = $pdo->prepare("SELECT id, status{$extra} FROM {$table} WHERE id = ?");
     $stmt->execute([$id]);
     $doc = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$doc) {
         echo json_encode(['success' => false, 'error' => ucfirst($type) . ' not found']);
+        exit;
+    }
+
+    $ownershipTable = $type === 'project_invoice' ? 'projects' : $table;
+    $ownershipId = $type === 'project_invoice' ? (int)($doc['project_id'] ?? 0) : $id;
+    if ($ownershipId <= 0 || !can_access_record($pdo, $ownershipTable, $ownershipId, (int)($_SESSION['user']['id'] ?? 0))) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Permission denied']);
         exit;
     }
     
@@ -55,7 +89,9 @@ try {
         $blocked = true;
     } elseif ($type === 'contract' && in_array($status, ['denied', 'cancelled', 'void'], true)) {
         $blocked = true;
-    } elseif ($type === 'invoice' && $status === 'void') {
+    } elseif ($type === 'invoice' && ($status === 'draft' || $status === 'void' || empty($doc['finalized_at']) || ($doc['collection_mode'] ?? 'direct') !== 'direct')) {
+        $blocked = true;
+    } elseif ($type === 'project_invoice' && ($status === 'draft' || $status === 'void' || empty($doc['finalized_at']))) {
         $blocked = true;
     }
     
@@ -106,15 +142,7 @@ try {
     
     if ($existing) {
         // Return existing valid link
-        $host = $_SERVER['HTTP_HOST'] ?? '';
-        if ($host === '' && !empty($appConfig['app_host'])) {
-            $host = (string)$appConfig['app_host'];
-        }
-        if ($host === '') {
-            $host = 'localhost';
-        }
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-        $publicUrl = $scheme . '://' . $host . '/?page=public-doc&token=' . rawurlencode($existing['token']);
+        $publicUrl = public_link_absolute_url($appConfig, (string)$existing['token']);
         
         $expiresAt = $existing['expire_when_paid'] ? 'When invoice is paid' : $existing['expires_at'];
         $expiresInDays = null;
@@ -135,7 +163,7 @@ try {
     }
     
     // Generate new token
-    $token = bin2hex(random_bytes(16));
+    $token = bin2hex(random_bytes(32));
     
     // Calculate expiration
     $exp = null;
@@ -148,15 +176,7 @@ try {
     $ins->execute([$type, $id, $token, $exp, $expireWhenPaid ? 1 : 0]);
     
     // Build absolute URL
-    $host = $_SERVER['HTTP_HOST'] ?? '';
-    if ($host === '' && !empty($appConfig['app_host'])) {
-        $host = (string)$appConfig['app_host'];
-    }
-    if ($host === '') {
-        $host = 'localhost';
-    }
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-    $publicUrl = $scheme . '://' . $host . '/?page=public-doc&token=' . rawurlencode($token);
+    $publicUrl = public_link_absolute_url($appConfig, $token);
     
     echo json_encode([
         'success' => true,

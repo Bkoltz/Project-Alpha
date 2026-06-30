@@ -8,14 +8,27 @@
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 
 services:
+  migrate:
+    build:
+      context: .
+      target: test
+    image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:latest}
+
   web:
     build:
       context: .
-      target: web
+      target: test
     image: ${PROJECT_ALPHA_WEB_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:latest}
+    environment:
+      APP_ENV: development
+      AUTOPAY_BETA_ENABLED: ${AUTOPAY_BETA_ENABLED:-false}
+      APP_AUTH_DISABLED: ${APP_AUTH_DISABLED:-false}
 
   cron:
     build:
       context: .
       target: cron
     image: ${PROJECT_ALPHA_CRON_IMAGE:-ghcr.io/ledgetoptechnologies/project-alpha:cron-latest}
+    environment:
+      APP_ENV: development
+      AUTOPAY_BETA_ENABLED: ${AUTOPAY_BETA_ENABLED:-false}

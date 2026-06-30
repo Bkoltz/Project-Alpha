@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/smtp.php';
+require_once __DIR__ . '/../../utils/project_billing.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
   header('Location: /?page=public-doc&error=' . urlencode('Invalid request'));
@@ -75,6 +76,15 @@ try {
         $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
         $quoteOrgId   = (int)($quote['organization_id'] ?? 0) ?: $fallbackOrgId;
         $billingMode = (($quote['billing_mode'] ?? 'fixed') === 'hourly') ? 'hourly' : 'fixed';
+        $depositType = $quote['deposit_type'] ?? 'none';
+        $depositValue = (float)($quote['deposit_amount'] ?? 0);
+        $quoteTotal = (float)($quote['total'] ?? 0);
+        $contractDepositAmount = 0.0;
+        if ($depositType === 'percent') {
+          $contractDepositAmount = max(0, min(100, $depositValue)) * $quoteTotal / 100;
+        } elseif ($depositType === 'fixed') {
+          $contractDepositAmount = min(max(0, $depositValue), $quoteTotal);
+        }
 
         // Create contract (pending)
         $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -91,8 +101,8 @@ try {
              $quote['subtotal'],
              $quote['total'],
              $projectCode,
-             $quote['deposit_type'] ?? 'none',
-             $quote['deposit_amount'] ?? 0,
+             $depositType,
+             $contractDepositAmount,
              $quote['start_date'] ?? null,
              $quote['end_date'] ?? null,
              $quote['billing_interval_count'] ?? 1,
@@ -119,10 +129,13 @@ try {
         }
 
         if ($quoteType === 'regular') {
-          // Create invoice (unpaid)
+          // Create a private draft. Contract completion is the billing event.
           $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'unpaid', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
           $invoice_id = (int)$pdo->lastInsertId();
+          if (!empty($quote['project_id']) && project_uses_monthly_invoice_billing($pdo, (int)$quote['project_id'])) {
+            $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
+          }
 
           $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
           foreach ($qitems as $it) {

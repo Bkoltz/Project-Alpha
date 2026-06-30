@@ -6,7 +6,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 
 # Install system utilities and Composer (use a matching PHP version so lockfile checks pass)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
         git curl unzip zip zlib1g-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/* \
     && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
@@ -17,6 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install production dependencies and optimize autoloader
 RUN composer install \
     --no-dev \
+    --prefer-dist \
+    --no-progress \
+    --no-interaction \
+    --optimize-autoloader
+
+# Development/test dependencies are isolated from production images.
+FROM vendor AS vendor-dev
+RUN composer install \
     --prefer-dist \
     --no-progress \
     --no-interaction \
@@ -43,7 +51,7 @@ RUN { \
 WORKDIR /var/www/html
 
 # System packages needed for PHP extensions
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y \
     default-mysql-client \
     git \
     unzip \
@@ -69,12 +77,8 @@ COPY php.ini /usr/local/etc/php/conf.d/php.ini
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/
 
-# Copy database initialization and migration files into the image
-# The init.sql is the single source of truth with all modules concatenated
-COPY ./database/init.sql /usr/local/share/app-migrations/init.sql
-COPY ./database/init.sql /docker-entrypoint-initdb.d/01-init.sql
-# Copy individual migration files so the migration runner can apply them
-# to existing databases (init.sql only runs on fresh DBs)
+# Copy the destructive 0.5.0 baseline and immutable forward migrations.
+COPY ./database/baseline.sql /usr/local/share/app-migrations/baseline.sql
 COPY ./database/migrations/ /var/www/database/migrations/
 
 # Copy Composer vendor from the builder stage
@@ -98,11 +102,27 @@ RUN mkdir -p /var/log && \
 # Entry script
 WORKDIR /var/www
 COPY ./docker/start.sh /usr/local/bin/start.sh
+COPY ./docker/migrate.sh /usr/local/bin/migrate.sh
 # Normalize Windows CRLF to LF to avoid "env: 'bash\r'" errors
-RUN sed -i 's/\r$//' /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
+RUN sed -i 's/\r$//' /usr/local/bin/start.sh /usr/local/bin/migrate.sh \
+    && chmod +x /usr/local/bin/start.sh /usr/local/bin/migrate.sh
 
 EXPOSE 80
 CMD ["start.sh"]
+
+# Local/CI target: production-equivalent web runtime plus PHPUnit and tests.
+FROM web AS test
+COPY --from=vendor-dev /app/vendor /var/www/vendor
+COPY --from=vendor /usr/local/bin/composer /usr/local/bin/composer
+COPY composer.json composer.lock /var/www/
+COPY ./tests/ /var/www/tests/
+COPY ./phpunit.xml /var/www/phpunit.xml
+COPY ./database/ /var/www/database/
+COPY ./public/ /var/www/public/
+COPY ./cron/ /var/www/cron/
+COPY ./docker/ /var/www/docker/
+COPY ./.github/ /var/www/.github/
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/.github /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
@@ -110,29 +130,33 @@ FROM php:8.5-cli AS cron
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        default-mysql-client cron curl \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
+        default-mysql-client cron curl zlib1g-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli
+RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli
 
 WORKDIR /var/www
 
 COPY --from=vendor /app/vendor /var/www/vendor
 COPY ./src/ /var/www/src/
 COPY ./database/migrations/ /var/www/database/migrations/
+COPY ./database/baseline.sql /usr/local/share/app-migrations/baseline.sql
+COPY ./docker/migrate.sh /usr/local/bin/migrate.sh
 RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
     && mkdir -p /var/www/config/logs/cron /var/www/backups \
     && chown -R root:root /var/www \
-    && chmod -R 755 /var/www
+    && chmod -R 755 /var/www \
+    && sed -i 's/\r$//' /usr/local/bin/migrate.sh \
+    && chmod +x /usr/local/bin/migrate.sh
 
 RUN mkdir -p /var/log/cron && \
     touch /var/log/cron/generate_recurring_invoices.log \
-          /var/log/cron/auto_charge_recurring.log \
           /var/log/cron/send_invoice_reminders.log \
           /var/log/cron/auto_terminate_contracts.log \
           /var/log/cron/link_expiration_checker.log \
-          /var/log/cron/stripe_reconciliation.log && \
+          /var/log/cron/stripe_reconciliation.log \
+          /var/log/cron/sync_merchant_rate.log && \
     chmod 666 /var/log/cron/*.log
 
 COPY cron/crontab /etc/cron.d/project-alpha

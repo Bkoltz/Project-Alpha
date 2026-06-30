@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/webhook_logger.php';
+require_once __DIR__ . '/../../utils/stripe_financial_events.php';
 
 $endpointName = 'stripe-webhook';
 $payload = file_get_contents('php://input');
@@ -26,6 +27,7 @@ if (!$payload) {
 $signatureValid = null;
 $responseCode = 200;
 $errorMessage = null;
+$stripeEventId = null;
 
 try {
     // Initialize Stripe service
@@ -78,6 +80,8 @@ try {
     } elseif ($webhookSecret) {
         // Secret configured but no signature header = reject
         throw new Exception('Missing webhook signature');
+    } elseif (strtolower((string)(getenv('APP_ENV') ?: 'production')) === 'production') {
+        throw new Exception('Stripe webhook secret is required in production');
     }
     
     // Parse the event
@@ -86,9 +90,33 @@ try {
         throw new Exception('Invalid event payload');
     }
     
-    // Log the event with full payload for debugging
-    @error_log('[StripeWebhook] Received event: ' . $event['type'] . ' - ' . ($event['id'] ?? 'no-id'));
-    @error_log('[StripeWebhook] Full payload: ' . $payload);
+    $stripeEventId = (string)($event['id'] ?? '');
+    if ($stripeEventId === '') {
+        throw new Exception('Stripe event ID is required');
+    }
+    @error_log('[StripeWebhook] Received event: ' . $event['type'] . ' - ' . $stripeEventId);
+
+    $eventInsert = $pdo->prepare('INSERT IGNORE INTO stripe_events (stripe_event_id,event_type,status) VALUES (?,? ,"processing")');
+    $eventInsert->execute([$stripeEventId, (string)$event['type']]);
+    if ($eventInsert->rowCount() === 0) {
+        $eventState = $pdo->prepare('SELECT status,updated_at FROM stripe_events WHERE stripe_event_id=?');
+        $eventState->execute([$stripeEventId]);
+        $existingEvent = $eventState->fetch(PDO::FETCH_ASSOC) ?: [];
+        if (($existingEvent['status'] ?? '') === 'processed') {
+            echo json_encode(['received' => true, 'duplicate' => true]);
+            webhook_log_update($pdo, $logId, $signatureValid, 200, null);
+            exit;
+        }
+        if (($existingEvent['status'] ?? '') === 'processing'
+            && !empty($existingEvent['updated_at'])
+            && strtotime((string)$existingEvent['updated_at']) > time() - 300) {
+            echo json_encode(['received' => true, 'processing' => true]);
+            webhook_log_update($pdo, $logId, $signatureValid, 200, null);
+            exit;
+        }
+        $pdo->prepare('UPDATE stripe_events SET status="processing",attempts=attempts+1,last_error=NULL WHERE stripe_event_id=?')
+            ->execute([$stripeEventId]);
+    }
     
     // Route to appropriate handler based on event type
     $eventType = $event['type'];
@@ -102,6 +130,12 @@ try {
             break;
             
         case 'checkout.session.expired':
+            if (!empty($eventData['id'])) {
+                $pdo->prepare('UPDATE invoices SET stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE stripe_session_id=?')
+                    ->execute([(string)$eventData['id']]);
+                $pdo->prepare('UPDATE project_invoices SET stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE stripe_session_id=?')
+                    ->execute([(string)$eventData['id']]);
+            }
             @error_log('[StripeWebhook] Checkout session expired: ' . ($eventData['id'] ?? 'unknown'));
             break;
             
@@ -165,26 +199,37 @@ try {
             
         // Refund events
         case 'charge.refunded':
-            @error_log('[StripeWebhook] Charge refunded: ' . ($eventData['id'] ?? 'unknown'));
-            // Future: handle refunds
+        case 'refund.created':
+        case 'refund.updated':
+        case 'refund.failed':
+            stripe_record_refund($pdo, $eventData);
             break;
             
         // Dispute events
         case 'charge.dispute.created':
-            @error_log('[StripeWebhook] Dispute created: ' . ($eventData['id'] ?? 'unknown'));
-            // Future: handle disputes
+        case 'charge.dispute.updated':
+        case 'charge.dispute.closed':
+        case 'charge.dispute.funds_withdrawn':
+        case 'charge.dispute.funds_reinstated':
+            stripe_record_dispute($pdo, $eventData, $eventType);
             break;
             
         default:
             @error_log('[StripeWebhook] Unhandled event type: ' . $eventType);
     }
     
+    $pdo->prepare('UPDATE stripe_events SET status="processed",processed_at=NOW(),last_error=NULL WHERE stripe_event_id=?')
+        ->execute([$stripeEventId]);
     echo json_encode(['received' => true]);
     
 } catch (Throwable $e) {
     @error_log('[StripeWebhook] Error: ' . $e->getMessage());
-    $responseCode = 400;
+    $responseCode = $stripeEventId ? 500 : 400;
     $errorMessage = $e->getMessage();
+    if ($stripeEventId) {
+        $pdo->prepare('UPDATE stripe_events SET status="failed",last_error=? WHERE stripe_event_id=?')
+            ->execute([substr($errorMessage, 0, 2000), $stripeEventId]);
+    }
     http_response_code($responseCode);
     webhook_log_update($pdo, $logId, $signatureValid, $responseCode, $errorMessage);
     echo json_encode(['error' => $e->getMessage()]);

@@ -276,6 +276,7 @@ try {
         <?php if ($selectedFile): ?>
         <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <strong><?php echo htmlspecialchars($selectedFile); ?></strong>
+            <a class="btn btn-sm" data-skip-nav href="/?page=settings/logs-handler&amp;file=<?php echo urlencode($selectedFile); ?>&amp;download=1">Download</a>
             <form method="GET" action="/" style="display:inline">
                 <input type="hidden" name="page" value="settings">
                 <input type="hidden" name="tab" value="logs">

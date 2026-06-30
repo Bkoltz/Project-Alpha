@@ -1,45 +1,38 @@
-# Project Alpha - Database Schema
+# Project Alpha Database Migrations
 
-## Overview
+Project Alpha 0.5.0 starts from the immutable `database/baseline.sql` schema. The baseline inserts version `0` into `schema_migrations`; this directory contains only later, forward-only changes.
 
-The active schema is split into 8 ordered module files and is also concatenated into `database/init.sql`, which Docker uses as the single source of truth for fresh databases.
+For `0.5.0-rc1`, there are no post-baseline SQL migrations. `php src/migrations/run_migrations.php --validate-files` should report `0` migration files until the first schema change after the 0.5.0 baseline is frozen.
 
-## Active Module Files
+## File Contract
 
-| # | File | Description |
-|---|------|-------------|
-| 001 | `001_auth_module.sql` | Users, password resets, login attempts, 2FA, trusted devices/IPs |
-| 002 | `002_organizations_module.sql` | Organizations, memberships, API keys, API usage, webhooks |
-| 003 | `003_projects_clients_module.sql` | Clients, projects, project metadata, counters, project document links, entity links |
-| 004 | `004_documents_module.sql` | Separate `quotes`, `contracts`, `invoices`, and `recurring_invoices` tables |
-| 005 | `005_financial_module.sql` | Payments, auto-pay logs, payment methods, tax rates, item library, receipts, forms, discounts, financial records |
-| 006 | `006_audit_system_module.sql` | System audit, audit schedules, notifications, cron runs, app config |
-| 007 | `007_public_links_module.sql` | Public document links, link resolver config, document customization, archived entities |
-| 008 | `008_seed_data.sql` | Default organization, admin user, app config |
+- Name files `0001_description.sql`, `0002_description.sql`, and so on.
+- Versions must begin at `0001` and remain contiguous and unique.
+- Never edit or remove a migration after it ships. Stored SHA-256 checksums are enforced.
+- Rollback files, `DELIMITER` blocks, gaps, malformed names, and empty files are rejected.
+- Do not copy historical pre-0.5.0 SQL back into this directory.
+- Before `0.5.0` ships, fold schema work into `database/baseline.sql`; after it ships, add the next immutable migration instead.
 
-## Document Model
+## Execution Contract
 
-Project Alpha intentionally uses separate tables for the three primary document families:
+The one-shot Compose `migrate` service:
 
-- `quotes` with `quote_type ENUM('regular','long_term','on_demand')`
-- `contracts` with `contract_type ENUM('regular','long_term','on_demand')`
-- `invoices` with `invoice_type ENUM('regular','long_term','on_demand')`
+1. Refuses to modify a non-empty database without the 0.5.0 baseline marker.
+2. Loads `database/baseline.sql` only into an empty database.
+3. Validates the migration sequence and applied checksums. An empty post-baseline migration directory is valid.
+4. Requires a successful compressed backup before applying pending post-baseline migrations.
+5. Applies pending migrations, if any, and validates critical schema invariants.
+6. Reconciles the Compose administrator password without logging it or its hash.
 
-This keeps the most common queries and foreign keys straightforward while still allowing each document table to support regular, long-term, and on-demand workflows.
+Web and cron depend on successful completion of this service.
 
-## Public Links
-
-Public links use `document_type` and `document_id`. These names match `project_documents` and make the polymorphic relationship explicit.
-
-## Deprecated Files
-
-The `deprecated/` folder contains old migration files kept for reference only. Do not run those files against a fresh database.
-
-## Rebuild
+## Validation
 
 ```bash
-docker compose down -v
-docker compose up --build
+php src/migrations/run_migrations.php --validate-files
+
+docker compose run --rm migrate \
+  php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 
-Fresh Docker databases execute `database/init.sql` via MySQL's `/docker-entrypoint-initdb.d`.
+Fix forward after a migration ships. MySQL DDL can auto-commit, so a failed change may require restoring the required pre-migration backup before deploying a corrected migration.

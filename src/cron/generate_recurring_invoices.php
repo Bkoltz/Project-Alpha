@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/recurring_billing.php';
+require_once __DIR__ . '/../utils/project_invoice_billing.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
@@ -63,6 +64,15 @@ try {
 
     @error_log("$logPrefix Completed: $invoicesGenerated invoices generated across $catchUpPasses catch-up pass(es), $errors errors");
 
+    $projectInvoicesGenerated = 0;
+    try {
+        $projectInvoicesGenerated = project_invoice_generate_due_monthly($pdo, $appConfig);
+        @error_log("$logPrefix Project monthly billing generated {$projectInvoicesGenerated} project invoice(s)");
+    } catch (Throwable $e) {
+        $errors++;
+        @error_log("$logPrefix Project monthly billing failed: " . $e->getMessage());
+    }
+
     // Automatic invoice notification deliveries (due reminders & overdue weekly reminders)
     try {
         require_once __DIR__ . '/../utils/mailer.php';
@@ -91,7 +101,7 @@ try {
 
         // small helper to create a short public link for invoice viewing
         $createPublicLink = function(int $invoiceId) use ($pdo, $appConfig) {
-            $token = bin2hex(random_bytes(16));
+            $token = bin2hex(random_bytes(32));
             $days = (int)($appConfig['documents_valid_days'] ?? 14);
             $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0,$days) . ' days'));
             $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
@@ -102,7 +112,7 @@ try {
         // 1) 7-day due reminders
         if (!empty($appConfig['invoice_auto_send_due_7days'])) {
             $due7 = date('Y-m-d', strtotime('+7 days'));
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date = ? AND i.status IN ('unpaid','partial')");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date = ? AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct'");
             $stmt->execute([$due7]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {
@@ -145,7 +155,7 @@ try {
         // 2) Weekly overdue reminders (at most once per 7 days for each invoice)
         if (!empty($appConfig['invoice_auto_send_overdue_weekly'])) {
             $todayDate = date('Y-m-d');
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date < ? AND i.status IN ('unpaid','partial')");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date < ? AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct'");
             $stmt->execute([$todayDate]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {
@@ -194,7 +204,7 @@ try {
 
         // 3) Auto-email newly-generated long-term and on-demand invoices (on generation)
         if (!empty($appConfig['invoice_auto_email_on_generate'])) {
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type = 'long_term' AND i.status IN ('unpaid','partial') AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type = 'long_term' AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct' AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
             $stmt->execute();
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {
@@ -234,7 +244,7 @@ try {
         @error_log("$logPrefix Notification pass error: " . $e->getMessage());
     }
 
-    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} invoice(s); {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
+    cron_state_mark_success($pdo, $jobName, "Generated {$invoicesGenerated} recurring invoice(s), {$projectInvoicesGenerated} project invoice(s); {$errors} error(s); {$catchUpPasses} catch-up pass(es)");
 
     // Update last run timestamp in settings (legacy support)
     $configMount = '/var/www/config';

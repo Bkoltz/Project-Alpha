@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = 1;
+$orgId = get_active_org_id();
 
 $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';

@@ -1,7 +1,18 @@
 <?php
-// src/cron/auto_charge_recurring.php
-// Cron job to auto-charge clients for recurring/long-term invoices
-// Run daily via cron
+// BETA / UNAVAILABLE: this legacy AutoPay job is not installed in crontab.
+// Direct execution also fails closed unless explicitly enabled in development/test.
+
+require_once __DIR__ . '/../utils/autopay_beta.php';
+
+try {
+    require_autopay_beta();
+} catch (Throwable $e) {
+    @error_log('[AutoPay] Blocked unavailable beta job: ' . $e->getMessage());
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, "AutoPay is unavailable and disabled.\n");
+    }
+    exit(78);
+}
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';

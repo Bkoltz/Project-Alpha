@@ -18,7 +18,7 @@ fi
 # ── Export environment variables so cron jobs can access them ──
 # Cron does NOT inherit the container's env vars, so we dump them
 # to /etc/environment which each cron job sources before running.
-printenv | grep -E '^(MYSQL_|DB_|APP_|STRIPE_|SMTP_)' | sed 's/=\(.*\)/="\1"/' > /etc/environment
+printenv | grep -E '^(MYSQL_|DB_|APP_|STRIPE_|SMTP_|BACKUP_)' | sed 's/=\(.*\)/="\1"/' > /etc/environment
 
 # ── Create log directory if it doesn't exist ──
 LOG_DIR="/var/www/config/logs/cron"

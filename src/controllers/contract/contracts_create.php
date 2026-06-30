@@ -127,8 +127,11 @@ try{
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
   $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'unpaid', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
+      ->execute([$co_id, null, $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'draft', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
   $invoice_id = (int)$pdo->lastInsertId();
+  if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
+    $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
+  }
   $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
   foreach($items as $it){ $ii->execute([$invoice_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
   // Assign per-type doc_number for invoices

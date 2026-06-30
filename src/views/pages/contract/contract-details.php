@@ -125,7 +125,7 @@ if ($termsText === '') {
         </form>
       <?php endif; ?>
       <?php if ($contract['status'] === 'active'): ?>
-        <form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Mark this contract as completed and set invoice due date?');">
+        <form method="post" action="/?page=contract/contract-complete" style="display:inline" onsubmit="return confirm('Complete this contract, finalize its invoice, and send it when automatic delivery is enabled?');">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
           <button type="submit" class="btn btn-sm btn-success">Complete</button>
@@ -300,14 +300,7 @@ if ($termsText === '') {
 
   <?php
   $depositType = $contract['deposit_type'] ?? 'none';
-  $depositValue = (float)($contract['deposit_amount'] ?? 0);
-  $contractTotal = (float)($contract['total'] ?? 0);
-  $depositCalc = 0;
-  if ($depositType === 'percent') {
-    $depositCalc = max(0, min(100, $depositValue)) * $contractTotal / 100;
-  } elseif ($depositType === 'fixed') {
-    $depositCalc = $depositValue;
-  }
+  $depositCalc = (float)($contract['deposit_amount'] ?? 0);
   $fulfillmentDate = $contract['fulfillment_date'] ?? null;
   $showDepositInfo = $depositType !== 'none' && $depositCalc > 0;
   $showFulfillmentDate = !empty($fulfillmentDate);
@@ -503,7 +496,6 @@ if ($termsText === '') {
   <!-- Totals section - uses table for PDF compatibility -->
   <?php
   $depType = $contract['deposit_type'] ?? 'none';
-  $depValue = (float)($contract['deposit_amount'] ?? 0);
   $contractTotal = (float)($contract['total'] ?? 0);
   if (($contract['contract_type'] ?? 'regular') === 'on_demand' && $contractTotal <= 0 && (float)($contract['subtotal'] ?? 0) > 0) {
     $displaySubtotal = (float)($contract['subtotal'] ?? 0);
@@ -516,12 +508,7 @@ if ($termsText === '') {
     $displayTaxable = max(0, $displaySubtotal - $displayDiscount);
     $contractTotal = max(0, $displayTaxable + (max(0, (float)($contract['tax_percent'] ?? 0)) * $displayTaxable / 100));
   }
-  $depositCalc = 0;
-  if ($depType === 'percent') {
-    $depositCalc = max(0, min(100, $depValue)) * $contractTotal / 100;
-  } elseif ($depType === 'fixed') {
-    $depositCalc = $depValue;
-  }
+  $depositCalc = (float)($contract['deposit_amount'] ?? 0);
   $showDeposit = $depType !== 'none' && $depositCalc > 0;
   ?>
 

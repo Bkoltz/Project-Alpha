@@ -9,6 +9,13 @@ require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
 require_once __DIR__ . '/../../utils/InvoiceSurcharge.php';
 
+// Production collection is client-initiated from the public invoice link.
+// Keep the historical route closed so an operator cannot accidentally submit
+// a client's card or bypass the one-time approval boundary.
+$blockedInvoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
+header('Location: /?page=invoice/invoice-details&id=' . $blockedInvoiceId . '&stripe_error=' . urlencode('Share the finalized invoice link so the client can approve their one-time payment.'));
+exit;
+
 $invoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
 $returnUrl = $_POST['return_url'] ?? $_GET['return_url'] ?? '';
 
@@ -41,6 +48,9 @@ try {
     $status = strtolower($invoice['status'] ?? '');
     if (!in_array($status, ['unpaid', 'partial'], true)) {
         throw new Exception('This invoice cannot be charged. Status: ' . $status);
+    }
+    if (empty($invoice['finalized_at']) || ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+        throw new Exception('This invoice is not eligible for individual online payment.');
     }
     
     // Calculate amount due from payments table for accuracy

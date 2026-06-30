@@ -36,6 +36,16 @@ $appConfig = [
     'invoice_auto_send_due_7days' => 1,
     'invoice_auto_send_overdue_weekly' => 1,
     'invoice_auto_email_on_generate' => 1,
+    'invoice_auto_email_on_contract_complete' => 1,
+    // Link resolver / invoice content links are intentionally opt-in.
+    'link_resolver_enabled' => 0,
+    'org_level_links_only' => 0,
+    'default_link_expiration_days' => 365,
+    'link_resolver_daily_scan_enabled' => 0,
+    'link_resolver_invoice_auto_attach_enabled' => 0,
+    'project_specific_links_enabled' => 0,
+    'invoice_content_links_enabled' => 0,
+    'invoice_missing_content_links_behavior' => 'warn',
     // SMTP (loaded from app_config with fallback to settings.json)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -56,8 +66,6 @@ $appConfig = [
     // qoute defaults
     'quote_auto_create_contract' => 1,
     'quote_auto_create_invoice' => 1,
-    // contract defaults
-    //invoice defaults
 ];
 
 // Load .env file if it exists (project root, config volume, or container root)
@@ -151,9 +159,10 @@ try {
             'net_terms_days', 'documents_valid_days', 'payment_methods',
             'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
             'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
+            'invoice_auto_email_on_contract_complete',
             'auto_terminate_contracts', 'link_expiration_checker',
             'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
-            'payment_failure_alert', 'payment_received_notification',
+            'payment_failure_alert',
             'link_expiration_warning', 'link_expiration_warning_days',
             'invoice_show_terms', 'invoice_show_project_code', 'invoice_show_due_date',
             'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
@@ -162,6 +171,9 @@ try {
             'contract_custom_sections_json',
             'backup_hour', 'backup_retention_days',
             'link_resolver_enabled', 'default_link_expiration_days', 'org_level_links_only',
+            'link_resolver_daily_scan_enabled', 'link_resolver_invoice_auto_attach_enabled',
+            'project_specific_links_enabled', 'invoice_content_links_enabled',
+            'invoice_missing_content_links_behavior',
             'link_expiration_email_enabled',
             // Surcharge settings (user-editable via billing settings)
             'stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed',

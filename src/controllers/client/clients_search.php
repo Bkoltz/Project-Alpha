@@ -12,6 +12,26 @@ if ($hasArchived) { $where[] = 'c.archived = 0'; }
 $where[] = 'c.name LIKE ?';
 $params = ['%'.$term.'%'];
 
+$userId = (int)($_SESSION['user']['id'] ?? 0);
+$activeOrgId = get_active_org_id();
+$isAdmin = (($_SESSION['user']['role'] ?? '') === 'admin');
+if (!$isAdmin) {
+    if ($activeOrgId > 0) {
+        if (acl_user_has_org_wide_scope($pdo, $userId, $activeOrgId)) {
+            $where[] = '(c.organization_id = ? OR c.organization_id IS NULL)';
+            $params[] = $activeOrgId;
+        } else {
+            $where[] = '((c.organization_id = ? AND c.created_by = ?) OR (c.organization_id IS NULL AND c.created_by = ?))';
+            $params[] = $activeOrgId;
+            $params[] = $userId;
+            $params[] = $userId;
+        }
+    } else {
+        $where[] = 'c.created_by = ?';
+        $params[] = $userId;
+    }
+}
+
 $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 $sql = "SELECT c.id, c.name, c.organization_id, o.name as org_name, o.tax_exempt_file FROM clients c LEFT JOIN organizations o ON c.organization_id = o.id {$whereSQL} ORDER BY c.name LIMIT 10";
 $stmt = $pdo->prepare($sql);

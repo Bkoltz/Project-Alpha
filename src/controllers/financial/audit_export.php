@@ -6,10 +6,13 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/csv.php';
 
 // Get form parameters
 $startDate = $_POST['start_date'] ?? date('Y-m-d', strtotime('January 1 ' . date('Y')));
 $endDate = $_POST['end_date'] ?? date('Y-m-d');
+$accountingBasis = ($_POST['accounting_basis'] ?? 'cash') === 'accrual' ? 'accrual' : 'cash';
 
 // CSRF check: accept legacy 'csrf' or Symfony '_token'
 $csrfOk = false;
@@ -31,6 +34,7 @@ $includeQuotes = isset($_POST['include_quotes']) && $_POST['include_quotes'] ===
 $generateCsv = isset($_POST['generate_csv']) && $_POST['generate_csv'] === '1';
 $includePdfs = isset($_POST['include_pdfs']) && $_POST['include_pdfs'] === '1';
 $enableScheduling = isset($_POST['enable_scheduling']) && $_POST['enable_scheduling'] === '1';
+$activeOrgId = (int)(function_exists('get_active_org_id') ? get_active_org_id() : ($_SESSION['active_org_id'] ?? 0));
 
 // Handle scheduling separately
 if ($enableScheduling) {
@@ -52,6 +56,7 @@ if ($enableScheduling) {
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 frequency VARCHAR(50) NOT NULL,
                 date_range_type VARCHAR(50) NOT NULL,
+                accounting_basis ENUM('cash','accrual') NOT NULL DEFAULT 'cash',
                 email_addresses TEXT NOT NULL,
                 include_invoices TINYINT(1) DEFAULT 1,
                 include_unpaid_invoices TINYINT(1) DEFAULT 0,
@@ -66,12 +71,14 @@ if ($enableScheduling) {
             )");
             
             $stmt = $pdo->prepare("INSERT INTO audit_schedules 
-                (frequency, date_range_type, email_addresses, include_invoices, include_unpaid_invoices, 
-                 include_contracts, include_quotes, generate_csv, include_pdfs, next_run_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                (organization_id, frequency, date_range_type, accounting_basis, email_addresses, include_invoices, include_unpaid_invoices,
+                 include_contracts, include_quotes, generate_csv, include_pdfs, next_run_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
+                $activeOrgId ?: null,
                 $frequency,
                 $dateRangeType,
+                $accountingBasis,
                 json_encode($scheduleEmails),
                 $includeInvoices ? 1 : 0,
                 $includeUnpaidInvoices ? 1 : 0,
@@ -120,6 +127,23 @@ try {
             ? "i.status IN ('paid', 'partial', 'unpaid')" 
             : "i.status IN ('paid', 'partial')";
         
+        if ($accountingBasis === 'cash') {
+            $invoiceQuery = "
+                SELECT i.id,i.doc_number,i.client_id,c.name AS client_name,i.project_code,
+                       i.subtotal,i.tax_percent,i.tax_amount AS tax,i.tax_county,i.discount_value,
+                       i.total,i.status,MIN(p.payment_date) AS report_date,i.created_at,i.due_date,
+                       SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)) AS amount_paid,
+                       GROUP_CONCAT(DISTINCT p.payment_method SEPARATOR ', ') AS payment_methods
+                FROM invoices i
+                JOIN clients c ON i.client_id=c.id
+                JOIN payments p ON i.id=p.invoice_id AND p.status='succeeded'
+                WHERE p.payment_date BETWEEN ? AND ? AND (?=0 OR i.organization_id=?)
+                GROUP BY i.id
+                ORDER BY report_date ASC,i.doc_number ASC
+            ";
+            $stmt = $pdo->prepare($invoiceQuery);
+            $stmt->execute([$startDate, $endDate, $activeOrgId, $activeOrgId]);
+        } else {
         $invoiceQuery = "
             SELECT 
                 i.id,
@@ -134,6 +158,7 @@ try {
                 i.discount_value,
                 i.total,
                 i.status,
+                DATE(COALESCE(i.finalized_at,i.created_at)) AS report_date,
                 i.created_at,
                 i.due_date,
                 COALESCE(SUM(CASE WHEN p.status = 'succeeded' THEN p.amount ELSE 0 END), 0) as amount_paid,
@@ -141,14 +166,23 @@ try {
             FROM invoices i
             LEFT JOIN clients c ON i.client_id = c.id
             LEFT JOIN payments p ON i.id = p.invoice_id
-            WHERE i.created_at BETWEEN ? AND ? AND {$statusFilter}
+            WHERE COALESCE(i.finalized_at,i.created_at) BETWEEN ? AND ? AND {$statusFilter}
+              AND i.status <> 'draft'
+              AND (?=0 OR i.organization_id=?)
             GROUP BY i.id
             ORDER BY i.created_at ASC, i.doc_number ASC
         ";
         
         $stmt = $pdo->prepare($invoiceQuery);
-        $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        $stmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59', $activeOrgId, $activeOrgId]);
+        }
         $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($accountingBasis === 'accrual') {
+            foreach ($invoices as &$invoiceRow) {
+                $invoiceRow['amount_paid'] = (float)$invoiceRow['total'];
+            }
+            unset($invoiceRow);
+        }
     }
 
     // Fetch contracts
@@ -172,11 +206,11 @@ try {
                 c.tax_percent
             FROM contracts c
             LEFT JOIN clients cl ON c.client_id = cl.id
-            WHERE c.created_at BETWEEN ? AND ?
+            WHERE c.created_at BETWEEN ? AND ? AND (?=0 OR c.organization_id=?)
             ORDER BY c.created_at ASC, c.doc_number ASC
         ";
         $contractStmt = $pdo->prepare($contractQuery);
-        $contractStmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        $contractStmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59', $activeOrgId, $activeOrgId]);
         $contracts = $contractStmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -199,11 +233,11 @@ try {
                 q.tax_percent
             FROM quotes q
             LEFT JOIN clients cl ON q.client_id = cl.id
-            WHERE q.created_at BETWEEN ? AND ?
+            WHERE q.created_at BETWEEN ? AND ? AND (?=0 OR q.organization_id=?)
             ORDER BY q.created_at ASC, q.doc_number ASC
         ";
         $quoteStmt = $pdo->prepare($quoteQuery);
-        $quoteStmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        $quoteStmt->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59', $activeOrgId, $activeOrgId]);
         $quotes = $quoteStmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -234,7 +268,7 @@ try {
 
         // Headers
         $headers = ['Date', 'Client', 'Doc Number', 'Document Type', 'Status', 'Tax %', 'Tax County', 'Amount Paid', 'Payment Method', 'Discount', 'Total', 'Running Total'];
-        fputcsv($fp, $headers);
+        csv_write_row($fp, $headers);
 
         $runningTotal = 0;
 
@@ -243,8 +277,8 @@ try {
             $amountPaid = (float)($inv['amount_paid'] ?? 0);
             $runningTotal += $amountPaid;
             
-            fputcsv($fp, [
-                substr($inv['created_at'] ?? '', 0, 10),
+            csv_write_row($fp, [
+                substr($inv['report_date'] ?? $inv['created_at'] ?? '', 0, 10),
                 $inv['client_name'] ?? '',
                 $inv['doc_number'] ?? $inv['id'],
                 'Invoice',
@@ -263,7 +297,7 @@ try {
         foreach ($contracts as $contract) {
             $total = (float)($contract['total'] ?? 0);
             
-            fputcsv($fp, [
+            csv_write_row($fp, [
                 substr($contract['created_at'] ?? '', 0, 10),
                 $contract['client_name'] ?? '',
                 $contract['doc_number'] ?? $contract['id'],
@@ -283,7 +317,7 @@ try {
         foreach ($quotes as $quote) {
             $total = (float)($quote['total'] ?? 0);
             
-            fputcsv($fp, [
+            csv_write_row($fp, [
                 substr($quote['created_at'] ?? '', 0, 10),
                 $quote['client_name'] ?? '',
                 $quote['doc_number'] ?? $quote['id'],
@@ -300,14 +334,14 @@ try {
         }
 
         // Summary row
-        fputcsv($fp, ['', '', '', '', '', '', '', '', '', '', '', '']);
-        fputcsv($fp, ['SUMMARY', '', '', '', '', '', '', '', '', '', '', '']);
-        fputcsv($fp, ['Total Invoices:', count($invoices), '', '', '', '', '', 'Total Collected:', '$' . number_format($runningTotal, 2), '', '', '']);
+        csv_write_row($fp, ['', '', '', '', '', '', '', '', '', '', '', '']);
+        csv_write_row($fp, ['SUMMARY', '', '', '', '', '', '', '', '', '', '', '']);
+        csv_write_row($fp, ['Total Invoices:', count($invoices), '', '', '', '', '', 'Total Collected:', '$' . number_format($runningTotal, 2), '', '', '']);
         if ($includeContracts) {
-            fputcsv($fp, ['Total Contracts:', count($contracts), '', '', '', '', '', '', '', '', '', '']);
+            csv_write_row($fp, ['Total Contracts:', count($contracts), '', '', '', '', '', '', '', '', '', '']);
         }
         if ($includeQuotes) {
-            fputcsv($fp, ['Total Quotes:', count($quotes), '', '', '', '', '', '', '', '', '', '']);
+            csv_write_row($fp, ['Total Quotes:', count($quotes), '', '', '', '', '', '', '', '', '', '']);
         }
 
         fclose($fp);
@@ -319,6 +353,7 @@ try {
     $manifest = "=== FINANCIAL AUDIT REPORT ===\n\n";
     $manifest .= "Generated: " . date('Y-m-d H:i:s') . "\n";
     $manifest .= "Audit Period: {$startDate} to {$endDate}\n\n";
+    $manifest .= "Accounting Basis: " . ucfirst($accountingBasis) . "\n\n";
     $manifest .= "REPORT CONFIGURATION:\n";
     $manifest .= "- Include Invoices (Paid/Partial): " . ($includeInvoices ? 'Yes' : 'No') . "\n";
     $manifest .= "- Include Unpaid Invoices: " . ($includeUnpaidInvoices ? 'Yes' : 'No') . "\n";
@@ -357,12 +392,22 @@ try {
     }
     $zip->close();
 
+    $orgId = get_active_org_id() ?: 0;
+    $artifactDir = '/var/www/config/audits/' . $orgId . '/' . date('Ymd_His');
+    if (!is_dir($artifactDir)) {
+        @mkdir($artifactDir, 0750, true);
+    }
+    if (is_dir($artifactDir) && is_writable($artifactDir)) {
+        @copy($zipPath, $artifactDir . DIRECTORY_SEPARATOR . $zipFilename);
+    }
+
     // Audit the data export
     audit_log($pdo, 'data.export', 'audit_report', null, [
         'period' => $startDate . ' to ' . $endDate,
         'invoices' => count($invoices),
         'contracts' => count($contracts),
         'quotes' => count($quotes),
+        'accounting_basis' => $accountingBasis,
     ]);
 
     // Send file for download

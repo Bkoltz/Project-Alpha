@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
-         bootstrap="vendor/autoload.php"
+         bootstrap="tests/bootstrap.php"
          colors="true"
          cacheDirectory=".phpunit.cache">
     <testsuites>
         <testsuite name="Security">
             <directory>tests/Security</directory>
+        </testsuite>
+        <testsuite name="Payments">
+            <directory>tests/Payments</directory>
+        </testsuite>
+        <testsuite name="Workflows">
+            <directory>tests/Workflows</directory>
+        </testsuite>
+        <testsuite name="Database">
+            <directory>tests/Database</directory>
+        </testsuite>
+        <testsuite name="Accounts">
+            <directory>tests/Accounts</directory>
         </testsuite>
     </testsuites>
 </phpunit>

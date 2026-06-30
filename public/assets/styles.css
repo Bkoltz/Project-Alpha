@@ -261,7 +261,7 @@ body.nav-open{overflow:hidden}
 .dash-finance-snapshot{margin-top:24px}
 .dash-finance-snapshot__sub{margin:3px 0 0;color:#6b7280;font-size:13px}
 .dash-finance-snapshot__metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border-top:1px solid #f1f2f4}
-.dash-finance-snapshot__metric{display:grid;gap:5px;padding:14px 18px 0 0;border-right:1px solid #f1f2f4;min-width:0}
+.dash-finance-snapshot__metric{display:grid;gap:5px;padding:14px 18px 0;border-right:1px solid #f1f2f4;min-width:0}
 .dash-finance-snapshot__metric:last-child{border-right:0}
 .dash-finance-snapshot__metric span{color:#6b7280;font-size:12px;font-weight:600}
 .dash-finance-snapshot__metric strong{font-size:20px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

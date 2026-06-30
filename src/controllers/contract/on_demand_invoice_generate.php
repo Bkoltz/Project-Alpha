@@ -5,6 +5,8 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/crypto.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 @error_log('[on_demand_invoice_generate] POST received', 0);
 
@@ -16,6 +18,8 @@ if ($contract_id <= 0) {
     header('Location: /?page=contract/on-demand-contracts-list&error=Invalid%20contract%20ID');
     exit;
 }
+
+require_record_ownership($pdo, 'contracts', $contract_id);
 
 $pdo->beginTransaction();
 
@@ -96,7 +100,7 @@ try {
         $contract['tax_percent'],
         $subtotal,
         $total,
-        'unpaid',
+        'draft',
         $dueDate,
         date('Y-m-d H:i:s'),
         $contractOrgId,
@@ -104,6 +108,9 @@ try {
     ]);
     
     $invoiceId = (int)$pdo->lastInsertId();
+    if ($projectMonthlyBilling) {
+        $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoiceId]);
+    }
     
     // Assign doc number
     $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "on_demand"')->fetchColumn();
@@ -152,9 +159,12 @@ try {
     
     @error_log("[on_demand_invoice_generate] Generated invoice I-$maxDoc for contract ODC-{$contract['doc_number']} (\${$total})");
 
-    // User-selected auto-email for on-demand generation, with a config fallback.
-    // Unlike long-term cron invoices, on-demand invoices can be generated as drafts first.
-    if ($sendEmail || (!$projectMonthlyBilling && !empty($appConfig['invoice_auto_email_on_generate']))) {
+    // Generate-only remains private. The send choice finalizes first; monthly
+    // project children are collected later through the project statement.
+    if ($sendEmail) {
+        invoice_finalize($pdo, $invoiceId, $appConfig, 'on_demand_send', $contractCreator);
+    }
+    if ($sendEmail && !$projectMonthlyBilling) {
         try {
             $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
             $clientStmt->execute([$clientId]);
@@ -187,7 +197,7 @@ try {
                 $dupStmt = $pdo->prepare('SELECT 1 FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
                 $dupStmt->execute([$invoiceId, 'on_generate']);
                 if (!$dupStmt->fetch()) {
-                    $token = bin2hex(random_bytes(16));
+                    $token = bin2hex(random_bytes(32));
                     $days = (int)($appConfig['documents_valid_days'] ?? 14);
                     $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
                     $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())')

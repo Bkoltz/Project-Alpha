@@ -1,133 +1,98 @@
-# Stripe Webhook Configuration Guide
+# Stripe Webhook Setup
 
-## Overview
-Project Alpha has a built-in webhook endpoint that handles Stripe payment events and automatically updates invoices.
+Project Alpha uses Stripe webhooks to record online payments and reconcile invoice status.
 
-## Endpoint Details
+## Endpoint
 
-**URL:** `https://pa.ledgetopdroneservices.com/?page=stripe-webhook`
+```text
+https://YOUR_PROJECT_ALPHA_HOST/?page=stripe-webhook
+```
 
-**Method:** POST
+The endpoint must be reachable over HTTPS from Stripe. Do not use the legacy endpoint for new installations.
 
-**Events Handled:**
-- `checkout.session.completed` - Customer completes Stripe Checkout
-- `payment_intent.succeeded` - Direct payment succeeds
-- `payment_intent.payment_failed` - Payment fails (logged only)
+## Events
 
-## What Happens When Payment Succeeds
+Configure at least:
 
-1. **Payment Recorded** in database with Stripe transaction ID
-2. **Invoice Status Updated** to `paid` or `partial`
-3. **Public Links Revoked** when invoice fully paid
-4. **Contract Marked Complete** if linked to paid invoice
-5. **Admin Notification** sent about payment
+- `checkout.session.completed`
+- `payment_intent.succeeded`
 
-## Setup Instructions
+Useful additional events:
 
-### 1. Configure Stripe Dashboard
+- `payment_intent.payment_failed`
+- `refund.created`
+- `refund.updated`
+- `refund.failed`
+- `charge.refunded`
+- `charge.dispute.created`
+- `charge.dispute.updated`
+- `charge.dispute.closed`
+- `charge.dispute.funds_withdrawn`
+- `charge.dispute.funds_reinstated`
 
-1. Go to [Stripe Dashboard](https://dashboard.stripe.com)
-2. Navigate to **Developers → Webhooks**
-3. Click **Add endpoint**
-4. Enter URL: `https://pa.ledgetopdroneservices.com/?page=stripe-webhook`
-5. Select events to listen for:
-   - ✅ `checkout.session.completed`
-   - ✅ `payment_intent.succeeded`
-   - ✅ `payment_intent.payment_failed`
-6. Click **Add endpoint**
+Only behavior implemented by the deployed version will be applied; unhandled events are logged or ignored.
 
-### 2. Get Webhook Secret
+## Configuration
 
-1. In Stripe Dashboard, click on your new endpoint
-2. Click **Reveal** next to **Signing secret**
-3. Copy the secret (starts with `whsec_`)
+1. In Stripe, create an endpoint with the production or test URL.
+2. Select the required events.
+3. Copy the endpoint signing secret.
+4. In Project Alpha, open **Settings > Billing**.
+5. Enter the matching publishable key, secret key, and webhook secret.
+6. Save and send a test event.
 
-### 3. Configure Project Alpha
+Use test keys and a test-mode endpoint while validating the installation.
 
-1. Log into Project Alpha at https://pa.ledgetopdroneservices.com
-2. Go to **Settings → Billing**
-3. Paste webhook secret in **Webhook Secret** field
-4. Save settings
+## Reconciliation Metadata
+
+Project Alpha includes invoice identifiers in Stripe metadata. Preserve these fields when changing payment creation:
+
+```json
+{
+  "pa_invoice_id": "123",
+  "invoice_id": "123",
+  "doc_number": "1001"
+}
+```
+
+`pa_invoice_id` is the primary reconciliation identifier.
+
+Project statement payments use `pa_project_invoice_id` and `project_invoice_id`. The aggregate payment is allocated to its child invoices; the project statement itself is never counted as additional revenue.
+
+## Successful Payment Behavior
+
+The handler:
+
+1. Verifies the Stripe signature when a webhook secret is configured.
+2. Records or reconciles the payment idempotently.
+3. Recalculates the successful amount paid, net of recorded refunds.
+4. Marks the invoice `partial` or `paid`.
+5. Revokes invoice links after full payment.
+6. May complete the linked contract.
+7. Records refunds and disputes and updates cash-basis reporting.
+8. Issues a branded Project Alpha receipt for ordinary invoice payments.
 
 ## Testing
 
-### Option A: Stripe CLI (Local Testing)
-```bash
-# Install Stripe CLI if not already installed
-# https://stripe.com/docs/stripe-cli
+Verify both supported paths:
 
-# Login to Stripe
-stripe login
+- Public invoice payment through Stripe Checkout
+- Public project-statement payment and child-invoice allocation
+- Duplicate delivery and reconciliation of the same one-time Payment Intent
 
-# Forward events to local endpoint
-stripe listen --forward-to localhost:1627/?page=stripe-webhook
-
-# Trigger a test event
-stripe trigger checkout.session.completed
-```
-
-### Option B: Stripe Dashboard
-1. Go to your webhook endpoint in Stripe Dashboard
-2. Click **Send test event**
-3. Select event type: `checkout.session.completed`
-4. Click **Send test event**
-5. Check Project Alpha logs for success message
-
-## Important Notes
-
-### Invoice Must Exist
-The webhook handler verifies the invoice exists before recording payment. If the invoice_id in the Stripe metadata doesn't exist in the database, the payment is silently skipped (returns 200 OK to Stripe so they don't retry).
-
-### Metadata Requirements
-When creating a Stripe Checkout Session or Payment Intent, include the invoice_id in metadata:
-```php
-$session = $stripe->createCheckoutSession(
-    $amount,
-    'usd',
-    $description,
-    $successUrl,
-    $cancelUrl,
-    [
-        'invoice_id' => (string)$invoiceId,  // Required for webhook matching
-        'pa_invoice_id' => (string)$invoiceId  // Alternative key
-    ]
-);
-```
-
-### Webhook Signature Verification
-If webhook secret is configured in Project Alpha settings, Stripe signatures are verified. If not configured, events are processed without verification (not recommended for production).
+Send duplicate test events and confirm they do not create duplicate payment records.
 
 ## Troubleshooting
 
-### "No payload" error
-- Check that POST body is being sent
-- Ensure Content-Type is `application/json`
+1. Confirm the endpoint URL and HTTPS certificate.
+2. Confirm test/live mode matches the configured keys.
+3. Confirm the webhook signing secret belongs to this exact endpoint.
+4. Review Stripe delivery attempts and response codes.
+5. Review Project Alpha webhook and system logs.
+6. Run reconciliation manually if a successful payment was missed:
 
-### "Invalid event payload" error
-- Stripe event may be malformed
-- Check Stripe dashboard for event details
+   ```bash
+   docker compose exec cron php /var/www/src/cron/stripe_reconciliation.php
+   ```
 
-### "Stripe not configured" error
-- Stripe API keys not set in Project Alpha settings
-- Go to Settings → Billing and add Stripe keys
-
-### "Invoice not found" in logs
-- Invoice ID in Stripe metadata doesn't exist in database
-- Verify invoice was created before payment
-
-## Security
-
-- Webhook endpoint is **public** (no auth required)
-- Stripe signature is verified using webhook secret
-- If secret not configured, events are processed without verification (not recommended for production)
-- Failed events are logged but don't block other events
-
-## Files Involved
-
-- `src/controllers/webhook/stripe_webhooks.php` - Main webhook router
-- `src/controllers/webhook/stripe_checkout_completed.php` - Checkout handler
-- `src/controllers/webhook/stripe_payment_succeeded.php` - Payment success handler
-- `src/controllers/webhook/stripe_payment_failed.php` - Payment failure handler
-- `src/controllers/stripe/stripe_checkout.php` - Checkout session creation
-- `src/controllers/stripe/stripe_success.php` - Success page
-- `src/services/StripeService.php` - Stripe API integration
+Never include Stripe secrets or full event payloads containing customer data in a public issue.

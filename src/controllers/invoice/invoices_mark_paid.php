@@ -6,10 +6,15 @@ $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) { header('Location: /?page=invoice/invoices-list&error=Invalid%20invoice'); exit; }
 require_record_ownership($pdo, 'invoices', $id);
 
-$tot = $pdo->prepare('SELECT total FROM invoices WHERE id=?');
+$tot = $pdo->prepare('SELECT total FROM invoices WHERE id=? AND status<>"draft" AND finalized_at IS NOT NULL');
 $tot->execute([$id]);
-$total = (float)$tot->fetchColumn();
-$paidStmt = $pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
+$totalValue = $tot->fetchColumn();
+if ($totalValue === false) {
+  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode('Finalize the invoice before recording payment.'));
+  exit;
+}
+$total = (float)$totalValue;
+$paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
 $paidStmt->execute([$id]);
 $paid = (float)$paidStmt->fetchColumn();
 $outstanding = max(0.0, $total - $paid);

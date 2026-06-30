@@ -70,14 +70,7 @@ if ($contract['pricing_type'] === 'per_invoice') {
 }
 
 $depositType = $contract['deposit_type'] ?? 'none';
-$depositValue = (float)($contract['deposit_amount'] ?? 0);
-$contractTotal = (float)($contract['total'] ?? 0);
-$depositCalc = 0;
-if ($depositType === 'percent') {
-    $depositCalc = max(0, min(100, $depositValue)) * $contractTotal / 100;
-} elseif ($depositType === 'fixed') {
-    $depositCalc = $depositValue;
-}
+$depositCalc = (float)($contract['deposit_amount'] ?? 0);
 
 $showDepositInfo = $depositType !== 'none' && $depositCalc > 0;
 $isOngoing = empty($contract['end_date']);

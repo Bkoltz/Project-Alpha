@@ -5,6 +5,11 @@ DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-3306}"
 ROOT_USER="${MYSQL_ROOT_USER:-root}"
 ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpass}"
+APP_ENV_NORMALIZED="$(printf '%s' "${APP_ENV:-production}" | tr '[:upper:]' '[:lower:]')"
+APP_ENCRYPTION_KEY_WAS_SET=1
+if [ -z "${APP_ENCRYPTION_KEY:-}" ]; then
+  APP_ENCRYPTION_KEY_WAS_SET=0
+fi
 
 # Auto-generate encryption key if not provided (persists in config volume)
 CONFIG_DIR="/var/www/config"
@@ -29,140 +34,41 @@ if [ ! -f "${CONFIG_DIR}/.env" ] || ! grep -q "APP_ENCRYPTION_KEY" "${CONFIG_DIR
   echo "APP_ENCRYPTION_KEY=\"${APP_ENCRYPTION_KEY}\"" >> "${CONFIG_DIR}/.env"
 fi
 
-echo "Waiting for DB at ${DB_HOST}:${DB_PORT} (user=${ROOT_USER})..."
-
-retries=60
-wait_interval=2
-
-counter=0
-while [ $counter -lt $retries ]; do
-  if command -v mysqladmin > /dev/null 2>&1; then
-    # Disable SSL because the client is MariaDB and the server presents a self-signed cert by default
-    mysqladmin --skip-ssl ping -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" --silent > /dev/null 2>&1 && {
-      echo "✅ DB is ready (mysqladmin responded as root)."
-      break
-    }
-  else
-    (echo > /dev/tcp/${DB_HOST}/${DB_PORT}) > /dev/null 2>&1 && {
-      echo "✅ DB TCP port is open."
-      break
-    }
+if [ "$APP_ENV_NORMALIZED" = "production" ] || [ "$APP_ENV_NORMALIZED" = "prod" ]; then
+  echo "Production readiness checks:"
+  if [ -z "${APP_HOST:-}" ]; then
+    echo "WARNING: APP_HOST is not set. Configure the canonical HTTPS/proxy hostname before exposing Project Alpha."
   fi
-
-  counter=$((counter+1))
-  echo "⏳ Still waiting for DB... (${counter}/${retries})"
-  sleep ${wait_interval}
-done
-
-if [ $counter -ge $retries ]; then
-  echo "❌ DB did not become available after $((retries*wait_interval)) seconds. Last checked host=${DB_HOST} port=${DB_PORT}"
-  exit 1
-fi
-
-# Apply base schema if missing, then runtime migrations (both idempotent)
-DB_NAME="${MYSQL_DATABASE:-project_alpha}"
-
-# Compute admin password hash
-ADMIN_PASSWORD="${ADMIN_PASSWORD}"
-if [ -z "$ADMIN_PASSWORD" ]; then
-  echo "❌ ADMIN_PASSWORD environment variable is required"
-  exit 1
-fi
-ADMIN_PASSWORD_HASH=$(php -r 'echo password_hash(getenv("ADMIN_PASSWORD"), PASSWORD_DEFAULT);')
-echo "Using admin password hash: ${ADMIN_PASSWORD_HASH}"
-
-# Replace placeholder in all SQL files used during boot (both copies)
-for sql_file in /usr/local/share/app-migrations/*.sql /docker-entrypoint-initdb.d/*.sql; do
-  if [ -f "$sql_file" ]; then
-    sed -i "s|{{ADMIN_PASSWORD_HASH}}|${ADMIN_PASSWORD_HASH}|g" "$sql_file"
+  if [ "$APP_ENCRYPTION_KEY_WAS_SET" = "0" ]; then
+    echo "WARNING: APP_ENCRYPTION_KEY was not explicitly supplied. A persisted key was used/generated; back it up securely."
   fi
-done
-
-# 1) Base schema: if key table (quotes) is missing, load the init schema
-if ! mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -N -e \
-     "SELECT 1 FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='quotes' LIMIT 1" | grep -q 1; then
-  echo "Applying base schema to '${DB_NAME}'..."
-  
-
-  # Run the unified init.sql which contains all modules. TrueNAS/image-based
-  # deployments rely on the copy baked into the web image, while local compose
-  # can still provide the MySQL entrypoint path as a bind mount.
-  INIT_SQL="/docker-entrypoint-initdb.d/01-init.sql"
-  if [ ! -f "$INIT_SQL" ]; then
-    INIT_SQL="/usr/local/share/app-migrations/init.sql"
+  if [ "${MYSQL_ROOT_PASSWORD:-}" = "changeme_root_pass" ] || [ "${MYSQL_ROOT_PASSWORD:-}" = "rootpass" ]; then
+    echo "WARNING: MYSQL_ROOT_PASSWORD appears to use a default/example value."
   fi
-  if [ -f "$INIT_SQL" ]; then
-    echo "Applying unified schema: $INIT_SQL"
-    if mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$INIT_SQL" > /dev/null 2>&1; then
-      echo "✅ Base schema applied from init.sql"
-    else
-      echo "⚠️ Failed to apply init.sql, trying individual migrations..."
-      # Fallback to individual migration files
-      for migration in /var/www/database/migrations/*.sql; do
-        if [ -f "$migration" ]; then
-          echo "Applying migration: $(basename "$migration")"
-          mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" < "$migration" || true
-        fi
-      done
+  if [ "${ADMIN_PASSWORD:-}" = "changeme_admin_pass" ] || [ -z "${ADMIN_PASSWORD:-}" ]; then
+    echo "WARNING: ADMIN_PASSWORD is missing or appears to use a default/example value."
+  fi
+  if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+    echo "WARNING: BACKUP_ENCRYPTION_KEY is not set; backup archives will not be encrypted."
+  fi
+  if command -v mysql >/dev/null 2>&1 && [ -n "${MYSQL_USER:-}" ] && [ -n "${MYSQL_PASSWORD:-}" ]; then
+    stripe_webhook_count="$(MYSQL_PWD="${MYSQL_PASSWORD}" mysql --skip-ssl -h "$DB_HOST" -P "$DB_PORT" -u"${MYSQL_USER}" -N -s -e "SELECT COUNT(*) FROM app_config WHERE config_key = 'stripe_webhook_secret_enc' AND COALESCE(config_value, '') <> ''" "${MYSQL_DATABASE:-project_alpha}" 2>/dev/null || echo "0")"
+    if [ "${stripe_webhook_count:-0}" = "0" ]; then
+      echo "WARNING: Stripe webhook secret is not configured in app settings; Stripe webhooks will fail closed in production."
     fi
   else
-    echo "⚠️ No init.sql found at $INIT_SQL"
+    echo "WARNING: Could not verify Stripe webhook secret readiness because mysql client or database credentials are unavailable."
+  fi
+  if [ "$(printf '%s' "${AUTH_DISABLED:-${APP_AUTH_DISABLED:-}}" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+    echo "WARNING: AUTH_DISABLED/APP_AUTH_DISABLED is set but ignored in production."
   fi
 fi
 
-# Ensure admin user exists with current password hash (recovery mechanism)
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@project-alpha.local}"
-ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
-echo "Ensuring admin user exists with email: ${ADMIN_EMAIL}, username: ${ADMIN_USERNAME}"
-# Ensure admin user exists and is linked to the default organization
-mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
-  INSERT INTO users (email, password_hash, username, role, force_password_reset)
-  VALUES ('${ADMIN_EMAIL}', '${ADMIN_PASSWORD_HASH}', '${ADMIN_USERNAME}', 'admin', 0)
-  ON DUPLICATE KEY UPDATE password_hash='${ADMIN_PASSWORD_HASH}', email='${ADMIN_EMAIL}', username='${ADMIN_USERNAME}', role='admin', force_password_reset=0, deleted_at=NULL;
-" || echo "⚠️  WARNING: admin user upsert failed — admin password may not have been updated this boot."
+# Database initialization, migrations, schema validation, and administrator
+# reconciliation are completed by docker/migrate.sh before this container is
+# allowed to start. The web process never performs fail-open schema work.
 
-mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -e "
-  INSERT INTO user_organizations (user_id, organization_id, role, role_id, is_default)
-  VALUES (
-    (SELECT id FROM users WHERE email='${ADMIN_EMAIL}' LIMIT 1),
-    (SELECT id FROM organizations ORDER BY id ASC LIMIT 1),
-    'owner',
-    (SELECT id FROM roles WHERE name='owner' AND is_system=1 LIMIT 1),
-    1
-  )
-  ON DUPLICATE KEY UPDATE \`role\`='owner', \`role_id\`=VALUES(role_id), \`is_default\`=1;
-" || true
-
-# 2) Run PHP migration runner BEFORE Apache starts. It tracks applied state
-#    in schema_migrations and tolerates per-file failures non-fatally.
-echo "Running PHP migration runner (state-tracked, non-fatal errors)..."
-php /var/www/src/migrations/run_migrations.php --verbose 2>&1 || echo "WARNING: Migration runner reported errors (non-fatal)"
-
-# 2b) Runtime SQL file (kept as an idempotent fallback / legacy hook)
-if [ -f "/usr/local/share/app-migrations/runtime.sql" ]; then
-  echo "Applying runtime migrations to database '${DB_NAME}' (if needed)..."
-  echo "Debug: Executing runtime.sql from $(ls -l /usr/local/share/app-migrations/runtime.sql)"
-
-  # Execute with verbose error reporting
-  set +e  # Temporarily disable exit on error
-  mysql --skip-ssl -h "${DB_HOST}" -P "${DB_PORT}" -u"${ROOT_USER}" --password="${ROOT_PASSWORD}" -D "${DB_NAME}" -v < \
-       "/usr/local/share/app-migrations/runtime.sql" 2>&1 | tee /tmp/migration.log
-  MIGRATION_EXIT=${PIPESTATUS[0]}
-  set -e  # Re-enable exit on error
-
-  if [ $MIGRATION_EXIT -eq 0 ]; then
-    echo "✅ Runtime migrations applied (or already up-to-date)."
-  else
-    echo "⚠️  Runtime migrations encountered errors (exit code $MIGRATION_EXIT):"
-    cat /tmp/migration.log
-    echo "Error details saved in /tmp/migration.log"
-    echo "Continuing anyway, but the application may not work correctly."
-  fi
-else
-  echo "ℹ️  No runtime migration file present. Skipping."
-fi
-
-# 3) Seed config directory with defaults if mounted and empty
+# Seed config directory with defaults if mounted and empty
 CONFIG_DIR="/var/www/config"
 if [ ! -d "${CONFIG_DIR}" ]; then
   mkdir -p "${CONFIG_DIR}" || true

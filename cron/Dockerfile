@@ -1,5 +1,5 @@
 # ---------- Stage 1: Install PHP dependencies with Composer ----------
-FROM php:8.3-cli AS vendor
+FROM php:8.5-cli AS vendor
 WORKDIR /app
 
 COPY composer.json ./
@@ -18,16 +18,18 @@ RUN composer install \
     --optimize-autoloader
 
 # ---------- Stage 2: Runtime image ----------
-FROM php:8.3-cli
+FROM php:8.5-cli
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         default-mysql-client \
         cron \
         curl \
+        zlib1g-dev \
+        libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions required by the cron scripts
-RUN docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli
+RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli
 
 WORKDIR /var/www
 
@@ -45,7 +47,6 @@ RUN chown -R root:root /var/www && chmod -R 755 /var/www
 # Create log directory and files for each cron job
 RUN mkdir -p /var/log/cron && \
     touch /var/log/cron/generate_recurring_invoices.log \
-          /var/log/cron/auto_charge_recurring.log \
           /var/log/cron/send_invoice_reminders.log \
           /var/log/cron/auto_terminate_contracts.log \
           /var/log/cron/link_expiration_checker.log \

@@ -31,25 +31,35 @@ $invoiceData = null;
 $showPayButton = false;
 $calculatedAmountDue = 0;
 $surchargeInfo = null;
-if ($type === 'invoice') {
+if (in_array($type, ['invoice', 'project_invoice'], true)) {
     require_once __DIR__ . '/../../services/StripeService.php';
     require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
     require_once __DIR__ . '/../../utils/document_sender.php';
     $stripeConfigured = StripeService::isConfigured($appConfig);
     try {
-        $invSt = $pdo->prepare('SELECT status, total, amount_paid, original_amount, surcharge_amount, surcharge_type, created_by FROM invoices WHERE id = ?');
+        $invSt = $type === 'project_invoice'
+            ? $pdo->prepare('SELECT status,total,amount_paid,balance_due,NULL AS original_amount,NULL AS surcharge_amount,NULL AS surcharge_type,NULL AS created_by,finalized_at,"direct" AS collection_mode FROM project_invoices WHERE id=?')
+            : $pdo->prepare('SELECT status, total, amount_paid, original_amount, surcharge_amount, surcharge_type, created_by, finalized_at, collection_mode FROM invoices WHERE id = ?');
         $invSt->execute([$rid]);
         $invoiceData = $invSt->fetch(PDO::FETCH_ASSOC);
         if ($invoiceData) {
             // Calculate amount paid from payments table for accuracy
-            $paidSt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
-            $paidSt->execute([$rid]);
-            $amountPaid = (float)$paidSt->fetchColumn();
+            if ($type === 'project_invoice') {
+                $amountPaid = (float)($invoiceData['amount_paid'] ?? 0);
+            } else {
+                $paidSt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+                $paidSt->execute([$rid]);
+                $amountPaid = (float)$paidSt->fetchColumn();
+            }
             $invoiceData['amount_paid'] = $amountPaid;
             
             $invStatus = strtolower($invoiceData['status'] ?? '');
             $calculatedAmountDue = (float)($invoiceData['total'] ?? 0) - $amountPaid;
-            $showPayButton = $stripeConfigured && in_array($invStatus, ['unpaid', 'partial'], true) && $calculatedAmountDue > 0;
+            $showPayButton = $stripeConfigured
+                && !empty($invoiceData['finalized_at'])
+                && ($invoiceData['collection_mode'] ?? 'direct') === 'direct'
+                && in_array($invStatus, ['unpaid', 'partial'], true)
+                && $calculatedAmountDue > 0;
             
             // Calculate surcharge info
             if ($showPayButton) {
@@ -258,7 +268,7 @@ if ($type === 'invoice') {
 
   <?php
     // Show payment banner at TOP for invoices if Stripe is configured and payment is due
-    if ($type === 'invoice' && $invoiceData):
+    if (in_array($type, ['invoice', 'project_invoice'], true) && $invoiceData):
       $amountDue = $calculatedAmountDue;
       if ($showPayButton):
   ?>
@@ -525,6 +535,8 @@ if ($type === 'invoice') {
           : __DIR__ . '/../pages/contract/contract-details.php';
       } elseif ($type === 'invoice') {
         require __DIR__ . '/../pages/invoice/invoice-details.php';
+      } elseif ($type === 'project_invoice') {
+        require __DIR__ . '/../pages/project/project-invoice-details.php';
       }
     ?>
   </div>

@@ -153,16 +153,30 @@ class DropboxLinkResolver
                 return ['success' => false, 'message' => 'Folder not found'];
             }
             
-            // Find exact match that is a folder
+            $matches = [];
             foreach ($data['matches'] as $match) {
-                if (isset($match['metadata']['metadata']['.tag']) && 
-                    $match['metadata']['metadata']['.tag'] === 'folder' &&
-                    strtolower($match['metadata']['metadata']['name']) === strtolower($folderName)) {
-                    return [
-                        'success' => true,
-                        'folder_id' => $match['metadata']['metadata']['path_lower']
+                $metadata = $match['metadata']['metadata'] ?? [];
+                if (
+                    isset($metadata['.tag'], $metadata['name'], $metadata['path_lower']) &&
+                    $metadata['.tag'] === 'folder' &&
+                    strtolower((string)$metadata['name']) === strtolower($folderName)
+                ) {
+                    $matches[] = [
+                        'folder_id' => (string)$metadata['path_lower'],
+                        'name' => (string)$metadata['name'],
+                        'path' => (string)$metadata['path_lower'],
                     ];
                 }
+            }
+
+            if ($matches) {
+                return [
+                    'success' => true,
+                    'matches' => $matches,
+                    'folder_id' => $matches[0]['folder_id'],
+                    'name' => $matches[0]['name'],
+                    'path' => $matches[0]['path'],
+                ];
             }
             
             return ['success' => false, 'message' => 'Exact folder match not found'];

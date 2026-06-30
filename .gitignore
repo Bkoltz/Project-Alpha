@@ -32,3 +32,4 @@ backups/
 backups.bak.pre-noenv-test/
 graphify-out/
 graphify-*.json
+.phpunit.cache/

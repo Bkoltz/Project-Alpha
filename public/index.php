@@ -238,10 +238,16 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'payment-receipt', 'client-onboarding', 'client-onboarding-send-code', 'client-onboarding-verify', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
+$appEnv = strtolower(trim((string)(getenv('APP_ENV') ?: 'production')));
+$authBypassAllowed = in_array($appEnv, ['development', 'dev', 'local', 'test', 'testing'], true);
+if ($authDisabled && !$authBypassAllowed) {
+    error_log('[security] AUTH_DISABLED ignored because APP_ENV is production or not explicitly development/test');
+    $authDisabled = false;
+}
 
 // Allow POST to auth handler without prior login
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $page === 'auth') {
@@ -278,6 +284,54 @@ if (false && empty($_SESSION['user']) && isset($_COOKIE['remember'])) {
     }
 }
 
+// Development/test auth bypass: create a real session for the first active admin
+// so the application behaves normally without weakening production deployments.
+if ($authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    try {
+        require_once __DIR__ . '/../src/config/db.php';
+        $stmt = $pdo->query('
+            SELECT id, email, role
+            FROM users
+            WHERE COALESCE(is_disabled, 0) = 0
+            ORDER BY (role = "admin") DESC, id ASC
+            LIMIT 1
+        ');
+        $bypassUser = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : false;
+        if ($bypassUser) {
+            $activeOrgId = 0;
+            try {
+                $orgStmt = $pdo->prepare('SELECT organization_id FROM user_organizations WHERE user_id = ? ORDER BY id ASC LIMIT 1');
+                $orgStmt->execute([(int)$bypassUser['id']]);
+                $activeOrgId = (int)($orgStmt->fetchColumn() ?: 0);
+            } catch (Throwable $e) {
+                $activeOrgId = 0;
+            }
+            if ($activeOrgId <= 0) {
+                try {
+                    $activeOrgId = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 0);
+                } catch (Throwable $e) {
+                    $activeOrgId = 0;
+                }
+            }
+            session_regenerate_id(true);
+            $_SESSION['user'] = [
+                'id' => (int)$bypassUser['id'],
+                'email' => (string)$bypassUser['email'],
+                'role' => (string)$bypassUser['role'],
+                'active_org_id' => $activeOrgId,
+                'auth_bypass' => true,
+            ];
+            $_SESSION['last_activity'] = time();
+            if (empty($_SESSION['auth_bypass_logged'])) {
+                error_log('[security] Development auth bypass signed in user id ' . (int)$bypassUser['id']);
+                $_SESSION['auth_bypass_logged'] = 1;
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[security] AUTH_DISABLED could not create a development session: ' . $e->getMessage());
+    }
+}
+
 // Enforce authentication for everything else (unless disabled)
 if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     header('Location: /?page=login');
@@ -297,7 +351,10 @@ if (!empty($_SESSION['user'])) {
         header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
         exit;
     }
-    $_SESSION['last_activity'] = time();
+    // Passive status polling must not keep an otherwise inactive session alive.
+    if ($page !== 'session-status') {
+        $_SESSION['last_activity'] = time();
+    }
 }
 
 // Enforce force-password-reset: lock user to account page until they change it
@@ -313,6 +370,22 @@ if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
                 exit;
             }
         } catch (Throwable $e) { /* allow through if check fails */ }
+    }
+}
+
+// Evaluate 2FA policy for administrators and privileged operators. Enforcement is
+// intentionally non-blocking: the layout renders a dismissible warning instead
+// of redirecting users away from their work.
+if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    try {
+        require_once __DIR__ . '/../src/config/db.php';
+        require_once __DIR__ . '/../src/utils/two_factor_policy.php';
+        $_SESSION['two_factor_warning_required'] = two_factor_warning_needed($pdo, $page) ? 1 : 0;
+    } catch (Throwable $e) {
+        // Do not lock users out if the policy check cannot be evaluated during
+        // installation/recovery. The production readiness check warns loudly
+        // when schema/configuration is incomplete.
+        error_log('[security] 2FA policy check failed: ' . $e->getMessage());
     }
 }
 
@@ -401,6 +474,10 @@ if ($page === 'org-search' || $page === 'organization/org-search') {
     require_once __DIR__ . '/../src/controllers/organization/org_search.php';
     exit;
 }
+if ($page === 'organization/organization-departments-options') {
+    require_once __DIR__ . '/../src/controllers/organization/organization_departments_options.php';
+    exit;
+}
 if ($page === 'time-tracking/unbilled') {
     require_once __DIR__ . '/../src/controllers/time-tracking/time_entries_unbilled.php';
     exit;
@@ -419,6 +496,10 @@ if ($page === 'settings/item-library-search') {
 }
 if ($page === 'settings/logs') {
     require_once __DIR__ . '/../src/views/pages/settings/logs.php';
+    exit;
+}
+if ($page === 'settings/logs-handler' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    require_once __DIR__ . '/../src/controllers/settings/logs_handler.php';
     exit;
 }
 if ($page === 'settings/permissions') {
@@ -498,6 +579,10 @@ if (in_array($page, ['invoice/invoice-pdf', 'invoice-pdf'])) {
     require_once __DIR__ . '/../src/controllers/invoice/invoice_pdf.php';
     exit;
 }
+if ($page === 'project/project-invoice-pdf') {
+    require_once __DIR__ . '/../src/controllers/project/project_invoice_pdf.php';
+    exit;
+}
 if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
     require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
     exit;
@@ -518,6 +603,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Settings & system
         'settings',
         'settings-backup',
+        'settings/backup-download',
         'settings/tax-rates-handler',
         'settings/tax-import-handler',
         'settings/links-handler',
@@ -541,6 +627,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         '2fa-setup-action',
         '2fa-verify-action',
         '2fa-admin-disable',
+        '2fa-warning-dismiss',
 
         // API keys
         'api-keys-create',
@@ -568,6 +655,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'project/projects-delete',
         'project/project-add-document',
         'project/project-remove-document',
+        'project/project-invoice-generate',
+        'project/project-invoice-email',
+        'project/project-invoice-payment',
         'project/projects-update-status',
         'project-notes-update',
 
@@ -615,6 +705,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'invoice/invoices-update',
         'invoices-update',
         'invoice/invoices-mark-paid',
+        'invoice/invoice-finalize',
+        'invoice/invoice-reopen',
         'invoice/email-send',
         'payments/payments-create',
 
@@ -633,6 +725,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'organization/organization-update-notes',
         'organization-update-notes',
         'organization/organization-remove-client',
+        'organization/organization-departments',
         'organization/organizations_upload',
         'organization/organizations-upload',
 
@@ -757,6 +850,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/auth/admin_2fa_disable.php';
         exit;
     }
+    if ($page === '2fa-warning-dismiss') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_warning_dismiss.php';
+        exit;
+    }
     if ($page === 'reset-request') {
         require_once __DIR__ . '/../src/controllers/auth/reset_request.php';
         exit;
@@ -789,6 +886,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/client/clients_create.php';
         exit;
     }
+    if ($page === 'client/onboarding-invite') {
+        require_once __DIR__ . '/../src/controllers/client/client_onboarding_invite.php';
+        exit;
+    }
+    if ($page === 'client/onboarding-review') {
+        require_once __DIR__ . '/../src/controllers/client/client_onboarding_review.php';
+        exit;
+    }
+    if ($page === 'client-onboarding-send-code') {
+        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_send_code.php';
+        exit;
+    }
+    if ($page === 'client-onboarding-verify') {
+        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_verify.php';
+        exit;
+    }
+    if ($page === 'client-onboarding-submit') {
+        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_submit.php';
+        exit;
+    }
     if ($page === 'project/projects-create') {
         require_once __DIR__ . '/../src/controllers/project/projects_create.php';
         exit;
@@ -807,6 +924,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'project/project-remove-document') {
         require_once __DIR__ . '/../src/controllers/project/project_remove_document.php';
+        exit;
+    }
+    if ($page === 'settings/backup-download') {
+        require_once __DIR__ . '/../src/controllers/settings/backup_download.php';
+        exit;
+    }
+    if ($page === 'project/project-invoice-generate') {
+        require_once __DIR__ . '/../src/controllers/project/project_invoice_generate.php';
+        exit;
+    }
+    if ($page === 'project/project-invoice-email') {
+        require_once __DIR__ . '/../src/controllers/project/project_invoice_email.php';
+        exit;
+    }
+    if ($page === 'project/project-invoice-payment') {
+        require_once __DIR__ . '/../src/controllers/project/project_invoice_payment.php';
         exit;
     }
     if ($page === 'project/projects-update-status') {
@@ -887,6 +1020,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'invoice/invoices-mark-paid') {
         require_once __DIR__ . '/../src/controllers/invoice/invoices_mark_paid.php';
+        exit;
+    }
+    if ($page === 'invoice/invoice-finalize') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_finalize.php';
+        exit;
+    }
+    if ($page === 'invoice/invoice-reopen') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_reopen.php';
         exit;
     }
     if ($page === 'payments/payments-create') {
@@ -997,6 +1138,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/organization/organization_remove_client.php';
         exit;
     }
+    if ($page === 'organization/organization-departments') {
+        require_once __DIR__ . '/../src/controllers/organization/organization_departments.php';
+        exit;
+    }
     if ($page === 'organization/organizations_upload' || $page === 'organization/organizations-upload') {
         require_once __DIR__ . '/../src/controllers/organization/organizations_upload.php';
         exit;
@@ -1035,6 +1180,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === '2fa-verify-action') {
         require_once __DIR__ . '/../src/controllers/auth/two_factor_verify.php';
+        exit;
+    }
+    if ($page === '2fa-warning-dismiss') {
+        require_once __DIR__ . '/../src/controllers/auth/two_factor_warning_dismiss.php';
         exit;
     }
     if ($page === 'receipts-handler') {
@@ -1100,9 +1249,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // Legacy webhook endpoint (kept for backward compatibility)
     if ($page === 'stripe-webhook-legacy') {
-        require_once __DIR__ . '/../src/controllers/stripe/stripe_webhook.php';
+        require_once __DIR__ . '/../src/controllers/webhook/stripe_webhooks.php';
         exit;
     }
+}
+
+if ($page === 'settings/backup-download') {
+    require_once __DIR__ . '/../src/controllers/settings/backup_download.php';
+    exit;
 }
 
 // Stripe charge endpoint (supports both GET and POST)
@@ -1150,6 +1304,15 @@ if ($page === 'public-doc') {
 }
 if ($page === 'public-doc-pdf') {
     require_once __DIR__ . '/../src/controllers/public_view/public_doc_pdf.php';
+    exit;
+}
+if ($page === 'payment-receipt') {
+    require_once __DIR__ . '/../src/controllers/public_view/payment_receipt.php';
+    exit;
+}
+if ($page === 'client-onboarding') {
+    require_once __DIR__ . '/../src/views/partials/auth_header.php';
+    require_once __DIR__ . '/../src/controllers/public_view/client_onboarding.php';
     exit;
 }
 if ($page === 'public-redirect') {

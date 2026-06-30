@@ -103,8 +103,8 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             INSERT INTO invoices (
                 contract_id, client_id, project_id, project_code, organization_id, created_by, invoice_type,
                 discount_type, discount_value, tax_percent,
-                subtotal, total, status, due_date, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                subtotal, total, status, due_date, finalized_at, finalization_source, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), "recurring_schedule", NOW())
         ');
 
         $insertInvoice->execute([
@@ -125,6 +125,12 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         ]);
 
         $invoiceId = (int)$pdo->lastInsertId();
+        if ($projectId) {
+            require_once __DIR__ . '/project_billing.php';
+            if (project_uses_monthly_invoice_billing($pdo, $projectId)) {
+                $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoiceId]);
+            }
+        }
 
         // Assign doc number
         $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "long_term"')->fetchColumn();

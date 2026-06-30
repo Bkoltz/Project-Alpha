@@ -66,7 +66,7 @@ $requiredTables = [
     'users', 'clients', 'projects', 'quotes', 'contracts', 'invoices', 
     'payments', 'tax_rates', 'organizations', 'project_documents',
     'contracts', 'contracts', 'invoices',
-    'financial_records', 'system_audit', 'notifications', 'api_keys',
+    'system_audit', 'notifications', 'api_keys',
     'document_custom_fields', 'document_settings', 'webhooks', 'app_config'
 ];
 
