@@ -36,7 +36,11 @@ jobs:
       - name: Determine image tag
         id: tag
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            echo "tag=${version}" >> $GITHUB_OUTPUT
+            echo "cron_tag=cron-${version}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
             echo "cron_tag=cron-latest" >> $GITHUB_OUTPUT
           else
@@ -54,7 +58,9 @@ jobs:
           context: .
           target: web
           push: true
-          tags: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.tag }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:sha-${{ github.sha }}
           build-args: |
             APP_VERSION=${{ steps.ver.outputs.version }}
           cache-from: type=gha
@@ -66,7 +72,9 @@ jobs:
           context: .
           target: cron
           push: true
-          tags: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.cron_tag }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.cron_tag }}
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:cron-sha-${{ github.sha }}
           build-args: |
             APP_VERSION=${{ steps.ver.outputs.version }}
           cache-from: type=gha
@@ -78,10 +86,10 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.tag }}
           format: table
           output: trivy-report.txt
-          exit-code: '0'
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+          severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy report
         uses: actions/upload-artifact@v4

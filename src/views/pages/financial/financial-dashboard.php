@@ -1,8 +1,9 @@
 <?php
 // src/views/pages/financial/financial-dashboard.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = (int)(function_exists('get_active_org_id') ? get_active_org_id() : ($_SESSION['active_org_id'] ?? 0));
+$orgId = get_active_org_id();
 
 // Date range filter (default: current year)
 $defaultStartDate = date('Y') . '-01-01';

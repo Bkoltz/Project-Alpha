@@ -37,6 +37,15 @@ $appConfig = [
     'invoice_auto_send_overdue_weekly' => 1,
     'invoice_auto_email_on_generate' => 1,
     'invoice_auto_email_on_contract_complete' => 1,
+    // Link resolver / invoice content links are intentionally opt-in.
+    'link_resolver_enabled' => 0,
+    'org_level_links_only' => 0,
+    'default_link_expiration_days' => 365,
+    'link_resolver_daily_scan_enabled' => 0,
+    'link_resolver_invoice_auto_attach_enabled' => 0,
+    'project_specific_links_enabled' => 0,
+    'invoice_content_links_enabled' => 0,
+    'invoice_missing_content_links_behavior' => 'warn',
     // SMTP (loaded from app_config with fallback to settings.json)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -57,8 +66,6 @@ $appConfig = [
     // qoute defaults
     'quote_auto_create_contract' => 1,
     'quote_auto_create_invoice' => 1,
-    // contract defaults
-    //invoice defaults
 ];
 
 // Load .env file if it exists (project root, config volume, or container root)
@@ -164,6 +171,9 @@ try {
             'contract_custom_sections_json',
             'backup_hour', 'backup_retention_days',
             'link_resolver_enabled', 'default_link_expiration_days', 'org_level_links_only',
+            'link_resolver_daily_scan_enabled', 'link_resolver_invoice_auto_attach_enabled',
+            'project_specific_links_enabled', 'invoice_content_links_enabled',
+            'invoice_missing_content_links_behavior',
             'link_expiration_email_enabled',
             // Surcharge settings (user-editable via billing settings)
             'stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed',

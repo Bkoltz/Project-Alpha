@@ -3,8 +3,9 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/twig.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = 1; // Should come from session/user context
+$orgId = get_active_org_id();
 
 // Get filter parameters with defaults to current year/month
 $filterStore = $_GET['store'] ?? '';

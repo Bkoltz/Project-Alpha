@@ -118,7 +118,9 @@ COPY ./phpunit.xml /var/www/phpunit.xml
 COPY ./database/ /var/www/database/
 COPY ./public/ /var/www/public/
 COPY ./cron/ /var/www/cron/
-RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/phpunit.xml
+COPY ./docker/ /var/www/docker/
+COPY ./.github/ /var/www/.github/
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/.github /var/www/phpunit.xml
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.

@@ -5,6 +5,11 @@ DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-3306}"
 ROOT_USER="${MYSQL_ROOT_USER:-root}"
 ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpass}"
+APP_ENV_NORMALIZED="$(printf '%s' "${APP_ENV:-production}" | tr '[:upper:]' '[:lower:]')"
+APP_ENCRYPTION_KEY_WAS_SET=1
+if [ -z "${APP_ENCRYPTION_KEY:-}" ]; then
+  APP_ENCRYPTION_KEY_WAS_SET=0
+fi
 
 # Auto-generate encryption key if not provided (persists in config volume)
 CONFIG_DIR="/var/www/config"
@@ -27,6 +32,36 @@ fi
 # (app.php reads .env from /var/www/config/.env)
 if [ ! -f "${CONFIG_DIR}/.env" ] || ! grep -q "APP_ENCRYPTION_KEY" "${CONFIG_DIR}/.env" 2>/dev/null; then
   echo "APP_ENCRYPTION_KEY=\"${APP_ENCRYPTION_KEY}\"" >> "${CONFIG_DIR}/.env"
+fi
+
+if [ "$APP_ENV_NORMALIZED" = "production" ] || [ "$APP_ENV_NORMALIZED" = "prod" ]; then
+  echo "Production readiness checks:"
+  if [ -z "${APP_HOST:-}" ]; then
+    echo "WARNING: APP_HOST is not set. Configure the canonical HTTPS/proxy hostname before exposing Project Alpha."
+  fi
+  if [ "$APP_ENCRYPTION_KEY_WAS_SET" = "0" ]; then
+    echo "WARNING: APP_ENCRYPTION_KEY was not explicitly supplied. A persisted key was used/generated; back it up securely."
+  fi
+  if [ "${MYSQL_ROOT_PASSWORD:-}" = "changeme_root_pass" ] || [ "${MYSQL_ROOT_PASSWORD:-}" = "rootpass" ]; then
+    echo "WARNING: MYSQL_ROOT_PASSWORD appears to use a default/example value."
+  fi
+  if [ "${ADMIN_PASSWORD:-}" = "changeme_admin_pass" ] || [ -z "${ADMIN_PASSWORD:-}" ]; then
+    echo "WARNING: ADMIN_PASSWORD is missing or appears to use a default/example value."
+  fi
+  if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+    echo "WARNING: BACKUP_ENCRYPTION_KEY is not set; backup archives will not be encrypted."
+  fi
+  if command -v mysql >/dev/null 2>&1 && [ -n "${MYSQL_USER:-}" ] && [ -n "${MYSQL_PASSWORD:-}" ]; then
+    stripe_webhook_count="$(MYSQL_PWD="${MYSQL_PASSWORD}" mysql --skip-ssl -h "$DB_HOST" -P "$DB_PORT" -u"${MYSQL_USER}" -N -s -e "SELECT COUNT(*) FROM app_config WHERE config_key = 'stripe_webhook_secret_enc' AND COALESCE(config_value, '') <> ''" "${MYSQL_DATABASE:-project_alpha}" 2>/dev/null || echo "0")"
+    if [ "${stripe_webhook_count:-0}" = "0" ]; then
+      echo "WARNING: Stripe webhook secret is not configured in app settings; Stripe webhooks will fail closed in production."
+    fi
+  else
+    echo "WARNING: Could not verify Stripe webhook secret readiness because mysql client or database credentials are unavailable."
+  fi
+  if [ "$(printf '%s' "${AUTH_DISABLED:-${APP_AUTH_DISABLED:-}}" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+    echo "WARNING: AUTH_DISABLED/APP_AUTH_DISABLED is set but ignored in production."
+  fi
 fi
 
 # Database initialization, migrations, schema validation, and administrator

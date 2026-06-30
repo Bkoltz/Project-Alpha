@@ -4,10 +4,12 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 // Fetch categories for default category dropdown
-$catStmt = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=1 ORDER BY name');
-$catStmt->execute();
+$orgId = get_active_org_id();
+$catStmt = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');
+$catStmt->execute([$orgId]);
 $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 

@@ -2,7 +2,9 @@
 
 Project Alpha 0.5.0 initializes empty databases from `database/baseline.sql`. It does not recognize or upgrade pre-0.5.0 databases.
 
-Future schema changes are immutable files in `database/migrations/`. The runner enforces contiguous four-digit versions, filenames, checksums, backup success, and post-migration schema health. Any failure exits nonzero and prevents web and cron startup.
+For `0.5.0-rc1`, the schema is baseline-only: `database/migrations/` intentionally contains no `.sql` files. Future schema changes after the 0.5.0 baseline is frozen are immutable files in `database/migrations/`. The runner enforces contiguous four-digit versions, filenames, checksums, backup success before pending migrations, and post-migration schema health. Any failure exits nonzero and prevents web and cron startup.
+
+During pre-production 0.5.0 refactoring, schema changes may still be folded into `database/baseline.sql`. After 0.5.0 ships, do not rewrite the baseline; fix forward with the next migration.
 
 ## Before a Future Deployment
 

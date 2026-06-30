@@ -23,6 +23,11 @@ $inSubdir = strpos($fname, '/') !== false || strpos($fname, '\\') !== false;
 // PDFs and anything inside a subdirectory require authentication.
 $isPublicAsset = $isImage && !$inSubdir;
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
+$appEnv = strtolower(trim((string)(getenv('APP_ENV') ?: 'production')));
+if ($authDisabled && in_array($appEnv, ['production', 'prod'], true)) {
+    error_log('[security] AUTH_DISABLED ignored for serve-upload because APP_ENV is production');
+    $authDisabled = false;
+}
 if (!$isPublicAsset && !$authDisabled && empty($_SESSION['user'])) {
   http_response_code(403);
   exit;

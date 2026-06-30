@@ -1,7 +1,7 @@
 <?php
 // src/utils/project_invoice_billing.php
-
 require_once __DIR__ . '/../services/EmailService.php';
+require_once __DIR__ . '/invoice_content_links.php';
 
 function project_invoice_table_has_column(PDO $pdo, string $table, string $column): bool
 {
@@ -50,7 +50,7 @@ function project_invoice_due_date_for_period(array $project, array $appConfig, s
     return date('Y-m-d', strtotime($periodEnd . ' +' . max(0, $netTerms) . ' days'));
 }
 
-function project_invoice_sync_clients(PDO $pdo, int $projectId, ?int $primaryClientId, array $clientIds, ?array $invoiceRecipientClientIds = null): void
+function project_invoice_sync_clients(PDO $pdo, int $projectId, ?int $primaryClientId, array $clientIds, ?array $invoiceRecipientClientIds = null, ?array $invoiceLinkClientIds = null): void
 {
     $clean = [];
     if ($primaryClientId) {
@@ -66,19 +66,33 @@ function project_invoice_sync_clients(PDO $pdo, int $projectId, ?int $primaryCli
     $recipientIds = $invoiceRecipientClientIds === null
         ? $clean
         : array_values(array_unique(array_filter(array_map('intval', $invoiceRecipientClientIds), static fn($id) => $id > 0)));
+    $linkViewerIds = $invoiceLinkClientIds === null
+        ? $clean
+        : array_values(array_unique(array_filter(array_map('intval', $invoiceLinkClientIds), static fn($id) => $id > 0)));
     if ($invoiceRecipientClientIds !== null && $primaryClientId && in_array($primaryClientId, $recipientIds, true) && !in_array($primaryClientId, $clean, true)) {
+        $clean[] = $primaryClientId;
+    }
+    if ($invoiceLinkClientIds !== null && $primaryClientId && in_array($primaryClientId, $linkViewerIds, true) && !in_array($primaryClientId, $clean, true)) {
         $clean[] = $primaryClientId;
     }
 
     $pdo->prepare('DELETE FROM project_clients WHERE project_id = ?')->execute([$projectId]);
     $hasSendColumn = project_invoice_table_has_column($pdo, 'project_clients', 'send_project_invoices');
-    $ins = $hasSendColumn
-        ? $pdo->prepare('INSERT IGNORE INTO project_clients (project_id, client_id, is_primary_billing, send_project_invoices, sort_order) VALUES (?,?,?,?,?)')
-        : $pdo->prepare('INSERT IGNORE INTO project_clients (project_id, client_id, is_primary_billing, sort_order) VALUES (?,?,?,?)');
+    $hasLinkColumn = project_invoice_table_has_column($pdo, 'project_clients', 'can_view_invoice_links');
+    if ($hasSendColumn && $hasLinkColumn) {
+        $ins = $pdo->prepare('INSERT IGNORE INTO project_clients (project_id, client_id, is_primary_billing, send_project_invoices, can_view_invoice_links, sort_order) VALUES (?,?,?,?,?,?)');
+    } elseif ($hasSendColumn) {
+        $ins = $pdo->prepare('INSERT IGNORE INTO project_clients (project_id, client_id, is_primary_billing, send_project_invoices, sort_order) VALUES (?,?,?,?,?)');
+    } else {
+        $ins = $pdo->prepare('INSERT IGNORE INTO project_clients (project_id, client_id, is_primary_billing, sort_order) VALUES (?,?,?,?)');
+    }
     foreach ($clean as $idx => $cid) {
         $isPrimary = ($primaryClientId && $cid === $primaryClientId) ? 1 : 0;
         $sendProjectInvoices = in_array($cid, $recipientIds, true) ? 1 : 0;
-        if ($hasSendColumn) {
+        $canViewInvoiceLinks = in_array($cid, $linkViewerIds, true) ? 1 : 0;
+        if ($hasSendColumn && $hasLinkColumn) {
+            $ins->execute([$projectId, $cid, $isPrimary, $sendProjectInvoices, $canViewInvoiceLinks, $idx]);
+        } elseif ($hasSendColumn) {
             $ins->execute([$projectId, $cid, $isPrimary, $sendProjectInvoices, $idx]);
         } else {
             $ins->execute([$projectId, $cid, $isPrimary, $idx]);
@@ -401,6 +415,16 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
         . '<p><strong>Total due:</strong> $' . number_format((float)$projectInvoice['balance_due'], 2) . '</p>'
         . '<p><strong>Billing period:</strong> ' . htmlspecialchars(date('M j, Y', strtotime($projectInvoice['billing_period_start']))) . ' - ' . htmlspecialchars(date('M j, Y', strtotime($projectInvoice['billing_period_end']))) . '</p>'
         . '<p><a href="' . htmlspecialchars($url) . '">View project invoice</a></p>';
+    $contentLinksHtml = invoice_content_links_html(invoice_content_links_for_project_invoice($pdo, $projectInvoiceId, $appConfig));
+    if ($contentLinksHtml !== '') {
+        $body .= $contentLinksHtml;
+    }
+    $invoiceLinks = pa_invoice_links_for_project_invoice(
+        $pdo,
+        $projectInvoiceId,
+        array_map(static fn($row) => (int)$row['id'], $pendingRecipients)
+    );
+    $body .= pa_invoice_links_html($invoiceLinks);
 
     $sent = 0;
     foreach ($pendingRecipients as $recipient) {

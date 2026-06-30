@@ -242,6 +242,11 @@ $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 're
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
+$appEnv = strtolower(trim((string)(getenv('APP_ENV') ?: 'production')));
+if ($authDisabled && in_array($appEnv, ['production', 'prod'], true)) {
+    error_log('[security] AUTH_DISABLED ignored because APP_ENV is production');
+    $authDisabled = false;
+}
 
 // Allow POST to auth handler without prior login
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $page === 'auth') {
@@ -316,6 +321,20 @@ if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
                 exit;
             }
         } catch (Throwable $e) { /* allow through if check fails */ }
+    }
+}
+
+// Enforce required 2FA for administrators and privileged operators.
+if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    try {
+        require_once __DIR__ . '/../src/config/db.php';
+        require_once __DIR__ . '/../src/utils/two_factor_policy.php';
+        two_factor_enforce_required($pdo, $page);
+    } catch (Throwable $e) {
+        // Do not lock users out if the policy check cannot be evaluated during
+        // installation/recovery. The production readiness check warns loudly
+        // when schema/configuration is incomplete.
+        error_log('[security] 2FA policy check failed: ' . $e->getMessage());
     }
 }
 
@@ -650,6 +669,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'organization/organization-update-notes',
         'organization-update-notes',
         'organization/organization-remove-client',
+        'organization/organization-departments',
         'organization/organizations_upload',
         'organization/organizations-upload',
 
@@ -1056,6 +1076,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'organization/organization-remove-client') {
         require_once __DIR__ . '/../src/controllers/organization/organization_remove_client.php';
+        exit;
+    }
+    if ($page === 'organization/organization-departments') {
+        require_once __DIR__ . '/../src/controllers/organization/organization_departments.php';
         exit;
     }
     if ($page === 'organization/organizations_upload' || $page === 'organization/organizations-upload') {

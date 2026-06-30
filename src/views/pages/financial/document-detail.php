@@ -2,10 +2,11 @@
 // src/views/pages/financial/document-detail.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
 $documentId = (int)($_GET['id'] ?? 0);
 $folderId = (int)($_GET['folder'] ?? 0);
-$orgId = 1; // Should come from session/user context
+$orgId = get_active_org_id();
 
 if (!$documentId) {
     header('Location: /?page=financial/forms-list');

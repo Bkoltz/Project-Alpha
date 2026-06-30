@@ -18,6 +18,8 @@ $projectClientIds = $_POST['project_client_ids'] ?? [];
 if (!is_array($projectClientIds)) { $projectClientIds = []; }
 $projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? null;
 if ($projectInvoiceRecipientIds !== null && !is_array($projectInvoiceRecipientIds)) { $projectInvoiceRecipientIds = []; }
+$projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? null;
+if ($projectInvoiceLinkClientIds !== null && !is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
 $parent_id = null; // Parent projects are not supported any more
 $organization_id = (int)($_POST['organization_id'] ?? 0);
 $estimated_start = trim($_POST['estimated_start'] ?? '');
@@ -29,6 +31,43 @@ $invoiceNetTermsDays = $invoiceNetTermsDays === '' ? null : max(0, (int)$invoice
 $projectInvoiceAutoEmail = !empty($_POST['project_invoice_auto_email']) ? 1 : 0;
 
 if ($name === '') { header('Location: /?page=project/projects-list&error=Name%20required'); exit; }
+
+if ($organization_id <= 0 && $__orgId !== null) {
+	$organization_id = (int)$__orgId;
+}
+if ($organization_id > 0) {
+	require_record_ownership($pdo, 'organizations', $organization_id);
+}
+
+$projectClientIds = array_values(array_unique(array_filter(array_map('intval', $projectClientIds), static fn($id) => $id > 0)));
+$projectInvoiceRecipientIds = $projectInvoiceRecipientIds === null
+	? null
+	: array_values(array_unique(array_filter(array_map('intval', $projectInvoiceRecipientIds), static fn($id) => $id > 0)));
+$projectInvoiceLinkClientIds = $projectInvoiceLinkClientIds === null
+	? null
+	: array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($id) => $id > 0)));
+if ($client_id > 0 && !in_array($client_id, $projectClientIds, true)) {
+	$projectClientIds[] = $client_id;
+}
+if ($organization_id > 0 && $projectClientIds) {
+	$placeholders = implode(',', array_fill(0, count($projectClientIds), '?'));
+	$clientScope = $pdo->prepare("SELECT id FROM clients WHERE organization_id = ? AND archived = 0 AND id IN ({$placeholders})");
+	$clientScope->execute(array_merge([$organization_id], $projectClientIds));
+	$validClientIds = array_map('intval', $clientScope->fetchAll(PDO::FETCH_COLUMN));
+	sort($validClientIds);
+	$expectedClientIds = $projectClientIds;
+	sort($expectedClientIds);
+	if ($validClientIds !== $expectedClientIds) {
+		header('Location: /?page=project/projects-create&error=' . urlencode('Project contacts must belong to the selected organization.'));
+		exit;
+	}
+} elseif ($projectClientIds) {
+	foreach ($projectClientIds as $attachedClientId) {
+		require_record_ownership($pdo, 'clients', $attachedClientId);
+	}
+}
+$projectInvoiceRecipientIds = $projectInvoiceRecipientIds === null ? null : array_values(array_intersect($projectInvoiceRecipientIds, $projectClientIds));
+$projectInvoiceLinkClientIds = $projectInvoiceLinkClientIds === null ? null : array_values(array_intersect($projectInvoiceLinkClientIds, $projectClientIds));
 
 // Validate date window if set
 if ($estimated_start !== '' && $estimated_end !== '') {
@@ -68,7 +107,14 @@ if ($hasAutoEmailColumn) {
 }
 
 $project_id = (int)$pdo->lastInsertId();
-project_invoice_sync_clients($pdo, $project_id, $client_id > 0 ? $client_id : null, array_map('intval', $projectClientIds), $projectInvoiceRecipientIds === null ? null : array_map('intval', $projectInvoiceRecipientIds));
+project_invoice_sync_clients(
+	$pdo,
+	$project_id,
+	$client_id > 0 ? $client_id : null,
+	$projectClientIds,
+	$projectInvoiceRecipientIds,
+	$projectInvoiceLinkClientIds
+);
 audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'created_by' => $__creator]);
 header('Location: /?page=project/projects-details&id=' . $project_id . '&created=1');
 exit;

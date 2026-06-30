@@ -222,7 +222,8 @@ function migration_schema_health(PDO $pdo): void
 {
     $requiredTables = [
         'users', 'organizations', 'roles', 'role_permissions', 'user_organizations',
-        'clients', 'projects', 'quotes', 'contracts', 'invoices', 'payments',
+        'clients', 'organization_departments', 'organization_department_contacts',
+        'projects', 'quotes', 'contracts', 'invoices', 'payments',
         'rate_limits', 'schema_migrations',
     ];
     $deadTables = [
@@ -252,7 +253,9 @@ function migration_schema_health(PDO $pdo): void
         'users' => ['email', 'password_hash', 'role'],
         'user_organizations' => ['user_id', 'organization_id', 'role_id'],
         'clients' => ['organization_id', 'created_by'],
-        'projects' => ['organization_id', 'created_by'],
+        'projects' => ['organization_id', 'department_id', 'created_by'],
+        'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
+        'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
         'quotes' => ['organization_id', 'created_by'],
         'contracts' => ['organization_id', 'created_by'],
         'invoices' => ['organization_id', 'created_by'],

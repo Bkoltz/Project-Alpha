@@ -49,16 +49,16 @@ Allowed values are `regular`, `long_term`, and `on_demand`. Do not recreate lega
 
 ### Schema changes
 
-Every schema change must update both:
+Until `0.5.0-rc1` is frozen, schema refactors may be folded directly into `database/baseline.sql` because there is no supported upgrade path from old dev schemas. Once 0.5.0 is frozen or shipped, every schema change must update both:
 
 1. `database/baseline.sql` for fresh installs
 2. A new idempotent file in `database/migrations/` for existing databases
 
-Use nullable columns or safe defaults. Test fresh installation and upgrade paths. Rollback files must end in `_rollback.sql`; the migration runner excludes them from automatic execution.
+Use nullable columns or safe defaults for upgrade migrations. Test fresh installation and upgrade paths. Rollback files are not allowed in the forward migration directory.
 
 ### Migrations on boot
 
-The web entrypoint initializes a missing schema and runs the tracked migration runner before Apache starts. Migration errors are logged and do not always stop startup, so verify logs and post-migration health checks.
+The one-shot `migrate` service initializes an empty schema from `database/baseline.sql`, runs the tracked migration runner, and must complete before web or cron starts. Migration errors are startup-blocking.
 
 ## Document Behavior
 

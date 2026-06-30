@@ -6,10 +6,11 @@ This guide covers Project Alpha as a TrueNAS Scale Custom App using published GH
 
 | Environment | Web image | Cron image | Host port |
 |---|---|---|---|
-| Production | `ghcr.io/ledgetoptechnologies/project-alpha:latest` | `ghcr.io/ledgetoptechnologies/project-alpha:cron-latest` | `1627` |
+| Release candidate validation | `ghcr.io/ledgetoptechnologies/project-alpha:0.5.0-rc1` | `ghcr.io/ledgetoptechnologies/project-alpha:cron-0.5.0-rc1` | `1627` |
+| Production after release | `ghcr.io/ledgetoptechnologies/project-alpha:latest` | `ghcr.io/ledgetoptechnologies/project-alpha:cron-latest` | `1627` |
 | Staging | `ghcr.io/ledgetoptechnologies/project-alpha:dev` | `ghcr.io/ledgetoptechnologies/project-alpha:cron` | `1628` |
 
-Keep the GHCR packages readable by TrueNAS. Production and staging must use separate credentials and named volumes.
+Keep the GHCR packages readable by TrueNAS. Use immutable release-candidate tags while validating a release; do not validate against `latest`. Production and staging must use separate credentials and named volumes.
 
 ## Persistent Volumes
 
@@ -24,7 +25,7 @@ Do not reuse these volumes between staging and production.
 
 ## Install
 
-1. Create a Custom App using the appropriate Compose file.
+1. Create a Custom App using the appropriate Compose file. For 0.5.0 testing, use the `0.5.0-rc1` image tags.
 2. Replace every `changeme` password with a unique value.
 3. Confirm the web, cron, and database services use the same database credentials.
 4. Pull the images and start the application.
@@ -44,9 +45,9 @@ Never copy live credentials into staging. If production data is needed for a tes
 
 1. Review the release or pull request and its migrations.
 2. Confirm a recent backup and protected encryption key.
-3. Pull and redeploy staging.
+3. Pull and redeploy staging with the immutable release tag.
 4. Complete the affected workflow and review logs.
-5. Pull and redeploy production manually.
+5. Pull and redeploy production manually after the release tag has passed staging.
 6. Verify the footer version, login, database connectivity, cron logs, and one focused business workflow.
 
 Publishing a GHCR image does not automatically update a TrueNAS Custom App.

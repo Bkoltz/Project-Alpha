@@ -2,8 +2,42 @@
 // src/views/pages/project/projects-create.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
 
-$clients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
+$activeOrgId = get_active_org_id();
+$isAdmin = (($_SESSION['user']['role'] ?? '') === 'admin');
+if ($isAdmin) {
+    $clients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+} elseif ($activeOrgId > 0) {
+    if (acl_user_has_org_wide_scope($pdo, $userId, $activeOrgId)) {
+        $stmt = $pdo->prepare('
+            SELECT id, name, email
+            FROM clients
+            WHERE organization_id = ? AND archived = 0
+            ORDER BY name
+        ');
+        $stmt->execute([$activeOrgId]);
+    } else {
+        $stmt = $pdo->prepare('
+            SELECT id, name, email
+            FROM clients
+            WHERE organization_id = ? AND created_by = ? AND archived = 0
+            ORDER BY name
+        ');
+        $stmt->execute([$activeOrgId, $userId]);
+    }
+    $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $stmt = $pdo->prepare('
+        SELECT id, name, email
+        FROM clients
+        WHERE organization_id IS NULL AND created_by = ? AND archived = 0
+        ORDER BY name
+    ');
+    $stmt->execute([$userId]);
+    $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
 
 // Organizations are selected via search in the form; no need to prefetch list.
 // no parent projects in this view — no need to fetch projects list

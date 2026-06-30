@@ -2,6 +2,7 @@
 // src/controllers/payments_create.php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/audit.php';
 require_once __DIR__ . '/../utils/invoice_lifecycle.php';
 
@@ -17,6 +18,10 @@ if (strtolower($method) === 'stripe') {
     header('Location: /?page=payments/payments-create&error=Please%20select%20an%20invoice');
     exit;
   }
+  if (!can_access_record($pdo, 'invoices', $invoice_id, (int)($_SESSION['user']['id'] ?? 0))) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Permission denied'));
+    exit;
+  }
   header('Location: /?page=stripe-charge&invoice_id=' . $invoice_id . '&amount=' . $amount);
   exit;
 }
@@ -30,6 +35,10 @@ if ($invoice_id <= 0 || $amount <= 0) {
 $invStmt = $pdo->prepare('SELECT client_id,contract_id,organization_id,status,finalized_at,total,collection_mode FROM invoices WHERE id=?');
 $invStmt->execute([$invoice_id]);
 $invoice = $invStmt->fetch(PDO::FETCH_ASSOC);
+if (!can_access_record($pdo, 'invoices', $invoice_id, (int)($_SESSION['user']['id'] ?? 0))) {
+  header('Location: /?page=payments/payments-create&error=' . urlencode('Permission denied'));
+  exit;
+}
 if (!$invoice || ($invoice['status'] ?? '') === 'draft' || empty($invoice['finalized_at'])) {
   header('Location: /?page=payments/payments-create&error=' . urlencode('Finalize the invoice before recording payment.'));
   exit;
@@ -64,8 +73,8 @@ if (strtolower($method) === 'check' && empty($check_number)) {
 
 $pdo->beginTransaction();
 try {
-  $lock = $pdo->prepare('SELECT total,status,finalized_at,collection_mode FROM invoices WHERE id=? FOR UPDATE');
-  $lock->execute([$invoice_id]);
+  $lock = $pdo->prepare('SELECT id,total,status,finalized_at,collection_mode,organization_id FROM invoices WHERE id=? AND organization_id=? FOR UPDATE');
+  $lock->execute([$invoice_id, get_active_org_id()]);
   $lockedInvoice = $lock->fetch(PDO::FETCH_ASSOC) ?: [];
   $lockedPaid = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
   $lockedPaid->execute([$invoice_id]);

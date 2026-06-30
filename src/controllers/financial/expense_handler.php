@@ -6,6 +6,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
 header('Content-Type: application/json');
@@ -28,7 +29,12 @@ if (!$csrfOk) {
     exit;
 }
 
-$orgId = 1;
+$orgId = get_active_org_id();
+if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Permission denied']);
+    exit;
+}
 $action = $_POST['action'] ?? '';
 $response = ['success' => false, 'error' => ''];
 

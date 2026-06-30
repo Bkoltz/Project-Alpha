@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
+require_once __DIR__ . '/../../../utils/invoice_content_links.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'invoices', $id);
@@ -433,6 +434,13 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       </td>
     </tr>
   </table>
+
+  <?php
+    $invoiceContentLinksHtml = invoice_content_links_html(invoice_content_links_for_invoice($pdo, $id, $appConfig));
+    if ($invoiceContentLinksHtml !== '') {
+      echo $invoiceContentLinksHtml;
+    }
+  ?>
 </section>
 
 <?php

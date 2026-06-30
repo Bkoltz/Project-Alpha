@@ -252,11 +252,14 @@ function scope_clause(PDO $pdo, string $tableAlias, int $userId): array
 function can_access_record(PDO $pdo, string $table, int $recordId, int $userId): bool
 {
     if (($_SESSION['user']['role'] ?? '') === 'admin') return true;
-    if ($table === 'clients') return true;
     $activeOrgId = get_active_org_id();
     if ($activeOrgId === 0) return false;
 
     if (!preg_match('/^[A-Za-z0-9_]+$/', $table)) return false;
+
+    if ($table === 'organizations') {
+        return in_array($recordId, user_org_ids($pdo, $userId), true);
+    }
 
     $select = 'organization_id';
     if (acl_table_has_column($pdo, $table, 'created_by')) {

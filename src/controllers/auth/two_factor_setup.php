@@ -9,6 +9,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
+require_once __DIR__ . '/../../utils/two_factor_policy.php';
 
 use App\Utils\TwoFactorAuth;
 
@@ -88,6 +89,11 @@ try {
     }
     
     if ($action === 'disable') {
+        if (two_factor_required_for_user($pdo, $userId)) {
+            header('Location: /?page=2fa-setup&required=1&error=' . urlencode('Two-factor authentication is required for your account.'));
+            exit;
+        }
+
         // Verify password before disabling
         $password = $_POST['password'] ?? '';
         

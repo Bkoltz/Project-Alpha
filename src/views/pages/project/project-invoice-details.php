@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../../utils/invoice_content_links.php';
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { http_response_code(400); echo 'Invalid project invoice'; return; }
@@ -46,6 +47,7 @@ $lineSql = $hasBillingUnit
 $lineStmt = $pdo->prepare($lineSql);
 
 $recipients = project_invoice_client_recipients($pdo, $id);
+$contentLinks = invoice_content_links_for_project_invoice($pdo, $id, $appConfig);
 $projectClientStmt = $pdo->prepare('
     SELECT c.id, c.name, c.email, pc.is_primary_billing,
            ' . (project_invoice_table_has_column($pdo, 'project_clients', 'send_project_invoices') ? 'pc.send_project_invoices' : '1 AS send_project_invoices') . '
@@ -178,6 +180,29 @@ $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
       <?php endforeach; ?>
     </tbody>
   </table>
+
+  <?php if (!empty($contentLinks)): ?>
+    <div style="border:1px solid #bfdbfe;border-radius:8px;padding:16px;background:#eff6ff;margin-bottom:22px">
+      <h2 style="font-size:18px;margin:0 0 8px">View your content here</h2>
+      <div style="display:grid;gap:8px">
+        <?php foreach ($contentLinks as $link): ?>
+          <div>
+            <a href="<?php echo htmlspecialchars($link['url']); ?>" target="_blank" rel="noopener" style="font-weight:700;color:#1d4ed8">
+              <?php echo htmlspecialchars($link['title']); ?>
+            </a>
+            <?php if (!$isPublic): ?>
+              <span style="font-size:12px;color:#6b7280"> &middot; <?php echo htmlspecialchars($link['source_label']); ?> link</span>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  <?php elseif (!$isPublic && !$isPdf): ?>
+    <div class="no-print" style="border:1px dashed #cbd5e1;border-radius:8px;padding:14px;background:#f8fafc;margin-bottom:22px;color:#475569">
+      <strong>No invoice content links.</strong>
+      Add manual links to the project department, organization, client, or enabled project links and mark them "Include on invoices."
+    </div>
+  <?php endif; ?>
 
   <?php foreach ($items as $item): ?>
     <div style="break-inside:avoid;margin-bottom:18px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">

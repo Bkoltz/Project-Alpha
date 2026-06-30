@@ -141,9 +141,14 @@ try {
                 throw new Exception('Invalid category ID');
             }
 
-            // Get all documents in this category to delete files
-            $stmt = $pdo->prepare('SELECT file_path FROM form_documents WHERE category_id = ?');
-            $stmt->execute([$categoryId]);
+            // Load candidate files only through the organization-scoped category.
+            $stmt = $pdo->prepare('
+                SELECT d.file_path
+                FROM form_documents d
+                INNER JOIN form_categories c ON c.id = d.category_id
+                WHERE d.category_id = ? AND c.organization_id = ?
+            ');
+            $stmt->execute([$categoryId, $orgId]);
             $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Delete category (will cascade delete documents due to FK)
@@ -152,8 +157,11 @@ try {
                 WHERE id = ? AND organization_id = ?
             ');
             $stmt->execute([$categoryId, $orgId]);
+            if ($stmt->rowCount() !== 1) {
+                throw new Exception('Category not found');
+            }
 
-            // Delete files
+            // Delete files only after the authorized database delete succeeds.
             foreach ($documents as $doc) {
                 $filePath = __DIR__ . '/../..' . $doc['file_path'];
                 if (file_exists($filePath)) {

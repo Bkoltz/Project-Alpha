@@ -8,7 +8,8 @@ This file records public, non-secret deployment conventions. Credentials, privat
 
 - Production runs as a TrueNAS Scale Custom App on host port `1627`.
 - Staging runs separately on host port `1628`.
-- Production uses `:latest` and `:cron-latest` images.
+- Release-candidate validation uses immutable image tags such as `:0.5.0-rc1` and `:cron-0.5.0-rc1`.
+- Production uses `:latest` and `:cron-latest` only after the matching release candidate has passed validation.
 - Staging uses `:dev` and `:cron` images.
 - Production and staging have different databases, named volumes, passwords, and encryption keys.
 - TrueNAS redeployment remains a manual operator action after an image is published.
@@ -41,7 +42,8 @@ Losing the configuration encryption key can make encrypted settings unrecoverabl
 | Branch | Web image | Cron image | Intended environment |
 |---|---|---|---|
 | `dev` | `:dev` | `:cron` | Staging |
-| `main` | `:latest` | `:cron-latest` | Production |
+| tag `v0.5.0-rc1` | `:0.5.0-rc1` | `:cron-0.5.0-rc1` | Release-candidate validation |
+| `main` | `:latest` | `:cron-latest` | Production after validation |
 
 Pull requests to `main` must pass the configured checks. Publishing an image does not automatically redeploy TrueNAS.
 

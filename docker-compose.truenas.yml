@@ -15,7 +15,7 @@
 
 services:
   migrate:
-    image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:0.5.0-rc1"
     command: ["/usr/local/bin/migrate.sh"]
     environment:
       DB_HOST: db
@@ -33,7 +33,7 @@ services:
       - /mnt/tank/apps/project-alpha/backups:/var/www/backups
 
   web:
-    image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:0.5.0-rc1"
     ports:
       - "1627:80"
     environment:
@@ -62,7 +62,7 @@ services:
       - /mnt/tank/apps/project-alpha/backups:/var/www/backups
 
   cron:
-    image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-0.5.0-rc1"
     environment:
       DB_HOST: db
       DB_PORT: 3306

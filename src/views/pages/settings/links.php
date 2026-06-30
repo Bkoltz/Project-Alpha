@@ -54,6 +54,9 @@ if (empty($_SESSION['csrf'])) {
 $csrfToken = $_SESSION['csrf'];
 
 $providers = ['dropbox', 'gdrive', 's3'];
+$helpIcon = static function (string $text): string {
+    return '<span class="pa-help" tabindex="0" aria-label="' . e($text) . '" title="' . e($text) . '">?</span>';
+};
 ?>
 <div style="max-width:1000px">
     <!-- CSRF token for JavaScript -->
@@ -62,6 +65,12 @@ $providers = ['dropbox', 'gdrive', 's3'];
         window.csrfToken = "<?php echo e($csrfToken); ?>";
     })();
     </script>
+
+    <style>
+    .pa-help{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:800;margin-left:6px;cursor:help}
+    .pa-help:focus{outline:2px solid #93c5fd;outline-offset:2px}
+    .pa-setting-note{font-size:12px;color:var(--muted);line-height:1.4;margin-top:4px}
+    </style>
 
     <h2 style="margin:0 0 8px 0">Link Resolver</h2>
     <p style="margin:0 0 24px 0;color:var(--muted)">Auto-generate and manage links for client/organization file storage</p>
@@ -96,13 +105,55 @@ $providers = ['dropbox', 'gdrive', 's3'];
         <div style="display:grid;gap:16px">
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="link_resolver_enabled" value="1" <?php echo !empty($appConfig['link_resolver_enabled']) ? 'checked' : ''; ?>>
-                <span class="font-600">Enable Link Resolver System</span>
+                <span class="font-600">Enable Link Resolver System<?php echo $helpIcon('Disabled by default. Turn this on only if PA should look for cloud folders automatically.'); ?></span>
             </label>
 
             <label style="display:flex;align-items:center;gap:10px">
                 <input type="checkbox" name="org_level_links_only" value="1" <?php echo !empty($appConfig['org_level_links_only']) ? 'checked' : ''; ?>>
-                <span class="font-600">Organization-level links only</span>
+                <span class="font-600">Organization-level links only<?php echo $helpIcon('When enabled, clients inside an organization use organization/department links instead of client-level auto links.'); ?></span>
                 <span style="font-size:13px;color:var(--muted);margin-left:4px">(If client belongs to organization, manage links at org level)</span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="link_resolver_daily_scan_enabled" value="1" <?php echo !empty($appConfig['link_resolver_daily_scan_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Daily folder scan<?php echo $helpIcon('Optional background scan. It stays off unless your business wants PA to refresh resolver candidates automatically.'); ?></span>
+                    <span class="pa-setting-note">Runs only when the resolver and a provider are enabled.</span>
+                </span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="link_resolver_invoice_auto_attach_enabled" value="1" <?php echo !empty($appConfig['link_resolver_invoice_auto_attach_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Just-in-time invoice link scan<?php echo $helpIcon('Before emailing an invoice, PA may check only the relevant org/department if the invoice has no content links.'); ?></span>
+                    <span class="pa-setting-note">Ambiguous matches must be reviewed instead of auto-attached.</span>
+                </span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="project_specific_links_enabled" value="1" <?php echo !empty($appConfig['project_specific_links_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Allow project-specific invoice links<?php echo $helpIcon('Disabled by default. Most projects should use the higher-level org or department folder link.'); ?></span>
+                    <span class="pa-setting-note">Manual project links can override the normal org/department link flow when this is enabled.</span>
+                </span>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" name="invoice_content_links_enabled" value="1" <?php echo !empty($appConfig['invoice_content_links_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+                <span>
+                    <span class="font-600">Show content links on invoices<?php echo $helpIcon('When enabled, invoices can show a “View your content here” section using links marked for invoices.'); ?></span>
+                    <span class="pa-setting-note">This is off by default so businesses that do not deliver files are not affected.</span>
+                </span>
+            </label>
+
+            <label>
+                <div style="font-weight:600;margin-bottom:4px">If invoice content links are missing<?php echo $helpIcon('Controls email behavior when a project invoice has no eligible content links.'); ?></div>
+                <?php $missingBehavior = (string)($appConfig['invoice_missing_content_links_behavior'] ?? 'warn'); ?>
+                <select name="invoice_missing_content_links_behavior" style="max-width:280px;width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
+                    <option value="send" <?php echo $missingBehavior === 'send' ? 'selected' : ''; ?>>Send anyway</option>
+                    <option value="warn" <?php echo $missingBehavior === 'warn' ? 'selected' : ''; ?>>Warn before sending</option>
+                    <option value="block" <?php echo $missingBehavior === 'block' ? 'selected' : ''; ?>>Block sending</option>
+                </select>
             </label>
             
             <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">

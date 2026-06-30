@@ -391,6 +391,7 @@ CREATE TABLE IF NOT EXISTS projects (
     client_id INT NULL,
     parent_id INT NULL,
     organization_id INT NULL,
+    department_id INT NULL,
     created_by INT NULL,
     name VARCHAR(150) NOT NULL,
     description TEXT NULL,
@@ -408,11 +409,42 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_projects_client (client_id),
     INDEX idx_projects_org (organization_id),
+    INDEX idx_projects_department (department_id),
     INDEX idx_projects_status (status),
     INDEX idx_projects_parent (parent_id),
     CONSTRAINT fk_projects_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_projects_parent FOREIGN KEY (parent_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_projects_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ORGANIZATION DEPARTMENTS
+CREATE TABLE IF NOT EXISTS organization_departments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    folder_name VARCHAR(150) NULL,
+    folder_aliases JSON NULL,
+    resolver_mode ENUM('auto_attach','review','manual_only','excluded') NOT NULL DEFAULT 'manual_only',
+    notes TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_org_department_name (organization_id, name),
+    INDEX idx_org_departments_org (organization_id),
+    CONSTRAINT fk_org_departments_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS organization_department_contacts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    department_id INT NOT NULL,
+    client_id INT NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'contact',
+    is_primary TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_department_contact (department_id, client_id),
+    INDEX idx_department_contacts_department (department_id),
+    INDEX idx_department_contacts_client (client_id),
+    CONSTRAINT fk_department_contacts_department FOREIGN KEY (department_id) REFERENCES organization_departments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_department_contacts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PROJECT META
@@ -468,15 +500,21 @@ CREATE TABLE IF NOT EXISTS project_clients (
     id INT AUTO_INCREMENT PRIMARY KEY,
     project_id INT NOT NULL,
     client_id INT NOT NULL,
+    department_id INT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'contact',
     is_primary_billing TINYINT(1) NOT NULL DEFAULT 0,
     send_project_invoices TINYINT(1) NOT NULL DEFAULT 1,
+    can_view_invoice_links TINYINT(1) NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_project_client (project_id, client_id),
     INDEX idx_project_clients_project (project_id),
     INDEX idx_project_clients_client (client_id),
+    INDEX idx_project_clients_department (department_id),
     CONSTRAINT fk_project_clients_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    CONSTRAINT fk_project_clients_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+    CONSTRAINT fk_project_clients_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_clients_department FOREIGN KEY (department_id) REFERENCES organization_departments(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PROJECT INVOICES
@@ -565,11 +603,16 @@ CREATE TABLE IF NOT EXISTS project_invoice_payments (
 -- ENTITY LINKS
 CREATE TABLE IF NOT EXISTS entity_links (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    entity_type ENUM('client', 'organization', 'project') NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
     entity_id INT NOT NULL,
     title VARCHAR(255) NULL,
     url VARCHAR(500) NOT NULL,
-    link_type ENUM('manual', 'auto_dropbox', 'auto_gdrive', 'auto_s3') NOT NULL DEFAULT 'manual',
+    link_type VARCHAR(50) NOT NULL DEFAULT 'manual',
+    link_source ENUM('manual','resolver') NOT NULL DEFAULT 'manual',
+    include_on_invoices TINYINT(1) NOT NULL DEFAULT 0,
+    visibility_scope ENUM('entity_only','all_departments','selected_departments','org_contacts') NOT NULL DEFAULT 'entity_only',
+    selected_department_ids JSON NULL,
+    resolver_mode ENUM('auto_attach','review','manual_only','excluded') NOT NULL DEFAULT 'manual_only',
     expiration_date DATE NULL,
     is_expired TINYINT(1) NOT NULL DEFAULT 0,
     ignore_auto_generation TINYINT(1) NOT NULL DEFAULT 0,
@@ -578,6 +621,9 @@ CREATE TABLE IF NOT EXISTS entity_links (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_link_entity (entity_type, entity_id),
     INDEX idx_link_type (link_type),
+    INDEX idx_link_source (link_source),
+    INDEX idx_link_invoice (include_on_invoices, is_expired),
+    INDEX idx_link_visibility (visibility_scope),
     INDEX idx_link_expired (is_expired),
     INDEX idx_link_expiration (expiration_date),
     INDEX idx_link_ignore (ignore_auto_generation)
@@ -1699,6 +1745,12 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('timezone', 'UTC'),
     ('primary_state', ''),
     ('cron_enabled', '1'),
+    ('link_resolver_enabled', '0'),
+    ('link_resolver_daily_scan_enabled', '0'),
+    ('link_resolver_invoice_auto_attach_enabled', '0'),
+    ('project_specific_links_enabled', '0'),
+    ('invoice_content_links_enabled', '0'),
+    ('invoice_missing_content_links_behavior', 'warn'),
     ('invoice_auto_send_due_7days', '1'),
     ('invoice_auto_send_overdue_weekly', '1'),
     ('invoice_auto_email_on_generate', '1')

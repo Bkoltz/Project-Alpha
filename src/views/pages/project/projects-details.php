@@ -7,12 +7,11 @@ require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
-require_record_ownership($pdo, 'projects', $projectId);
-
-if (!$projectId) {
+if ($projectId <= 0) {
     header('Location: /?page=project/projects-list');
     exit;
 }
+require_record_ownership($pdo, 'projects', $projectId);
 
 // Fetch project details
 $stmt = $pdo->prepare('
@@ -79,8 +78,11 @@ $projectInvoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $projectClientsSendSelect = project_invoice_table_has_column($pdo, 'project_clients', 'send_project_invoices')
     ? 'pc.send_project_invoices'
     : '1 AS send_project_invoices';
+$projectClientsLinkSelect = project_invoice_table_has_column($pdo, 'project_clients', 'can_view_invoice_links')
+    ? 'pc.can_view_invoice_links'
+    : '1 AS can_view_invoice_links';
 $stmt = $pdo->prepare("
-    SELECT c.id, c.name, c.email, pc.is_primary_billing, {$projectClientsSendSelect}
+    SELECT c.id, c.name, c.email, pc.is_primary_billing, {$projectClientsSendSelect}, {$projectClientsLinkSelect}
     FROM project_clients pc
     JOIN clients c ON c.id = pc.client_id
     WHERE pc.project_id = ?
@@ -89,11 +91,48 @@ $stmt = $pdo->prepare("
 $stmt->execute([$projectId]);
 $projectClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$allClients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$projectOrganizationId = (int)($project['organization_id'] ?? 0);
+if ($projectOrganizationId > 0) {
+    $allClientsStmt = $pdo->prepare('
+        SELECT id, name, email
+        FROM clients
+        WHERE organization_id = ? AND archived = 0
+        ORDER BY name
+    ');
+    $allClientsStmt->execute([$projectOrganizationId]);
+    $allClients = $allClientsStmt->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $activeOrgId = get_active_org_id();
+    if ($activeOrgId > 0) {
+        $allClientsStmt = $pdo->prepare('
+            SELECT id, name, email
+            FROM clients
+            WHERE organization_id = ? AND archived = 0
+            ORDER BY name
+        ');
+        $allClientsStmt->execute([$activeOrgId]);
+        $allClients = $allClientsStmt->fetchAll(PDO::FETCH_ASSOC);
+    } elseif (($_SESSION['user']['role'] ?? '') === 'admin') {
+        $allClients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $allClientsStmt = $pdo->prepare('
+            SELECT id, name, email
+            FROM clients
+            WHERE organization_id IS NULL AND created_by = ? AND archived = 0
+            ORDER BY name
+        ');
+        $allClientsStmt->execute([(int)($_SESSION['user']['id'] ?? 0)]);
+        $allClients = $allClientsStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
 $selectedProjectClientIds = array_map(static fn($row) => (int)$row['id'], $projectClients);
 $selectedProjectInvoiceRecipientIds = array_map(
     static fn($row) => (int)$row['id'],
     array_values(array_filter($projectClients, static fn($row) => !empty($row['send_project_invoices'])))
+);
+$selectedProjectInvoiceLinkClientIds = array_map(
+    static fn($row) => (int)$row['id'],
+    array_values(array_filter($projectClients, static fn($row) => !empty($row['can_view_invoice_links'])))
 );
 
 // Fetch associated form documents
@@ -518,42 +557,50 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
                         <input name="name" value="<?php echo htmlspecialchars($project['name']); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
                     </label>
                     <input type="hidden" name="organization_id" value="<?php echo (int)($project['organization_id'] ?? 0); ?>">
-                    <label>
-                        <div style="font-size:13px;font-weight:600">Primary Client</div>
-                        <select name="client_id" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-                            <option value="">No primary client</option>
-                            <?php foreach ($allClients as $client): ?>
-                                <option value="<?php echo (int)$client['id']; ?>" <?php echo (int)($project['client_id'] ?? 0) === (int)$client['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($client['name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                    <label>
-                        <div style="font-size:13px;font-weight:600">Project Clients</div>
-                        <select name="project_client_ids[]" multiple size="5" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-                            <?php foreach ($allClients as $client): ?>
-                                <option value="<?php echo (int)$client['id']; ?>" <?php echo in_array((int)$client['id'], $selectedProjectClientIds, true) ? 'selected' : ''; ?>><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
                     <div class="project-field">
-                        <span>Default Invoice Recipients</span>
-                        <div class="project-check-list">
+                        <div>Project Contacts <span title="These contacts belong to this project only. Removing someone here does not delete the client record." style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;cursor:help">?</span></div>
+                        <div style="display:grid;gap:8px">
                             <?php if (empty($projectClients)): ?>
-                                <div class="project-muted">Add project clients before choosing recipients.</div>
+                                <div class="project-muted" style="padding:10px;border:1px dashed #d1d5db;border-radius:8px">No project contacts attached yet.</div>
                             <?php else: ?>
                                 <?php foreach ($projectClients as $client): ?>
-                                    <label class="project-check">
-                                        <input type="checkbox" name="project_invoice_email_client_ids[]" value="<?php echo (int)$client['id']; ?>" <?php echo in_array((int)$client['id'], $selectedProjectInvoiceRecipientIds, true) ? 'checked' : ''; ?> <?php echo empty($client['email']) ? 'disabled' : ''; ?>>
-                                        <span>
-                                            <?php echo htmlspecialchars($client['name']); ?><?php echo !empty($client['is_primary_billing']) ? ' (primary)' : ''; ?>
-                                            <small style="display:block"><?php echo !empty($client['email']) ? htmlspecialchars($client['email']) : 'No email address'; ?></small>
-                                        </span>
-                                    </label>
+                                    <?php $clientId = (int)$client['id']; ?>
+                                    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;padding:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fff">
+                                        <input type="checkbox" name="project_client_ids[]" value="<?php echo $clientId; ?>" checked style="margin-top:3px" title="Uncheck to remove from this project">
+                                        <div>
+                                            <div style="font-weight:700"><?php echo htmlspecialchars($client['name']); ?><?php echo !empty($client['is_primary_billing']) ? ' (primary)' : ''; ?></div>
+                                            <div style="font-size:12px;color:var(--muted)"><?php echo !empty($client['email']) ? htmlspecialchars($client['email']) : 'No email address'; ?></div>
+                                            <div style="display:grid;gap:5px;margin-top:8px">
+                                                <label class="project-check">
+                                                    <input type="radio" name="client_id" value="<?php echo $clientId; ?>" <?php echo (int)($project['client_id'] ?? 0) === $clientId ? 'checked' : ''; ?>>
+                                                    <span>Primary invoice receiver</span>
+                                                </label>
+                                                <label class="project-check">
+                                                    <input type="checkbox" name="project_invoice_email_client_ids[]" value="<?php echo $clientId; ?>" <?php echo in_array($clientId, $selectedProjectInvoiceRecipientIds, true) ? 'checked' : ''; ?> <?php echo empty($client['email']) ? 'disabled' : ''; ?>>
+                                                    <span>Receives project invoice emails</span>
+                                                </label>
+                                                <label class="project-check">
+                                                    <input type="checkbox" name="project_invoice_link_client_ids[]" value="<?php echo $clientId; ?>" <?php echo in_array($clientId, $selectedProjectInvoiceLinkClientIds, true) ? 'checked' : ''; ?>>
+                                                    <span>Can view invoice content links</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </div>
-                        <small>These people receive automatic and Generate &amp; Email project invoices. You can choose different recipients when emailing an individual project invoice.</small>
+                        <small>Uncheck a contact to remove them from this project. They stay in PA and can be added again later.</small>
                     </div>
+                    <label>
+                        <div style="font-size:13px;font-weight:600">Add Contacts</div>
+                        <select name="project_client_ids[]" multiple size="5" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
+                            <?php foreach ($allClients as $client): ?>
+                                <?php if (in_array((int)$client['id'], $selectedProjectClientIds, true)) { continue; } ?>
+                                <option value="<?php echo (int)$client['id']; ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small style="display:block;color:var(--muted);font-size:12px;margin-top:4px">New contacts are added when you save. Use the rows above to control invoice and link access after they are attached.</small>
+                    </label>
                     <label>
                         <div style="font-size:13px;font-weight:600">Billing Period</div>
                         <select name="invoice_billing_period" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">

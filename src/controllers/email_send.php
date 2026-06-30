@@ -7,6 +7,7 @@ require_once __DIR__ . '/../utils/smtp.php';
 require_once __DIR__ . '/../utils/logger.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/acl.php';
+require_once __DIR__ . '/../utils/invoice_content_links.php';
 
 // Determine if Dompdf is available
 $dompdfAvailable = is_file(__DIR__ . '/../../vendor/autoload.php');
@@ -138,6 +139,12 @@ try {
 
   // Add Pay via Credit Card button for invoices if Stripe is configured
   if ($type === 'invoice') {
+    $contentLinks = invoice_content_links_for_invoice($pdo, $id, $appConfig);
+    $contentLinksHtml = invoice_content_links_html($contentLinks);
+    if ($contentLinksHtml !== '') {
+      $body .= $contentLinksHtml;
+    }
+
     require_once __DIR__ . '/../services/StripeService.php';
     if (StripeService::isConfigured($appConfig)) {
       // Check if invoice is payable
