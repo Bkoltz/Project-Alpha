@@ -220,7 +220,60 @@ class DropboxLinkResolver
         $response = curl_exec($ch);
         $curlError = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+
+        return [
+            'response' => $response,
+            'curl_error' => $curlError,
+            'http_code' => (int)$httpCode,
+        ];
+    }
+
+    private function createLegacySharedLink(string $folderPath): array
+    {
+        $ch = curl_init('https://api.dropboxapi.com/2/sharing/create_shared_link');
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode([
+                'path' => $folderPath,
+                'short_url' => false,
+            ]),
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Content-Type: application/json'
+            ],
+            CURLOPT_RETURNTRANSFER => true
+        ]);
+
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        return [
+            'response' => $response,
+            'curl_error' => $curlError,
+            'http_code' => (int)$httpCode,
+        ];
+    }
+
+    private function listSharedLinks(string $folderPath, bool $directOnly): array
+    {
+        $ch = curl_init('https://api.dropboxapi.com/2/sharing/list_shared_links');
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode([
+                'path' => $folderPath,
+                'direct_only' => $directOnly,
+            ]),
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Content-Type: application/json'
+            ],
+            CURLOPT_RETURNTRANSFER => true
+        ]);
+
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         return [
             'response' => $response,
@@ -254,7 +307,6 @@ class DropboxLinkResolver
             
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
             
             if ($httpCode === 200) {
                 $data = json_decode($response, true);
@@ -336,7 +388,6 @@ class DropboxLinkResolver
             $response = curl_exec($ch);
             $curlError = curl_error($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
 
             if ($response === false) {
                 return $this->fail('folder search', 'Dropbox folder search could not reach Dropbox: ' . $curlError, 'Check outbound network access from the PA container/server.');
@@ -397,25 +448,10 @@ class DropboxLinkResolver
             $folderPath = $this->normalizeDropboxPath($folderPath);
 
             // First, try to get existing shared link
-            $ch = curl_init('https://api.dropboxapi.com/2/sharing/list_shared_links');
-            
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode([
-                    'path' => $folderPath,
-                    'direct_only' => true,
-                ]),
-                CURLOPT_HTTPHEADER => [
-                    'Authorization: Bearer ' . $this->accessToken,
-                    'Content-Type: application/json'
-                ],
-                CURLOPT_RETURNTRANSFER => true
-            ]);
-            
-            $response = curl_exec($ch);
-            $curlError = curl_error($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+            $lookup = $this->listSharedLinks($folderPath, true);
+            $response = $lookup['response'];
+            $curlError = (string)$lookup['curl_error'];
+            $httpCode = (int)$lookup['http_code'];
 
             if ($response === false) {
                 $this->fail('list shared links', 'Dropbox shared-link lookup could not reach Dropbox: ' . $curlError, 'Check outbound network access from the PA container/server.');
@@ -437,6 +473,21 @@ class DropboxLinkResolver
                 $this->fail('list shared links', $message, $tip, $httpCode, (string)$response);
                 return null;
             }
+
+            // If Dropbox did not expose a direct-only link, search all shared
+            // links visible for this path and still require an exact path match.
+            $lookup = $this->listSharedLinks($folderPath, false);
+            $response = $lookup['response'];
+            $httpCode = (int)$lookup['http_code'];
+            if ($response !== false && $httpCode === 200) {
+                $data = json_decode((string)$response, true);
+                if (!empty($data['links'])) {
+                    $exactUrl = $this->exactSharedLinkUrl((array)$data['links'], $folderPath);
+                    if ($exactUrl !== null) {
+                        return $exactUrl;
+                    }
+                }
+            }
             
             // Create a new shared link. Some Dropbox team policies reject an
             // explicit public visibility request with HTTP 400, but still allow
@@ -448,10 +499,15 @@ class DropboxLinkResolver
 
             if ($httpCode === 400 && $response !== false) {
                 $retry = $this->createSharedLink($folderPath, false);
-                if ($retry['response'] !== false && (int)$retry['http_code'] === 200) {
-                    $response = $retry['response'];
-                    $curlError = (string)$retry['curl_error'];
-                    $httpCode = (int)$retry['http_code'];
+                $response = $retry['response'];
+                $curlError = (string)$retry['curl_error'];
+                $httpCode = (int)$retry['http_code'];
+
+                if ($httpCode === 400 && $response !== false) {
+                    $legacyRetry = $this->createLegacySharedLink($folderPath);
+                    $response = $legacyRetry['response'];
+                    $curlError = (string)$legacyRetry['curl_error'];
+                    $httpCode = (int)$legacyRetry['http_code'];
                 }
             }
 

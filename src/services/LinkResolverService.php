@@ -238,6 +238,7 @@ class LinkResolverService
             'review_required' => $review,
             'errors' => $errors,
             'tips' => $tips,
+            'tip' => $tips ? reset($tips) : null,
             'message' => $message,
         ];
     }
@@ -314,6 +315,7 @@ class LinkResolverService
             'message' => $issue['message'] ?? null,
             'tip' => $issue['tip'] ?? null,
             'http_code' => $issue['http_code'] ?? null,
+            'response' => $issue['response'] ?? null,
         ];
 
         if (function_exists('app_log')) {
@@ -648,7 +650,8 @@ class LinkResolverService
             } else {
                 $summary['errors']++;
                 if (count($summary['details']) < 6) {
-                    $summary['details'][] = $label . ': ' . $message;
+                    $tip = !empty($result['tip']) ? ' Tip: ' . (string)$result['tip'] : '';
+                    $summary['details'][] = $label . ': ' . $message . $tip;
                 }
             }
         };
