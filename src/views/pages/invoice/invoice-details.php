@@ -478,8 +478,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <div id="shareLinkContent">
       <p style="color:#6b7280;margin:0 0 16px">Generate a public link that clients can use to view and pay this invoice.</p>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer">
-        <input type="checkbox" id="expireWhenPaid" onchange="toggleDaysInput()" style="width:18px;height:18px">
-        <span style="font-weight:500">Expire when invoice is paid in full</span>
+        <input type="checkbox" id="expireWhenPaid" onchange="toggleDaysInput()" style="width:18px;height:18px" checked disabled>
+        <span style="font-weight:500">Invoice links expire when paid in full or manually revoked</span>
       </label>
       <label id="daysLabel" style="display:block;margin-bottom:12px">
         <div style="font-weight:500;margin-bottom:4px">Link expires in (days)</div>
@@ -513,7 +513,7 @@ function generatePublicLink() {
   formData.append('type', 'invoice');
   formData.append('id', '<?php echo (int)$id; ?>');
   formData.append('days', '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>');
-  formData.append('expire_when_paid', '0');
+  formData.append('expire_when_paid', '1');
   formData.append('csrf', '<?php echo htmlspecialchars(csrf_token()); ?>');
   
   fetch('/?page=public-link-create', {
@@ -540,7 +540,7 @@ function generatePublicLink() {
       // No existing link, show the create form
       document.getElementById('shareLinkContent').style.display = 'block';
       document.getElementById('shareLinkResult').style.display = 'none';
-      document.getElementById('expireWhenPaid').checked = false;
+      document.getElementById('expireWhenPaid').checked = true;
       toggleDaysInput();
     }
   })
@@ -548,7 +548,7 @@ function generatePublicLink() {
     // On error, show the create form
     document.getElementById('shareLinkContent').style.display = 'block';
     document.getElementById('shareLinkResult').style.display = 'none';
-    document.getElementById('expireWhenPaid').checked = false;
+    document.getElementById('expireWhenPaid').checked = true;
     toggleDaysInput();
   });
 }
@@ -558,7 +558,7 @@ function closeShareModal() {
 }
 
 function toggleDaysInput() {
-  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
+  const expireWhenPaid = true;
   const daysLabel = document.getElementById('daysLabel');
   const daysInput = document.getElementById('linkDays');
   if (expireWhenPaid) {
@@ -571,7 +571,7 @@ function toggleDaysInput() {
 }
 
 function createPublicLink() {
-  const expireWhenPaid = document.getElementById('expireWhenPaid').checked;
+  const expireWhenPaid = true;
   const days = document.getElementById('linkDays').value || 14;
   const formData = new FormData();
   formData.append('type', 'invoice');
@@ -655,7 +655,7 @@ function revokeAndCreateNew() {
       document.getElementById('linkExpiry').textContent = '';
       // Reset to default days
       document.getElementById('linkDays').value = '<?php echo (int)($appConfig['documents_valid_days'] ?? 14); ?>';
-      document.getElementById('expireWhenPaid').checked = false;
+      document.getElementById('expireWhenPaid').checked = true;
       toggleDaysInput();
     } else {
       alert('Error: ' + (data.error || 'Failed to revoke link'));

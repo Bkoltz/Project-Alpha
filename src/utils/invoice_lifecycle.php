@@ -305,13 +305,18 @@ function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, stri
         }
     }
 
+    try {
+        $pdo->exec('ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL');
+    } catch (Throwable $e) { /* ignore */ }
+    try {
+        $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
+    } catch (Throwable $e) { /* ignore */ }
+
     $token = bin2hex(random_bytes(32));
-    $days = max(1, (int)($appConfig['documents_valid_days'] ?? 14));
-    $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $days . ' days'));
     $pdo->prepare(
-        'INSERT INTO public_links (document_type,document_id,token,expires_at,revoked,created_at)
-         VALUES ("invoice",?,?,?,0,NOW())'
-    )->execute([$invoiceId, $token, $expiresAt]);
+        'INSERT INTO public_links (document_type,document_id,token,expires_at,expire_when_paid,revoked,created_at)
+         VALUES ("invoice",?,?,NULL,1,0,NOW())'
+    )->execute([$invoiceId, $token]);
 
     $base = invoice_public_base_url($appConfig);
     $url = $base . '/?page=public-doc&token=' . rawurlencode($token);
