@@ -6,7 +6,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 
 # Install system utilities and Composer (use a matching PHP version so lockfile checks pass)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
         git curl unzip zip zlib1g-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/* \
     && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
@@ -51,7 +51,7 @@ RUN { \
 WORKDIR /var/www/html
 
 # System packages needed for PHP extensions
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y \
     default-mysql-client \
     git \
     unzip \
@@ -113,6 +113,8 @@ CMD ["start.sh"]
 # Local/CI target: production-equivalent web runtime plus PHPUnit and tests.
 FROM web AS test
 COPY --from=vendor-dev /app/vendor /var/www/vendor
+COPY --from=vendor /usr/local/bin/composer /usr/local/bin/composer
+COPY composer.json composer.lock /var/www/
 COPY ./tests/ /var/www/tests/
 COPY ./phpunit.xml /var/www/phpunit.xml
 COPY ./database/ /var/www/database/
@@ -120,7 +122,7 @@ COPY ./public/ /var/www/public/
 COPY ./cron/ /var/www/cron/
 COPY ./docker/ /var/www/docker/
 COPY ./.github/ /var/www/.github/
-RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/.github /var/www/phpunit.xml
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/.github /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
@@ -128,7 +130,7 @@ FROM php:8.5-cli AS cron
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
         default-mysql-client cron curl zlib1g-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 

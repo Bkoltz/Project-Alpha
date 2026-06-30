@@ -88,10 +88,21 @@ jobs:
           output: trivy-report.txt
           exit-code: '1'
           ignore-unfixed: true
+          scanners: 'vuln'
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
+      - name: Print Trivy report
+        if: always()
+        run: |
+          if [ -f trivy-report.txt ]; then
+            cat trivy-report.txt
+          else
+            echo "Trivy report was not generated."
+          fi
+
       - name: Upload Trivy report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: trivy-report
