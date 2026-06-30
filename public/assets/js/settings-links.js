@@ -45,9 +45,10 @@
         btn.disabled = false;
         btn.textContent = originalText;
         if (data.success) {
-          alert('Connection successful!');
+          alert(data.message || 'Connection successful!');
         } else {
-          alert('Connection failed: ' + (data.error || 'Unknown error'));
+          var tip = data.tip ? '\n\nTip: ' + data.tip : '';
+          alert('Connection failed: ' + (data.error || 'Unknown error') + tip);
         }
       })
       .catch(function (err) {

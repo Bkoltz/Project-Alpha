@@ -5,29 +5,113 @@ class GdriveLinkResolver
     private $serviceAccount;
     private $accessToken;
     private $rootPath;
+    private string $serviceAccountEmail = '';
     private array $metadataCache = [];
-    
+    private ?array $lastError = null;
+
     public function __construct(array $credentials)
     {
         $this->serviceAccount = $credentials['service_account'] ?? null;
-        $this->rootPath = $credentials['root_path'] ?? '';
-        
+        $this->rootPath = trim((string)($credentials['root_path'] ?? ''));
+
         if (!$this->serviceAccount) {
             throw new \Exception('Google Drive service account not configured');
         }
-        
-        // Parse service account JSON
+
         $serviceAccountData = json_decode($this->serviceAccount, true);
         if (!$serviceAccountData) {
             throw new \Exception('Invalid service account JSON');
         }
-        
-        // Get access token
+        $this->serviceAccountEmail = (string)($serviceAccountData['client_email'] ?? '');
+
         $this->accessToken = $this->getAccessToken($serviceAccountData);
     }
-    
+
+    public function getLastError(): ?array
+    {
+        return $this->lastError;
+    }
+
+    private function fail(string $operation, string $message, ?string $tip = null, ?int $httpCode = null, ?string $response = null): array
+    {
+        $this->lastError = [
+            'operation' => $operation,
+            'message' => $message,
+            'tip' => $tip,
+            'http_code' => $httpCode,
+            'response' => $response ? substr($response, 0, 1000) : null,
+        ];
+        return ['success' => false, 'message' => $message, 'tip' => $tip];
+    }
+
+    private function googleApiErrorMessage(int $httpCode, string $operation, string $response): array
+    {
+        $decoded = json_decode($response, true);
+        $error = is_array($decoded) && isset($decoded['error']) && is_array($decoded['error']) ? $decoded['error'] : [];
+        $detail = '';
+        if (!empty($error['message'])) {
+            $detail = ' Google said: ' . (string)$error['message'];
+        } elseif (!empty($error['status'])) {
+            $detail = ' Google said: ' . (string)$error['status'];
+        }
+
+        if ($httpCode === 401) {
+            return [
+                'Google Drive authentication failed.' . $detail,
+                'Check the service account JSON and make sure the private key is current.',
+            ];
+        }
+        if ($httpCode === 403) {
+            return [
+                'Google Drive denied permission for ' . $operation . '.' . $detail,
+                'Share the target folders with the service account and verify Drive API permissions for this project.',
+            ];
+        }
+        if ($httpCode === 404) {
+            return [
+                'Google Drive could not find the configured folder.' . $detail,
+                'Check the root folder ID and make sure it is shared with the service account.',
+            ];
+        }
+
+        return [
+            'Google Drive ' . $operation . ' failed with HTTP ' . $httpCode . '.' . $detail,
+            'Use Test Connection in Settings > Links and verify the Google service account has access to the target folders.',
+        ];
+    }
+
+    private function request(string $method, string $url, ?array $payload = null): array
+    {
+        $ch = curl_init($url);
+        $options = [
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+        ];
+        if ($method !== 'GET') {
+            $options[CURLOPT_CUSTOMREQUEST] = $method;
+        }
+        if ($payload !== null) {
+            $options[CURLOPT_POSTFIELDS] = json_encode($payload);
+        }
+        curl_setopt_array($ch, $options);
+
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        return [
+            'response' => $response,
+            'curl_error' => $curlError,
+            'http_code' => (int)$httpCode,
+        ];
+    }
+
     /**
-     * Get access token using service account
+     * Get access token using service account.
      */
     private function getAccessToken(array $serviceAccount): string
     {
@@ -38,16 +122,15 @@ class GdriveLinkResolver
                 'scope' => 'https://www.googleapis.com/auth/drive',
                 'aud' => 'https://oauth2.googleapis.com/token',
                 'exp' => $now + 3600,
-                'iat' => $now
+                'iat' => $now,
             ];
-            
-            // Create JWT
+
             $header = json_encode(['alg' => 'RS256', 'typ' => 'JWT']);
             $payload = json_encode($jwt);
-            
-            $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
-            $base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($payload));
-            
+
+            $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode((string)$header));
+            $base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode((string)$payload));
+
             $signature = '';
             openssl_sign(
                 $base64UrlHeader . '.' . $base64UrlPayload,
@@ -55,71 +138,77 @@ class GdriveLinkResolver
                 $serviceAccount['private_key'],
                 OPENSSL_ALGO_SHA256
             );
-            
+
             $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
             $jwtToken = $base64UrlHeader . '.' . $base64UrlPayload . '.' . $base64UrlSignature;
-            
-            // Exchange JWT for access token
+
             $ch = curl_init('https://oauth2.googleapis.com/token');
             curl_setopt_array($ch, [
                 CURLOPT_POST => true,
                 CURLOPT_POSTFIELDS => http_build_query([
                     'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                    'assertion' => $jwtToken
+                    'assertion' => $jwtToken,
                 ]),
-                CURLOPT_RETURNTRANSFER => true
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30,
             ]);
-            
+
             $response = curl_exec($ch);
-            curl_close($ch);
-            
-            $data = json_decode($response, true);
-            if (empty($data['access_token'])) {
-                throw new \Exception('Failed to get access token');
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+
+            if ($response === false) {
+                throw new \Exception('Failed to get Google access token: ' . $curlError);
             }
-            
-            return $data['access_token'];
-            
+
+            $data = json_decode((string)$response, true);
+            if ($httpCode !== 200 || empty($data['access_token'])) {
+                $message = is_array($data) && !empty($data['error_description'])
+                    ? (string)$data['error_description']
+                    : 'Failed to get Google access token';
+                throw new \Exception($message);
+            }
+
+            return (string)$data['access_token'];
         } catch (\Throwable $e) {
             @error_log('[GDrive] Token error: ' . $e->getMessage());
             throw $e;
         }
     }
-    
+
     /**
-     * Search for a folder by name in Google Drive
+     * Search for a folder by exact name in Google Drive.
      */
     public function searchFolder(string $folderName): array
     {
         try {
             $query = "name = '" . addslashes($folderName) . "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-            
+
             $url = 'https://www.googleapis.com/drive/v3/files?' . http_build_query([
                 'q' => $query,
-                'fields' => 'files(id,name,parents)',
-                'pageSize' => 100
+                'fields' => 'files(id,name,parents,mimeType,trashed)',
+                'pageSize' => 100,
+                'includeItemsFromAllDrives' => 'true',
+                'supportsAllDrives' => 'true',
             ]);
-            
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_HTTPHEADER => [
-                    'Authorization: Bearer ' . $this->accessToken
-                ],
-                CURLOPT_RETURNTRANSFER => true
-            ]);
-            
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            
-            if ($httpCode !== 200) {
-                @error_log('[GDrive] Search failed: ' . $response);
-                return ['success' => false, 'message' => 'Search request failed'];
+
+            $result = $this->request('GET', $url);
+            $response = $result['response'];
+            $httpCode = (int)$result['http_code'];
+
+            if ($response === false) {
+                return $this->fail('folder search', 'Google Drive folder search could not reach Google: ' . (string)$result['curl_error'], 'Check outbound network access from the PA container/server.');
             }
-            
-            $data = json_decode($response, true);
-            
-            if (empty($data['files'])) {
+
+            if ($httpCode !== 200) {
+                [$message, $tip] = $this->googleApiErrorMessage($httpCode, 'folder search', (string)$response);
+                @error_log('[GDrive] Search failed HTTP ' . $httpCode . ': ' . substr((string)$response, 0, 500));
+                return $this->fail('folder search', $message, $tip, $httpCode, (string)$response);
+            }
+
+            $data = json_decode((string)$response, true);
+
+            if (empty($data['files']) || !is_array($data['files'])) {
                 return ['success' => false, 'message' => 'Folder not found'];
             }
 
@@ -128,7 +217,7 @@ class GdriveLinkResolver
                 if (strtolower((string)($file['name'] ?? '')) !== strtolower($folderName)) {
                     continue;
                 }
-                if ($this->rootPath && !$this->isDescendantOfRoot($file, (string)$this->rootPath)) {
+                if ($this->rootPath !== '' && $this->rootPath !== '/' && !$this->isSameOrDescendantOfRoot($file, $this->rootPath)) {
                     continue;
                 }
 
@@ -145,7 +234,7 @@ class GdriveLinkResolver
             if (!$matches) {
                 return ['success' => false, 'message' => 'Exact folder match not found'];
             }
-            
+
             return [
                 'success' => true,
                 'matches' => $matches,
@@ -154,10 +243,9 @@ class GdriveLinkResolver
                 'path' => $matches[0]['path'],
                 'parent_name' => $matches[0]['parent_name'],
             ];
-            
         } catch (\Throwable $e) {
             @error_log('[GDrive] Search error: ' . $e->getMessage());
-            return ['success' => false, 'message' => $e->getMessage()];
+            return $this->fail('folder search', $e->getMessage());
         }
     }
 
@@ -174,23 +262,21 @@ class GdriveLinkResolver
         }
 
         $url = 'https://www.googleapis.com/drive/v3/files/' . rawurlencode($fileId) . '?' . http_build_query([
-            'fields' => 'id,name,parents'
+            'fields' => 'id,name,parents,mimeType,trashed,webViewLink',
+            'supportsAllDrives' => 'true',
         ]);
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_HTTPHEADER => [
-                'Authorization: Bearer ' . $this->accessToken
-            ],
-            CURLOPT_RETURNTRANSFER => true
-        ]);
+        $result = $this->request('GET', $url);
+        $response = $result['response'];
+        $httpCode = (int)$result['http_code'];
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if ($response === false) {
+            $this->metadataCache[$fileId] = [];
+            return [];
+        }
 
         if ($httpCode !== 200) {
-            @error_log('[GDrive] Metadata lookup failed: ' . $response);
+            @error_log('[GDrive] Metadata lookup failed HTTP ' . $httpCode . ': ' . substr((string)$response, 0, 500));
             $this->metadataCache[$fileId] = [];
             return [];
         }
@@ -201,6 +287,14 @@ class GdriveLinkResolver
         }
         $this->metadataCache[$fileId] = $metadata;
         return $metadata;
+    }
+
+    private function isSameOrDescendantOfRoot(array $file, string $rootId): bool
+    {
+        if ((string)($file['id'] ?? '') === $rootId) {
+            return true;
+        }
+        return $this->isDescendantOfRoot($file, $rootId);
     }
 
     private function isDescendantOfRoot(array $file, string $rootId): bool
@@ -228,43 +322,88 @@ class GdriveLinkResolver
 
         return false;
     }
-    
+
+    public function testConnection(): array
+    {
+        if ($this->rootPath !== '' && $this->rootPath !== '/') {
+            $metadata = $this->getFileMetadata($this->rootPath);
+            if (empty($metadata['id'])) {
+                return $this->fail('root folder check', 'Google Drive connected, but the root folder ID was not found or is not accessible.', 'Share the root folder with the service account or clear the root folder ID.');
+            }
+            if (($metadata['mimeType'] ?? '') !== 'application/vnd.google-apps.folder' || !empty($metadata['trashed'])) {
+                return $this->fail('root folder check', 'Google Drive root ID is not an active folder.', 'Use a Google Drive folder ID as the root folder ID.');
+            }
+            return ['success' => true, 'message' => 'Connected to Google Drive as ' . ($this->serviceAccountEmail ?: 'service account') . '; root folder verified: ' . (string)($metadata['name'] ?? $this->rootPath)];
+        }
+
+        $url = 'https://www.googleapis.com/drive/v3/files?' . http_build_query([
+            'pageSize' => 1,
+            'fields' => 'files(id)',
+            'includeItemsFromAllDrives' => 'true',
+            'supportsAllDrives' => 'true',
+        ]);
+        $result = $this->request('GET', $url);
+        $response = $result['response'];
+        $httpCode = (int)$result['http_code'];
+        if ($response === false) {
+            return $this->fail('connection test', 'Google Drive connection test could not reach Google: ' . (string)$result['curl_error'], 'Check outbound network access from the PA container/server.');
+        }
+        if ($httpCode !== 200) {
+            [$message, $tip] = $this->googleApiErrorMessage($httpCode, 'connection test', (string)$response);
+            return $this->fail('connection test', $message, $tip, $httpCode, (string)$response);
+        }
+
+        return ['success' => true, 'message' => 'Connected to Google Drive as ' . ($this->serviceAccountEmail ?: 'service account')];
+    }
+
     /**
-     * Generate a public shared link for a folder
+     * Create or reuse an anyone-with-link reader permission for an exact folder ID.
      */
     public function generatePublicLink(string $folderId): ?string
     {
         try {
-            // Create permission for anyone with link
-            $ch = curl_init("https://www.googleapis.com/drive/v3/files/{$folderId}/permissions");
-            
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode([
-                    'role' => 'reader',
-                    'type' => 'anyone'
-                ]),
-                CURLOPT_HTTPHEADER => [
-                    'Authorization: Bearer ' . $this->accessToken,
-                    'Content-Type: application/json'
-                ],
-                CURLOPT_RETURNTRANSFER => true
-            ]);
-            
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            
-            // 200 = success, 409 = permission already exists
-            if ($httpCode !== 200 && $httpCode !== 409) {
-                @error_log('[GDrive] Create permission failed: ' . $response);
+            $metadata = $this->getFileMetadata($folderId);
+            if (empty($metadata['id'])) {
+                $this->fail('folder metadata', 'Google Drive could not verify the matched folder before sharing.', 'Make sure the folder is still shared with the service account.');
+                return null;
             }
-            
-            // Return the shareable link
-            return "https://drive.google.com/drive/folders/{$folderId}";
-            
+            if (($metadata['mimeType'] ?? '') !== 'application/vnd.google-apps.folder' || !empty($metadata['trashed'])) {
+                $this->fail('folder metadata', 'Google Drive matched item is not an active folder.', 'Check the folder name and root folder ID in Settings > Links.');
+                return null;
+            }
+            if ($this->rootPath !== '' && $this->rootPath !== '/' && !$this->isSameOrDescendantOfRoot($metadata, $this->rootPath)) {
+                $this->fail('folder metadata', 'Google Drive matched folder is outside the configured root folder.', 'Check the root folder ID before running the resolver again.');
+                return null;
+            }
+
+            $url = 'https://www.googleapis.com/drive/v3/files/' . rawurlencode($folderId) . '/permissions?' . http_build_query([
+                'supportsAllDrives' => 'true',
+                'fields' => 'id',
+            ]);
+            $result = $this->request('POST', $url, [
+                'role' => 'reader',
+                'type' => 'anyone',
+                'allowFileDiscovery' => false,
+            ]);
+            $response = $result['response'];
+            $httpCode = (int)$result['http_code'];
+
+            if ($response === false) {
+                $this->fail('create share permission', 'Google Drive permission creation could not reach Google: ' . (string)$result['curl_error'], 'Check outbound network access from the PA container/server.');
+                return null;
+            }
+
+            if (!in_array($httpCode, [200, 201, 409], true)) {
+                [$message, $tip] = $this->googleApiErrorMessage($httpCode, 'create share permission', (string)$response);
+                @error_log('[GDrive] Create permission failed HTTP ' . $httpCode . ': ' . substr((string)$response, 0, 500));
+                $this->fail('create share permission', $message, $tip, $httpCode, (string)$response);
+                return null;
+            }
+
+            return (string)($metadata['webViewLink'] ?? ('https://drive.google.com/drive/folders/' . rawurlencode($folderId)));
         } catch (\Throwable $e) {
             @error_log('[GDrive] Generate link error: ' . $e->getMessage());
+            $this->fail('create share permission', $e->getMessage());
             return null;
         }
     }

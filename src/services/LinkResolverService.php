@@ -374,7 +374,8 @@ class LinkResolverService
             if (empty($result['success']) && !empty($result['message'])) {
                 $message = (string)$result['message'];
                 if (!in_array($message, ['Folder not found', 'Exact folder match not found'], true)) {
-                    $diagnostics[] = [
+                    $lastError = method_exists($resolver, 'getLastError') ? $resolver->getLastError() : null;
+                    $diagnostics[] = is_array($lastError) ? $lastError : [
                         'operation' => 'folder search',
                         'message' => $message,
                         'tip' => $result['tip'] ?? null,

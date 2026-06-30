@@ -341,6 +341,9 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                                placeholder="us-east-1"
                                style="width:200px;padding:8px;border-radius:6px;border:1px solid #ddd">
                     </label>
+                    <div class="pa-setting-note">
+                        S3 does not create folder share links automatically. PA verifies the exact prefix and returns its HTTPS URL; the bucket, prefix, or CDN must already allow customer access.
+                    </div>
                 <?php endif; ?>
 
 	                <label>
