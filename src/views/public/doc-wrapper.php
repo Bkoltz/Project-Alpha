@@ -58,7 +58,7 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
             $showPayButton = $stripeConfigured
                 && !empty($invoiceData['finalized_at'])
                 && ($invoiceData['collection_mode'] ?? 'direct') === 'direct'
-                && in_array($invStatus, ['unpaid', 'partial'], true)
+                && in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true)
                 && $calculatedAmountDue > 0;
             
             // Calculate surcharge info

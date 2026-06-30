@@ -36,6 +36,22 @@ try {
     if (!$linkRow) {
         throw new Exception('Link not found');
     }
+
+    if (in_array((string)$linkRow['document_type'], ['invoice', 'project_invoice'], true) && empty($linkRow['expire_when_paid'])) {
+        try {
+            $pdo->exec("ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0");
+        } catch (Throwable $e) {
+        }
+        try {
+            $pdo->exec("ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL");
+            $up = $pdo->prepare('UPDATE public_links SET expire_when_paid=1, expires_at=NULL WHERE token=? AND revoked=0 AND document_type IN ("invoice","project_invoice")');
+            $up->execute([$token]);
+            $linkRow['expire_when_paid'] = 1;
+            $linkRow['expires_at'] = null;
+        } catch (Throwable $e) {
+            // Keep validating against the existing expiration if the schema cannot be adjusted here.
+        }
+    }
     
     // Check if revoked
     if ((int)($linkRow['revoked'] ?? 0) === 1) {
@@ -79,7 +95,7 @@ try {
     
     // Check invoice status
     $status = strtolower($invoice['status'] ?? '');
-    if (!in_array($status, ['unpaid', 'partial'], true)) {
+    if (!in_array($status, ['sent', 'unpaid', 'partial', 'overdue'], true)) {
         throw new Exception('This invoice cannot be paid online. Status: ' . $status);
     }
     if (empty($invoice['finalized_at'])) {

@@ -45,6 +45,9 @@ if (!in_array($type, ['quote', 'contract', 'invoice', 'project_invoice'], true) 
 if ($expireWhenPaid && !in_array($type, ['invoice', 'project_invoice'], true)) {
     $expireWhenPaid = false;
 }
+if (in_array($type, ['invoice', 'project_invoice'], true)) {
+    $expireWhenPaid = true;
+}
 
 // Use default days if not specified (unless expire_when_paid is set)
 if (!$expireWhenPaid && $days <= 0) {
@@ -118,6 +121,12 @@ try {
             INDEX idx_public_type_doc (document_type, document_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
     } catch (Throwable $e) { /* table exists */ }
+    try {
+        $pdo->exec('ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL');
+    } catch (Throwable $e) { /* older/non-MySQL schemas can ignore */ }
+    try {
+        $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
+    } catch (Throwable $e) { /* column already exists */ }
     
     // If force_new is set, revoke all existing links for this document
     if ($forceNew) {
@@ -128,6 +137,16 @@ try {
     // Check if a valid link already exists for this document (only if not forcing new)
     $existing = null;
     if (!$forceNew) {
+        if (in_array($type, ['invoice', 'project_invoice'], true)) {
+            try {
+                $upgrade = $pdo->prepare('
+                    UPDATE public_links
+                    SET expire_when_paid = 1, expires_at = NULL
+                    WHERE document_type = ? AND document_id = ? AND revoked = 0
+                ');
+                $upgrade->execute([$type, $id]);
+            } catch (Throwable $e) { /* older schemas are handled by the existing query fallback */ }
+        }
         $existingStmt = $pdo->prepare('
             SELECT token, expires_at, expire_when_paid 
             FROM public_links 
