@@ -32,6 +32,23 @@ try {
     if (!$row) {
         throw new Exception('Link not found');
     }
+
+    if (in_array((string)$row['document_type'], ['invoice', 'project_invoice'], true) && empty($row['expire_when_paid'])) {
+        try {
+            $pdo->exec("ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0");
+        } catch (Throwable $e) {
+        }
+        try {
+            $pdo->exec("ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL");
+            $up = $pdo->prepare('UPDATE public_links SET expire_when_paid=1, expires_at=NULL WHERE token=? AND revoked=0 AND document_type IN ("invoice","project_invoice")');
+            $up->execute([$token]);
+            $row['expire_when_paid'] = 1;
+            $row['expires_at'] = null;
+        } catch (Throwable $e) {
+            // Keep serving the link with its existing expiration if the schema cannot be adjusted here.
+        }
+    }
+
     if ((int)($row['revoked'] ?? 0) === 1) {
         $redirect = trim((string)($row['redirect'] ?? ''));
         if ($redirect !== '') {
@@ -63,8 +80,15 @@ try {
         $eligibility = $pdo->prepare('SELECT status, finalized_at, collection_mode FROM invoices WHERE id=?');
         $eligibility->execute([$id]);
         $invoice = $eligibility->fetch(PDO::FETCH_ASSOC);
-        if (!$invoice || !in_array((string)$invoice['status'], ['sent','unpaid','partial','overdue'], true)
-            || empty($invoice['finalized_at']) || ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+        if (!$invoice) {
+            throw new Exception('Invoice is not public');
+        }
+        $collectionMode = trim((string)($invoice['collection_mode'] ?? ''));
+        if ($collectionMode === '') {
+            $collectionMode = 'direct';
+        }
+        if (!in_array((string)$invoice['status'], ['sent','unpaid','partial','overdue'], true)
+            || empty($invoice['finalized_at']) || $collectionMode !== 'direct') {
             throw new Exception('Invoice is not public');
         }
     }

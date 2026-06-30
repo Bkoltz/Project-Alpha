@@ -8,13 +8,8 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
 require_once __DIR__ . '/../../utils/InvoiceSurcharge.php';
-
-// Production collection is client-initiated from the public invoice link.
-// Keep the historical route closed so an operator cannot accidentally submit
-// a client's card or bypass the one-time approval boundary.
-$blockedInvoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
-header('Location: /?page=invoice/invoice-details&id=' . $blockedInvoiceId . '&stripe_error=' . urlencode('Share the finalized invoice link so the client can approve their one-time payment.'));
-exit;
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 $invoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
 $returnUrl = $_POST['return_url'] ?? $_GET['return_url'] ?? '';
@@ -25,6 +20,14 @@ if ($invoiceId <= 0) {
 }
 
 try {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_validate()) {
+        throw new Exception('Invalid request. Please refresh and try again.');
+    }
+
+    if (!can_access_record($pdo, 'invoices', $invoiceId, (int)($_SESSION['user']['id'] ?? 0))) {
+        throw new Exception('Permission denied');
+    }
+
     // Check if Stripe is configured
     if (!StripeService::isConfigured($appConfig)) {
         throw new Exception('Stripe is not configured. Please add your Stripe keys in Settings → Billing.');
@@ -46,16 +49,20 @@ try {
     
     // Check invoice status
     $status = strtolower($invoice['status'] ?? '');
-    if (!in_array($status, ['unpaid', 'partial'], true)) {
+    if (!in_array($status, ['sent', 'unpaid', 'partial', 'overdue'], true)) {
         throw new Exception('This invoice cannot be charged. Status: ' . $status);
     }
-    if (empty($invoice['finalized_at']) || ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+    $collectionMode = trim((string)($invoice['collection_mode'] ?? ''));
+    if ($collectionMode === '') {
+        $collectionMode = 'direct';
+    }
+    if (empty($invoice['finalized_at']) || $collectionMode !== 'direct') {
         throw new Exception('This invoice is not eligible for individual online payment.');
     }
     
     // Calculate amount due from payments table for accuracy
     $total = (float)($invoice['total'] ?? 0);
-    $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+    $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
     $paidStmt->execute([$invoiceId]);
     $amountPaid = (float)$paidStmt->fetchColumn();
     $amountDue = $total - $amountPaid;
@@ -107,7 +114,8 @@ try {
             'pa_invoice_id' => (string)$invoiceId,
             'invoice_id' => (string)$invoiceId,
             'doc_number' => $docNumber,
-            'charged_by' => 'admin',
+            'charged_by' => 'admin_hosted_checkout',
+            'admin_user_id' => (string)($_SESSION['user']['id'] ?? ''),
             'surcharge_amount' => (string)$surchargeAmount,
             'original_amount' => (string)$amountDue
         ]

@@ -37,19 +37,7 @@ try {
     }
     
     // Verify webhook signature if webhook secret is configured
-    $webhookSecret = null;
-    if (!empty($appConfig['stripe_webhook_secret_enc'])) {
-        $encVal = $appConfig['stripe_webhook_secret_enc'];
-        if (strpos($encVal, 'plain::') === 0) {
-            $webhookSecret = substr($encVal, 7);
-        } else {
-            require_once __DIR__ . '/../../utils/crypto.php';
-            $pt = crypto_decrypt($encVal);
-            if (is_string($pt)) {
-                $webhookSecret = $pt;
-            }
-        }
-    }
+    $webhookSecret = StripeService::webhookSecret($appConfig);
     
     // Verify webhook signature if secret is available
     if ($webhookSecret && $sigHeader) {

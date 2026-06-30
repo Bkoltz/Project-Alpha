@@ -277,6 +277,38 @@ class StripeService {
     public function expireCheckoutSession(string $sessionId): array {
         return $this->apiRequest('POST', 'checkout/sessions/' . rawurlencode($sessionId) . '/expire');
     }
+
+    private static function resolveSecret(array $appConfig, array $rawKeys, string $encryptedKey): ?string {
+        foreach ($rawKeys as $key) {
+            if (!empty($appConfig[$key])) {
+                $value = trim((string)$appConfig[$key]);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        if (empty($appConfig[$encryptedKey])) {
+            return null;
+        }
+
+        $encVal = trim((string)$appConfig[$encryptedKey]);
+        if ($encVal === '') {
+            return null;
+        }
+        if (strpos($encVal, 'plain::') === 0) {
+            $plain = trim(substr($encVal, 7));
+            return $plain !== '' ? $plain : null;
+        }
+
+        require_once __DIR__ . '/../utils/crypto.php';
+        $pt = crypto_decrypt($encVal);
+        if (!is_string($pt)) {
+            return null;
+        }
+        $pt = trim($pt);
+        return $pt !== '' ? $pt : null;
+    }
     
     /**
      * Initialize StripeService from app config settings
@@ -284,40 +316,13 @@ class StripeService {
      * @return StripeService|null Returns null if Stripe is not configured
      */
     public static function fromAppConfig($appConfig) {
-        $secretKey = null;
-        
-        // Try to get decrypted secret key
-        if (!empty($appConfig['stripe_secret_key_enc'])) {
-            $encVal = $appConfig['stripe_secret_key_enc'];
-            if (strpos($encVal, 'plain::') === 0) {
-                $secretKey = substr($encVal, 7);
-            } else {
-                require_once __DIR__ . '/../utils/crypto.php';
-                $pt = crypto_decrypt($encVal);
-                if (is_string($pt)) {
-                    $secretKey = $pt;
-                }
-            }
-        }
+        $secretKey = self::resolveSecret((array)$appConfig, ['_stripe_secret_key'], 'stripe_secret_key_enc');
         
         if (!$secretKey) {
             return null;
         }
         
-        // Get webhook secret if configured
-        $webhookSecret = null;
-        if (!empty($appConfig['stripe_webhook_secret_enc'])) {
-            $encVal = $appConfig['stripe_webhook_secret_enc'];
-            if (strpos($encVal, 'plain::') === 0) {
-                $webhookSecret = substr($encVal, 7);
-            } else {
-                require_once __DIR__ . '/../utils/crypto.php';
-                $pt = crypto_decrypt($encVal);
-                if (is_string($pt)) {
-                    $webhookSecret = $pt;
-                }
-            }
-        }
+        $webhookSecret = self::resolveSecret((array)$appConfig, ['_stripe_webhook_secret'], 'stripe_webhook_secret_enc');
         
         return new self($secretKey, $webhookSecret);
     }
@@ -328,7 +333,18 @@ class StripeService {
      * @return bool True if Stripe keys are configured
      */
     public static function isConfigured($appConfig) {
-        return !empty($appConfig['stripe_publishable_key']) && !empty($appConfig['stripe_secret_key_enc']);
+        return self::hasSecretKey((array)$appConfig);
+    }
+
+    /**
+     * True when the server has a usable Stripe secret key for Checkout/API calls.
+     */
+    public static function hasSecretKey($appConfig) {
+        return self::resolveSecret((array)$appConfig, ['_stripe_secret_key'], 'stripe_secret_key_enc') !== null;
+    }
+
+    public static function webhookSecret($appConfig): ?string {
+        return self::resolveSecret((array)$appConfig, ['_stripe_webhook_secret'], 'stripe_webhook_secret_enc');
     }
     
     /**

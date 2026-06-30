@@ -184,12 +184,13 @@ try {
   </style>
 
   <div class="pa-edit-layout">
+    <form method="post" action="/?page=accounts-update" id="account-edit-form">
+      <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+      <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
+
     <!-- Account Details -->
     <div class="pa-edit-card">
       <h3>Account Details</h3>
-      <form method="post" action="/?page=accounts-update">
-        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
-        <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
 
         <div class="pa-edit-grid">
           <label>
@@ -251,7 +252,7 @@ try {
             </label>
             <label>
               <span style="font-weight:600">Phone</span>
-              <input type="text" name="document_sender_phone" value="<?php echo e($user['document_sender_phone'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
+              <input type="tel" name="document_sender_phone" autocomplete="tel" value="<?php echo e($user['document_sender_phone'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
             </label>
             <label>
               <span style="font-weight:600">Email</span>
@@ -287,11 +288,15 @@ try {
         <div class="pa-edit-actionbar">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save Changes</button>
         </div>
-      </form>
     </div>
 
     <!-- Permissions (full-width card) -->
-    <?php include __DIR__ . '/../account/permissions_overrides.php'; ?>
+    <?php
+      $permissionsEmbedInParentForm = true;
+      include __DIR__ . '/../account/permissions_overrides.php';
+      unset($permissionsEmbedInParentForm);
+    ?>
+    </form>
     <script>
       window.PA_EDIT_ROLE_DEFAULTS = <?php echo json_encode($roleDefaults, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
       window.PA_EDIT_ROLE_META = <?php echo json_encode($roleMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
@@ -330,7 +335,7 @@ try {
           });
         }
 
-        function updatePermissionsForRole() {
+        function updatePermissionsForRole(applyDefaultsForRole) {
           if (!roleSelect || !panel) return;
           var meta = selectedRoleMeta();
           if (meta.isAdmin) {
@@ -341,13 +346,17 @@ try {
             panel.classList.remove('pa-hidden');
             if (adminNote) adminNote.style.display = 'none';
             if (grid) grid.style.display = 'block';
-            applyRoleDefaults();
+            if (applyDefaultsForRole) {
+              applyRoleDefaults();
+            }
           }
         }
 
         if (roleSelect) {
-          roleSelect.addEventListener('change', updatePermissionsForRole);
-          updatePermissionsForRole();
+          roleSelect.addEventListener('change', function() {
+            updatePermissionsForRole(true);
+          });
+          updatePermissionsForRole(false);
         }
 
         function updateSenderFields() {

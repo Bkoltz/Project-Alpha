@@ -69,7 +69,11 @@ try {
     $eligibility = $pdo->prepare('SELECT finalized_at, collection_mode FROM invoices WHERE id=?');
     $eligibility->execute([$id]);
     $invoiceEligibility = $eligibility->fetch(PDO::FETCH_ASSOC);
-    if (!$invoiceEligibility || empty($invoiceEligibility['finalized_at']) || ($invoiceEligibility['collection_mode'] ?? 'direct') !== 'direct') {
+    $collectionMode = trim((string)($invoiceEligibility['collection_mode'] ?? ''));
+    if ($collectionMode === '') {
+      $collectionMode = 'direct';
+    }
+    if (!$invoiceEligibility || empty($invoiceEligibility['finalized_at']) || $collectionMode !== 'direct') {
       $toUrl = $redirectTo ?: $baseView;
       header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('Finalize this invoice before emailing it. Project-billed invoices are sent through the project statement.'));
       exit;
@@ -90,7 +94,7 @@ try {
       document_type VARCHAR(50) NOT NULL,
       document_id INT NOT NULL,
       redirect VARCHAR(255) NULL,
-      expires_at DATETIME NOT NULL,
+      expires_at DATETIME NULL,
       expire_when_paid TINYINT(1) NOT NULL DEFAULT 0,
       revoked TINYINT(1) NOT NULL DEFAULT 0,
       access_count INT NOT NULL DEFAULT 0,
@@ -100,17 +104,25 @@ try {
       INDEX idx_public_type_document (document_type, document_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
   } catch (Throwable $e) { /* ignore */ }
+  try {
+    $pdo->exec('ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL');
+  } catch (Throwable $e) { /* ignore */ }
+  try {
+    $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
+  } catch (Throwable $e) { /* ignore */ }
 
-  // Insert a fresh token for this share (do not reuse old links)
+  // Insert a fresh token for this share (do not reuse old links).
+  // Invoice links stay valid until payment or manual revocation; other
+  // document links keep the configured date-based expiration.
   $token = bin2hex(random_bytes(16));
-  // Use configured documents_valid_days from settings (fallback to 14)
   $days = isset($appConfig['documents_valid_days']) ? (int)$appConfig['documents_valid_days'] : 14;
   if ($days <= 0) { $days = 14; }
-  $exp = date('Y-m-d H:i:s', time() + ($days * 24 * 60 * 60));
+  $expireWhenPaid = $type === 'invoice';
+  $exp = $expireWhenPaid ? null : date('Y-m-d H:i:s', time() + ($days * 24 * 60 * 60));
   try {
-  $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, redirect, expires_at) VALUES (?,?,?,?,?)');
+  $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, redirect, expires_at, expire_when_paid) VALUES (?,?,?,?,?,?)');
   // No redirect by default; callers may update this row later if desired
-  $ins->execute([$type, $id, $token, null, $exp]);
+  $ins->execute([$type, $id, $token, null, $exp, $expireWhenPaid ? 1 : 0]);
   } catch (Throwable $e) { /* ignore */ }
 
   // Build absolute URL to public view
@@ -155,7 +167,7 @@ try {
         if ($invRow) {
           $invStatus = strtolower($invRow['status'] ?? '');
           $amountDue = (float)($invRow['total'] ?? 0) - (float)($invRow['amount_paid'] ?? 0);
-          if (in_array($invStatus, ['unpaid', 'partial'], true) && $amountDue > 0) {
+          if (in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true) && $amountDue > 0) {
             $payUrl = $scheme . '://' . $host . '/?page=stripe-checkout&token=' . rawurlencode($token);
             $body .= '<div style="margin:24px 0;padding:20px;background:#f0f7ff;border:1px solid #93c5fd;border-radius:8px;text-align:center">';
             $body .= '<p style="margin:0 0 12px;color:#1e40af;font-weight:600;font-size:16px">Ready to pay? Use our secure online payment option:</p>';
@@ -168,7 +180,10 @@ try {
     }
   }
 
-  $body .= '<p>This link will expire in '.htmlspecialchars((string)$days).' day'.($days===1?'':'s').'. Do not share this link with untrusted parties!</p>' .
+  $expiryCopy = $expireWhenPaid
+    ? 'This invoice link remains active until the invoice is paid in full or manually revoked.'
+    : 'This link will expire in ' . htmlspecialchars((string)$days) . ' day' . ($days===1?'':'s') . '.';
+  $body .= '<p>' . $expiryCopy . ' Do not share this link with untrusted parties!</p>' .
     '<p>Thank you.</p>';
 
   // Optionally render PDF attachment using Dompdf

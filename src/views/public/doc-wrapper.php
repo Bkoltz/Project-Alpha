@@ -2,6 +2,14 @@
 // src/views/public/doc-wrapper.php
 // Expects variables set by controller: $type, $rid, $token, $notice, $err, $pdo, $appConfig, $row (link data)
 
+$type = isset($type) ? (string)$type : '';
+$rid = isset($rid) ? (int)$rid : 0;
+$token = isset($token) ? (string)$token : '';
+$notice = isset($notice) ? $notice : false;
+$err = isset($err) ? $err : '';
+$row = (isset($row) && is_array($row)) ? $row : [];
+$appConfig = (isset($appConfig) && is_array($appConfig)) ? $appConfig : [];
+
 // Get link expiration info
 $linkExpiresAt = isset($row['expires_at']) && $row['expires_at'] !== null && $row['expires_at'] !== '' ? $row['expires_at'] : null;
 $linkExpireWhenPaid = isset($row['expire_when_paid']) && (int)$row['expire_when_paid'] === 1;
@@ -55,11 +63,33 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
             
             $invStatus = strtolower($invoiceData['status'] ?? '');
             $calculatedAmountDue = (float)($invoiceData['total'] ?? 0) - $amountPaid;
+            $collectionMode = trim((string)($invoiceData['collection_mode'] ?? ''));
+            if ($collectionMode === '') {
+                $collectionMode = 'direct';
+            }
             $showPayButton = $stripeConfigured
                 && !empty($invoiceData['finalized_at'])
-                && ($invoiceData['collection_mode'] ?? 'direct') === 'direct'
-                && in_array($invStatus, ['unpaid', 'partial'], true)
+                && $collectionMode === 'direct'
+                && in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true)
                 && $calculatedAmountDue > 0;
+            if (!$showPayButton) {
+                $hideReasons = [];
+                if (!$stripeConfigured) { $hideReasons[] = 'stripe_not_configured'; }
+                if (empty($invoiceData['finalized_at'])) { $hideReasons[] = 'not_finalized'; }
+                if ($collectionMode !== 'direct') { $hideReasons[] = 'collection_mode_' . $collectionMode; }
+                if (!in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true)) { $hideReasons[] = 'status_' . ($invStatus ?: 'blank'); }
+                if ($calculatedAmountDue <= 0) { $hideReasons[] = 'no_amount_due'; }
+                @error_log('[PublicInvoicePayment] Hiding Stripe payment option: ' . json_encode([
+                    'document_type' => $type,
+                    'document_id' => $rid,
+                    'reasons' => $hideReasons,
+                    'status' => $invStatus,
+                    'collection_mode' => $collectionMode,
+                    'finalized' => !empty($invoiceData['finalized_at']),
+                    'amount_due' => $calculatedAmountDue,
+                    'stripe_secret_available' => method_exists('StripeService', 'hasSecretKey') ? StripeService::hasSecretKey($appConfig) : false,
+                ]));
+            }
             
             // Calculate surcharge info
             if ($showPayButton) {

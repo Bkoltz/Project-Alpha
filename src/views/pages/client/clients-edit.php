@@ -37,7 +37,7 @@ $organizations = $orgStmt->fetchAll();
     </label>
     <label>
       <div>Phone</div>
-      <input type="text" name="phone" value="<?php echo htmlspecialchars($client['phone'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <input type="tel" name="phone" autocomplete="tel" value="<?php echo htmlspecialchars($client['phone'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
     <label style="position:relative">
       <div>Organization</div>

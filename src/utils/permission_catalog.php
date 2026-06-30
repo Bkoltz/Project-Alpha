@@ -8,7 +8,7 @@ function permission_catalog(): array
         'Contracts'     => ['contracts.view','contracts.create','contracts.edit','contracts.sign','contracts.complete','contracts.void','contracts.send'],
         'Invoices'      => ['invoices.view','invoices.create','invoices.edit','invoices.mark_paid','invoices.void','invoices.send'],
         'Payments'      => ['payments.view','payments.create'],
-        'Clients'       => ['clients.view','clients.create','clients.edit','clients.delete','clients.purge','clients.restore'],
+        'Clients'       => ['clients.view','clients.create','clients.edit','clients.onboarding','clients.delete','clients.purge','clients.restore'],
         'Projects'      => ['projects.view','projects.create','projects.edit','projects.delete','projects.search'],
         'Jobs'          => ['jobs.view','jobs.edit','jobs.search'],
         'Organizations' => ['organizations.view','organizations.manage','organizations.delete'],

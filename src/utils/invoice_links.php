@@ -77,9 +77,12 @@ function pa_invoice_links_for_invoice(PDO $pdo, int $invoiceId): array
     $projectDepartmentSelect = pa_table_has_column($pdo, 'projects', 'department_id') ? 'p.department_id' : 'NULL AS department_id';
     $stmt = $pdo->prepare("
         SELECT i.project_id, i.organization_id, i.client_id,
-               p.organization_id AS project_organization_id, {$projectDepartmentSelect}
+               p.organization_id AS project_organization_id,
+               c.organization_id AS client_organization_id,
+               {$projectDepartmentSelect}
         FROM invoices i
         LEFT JOIN projects p ON p.id = i.project_id
+        LEFT JOIN clients c ON c.id = i.client_id
         WHERE i.id = ?
         LIMIT 1
     ");
@@ -92,7 +95,7 @@ function pa_invoice_links_for_invoice(PDO $pdo, int $invoiceId): array
     return pa_invoice_links_for_context(
         $pdo,
         (int)($invoice['project_id'] ?? 0) ?: null,
-        (int)($invoice['organization_id'] ?: $invoice['project_organization_id'] ?: 0) ?: null,
+        (int)($invoice['organization_id'] ?: $invoice['project_organization_id'] ?: $invoice['client_organization_id'] ?: 0) ?: null,
         (int)($invoice['department_id'] ?? 0) ?: null,
         (int)($invoice['client_id'] ?? 0) ?: null,
         null

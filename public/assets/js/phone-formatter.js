@@ -69,9 +69,11 @@
     attachAll: attachAll
   };
 
-  document.addEventListener('DOMContentLoaded', function() {
+  function boot() {
     attachAll(document);
 
+    if (window.__projectAlphaPhoneObserverAttached === true) return;
+    window.__projectAlphaPhoneObserverAttached = true;
     const observer = new MutationObserver(function(records) {
       records.forEach(function(record) {
         record.addedNodes.forEach(function(node) {
@@ -85,5 +87,15 @@
       });
     });
     observer.observe(document.documentElement, {childList: true, subtree: true});
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  window.addEventListener('pageshow', function() {
+    attachAll(document);
   });
 })();
