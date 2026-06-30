@@ -41,16 +41,33 @@ function dropbox_oauth_state_cookie_options(int $expires): array
     ];
 }
 
-function dropbox_oauth_redirect_uri(): string
+function dropbox_oauth_redirect_uri(?string $configuredHost = null): string
 {
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $host = trim((string)($configuredHost ?? ''));
     $scheme = dropbox_oauth_is_secure_request() ? 'https' : 'http';
+    if ($host !== '') {
+        if (preg_match('#^https?://#i', $host)) {
+            $parts = parse_url($host);
+            $scheme = strtolower((string)($parts['scheme'] ?? 'https')) === 'http' ? 'http' : 'https';
+            $host = (string)($parts['host'] ?? '');
+            if (!empty($parts['port'])) {
+                $host .= ':' . (int)$parts['port'];
+            }
+        } else {
+            $host = preg_replace('#/.*$#', '', $host) ?? $host;
+            $scheme = 'https';
+        }
+    }
+    if ($host === '') {
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    }
     return $scheme . '://' . $host . '/?page=settings/dropbox-oauth&action=callback';
 }
 
 // Dropbox app credentials (stored in app_config)
 $dropboxAppKey = null;
 $dropboxAppSecret = null;
+$dropboxRedirectHost = null;
 try {
     $st = $pdo->prepare('SELECT config_value FROM app_config WHERE config_key = ?');
     $st->execute(['dropbox_app_key']);
@@ -59,6 +76,10 @@ try {
     $st = $pdo->prepare('SELECT config_value FROM app_config WHERE config_key = ?');
     $st->execute(['dropbox_app_secret']);
     $dropboxAppSecret = $st->fetchColumn();
+
+    $st = $pdo->prepare('SELECT config_value FROM app_config WHERE config_key = ?');
+    $st->execute(['app_host']);
+    $dropboxRedirectHost = $st->fetchColumn() ?: null;
 } catch (Throwable $e) {}
 
 if ($action === 'start') {
@@ -76,7 +97,12 @@ if ($action === 'start') {
     setcookie('pa_dropbox_oauth_state', $state, dropbox_oauth_state_cookie_options(time() + 600));
     
     // Build authorization URL
-    $redirectUri = dropbox_oauth_redirect_uri();
+    $redirectUri = dropbox_oauth_redirect_uri(is_string($dropboxRedirectHost) ? $dropboxRedirectHost : null);
+    app_log('dropbox_oauth', 'Starting OAuth authorization', [
+        'user_id' => $userId,
+        'redirect_uri' => $redirectUri,
+        'host' => $_SERVER['HTTP_HOST'] ?? null,
+    ]);
     $authUrl = 'https://www.dropbox.com/oauth2/authorize';
     $params = http_build_query([
         'client_id' => $dropboxAppKey,
@@ -122,7 +148,7 @@ if ($action === 'callback') {
     }
     
     // Exchange code for tokens
-    $redirectUri = dropbox_oauth_redirect_uri();
+    $redirectUri = dropbox_oauth_redirect_uri(is_string($dropboxRedirectHost) ? $dropboxRedirectHost : null);
     
     $ch = curl_init('https://api.dropboxapi.com/oauth2/token');
     curl_setopt_array($ch, [

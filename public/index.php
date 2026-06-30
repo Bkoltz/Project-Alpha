@@ -456,6 +456,11 @@ try {
     @error_log('[acl] middleware failed: ' . $e->getMessage());
 }
 
+if ($page === 'settings/dropbox-oauth') {
+    require_once __DIR__ . '/../src/controllers/settings/dropbox_oauth.php';
+    exit;
+}
+
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
     require_once __DIR__ . '/../src/controllers/client/clients_search.php';
