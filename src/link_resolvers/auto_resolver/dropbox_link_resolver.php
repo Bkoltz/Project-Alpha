@@ -77,10 +77,45 @@ class DropboxLinkResolver
         return ['success' => false, 'message' => $message, 'tip' => $tip];
     }
 
+    private function dropboxErrorSummary(array $value): string
+    {
+        if (!empty($value['error_summary']) && is_string($value['error_summary'])) {
+            return (string)$value['error_summary'];
+        }
+        if (!empty($value['.tag']) && is_string($value['.tag'])) {
+            $parts = [(string)$value['.tag']];
+            foreach ($value as $key => $child) {
+                if ($key === '.tag') {
+                    continue;
+                }
+                if (is_array($child)) {
+                    $childSummary = $this->dropboxErrorSummary($child);
+                    if ($childSummary !== '') {
+                        $parts[] = $childSummary;
+                        break;
+                    }
+                } elseif (is_string($child) && $child !== '') {
+                    $parts[] = $child;
+                    break;
+                }
+            }
+            return implode(':', $parts);
+        }
+        foreach ($value as $child) {
+            if (is_array($child)) {
+                $childSummary = $this->dropboxErrorSummary($child);
+                if ($childSummary !== '') {
+                    return $childSummary;
+                }
+            }
+        }
+        return '';
+    }
+
     private function dropboxApiErrorMessage(int $httpCode, string $operation, string $response): array
     {
         $decoded = json_decode($response, true);
-        $summary = is_array($decoded) && !empty($decoded['error_summary']) ? (string)$decoded['error_summary'] : '';
+        $summary = is_array($decoded) ? $this->dropboxErrorSummary($decoded) : '';
         $detail = $summary !== '' ? ' Dropbox said: ' . $summary : '';
 
         if ($httpCode === 401) {
@@ -99,6 +134,12 @@ class DropboxLinkResolver
             return [
                 'Dropbox could not find or access the configured folder path.' . $detail,
                 'Check the resolver root path and make sure the connected Dropbox account can see that folder.',
+            ];
+        }
+        if ($httpCode === 400 && $summary !== '') {
+            return [
+                'Dropbox rejected the ' . $operation . ' request.' . $detail,
+                'If this folder already has a link, PA will reuse the exact-path link when Dropbox exposes it. Otherwise check Dropbox sharing policy for this folder.',
             ];
         }
 
@@ -154,6 +195,38 @@ class DropboxLinkResolver
             }
         }
         return null;
+    }
+
+    private function createSharedLink(string $folderPath, bool $withRequestedVisibility): array
+    {
+        $payload = ['path' => $folderPath];
+        if ($withRequestedVisibility) {
+            $payload['settings'] = [
+                'requested_visibility' => 'public',
+            ];
+        }
+
+        $ch = curl_init('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings');
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Content-Type: application/json'
+            ],
+            CURLOPT_RETURNTRANSFER => true
+        ]);
+
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return [
+            'response' => $response,
+            'curl_error' => $curlError,
+            'http_code' => (int)$httpCode,
+        ];
     }
     
     /**
@@ -365,28 +438,22 @@ class DropboxLinkResolver
                 return null;
             }
             
-            // Create new shared link
-            $ch = curl_init('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings');
-            
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode([
-                    'path' => $folderPath,
-                    'settings' => [
-                        'requested_visibility' => 'public'
-                    ]
-                ]),
-                CURLOPT_HTTPHEADER => [
-                    'Authorization: Bearer ' . $this->accessToken,
-                    'Content-Type: application/json'
-                ],
-                CURLOPT_RETURNTRANSFER => true
-            ]);
-            
-            $response = curl_exec($ch);
-            $curlError = curl_error($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+            // Create a new shared link. Some Dropbox team policies reject an
+            // explicit public visibility request with HTTP 400, but still allow
+            // a policy-default link, so retry once without requested_visibility.
+            $create = $this->createSharedLink($folderPath, true);
+            $response = $create['response'];
+            $curlError = (string)$create['curl_error'];
+            $httpCode = (int)$create['http_code'];
+
+            if ($httpCode === 400 && $response !== false) {
+                $retry = $this->createSharedLink($folderPath, false);
+                if ($retry['response'] !== false && (int)$retry['http_code'] === 200) {
+                    $response = $retry['response'];
+                    $curlError = (string)$retry['curl_error'];
+                    $httpCode = (int)$retry['http_code'];
+                }
+            }
 
             if ($response === false) {
                 $this->fail('create shared link', 'Dropbox shared-link creation could not reach Dropbox: ' . $curlError, 'Check outbound network access from the PA container/server.');
@@ -395,7 +462,7 @@ class DropboxLinkResolver
             
             if ($httpCode !== 200) {
                 $data = json_decode((string)$response, true);
-                if ($httpCode === 409 && is_array($data)) {
+                if (in_array($httpCode, [400, 409], true) && is_array($data)) {
                     $exactUrl = $this->findExactSharedLinkInError($data, $folderPath);
                     if ($exactUrl !== null) {
                         return $exactUrl;
