@@ -1,6 +1,8 @@
 <?php
 // src/services/LinkResolverService.php
 
+require_once __DIR__ . '/../utils/link_provider_config.php';
+
 class LinkResolverService
 {
     private PDO $pdo;
@@ -45,8 +47,10 @@ class LinkResolverService
                 }
             }
 
-            $stmt = $this->pdo->query('SELECT * FROM link_resolver_config WHERE is_enabled = 1');
-            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            foreach (pa_link_provider_best_rows($this->pdo) as $row) {
+                if (empty($row['is_enabled'])) {
+                    continue;
+                }
                 $credentials = !empty($row['credentials']) ? json_decode((string)$row['credentials'], true) : [];
                 if (!is_array($credentials)) {
                     $credentials = [];
@@ -61,7 +65,7 @@ class LinkResolverService
         }
     }
 
-    public function autoGenerateForClient(int $clientId): array
+    public function autoGenerateForClient(int $clientId, ?string $provider = null): array
     {
         if (!$this->config['enabled']) {
             return ['success' => false, 'message' => 'Link resolver is disabled'];
@@ -90,14 +94,14 @@ class LinkResolverService
                 'title' => (string)$client['name'],
                 'visibility_scope' => 'entity_only',
                 'selected_department_ids' => [],
-            ]);
+            ], $provider ? [$provider] : null);
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error generating links for client: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
-    public function autoGenerateForOrganization(int $orgId): array
+    public function autoGenerateForOrganization(int $orgId, ?string $provider = null): array
     {
         if (!$this->config['enabled']) {
             return ['success' => false, 'message' => 'Link resolver is disabled'];
@@ -123,14 +127,14 @@ class LinkResolverService
                 'title' => (string)$org['name'],
                 'visibility_scope' => 'entity_only',
                 'selected_department_ids' => [],
-            ]);
+            ], $provider ? [$provider] : null);
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error generating links for organization: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
-    public function autoGenerateForDepartment(int $departmentId): array
+    public function autoGenerateForDepartment(int $departmentId, ?string $provider = null): array
     {
         if (!$this->config['enabled']) {
             return ['success' => false, 'message' => 'Link resolver is disabled'];
@@ -183,24 +187,30 @@ class LinkResolverService
                 'title' => (string)$department['name'],
                 'visibility_scope' => 'entity_only',
                 'selected_department_ids' => [],
-            ]);
+            ], $provider ? [$provider] : null);
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error generating links for department: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
-    private function generateForContext(array $context): array
+    private function generateForContext(array $context, ?array $onlyProviders = null): array
     {
-        if (empty($this->config['providers'])) {
+        $providers = $this->config['providers'];
+        if ($onlyProviders !== null) {
+            $providers = array_intersect_key($providers, array_fill_keys($onlyProviders, true));
+        }
+
+        if (empty($providers)) {
             return ['success' => false, 'message' => 'No enabled link providers'];
         }
 
         $generated = [];
         $review = [];
         $errors = [];
+        $tips = [];
 
-        foreach ($this->config['providers'] as $provider => $providerConfig) {
+        foreach ($providers as $provider => $providerConfig) {
             $result = $this->generateLinkForProvider($provider, $context, $providerConfig);
             if (!empty($result['success'])) {
                 $generated[] = $provider;
@@ -209,6 +219,17 @@ class LinkResolverService
             } else {
                 $errors[$provider] = $result['message'] ?? 'No safe match';
             }
+            if (!empty($result['tip'])) {
+                $tips[$provider] = (string)$result['tip'];
+            }
+        }
+
+        $message = count($generated) > 0
+            ? 'Resolver attached exact folder links.'
+            : ($review ? 'Resolver found matches that require review.' : 'No safe resolver matches found.');
+        if (!$generated && !$review && $errors) {
+            $firstProvider = (string)array_key_first($errors);
+            $message = $firstProvider . ': ' . $errors[$firstProvider];
         }
 
         return [
@@ -216,9 +237,9 @@ class LinkResolverService
             'generated' => $generated,
             'review_required' => $review,
             'errors' => $errors,
-            'message' => count($generated) > 0
-                ? 'Resolver attached exact folder links.'
-                : ($review ? 'Resolver found matches that require review.' : 'No safe resolver matches found.'),
+            'tips' => $tips,
+            'tip' => $tips ? reset($tips) : null,
+            'message' => $message,
         ];
     }
 
@@ -236,10 +257,19 @@ class LinkResolverService
 
         try {
             $resolver = $this->makeProvider($provider, $providerConfig['credentials'] ?? []);
-            $matches = $this->findSafeMatches($resolver, $context);
+            $diagnostics = [];
+            $matches = $this->findSafeMatches($resolver, $context, $diagnostics);
             $mode = (string)($context['resolver_mode'] ?? 'auto_attach');
 
             if (!$matches) {
+                if ($diagnostics) {
+                    $this->logProviderIssue($provider, $context, $diagnostics[0]);
+                    return [
+                        'success' => false,
+                        'message' => $diagnostics[0]['message'] ?? 'Provider lookup failed',
+                        'tip' => $diagnostics[0]['tip'] ?? null,
+                    ];
+                }
                 return ['success' => false, 'message' => 'No exact folder match found'];
             }
             if ($mode === 'review') {
@@ -252,6 +282,15 @@ class LinkResolverService
             $match = $matches[0];
             $publicLink = $resolver->generatePublicLink((string)$match['folder_id']);
             if (!$publicLink) {
+                $lastError = method_exists($resolver, 'getLastError') ? $resolver->getLastError() : null;
+                if (is_array($lastError)) {
+                    $this->logProviderIssue($provider, $context, $lastError);
+                    return [
+                        'success' => false,
+                        'message' => $lastError['message'] ?? 'Could not generate public link',
+                        'tip' => $lastError['tip'] ?? null,
+                    ];
+                }
                 return ['success' => false, 'message' => 'Could not generate public link'];
             }
 
@@ -264,6 +303,25 @@ class LinkResolverService
             @error_log("[LinkResolverService] Error generating {$provider} link: " . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    private function logProviderIssue(string $provider, array $context, array $issue): void
+    {
+        $payload = [
+            'provider' => $provider,
+            'entity_type' => $context['entity_type'] ?? null,
+            'entity_id' => $context['entity_id'] ?? null,
+            'operation' => $issue['operation'] ?? null,
+            'message' => $issue['message'] ?? null,
+            'tip' => $issue['tip'] ?? null,
+            'http_code' => $issue['http_code'] ?? null,
+            'response' => $issue['response'] ?? null,
+        ];
+
+        if (function_exists('app_log')) {
+            app_log('link_resolver', 'Provider issue', $payload);
+        }
+        @error_log('[LinkResolverService] Provider issue: ' . json_encode($payload));
     }
 
     private function makeProvider(string $provider, array $credentials): object
@@ -304,7 +362,7 @@ class LinkResolverService
     /**
      * @return list<array{folder_id:string,name:string,path:string}>
      */
-    private function findSafeMatches(object $resolver, array $context): array
+    private function findSafeMatches(object $resolver, array $context, array &$diagnostics = []): array
     {
         $safe = [];
         $seen = [];
@@ -313,6 +371,17 @@ class LinkResolverService
 
         foreach ($candidateNames as $candidateName) {
             $result = $resolver->searchFolder($candidateName);
+            if (empty($result['success']) && !empty($result['message'])) {
+                $message = (string)$result['message'];
+                if (!in_array($message, ['Folder not found', 'Exact folder match not found'], true)) {
+                    $lastError = method_exists($resolver, 'getLastError') ? $resolver->getLastError() : null;
+                    $diagnostics[] = is_array($lastError) ? $lastError : [
+                        'operation' => 'folder search',
+                        'message' => $message,
+                        'tip' => $result['tip'] ?? null,
+                    ];
+                }
+            }
             $rawMatches = [];
             if (!empty($result['matches']) && is_array($result['matches'])) {
                 $rawMatches = $result['matches'];
@@ -444,12 +513,24 @@ class LinkResolverService
     public function markAsIgnored(string $entityType, int $entityId): array
     {
         try {
-            $stmt = $this->pdo->prepare('
-                UPDATE entity_links
-                SET ignore_auto_generation = 1
-                WHERE entity_type = ? AND entity_id = ?
-            ');
+            $stmt = $this->pdo->prepare('SELECT id FROM entity_links WHERE entity_type = ? AND entity_id = ? LIMIT 1');
             $stmt->execute([$entityType, $entityId]);
+            $existingId = (int)($stmt->fetchColumn() ?: 0);
+            if ($existingId > 0) {
+                $stmt = $this->pdo->prepare('
+                    UPDATE entity_links
+                    SET ignore_auto_generation = 1
+                    WHERE entity_type = ? AND entity_id = ?
+                ');
+                $stmt->execute([$entityType, $entityId]);
+            } else {
+                $stmt = $this->pdo->prepare('
+                    INSERT INTO entity_links
+                        (entity_type, entity_id, title, url, link_type, link_source, include_on_invoices, resolver_mode, ignore_auto_generation)
+                    VALUES (?, ?, "Resolver disabled", "#", "resolver_blacklist", "resolver", 0, "manual_only", 1)
+                ');
+                $stmt->execute([$entityType, $entityId]);
+            }
             return ['success' => true];
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error marking as ignored: ' . $e->getMessage());
@@ -466,9 +547,39 @@ class LinkResolverService
                 WHERE entity_type = ? AND entity_id = ?
             ');
             $stmt->execute([$entityType, $entityId]);
+            $stmt = $this->pdo->prepare('
+                DELETE FROM entity_links
+                WHERE entity_type = ? AND entity_id = ? AND link_type = "resolver_blacklist"
+            ');
+            $stmt->execute([$entityType, $entityId]);
             return ['success' => true];
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error unmarking as ignored: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function revokeLink(string $entityType, int $entityId, int $linkId, bool $blacklist = false): array
+    {
+        try {
+            $stmt = $this->pdo->prepare('
+                DELETE FROM entity_links
+                WHERE id = ? AND entity_type = ? AND entity_id = ?
+                LIMIT 1
+            ');
+            $stmt->execute([$linkId, $entityType, $entityId]);
+            if ($stmt->rowCount() < 1) {
+                return ['success' => false, 'message' => 'Link not found'];
+            }
+            if ($blacklist) {
+                $ignored = $this->markAsIgnored($entityType, $entityId);
+                if (empty($ignored['success'])) {
+                    return $ignored;
+                }
+            }
+            return ['success' => true];
+        } catch (Throwable $e) {
+            @error_log('[LinkResolverService] Error revoking link: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
@@ -487,6 +598,94 @@ class LinkResolverService
             @error_log('[LinkResolverService] Error expiring links: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function runProviderScan(string $provider): array
+    {
+        if (!in_array($provider, ['dropbox', 'gdrive', 's3'], true)) {
+            return ['success' => false, 'message' => 'Invalid provider'];
+        }
+        if (!$this->config['enabled']) {
+            return ['success' => false, 'message' => 'Link resolver is disabled'];
+        }
+        if (empty($this->config['providers'][$provider])) {
+            return ['success' => false, 'message' => ucfirst($provider) . ' is not enabled or configured'];
+        }
+
+        $summary = [
+            'success' => true,
+            'provider' => $provider,
+            'scanned' => 0,
+            'generated' => 0,
+            'review_required' => 0,
+            'no_match' => 0,
+            'errors' => 0,
+            'details' => [],
+        ];
+
+        $record = function (string $label, array $result) use (&$summary): void {
+            $summary['scanned']++;
+            if (!empty($result['success'])) {
+                $summary['generated']++;
+                return;
+            }
+            if (!empty($result['review_required'])) {
+                $summary['review_required']++;
+                if (count($summary['details']) < 6) {
+                    $summary['details'][] = $label . ': review required';
+                }
+                return;
+            }
+
+            $message = (string)($result['message'] ?? 'No safe match');
+            if (
+                stripos($message, 'no exact') !== false
+                || stripos($message, 'no safe') !== false
+                || stripos($message, 'not found') !== false
+                || stripos($message, 'manual-only') !== false
+                || stripos($message, 'manual links only') !== false
+                || stripos($message, 'excluded') !== false
+                || stripos($message, 'belongs to an organization') !== false
+            ) {
+                $summary['no_match']++;
+            } else {
+                $summary['errors']++;
+                if (count($summary['details']) < 6) {
+                    $tip = !empty($result['tip']) ? ' Tip: ' . (string)$result['tip'] : '';
+                    $summary['details'][] = $label . ': ' . $message . $tip;
+                }
+            }
+        };
+
+        try {
+            $stmt = $this->pdo->query('SELECT id, name FROM organizations ORDER BY name');
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $record('Organization ' . (string)$row['name'], $this->autoGenerateForOrganization((int)$row['id'], $provider));
+            }
+
+            $stmt = $this->pdo->query('SELECT id, name FROM organization_departments ORDER BY name');
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $record('Department ' . (string)$row['name'], $this->autoGenerateForDepartment((int)$row['id'], $provider));
+            }
+
+            $stmt = $this->pdo->query('SELECT id, name FROM clients WHERE organization_id IS NULL OR organization_id = 0 ORDER BY name');
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $record('Client ' . (string)$row['name'], $this->autoGenerateForClient((int)$row['id'], $provider));
+            }
+        } catch (Throwable $e) {
+            @error_log('[LinkResolverService] Manual provider scan failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+
+        $summary['message'] = sprintf(
+            'Scanned %d records. Generated %d, review %d, no match %d, errors %d.',
+            $summary['scanned'],
+            $summary['generated'],
+            $summary['review_required'],
+            $summary['no_match'],
+            $summary['errors']
+        );
+        return $summary;
     }
 
     public function refreshLinks(string $entityType, int $entityId): array

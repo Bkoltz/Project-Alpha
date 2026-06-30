@@ -17,6 +17,11 @@ jobs:
           docker compose -f docker-compose.yml config >/tmp/compose.prod.yml
           docker compose -f docker-compose.yml -f docker-compose.override.yml config >/tmp/compose.local.yml
 
+      - name: Validate Compose configuration
+        run: |
+          docker compose -f docker-compose.yml config >/tmp/compose.prod.yml
+          docker compose -f docker-compose.yml -f docker-compose.override.yml config >/tmp/compose.local.yml
+
       - name: Build and start real compose path
         run: |
           docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build

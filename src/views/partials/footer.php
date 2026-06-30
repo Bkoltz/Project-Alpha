@@ -15,6 +15,7 @@
 </main>
 <script src="/assets/js/phone-formatter.js" defer></script>
 <script src="/assets/js/csrf-auto-link.js" defer></script>
+<script src="/assets/js/settings-links.js" defer></script>
 <script>
 (function() {
   function inferShareContext(modal) {

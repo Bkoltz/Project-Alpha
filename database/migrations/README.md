@@ -2,7 +2,7 @@
 
 Project Alpha 0.5.0 starts from the immutable `database/baseline.sql` schema. The baseline inserts version `0` into `schema_migrations`; this directory contains only later, forward-only changes.
 
-For `0.5.0-rc1`, there are no post-baseline SQL migrations. `php src/migrations/run_migrations.php --validate-files` should report `0` migration files until the first schema change after the 0.5.0 baseline is frozen.
+`0001_schema_compatibility_for_dev_release.sql` backfills schema pieces that were added to the 0.5.0 dev baseline after early migration-test databases had already been reset. It is safe for current fresh installs and repairs existing baseline-ledger databases before the web image serves newer dev code.
 
 ## File Contract
 
