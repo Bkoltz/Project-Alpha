@@ -1,6 +1,8 @@
 <?php
 // src/services/LinkResolverService.php
 
+require_once __DIR__ . '/../utils/link_provider_config.php';
+
 class LinkResolverService
 {
     private PDO $pdo;
@@ -45,8 +47,10 @@ class LinkResolverService
                 }
             }
 
-            $stmt = $this->pdo->query('SELECT * FROM link_resolver_config WHERE is_enabled = 1');
-            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            foreach (pa_link_provider_best_rows($this->pdo) as $row) {
+                if (empty($row['is_enabled'])) {
+                    continue;
+                }
                 $credentials = !empty($row['credentials']) ? json_decode((string)$row['credentials'], true) : [];
                 if (!is_array($credentials)) {
                     $credentials = [];
@@ -61,7 +65,7 @@ class LinkResolverService
         }
     }
 
-    public function autoGenerateForClient(int $clientId): array
+    public function autoGenerateForClient(int $clientId, ?string $provider = null): array
     {
         if (!$this->config['enabled']) {
             return ['success' => false, 'message' => 'Link resolver is disabled'];
@@ -90,14 +94,14 @@ class LinkResolverService
                 'title' => (string)$client['name'],
                 'visibility_scope' => 'entity_only',
                 'selected_department_ids' => [],
-            ]);
+            ], $provider ? [$provider] : null);
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error generating links for client: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
-    public function autoGenerateForOrganization(int $orgId): array
+    public function autoGenerateForOrganization(int $orgId, ?string $provider = null): array
     {
         if (!$this->config['enabled']) {
             return ['success' => false, 'message' => 'Link resolver is disabled'];
@@ -123,14 +127,14 @@ class LinkResolverService
                 'title' => (string)$org['name'],
                 'visibility_scope' => 'entity_only',
                 'selected_department_ids' => [],
-            ]);
+            ], $provider ? [$provider] : null);
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error generating links for organization: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
-    public function autoGenerateForDepartment(int $departmentId): array
+    public function autoGenerateForDepartment(int $departmentId, ?string $provider = null): array
     {
         if (!$this->config['enabled']) {
             return ['success' => false, 'message' => 'Link resolver is disabled'];
@@ -183,16 +187,21 @@ class LinkResolverService
                 'title' => (string)$department['name'],
                 'visibility_scope' => 'entity_only',
                 'selected_department_ids' => [],
-            ]);
+            ], $provider ? [$provider] : null);
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error generating links for department: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
-    private function generateForContext(array $context): array
+    private function generateForContext(array $context, ?array $onlyProviders = null): array
     {
-        if (empty($this->config['providers'])) {
+        $providers = $this->config['providers'];
+        if ($onlyProviders !== null) {
+            $providers = array_intersect_key($providers, array_fill_keys($onlyProviders, true));
+        }
+
+        if (empty($providers)) {
             return ['success' => false, 'message' => 'No enabled link providers'];
         }
 
@@ -201,7 +210,7 @@ class LinkResolverService
         $errors = [];
         $tips = [];
 
-        foreach ($this->config['providers'] as $provider => $providerConfig) {
+        foreach ($providers as $provider => $providerConfig) {
             $result = $this->generateLinkForProvider($provider, $context, $providerConfig);
             if (!empty($result['success'])) {
                 $generated[] = $provider;
@@ -544,6 +553,93 @@ class LinkResolverService
             @error_log('[LinkResolverService] Error expiring links: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function runProviderScan(string $provider): array
+    {
+        if (!in_array($provider, ['dropbox', 'gdrive', 's3'], true)) {
+            return ['success' => false, 'message' => 'Invalid provider'];
+        }
+        if (!$this->config['enabled']) {
+            return ['success' => false, 'message' => 'Link resolver is disabled'];
+        }
+        if (empty($this->config['providers'][$provider])) {
+            return ['success' => false, 'message' => ucfirst($provider) . ' is not enabled or configured'];
+        }
+
+        $summary = [
+            'success' => true,
+            'provider' => $provider,
+            'scanned' => 0,
+            'generated' => 0,
+            'review_required' => 0,
+            'no_match' => 0,
+            'errors' => 0,
+            'details' => [],
+        ];
+
+        $record = function (string $label, array $result) use (&$summary): void {
+            $summary['scanned']++;
+            if (!empty($result['success'])) {
+                $summary['generated']++;
+                return;
+            }
+            if (!empty($result['review_required'])) {
+                $summary['review_required']++;
+                if (count($summary['details']) < 6) {
+                    $summary['details'][] = $label . ': review required';
+                }
+                return;
+            }
+
+            $message = (string)($result['message'] ?? 'No safe match');
+            if (
+                stripos($message, 'no exact') !== false
+                || stripos($message, 'no safe') !== false
+                || stripos($message, 'not found') !== false
+                || stripos($message, 'manual-only') !== false
+                || stripos($message, 'manual links only') !== false
+                || stripos($message, 'excluded') !== false
+                || stripos($message, 'belongs to an organization') !== false
+            ) {
+                $summary['no_match']++;
+            } else {
+                $summary['errors']++;
+                if (count($summary['details']) < 6) {
+                    $summary['details'][] = $label . ': ' . $message;
+                }
+            }
+        };
+
+        try {
+            $stmt = $this->pdo->query('SELECT id, name FROM organizations ORDER BY name');
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $record('Organization ' . (string)$row['name'], $this->autoGenerateForOrganization((int)$row['id'], $provider));
+            }
+
+            $stmt = $this->pdo->query('SELECT id, name FROM organization_departments ORDER BY name');
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $record('Department ' . (string)$row['name'], $this->autoGenerateForDepartment((int)$row['id'], $provider));
+            }
+
+            $stmt = $this->pdo->query('SELECT id, name FROM clients WHERE organization_id IS NULL OR organization_id = 0 ORDER BY name');
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $record('Client ' . (string)$row['name'], $this->autoGenerateForClient((int)$row['id'], $provider));
+            }
+        } catch (Throwable $e) {
+            @error_log('[LinkResolverService] Manual provider scan failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+
+        $summary['message'] = sprintf(
+            'Scanned %d records. Generated %d, review %d, no match %d, errors %d.',
+            $summary['scanned'],
+            $summary['generated'],
+            $summary['review_required'],
+            $summary['no_match'],
+            $summary['errors']
+        );
+        return $summary;
     }
 
     public function refreshLinks(string $entityType, int $entityId): array

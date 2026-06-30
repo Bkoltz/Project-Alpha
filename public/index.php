@@ -623,6 +623,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/document-custom-fields-handler',
         'settings/link-test-connection',
         'settings/dropbox-oauth',
+        'settings/link-resolver-run',
 
         // User accounts / auth management
         'auth/account-edit',
@@ -793,8 +794,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   stripe-webhook               - tokenless: Stripe webhook uses signature verification (HMAC + replay protection)
     //   stripe-webhook-legacy        - tokenless: legacy Stripe webhook uses signature verification (HMAC + replay protection)
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
+    //   settings/link-resolver-run    - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -1169,6 +1171,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/link-test-connection') {
         require_once __DIR__ . '/../src/controllers/settings/link_test_connection.php';
+        exit;
+    }
+    if ($page === 'settings/link-resolver-run') {
+        require_once __DIR__ . '/../src/controllers/settings/link_resolver_run.php';
         exit;
     }
     if ($page === 'links/link-management') {

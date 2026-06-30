@@ -8,6 +8,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
+require_once __DIR__ . '/../../utils/link_provider_config.php';
 
 // Require authenticated user
 if (!isset($_SESSION['user'])) {
@@ -192,23 +193,23 @@ if ($action === 'callback') {
     $expiresIn = $tokenData['expires_in'] ?? null;
     
     try {
+        $existingRow = pa_link_provider_best_row($pdo, 'dropbox');
+        $existingCredentials = $existingRow ? pa_link_provider_credentials_from_row($existingRow) : [];
         // Update the Dropbox credentials in link_resolver_config
         // Store both access token and refresh token
         $credentials = [
             'access_token' => $accessToken,
             'refresh_token' => $refreshToken,
             'token_expires_at' => $expiresIn ? date('Y-m-d H:i:s', time() + $expiresIn) : null,
-            'root_path' => '/'
+            'root_path' => $existingCredentials['root_path'] ?? '/'
         ];
-        
-        $stmt = $pdo->prepare("
-            INSERT INTO link_resolver_config (provider, is_enabled, credentials)
-            VALUES ('dropbox', 1, ?)
-            ON DUPLICATE KEY UPDATE 
-                is_enabled = 1,
-                credentials = ?
-        ");
-        $stmt->execute([json_encode($credentials), json_encode($credentials)]);
+        pa_link_provider_save(
+            $pdo,
+            'dropbox',
+            1,
+            $credentials,
+            $existingRow ? (int)($existingRow['default_expiration_days'] ?? 365) : 365
+        );
         
         app_log('dropbox_oauth', 'OAuth connected successfully', ['user_id' => $userId]);
         header('Location: /?page=settings&tab=links&saved=1');

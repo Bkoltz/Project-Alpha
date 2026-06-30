@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/link_provider_config.php';
 
 header('Content-Type: application/json');
 
@@ -26,12 +27,15 @@ $provider = $_POST['provider'] ?? '';
 try {
     if ($provider === 'dropbox') {
         $accessToken = $_POST['access_token'] ?? '';
+        $rootPath = trim((string)($_POST['root_path'] ?? '/'));
         if ($accessToken === '') {
-            $stmt = $pdo->prepare('SELECT credentials FROM link_resolver_config WHERE provider = ? LIMIT 1');
-            $stmt->execute(['dropbox']);
-            $credentials = json_decode((string)($stmt->fetchColumn() ?: ''), true);
-            if (is_array($credentials)) {
+            $row = pa_link_provider_best_row($pdo, 'dropbox');
+            $credentials = $row ? pa_link_provider_credentials_from_row($row) : [];
+            if ($credentials) {
                 $accessToken = (string)($credentials['access_token'] ?? '');
+                if ($rootPath === '') {
+                    $rootPath = (string)($credentials['root_path'] ?? '/');
+                }
             }
         }
         
@@ -74,6 +78,37 @@ try {
         if ($httpCode === 200) {
             $data = json_decode($response, true);
             $accountName = $data['name']['display_name'] ?? 'Unknown';
+            $normalizedRoot = $rootPath === '' ? '/' : $rootPath;
+            if ($normalizedRoot !== '/') {
+                $metadataPath = '/' . ltrim($normalizedRoot, '/');
+                $ch = curl_init('https://api.dropboxapi.com/2/files/get_metadata');
+                curl_setopt_array($ch, [
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => json_encode(['path' => $metadataPath]),
+                    CURLOPT_HTTPHEADER => [
+                        'Authorization: Bearer ' . $accessToken,
+                        'Content-Type: application/json'
+                    ],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 15
+                ]);
+                $metadataResponse = curl_exec($ch);
+                $metadataHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $metadataCurlError = curl_error($ch);
+                curl_close($ch);
+
+                if ($metadataCurlError) {
+                    echo json_encode(['success' => false, 'error' => 'Connected to Dropbox, but root path check failed: ' . $metadataCurlError]);
+                    exit;
+                }
+                if ($metadataHttpCode !== 200) {
+                    $metadataError = json_decode((string)$metadataResponse, true);
+                    $summary = is_array($metadataError) ? (string)($metadataError['error_summary'] ?? '') : '';
+                    echo json_encode(['success' => false, 'error' => 'Connected to Dropbox, but the root folder path was not found or is not accessible' . ($summary !== '' ? ': ' . $summary : '')]);
+                    exit;
+                }
+            }
+
             echo json_encode(['success' => true, 'message' => "Connected to Dropbox account: {$accountName}"]);
         } elseif ($httpCode === 401) {
             echo json_encode(['success' => false, 'error' => 'Invalid or expired access token']);

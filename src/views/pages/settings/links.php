@@ -2,6 +2,7 @@
 // src/views/pages/settings/links.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
+require_once __DIR__ . '/../../../utils/link_provider_config.php';
 
 // Fetch global app config
 $appConfig = [];
@@ -18,10 +19,7 @@ try {
 // Fetch link resolver configurations
 $linkConfigs = [];
 try {
-    $stmt = $pdo->query('SELECT * FROM link_resolver_config ORDER BY provider');
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $linkConfigs[$row['provider']] = $row;
-    }
+    $linkConfigs = pa_link_provider_best_rows($pdo);
 } catch (Throwable $e) {
     // Table may not exist yet
 }
@@ -360,10 +358,16 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
 	                    </div>
 	                </label>
 
-                <button type="button" onclick="testConnection('<?php echo e($provider); ?>')"
-                        style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
-                    Test Connection
-                </button>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                    <button type="button" onclick="testConnection(event, '<?php echo e($provider); ?>')"
+                            style="padding:8px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;font-size:13px;cursor:pointer">
+                        Test Connection
+                    </button>
+                    <button type="button" onclick="runProviderScan(event, '<?php echo e($provider); ?>')"
+                            style="padding:8px 16px;border-radius:6px;border:0;background:#0f766e;color:#fff;font-size:13px;font-weight:600;cursor:pointer">
+                        Run <?php echo e($providerName); ?> Now
+                    </button>
+                </div>
             </div>
         </div>
     </fieldset>
@@ -402,8 +406,8 @@ function toggleProviderFields(provider) {
     fields.style.display = checkbox.checked ? 'block' : 'none';
 }
 
-function testConnection(provider) {
-    const btn = event.target;
+function testConnection(event, provider) {
+    const btn = event.currentTarget;
     btn.disabled = true;
     btn.textContent = 'Testing...';
     
@@ -411,6 +415,8 @@ function testConnection(provider) {
     const formData = new FormData();
     formData.append('provider', provider);
     formData.append('csrf', window.csrfToken || '');  // Add CSRF token
+    const rootPathField = document.querySelector(`input[name="${provider}_root_path"]`);
+    formData.append('root_path', rootPathField ? rootPathField.value : '');
     
     if (provider === 'dropbox') {
         const tokenField = document.querySelector(`input[name="${provider}_access_token"]`);
@@ -442,6 +448,42 @@ function testConnection(provider) {
         btn.disabled = false;
         btn.textContent = 'Test Connection';
         alert('❌ Connection test failed: ' + err.message);
+    });
+}
+
+function runProviderScan(event, provider) {
+    const btn = event.currentTarget;
+    const originalText = btn.textContent;
+    if (!confirm('Run the ' + originalText.replace(/^Run\s+|\s+Now$/g, '') + ' resolver scan now?')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+
+    const formData = new FormData();
+    formData.append('provider', provider);
+    formData.append('csrf', window.csrfToken || '');
+
+    fetch('/?page=settings/link-resolver-run', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        if (data.success) {
+            const details = Array.isArray(data.details) && data.details.length ? '\n\n' + data.details.join('\n') : '';
+            alert('Scan complete. ' + (data.message || '') + details);
+        } else {
+            alert('Scan failed: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        alert('Scan failed: ' + err.message);
     });
 }
 </script>

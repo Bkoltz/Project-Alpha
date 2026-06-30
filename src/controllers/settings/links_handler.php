@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/link_provider_config.php';
 
 if (empty($_SESSION['user'])) {
     http_response_code(401);
@@ -100,11 +101,9 @@ try {
             // For Dropbox, preserve existing OAuth credentials if present
             $existingCredentials = [];
             try {
-                $stmt = $pdo->prepare("SELECT credentials FROM link_resolver_config WHERE provider = ?");
-                $stmt->execute([$provider]);
-                $existing = $stmt->fetchColumn();
-                if ($existing) {
-                    $existingCredentials = json_decode($existing, true) ?: [];
+                $existingRow = pa_link_provider_best_row($pdo, $provider);
+                if ($existingRow) {
+                    $existingCredentials = pa_link_provider_credentials_from_row($existingRow);
                 }
             } catch (Throwable $e) {}
             
@@ -142,28 +141,8 @@ try {
             ];
         }
         
-        // Save or update provider config
-        $stmt = $pdo->prepare("
-            INSERT INTO link_resolver_config (provider, is_enabled, credentials, default_expiration_days)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
-                is_enabled = ?,
-                credentials = ?,
-                default_expiration_days = ?
-        ");
-        
-        $credentialsJson = json_encode($credentials);
         $expirationDays = (int)($globalSettings['default_link_expiration_days'] ?? $readConfig('default_link_expiration_days', 365));
-        
-        $stmt->execute([
-            $provider,
-            $isEnabled,
-            $credentialsJson,
-            $expirationDays,
-            $isEnabled,
-            $credentialsJson,
-            $expirationDays
-        ]);
+        pa_link_provider_save($pdo, $provider, $isEnabled, $credentials, $expirationDays);
     }
     
     header('Location: /?page=settings&tab=links&saved=1');

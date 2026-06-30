@@ -36,6 +36,7 @@ function page_permission_map(): array
         'settings/item-library-handler'      => 'settings.manage',
         'settings/item-library-search'       => 'settings.view',
         'settings/links-handler'             => 'settings.manage',
+        'settings/link-resolver-run'         => 'settings.manage',
         'settings/logs'                      => 'settings.manage',
         'settings/logs-handler'                => 'settings.manage',
         'settings/permissions'                 => 'settings.manage',

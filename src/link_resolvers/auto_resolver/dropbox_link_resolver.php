@@ -2,6 +2,8 @@
 // src/link_resolvers/auto_resolver/dropbox_link_resolver.php
 // Updated to support OAuth with automatic token refresh
 
+require_once __DIR__ . '/../../utils/link_provider_config.php';
+
 class DropboxLinkResolver
 {
     private $accessToken;
@@ -162,18 +164,19 @@ class DropboxLinkResolver
         if (!$this->pdo) return;
         
         try {
-            $stmt = $this->pdo->prepare("SELECT credentials FROM link_resolver_config WHERE provider = 'dropbox'");
-            $stmt->execute();
-            $existing = $stmt->fetchColumn();
-            
-            if ($existing) {
-                $credentials = json_decode($existing, true) ?: [];
-                $credentials['access_token'] = $this->accessToken;
-                $credentials['token_expires_at'] = $this->tokenExpiresAt;
-                
-                $stmt = $this->pdo->prepare("UPDATE link_resolver_config SET credentials = ? WHERE provider = 'dropbox'");
-                $stmt->execute([json_encode($credentials)]);
-            }
+            $row = pa_link_provider_best_row($this->pdo, 'dropbox');
+            $credentials = $row ? pa_link_provider_credentials_from_row($row) : [];
+            $credentials['access_token'] = $this->accessToken;
+            $credentials['refresh_token'] = $this->refreshToken;
+            $credentials['token_expires_at'] = $this->tokenExpiresAt;
+            $credentials['root_path'] = $this->rootPath ?: ($credentials['root_path'] ?? '/');
+            pa_link_provider_save(
+                $this->pdo,
+                'dropbox',
+                $row ? (int)($row['is_enabled'] ?? 1) : 1,
+                $credentials,
+                $row ? (int)($row['default_expiration_days'] ?? 365) : 365
+            );
         } catch (\Throwable $e) {
             @error_log('[Dropbox] Failed to update stored token: ' . $e->getMessage());
         }
