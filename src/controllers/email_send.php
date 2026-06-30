@@ -69,7 +69,11 @@ try {
     $eligibility = $pdo->prepare('SELECT finalized_at, collection_mode FROM invoices WHERE id=?');
     $eligibility->execute([$id]);
     $invoiceEligibility = $eligibility->fetch(PDO::FETCH_ASSOC);
-    if (!$invoiceEligibility || empty($invoiceEligibility['finalized_at']) || ($invoiceEligibility['collection_mode'] ?? 'direct') !== 'direct') {
+    $collectionMode = trim((string)($invoiceEligibility['collection_mode'] ?? ''));
+    if ($collectionMode === '') {
+      $collectionMode = 'direct';
+    }
+    if (!$invoiceEligibility || empty($invoiceEligibility['finalized_at']) || $collectionMode !== 'direct') {
       $toUrl = $redirectTo ?: $baseView;
       header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('Finalize this invoice before emailing it. Project-billed invoices are sent through the project statement.'));
       exit;

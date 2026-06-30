@@ -285,9 +285,16 @@ class StripeService {
      */
     public static function fromAppConfig($appConfig) {
         $secretKey = null;
+
+        if (!empty($appConfig['_stripe_secret_key'])) {
+            $secretKey = trim((string)$appConfig['_stripe_secret_key']);
+        }
+        if (!$secretKey && !empty($appConfig['stripe_secret_key'])) {
+            $secretKey = trim((string)$appConfig['stripe_secret_key']);
+        }
         
         // Try to get decrypted secret key
-        if (!empty($appConfig['stripe_secret_key_enc'])) {
+        if (!$secretKey && !empty($appConfig['stripe_secret_key_enc'])) {
             $encVal = $appConfig['stripe_secret_key_enc'];
             if (strpos($encVal, 'plain::') === 0) {
                 $secretKey = substr($encVal, 7);
@@ -306,7 +313,13 @@ class StripeService {
         
         // Get webhook secret if configured
         $webhookSecret = null;
-        if (!empty($appConfig['stripe_webhook_secret_enc'])) {
+        if (!empty($appConfig['_stripe_webhook_secret'])) {
+            $webhookSecret = trim((string)$appConfig['_stripe_webhook_secret']);
+        }
+        if (!$webhookSecret && !empty($appConfig['stripe_webhook_secret'])) {
+            $webhookSecret = trim((string)$appConfig['stripe_webhook_secret']);
+        }
+        if (!$webhookSecret && !empty($appConfig['stripe_webhook_secret_enc'])) {
             $encVal = $appConfig['stripe_webhook_secret_enc'];
             if (strpos($encVal, 'plain::') === 0) {
                 $webhookSecret = substr($encVal, 7);
@@ -328,7 +341,29 @@ class StripeService {
      * @return bool True if Stripe keys are configured
      */
     public static function isConfigured($appConfig) {
-        return !empty($appConfig['stripe_publishable_key']) && !empty($appConfig['stripe_secret_key_enc']);
+        return !empty($appConfig['stripe_publishable_key']) && self::hasSecretKey($appConfig);
+    }
+
+    /**
+     * Check whether the server has enough secret material to create Stripe Checkout sessions.
+     * This intentionally supports raw env-provided secrets and encrypted UI-saved secrets.
+     */
+    public static function hasSecretKey($appConfig) {
+        if (!empty($appConfig['_stripe_secret_key']) || !empty($appConfig['stripe_secret_key'])) {
+            return true;
+        }
+        if (empty($appConfig['stripe_secret_key_enc'])) {
+            return false;
+        }
+
+        $encVal = (string)$appConfig['stripe_secret_key_enc'];
+        if (strpos($encVal, 'plain::') === 0) {
+            return trim(substr($encVal, 7)) !== '';
+        }
+
+        require_once __DIR__ . '/../utils/crypto.php';
+        $pt = crypto_decrypt($encVal);
+        return is_string($pt) && trim($pt) !== '';
     }
     
     /**

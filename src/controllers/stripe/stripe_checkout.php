@@ -101,7 +101,11 @@ try {
     if (empty($invoice['finalized_at'])) {
         throw new Exception('This invoice has not been finalized for payment.');
     }
-    if ($documentType === 'invoice' && ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+    $collectionMode = trim((string)($invoice['collection_mode'] ?? ''));
+    if ($collectionMode === '') {
+        $collectionMode = 'direct';
+    }
+    if ($documentType === 'invoice' && $collectionMode !== 'direct') {
         throw new Exception('This invoice is collected through its project billing statement.');
     }
     

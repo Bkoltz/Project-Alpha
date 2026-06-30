@@ -106,6 +106,18 @@ foreach ($secretKeys as $key) {
     }
 }
 
+$secretEnvAliases = [
+    'STRIPE_PUBLISHABLE_KEY' => 'stripe_publishable_key',
+    'STRIPE_SECRET_KEY' => '_stripe_secret_key',
+    'STRIPE_WEBHOOK_SECRET' => '_stripe_webhook_secret',
+];
+foreach ($secretEnvAliases as $envKey => $configKey) {
+    $envValue = $_ENV[$envKey] ?? $_SERVER[$envKey] ?? getenv($envKey) ?? false;
+    if ($envValue !== false && $envValue !== '') {
+        $appConfig[$configKey] = $envValue;
+    }
+}
+
 $paths = [$settingsPrimary, $settingsProject, $settingsPublic, $settingsFallback];
 foreach ($paths as $path) {
     if (is_readable($path)) {
