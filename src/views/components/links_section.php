@@ -62,6 +62,9 @@ foreach ($links as $link) {
         break;
     }
 }
+$visibleLinks = array_values(array_filter($links, static function (array $link): bool {
+    return (string)($link['link_type'] ?? '') !== 'resolver_blacklist';
+}));
 ?>
 
 <div style="margin-top:32px;padding-top:24px;border-top:2px solid #eee">
@@ -120,14 +123,15 @@ foreach ($links as $link) {
     <?php endif; ?>
 
     <div id="linksContainer_<?php echo e((string)$entityType); ?>_<?php echo (int)$entityId; ?>" style="display:grid;gap:12px">
-        <?php if (empty($links)): ?>
+        <?php if (empty($visibleLinks)): ?>
             <div style="padding:24px;text-align:center;background:#f9fafb;border:1px dashed #d1d5db;border-radius:8px;color:var(--muted)">
                 No links yet. Add a manual link when this client or organization needs a content URL.
             </div>
         <?php else: ?>
-            <?php foreach ($links as $link):
+            <?php foreach ($visibleLinks as $link):
                 $typeLabel = ucwords(str_replace(['manual_', 'auto_', '_'], ['', '', ' '], (string)$link['link_type']));
                 $displayTitle = trim((string)($link['title'] ?? '')) !== '' ? (string)$link['title'] : ($typeLabel ?: 'Content link');
+                $isResolverLink = (string)($link['link_source'] ?? '') === 'resolver' || str_starts_with((string)$link['link_type'], 'auto_');
                 if (!empty($link['is_expired'])) {
                     $statusStyle = 'background:#fee2e2;color:#991b1b;border-color:#fca5a5';
                     $statusText = 'Expired';
@@ -163,6 +167,22 @@ foreach ($links as $link) {
                             <span>Last verified: <?php echo e(date('M j, Y', strtotime((string)$link['last_verified']))); ?></span>
                         <?php endif; ?>
                     </div>
+                    <?php if (!$isReadOnly): ?>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+                            <button type="button"
+                                    onclick="revokeContentLink('<?php echo e((string)$entityType); ?>', <?php echo (int)$entityId; ?>, <?php echo (int)$link['id']; ?>)"
+                                    style="padding:6px 10px;border-radius:6px;border:1px solid #fecaca;background:#fff;color:#991b1b;font-size:12px;cursor:pointer">
+                                Revoke
+                            </button>
+                            <?php if ($isResolverLink): ?>
+                                <button type="button"
+                                        onclick="revokeAndBlacklistContentLink('<?php echo e((string)$entityType); ?>', <?php echo (int)$entityId; ?>, <?php echo (int)$link['id']; ?>)"
+                                        style="padding:6px 10px;border-radius:6px;border:1px solid #991b1b;background:#fee2e2;color:#7f1d1d;font-size:12px;font-weight:600;cursor:pointer">
+                                    Revoke + Blacklist
+                                </button>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         <?php endif; ?>
@@ -252,11 +272,13 @@ foreach ($links as $link) {
 <script>
 var linksSectionCsrf = '<?php echo e(csrf_token()); ?>';
 
-function linkManagementRequest(action, entityType, entityId) {
+function linkManagementRequest(action, entityType, entityId, linkId) {
+    const body = new URLSearchParams({action, entity_type: entityType, entity_id: entityId, csrf: linksSectionCsrf});
+    if (linkId) body.set('link_id', linkId);
     return fetch('/?page=links/link-management', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({action, entity_type: entityType, entity_id: entityId, csrf: linksSectionCsrf})
+        body
     }).then(r => r.json());
 }
 
@@ -304,6 +326,22 @@ function unignoreLinks(entityType, entityId) {
     linkManagementRequest('unignore', entityType, entityId).then(data => {
         if (data.success) location.reload();
         else alert('Error: ' + (data.message || 'Failed to update setting'));
+    }).catch(err => alert('Network error: ' + err.message));
+}
+
+function revokeContentLink(entityType, entityId, linkId) {
+    if (!confirm('Remove this content link from PA? This does not change the provider-side sharing setting.')) return;
+    linkManagementRequest('revoke_link', entityType, entityId, linkId).then(data => {
+        if (data.success) location.reload();
+        else alert('Error: ' + (data.message || 'Failed to revoke link'));
+    }).catch(err => alert('Network error: ' + err.message));
+}
+
+function revokeAndBlacklistContentLink(entityType, entityId, linkId) {
+    if (!confirm('Remove this resolver link from PA and prevent automatic resolver scans from adding it back for this ' + entityType + '?')) return;
+    linkManagementRequest('revoke_link_blacklist', entityType, entityId, linkId).then(data => {
+        if (data.success) location.reload();
+        else alert('Error: ' + (data.message || 'Failed to revoke and blacklist link'));
     }).catch(err => alert('Network error: ' + err.message));
 }
 

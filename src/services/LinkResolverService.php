@@ -510,12 +510,24 @@ class LinkResolverService
     public function markAsIgnored(string $entityType, int $entityId): array
     {
         try {
-            $stmt = $this->pdo->prepare('
-                UPDATE entity_links
-                SET ignore_auto_generation = 1
-                WHERE entity_type = ? AND entity_id = ?
-            ');
+            $stmt = $this->pdo->prepare('SELECT id FROM entity_links WHERE entity_type = ? AND entity_id = ? LIMIT 1');
             $stmt->execute([$entityType, $entityId]);
+            $existingId = (int)($stmt->fetchColumn() ?: 0);
+            if ($existingId > 0) {
+                $stmt = $this->pdo->prepare('
+                    UPDATE entity_links
+                    SET ignore_auto_generation = 1
+                    WHERE entity_type = ? AND entity_id = ?
+                ');
+                $stmt->execute([$entityType, $entityId]);
+            } else {
+                $stmt = $this->pdo->prepare('
+                    INSERT INTO entity_links
+                        (entity_type, entity_id, title, url, link_type, link_source, include_on_invoices, resolver_mode, ignore_auto_generation)
+                    VALUES (?, ?, "Resolver disabled", "#", "resolver_blacklist", "resolver", 0, "manual_only", 1)
+                ');
+                $stmt->execute([$entityType, $entityId]);
+            }
             return ['success' => true];
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error marking as ignored: ' . $e->getMessage());
@@ -532,9 +544,39 @@ class LinkResolverService
                 WHERE entity_type = ? AND entity_id = ?
             ');
             $stmt->execute([$entityType, $entityId]);
+            $stmt = $this->pdo->prepare('
+                DELETE FROM entity_links
+                WHERE entity_type = ? AND entity_id = ? AND link_type = "resolver_blacklist"
+            ');
+            $stmt->execute([$entityType, $entityId]);
             return ['success' => true];
         } catch (Throwable $e) {
             @error_log('[LinkResolverService] Error unmarking as ignored: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function revokeLink(string $entityType, int $entityId, int $linkId, bool $blacklist = false): array
+    {
+        try {
+            $stmt = $this->pdo->prepare('
+                DELETE FROM entity_links
+                WHERE id = ? AND entity_type = ? AND entity_id = ?
+                LIMIT 1
+            ');
+            $stmt->execute([$linkId, $entityType, $entityId]);
+            if ($stmt->rowCount() < 1) {
+                return ['success' => false, 'message' => 'Link not found'];
+            }
+            if ($blacklist) {
+                $ignored = $this->markAsIgnored($entityType, $entityId);
+                if (empty($ignored['success'])) {
+                    return $ignored;
+                }
+            }
+            return ['success' => true];
+        } catch (Throwable $e) {
+            @error_log('[LinkResolverService] Error revoking link: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }

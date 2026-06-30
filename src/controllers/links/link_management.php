@@ -28,8 +28,9 @@ try {
     $action = $_POST['action'] ?? '';
     $entityType = $_POST['entity_type'] ?? '';
     $entityId = (int)($_POST['entity_id'] ?? 0);
+    $linkId = (int)($_POST['link_id'] ?? 0);
     
-    if (!in_array($action, ['generate', 'refresh', 'expire', 'ignore', 'unignore'])) {
+    if (!in_array($action, ['generate', 'refresh', 'expire', 'ignore', 'unignore', 'revoke_link', 'revoke_link_blacklist'], true)) {
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
         exit;
     }
@@ -91,6 +92,15 @@ try {
             
         case 'unignore':
             $result = $linkService->unmarkAsIgnored($entityType, $entityId);
+            break;
+
+        case 'revoke_link':
+        case 'revoke_link_blacklist':
+            if ($linkId <= 0) {
+                $result = ['success' => false, 'message' => 'Invalid link ID'];
+                break;
+            }
+            $result = $linkService->revokeLink($entityType, $entityId, $linkId, $action === 'revoke_link_blacklist');
             break;
             
         default:
