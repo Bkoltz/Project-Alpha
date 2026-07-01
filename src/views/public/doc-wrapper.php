@@ -47,7 +47,7 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
     try {
         $invSt = $type === 'project_invoice'
             ? $pdo->prepare('SELECT status,total,amount_paid,balance_due,NULL AS original_amount,NULL AS surcharge_amount,NULL AS surcharge_type,NULL AS created_by,finalized_at,"direct" AS collection_mode FROM project_invoices WHERE id=?')
-            : $pdo->prepare('SELECT status, total, amount_paid, original_amount, surcharge_amount, surcharge_type, created_by, finalized_at, collection_mode FROM invoices WHERE id = ?');
+            : $pdo->prepare('SELECT status,total,amount_paid,NULL AS original_amount,NULL AS surcharge_amount,NULL AS surcharge_type,created_by,finalized_at,collection_mode FROM invoices WHERE id = ?');
         $invSt->execute([$rid]);
         $invoiceData = $invSt->fetch(PDO::FETCH_ASSOC);
         if ($invoiceData) {
