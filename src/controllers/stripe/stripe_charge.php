@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
 require_once __DIR__ . '/../../utils/InvoiceSurcharge.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/payment_methods.php';
 
 $invoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
 $returnUrl = $_POST['return_url'] ?? $_GET['return_url'] ?? '';
@@ -26,6 +27,10 @@ try {
 
     if (!can_access_record($pdo, 'invoices', $invoiceId, (int)($_SESSION['user']['id'] ?? 0))) {
         throw new Exception('Permission denied');
+    }
+
+    if (!pa_payment_methods_has($appConfig, 'stripe')) {
+        throw new Exception('Online card payment is not enabled. Add Stripe in Settings -> Billing payment methods first.');
     }
 
     // Check if Stripe is configured

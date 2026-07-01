@@ -2,6 +2,7 @@
 // src/controllers/contract/long_term_contracts_create.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
+require_once __DIR__ . '/../../utils/project_selection.php';
 
 @error_log('[long_term_contracts_create] POST received', 0);
 
@@ -72,6 +73,10 @@ if ($client_id <= 0) {
 if ($client_id <= 0) {
     @error_log('[long_term_contracts_create] invalid client_id', 0);
     header('Location: /?page=contract/contracts-create&error=Please%20select%20a%20client');
+    exit;
+}
+if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
+    header('Location: /?page=contract/contracts-create&error=' . urlencode('Select an active project for this client or organization.'));
     exit;
 }
 

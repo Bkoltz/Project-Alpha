@@ -25,7 +25,7 @@ $appConfig = [
     // Terms for contracts
     'terms' => null,
     'net_terms_days' => 30,
-    'payment_methods' => ['Card','Cash','Bank Transfer'],
+    'payment_methods' => ['Cash','Check','Bank Transfer'],
     'quotes_show_terms' => 1,
     // App preferences
     'cron_enabled' => 1,
@@ -41,6 +41,7 @@ $appConfig = [
     'link_resolver_enabled' => 0,
     'org_level_links_only' => 0,
     'default_link_expiration_days' => 365,
+    'link_resolver_scan_mode' => 'quick',
     'link_resolver_daily_scan_enabled' => 0,
     'link_resolver_invoice_auto_attach_enabled' => 0,
     'project_specific_links_enabled' => 0,
@@ -64,7 +65,7 @@ $appConfig = [
     'stripe_surcharge_percent' => 2.9,
     'stripe_surcharge_fixed' => 0.3,
     'stripe_surcharge_split_percent' => 50,
-    'stripe_surcharge_message' => 'Using a credit card is a privilege for both parties, so it is fair that we split the fee',
+    'stripe_surcharge_message' => 'Online card payments include a disclosed processing fee when enabled. Other accepted payment methods use the invoice amount.',
     // qoute defaults
     'quote_auto_create_contract' => 1,
     'quote_auto_create_invoice' => 1,
@@ -186,7 +187,7 @@ try {
             'cron_enabled', 'cron_schedule', 'cron_custom', 'cron_last_run',
             'contract_custom_sections_json',
             'backup_hour', 'backup_retention_days',
-            'link_resolver_enabled', 'default_link_expiration_days', 'org_level_links_only',
+            'link_resolver_enabled', 'default_link_expiration_days', 'link_resolver_scan_mode', 'org_level_links_only',
             'link_resolver_daily_scan_enabled', 'link_resolver_invoice_auto_attach_enabled',
             'project_specific_links_enabled', 'invoice_content_links_enabled',
             'invoice_missing_content_links_behavior',

@@ -15,6 +15,35 @@
       <div>Organization Name</div>
       <input required type="text" name="name" placeholder="Organization name" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
+    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+      <legend style="padding:0 6px;color:var(--muted)">Organization Address</legend>
+      <label>
+        <div>Address line 1</div>
+        <input name="address_line1" autocomplete="address-line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div>Address line 2</div>
+        <input name="address_line2" autocomplete="address-line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
+        <label>
+          <div>City</div>
+          <input name="city" autocomplete="address-level2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>State</div>
+          <input name="state" autocomplete="address-level1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>Postal</div>
+          <input name="postal_code" autocomplete="postal-code" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+      </div>
+      <label>
+        <div>Country</div>
+        <input name="country" autocomplete="country-name" value="USA" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+    </fieldset>
     <label>
       <div>Notes</div>
       <textarea name="notes" rows="4" placeholder="Internal notes about this organization" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></textarea>

@@ -1,16 +1,36 @@
 <?php
 // src/controllers/organization/organizations_update.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/organization_schema.php';
 
 $id = (int)($_POST['id'] ?? 0);
 $name = trim($_POST['name'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
 $remove_tax = !empty($_POST['remove_tax_file']);
+$addressValues = [
+    'address_line1' => trim((string)($_POST['address_line1'] ?? '')),
+    'address_line2' => trim((string)($_POST['address_line2'] ?? '')),
+    'city' => trim((string)($_POST['city'] ?? '')),
+    'state' => trim((string)($_POST['state'] ?? '')),
+    'postal_code' => trim((string)($_POST['postal_code'] ?? '')),
+    'country' => trim((string)($_POST['country'] ?? '')),
+];
 
 if ($id <= 0 || $name === '') {
     header('Location: /?page=organization/organizations-edit&id=' . $id . '&error=Invalid%20input');
     exit;
 }
+
+$addressColumns = pa_ensure_organization_address_columns($pdo);
+$addressAssignments = [];
+$addressParams = [];
+foreach ($addressValues as $column => $value) {
+    if (isset($addressColumns[$column])) {
+        $addressAssignments[] = "{$column} = ?";
+        $addressParams[] = $value !== '' ? $value : null;
+    }
+}
+$addressSql = $addressAssignments ? ', ' . implode(', ', $addressAssignments) : '';
 
 // Handle file upload if present
 if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_file']['tmp_name'])) {
@@ -84,13 +104,14 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
     $prevStmt->execute([$id]);
     $prev = $prevStmt->fetchColumn();
 
-    $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?, tax_exempt_file = ?, tax_exempt_uploaded_at = NOW() WHERE id = ?');
-    $stmt->execute([
+    $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ', tax_exempt_file = ?, tax_exempt_uploaded_at = NOW() WHERE id = ?');
+    $stmt->execute(array_merge([
         $name,
         $notes ?: null,
+    ], $addressParams, [
         $filename,
         $id
-    ]);
+    ]));
     
     error_log('ORG_UPDATE_UPLOAD: Database updated with filename: ' . $filename);
 
@@ -114,23 +135,25 @@ if ($remove_tax) {
         $path = __DIR__ . '/../../uploads/organizations/' . $prev;
         if (is_file($path)) @unlink($path);
     }
-    $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?, tax_exempt_file = NULL, tax_exempt_uploaded_at = NULL WHERE id = ?');
-    $stmt->execute([
+    $stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ', tax_exempt_file = NULL, tax_exempt_uploaded_at = NULL WHERE id = ?');
+    $stmt->execute(array_merge([
         $name,
         $notes ?: null,
+    ], $addressParams, [
         $id
-    ]);
+    ]));
     header('Location: /?page=organization/organizations-edit&id=' . $id . '&updated=1');
     exit;
 }
 
 // Default update (no file change)
-$stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ? WHERE id = ?');
-$stmt->execute([
+$stmt = $pdo->prepare('UPDATE organizations SET name = ?, notes = ?' . $addressSql . ' WHERE id = ?');
+$stmt->execute(array_merge([
     $name,
     $notes ?: null,
+], $addressParams, [
     $id
-]);
+]));
 
 header('Location: /?page=organization/organizations-list&updated=1');
 exit;

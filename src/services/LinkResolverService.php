@@ -22,6 +22,7 @@ class LinkResolverService
         $this->config = [
             'enabled' => false,
             'default_expiration_days' => 365,
+            'scan_mode' => 'quick',
             'org_level_only' => false,
             'providers' => [],
         ];
@@ -31,7 +32,7 @@ class LinkResolverService
                 SELECT config_key, config_value
                 FROM app_config
                 WHERE organization_id = 0
-                  AND config_key IN ('link_resolver_enabled', 'default_link_expiration_days', 'org_level_links_only')
+                  AND config_key IN ('link_resolver_enabled', 'default_link_expiration_days', 'link_resolver_scan_mode', 'org_level_links_only')
             ");
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 switch ((string)$row['config_key']) {
@@ -40,6 +41,10 @@ class LinkResolverService
                         break;
                     case 'default_link_expiration_days':
                         $this->config['default_expiration_days'] = max(1, (int)$row['config_value']);
+                        break;
+                    case 'link_resolver_scan_mode':
+                        $mode = (string)$row['config_value'];
+                        $this->config['scan_mode'] = in_array($mode, ['quick', 'full'], true) ? $mode : 'quick';
                         break;
                     case 'org_level_links_only':
                         $this->config['org_level_only'] = (string)$row['config_value'] === '1' || $row['config_value'] === 1 || $row['config_value'] === true;
@@ -206,6 +211,7 @@ class LinkResolverService
         }
 
         $generated = [];
+        $skipped = [];
         $review = [];
         $errors = [];
         $tips = [];
@@ -213,7 +219,11 @@ class LinkResolverService
         foreach ($providers as $provider => $providerConfig) {
             $result = $this->generateLinkForProvider($provider, $context, $providerConfig);
             if (!empty($result['success'])) {
-                $generated[] = $provider;
+                if (!empty($result['skipped'])) {
+                    $skipped[] = $provider;
+                } else {
+                    $generated[] = $provider;
+                }
             } elseif (!empty($result['review_required'])) {
                 $review[$provider] = $result['message'];
             } else {
@@ -226,15 +236,16 @@ class LinkResolverService
 
         $message = count($generated) > 0
             ? 'Resolver attached exact folder links.'
-            : ($review ? 'Resolver found matches that require review.' : 'No safe resolver matches found.');
-        if (!$generated && !$review && $errors) {
+            : ($skipped ? 'Existing resolver links reused.' : ($review ? 'Resolver found matches that require review.' : 'No safe resolver matches found.'));
+        if (!$generated && !$skipped && !$review && $errors) {
             $firstProvider = (string)array_key_first($errors);
             $message = $firstProvider . ': ' . $errors[$firstProvider];
         }
 
         return [
-            'success' => count($generated) > 0,
+            'success' => count($generated) > 0 || count($skipped) > 0,
             'generated' => $generated,
+            'skipped' => $skipped,
             'review_required' => $review,
             'errors' => $errors,
             'tips' => $tips,
@@ -256,6 +267,16 @@ class LinkResolverService
         }
 
         try {
+            $existingUrl = $this->existingResolverLinkUrl($context, $linkType);
+            if (($this->config['scan_mode'] ?? 'quick') === 'quick' && $existingUrl !== null) {
+                return [
+                    'success' => true,
+                    'skipped' => true,
+                    'url' => $existingUrl,
+                    'message' => 'Existing resolver link reused.',
+                ];
+            }
+
             $resolver = $this->makeProvider($provider, $providerConfig['credentials'] ?? []);
             $diagnostics = [];
             $matches = $this->findSafeMatches($resolver, $context, $diagnostics);
@@ -471,6 +492,35 @@ class LinkResolverService
         ]);
     }
 
+    private function existingResolverLinkUrl(array $context, string $linkType): ?string
+    {
+        try {
+            $stmt = $this->pdo->prepare('
+                SELECT url
+                FROM entity_links
+                WHERE entity_type = ?
+                  AND entity_id = ?
+                  AND link_type = ?
+                  AND link_source = "resolver"
+                  AND COALESCE(is_expired, 0) = 0
+                  AND COALESCE(ignore_auto_generation, 0) = 0
+                  AND url IS NOT NULL
+                  AND url <> ""
+                LIMIT 1
+            ');
+            $stmt->execute([
+                (string)$context['entity_type'],
+                (int)$context['entity_id'],
+                $linkType,
+            ]);
+            $url = trim((string)($stmt->fetchColumn() ?: ''));
+            return $url !== '' ? $url : null;
+        } catch (Throwable $e) {
+            @error_log('[LinkResolverService] Error checking existing resolver link: ' . $e->getMessage());
+            return null;
+        }
+    }
+
     private function entityIsIgnored(string $entityType, int $entityId): bool
     {
         try {
@@ -617,6 +667,7 @@ class LinkResolverService
             'provider' => $provider,
             'scanned' => 0,
             'generated' => 0,
+            'skipped' => 0,
             'review_required' => 0,
             'no_match' => 0,
             'errors' => 0,
@@ -626,7 +677,11 @@ class LinkResolverService
         $record = function (string $label, array $result) use (&$summary): void {
             $summary['scanned']++;
             if (!empty($result['success'])) {
-                $summary['generated']++;
+                if (!empty($result['skipped'])) {
+                    $summary['skipped']++;
+                } else {
+                    $summary['generated']++;
+                }
                 return;
             }
             if (!empty($result['review_required'])) {
@@ -678,9 +733,10 @@ class LinkResolverService
         }
 
         $summary['message'] = sprintf(
-            'Scanned %d records. Generated %d, review %d, no match %d, errors %d.',
+            'Scanned %d records. Generated %d, skipped %d, review %d, no match %d, errors %d.',
             $summary['scanned'],
             $summary['generated'],
+            $summary['skipped'],
             $summary['review_required'],
             $summary['no_match'],
             $summary['errors']

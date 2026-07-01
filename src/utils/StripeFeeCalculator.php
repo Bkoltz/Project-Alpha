@@ -57,6 +57,9 @@ class StripeFeeCalculator {
         
         // Get custom message from config
         $customMessage = trim($config['stripe_surcharge_message'] ?? '');
+        if ($customMessage === 'Using a credit card is a privilege for both parties, so it is fair that we split the fee') {
+            $customMessage = 'Online card payments include a disclosed processing fee when enabled. Other accepted payment methods use the invoice amount.';
+        }
         
         switch ($type) {
             case 'merchant':
@@ -65,7 +68,7 @@ class StripeFeeCalculator {
                 $result['client_pays'] = 0;
                 $result['new_total'] = $amount;
                 $defaultText = sprintf(
-                    'Credit card processing fee of $%.2f absorbed by merchant',
+                    'Online card processing fee of $%.2f absorbed by merchant',
                     $feeTotal
                 );
                 if ($customMessage) {
@@ -89,7 +92,7 @@ class StripeFeeCalculator {
                 $result['merchant_pays'] = round($feeTotal - $clientPays, 2);
                 $result['new_total'] = $amount + $clientPays;
                 $defaultText = sprintf(
-                    'Credit card surcharge: $%.2f (processing fee)',
+                    'Online card surcharge: $%.2f (processing fee)',
                     $feeTotal
                 );
                 if ($customMessage) {
@@ -109,7 +112,7 @@ class StripeFeeCalculator {
                 $result['merchant_pays'] = $merchantPortion;
                 $result['new_total'] = $amount + $clientPortion;
                 $defaultText = sprintf(
-                    'Credit card surcharge: $%.2f (%d%% of $%.2f processing fee)',
+                    'Online card surcharge: $%.2f (%d%% of $%.2f processing fee)',
                     $clientPortion,
                     $splitPercent,
                     $feeTotal

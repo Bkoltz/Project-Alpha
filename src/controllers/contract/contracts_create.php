@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/project_selection.php';
 
 $__orgId = get_active_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -65,6 +66,10 @@ if ($client_id <= 0) {
 if ($client_id <= 0) {
     @error_log('[contracts_create] invalid client_id', 0);
     header('Location: /?page=contract/contracts-create&error=Please%20select%20a%20client%20from%20suggestions');
+    exit;
+}
+if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
+    header('Location: /?page=contract/contracts-create&error=' . urlencode('Select an active project for this client or organization.'));
     exit;
 }
 
