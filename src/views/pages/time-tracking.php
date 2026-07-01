@@ -6,6 +6,40 @@ require_once __DIR__ . '/../../utils/format.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
+function time_tracking_table_exists(PDO $pdo, string $table): bool
+{
+    try {
+        $stmt = $pdo->prepare('SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?');
+        $stmt->execute([$table]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function time_tracking_table_has_column(PDO $pdo, string $table, string $column): bool
+{
+    try {
+        $stmt = $pdo->prepare('SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
+        $stmt->execute([$table, $column]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function time_tracking_fetch_all(PDO $pdo, string $sql, array $params = []): array
+{
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        @error_log('[TimeTracking] Query failed: ' . $e->getMessage());
+        return [];
+    }
+}
+
 // Active timer for this user (started, not ended)
 $activeTimer = null;
 try {
@@ -17,18 +51,42 @@ try {
 }
 
 // Time entries list
-$stmt = $pdo->prepare('SELECT te.*, c.name AS client_name, il.item_name AS service_name FROM time_entries te LEFT JOIN clients c ON te.client_id = c.id LEFT JOIN item_library il ON il.id = te.service_item_id WHERE te.user_id = ? ORDER BY te.created_at DESC');
-$stmt->execute([$userId]);
-$entries = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$hasTimeEntries = time_tracking_table_exists($pdo, 'time_entries');
+$hasServiceItemId = $hasTimeEntries && time_tracking_table_has_column($pdo, 'time_entries', 'service_item_id');
+$hasTimeCreatedAt = $hasTimeEntries && time_tracking_table_has_column($pdo, 'time_entries', 'created_at');
+$itemLibraryReady = time_tracking_table_exists($pdo, 'item_library')
+    && time_tracking_table_has_column($pdo, 'item_library', 'id')
+    && time_tracking_table_has_column($pdo, 'item_library', 'item_name')
+    && time_tracking_table_has_column($pdo, 'item_library', 'unit_price');
 
-$services = $pdo->query("SELECT id, item_name, unit_price FROM item_library WHERE is_active = 1 AND category = 'Hourly' ORDER BY item_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$jobRows = $pdo->query("SELECT project_code, MIN(client_id) AS client_id FROM (
+$entries = [];
+if ($hasTimeEntries) {
+    $serviceSelect = ($itemLibraryReady && $hasServiceItemId) ? 'il.item_name AS service_name' : 'NULL AS service_name';
+    $serviceJoin = ($itemLibraryReady && $hasServiceItemId) ? ' LEFT JOIN item_library il ON il.id = te.service_item_id' : '';
+    $orderBy = $hasTimeCreatedAt ? 'te.created_at DESC' : 'te.started_at DESC';
+    $entries = time_tracking_fetch_all(
+        $pdo,
+        'SELECT te.*, c.name AS client_name, ' . $serviceSelect . ' FROM time_entries te LEFT JOIN clients c ON te.client_id = c.id' . $serviceJoin . ' WHERE te.user_id = ? ORDER BY ' . $orderBy,
+        [$userId]
+    );
+}
+
+$services = [];
+if ($itemLibraryReady) {
+    $serviceWhere = time_tracking_table_has_column($pdo, 'item_library', 'is_active') ? 'WHERE is_active = 1' : '';
+    if (time_tracking_table_has_column($pdo, 'item_library', 'category')) {
+        $serviceWhere .= $serviceWhere === '' ? "WHERE category = 'Hourly'" : " AND category = 'Hourly'";
+    }
+    $services = time_tracking_fetch_all($pdo, "SELECT id, item_name, unit_price FROM item_library {$serviceWhere} ORDER BY item_name ASC");
+}
+
+$jobRows = time_tracking_fetch_all($pdo, "SELECT project_code, MIN(client_id) AS client_id FROM (
   SELECT project_code, client_id FROM quotes WHERE project_code IS NOT NULL
   UNION ALL SELECT project_code, client_id FROM contracts WHERE project_code IS NOT NULL
   UNION ALL SELECT project_code, client_id FROM invoices WHERE project_code IS NOT NULL
-) jobs GROUP BY project_code ORDER BY project_code DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
-$hourlyContracts = $pdo->query("SELECT id, doc_number, project_code, client_id, contract_type FROM contracts WHERE billing_mode = 'hourly' ORDER BY created_at DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
-$hourlyInvoices = $pdo->query("SELECT id, doc_number, project_code, client_id FROM invoices WHERE billing_mode = 'hourly' ORDER BY created_at DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
+) jobs GROUP BY project_code ORDER BY project_code DESC LIMIT 200");
+$hourlyContracts = time_tracking_fetch_all($pdo, "SELECT id, doc_number, project_code, client_id, contract_type FROM contracts WHERE billing_mode = 'hourly' ORDER BY created_at DESC LIMIT 200");
+$hourlyInvoices = time_tracking_fetch_all($pdo, "SELECT id, doc_number, project_code, client_id FROM invoices WHERE billing_mode = 'hourly' ORDER BY created_at DESC LIMIT 200");
 
 $totalHours = 0.0;
 $totalBillableAmount = 0.0;

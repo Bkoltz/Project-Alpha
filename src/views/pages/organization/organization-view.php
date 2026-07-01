@@ -89,24 +89,70 @@ if ($departments) {
         $departmentLinks[(int)$row['entity_id']][] = $row;
     }
 }
-?>
-<section>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-    <h2><?php echo htmlspecialchars($org['name']); ?></h2>
-    <div>
-      <a href="/?page=organization/organizations-edit&id=<?php echo $id; ?>" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;font-size:small">Edit Organization</a>
 
-      <!-- Upload tax-exempt form directly from the organization view -->
-      <form method="post" action="/?page=organization/organizations-upload" enctype="multipart/form-data" style="display:inline-block;margin-left:8px">
+$orgAddressLines = array_values(array_filter([
+    trim((string)($org['address_line1'] ?? '')),
+    trim((string)($org['address_line2'] ?? '')),
+    trim(implode(', ', array_filter([
+        trim((string)($org['city'] ?? '')),
+        trim((string)($org['state'] ?? '')),
+    ]))),
+    trim((string)($org['postal_code'] ?? '')),
+    trim((string)($org['country'] ?? '')),
+], static fn($value) => $value !== ''));
+$taxFileUrl = !empty($org['tax_exempt_file'])
+    ? '/?page=serve-upload&file=' . e(rawurlencode('organizations/' . $org['tax_exempt_file']))
+    : '';
+?>
+<style>
+  .org-view { max-width: 1440px; margin: 0 auto; padding-bottom: 32px; }
+  .org-view__header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 18px; }
+  .org-view__title { margin: 0; font-size: 30px; line-height: 1.15; }
+  .org-view__meta { margin-top: 6px; color: var(--muted); font-size: 13px; }
+  .org-view__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .org-view__button { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: inherit; text-decoration: none; font-size: 13px; cursor: pointer; }
+  .org-view__button--primary { background: var(--nav-accent); border-color: var(--nav-accent); color: #fff; }
+  .org-view__stats { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 12px; margin: 0 0 18px; }
+  .org-view__stat { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; box-shadow: 0 6px 18px rgba(11,18,32,0.05); }
+  .org-view__stat span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .org-view__stat strong { display: block; margin-top: 6px; font-size: 24px; line-height: 1; }
+  .org-view__layout { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .org-view__sidebar { display: grid; gap: 14px; position: sticky; top: 16px; }
+  .org-view__main { min-width: 0; }
+  .org-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; box-shadow: 0 6px 18px rgba(11,18,32,0.05); }
+  .org-card + .org-card { margin-top: 18px; }
+  .org-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .org-card__title { margin: 0; font-size: 17px; }
+  .org-detail-list { display: grid; gap: 12px; margin: 0; }
+  .org-detail-list dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .org-detail-list dd { margin: 4px 0 0; line-height: 1.5; }
+  .org-empty { padding: 20px; text-align: center; color: var(--muted); border: 1px dashed #d1d5db; border-radius: 8px; background: #f9fafb; }
+  @media (max-width: 960px) {
+    .org-view__header { display: grid; }
+    .org-view__actions { justify-content: flex-start; }
+    .org-view__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .org-view__layout { grid-template-columns: 1fr; }
+    .org-view__sidebar { position: static; order: -1; }
+  }
+</style>
+
+<section class="org-view">
+  <div class="org-view__header">
+    <div>
+      <h2 class="org-view__title"><?php echo htmlspecialchars($org['name']); ?></h2>
+      <div class="org-view__meta">Created <?php echo htmlspecialchars(date('F j, Y', strtotime($org['created_at']))); ?></div>
+    </div>
+    <div class="org-view__actions">
+      <a class="org-view__button org-view__button--primary" href="/?page=organization/organizations-edit&id=<?php echo $id; ?>">Edit Organization</a>
+      <form method="post" action="/?page=organization/organizations-upload" enctype="multipart/form-data" style="display:inline-block;margin:0">
         <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
         <input type="hidden" name="id" value="<?php echo $id; ?>">
-        <label style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer">
+        <label class="org-view__button" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
           <input type="file" name="tax_exempt_file" accept="application/pdf,image/*" style="display:none" onchange="this.form.submit()">
           <span style="pointer-events:none">Upload Tax Exempt</span>
         </label>
       </form>
-
-      <a href="/?page=organization/organizations-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;margin-left:8px;font-size:small">Back to List</a>
+      <a class="org-view__button" href="/?page=organization/organizations-list">Back to List</a>
     </div>
   </div>
 
@@ -128,70 +174,88 @@ if ($departments) {
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
   <?php endif; ?>
 
-  <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 6px 18px rgba(11,18,32,0.06);margin-bottom:24px">
-    <div style="display:grid;grid-template-columns:<?php echo !empty($org['tax_exempt_file']) ? '1fr 300px' : '1fr'; ?>;gap:20px">
-      <div>
-        <h3 style="margin-top:0">Organization Details</h3>
-        <div style="display:grid;gap:12px">
-          <div>
-            <strong>Name:</strong> <?php echo htmlspecialchars($org['name']); ?>
-          </div>
-          <div>
-            <strong>Total Clients:</strong> <?php echo count($clients); ?>
-          </div>
-          <div>
-            <strong>Notes:</strong>
-            <div id="notesDisplay" style="margin-top:4px;color:var(--muted);min-height:40px;padding:8px;border:1px solid transparent;border-radius:4px;cursor:pointer" onclick="toggleNotesEdit()">
-              <?php echo !empty($org['notes']) ? nl2br(htmlspecialchars($org['notes'])) : '<em style="color:#999">Click to add notes...</em>'; ?>
-            </div>
-            <form id="notesForm" method="post" action="/?page=organization/organization-update-notes" style="display:none;margin-top:4px">
-              <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-              <input type="hidden" name="id" value="<?php echo $id; ?>">
-              <textarea name="notes" id="notesTextarea" rows="4" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;font-family:inherit"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>
-              <div style="display:flex;gap:8px;margin-top:8px">
-                <button type="submit" style="padding:6px 12px;border:0;border-radius:8px;background:var(--nav-accent);color:#fff;font-size:small;cursor:pointer">Save</button>
-                <button type="button" onclick="toggleNotesEdit()" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;cursor:pointer">Cancel</button>
-              </div>
-            </form>
-          </div>
-          <div>
-            <strong>Created:</strong> <?php echo htmlspecialchars(date('F j, Y', strtotime($org['created_at']))); ?>
-          </div>
+  <div class="org-view__stats">
+    <div class="org-view__stat"><span>Clients</span><strong><?php echo count($clients); ?></strong></div>
+    <div class="org-view__stat"><span>Departments</span><strong><?php echo count($departments); ?></strong></div>
+    <div class="org-view__stat"><span>Tax Exempt</span><strong><?php echo !empty($org['tax_exempt_file']) ? 'Yes' : 'No'; ?></strong></div>
+    <div class="org-view__stat"><span>Available Adds</span><strong><?php echo count($availableClients); ?></strong></div>
+  </div>
+
+  <div class="org-view__layout">
+    <aside class="org-view__sidebar">
+      <div class="org-card">
+        <div class="org-card__head">
+          <h3 class="org-card__title">Details</h3>
         </div>
+        <dl class="org-detail-list">
+          <div>
+            <dt>Name</dt>
+            <dd><?php echo htmlspecialchars($org['name']); ?></dd>
+          </div>
+          <div>
+            <dt>Address</dt>
+            <dd>
+              <?php if ($orgAddressLines): ?>
+                <?php echo implode('<br>', array_map('htmlspecialchars', $orgAddressLines)); ?>
+              <?php else: ?>
+                <span style="color:var(--muted)">No organization address saved.</span>
+              <?php endif; ?>
+            </dd>
+          </div>
+          <div>
+            <dt>Notes</dt>
+            <dd>
+              <div id="notesDisplay" style="color:var(--muted);min-height:40px;padding:8px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;background:#f9fafb" onclick="toggleNotesEdit()">
+                <?php echo !empty($org['notes']) ? nl2br(htmlspecialchars($org['notes'])) : '<em style="color:#999">Click to add notes...</em>'; ?>
+              </div>
+              <form id="notesForm" method="post" action="/?page=organization/organization-update-notes" style="display:none;margin-top:8px">
+                <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+                <input type="hidden" name="id" value="<?php echo $id; ?>">
+                <textarea name="notes" id="notesTextarea" rows="5" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;font-family:inherit"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                  <button type="submit" class="org-view__button org-view__button--primary">Save</button>
+                  <button type="button" onclick="toggleNotesEdit()" class="org-view__button">Cancel</button>
+                </div>
+              </form>
+            </dd>
+          </div>
+        </dl>
       </div>
-      <?php if (!empty($org['tax_exempt_file'])): ?>
-        <div>
-          <h3 style="margin-top:0">Tax Exempt Form</h3>
-          <?php
-          $filePath = __DIR__ . '/../../../../uploads/organizations/' . $org['tax_exempt_file'];
-          $isPdf = strtolower(pathinfo($org['tax_exempt_file'], PATHINFO_EXTENSION)) === 'pdf';
-          ?>
+
+      <div class="org-card">
+        <div class="org-card__head">
+          <h3 class="org-card__title">Tax Exempt Form</h3>
+        </div>
+        <?php if (!empty($org['tax_exempt_file'])): ?>
+          <?php $isPdf = strtolower(pathinfo($org['tax_exempt_file'], PATHINFO_EXTENSION)) === 'pdf'; ?>
           <?php if ($isPdf): ?>
             <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
-              <embed src="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" type="application/pdf" width="100%" height="350px" />
+              <embed src="<?php echo $taxFileUrl; ?>" type="application/pdf" width="100%" height="260px" />
             </div>
           <?php else: ?>
             <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
-              <img src="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" style="width:100%;height:auto" alt="Tax Exempt Form" />
+              <img src="<?php echo $taxFileUrl; ?>" style="width:100%;height:auto" alt="Tax Exempt Form" />
             </div>
           <?php endif; ?>
           <div style="display:flex;gap:8px;margin-top:8px;font-size:small">
-            <a href="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" target="_blank" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">View Full</a>
-            <a href="/?page=serve-upload&file=<?php echo e(rawurlencode('organizations/' . $org['tax_exempt_file'])); ?>" download style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;text-decoration:none;color:inherit">Download</a>
+            <a href="<?php echo $taxFileUrl; ?>" target="_blank" class="org-view__button">View Full</a>
+            <a href="<?php echo $taxFileUrl; ?>" download class="org-view__button">Download</a>
           </div>
           <?php if (!empty($org['tax_exempt_uploaded_at'])): ?>
             <div style="font-size:small;color:var(--muted);margin-top:8px">Uploaded <?php echo htmlspecialchars(date('F j, Y', strtotime($org['tax_exempt_uploaded_at']))); ?></div>
           <?php endif; ?>
-        </div>
-      <?php endif; ?>
-    </div>
-  </div>
+        <?php else: ?>
+          <div class="org-empty">No tax exempt form uploaded.</div>
+        <?php endif; ?>
+      </div>
+    </aside>
 
-  <?php
-    $entityType = 'organization';
-    $entityId = $id;
-    require __DIR__ . '/../../components/links_section.php';
-  ?>
+    <main class="org-view__main">
+      <?php
+        $entityType = 'organization';
+        $entityId = $id;
+        require __DIR__ . '/../../components/links_section.php';
+      ?>
 
   <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 6px 18px rgba(11,18,32,0.06);margin:24px 0">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px">
@@ -230,7 +294,7 @@ if ($departments) {
     </form>
 
     <?php if (empty($departments)): ?>
-      <div style="padding:20px;text-align:center;color:var(--muted);border:1px dashed #ddd;border-radius:8px">
+      <div class="org-empty">
         No departments yet. That is fine for simple organizations.
       </div>
     <?php else: ?>
@@ -362,7 +426,7 @@ if ($departments) {
     </div>
 
     <?php if (empty($clients)): ?>
-      <div style="padding:20px;text-align:center;color:var(--muted);border:1px dashed #ddd;border-radius:8px">
+      <div class="org-empty">
         No clients in this organization yet. Use the search above to add clients.
       </div>
     <?php else: ?>
@@ -400,6 +464,8 @@ if ($departments) {
         </table>
       </div>
     <?php endif; ?>
+  </div>
+    </main>
   </div>
 </section>
 

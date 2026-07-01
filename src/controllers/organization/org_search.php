@@ -2,6 +2,7 @@
 // src/controllers/organization/org_search.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/organization_schema.php';
 
 header('Content-Type: application/json');
 $term = isset($_GET['term']) ? trim((string)$_GET['term']) : '';
@@ -23,7 +24,8 @@ try {
         $where[] = 'id IN (' . implode(',', array_fill(0, count($orgIds), '?')) . ')';
         $params = array_merge($params, $orgIds);
     }
-    $st = $pdo->prepare('SELECT id, name FROM organizations WHERE ' . implode(' AND ', $where) . ' ORDER BY name ASC LIMIT 15');
+    $addressSelect = pa_organization_address_select($pdo);
+    $st = $pdo->prepare('SELECT id, name, ' . $addressSelect . ' FROM organizations WHERE ' . implode(' AND ', $where) . ' ORDER BY name ASC LIMIT 15');
     $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode(array_values($rows));

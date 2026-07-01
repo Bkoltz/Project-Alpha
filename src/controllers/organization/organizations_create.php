@@ -1,10 +1,19 @@
 <?php
 // src/controllers/organization/organizations_create.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/organization_schema.php';
 
 $name = trim($_POST['name'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
 $return_to = trim($_POST['return_to'] ?? '');
+$addressValues = [
+    'address_line1' => trim((string)($_POST['address_line1'] ?? '')),
+    'address_line2' => trim((string)($_POST['address_line2'] ?? '')),
+    'city' => trim((string)($_POST['city'] ?? '')),
+    'state' => trim((string)($_POST['state'] ?? '')),
+    'postal_code' => trim((string)($_POST['postal_code'] ?? '')),
+    'country' => trim((string)($_POST['country'] ?? '')),
+];
 
 if ($name === '') {
     header('Location: /?page=organization/organizations-create&error=Name%20is%20required');
@@ -54,12 +63,25 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
     }
 }
 
-$stmt = $pdo->prepare('INSERT INTO organizations (name, notes, tax_exempt_file, tax_exempt_uploaded_at) VALUES (?, ?, ?, NOW())');
-$stmt->execute([
-    $name,
-    $notes ?: null,
-    $tax_filename
-]);
+$addressColumns = pa_ensure_organization_address_columns($pdo);
+$columns = ['name', 'notes'];
+$placeholders = ['?', '?'];
+$params = [$name, $notes ?: null];
+foreach ($addressValues as $column => $value) {
+    if (isset($addressColumns[$column])) {
+        $columns[] = $column;
+        $placeholders[] = '?';
+        $params[] = $value !== '' ? $value : null;
+    }
+}
+$columns[] = 'tax_exempt_file';
+$placeholders[] = '?';
+$params[] = $tax_filename;
+$columns[] = 'tax_exempt_uploaded_at';
+$placeholders[] = $tax_filename ? 'NOW()' : 'NULL';
+
+$stmt = $pdo->prepare('INSERT INTO organizations (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $placeholders) . ')');
+$stmt->execute($params);
 
 $id = (int)$pdo->lastInsertId();
 if ($return_to === 'clients-create') {
