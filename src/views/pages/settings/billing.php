@@ -16,7 +16,7 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
     <input type="number" min="0" name="net_terms_days" value="<?php echo htmlspecialchars((string)($appConfig['net_terms_days'] ?? 30)); ?>" style="width:120px;padding:10px;border-radius:8px;border:1px solid #ddd">
   </label>
   <div style="margin-top:12px"></div>
-  <?php $paymentMethods = (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']); ?>
+  <?php $paymentMethods = (array)($appConfig['payment_methods'] ?? ['cash', 'check', 'bank_transfer']); ?>
   <div style="margin-bottom:8px">
     <div style="margin-bottom:6px">Payment Methods</div>
     <div id="pmList" style="display:flex;flex-direction:column;gap:6px">
@@ -34,7 +34,7 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
         <option value="stripe">Stripe</option>
         <option value="bank_transfer">Bank Transfer</option>
         <option value="cash">Cash</option>
-        <option value="Check">Check</option>
+        <option value="check">Check</option>
         <option value="other">Other...</option>
       </select>
       <input id="pmCustom" placeholder="Custom method" style="padding:8px;border-radius:8px;border:1px solid #ddd;flex:1;display:none">

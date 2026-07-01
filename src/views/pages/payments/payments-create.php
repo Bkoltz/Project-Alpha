@@ -38,14 +38,16 @@ if ($pref > 0) {
       <div>Method</div>
     <?php require_once __DIR__ . '/../../../config/app.php';
          require_once __DIR__ . '/../../../services/StripeService.php';
-         $methods = (array)($appConfig['payment_methods'] ?? ['card','cash','bank_transfer']);
+         require_once __DIR__ . '/../../../utils/payment_methods.php';
+         $methods = pa_payment_methods_from_config($appConfig);
          $stripeConfigured = StripeService::isConfigured($appConfig);
     ?>
       <select name="method" id="paymentMethod" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <?php foreach ($methods as $m): ?>
-          <option value="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></option>
+          <?php if (($m['key'] ?? '') === 'stripe') { continue; } ?>
+          <option value="<?php echo htmlspecialchars($m['key']); ?>"><?php echo htmlspecialchars($m['label']); ?></option>
         <?php endforeach; ?>
-        <?php if ($stripeConfigured): ?>
+        <?php if ($stripeConfigured && pa_payment_methods_has($appConfig, 'stripe')): ?>
           <option value="stripe">💳 Credit Card (Stripe)</option>
         <?php endif; ?>
       </select>

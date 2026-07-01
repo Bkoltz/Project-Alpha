@@ -159,9 +159,10 @@ class StripeService {
      * @param string $cancelUrl URL to redirect if payment is cancelled
      * @param array $metadata Optional metadata to attach to the session
      * @param string|null $customerId Optional Stripe customer ID for saved cards
+     * @param string|null $idempotencyKey Optional Stripe idempotency key
      * @return array Checkout session data including 'url' for redirect
      */
-    public function createCheckoutSessionWithSurcharge($amount, $surchargeAmount, $currency, $description, $successUrl, $cancelUrl, $metadata = [], $customerId = null) {
+    public function createCheckoutSessionWithSurcharge($amount, $surchargeAmount, $currency, $description, $successUrl, $cancelUrl, $metadata = [], $customerId = null, ?string $idempotencyKey = null) {
         try {
             if ($customerId !== null && $customerId !== '') {
                 require_once __DIR__ . '/../utils/autopay_beta.php';
@@ -211,7 +212,7 @@ class StripeService {
                 $sessionData['customer'] = $customerId;
             }
             
-            $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData);
+            $session = $this->apiRequest('POST', 'checkout/sessions', $sessionData, $idempotencyKey);
             
             return $session;
             

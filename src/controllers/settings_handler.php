@@ -1,6 +1,7 @@
 <?php
 // src/controllers/settings_handler.php
 // Save settings and handle logo upload, then redirect (PRG)
+require_once __DIR__ . '/../utils/payment_methods.php';
 
 // Route specific tabs to dedicated handlers
 $tab = $_POST['tab'] ?? $_GET['tab'] ?? '';
@@ -80,7 +81,7 @@ $settings = [
     'from_phone' => null,
     'terms' => null,
     'net_terms_days' => 30,
-    'payment_methods' => ['card','cash','bank_transfer'],
+    'payment_methods' => ['cash','check','bank_transfer'],
     'timezone' => 'UTC',
     // App extras
     'primary_state' => null,
@@ -281,7 +282,7 @@ if (isset($_POST['payment_methods_json'])) {
                 $methods[] = trim($item);
             }
         }
-        $settings['payment_methods'] = array_values(array_unique($methods));
+        $settings['payment_methods'] = pa_normalized_payment_method_values($methods);
     }
 } elseif (isset($_POST['payment_methods'])) {
     // Fallback: textarea lines for backward compatibility
@@ -291,7 +292,7 @@ if (isset($_POST['payment_methods_json'])) {
         $m = trim($ln);
         if ($m !== '') { $methods[] = $m; }
     }
-    $settings['payment_methods'] = array_values(array_unique($methods));
+    $settings['payment_methods'] = pa_normalized_payment_method_values($methods);
 }
 
 // Time zone

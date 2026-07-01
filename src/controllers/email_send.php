@@ -8,6 +8,7 @@ require_once __DIR__ . '/../utils/logger.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/invoice_content_links.php';
+require_once __DIR__ . '/../utils/payment_methods.php';
 
 // Determine if Dompdf is available
 $dompdfAvailable = is_file(__DIR__ . '/../../vendor/autoload.php');
@@ -149,7 +150,7 @@ try {
     '<p>Please find your document attached and available at the link below:</p>' .
     '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>';
 
-  // Add Pay via Credit Card button for invoices if Stripe is configured
+  // Add online card payment button for invoices if Stripe is configured
   if ($type === 'invoice') {
     $contentLinks = invoice_content_links_for_invoice($pdo, $id, $appConfig);
     $contentLinksHtml = invoice_content_links_html($contentLinks);
@@ -158,7 +159,7 @@ try {
     }
 
     require_once __DIR__ . '/../services/StripeService.php';
-    if (StripeService::isConfigured($appConfig)) {
+    if (pa_payment_methods_has($appConfig, 'stripe') && StripeService::isConfigured($appConfig)) {
       // Check if invoice is payable
       try {
         $invSt = $pdo->prepare('SELECT status, total, amount_paid FROM invoices WHERE id = ?');
@@ -170,13 +171,21 @@ try {
           if (in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true) && $amountDue > 0) {
             $payUrl = $scheme . '://' . $host . '/?page=stripe-checkout&token=' . rawurlencode($token);
             $body .= '<div style="margin:24px 0;padding:20px;background:#f0f7ff;border:1px solid #93c5fd;border-radius:8px;text-align:center">';
-            $body .= '<p style="margin:0 0 12px;color:#1e40af;font-weight:600;font-size:16px">Ready to pay? Use our secure online payment option:</p>';
-            $body .= '<a href="'.htmlspecialchars($payUrl).'" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">💳 Pay via Credit Card</a>';
+            $body .= '<p style="margin:0 0 12px;color:#1e40af;font-weight:600;font-size:16px">Ready to pay? Use our secure online card payment option:</p>';
+            $body .= '<a href="'.htmlspecialchars($payUrl).'" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">Pay by Card</a>';
             $body .= '<p style="margin:12px 0 0;color:#6b7280;font-size:13px">Secure payment powered by Stripe</p>';
             $body .= '</div>';
           }
         }
       } catch (Throwable $e) { /* ignore */ }
+    }
+
+    $reviewLink = trim((string)($appConfig['review_link'] ?? ''));
+    if ($reviewLink !== '' && filter_var($reviewLink, FILTER_VALIDATE_URL)) {
+      $body .= '<div style="margin:24px 0;padding:18px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;text-align:center">';
+      $body .= '<p style="margin:0 0 10px;color:#111827;font-weight:600">Happy with the work?</p>';
+      $body .= '<a href="'.htmlspecialchars($reviewLink).'" style="display:inline-block;padding:10px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">Leave a Review</a>';
+      $body .= '</div>';
     }
   }
 

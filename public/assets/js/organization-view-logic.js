@@ -12,6 +12,31 @@ function toggleNotesEdit() {
     }
 }
 
+function openDepartmentModal() {
+    const modal = document.getElementById('departmentModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const firstInput = modal.querySelector('input[name="name"]');
+    if (firstInput) firstInput.focus();
+}
+
+function closeDepartmentModal() {
+    const modal = document.getElementById('departmentModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+}
+
+document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    closeDepartmentModal();
+});
+
+document.addEventListener('click', function (event) {
+    const modal = document.getElementById('departmentModal');
+    if (!modal || modal.style.display !== 'flex') return;
+    if (event.target === modal) closeDepartmentModal();
+});
+
 // Client search
 function initOrganizationClientSearch() {
     const searchInput = document.getElementById('clientSearchInput');

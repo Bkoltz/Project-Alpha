@@ -44,7 +44,11 @@ unset($_SESSION['client_onboarding_link']);
   <form method="post" action="/?page=client/onboarding-invite" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;align-items:end;padding:18px 0;border-bottom:1px solid var(--border);margin-bottom:24px">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <input type="hidden" name="action" value="create">
-    <label class="field"><span class="label-muted">Invited Email</span><input type="email" class="input" name="email" required></label>
+    <label class="field">
+      <span class="label-muted">Invited Email</span>
+      <input type="email" class="input" name="email" required aria-describedby="onboardingEmailHelp">
+      <span id="onboardingEmailHelp" style="display:block;margin-top:5px;font-size:12px;color:var(--muted)">Required for generated links and emailed invitations.</span>
+    </label>
     <label class="field"><span class="label-muted">Existing Client</span><select class="input" name="client_id" data-onboarding-client-select><option value="0">New client</option><?php foreach ($clients as $client): ?><option value="<?php echo (int)$client['id']; ?>" data-email="<?php echo htmlspecialchars((string)($client['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option><?php endforeach; ?></select></label>
     <label class="field"><span class="label-muted">Client Organization</span><select class="input" name="target_organization_id"><option value="0">No organization</option><?php foreach ($organizations as $organization): ?><option value="<?php echo (int)$organization['id']; ?>"><?php echo htmlspecialchars($organization['name']); ?></option><?php endforeach; ?></select></label>
     <label class="field"><span class="label-muted">Expires In</span><select class="input" name="expires_hours"><option value="24">24 hours</option><option value="48" selected>48 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label>

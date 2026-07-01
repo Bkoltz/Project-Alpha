@@ -5,6 +5,8 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
+require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
+require_once __DIR__ . '/../../utils/payment_methods.php';
 
 header('Content-Type: text/html; charset=UTF-8');
 
@@ -77,6 +79,10 @@ try {
     
     $invoiceId = (int)$linkRow['document_id'];
     
+    if (!pa_payment_methods_has($appConfig, 'stripe')) {
+        throw new Exception('Online card payment is not enabled for this invoice. Please contact us for alternative payment methods.');
+    }
+
     // Check if Stripe is configured
     if (!StripeService::isConfigured($appConfig)) {
         throw new Exception('Online payment is not configured. Please contact us for alternative payment methods.');
@@ -123,6 +129,10 @@ try {
     if ($amountDue <= 0) {
         throw new Exception('This invoice has already been paid in full.');
     }
+
+    $surchargeInfo = StripeFeeCalculator::calculateSurcharge($amountDue, $appConfig);
+    $surchargeAmount = max(0.0, (float)($surchargeInfo['client_pays'] ?? 0));
+    $checkoutTotal = $amountDue + $surchargeAmount;
     
     // Build URLs
     $host = $_SERVER['HTTP_HOST'] ?? '';
@@ -149,7 +159,7 @@ try {
     $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
     $description = "{$documentLabel}{$docNumber} from {$brandName}";
 
-    $expectedCents = (int)round($amountDue * 100);
+    $expectedCents = (int)round($checkoutTotal * 100);
     $existingSessionId = trim((string)($invoice['stripe_session_id'] ?? ''));
     $existingExpiresAt = !empty($invoice['stripe_checkout_expires_at'])
         ? strtotime((string)$invoice['stripe_checkout_expires_at'])
@@ -186,21 +196,29 @@ try {
             'project_invoice_id' => (string)$invoiceId,
             'doc_number' => (string)$docNumber,
             'token' => $token,
+            'original_amount' => (string)$amountDue,
+            'surcharge_amount' => (string)$surchargeAmount,
+            'surcharge_type' => (string)($surchargeInfo['surcharge_type'] ?? 'merchant'),
         ]
         : [
             'pa_invoice_id' => (string)$invoiceId,
             'invoice_id' => (string)$invoiceId,
             'doc_number' => (string)$docNumber,
             'token' => $token,
+            'original_amount' => (string)$amountDue,
+            'surcharge_amount' => (string)$surchargeAmount,
+            'surcharge_type' => (string)($surchargeInfo['surcharge_type'] ?? 'merchant'),
         ];
     
-    $session = $stripe->createCheckoutSession(
+    $session = $stripe->createCheckoutSessionWithSurcharge(
         $amountDue,
+        $surchargeAmount,
         'usd', // TODO: Make currency configurable
         $description,
         $successUrl,
         $cancelUrl,
         $checkoutMetadata,
+        null,
         $idempotencyKey
     );
     

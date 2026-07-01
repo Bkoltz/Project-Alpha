@@ -91,15 +91,17 @@ initInvoiceClientDropdown();
 document.addEventListener('pageLoaded', initInvoiceClientDropdown);
 
 function loadProjectsForClientInv(clientId) {
+    const projectSection = document.getElementById('projectSectionInv');
+    const projectSelect = document.getElementById('projectSelectInv');
     if (!clientId) {
-        document.getElementById('projectSectionInv').style.display = 'none';
+        if (projectSelect) projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
+        if (projectSection) projectSection.style.display = 'none';
         return;
     }
 
     fetch('/?page=projects-search&client_id=' + encodeURIComponent(clientId))
         .then(r => r.json())
         .then(projects => {
-            const projectSelect = document.getElementById('projectSelectInv');
             projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
 
             if (projects && projects.length > 0) {
@@ -109,18 +111,14 @@ function loadProjectsForClientInv(clientId) {
                     option.textContent = project.name + ' (' + project.status.replace('_', ' ') + ')';
                     projectSelect.appendChild(option);
                 });
-                document.getElementById('projectSectionInv').style.display = 'block';
+                projectSection.style.display = 'block';
             } else {
-                const option = document.createElement('option');
-                option.value = '';
-                option.textContent = 'No active projects';
-                option.disabled = true;
-                projectSelect.appendChild(option);
-                document.getElementById('projectSectionInv').style.display = 'block';
+                projectSelect.value = '';
+                projectSection.style.display = 'none';
             }
         })
         .catch(() => {
-            document.getElementById('projectSectionInv').style.display = 'none';
+            projectSection.style.display = 'none';
         });
 }
 
