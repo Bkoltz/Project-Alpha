@@ -112,7 +112,7 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
   .org-view__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .org-view__button { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: inherit; text-decoration: none; font-size: 13px; cursor: pointer; }
   .org-view__button--primary { background: var(--nav-accent); border-color: var(--nav-accent); color: #fff; }
-  .org-view__stats { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 12px; margin: 0 0 18px; }
+  .org-view__stats { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 12px; margin: 0 0 18px; }
   .org-view__stat { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; box-shadow: 0 6px 18px rgba(11,18,32,0.05); }
   .org-view__stat span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .org-view__stat strong { display: block; margin-top: 6px; font-size: 24px; line-height: 1; }
@@ -178,7 +178,6 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
     <div class="org-view__stat"><span>Clients</span><strong><?php echo count($clients); ?></strong></div>
     <div class="org-view__stat"><span>Departments</span><strong><?php echo count($departments); ?></strong></div>
     <div class="org-view__stat"><span>Tax Exempt</span><strong><?php echo !empty($org['tax_exempt_file']) ? 'Yes' : 'No'; ?></strong></div>
-    <div class="org-view__stat"><span>Available Adds</span><strong><?php echo count($availableClients); ?></strong></div>
   </div>
 
   <div class="org-view__layout">
@@ -248,6 +247,46 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
           <div class="org-empty">No tax exempt form uploaded.</div>
         <?php endif; ?>
       </div>
+
+      <div class="org-card">
+        <div class="org-card__head">
+          <h3 class="org-card__title">Clients (<?php echo count($clients); ?>)</h3>
+        </div>
+        <div style="position:relative;margin-bottom:12px">
+          <input type="text" id="clientSearchInput" placeholder="Search clients to add..." autocomplete="off" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:small">
+          <div id="clientSearchResults" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;max-height:220px;overflow-y:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1);z-index:50;margin-top:4px"></div>
+        </div>
+
+        <?php if (empty($clients)): ?>
+          <div class="org-empty">
+            No clients in this organization yet.
+          </div>
+        <?php else: ?>
+          <div style="display:grid;gap:8px">
+            <?php foreach ($clients as $client): ?>
+              <div style="display:grid;gap:4px;border:1px solid #eef2f7;border-radius:8px;padding:10px">
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:start">
+                  <a href="/?page=client/clients-edit&id=<?php echo (int)$client['id']; ?>" style="font-weight:700;text-decoration:none;color:inherit">
+                    <?php echo htmlspecialchars($client['name']); ?>
+                  </a>
+                  <form method="post" action="/?page=organization/organization-remove-client" style="margin:0" onsubmit="return confirm('Remove <?php echo e(substr(json_encode((string)$client['name'], JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS), 1, -1)); ?> from this organization?')">
+                    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+                    <input type="hidden" name="client_id" value="<?php echo (int)$client['id']; ?>">
+                    <input type="hidden" name="organization_id" value="<?php echo $id; ?>">
+                    <button type="submit" style="padding:4px 8px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#b91c1c;font-size:12px">Remove</button>
+                  </form>
+                </div>
+                <?php if (!empty($client['email']) || !empty($client['phone'])): ?>
+                  <div style="font-size:12px;color:var(--muted);line-height:1.5">
+                    <?php if (!empty($client['email'])): ?><div><?php echo htmlspecialchars($client['email']); ?></div><?php endif; ?>
+                    <?php if (!empty($client['phone'])): ?><div><?php echo htmlspecialchars($client['phone']); ?></div><?php endif; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
     </aside>
 
     <main class="org-view__main">
@@ -261,41 +300,14 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px">
       <div>
         <h3 style="margin:0 0 4px">Departments</h3>
-        <p style="margin:0;color:var(--muted);font-size:13px">Optional groups inside this organization, like Football, HighSchool, or Accounting.</p>
+        <p style="margin:0;color:var(--muted);font-size:13px">Optional groups inside this organization for teams, locations, or departments.</p>
       </div>
+      <button type="button" class="org-view__button org-view__button--primary" onclick="openDepartmentModal()">Add Department</button>
     </div>
-
-    <form method="post" action="/?page=organization/organization-departments" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end;margin-bottom:18px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
-      <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-      <input type="hidden" name="action" value="save_department">
-      <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
-      <label>
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Department Name</div>
-        <input name="name" required placeholder="Football" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-      </label>
-      <label>
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Name</div>
-        <input name="folder_name" placeholder="Football" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-      </label>
-      <label>
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Resolver Mode</div>
-        <select name="resolver_mode" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-          <option value="manual_only">Manual links only</option>
-          <option value="review">Review matches</option>
-          <option value="auto_attach">Auto attach exact matches</option>
-          <option value="excluded">Exclude from resolver</option>
-        </select>
-      </label>
-      <label style="grid-column:1/-1">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Aliases <span style="font-weight:400;color:var(--muted)">(one per line)</span></div>
-        <textarea name="folder_aliases" rows="2" placeholder="WHS Football&#10;Football Club" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"></textarea>
-      </label>
-      <button type="submit" class="btn btn-sm" style="width:max-content">Add Department</button>
-    </form>
 
     <?php if (empty($departments)): ?>
       <div class="org-empty">
-        No departments yet. That is fine for simple organizations.
+        No departments yet. Add one only when this organization needs separate groups or link rules.
       </div>
     <?php else: ?>
       <div style="display:grid;gap:14px">
@@ -416,58 +428,52 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
     <?php endif; ?>
   </div>
 
-  <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 6px 18px rgba(11,18,32,0.06)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h3 style="margin:0">Clients (<?php echo count($clients); ?>)</h3>
-      <div style="position:relative">
-        <input type="text" id="clientSearchInput" placeholder="Search clients to add..." autocomplete="off" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;font-size:small;min-width:250px">
-        <div id="clientSearchResults" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1);z-index:50;margin-top:4px"></div>
-      </div>
-    </div>
-
-    <?php if (empty($clients)): ?>
-      <div class="org-empty">
-        No clients in this organization yet. Use the search above to add clients.
-      </div>
-    <?php else: ?>
-      <div style="overflow:auto">
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="text-align:left;border-bottom:1px solid #eee">
-              <th style="padding:10px">Name</th>
-              <th style="padding:10px">Email</th>
-              <th style="padding:10px">Phone</th>
-              <th style="padding:10px">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($clients as $client): ?>
-              <tr style="border-top:1px solid #f3f4f6">
-                <td style="padding:10px">
-                  <a href="/?page=client/clients-edit&id=<?php echo (int)$client['id']; ?>" style="text-decoration:none;color:inherit">
-                    <?php echo htmlspecialchars($client['name']); ?>
-                  </a>
-                </td>
-                <td style="padding:10px"><?php echo htmlspecialchars($client['email'] ?? ''); ?></td>
-                <td style="padding:10px"><?php echo htmlspecialchars($client['phone'] ?? ''); ?></td>
-                <td style="padding:10px">
-                  <form method="post" action="/?page=organization/organization-remove-client" style="display:inline" onsubmit="return confirm('Remove <?php echo e(substr(json_encode((string)$client['name'], JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS), 1, -1)); ?> from this organization?')">
-                    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-                    <input type="hidden" name="client_id" value="<?php echo (int)$client['id']; ?>">
-                    <input type="hidden" name="organization_id" value="<?php echo $id; ?>">
-                    <button type="submit" style="padding:6px 10px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#b91c1c;font-size:small">Remove</button>
-                  </form>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    <?php endif; ?>
-  </div>
     </main>
   </div>
 </section>
+
+<div id="departmentModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:12px;padding:22px;max-width:640px;width:min(640px,100%);box-shadow:0 24px 60px rgba(15,23,42,0.22)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px">
+      <h3 style="margin:0">Add Department</h3>
+      <button type="button" onclick="closeDepartmentModal()" aria-label="Close add department" style="border:0;background:#fff;font-size:24px;line-height:1;cursor:pointer;color:#6b7280">&times;</button>
+    </div>
+    <form method="post" action="/?page=organization/organization-departments" style="display:grid;gap:12px">
+      <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+      <input type="hidden" name="action" value="save_department">
+      <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
+      <label>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Department Name</div>
+        <input name="name" required placeholder="Department name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+      </label>
+      <label>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Name</div>
+        <input name="folder_name" placeholder="Folder name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+      </label>
+      <label>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Resolver Mode</div>
+        <select name="resolver_mode" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+          <option value="manual_only">Manual links only</option>
+          <option value="review">Review matches</option>
+          <option value="auto_attach">Auto attach exact matches</option>
+          <option value="excluded">Exclude from resolver</option>
+        </select>
+      </label>
+      <label>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Aliases <span style="font-weight:400;color:var(--muted)">(one per line)</span></div>
+        <textarea name="folder_aliases" rows="3" placeholder="Alternate folder name&#10;Short folder name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px"></textarea>
+      </label>
+      <label>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Notes</div>
+        <textarea name="notes" rows="2" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px"></textarea>
+      </label>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button type="submit" class="org-view__button org-view__button--primary" style="flex:1">Save Department</button>
+        <button type="button" onclick="closeDepartmentModal()" class="org-view__button" style="flex:1">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <div id="organizationViewData"
      data-org-id="<?php echo $id; ?>"

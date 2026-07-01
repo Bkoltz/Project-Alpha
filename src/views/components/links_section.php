@@ -42,8 +42,10 @@ if ($entityType === 'organization') {
 try {
     $sourceSelect = invoice_content_links_table_has_column($pdo, 'entity_links', 'link_source') ? 'link_source' : 'link_type AS link_source';
     $includeSelect = invoice_content_links_table_has_column($pdo, 'entity_links', 'include_on_invoices') ? 'include_on_invoices' : '0 AS include_on_invoices';
+    $visibilitySelect = invoice_content_links_table_has_column($pdo, 'entity_links', 'visibility_scope') ? 'visibility_scope' : '"entity_only" AS visibility_scope';
+    $departmentSelect = invoice_content_links_table_has_column($pdo, 'entity_links', 'selected_department_ids') ? 'selected_department_ids' : 'NULL AS selected_department_ids';
     $stmt = $pdo->prepare("
-        SELECT id, title, link_type, {$sourceSelect}, {$includeSelect}, url, expiration_date, is_expired, ignore_auto_generation, last_verified
+        SELECT id, title, link_type, {$sourceSelect}, {$includeSelect}, {$visibilitySelect}, {$departmentSelect}, url, expiration_date, is_expired, ignore_auto_generation, last_verified
         FROM entity_links
         WHERE entity_type = ? AND entity_id = ?
         ORDER BY include_on_invoices DESC, link_type ASC, title ASC
@@ -65,6 +67,10 @@ foreach ($links as $link) {
 $visibleLinks = array_values(array_filter($links, static function (array $link): bool {
     return (string)($link['link_type'] ?? '') !== 'resolver_blacklist';
 }));
+$linkDepartmentNames = [];
+foreach ($linkDepartmentOptions as $department) {
+    $linkDepartmentNames[(int)$department['id']] = (string)$department['name'];
+}
 ?>
 
 <div style="margin-top:32px;padding-top:24px;border-top:2px solid #eee">
@@ -132,6 +138,18 @@ $visibleLinks = array_values(array_filter($links, static function (array $link):
                 $typeLabel = ucwords(str_replace(['manual_', 'auto_', '_'], ['', '', ' '], (string)$link['link_type']));
                 $displayTitle = trim((string)($link['title'] ?? '')) !== '' ? (string)$link['title'] : ($typeLabel ?: 'Content link');
                 $isResolverLink = (string)($link['link_source'] ?? '') === 'resolver' || str_starts_with((string)$link['link_type'], 'auto_');
+                $visibilityScope = (string)($link['visibility_scope'] ?? 'entity_only');
+                $visibilityText = $entityType === 'organization' ? 'Overall organization only' : ucfirst((string)$entityType) . ' only';
+                if ($entityType === 'organization' && $visibilityScope === 'all_departments') {
+                    $visibilityText = 'Overall organization and all departments';
+                } elseif ($entityType === 'organization' && $visibilityScope === 'selected_departments') {
+                    $selectedIds = json_decode((string)($link['selected_department_ids'] ?? '[]'), true);
+                    $selectedIds = is_array($selectedIds) ? array_map('intval', $selectedIds) : [];
+                    $selectedNames = array_values(array_filter(array_map(static fn($deptId) => $linkDepartmentNames[$deptId] ?? '', $selectedIds)));
+                    $visibilityText = $selectedNames ? 'Department only: ' . implode(', ', $selectedNames) : 'Selected departments only';
+                } elseif ($entityType === 'organization' && $visibilityScope === 'org_contacts') {
+                    $visibilityText = 'Organization contacts without a department';
+                }
                 if (!empty($link['is_expired'])) {
                     $statusStyle = 'background:#fee2e2;color:#991b1b;border-color:#fca5a5';
                     $statusText = 'Expired';
@@ -149,6 +167,9 @@ $visibleLinks = array_values(array_filter($links, static function (array $link):
                             <div style="font-weight:600;font-size:14px;margin-bottom:4px"><?php echo e($displayTitle); ?></div>
                             <div style="font-size:12px;color:var(--muted);margin-bottom:4px">
                                 <?php echo e($typeLabel); ?><?php echo !empty($link['include_on_invoices']) ? ' · Included on invoices' : ''; ?>
+                            </div>
+                            <div style="font-size:12px;color:#4b5563;margin-bottom:4px">
+                                Visibility: <?php echo e($visibilityText); ?>
                             </div>
                             <a href="<?php echo e((string)$link['url']); ?>" target="_blank" rel="noopener"
                                style="font-size:13px;color:#0369a1;text-decoration:none;word-break:break-all">
@@ -231,32 +252,31 @@ $visibleLinks = array_values(array_filter($links, static function (array $link):
                     <span style="display:block;font-size:12px;color:var(--muted)">Shown in "View your content here" when invoice link rules allow this entity's links.</span>
                 </span>
             </label>
+            <?php if ($entityType === 'organization' && !empty($linkDepartmentOptions)): ?>
             <div id="manualLinkVisibilityFields" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#f9fafb">
                 <label>
-                    <div style="margin-bottom:4px;font-weight:600">Organization Link Visibility</div>
+                    <div style="margin-bottom:4px;font-weight:600">Where should this link show?</div>
                     <select id="manualLinkVisibilityScope" name="visibility_scope" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-                        <option value="entity_only">Organization only</option>
-                        <option value="all_departments">All departments</option>
-                        <option value="selected_departments">Selected departments</option>
-                        <option value="org_contacts">Organization contacts without department</option>
+                        <option value="entity_only">Overall organization only</option>
+                        <option value="all_departments">Overall organization and all departments</option>
+                        <option value="selected_departments">Selected departments only</option>
+                        <option value="org_contacts">Organization contacts without a department</option>
                     </select>
+                    <div style="font-size:12px;color:var(--muted);margin-top:6px">Use department-only when the link should not appear for the overall organization.</div>
                 </label>
                 <div id="manualLinkDepartmentPicker" style="display:none;margin-top:10px">
-                    <div style="font-size:13px;font-weight:600;margin-bottom:6px">Allowed Departments</div>
-                    <?php if (empty($linkDepartmentOptions)): ?>
-                        <div style="font-size:12px;color:var(--muted)">No departments exist yet.</div>
-                    <?php else: ?>
-                        <div style="display:grid;gap:6px;max-height:140px;overflow:auto">
-                            <?php foreach ($linkDepartmentOptions as $department): ?>
-                                <label style="display:flex;gap:8px;align-items:center;font-size:13px">
-                                    <input type="checkbox" name="selected_department_ids[]" value="<?php echo (int)$department['id']; ?>">
-                                    <span><?php echo e((string)$department['name']); ?></span>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
+                    <div style="font-size:13px;font-weight:600;margin-bottom:6px">Departments</div>
+                    <div style="display:grid;gap:6px;max-height:140px;overflow:auto">
+                        <?php foreach ($linkDepartmentOptions as $department): ?>
+                            <label style="display:flex;gap:8px;align-items:center;font-size:13px">
+                                <input type="checkbox" name="selected_department_ids[]" value="<?php echo (int)$department['id']; ?>">
+                                <span><?php echo e((string)$department['name']); ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             </div>
+            <?php endif; ?>
             <div style="display:flex;gap:12px;margin-top:8px">
                 <button type="submit" style="flex:1;padding:10px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">
                     Add Link
