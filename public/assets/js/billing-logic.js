@@ -24,13 +24,26 @@ function sync() {
     var stripeConfig = document.getElementById('stripeConfig');
     if (stripeConfig) {
         var hasStripe = items.some(function (i) {
-            var name = i.name.toLowerCase();
-            return name === 'stripe' || name === 'card' || name === 'credit card';
+            return methodKey(i.name) === 'stripe';
         });
         var stripeAlreadyConfigured = stripeConfig.getAttribute('data-configured') === '1';
         hasStripe = hasStripe || stripeAlreadyConfigured;
         stripeConfig.style.display = hasStripe ? 'block' : 'none';
     }
+}
+
+function methodKey(name) {
+    return String(name || '').trim().toLowerCase().replace(/[\s-]+/g, '_').replace(/_+/g, '_');
+}
+
+function removeMethodsByKeys(keys) {
+    Array.from(pmList.querySelectorAll('.pm-item')).forEach(function (el) {
+        var input = el.querySelector('input[type="hidden"]');
+        var value = input ? input.value : '';
+        if (keys.indexOf(methodKey(value)) !== -1) {
+            el.remove();
+        }
+    });
 }
 
 function removeHandler(e) {
@@ -44,9 +57,17 @@ function removeHandler(e) {
 
 function addMethod(name) {
     if (!name) return;
+    var newKey = methodKey(name);
+    if (newKey === 'stripe') {
+        removeMethodsByKeys(['card', 'credit_card']);
+    } else if ((newKey === 'card' || newKey === 'credit_card') && Array.from(pmList.querySelectorAll('input[type="hidden"]')).some(function (h) {
+        return methodKey(h.value) === 'stripe';
+    })) {
+        return;
+    }
     // prevent duplicates (case-insensitive)
     var existing = Array.from(pmList.querySelectorAll('input[type="hidden"]')).some(function (h) {
-        return h.value.toLowerCase() === name.toLowerCase();
+        return methodKey(h.value) === newKey;
     });
     if (existing) return;
 

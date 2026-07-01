@@ -14,6 +14,18 @@ function initializeOrgCreate() {
     const createOrgNameInput = document.getElementById('createOrgNameInput');
     const clientForm = document.querySelector('form[action="/?page=clients-create"]');
     const orgValidationBanner = document.getElementById('orgValidationBanner');
+    const clientNameInput = document.getElementById('clientNameInput');
+    const duplicateBanner = document.getElementById('clientDuplicateBanner');
+    const duplicateMessage = duplicateBanner ? duplicateBanner.querySelector('[data-duplicate-client-message]') : null;
+    const orgAddressNotice = document.getElementById('orgAddressAutofillNotice');
+    const addressFields = {
+        address_line1: document.getElementById('clientAddressLine1'),
+        address_line2: document.getElementById('clientAddressLine2'),
+        city: document.getElementById('clientCity'),
+        state: document.getElementById('clientState'),
+        postal_code: document.getElementById('clientPostal'),
+        country: document.getElementById('clientCountry')
+    };
 
     // If elements don't exist yet, retry (with limit)
     if (!orgInput || !orgSuggest) {
@@ -34,6 +46,64 @@ function initializeOrgCreate() {
     function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
     function clearSuggestions() { orgSuggest.style.display = 'none'; orgSuggest.innerHTML = ''; }
+
+    function normalizeName(value) {
+        return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    function addressIsEmpty() {
+        return Object.values(addressFields).every((field) => !field || !field.value.trim());
+    }
+
+    function orgHasAddress(org) {
+        return ['address_line1', 'address_line2', 'city', 'state', 'postal_code', 'country']
+            .some((key) => org && String(org[key] || '').trim() !== '');
+    }
+
+    function fillAddressFromOrg(org) {
+        if (!orgHasAddress(org) || !addressIsEmpty()) return;
+        Object.keys(addressFields).forEach((key) => {
+            if (addressFields[key] && org[key]) {
+                addressFields[key].value = org[key];
+            }
+        });
+        if (orgAddressNotice) orgAddressNotice.style.display = 'block';
+    }
+
+    function hideDuplicateWarning() {
+        if (duplicateBanner) duplicateBanner.style.display = 'none';
+        if (duplicateMessage) duplicateMessage.textContent = '';
+    }
+
+    async function checkDuplicateClientName(name) {
+        const normalized = normalizeName(name);
+        if (normalized.length < 2) {
+            hideDuplicateWarning();
+            return;
+        }
+        try {
+            const res = await fetch('/?page=clients-search&term=' + encodeURIComponent(name));
+            if (!res.ok) {
+                hideDuplicateWarning();
+                return;
+            }
+            const clients = await res.json();
+            const match = Array.isArray(clients)
+                ? clients.find((client) => normalizeName(client.name) === normalized)
+                : null;
+            if (!match) {
+                hideDuplicateWarning();
+                return;
+            }
+            if (duplicateMessage) {
+                const orgText = match.org_name ? ` in ${match.org_name}` : '';
+                duplicateMessage.textContent = `${match.name}${orgText} already exists. You can still create this client if it is intentionally separate.`;
+            }
+            if (duplicateBanner) duplicateBanner.style.display = 'block';
+        } catch (e) {
+            hideDuplicateWarning();
+        }
+    }
 
     async function fetchOrgs(term) {
         if (!term) { clearSuggestions(); orgValidationBanner.style.display = 'none'; return; }
@@ -63,6 +133,7 @@ function initializeOrgCreate() {
             div.addEventListener('click', () => {
                 orgInput.value = it.name;
                 orgId.value = it.id;
+                fillAddressFromOrg(it);
                 clearSuggestions();
                 orgValidationBanner.style.display = 'none';
             });
@@ -77,6 +148,11 @@ function initializeOrgCreate() {
     }, 250);
 
     orgInput.addEventListener('input', debouncedFetch);
+    if (clientNameInput) {
+        clientNameInput.addEventListener('input', debounce((ev) => {
+            checkDuplicateClientName(ev.target.value);
+        }, 300));
+    }
 
     document.addEventListener('click', function (ev) {
         if (!orgSuggest.contains(ev.target) && ev.target !== orgInput) clearSuggestions();

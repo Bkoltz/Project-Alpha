@@ -144,6 +144,16 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                 </span>
             </label>
 
+            <label>
+                <div style="font-weight:600;margin-bottom:4px">Scan Mode<?php echo $helpIcon('Quick scan reuses existing resolver links for speed. Full scan re-checks providers so moved or recreated folders can update stored links.'); ?></div>
+                <?php $scanMode = (string)($appConfig['link_resolver_scan_mode'] ?? 'quick'); ?>
+                <select name="link_resolver_scan_mode" style="max-width:360px;width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
+                    <option value="quick" <?php echo $scanMode === 'quick' ? 'selected' : ''; ?>>Quick scan - skip existing links</option>
+                    <option value="full" <?php echo $scanMode === 'full' ? 'selected' : ''; ?>>Full scan - re-check provider folders</option>
+                </select>
+                <div class="pa-setting-note">Use Full when folders may have moved or shared links need to be refreshed.</div>
+            </label>
+
             <label style="display:flex;align-items:flex-start;gap:10px">
                 <input type="checkbox" name="link_resolver_invoice_auto_attach_enabled" value="1" <?php echo !empty($appConfig['link_resolver_invoice_auto_attach_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
                 <span>

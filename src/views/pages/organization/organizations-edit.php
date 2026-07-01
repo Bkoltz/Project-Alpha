@@ -25,6 +25,35 @@ if (!$org) {
       <div>Organization Name</div>
       <input required type="text" name="name" value="<?php echo htmlspecialchars($org['name']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
+    <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+      <legend style="padding:0 6px;color:var(--muted)">Organization Address</legend>
+      <label>
+        <div>Address line 1</div>
+        <input name="address_line1" autocomplete="address-line1" value="<?php echo htmlspecialchars((string)($org['address_line1'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div>Address line 2</div>
+        <input name="address_line2" autocomplete="address-line2" value="<?php echo htmlspecialchars((string)($org['address_line2'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
+        <label>
+          <div>City</div>
+          <input name="city" autocomplete="address-level2" value="<?php echo htmlspecialchars((string)($org['city'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>State</div>
+          <input name="state" autocomplete="address-level1" value="<?php echo htmlspecialchars((string)($org['state'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+        <label>
+          <div>Postal</div>
+          <input name="postal_code" autocomplete="postal-code" value="<?php echo htmlspecialchars((string)($org['postal_code'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+      </div>
+      <label>
+        <div>Country</div>
+        <input name="country" autocomplete="country-name" value="<?php echo htmlspecialchars((string)($org['country'] ?? 'USA')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+    </fieldset>
     <label>
       <div>Notes</div>
       <textarea name="notes" rows="4" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><?php echo htmlspecialchars($org['notes'] ?? ''); ?></textarea>

@@ -12,7 +12,7 @@ if ($selectedProjectId > 0) {
     FROM projects p
     LEFT JOIN clients c ON c.id = p.client_id
     LEFT JOIN organizations o ON o.id = p.organization_id
-    WHERE p.id = ?
+    WHERE p.id = ? AND p.status = "active"
   ');
   $projectStmt->execute([$selectedProjectId]);
   $selectedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -45,33 +45,7 @@ if ($selectedProjectId > 0) {
         <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
 
-      <!-- Project selection -->
       <label>
-        <div id="projectSection" style="<?php echo $selectedProject ? 'display:block' : 'display:none'; ?>;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
-          <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
-          <div style="display:grid;gap:12px">
-            <label>
-              <div>Add to Existing Project</div>
-              <select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-                <option value="">-- Select Project --</option>
-                <?php if ($selectedProject): ?>
-                  <option value="<?php echo (int)$selectedProject['id']; ?>" selected>
-                    <?php echo htmlspecialchars((string)$selectedProject['name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>
-                    <?php if (!empty($selectedProject['organization_name'])): ?>
-                      (<?php echo htmlspecialchars((string)$selectedProject['organization_name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>)
-                    <?php endif; ?>
-                  </option>
-                <?php endif; ?>
-              </select>
-            </label>
-            <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
-            <div>
-              <button type="button" id="createProjectBtn" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Discount inputs -->
         <div>Discount Type</div>
         <select id="discountType" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="none">None</option>
@@ -85,6 +59,30 @@ if ($selectedProjectId > 0) {
       </label>
 
 
+    </div>
+
+    <div id="projectSection" style="<?php echo $selectedProject ? 'display:block' : 'display:none'; ?>;border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb;margin:12px 0">
+      <h3 style="margin:0 0 12px 0;color:#374151">Project Association</h3>
+      <div style="display:grid;gap:12px">
+        <label>
+          <div>Add to Existing Project</div>
+          <select id="projectSelect" name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <option value="">-- Select Project --</option>
+            <?php if ($selectedProject): ?>
+              <option value="<?php echo (int)$selectedProject['id']; ?>" selected>
+                <?php echo htmlspecialchars((string)$selectedProject['name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>
+                <?php if (!empty($selectedProject['organization_name'])): ?>
+                  (<?php echo htmlspecialchars((string)$selectedProject['organization_name'], ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>)
+                <?php endif; ?>
+              </option>
+            <?php endif; ?>
+          </select>
+        </label>
+        <div style="text-align:center;color:#6b7280;font-size:13px">or</div>
+        <div>
+          <button type="button" id="createProjectBtn" style="padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;width:100%">Create New Project</button>
+        </div>
+      </div>
     </div>
 
     <div id="customFieldsContainer">

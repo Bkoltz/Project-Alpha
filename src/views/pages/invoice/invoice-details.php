@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/invoice_content_links.php';
+require_once __DIR__ . '/../../../utils/payment_methods.php';
 require_once __DIR__ . '/../../../services/StripeService.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
@@ -108,8 +109,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       <a href="/?page=payments/payments-create&invoice_id=<?php echo (int)$id; ?>&amount=<?php echo urlencode(number_format($outstanding, 2, '.', '')); ?>" 
          class="btn btn-sm btn-success">Mark as Paid</a>
     <?php endif; ?>
-    <?php if ($outstanding > 0 && StripeService::isConfigured($appConfig) && !empty($inv['finalized_at']) && $invoiceCollectionMode === 'direct' && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
-      <form method="post" action="/?page=stripe-charge" target="_blank" rel="noopener" style="display:inline" onsubmit="return confirm('Open Stripe Checkout so you can enter this client payment on Stripe? PA will not store card details.');">
+    <?php if ($outstanding > 0 && pa_payment_methods_has($appConfig, 'stripe') && StripeService::isConfigured($appConfig) && !empty($inv['finalized_at']) && $invoiceCollectionMode === 'direct' && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
+      <form method="post" action="/?page=stripe-charge" style="display:inline" onsubmit="return confirm('Open Stripe Checkout so you can enter this client payment on Stripe? PA will not store card details.');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="invoice_id" value="<?php echo (int)$id; ?>">
         <input type="hidden" name="return_url" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">

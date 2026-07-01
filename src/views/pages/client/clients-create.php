@@ -10,11 +10,14 @@ require_once __DIR__ . '/../../../config/db.php';
   <div id="orgValidationBanner" style="display:none;padding:12px 16px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;margin-bottom:16px;color:#856404">
     <strong>⚠️ Organization doesn't exist yet.</strong> You can create it using the button below.
   </div>
+  <div id="clientDuplicateBanner" style="display:none;padding:12px 16px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;margin-bottom:16px;color:#9a3412">
+    <strong>Possible duplicate client.</strong> <span data-duplicate-client-message></span>
+  </div>
   <form method="post" action="/?page=clients-create" style="display:grid;gap:12px;max-width:520px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <label>
       <div>Name</div>
-      <input required type="text" name="name" placeholder="First Last" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      <input required type="text" id="clientNameInput" name="name" placeholder="First Last" autocomplete="name" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
     </label>
     <label>
       <div>Email</div>
@@ -37,23 +40,29 @@ require_once __DIR__ . '/../../../config/db.php';
 
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
       <legend style="padding:0 6px;color:var(--muted)">Address</legend>
+      <div id="orgAddressAutofillNotice" style="display:none;margin-bottom:8px;color:#166534;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px;font-size:13px">
+        Address filled from the selected organization.
+      </div>
       <label>
-        <div>Address line 1</div><input name="address_line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div>Address line 1</div><input id="clientAddressLine1" name="address_line1" autocomplete="address-line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
-        <div>Address line 2</div><input name="address_line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div>Address line 2</div><input id="clientAddressLine2" name="address_line2" autocomplete="address-line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
         <label>
-          <div>City</div><input name="city" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <div>City</div><input id="clientCity" name="city" autocomplete="address-level2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
-          <div>State</div><input name="state" value="<?php echo htmlspecialchars($appConfig['primary_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <div>State</div><input id="clientState" name="state" autocomplete="address-level1" value="<?php echo htmlspecialchars($appConfig['primary_state'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
-          <div>Postal (zip)</div><input name="postal" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <div>Postal (zip)</div><input id="clientPostal" name="postal" autocomplete="postal-code" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
       </div>
+      <label>
+        <div>Country</div><input id="clientCountry" name="country" autocomplete="country-name" value="USA" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
     </fieldset>
     <label>
       <div>Notes</div>
