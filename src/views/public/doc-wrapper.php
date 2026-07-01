@@ -43,6 +43,7 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
     require_once __DIR__ . '/../../services/StripeService.php';
     require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
     require_once __DIR__ . '/../../utils/document_sender.php';
+    require_once __DIR__ . '/../../utils/payment_methods.php';
     $stripeConfigured = StripeService::isConfigured($appConfig);
     try {
         $invSt = $type === 'project_invoice'
@@ -300,13 +301,26 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
     // Show payment banner at TOP for invoices if Stripe is configured and payment is due
     if (in_array($type, ['invoice', 'project_invoice'], true) && $invoiceData):
       $amountDue = $calculatedAmountDue;
-      if ($showPayButton):
+      $configuredPaymentMethods = pa_payment_methods_from_config($appConfig);
+      $stripePaymentMethod = null;
+      $offlinePaymentMethods = [];
+      foreach ($configuredPaymentMethods as $method) {
+        $methodKey = (string)$method['key'];
+        if ($methodKey === 'stripe') {
+          if ($showPayButton) {
+            $stripePaymentMethod = $method;
+          }
+          continue;
+        }
+        $offlinePaymentMethods[] = $method;
+      }
+      if ($amountDue > 0 && ($stripePaymentMethod !== null || !empty($offlinePaymentMethods))):
   ?>
   <div class="payment-section">
     <div class="payment-header">
       <div class="payment-title">Payment Options</div>
       <div class="payment-amount-due">
-        <?php if ($surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
+        <?php if ($stripePaymentMethod !== null && $surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
           <span class="original-amount">$<?php echo number_format($calculatedAmountDue, 2); ?></span>
           <span class="total-due">$<?php echo number_format($surchargeInfo['new_total'], 2); ?></span>
           <span class="due-label">total due</span>
@@ -317,7 +331,7 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
       </div>
     </div>
 
-    <?php if (StripeFeeCalculator::isSurchargeEnabled($appConfig) && $surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
+    <?php if ($stripePaymentMethod !== null && StripeFeeCalculator::isSurchargeEnabled($appConfig) && $surchargeInfo && $surchargeInfo['client_pays'] > 0): ?>
     <div class="surcharge-notice">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"></circle>
@@ -326,82 +340,70 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
       </svg>
       <div class="surcharge-text">
         <div style="font-weight:600;margin-bottom:4px">
-          <strong>Credit Card Processing Fee:</strong>
+          <strong>Online Card Processing Fee:</strong>
           A surcharge of $<?php echo number_format($surchargeInfo['client_pays'], 2); ?> will be added to your payment.
           <?php echo htmlspecialchars($surchargeInfo['display_text']); ?>
         </div>
         <div style="margin-top:4px;font-size:12px;">
-          <small>This fee does not apply to debit cards, bank transfers, or checks.</small>
+          <small>This fee applies only when paying online by card through Stripe. Other listed payment methods use the invoice amount.</small>
         </div>
       </div>
     </div>
     <?php endif; ?>
 
-    <div class="payment-options">
-      <!-- Credit Card (Primary) -->
-      <a href="/?page=stripe-checkout&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" class="payment-option primary">
-        <div class="payment-option-icon">💳</div>
-        <div class="payment-option-details">
-          <div class="payment-option-name">Pay by Credit Card</div>
-          <div class="payment-option-desc">Secure online payment via Stripe</div>
-        </div>
-        <div class="payment-option-arrow">→</div>
-      </a>
-
-      <?php
-      // Show check option if enabled
-      $paymentMethods = (array)($appConfig['payment_methods'] ?? ['card', 'cash', 'bank_transfer']);
-      $hasCheck = false;
-      $hasCash = false;
-      
-      foreach ($paymentMethods as $pm) {
-        $pmLower = strtolower(trim($pm));
-        if ($pmLower === 'check') $hasCheck = true;
-        if ($pmLower === 'cash') $hasCash = true;
-      }
-      
-      if ($hasCheck):
-        $payeeSender = function_exists('document_sender_for_creator')
-          ? document_sender_for_creator($pdo, $appConfig, !empty($invoiceData['created_by']) ? (int)$invoiceData['created_by'] : null)
-          : ['name' => (($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha'))];
-        $payeeName = $payeeSender['name'] ?? (($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha'));
-        $payeeAddress = function_exists('document_sender_lines') ? document_sender_lines($payeeSender) : [];
-        if (!empty($payeeAddress) && strcasecmp((string)$payeeAddress[0], (string)$payeeName) === 0) {
-          array_shift($payeeAddress);
-        }
-      ?>
-      <div class="payment-option">
-        <div class="payment-option-icon">📄</div>
-        <div class="payment-option-details">
-          <div class="payment-option-name">Pay by Check</div>
-          <div class="payment-option-desc">
-            Make check payable to: <strong><?php echo htmlspecialchars($payeeName); ?></strong>
-            <?php if (!empty($payeeAddress)): ?>
-            <br><span style="color:#6b7280"><?php echo htmlspecialchars(implode(', ', $payeeAddress)); ?></span>
-            <?php endif; ?>
+    <div class="payment-columns">
+      <?php if (!empty($offlinePaymentMethods)): ?>
+      <div class="payment-column">
+        <div class="payment-column-title">Other ways to pay</div>
+        <div class="payment-column-total">$<?php echo number_format($amountDue, 2); ?></div>
+        <div class="payment-column-note">Use the invoice amount shown here.</div>
+        <?php foreach ($offlinePaymentMethods as $method): ?>
+          <?php
+            $methodKey = (string)$method['key'];
+            $methodLabel = (string)$method['label'];
+            $methodDescription = match ($methodKey) {
+              'cash' => 'Contact us to arrange an in-person payment.',
+              'check', 'cheque' => 'Make checks payable to the business listed on this invoice.',
+              'bank', 'bank_transfer', 'ach' => 'Contact us for bank transfer instructions.',
+              'card', 'credit_card' => 'Contact us for card payment instructions.',
+              default => 'Contact us to use this payment method.',
+            };
+          ?>
+          <div class="payment-mini-option">
+            <div class="payment-option-name"><?php echo htmlspecialchars($methodLabel); ?></div>
+            <div class="payment-option-desc"><?php echo htmlspecialchars($methodDescription); ?></div>
           </div>
-        </div>
+        <?php endforeach; ?>
       </div>
       <?php endif; ?>
 
-      <?php if ($hasCash): ?>
-      <div class="payment-option">
-        <div class="payment-option-icon">💵</div>
-        <div class="payment-option-details">
-          <div class="payment-option-name">Pay with Cash</div>
-          <div class="payment-option-desc">Contact us to arrange an in-person payment</div>
+      <?php if ($stripePaymentMethod !== null): ?>
+      <div class="payment-column payment-column-card">
+        <div class="payment-column-title">Pay online by card</div>
+        <div class="payment-column-total">
+          $<?php echo number_format(($surchargeInfo && $surchargeInfo['client_pays'] > 0) ? (float)$surchargeInfo['new_total'] : $amountDue, 2); ?>
         </div>
+        <div class="payment-column-note">Secure checkout through Stripe.</div>
+        <a href="/?page=stripe-checkout&token=<?php echo htmlspecialchars(rawurlencode($token)); ?>" class="payment-option primary payment-option-cta">
+          <div class="payment-option-details">
+            <div class="payment-option-name">Pay by Card</div>
+            <div class="payment-option-desc">Credit and debit cards are processed online.</div>
+          </div>
+          <div class="payment-option-arrow">&rarr;</div>
+        </a>
       </div>
       <?php endif; ?>
     </div>
 
+    <?php if ($stripePaymentMethod !== null): ?>
     <div class="payment-footer">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
         <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
       </svg>
-      All credit card payments are secure and encrypted
+      Online card payments are secure and encrypted
     </div>
+    <?php endif; ?>
   </div>
 
   <style>
@@ -462,6 +464,48 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
     }
     .payment-options {
       padding: 16px;
+    }
+    .payment-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      padding: 16px;
+    }
+    .payment-column {
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+      background: #ffffff;
+    }
+    .payment-column-card {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+    .payment-column-title {
+      color: #374151;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .payment-column-total {
+      color: #111827;
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+    .payment-column-note {
+      color: #6b7280;
+      font-size: 13px;
+      margin: 6px 0 14px;
+    }
+    .payment-mini-option {
+      border-top: 1px solid #e5e7eb;
+      padding: 11px 0 0;
+      margin-top: 11px;
+    }
+    .payment-option-cta {
+      margin-bottom: 0;
     }
     .payment-option {
       display: flex;
@@ -534,10 +578,32 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
       justify-content: center;
       gap: 6px;
     }
+    @media (max-width: 700px) {
+      .payment-columns {
+        grid-template-columns: 1fr;
+      }
+      .total-due {
+        font-size: 30px;
+      }
+    }
   </style>
 
-  <?php endif; // showPayButton ?>
+  <?php endif; // amountDue/paymentMethods ?>
   <?php endif; // type === invoice ?>
+
+  <?php
+    $reviewLink = '';
+    if (in_array($type, ['invoice', 'project_invoice'], true)) {
+      $reviewLink = trim((string)($appConfig['review_link'] ?? ''));
+    }
+    if ($reviewLink !== '' && filter_var($reviewLink, FILTER_VALIDATE_URL)):
+  ?>
+  <div style="margin-bottom:24px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;text-align:center">
+    <div style="font-weight:700;color:#111827;margin-bottom:6px">Happy with the work?</div>
+    <div style="color:#6b7280;font-size:14px;margin-bottom:12px">A quick review helps future clients know what to expect.</div>
+    <a href="<?php echo htmlspecialchars($reviewLink); ?>" target="_blank" rel="noopener" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:8px;padding:10px 16px;font-weight:700">Leave a Review</a>
+  </div>
+  <?php endif; ?>
 
   <!-- Paper-like document container -->
   <div class="paper-document">

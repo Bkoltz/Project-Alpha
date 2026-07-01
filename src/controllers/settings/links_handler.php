@@ -58,6 +58,11 @@ try {
         'project_specific_links_enabled' => isset($_POST['project_specific_links_enabled']) ? 1 : 0,
         'invoice_content_links_enabled' => isset($_POST['invoice_content_links_enabled']) ? 1 : 0,
     ];
+    $scanMode = (string)($_POST['link_resolver_scan_mode'] ?? 'quick');
+    if (!in_array($scanMode, ['quick', 'full'], true)) {
+        $scanMode = 'quick';
+    }
+    $globalSettings['link_resolver_scan_mode'] = $scanMode;
     $missingLinksBehavior = (string)($_POST['invoice_missing_content_links_behavior'] ?? 'warn');
     if (!in_array($missingLinksBehavior, ['send', 'warn', 'block'], true)) {
         $missingLinksBehavior = 'warn';

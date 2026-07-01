@@ -1733,6 +1733,7 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('primary_state', ''),
     ('cron_enabled', '1'),
     ('link_resolver_enabled', '0'),
+    ('link_resolver_scan_mode', 'quick'),
     ('link_resolver_daily_scan_enabled', '0'),
     ('link_resolver_invoice_auto_attach_enabled', '0'),
     ('project_specific_links_enabled', '0'),
