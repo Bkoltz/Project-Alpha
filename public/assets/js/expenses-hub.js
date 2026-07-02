@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize from URL
     const params = new URLSearchParams(window.location.search);
-    const active = params.get('tab') || 'expenses';
+    const active = params.get('tab') || 'assets';
     const tabEl = document.querySelector('.expenses-hub__tab[data-tab="' + active + '"]');
     if (tabEl) switchTab(active);
 });

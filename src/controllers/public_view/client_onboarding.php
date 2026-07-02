@@ -45,11 +45,21 @@ if ($invitationId > 0) {
       <p>This invitation is invalid, expired, or already used. Contact the business that sent it for a new link.</p>
     <?php elseif (($invite['status'] ?? '') === 'pending'): ?>
       <h1 style="margin-top:0">Verify your email</h1>
-      <p>Send a verification code to <?php echo htmlspecialchars(client_onboarding_mask_email((string)$invite['invited_email'])); ?>.</p>
+      <?php $inviteEmail = trim((string)($invite['invited_email'] ?? '')); ?>
+      <p>
+        <?php if ($inviteEmail !== ''): ?>
+          Send a verification code to <?php echo htmlspecialchars(client_onboarding_mask_email($inviteEmail)); ?>.
+        <?php else: ?>
+          Enter your email address so we can send a verification code for this onboarding link.
+        <?php endif; ?>
+      </p>
       <?php if ($error): ?><div style="padding:10px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;margin-bottom:12px"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
-      <form method="post" action="/?page=client-onboarding-send-code" style="margin-bottom:18px">
+      <form method="post" action="/?page=client-onboarding-send-code" style="margin-bottom:18px;display:grid;gap:12px">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
+        <?php if ($inviteEmail === ''): ?>
+          <label><span>Email address</span><input class="input" type="email" name="email" autocomplete="email" required></label>
+        <?php endif; ?>
         <button type="submit" class="btn btn-primary">Send Verification Code</button>
       </form>
       <?php if (!empty($_GET['code_sent'])): ?>

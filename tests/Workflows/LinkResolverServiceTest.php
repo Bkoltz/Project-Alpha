@@ -161,6 +161,55 @@ final class LinkResolverServiceTest extends TestCase
         self::assertSame('entity_only', $link['visibility_scope']);
     }
 
+    public function testDepartmentedOrganizationDefaultsToDepartmentLinksOnly(): void
+    {
+        $orgName = 'Dept Only ' . bin2hex(random_bytes(3));
+        $orgId = $this->insertOrganization($orgName);
+        $deptId = $this->insertDepartment($orgId, 'Football', 'Football', 'auto_attach');
+        $staleOrgLinkId = $this->insertResolverLink('organization', $orgId, 'https://example.invalid/stale-org');
+
+        $service = $this->service(new FakeResolverProvider([
+            $orgName => [
+                ['folder_id' => '/' . $orgName, 'name' => $orgName, 'path' => '/' . $orgName],
+            ],
+            'Football' => [
+                ['folder_id' => '/' . $orgName . '/Football', 'name' => 'Football', 'path' => '/' . $orgName . '/Football'],
+            ],
+        ]));
+
+        $result = $service->autoGenerateForOrganization($orgId);
+
+        self::assertTrue($result['success'], json_encode($result));
+        self::assertSame(0, $this->countLinks('organization', $orgId), 'Resolver-created org links should be removed in department-only mode.');
+
+        $link = $this->fetchOneLink('department', $deptId);
+        $this->remember('links', (int)$link['id']);
+        self::assertNotSame($staleOrgLinkId, (int)$link['id']);
+        self::assertSame('https://example.invalid/' . $orgName . '/Football', $link['url']);
+    }
+
+    public function testSharedFolderStrategyCreatesInheritedOrganizationLink(): void
+    {
+        $orgName = 'Shared Strategy ' . bin2hex(random_bytes(3));
+        $orgId = $this->insertOrganization($orgName);
+        $this->pdo->prepare('UPDATE organizations SET link_strategy = "shared_folder" WHERE id = ?')->execute([$orgId]);
+        $this->insertDepartment($orgId, 'Football', 'Football', 'auto_attach');
+        $service = $this->service(new FakeResolverProvider([
+            '_shared' => [
+                ['folder_id' => '/' . $orgName . '/_shared', 'name' => '_shared', 'path' => '/' . $orgName . '/_shared'],
+            ],
+        ]));
+
+        $result = $service->autoGenerateForOrganization($orgId);
+
+        self::assertTrue($result['success'], json_encode($result));
+        $link = $this->fetchOneLink('organization', $orgId);
+        $this->remember('links', (int)$link['id']);
+        self::assertSame('Shared organization files', $link['title']);
+        self::assertSame('https://example.invalid/' . $orgName . '/_shared', $link['url']);
+        self::assertSame('all_departments', $link['visibility_scope']);
+    }
+
     public function testOrganizationClientAutoGenerationIsDeniedForSafety(): void
     {
         $orgId = $this->insertOrganization('WHS Client Safety ' . bin2hex(random_bytes(3)));
@@ -231,6 +280,17 @@ final class LinkResolverServiceTest extends TestCase
         $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM entity_links WHERE entity_type = ? AND entity_id = ?');
         $stmt->execute([$entityType, $entityId]);
         return (int)$stmt->fetchColumn();
+    }
+
+    private function insertResolverLink(string $entityType, int $entityId, string $url): int
+    {
+        $stmt = $this->pdo->prepare('
+            INSERT INTO entity_links
+                (entity_type, entity_id, title, url, link_type, link_source, include_on_invoices, visibility_scope, is_expired)
+            VALUES (?, ?, "Old resolver folder", ?, "auto_dropbox", "resolver", 1, "entity_only", 0)
+        ');
+        $stmt->execute([$entityType, $entityId, $url]);
+        return $this->remember('links', (int)$this->pdo->lastInsertId());
     }
 
     private function remember(string $bucket, int $id): int

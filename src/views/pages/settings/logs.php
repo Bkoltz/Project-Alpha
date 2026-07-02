@@ -261,16 +261,43 @@ try {
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px">
         <legend style="padding:0 8px;font-weight:600">Log Files</legend>
 
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-            <?php foreach ($logFiles as $file): ?>
-                <a href="/?page=settings&tab=logs&file=<?php echo urlencode($file); ?>"
-                   style="padding:8px 14px;border-radius:6px;border:1px solid #ddd;text-decoration:none;font-size:13px;<?php echo $selectedFile === $file ? 'background:var(--nav-accent);color:#fff;border-color:var(--nav-accent)' : 'background:#fff;color:#374151'; ?>">
-                    <?php echo htmlspecialchars($file); ?>
-                </a>
-            <?php endforeach; ?>
-            <?php if (empty($logFiles)): ?>
-                <span style="color:var(--muted);font-size:13px">No log files found yet.</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <p style="margin:0;color:var(--muted);font-size:13px">Allowed files from system and cron log directories are viewable here.</p>
+            <?php if (!empty($logFiles)): ?>
+                <a class="btn btn-sm" data-skip-nav href="/?page=settings/logs-handler&amp;bulk=1">Download All ZIP</a>
             <?php endif; ?>
+        </div>
+
+        <div style="overflow-x:auto;margin-bottom:16px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                    <tr style="background:#f8fafc">
+                        <th style="padding:10px;border-bottom:2px solid #e2e8f0;text-align:left">File</th>
+                        <th style="padding:10px;border-bottom:2px solid #e2e8f0;text-align:left">Size</th>
+                        <th style="padding:10px;border-bottom:2px solid #e2e8f0;text-align:left">Modified</th>
+                        <th style="padding:10px;border-bottom:2px solid #e2e8f0;text-align:left">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($logFiles as $file): ?>
+                        <?php $logPath = $logFileMap[$file] ?? ''; ?>
+                        <tr style="border-bottom:1px solid #f1f5f9;<?php echo $selectedFile === $file ? 'background:#f8fafc' : ''; ?>">
+                            <td style="padding:10px;font-weight:600"><?php echo htmlspecialchars($file); ?></td>
+                            <td style="padding:10px;color:var(--muted)"><?php echo $logPath && is_file($logPath) ? number_format((float)filesize($logPath) / 1024, 1) . ' KB' : '-'; ?></td>
+                            <td style="padding:10px;color:var(--muted);white-space:nowrap"><?php echo $logPath && is_file($logPath) ? htmlspecialchars(date('Y-m-d H:i:s', filemtime($logPath))) : '-'; ?></td>
+                            <td style="padding:10px;white-space:nowrap">
+                                <a class="btn btn-sm" href="/?page=settings&amp;tab=logs&amp;file=<?php echo urlencode($file); ?>">View</a>
+                                <a class="btn btn-sm" data-skip-nav href="/?page=settings/logs-handler&amp;file=<?php echo urlencode($file); ?>&amp;download=1">Download</a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($logFiles)): ?>
+                        <tr>
+                            <td colspan="4" style="padding:18px;text-align:center;color:var(--muted)">No log files found yet.</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
 
         <?php if ($selectedFile): ?>

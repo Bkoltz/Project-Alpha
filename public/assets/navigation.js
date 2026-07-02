@@ -11,6 +11,7 @@ let currentPage = getCurrentPage();
 // Cache for loaded content
 const contentCache = new Map();
 const cachedScripts = new Array();
+let navigationInitialized = false;
 
 function getCurrentPage() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -112,8 +113,9 @@ async function loadPageContent(page) {
                 console.log('Script tag count in raw HTML:', (html.match(/<script\b[^>]*>/gi) || []).length);
             }
             const inlineScripts = scripts.map(s => ({
-                src: s.src || null,
-                code: s.src ? null : s.textContent
+                src: s.getAttribute('src') || null,
+                code: s.getAttribute('src') ? null : s.textContent,
+                type: s.getAttribute('type') || ''
             }));
 
             // Remove scripts from the HTML fragment to avoid duplicate execution when inserted
@@ -130,6 +132,65 @@ async function loadPageContent(page) {
         console.error('Failed to load page content:', error);
         // Fall back to full page reload
         return null;
+    }
+}
+
+function dispatchPageLoaded(page) {
+    try {
+        document.dispatchEvent(new CustomEvent('pageLoaded', { detail: { page } }));
+    } catch (err) {
+        try { document.dispatchEvent(new Event('pageLoaded')); } catch (e) { /* ignore */ }
+    }
+}
+
+function appendPageScript(scriptData) {
+    return new Promise(resolve => {
+        try {
+            const scr = document.createElement('script');
+            let blobUrl = '';
+            cachedScripts.push(scr);
+
+            if (scriptData.type) {
+                scr.type = scriptData.type;
+            }
+
+            scr.async = false;
+
+            const cleanup = () => {
+                if (blobUrl) {
+                    try { URL.revokeObjectURL(blobUrl); } catch (e) { /* ignore */ }
+                }
+                resolve();
+            };
+
+            scr.addEventListener('load', cleanup, { once: true });
+            scr.addEventListener('error', function () {
+                console.error('Error loading page script', scriptData.src || '[inline]');
+                cleanup();
+            }, { once: true });
+
+            if (scriptData.src) {
+                scr.src = scriptData.src;
+            } else if (scriptData.code) {
+                // Run inline fragment scripts as same-origin blob scripts so CSP stays centralized.
+                blobUrl = URL.createObjectURL(new Blob([scriptData.code], { type: 'application/javascript' }));
+                scr.src = blobUrl;
+            } else {
+                resolve();
+                return;
+            }
+
+            document.body.appendChild(scr);
+        } catch (err) {
+            console.error('Error executing page script', err);
+            resolve();
+        }
+    });
+}
+
+async function executePageScripts(scripts) {
+    for (const scriptData of scripts) {
+        await appendPageScript(scriptData);
     }
 }
 
@@ -171,59 +232,26 @@ async function navigateToPage(page, updateHistory = true) {
             mainContent.innerHTML = html;
             initializeDocumentFilterToggles();
 
-            // Execute extracted scripts (external and inline)
-            scripts.forEach((s, idx) => {
-                try {
-                    const scr = document.createElement('script');
-                    cachedScripts.push(scr);
+            // Update browser history before page scripts run so initializers see the new URL.
+            if (updateHistory) {
+                // Use same URL builder so history uses the canonical query string
+                const absolute = buildUrlFromPageString(page);
+                const rel = absolute.replace(window.location.origin, '');
+                history.pushState({ page }, '', rel);
+            }
 
-                    if (s.src) {
-                        scr.src = s.src;
-                        scr.async = false;
-                    } else if (s.code) {
-                        // Avoid CSP 'unsafe-inline' violation by loading inline code
-                        // through a same-origin Blob URL. Blob URLs inherit the document
-                        // origin, so they are permitted by script-src 'self'.
-                        const blob = new Blob([s.code], { type: 'application/javascript' });
-                        scr.src = URL.createObjectURL(blob);
-                    }
+            // Update navigation state
+            updateActiveNavigation(page);
+            currentPage = page;
 
-                    document.body.appendChild(scr);
-                } catch (err) {
-                    // ignore individual script errors
-                    console.error('Error executing page script', err);
-                }
-            });
+            // Update page title if needed
+            updatePageTitle(page);
 
-            // Clean up blob URLs after the scripts have loaded to avoid leaking them
-            cachedScripts.forEach(scr => {
-                if (scr.src && scr.src.startsWith('blob:')) {
-                    const cleanup = () => {
-                        try { URL.revokeObjectURL(scr.src); } catch (e) { /* ignore */ }
-                    };
-                    scr.addEventListener('load', cleanup, { once: true });
-                    scr.addEventListener('error', cleanup, { once: true });
-                }
-            });
+            await executePageScripts(scripts);
 
-            // Dispatch an event so per-page assets (e.g., client-create.js) can re-initialize
-            try { document.dispatchEvent(new Event('pageLoaded')); } catch (err) { /* ignore */ }
+            // Dispatch after injected scripts load so their pageLoaded listeners are registered.
+            dispatchPageLoaded(page);
         }
-
-        // Update browser history
-        if (updateHistory) {
-            // Use same URL builder so history uses the canonical query string
-            const absolute = buildUrlFromPageString(page);
-            const rel = absolute.replace(window.location.origin, '');
-            history.pushState({ page }, '', rel);
-        }
-
-        // Update navigation state
-        updateActiveNavigation(page);
-        currentPage = page;
-
-        // Update page title if needed
-        updatePageTitle(page);
 
     } catch (error) {
         console.error('Navigation error:', error);
@@ -254,9 +282,13 @@ function updatePageTitle(page) {
         'jobs/job-details': 'Job Details',
         'project/projects-list': 'Projects',
         'project/projects-create': 'Create Project',
+        'project/projects-edit': 'Edit Project',
         'api-keys': 'API Keys',
         'settings': 'Settings',
         'financial/financial-dashboard': 'Financial Dashboard',
+        'financial/expenses-list': 'Assets & Expenses',
+        'financial/asset-form': 'Asset',
+        'financial/asset-detail': 'Asset Details',
         'financial/audit': 'Audit & Reports',
         'account': 'My Account',
         'account-edit': 'Edit Account'
@@ -291,6 +323,7 @@ function handleNavigation(event) {
     // Allow normal navigation for PDF/print/download/serve-upload links
     if (pageName.includes('-print') ||
         pageName.includes('-pdf') ||
+        pageName.includes('project-file-download') ||
         pageName.includes('serve-upload') ||
         link.hasAttribute('data-skip-nav') ||
         link.hasAttribute('download')) {
@@ -373,6 +406,9 @@ function handleDocumentFilterToggle(event) {
 
 // Initialize client-side navigation
 function initialize() {
+    if (navigationInitialized) return;
+    navigationInitialized = true;
+
     // Set up event listeners
     document.addEventListener('click', handleNavigation);
     document.addEventListener('click', handleDocumentFilterToggle);

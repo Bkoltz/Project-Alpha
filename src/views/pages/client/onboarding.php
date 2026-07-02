@@ -7,6 +7,11 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 $organizationId = get_active_org_id();
 $clients = $pdo->query('SELECT id,name,email FROM clients WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $organizations = $pdo->query('SELECT id,name FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
+$invitationWhere = $organizationId > 0
+    ? '(i.organization_id=? OR (i.organization_id IS NULL AND i.created_by=?))'
+    : 'i.organization_id IS NULL AND i.created_by=?';
+$invitationParams = $organizationId > 0 ? [$organizationId, $userId] : [$userId];
 $stmt = $pdo->prepare(
     'SELECT i.*,c.name AS client_name,o.name AS target_organization_name,
             s.id AS submission_id,s.proposed_data,s.status AS submission_status,s.created_at AS submitted_at
@@ -14,10 +19,10 @@ $stmt = $pdo->prepare(
      LEFT JOIN clients c ON c.id=i.client_id
      LEFT JOIN organizations o ON o.id=i.target_organization_id
      LEFT JOIN client_onboarding_submissions s ON s.invitation_id=i.id
-     WHERE i.organization_id=?
+     WHERE ' . $invitationWhere . '
      ORDER BY i.created_at DESC LIMIT 100'
 );
-$stmt->execute([$organizationId]);
+$stmt->execute($invitationParams);
 $invitations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $generatedLink = (string)($_SESSION['client_onboarding_link'] ?? '');
 unset($_SESSION['client_onboarding_link']);
@@ -41,18 +46,53 @@ unset($_SESSION['client_onboarding_link']);
     </div>
   <?php endif; ?>
 
-  <form method="post" action="/?page=client/onboarding-invite" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;align-items:end;padding:18px 0;border-bottom:1px solid var(--border);margin-bottom:24px">
+  <style>
+    .onboarding-invite-panel {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      margin-bottom: 24px;
+    }
+    .onboarding-invite-grid {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.2fr) minmax(210px, 1fr) minmax(210px, 1fr) minmax(150px, 0.7fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .onboarding-invite-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-top: 2px;
+    }
+    @media (max-width: 900px) {
+      .onboarding-invite-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 620px) {
+      .onboarding-invite-grid { grid-template-columns: 1fr; }
+      .onboarding-invite-actions { justify-content: stretch; }
+      .onboarding-invite-actions .btn { flex: 1; }
+    }
+  </style>
+
+  <form method="post" action="/?page=client/onboarding-invite" class="onboarding-invite-panel">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <input type="hidden" name="action" value="create">
-    <label class="field">
-      <span class="label-muted">Invited Email</span>
-      <input type="email" class="input" name="email" required aria-describedby="onboardingEmailHelp">
-      <span id="onboardingEmailHelp" style="display:block;margin-top:5px;font-size:12px;color:var(--muted)">Required for generated links and emailed invitations.</span>
-    </label>
-    <label class="field"><span class="label-muted">Existing Client</span><select class="input" name="client_id" data-onboarding-client-select><option value="0">New client</option><?php foreach ($clients as $client): ?><option value="<?php echo (int)$client['id']; ?>" data-email="<?php echo htmlspecialchars((string)($client['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option><?php endforeach; ?></select></label>
-    <label class="field"><span class="label-muted">Client Organization</span><select class="input" name="target_organization_id"><option value="0">No organization</option><?php foreach ($organizations as $organization): ?><option value="<?php echo (int)$organization['id']; ?>"><?php echo htmlspecialchars($organization['name']); ?></option><?php endforeach; ?></select></label>
-    <label class="field"><span class="label-muted">Expires In</span><select class="input" name="expires_hours"><option value="24">24 hours</option><option value="48" selected>48 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="onboarding-invite-grid">
+      <label class="field">
+        <span class="label-muted">Invited Email</span>
+        <input type="email" class="input" name="email" aria-describedby="onboardingEmailHelp">
+        <span id="onboardingEmailHelp" style="display:block;margin-top:5px;font-size:12px;color:var(--muted)">Optional for copyable links. Required when emailing the invitation.</span>
+      </label>
+      <label class="field"><span class="label-muted">Existing Client</span><select class="input" name="client_id" data-onboarding-client-select><option value="0">New client</option><?php foreach ($clients as $client): ?><option value="<?php echo (int)$client['id']; ?>" data-email="<?php echo htmlspecialchars((string)($client['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option><?php endforeach; ?></select></label>
+      <label class="field"><span class="label-muted">Client Organization <span style="font-weight:400;color:var(--muted)">(optional)</span></span><select class="input" name="target_organization_id"><option value="0">No organization</option><?php foreach ($organizations as $organization): ?><option value="<?php echo (int)$organization['id']; ?>"><?php echo htmlspecialchars($organization['name']); ?></option><?php endforeach; ?></select></label>
+      <label class="field"><span class="label-muted">Expires In</span><select class="input" name="expires_hours"><option value="24">24 hours</option><option value="48" selected>48 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label>
+    </div>
+    <div class="onboarding-invite-actions">
       <button class="btn" type="submit" name="delivery" value="link">Generate Link</button>
       <button class="btn btn-primary" type="submit" name="delivery" value="email">Generate and Email</button>
     </div>
@@ -66,7 +106,7 @@ unset($_SESSION['client_onboarding_link']);
       <?php foreach ($invitations as $invitation): ?>
         <?php $proposal = json_decode((string)($invitation['proposed_data'] ?? ''), true); $proposal = is_array($proposal) ? $proposal : []; ?>
         <tr>
-          <td><?php echo htmlspecialchars((string)$invitation['invited_email']); ?></td>
+          <td><?php echo !empty($invitation['invited_email']) ? htmlspecialchars((string)$invitation['invited_email']) : '<span class="muted">Provided during verification</span>'; ?></td>
           <td><?php echo htmlspecialchars((string)($invitation['client_name'] ?: 'New client')); ?></td>
           <td><?php echo htmlspecialchars((string)($invitation['target_organization_name'] ?: 'None')); ?></td>
           <td><span class="status-pill status-pill--<?php echo htmlspecialchars((string)$invitation['status']); ?>"><?php echo htmlspecialchars(ucfirst((string)$invitation['status'])); ?></span></td>

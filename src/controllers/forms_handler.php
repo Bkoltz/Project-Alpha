@@ -27,6 +27,9 @@ if (!csrf_validate()) {
 try {
     $orgId = get_active_org_id() ?: 0;
     $userId = (int)($_SESSION['user']['id'] ?? 0) ?: null;
+    if ($orgId <= 0) {
+        throw new Exception('Select an active organization before managing forms and documents.');
+    }
 
     switch ($action) {
         case 'quick_upload':

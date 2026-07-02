@@ -2,70 +2,56 @@ function initAuditReportPage() {
     const presetButtons = document.querySelectorAll('.preset-btn');
     const startDateInput = document.querySelector('input[name="start_date"]');
     const endDateInput = document.querySelector('input[name="end_date"]');
-    const enableSchedulingCheckbox = document.getElementById('enableScheduling');
-    const schedulingOptions = document.getElementById('schedulingOptions');
+    const auditForm = document.getElementById('auditForm');
     const addEmailBtn = document.getElementById('addEmailBtn');
     const emailContainer = document.getElementById('emailContainer');
-    const form = document.getElementById('auditForm');
-
-    if (!enableSchedulingCheckbox || !schedulingOptions || !addEmailBtn || !emailContainer || !form) {
-        return;
-    }
-    if (form.dataset.scheduleInitialized === '1') {
-        return;
-    }
-    form.dataset.scheduleInitialized = '1';
+    const scheduleForm = document.getElementById('auditScheduleForm');
 
     // Handle preset date buttons
-    presetButtons.forEach(button => {
-        button.addEventListener('click', function (e) {
-            e.preventDefault();
-            const preset = this.dataset.preset;
-            const today = new Date();
-            let startDate, endDate;
+    if (auditForm && auditForm.dataset.datePresetsInitialized !== '1') {
+        auditForm.dataset.datePresetsInitialized = '1';
+        presetButtons.forEach(button => {
+            button.addEventListener('click', function (e) {
+                e.preventDefault();
+                const preset = this.dataset.preset;
+                const today = new Date();
+                let startDate, endDate;
 
-            switch (preset) {
-                case 'last-month':
-                    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                    endDate = new Date(today.getFullYear(), today.getMonth(), 0);
-                    break;
-                case 'last-quarter':
-                    const quarter = Math.floor(today.getMonth() / 3);
-                    startDate = new Date(today.getFullYear(), (quarter - 1) * 3, 1);
-                    endDate = new Date(today.getFullYear(), quarter * 3, 0);
-                    break;
-                case 'all-time':
-                    startDate = new Date(2020, 0, 1);
-                    endDate = today;
-                    break;
-                case 'this-year':
-                    startDate = new Date(today.getFullYear(), 0, 1);
-                    endDate = today;
-                    break;
-            }
+                switch (preset) {
+                    case 'last-month':
+                        startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                        endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                        break;
+                    case 'last-quarter':
+                        const quarter = Math.floor(today.getMonth() / 3);
+                        startDate = new Date(today.getFullYear(), (quarter - 1) * 3, 1);
+                        endDate = new Date(today.getFullYear(), quarter * 3, 0);
+                        break;
+                    case 'all-time':
+                        startDate = new Date(2020, 0, 1);
+                        endDate = today;
+                        break;
+                    case 'this-year':
+                        startDate = new Date(today.getFullYear(), 0, 1);
+                        endDate = today;
+                        break;
+                }
 
-            if (startDate && endDate) {
-                startDateInput.value = startDate.toISOString().split('T')[0];
-                endDateInput.value = endDate.toISOString().split('T')[0];
-            }
+                if (startDate && endDate && startDateInput && endDateInput) {
+                    startDateInput.value = startDate.toISOString().split('T')[0];
+                    endDateInput.value = endDate.toISOString().split('T')[0];
+                }
+            });
         });
-    });
+    }
 
-    // Handle email scheduling toggle
-    enableSchedulingCheckbox.addEventListener('change', function () {
-        schedulingOptions.style.display = this.checked ? 'block' : 'none';
-
-        // Change form action and button text based on scheduling
-        if (this.checked) {
-            form.action = '/?page=financial/audit-schedule-handler';
-            document.getElementById('formAction').value = 'create';
-            form.querySelector('button[type="submit"]').textContent = 'Save Schedule';
-        } else {
-            form.action = '/?page=financial/audit-export';
-            document.getElementById('formAction').value = 'generate';
-            form.querySelector('button[type="submit"]').textContent = 'Generate Audit Report';
-        }
-    });
+    if (!addEmailBtn || !emailContainer || !scheduleForm) {
+        return;
+    }
+    if (scheduleForm.dataset.scheduleInitialized === '1') {
+        return;
+    }
+    scheduleForm.dataset.scheduleInitialized = '1';
 
     // Handle add email button
     addEmailBtn.addEventListener('click', function (e) {

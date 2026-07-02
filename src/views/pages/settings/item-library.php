@@ -25,7 +25,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <div>
   <div class="page-head">
     <h3 style="margin:0">Item Library</h3>
-    <button onclick="showCreateModal()" style="padding:10px 20px;background:#3b82f6;color:#fff;border:0;border-radius:8px;cursor:pointer;font-size:14px">
+    <button type="button" data-item-library-create style="padding:10px 20px;background:#3b82f6;color:#fff;border:0;border-radius:8px;cursor:pointer;font-size:14px">
       + Add New Item
     </button>
   </div>
@@ -74,7 +74,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </span>
               </td>
               <td style="padding:12px;text-align:center">
-                <button onclick='editItem(<?php echo json_encode($item); ?>)' style="padding:6px 12px;background:#fff;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;margin-right:8px">
+                <button type="button" data-item-library-edit data-item='<?php echo htmlspecialchars(json_encode($item), ENT_QUOTES, 'UTF-8'); ?>' style="padding:6px 12px;background:#fff;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;margin-right:8px">
                   Edit
                 </button>
                 <form method="post" action="/?page=settings/item-library-handler" style="display:inline" onsubmit="return confirm('Delete this item?')">
@@ -141,7 +141,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
       </div>
 
       <div style="display:flex;gap:12px;justify-content:flex-end">
-        <button type="button" onclick="closeModal()" style="padding:10px 20px;background:#fff;border:1px solid #d1d5db;border-radius:6px;cursor:pointer">
+        <button type="button" data-item-library-close style="padding:10px 20px;background:#fff;border:1px solid #d1d5db;border-radius:6px;cursor:pointer">
           Cancel
         </button>
         <button type="submit" style="padding:10px 20px;background:#3b82f6;color:#fff;border:0;border-radius:6px;cursor:pointer">
@@ -152,40 +152,5 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
   </div>
 </div>
 
-<script>
-function showCreateModal() {
-  document.getElementById('modalTitle').textContent = 'Add New Item';
-  document.getElementById('formAction').value = 'create';
-  document.getElementById('formId').value = '';
-  document.getElementById('itemName').value = '';
-  document.getElementById('itemDescription').value = '';
-  document.getElementById('unitPrice').value = '';
-  document.getElementById('isHourly').checked = false;
-  document.getElementById('isActive').checked = true;
-  document.getElementById('itemModal').style.display = 'flex';
-}
-
-function editItem(item) {
-  document.getElementById('modalTitle').textContent = 'Edit Item';
-  document.getElementById('formAction').value = 'update';
-  document.getElementById('formId').value = item.id;
-  document.getElementById('itemName').value = item.item_name;
-  document.getElementById('itemDescription').value = item.description || '';
-  document.getElementById('unitPrice').value = item.unit_price;
-  document.getElementById('isHourly').checked = item.category === 'Hourly';
-  document.getElementById('isActive').checked = item.is_active == 1;
-  document.getElementById('itemModal').style.display = 'flex';
-}
-
-function closeModal() {
-  document.getElementById('itemModal').style.display = 'none';
-}
-
-// Close modal on background click
-document.getElementById('itemModal').addEventListener('click', function(e) {
-  if (e.target === this) {
-    closeModal();
-  }
-});
-</script>
+<script src="/assets/js/item-library.js" defer></script>
 </div>
