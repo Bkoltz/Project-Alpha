@@ -190,8 +190,54 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
   .n-ok { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
   .n-err { background: #fff1f2; color: #881337; border: 1px solid #fca5a5; }
   @media (max-width: 640px) {
-    .paper-document { padding: 24px 20px; }
-    .public-doc-wrap { padding: 0 12px 64px; margin-top: 16px; }
+    body { background: #fff !important; }
+    .public-doc-wrap {
+      margin: 0 auto;
+      padding: 0 12px 56px;
+      width: 100%;
+      max-width: 100%;
+    }
+    .public-header {
+      margin: 12px 0 14px;
+    }
+    .public-header h1 {
+      font-size: 22px;
+    }
+    .link-expiry {
+      border-radius: 10px;
+      padding: 8px 10px;
+      text-align: left;
+      align-items: flex-start;
+    }
+    .paper-document {
+      padding: 18px 12px;
+      margin: 0 -12px 18px;
+      border-radius: 0;
+      box-shadow: none;
+      overflow-x: auto;
+    }
+    .paper-document::before {
+      border-radius: 0;
+    }
+    .action-banner {
+      padding: 16px 12px !important;
+      border-radius: 10px !important;
+    }
+    .action-banner > div {
+      flex-wrap: wrap !important;
+    }
+    .action-banner form {
+      width: 100%;
+    }
+    .action-banner button,
+    .payment-banner .pay-btn {
+      width: 100%;
+      justify-content: center;
+    }
+    .action-banner input[type="file"] {
+      width: 100%;
+      max-width: 100%;
+    }
   }
 </style>
 

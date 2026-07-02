@@ -12,11 +12,36 @@ function toggleNotesEdit() {
     }
 }
 
-function openDepartmentModal() {
+function openDepartmentModal(trigger) {
     const modal = document.getElementById('departmentModal');
     if (!modal) return;
+    const title = document.getElementById('departmentModalTitle');
+    const idInput = document.getElementById('departmentIdInput');
+    const nameInput = document.getElementById('departmentNameInput');
+    const folderInput = document.getElementById('departmentFolderInput');
+    const resolverInput = document.getElementById('departmentResolverInput');
+    const aliasesInput = document.getElementById('departmentAliasesInput');
+    const notesInput = document.getElementById('departmentNotesInput');
+
+    let data = null;
+    if (trigger && trigger.dataset && trigger.dataset.department) {
+        try {
+            data = JSON.parse(trigger.dataset.department);
+        } catch (error) {
+            data = null;
+        }
+    }
+
+    if (title) title.textContent = data ? 'Edit Department' : 'Add Department';
+    if (idInput) idInput.value = data ? String(data.id || '') : '';
+    if (nameInput) nameInput.value = data ? String(data.name || '') : '';
+    if (folderInput) folderInput.value = data ? String(data.folder_name || '') : '';
+    if (resolverInput) resolverInput.value = data ? String(data.resolver_mode || 'auto_attach') : 'auto_attach';
+    if (aliasesInput) aliasesInput.value = data ? String(data.folder_aliases || '') : '';
+    if (notesInput) notesInput.value = data ? String(data.notes || '') : '';
+
     modal.style.display = 'flex';
-    const firstInput = modal.querySelector('input[name="name"]');
+    const firstInput = nameInput || modal.querySelector('input[name="name"]');
     if (firstInput) firstInput.focus();
 }
 

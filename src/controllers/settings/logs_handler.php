@@ -17,34 +17,97 @@ require_once __DIR__ . '/../../utils/csrf.php';
  * Resolve a requested log filename to a safe, real path under config/logs.
  * Returns null if the request is invalid or attempts traversal.
  */
-function allowed_log_path(string $requested): ?string
+function allowed_log_files(): array
 {
-    // Reject path traversal and directory separators
-    if (str_contains($requested, '..') || str_contains($requested, '/') || str_contains($requested, '\\') || str_contains($requested, chr(0))) {
-        return null;
-    }
-    // Only allow alphanumeric + underscore + hyphen + dot + .log extension
-    if (!preg_match('/^[a-zA-Z0-9_.\-]+\.log$/', $requested)) {
-        return null;
-    }
     $bases = [
         '/var/www/config/logs/system',
         '/var/www/config/logs/cron',
         __DIR__ . '/../../../config/logs/system',
         __DIR__ . '/../../../config/logs/cron',
     ];
+    $files = [];
     foreach ($bases as $base) {
         $realBase = realpath($base);
         if ($realBase === false) {
             continue;
         }
-        $candidate = $realBase . DIRECTORY_SEPARATOR . $requested;
-        $realCandidate = realpath($candidate);
-        if ($realCandidate !== false && str_starts_with($realCandidate, $realBase . DIRECTORY_SEPARATOR)) {
-            return $realCandidate;
+        foreach (glob($realBase . DIRECTORY_SEPARATOR . '*.{log,txt}', GLOB_BRACE) ?: [] as $candidate) {
+            $realCandidate = realpath($candidate);
+            $name = basename($candidate);
+            if ($realCandidate !== false
+                && is_file($realCandidate)
+                && is_readable($realCandidate)
+                && preg_match('/^[a-zA-Z0-9_.\-]+\.(?:log|txt)$/', $name)
+                && str_starts_with($realCandidate, $realBase . DIRECTORY_SEPARATOR)) {
+                $files[$name] = $realCandidate;
+            }
         }
     }
+    ksort($files, SORT_NATURAL | SORT_FLAG_CASE);
+    return $files;
+}
+
+function allowed_log_path(string $requested): ?string
+{
+    // Reject path traversal and directory separators
+    if (str_contains($requested, '..') || str_contains($requested, '/') || str_contains($requested, '\\') || str_contains($requested, chr(0))) {
+        return null;
+    }
+    // Only allow alphanumeric + underscore + hyphen + dot + .log/.txt extension
+    if (!preg_match('/^[a-zA-Z0-9_.\-]+\.(?:log|txt)$/', $requested)) {
+        return null;
+    }
+    $files = allowed_log_files();
+    if (isset($files[$requested])) {
+        return $files[$requested];
+    }
     return null;
+}
+
+if (!empty($_GET['bulk'])) {
+    $files = allowed_log_files();
+    if (!$files) {
+        header('Content-Type: application/json');
+        http_response_code(404);
+        echo json_encode(['error' => 'No log files available']);
+        exit;
+    }
+    if (!class_exists('ZipArchive')) {
+        header('Content-Type: application/json');
+        http_response_code(500);
+        echo json_encode(['error' => 'ZIP support is not available on this server']);
+        exit;
+    }
+
+    $zipPath = tempnam(sys_get_temp_dir(), 'project_alpha_logs_');
+    if ($zipPath === false) {
+        header('Content-Type: application/json');
+        http_response_code(500);
+        echo json_encode(['error' => 'Could not prepare log archive']);
+        exit;
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        @unlink($zipPath);
+        header('Content-Type: application/json');
+        http_response_code(500);
+        echo json_encode(['error' => 'Could not create log archive']);
+        exit;
+    }
+    foreach ($files as $name => $path) {
+        $zip->addFile($path, $name);
+    }
+    $zip->close();
+
+    $downloadName = 'project-alpha-logs-' . gmdate('Ymd-His') . '.zip';
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+    header('Content-Length: ' . filesize($zipPath));
+    header('X-Content-Type-Options: nosniff');
+    readfile($zipPath);
+    @unlink($zipPath);
+    exit;
 }
 
 if (isset($_GET['file'])) {

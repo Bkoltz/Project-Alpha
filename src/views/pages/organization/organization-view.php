@@ -63,11 +63,11 @@ $departmentContacts = [];
 if ($departments) {
     $ids = array_map(static fn($row) => (int)$row['id'], $departments);
     $contactStmt = $pdo->prepare('
-        SELECT odc.department_id, c.id, c.name, c.email
+        SELECT odc.department_id, odc.is_primary, c.id, c.name, c.email
         FROM organization_department_contacts odc
         JOIN clients c ON c.id = odc.client_id
         WHERE odc.department_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')
-        ORDER BY c.name ASC
+        ORDER BY odc.is_primary DESC, c.name ASC
     ');
     $contactStmt->execute($ids);
     foreach ($contactStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -127,6 +127,18 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
   .org-detail-list dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .org-detail-list dd { margin: 4px 0 0; line-height: 1.5; }
   .org-empty { padding: 20px; text-align: center; color: var(--muted); border: 1px dashed #d1d5db; border-radius: 8px; background: #f9fafb; }
+  .org-link-strategy { background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;box-shadow:0 6px 18px rgba(11,18,32,0.05);margin-bottom:18px; }
+  .org-link-strategy__options { display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin:12px 0; }
+  .org-link-strategy__option { border:1px solid #dbe3ef;border-radius:8px;padding:12px;background:#fff;display:flex;gap:10px;align-items:flex-start; }
+  .org-link-strategy__option strong { display:block;font-size:13px;margin-bottom:3px; }
+  .org-link-strategy__option span { display:block;font-size:12px;color:var(--muted);line-height:1.4; }
+  .org-dept-card { border:1px solid #dfe6ef;border-radius:8px;background:#fff;overflow:hidden;box-shadow:0 2px 8px rgba(15,23,42,.035); }
+  .org-dept-card__header { display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:14px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb; }
+  .org-dept-card__title { margin:0;font-size:18px;line-height:1.25; }
+  .org-dept-card__meta { margin-top:5px;color:var(--muted);font-size:12px;display:flex;gap:8px;flex-wrap:wrap; }
+  .org-dept-card__body { display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;padding:14px 16px; }
+  .org-dept-card__section-title { font-weight:700;margin-bottom:8px; }
+  .org-dept-card__actions { display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end; }
   @media (max-width: 960px) {
     .org-view__header { display: grid; }
     .org-view__actions { justify-content: flex-start; }
@@ -166,9 +178,11 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Tax exempt form uploaded successfully.</div>
   <?php elseif (!empty($_GET['department_created']) || !empty($_GET['department_saved'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Department saved.</div>
+  <?php elseif (!empty($_GET['link_strategy_saved'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Organization link strategy saved.</div>
   <?php elseif (!empty($_GET['department_deleted'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Department deleted.</div>
-  <?php elseif (!empty($_GET['department_contact_added']) || !empty($_GET['department_contact_removed'])): ?>
+  <?php elseif (!empty($_GET['department_contact_added']) || !empty($_GET['department_contact_removed']) || !empty($_GET['department_contact_primary'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Department contact updated.</div>
   <?php elseif (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff3f3;color:#991b1b;border:1px solid #fecaca"><?php echo htmlspecialchars($_GET['error']); ?></div>
@@ -290,6 +304,36 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
     </aside>
 
     <main class="org-view__main">
+      <?php $linkStrategy = (string)($org['link_strategy'] ?? 'department_links_only'); ?>
+      <div class="org-link-strategy">
+        <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div>
+            <h3 style="margin:0 0 4px">Automatic Link Strategy</h3>
+            <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.45">
+              Choose how PA resolves provider folders for this organization when departments exist.
+            </p>
+          </div>
+          <form method="post" action="/?page=organization/organization-departments" style="margin:0">
+            <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+            <input type="hidden" name="action" value="save_link_strategy">
+            <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
+            <div class="org-link-strategy__options">
+              <?php foreach ([
+                'department_links_only' => ['Department links only', 'Default for orgs with departments. PA removes resolver-created org folder links and generates department links.'],
+                'overall_folder' => ['Overall org folder', 'PA resolves the folder that exactly matches the organization and shares it with department recipients.'],
+                'shared_folder' => ['_shared folder', 'PA resolves a folder named _shared inside the organization folder and shares it with department recipients.'],
+              ] as $value => [$label, $help]): ?>
+                <label class="org-link-strategy__option">
+                  <input type="radio" name="link_strategy" value="<?php echo e($value); ?>" <?php echo $linkStrategy === $value ? 'checked' : ''; ?> style="margin-top:3px">
+                  <span><strong><?php echo e($label); ?></strong><span><?php echo e($help); ?></span></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+            <button type="submit" class="org-view__button org-view__button--primary">Save Link Strategy</button>
+          </form>
+        </div>
+      </div>
+
       <?php
         $entityType = 'organization';
         $entityId = $id;
@@ -321,46 +365,52 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
                     $aliases = array_values(array_filter(array_map('strval', $decodedAliases)));
                 }
             }
+            $departmentPayload = [
+                'id' => $deptId,
+                'name' => (string)$department['name'],
+                'folder_name' => (string)($department['folder_name'] ?? ''),
+                'resolver_mode' => (string)($department['resolver_mode'] ?? 'manual_only'),
+                'folder_aliases' => implode("\n", $aliases),
+                'notes' => (string)($department['notes'] ?? ''),
+            ];
+            $resolverLabels = [
+                'manual_only' => 'Manual links only',
+                'review' => 'Review matches',
+                'auto_attach' => 'Auto attach exact matches',
+                'excluded' => 'Excluded from resolver',
+            ];
           ?>
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
-            <form method="post" action="/?page=organization/organization-departments" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end">
-              <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-              <input type="hidden" name="action" value="save_department">
-              <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
-              <input type="hidden" name="department_id" value="<?php echo $deptId; ?>">
-              <label>
-                <div style="font-size:13px;font-weight:600;margin-bottom:4px">Name</div>
-                <input name="name" value="<?php echo e((string)$department['name']); ?>" required style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-              </label>
-              <label>
-                <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Name</div>
-                <input name="folder_name" value="<?php echo e((string)($department['folder_name'] ?? '')); ?>" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-              </label>
-              <label>
-                <div style="font-size:13px;font-weight:600;margin-bottom:4px">Resolver Mode</div>
-                <select name="resolver_mode" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px">
-                  <?php foreach (['manual_only' => 'Manual links only', 'review' => 'Review matches', 'auto_attach' => 'Auto attach exact matches', 'excluded' => 'Exclude from resolver'] as $value => $label): ?>
-                    <option value="<?php echo e($value); ?>" <?php echo (string)$department['resolver_mode'] === $value ? 'selected' : ''; ?>><?php echo e($label); ?></option>
-                  <?php endforeach; ?>
-                </select>
-              </label>
-              <label style="grid-column:1/-1">
-                <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Aliases</div>
-                <textarea name="folder_aliases" rows="2" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"><?php echo e(implode("\n", $aliases)); ?></textarea>
-              </label>
-              <label style="grid-column:1/-1">
-                <div style="font-size:13px;font-weight:600;margin-bottom:4px">Notes</div>
-                <textarea name="notes" rows="2" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px"><?php echo e((string)($department['notes'] ?? '')); ?></textarea>
-              </label>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1">
-                <button type="submit" class="btn btn-sm">Save Department</button>
-                <button type="button" class="btn btn-sm" onclick="showAddManualLinkModal('department', <?php echo $deptId; ?>)">Add Department Link</button>
-              </div>
-            </form>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px">
+          <div class="org-dept-card">
+            <div class="org-dept-card__header">
               <div>
-                <div style="font-weight:700;margin-bottom:8px">Department Contacts</div>
+                <h4 class="org-dept-card__title"><?php echo e((string)$department['name']); ?></h4>
+                <div class="org-dept-card__meta">
+                  <span><?php echo (int)$department['contact_count']; ?> contact<?php echo (int)$department['contact_count'] === 1 ? '' : 's'; ?></span>
+                  <span><?php echo count($departmentLinks[$deptId] ?? []); ?> link<?php echo count($departmentLinks[$deptId] ?? []) === 1 ? '' : 's'; ?></span>
+                  <span><?php echo e($resolverLabels[(string)($department['resolver_mode'] ?? 'manual_only')] ?? 'Manual links only'); ?></span>
+                </div>
+                <?php if (!empty($department['folder_name']) || $aliases || !empty($department['notes'])): ?>
+                  <div style="margin-top:8px;color:#4b5563;font-size:13px;line-height:1.45">
+                    <?php if (!empty($department['folder_name'])): ?><div><strong>Folder:</strong> <?php echo e((string)$department['folder_name']); ?></div><?php endif; ?>
+                    <?php if ($aliases): ?><div><strong>Aliases:</strong> <?php echo e(implode(', ', $aliases)); ?></div><?php endif; ?>
+                    <?php if (!empty($department['notes'])): ?><div><strong>Notes:</strong> <?php echo e((string)$department['notes']); ?></div><?php endif; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+              <div class="org-dept-card__actions">
+                <button type="button"
+                        class="org-view__button"
+                        data-department="<?php echo e(json_encode($departmentPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)); ?>"
+                        onclick="openDepartmentModal(this)">
+                  Edit
+                </button>
+                <button type="button" class="org-view__button" onclick="showAddManualLinkModal('department', <?php echo $deptId; ?>)">Add Link</button>
+              </div>
+            </div>
+
+            <div class="org-dept-card__body">
+              <div>
+                <div class="org-dept-card__section-title">Department Contacts</div>
                 <?php if (empty($departmentContacts[$deptId])): ?>
                   <div style="color:var(--muted);font-size:13px">No contacts assigned. Contacts can stay organization-only.</div>
                 <?php else: ?>
@@ -369,16 +419,29 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid #eef2f7;border-radius:8px;padding:8px">
                         <span>
                           <strong><?php echo e((string)$contact['name']); ?></strong>
+                          <?php if (!empty($contact['is_primary'])): ?><span style="margin-left:6px;padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;font-size:11px;font-weight:700">Primary</span><?php endif; ?>
                           <?php if (!empty($contact['email'])): ?><span style="color:var(--muted);font-size:12px"> <?php echo e((string)$contact['email']); ?></span><?php endif; ?>
                         </span>
-                        <form method="post" action="/?page=organization/organization-departments" style="margin:0">
-                          <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
-                          <input type="hidden" name="action" value="remove_contact">
-                          <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
-                          <input type="hidden" name="department_id" value="<?php echo $deptId; ?>">
-                          <input type="hidden" name="client_id" value="<?php echo (int)$contact['id']; ?>">
-                          <button type="submit" style="padding:4px 8px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#b91c1c;font-size:12px">Remove</button>
-                        </form>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                          <?php if (empty($contact['is_primary'])): ?>
+                            <form method="post" action="/?page=organization/organization-departments" style="margin:0">
+                              <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+                              <input type="hidden" name="action" value="set_primary_contact">
+                              <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
+                              <input type="hidden" name="department_id" value="<?php echo $deptId; ?>">
+                              <input type="hidden" name="client_id" value="<?php echo (int)$contact['id']; ?>">
+                              <button type="submit" style="padding:4px 8px;border:1px solid #bbf7d0;border-radius:8px;background:#f0fdf4;color:#166534;font-size:12px">Make Primary</button>
+                            </form>
+                          <?php endif; ?>
+                          <form method="post" action="/?page=organization/organization-departments" style="margin:0">
+                            <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+                            <input type="hidden" name="action" value="remove_contact">
+                            <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
+                            <input type="hidden" name="department_id" value="<?php echo $deptId; ?>">
+                            <input type="hidden" name="client_id" value="<?php echo (int)$contact['id']; ?>">
+                            <button type="submit" style="padding:4px 8px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#b91c1c;font-size:12px">Remove</button>
+                          </form>
+                        </div>
                       </div>
                     <?php endforeach; ?>
                   </div>
@@ -394,11 +457,15 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
                       <option value="<?php echo (int)$client['id']; ?>"><?php echo e((string)$client['name']); ?></option>
                     <?php endforeach; ?>
                   </select>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;white-space:nowrap">
+                    <input type="checkbox" name="is_primary" value="1">
+                    Primary
+                  </label>
                   <button type="submit" class="btn btn-sm">Assign</button>
                 </form>
               </div>
               <div>
-                <div style="font-weight:700;margin-bottom:8px">Department Links</div>
+                <div class="org-dept-card__section-title">Department Links</div>
                 <?php if (empty($departmentLinks[$deptId])): ?>
                   <div style="color:var(--muted);font-size:13px">No department links yet.</div>
                 <?php else: ?>
@@ -415,7 +482,7 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
               </div>
             </div>
 
-            <form method="post" action="/?page=organization/organization-departments" onsubmit="return confirm('Delete this department? Contacts and clients will not be deleted.')" style="margin-top:12px">
+            <form method="post" action="/?page=organization/organization-departments" onsubmit="return confirm('Delete this department? Contacts and clients will not be deleted.')" style="padding:0 16px 14px">
               <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
               <input type="hidden" name="action" value="delete_department">
               <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
@@ -435,37 +502,38 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
 <div id="departmentModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;padding:20px">
   <div style="background:#fff;border-radius:12px;padding:22px;max-width:640px;width:min(640px,100%);box-shadow:0 24px 60px rgba(15,23,42,0.22)">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px">
-      <h3 style="margin:0">Add Department</h3>
+      <h3 id="departmentModalTitle" style="margin:0">Add Department</h3>
       <button type="button" onclick="closeDepartmentModal()" aria-label="Close add department" style="border:0;background:#fff;font-size:24px;line-height:1;cursor:pointer;color:#6b7280">&times;</button>
     </div>
-    <form method="post" action="/?page=organization/organization-departments" style="display:grid;gap:12px">
+    <form id="departmentForm" method="post" action="/?page=organization/organization-departments" style="display:grid;gap:12px">
       <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
       <input type="hidden" name="action" value="save_department">
       <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
+      <input type="hidden" name="department_id" id="departmentIdInput" value="">
       <label>
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">Department Name</div>
-        <input name="name" required placeholder="Department name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+        <input name="name" id="departmentNameInput" required placeholder="Department name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
       </label>
       <label>
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Name</div>
-        <input name="folder_name" placeholder="Folder name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+        <input name="folder_name" id="departmentFolderInput" placeholder="Folder name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
       </label>
       <label>
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">Resolver Mode</div>
-        <select name="resolver_mode" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+        <select name="resolver_mode" id="departmentResolverInput" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
           <option value="manual_only">Manual links only</option>
           <option value="review">Review matches</option>
-          <option value="auto_attach">Auto attach exact matches</option>
+          <option value="auto_attach" selected>Auto attach exact matches</option>
           <option value="excluded">Exclude from resolver</option>
         </select>
       </label>
       <label>
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">Folder Aliases <span style="font-weight:400;color:var(--muted)">(one per line)</span></div>
-        <textarea name="folder_aliases" rows="3" placeholder="Alternate folder name&#10;Short folder name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px"></textarea>
+        <textarea name="folder_aliases" id="departmentAliasesInput" rows="3" placeholder="Alternate folder name&#10;Short folder name" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px"></textarea>
       </label>
       <label>
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">Notes</div>
-        <textarea name="notes" rows="2" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px"></textarea>
+        <textarea name="notes" id="departmentNotesInput" rows="2" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px"></textarea>
       </label>
       <div style="display:flex;gap:10px;margin-top:4px">
         <button type="submit" class="org-view__button org-view__button--primary" style="flex:1">Save Department</button>

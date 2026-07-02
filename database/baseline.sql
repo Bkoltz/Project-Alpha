@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     country VARCHAR(100) NULL,
     tax_exempt_file VARCHAR(255) NULL,
     tax_exempt_uploaded_at TIMESTAMP NULL,
+    link_strategy ENUM('department_links_only','overall_folder','shared_folder') NOT NULL DEFAULT 'department_links_only',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_organizations_name (name)
@@ -336,10 +337,10 @@ CREATE TABLE IF NOT EXISTS clients (
 -- CLIENT ONBOARDING
 CREATE TABLE IF NOT EXISTS client_onboarding_invitations (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL,
     target_organization_id INT NULL,
     client_id INT NULL,
-    invited_email VARCHAR(255) NOT NULL,
+    invited_email VARCHAR(255) NULL,
     token_hash CHAR(64) NOT NULL,
     status ENUM('pending','verified','submitted','approved','rejected','revoked','expired') NOT NULL DEFAULT 'pending',
     expires_at DATETIME NOT NULL,
@@ -486,6 +487,46 @@ CREATE TABLE IF NOT EXISTS project_documents (
     INDEX idx_project_docs_project (project_id),
     INDEX idx_project_docs_type (document_type, document_id),
     CONSTRAINT fk_project_docs_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PROJECT FILE UPLOADS
+CREATE TABLE IF NOT EXISTS project_file_folders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    name VARCHAR(190) NOT NULL,
+    description TEXT NULL,
+    client_visible TINYINT(1) NOT NULL DEFAULT 0,
+    client_upload_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_project_file_folder_name (project_id, name),
+    INDEX idx_project_file_folders_project (project_id),
+    INDEX idx_project_file_folders_created_by (created_by),
+    CONSTRAINT fk_project_file_folders_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_file_folders_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    folder_id INT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
+    stored_name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    mime_type VARCHAR(190) NULL,
+    file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    client_visible TINYINT(1) NOT NULL DEFAULT 0,
+    uploaded_by INT NULL,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_project_files_project (project_id),
+    INDEX idx_project_files_folder (folder_id),
+    INDEX idx_project_files_uploaded_by (uploaded_by),
+    CONSTRAINT fk_project_files_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_files_folder FOREIGN KEY (folder_id) REFERENCES project_file_folders(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_files_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PROJECT CLIENTS
@@ -1353,6 +1394,46 @@ CREATE TABLE IF NOT EXISTS expenses (
     CONSTRAINT fk_exp_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_receipt FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- FINANCIAL ASSETS
+CREATE TABLE IF NOT EXISTS financial_assets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    vendor_id INT NULL DEFAULT NULL,
+    category_id INT NULL DEFAULT NULL,
+    expense_id INT NULL DEFAULT NULL,
+    asset_tag VARCHAR(80) NULL DEFAULT NULL,
+    name VARCHAR(190) NOT NULL,
+    asset_type VARCHAR(100) NULL DEFAULT NULL,
+    serial_number VARCHAR(190) NULL DEFAULT NULL,
+    status ENUM('planned','active','maintenance','retired','sold','lost','disposed') NOT NULL DEFAULT 'active',
+    location VARCHAR(190) NULL DEFAULT NULL,
+    purchase_date DATE NULL DEFAULT NULL,
+    purchase_cost DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    depreciation_method ENUM('none','straight_line') NOT NULL DEFAULT 'straight_line',
+    depreciation_start_date DATE NULL DEFAULT NULL,
+    useful_life_months INT NULL DEFAULT NULL,
+    salvage_value DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    warranty_expires_on DATE NULL DEFAULT NULL,
+    disposed_on DATE NULL DEFAULT NULL,
+    disposal_value DECIMAL(12,2) NULL DEFAULT NULL,
+    notes TEXT NULL,
+    created_by INT NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_fin_asset_org_tag (organization_id, asset_tag),
+    INDEX idx_fin_asset_org (organization_id),
+    INDEX idx_fin_asset_vendor (vendor_id),
+    INDEX idx_fin_asset_category (category_id),
+    INDEX idx_fin_asset_expense (expense_id),
+    INDEX idx_fin_asset_status (status),
+    INDEX idx_fin_asset_purchase_date (purchase_date),
+    CONSTRAINT fk_fin_asset_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_fin_asset_vendor FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE SET NULL,
+    CONSTRAINT fk_fin_asset_category FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_fin_asset_expense FOREIGN KEY (expense_id) REFERENCES expenses(id) ON DELETE SET NULL,
+    CONSTRAINT fk_fin_asset_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================

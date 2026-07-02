@@ -19,6 +19,7 @@ final class ClientOnboardingTest extends TestCase
         $invite = file_get_contents($this->root . '/src/controllers/client/client_onboarding_invite.php');
         $utility = file_get_contents($this->root . '/src/utils/client_onboarding.php');
         self::assertStringContainsString('token_hash CHAR(64)', (string)$baseline);
+        self::assertStringContainsString('organization_id INT NULL', (string)$baseline);
         self::assertStringContainsString("hash('sha256', \$token)", (string)$invite);
         self::assertStringContainsString('password_hash($code, PASSWORD_DEFAULT)', (string)$utility);
     }
@@ -26,9 +27,12 @@ final class ClientOnboardingTest extends TestCase
     public function testPortalSupportsStandaloneManualLinksAndReview(): void
     {
         $view = file_get_contents($this->root . '/src/views/pages/client/onboarding.php');
+        $invite = file_get_contents($this->root . '/src/controllers/client/client_onboarding_invite.php');
         $review = file_get_contents($this->root . '/src/controllers/client/client_onboarding_review.php');
         self::assertStringContainsString('No organization', (string)$view);
         self::assertStringContainsString('Generate Link', (string)$view);
+        self::assertStringNotContainsString('Select an organization before creating an invitation.', (string)$invite);
+        self::assertStringContainsString('$ownerOrganizationId = $organizationId > 0 ? $organizationId : null', (string)$invite);
         self::assertStringContainsString("in_array(\$decision, ['approve', 'reject']", (string)$review);
     }
 
@@ -39,6 +43,22 @@ final class ClientOnboardingTest extends TestCase
         self::assertStringContainsString("rate_limit_check(\$pdo, 'client_onboarding_submit'", (string)$submit);
         self::assertStringNotContainsString('card_number', (string)$submit . (string)$page);
         self::assertStringNotContainsString('payment_method', (string)$submit . (string)$page);
+    }
+
+    public function testLinkOnlyInvitationsCanCollectEmailDuringVerification(): void
+    {
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $invite = file_get_contents($this->root . '/src/controllers/client/client_onboarding_invite.php');
+        $page = file_get_contents($this->root . '/src/controllers/public_view/client_onboarding.php');
+        $sendCode = file_get_contents($this->root . '/src/controllers/public_view/client_onboarding_send_code.php');
+
+        self::assertStringContainsString('invited_email VARCHAR(255) NULL', (string)$baseline);
+        self::assertStringContainsString('$delivery === \'email\'', (string)$invite);
+        self::assertStringContainsString('$email !== \'\' ? $email : null', (string)$invite);
+        self::assertStringContainsString('Enter your email address so we can send a verification code', (string)$page);
+        self::assertStringContainsString('name="email" autocomplete="email" required', (string)$page);
+        self::assertStringContainsString('SET invited_email=?', (string)$sendCode);
+        self::assertStringContainsString('The verification email could not be sent.', (string)$sendCode);
     }
 
     public function testReceiptDeliveryHasNoUserToggleOrDuplicateConfirmation(): void

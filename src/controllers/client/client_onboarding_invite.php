@@ -8,17 +8,31 @@ require_once __DIR__ . '/../../utils/client_onboarding.php';
 
 $organizationId = get_active_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-if ($organizationId <= 0 || $userId <= 0) {
-    header('Location: /?page=client/onboarding&error=' . urlencode('Select an organization before creating an invitation.'));
+if ($userId <= 0) {
+    header('Location: /?page=client/onboarding&error=' . urlencode('Sign in before creating an invitation.'));
     exit;
 }
+$ownerOrganizationId = $organizationId > 0 ? $organizationId : null;
 
 $action = (string)($_POST['action'] ?? 'create');
 if ($action === 'revoke') {
     $id = (int)($_POST['id'] ?? 0);
-    $stmt = $pdo->prepare('UPDATE client_onboarding_invitations SET status="revoked",consumed_at=NOW() WHERE id=? AND organization_id=? AND status IN ("pending","verified")');
-    $stmt->execute([$id, $organizationId]);
-    audit_log($pdo, 'client_onboarding.revoke', 'client_onboarding_invitation', $id, ['organization_id' => $organizationId]);
+    if ($ownerOrganizationId !== null) {
+        $stmt = $pdo->prepare('
+            UPDATE client_onboarding_invitations
+            SET status="revoked", consumed_at=NOW()
+            WHERE id=? AND (organization_id=? OR (organization_id IS NULL AND created_by=?)) AND status IN ("pending","verified")
+        ');
+        $stmt->execute([$id, $ownerOrganizationId, $userId]);
+    } else {
+        $stmt = $pdo->prepare('
+            UPDATE client_onboarding_invitations
+            SET status="revoked", consumed_at=NOW()
+            WHERE id=? AND organization_id IS NULL AND created_by=? AND status IN ("pending","verified")
+        ');
+        $stmt->execute([$id, $userId]);
+    }
+    audit_log($pdo, 'client_onboarding.revoke', 'client_onboarding_invitation', $id, ['organization_id' => $ownerOrganizationId]);
     header('Location: /?page=client/onboarding&revoked=1');
     exit;
 }
@@ -29,8 +43,12 @@ $targetOrganizationId = max(0, (int)($_POST['target_organization_id'] ?? 0));
 $delivery = ($_POST['delivery'] ?? 'link') === 'email' ? 'email' : 'link';
 $expiresHours = max(1, min(168, (int)($_POST['expires_hours'] ?? 48)));
 
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+if ($delivery === 'email' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     header('Location: /?page=client/onboarding&error=' . urlencode('Enter a valid email address.'));
+    exit;
+}
+if ($delivery === 'link' && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    header('Location: /?page=client/onboarding&error=' . urlencode('Enter a valid email address or leave email blank when generating a link only.'));
     exit;
 }
 if ($clientId > 0) {
@@ -52,20 +70,29 @@ if ($targetOrganizationId > 0) {
 
 $token = bin2hex(random_bytes(32));
 $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $expiresHours . ' hours'));
-$pdo->prepare(
-    'UPDATE client_onboarding_invitations SET status="revoked",consumed_at=NOW()
-     WHERE organization_id=? AND invited_email=? AND status IN ("pending","verified")'
-)->execute([$organizationId, $email]);
+if ($email !== '') {
+    if ($ownerOrganizationId !== null) {
+        $pdo->prepare(
+            'UPDATE client_onboarding_invitations SET status="revoked",consumed_at=NOW()
+             WHERE (organization_id=? OR (organization_id IS NULL AND created_by=?)) AND invited_email=? AND status IN ("pending","verified")'
+        )->execute([$ownerOrganizationId, $userId, $email]);
+    } else {
+        $pdo->prepare(
+            'UPDATE client_onboarding_invitations SET status="revoked",consumed_at=NOW()
+             WHERE organization_id IS NULL AND created_by=? AND invited_email=? AND status IN ("pending","verified")'
+        )->execute([$userId, $email]);
+    }
+}
 $stmt = $pdo->prepare(
     'INSERT INTO client_onboarding_invitations
      (organization_id,target_organization_id,client_id,invited_email,token_hash,expires_at,created_by)
      VALUES (?,?,?,?,?,?,?)'
 );
 $stmt->execute([
-    $organizationId,
+    $ownerOrganizationId,
     $targetOrganizationId ?: null,
     $clientId ?: null,
-    $email,
+    $email !== '' ? $email : null,
     hash('sha256', $token),
     $expiresAt,
     $userId,
@@ -89,10 +116,11 @@ if ($delivery === 'email') {
 
 $_SESSION['client_onboarding_link'] = $link;
 audit_log($pdo, 'client_onboarding.create', 'client_onboarding_invitation', $invitationId, [
-    'organization_id' => $organizationId,
+    'organization_id' => $ownerOrganizationId,
     'target_organization_id' => $targetOrganizationId ?: null,
     'client_id' => $clientId ?: null,
     'delivery' => $delivery,
+    'email_provided' => $email !== '',
     'email_sent' => $emailSent,
 ]);
 header('Location: /?page=client/onboarding&created=1' . ($delivery === 'email' && !$emailSent ? '&email_error=1' : ''));

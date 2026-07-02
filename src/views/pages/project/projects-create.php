@@ -6,6 +6,17 @@ require_once __DIR__ . '/../../../utils/acl.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $activeOrgId = get_active_org_id();
+$activeOrgName = '';
+$activeOrgId = (int)$activeOrgId;
+if ($activeOrgId > 0) {
+    try {
+        $activeOrgStmt = $pdo->prepare('SELECT name FROM organizations WHERE id = ? LIMIT 1');
+        $activeOrgStmt->execute([$activeOrgId]);
+        $activeOrgName = (string)($activeOrgStmt->fetchColumn() ?: '');
+    } catch (Throwable $e) {
+        $activeOrgName = '';
+    }
+}
 $isAdmin = (($_SESSION['user']['role'] ?? '') === 'admin');
 if ($isAdmin) {
     $clients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
@@ -58,6 +69,97 @@ if ($activeOrgId > 0) {
 <section>
   <h2>Create Project</h2>
   <h3 id="projectNamePreview" style="margin-top:8px;margin-bottom:16px;color:#333;font-size:18px"></h3>
+  <style>
+    .project-client-picker {
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .project-client-picker__selected {
+      display: grid;
+      gap: 6px;
+      padding: 8px;
+      min-height: 44px;
+      border-bottom: 1px solid #edf2f7;
+      background: #f8fafc;
+    }
+    .project-client-picker__empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 4px 2px;
+    }
+    .project-client-picker__item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .project-client-picker__name {
+      font-weight: 700;
+      color: #111827;
+    }
+    .project-client-picker__meta {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .project-client-picker__remove {
+      width: 26px;
+      height: 26px;
+      border: 1px solid #fecaca;
+      border-radius: 999px;
+      background: #fff;
+      color: #b91c1c;
+      cursor: pointer;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .project-client-picker__search {
+      position: relative;
+      padding: 8px;
+    }
+    .project-client-picker__suggestions {
+      display: none;
+      position: absolute;
+      z-index: 70;
+      left: 8px;
+      right: 8px;
+      top: calc(100% - 4px);
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(15,23,42,0.12);
+    }
+    .project-client-picker__suggestion {
+      padding: 9px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .project-client-picker__suggestion:last-child {
+      border-bottom: 0;
+    }
+    .project-client-picker__suggestion:hover {
+      background: #f8fafc;
+    }
+    .project-client-picker__badge {
+      display: inline-flex;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #166534;
+      font-size: 11px;
+      font-weight: 700;
+    }
+  </style>
   <form method="post" action="/?page=project/projects-create" style="display:grid;gap:12px;max-width:680px">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     
@@ -68,8 +170,8 @@ if ($activeOrgId > 0) {
 
     <label style="position:relative">
       <div>Organization</div>
-      <input id="orgInputProject" type="text" name="organization_search" placeholder="Search organization..." autocomplete="off" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-      <input type="hidden" name="organization_id" id="organization_id_create" value="">
+      <input id="orgInputProject" type="text" name="organization_search" placeholder="Search organization..." autocomplete="off" value="<?php echo htmlspecialchars($activeOrgName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+      <input type="hidden" name="organization_id" id="organization_id_create" value="<?php echo $activeOrgId > 0 ? (int)$activeOrgId : ''; ?>">
       <div id="orgSuggestProject" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:220px;overflow:auto"></div>
     </label>
 
@@ -97,22 +199,28 @@ if ($activeOrgId > 0) {
 
     <label>
       <div>Additional Project Clients</div>
-      <select name="project_client_ids[]" multiple size="5" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-        <?php foreach ($clients as $client): ?>
-          <option value="<?php echo (int)$client['id']; ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option>
-        <?php endforeach; ?>
-      </select>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">The primary client above is included automatically. This project will not automatically include every contact in the organization.</div>
+      <div class="project-client-picker" data-project-client-picker="project" data-empty-text="No additional clients selected.">
+        <div class="project-client-picker__selected" data-picker-selected></div>
+        <div class="project-client-picker__search">
+          <input type="text" class="input" data-picker-search placeholder="Select an organization first" autocomplete="off" disabled>
+          <div class="project-client-picker__suggestions" data-picker-suggestions></div>
+        </div>
+        <div data-picker-hidden></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Search and add only the extra clients who should be part of this project. The primary client above is attached automatically.</div>
     </label>
 
     <label>
       <div>Project Invoice Email Recipients</div>
-      <select name="project_invoice_email_client_ids[]" multiple size="5" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
-        <?php foreach ($clients as $client): ?>
-          <option value="<?php echo (int)$client['id']; ?>" selected><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : ' - no email')); ?></option>
-        <?php endforeach; ?>
-      </select>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">Only attached project contacts with email addresses can receive project invoice emails. You can fine-tune recipients on the project details page.</div>
+      <div class="project-client-picker" data-project-client-picker="invoice" data-empty-text="No invoice email recipients selected.">
+        <div class="project-client-picker__selected" data-picker-selected></div>
+        <div class="project-client-picker__search">
+          <input type="text" class="input" data-picker-search placeholder="Select an organization first" autocomplete="off" disabled>
+          <div class="project-client-picker__suggestions" data-picker-suggestions></div>
+        </div>
+        <div data-picker-hidden></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Department primary contacts are added automatically when a department is selected. You can remove them with the x.</div>
     </label>
 
     <!-- Parent projects removed per spec: Projects have no parents -->

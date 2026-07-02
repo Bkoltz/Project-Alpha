@@ -149,7 +149,8 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
       <p class="finance-subtitle"><?php echo finance_dashboard_date($start); ?> to <?php echo finance_dashboard_date($end); ?></p>
     </div>
     <div class="finance-actions">
-      <a href="/?page=financial/expenses-list" class="btn btn-primary">Expenses Hub</a>
+      <a href="/?page=financial/expenses-list" class="btn btn-primary">Assets &amp; Expenses</a>
+      <a href="/?page=financial/asset-form" class="btn">Add Asset</a>
       <a href="/?page=financial/expense-create" class="btn">Add Expense</a>
       <a href="/?page=financial/expense-report" class="btn">Reports</a>
     </div>

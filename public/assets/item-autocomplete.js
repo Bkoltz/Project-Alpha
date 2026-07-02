@@ -49,12 +49,6 @@ class ItemAutocomplete {
       setTimeout(() => this.hideDropdown(), 200);
     });
     
-    // Click outside to close
-    document.addEventListener('click', (e) => {
-      if (!this.input.contains(e.target) && !this.dropdown.contains(e.target)) {
-        this.hideDropdown();
-      }
-    });
   }
   
   handleInput(e) {
@@ -227,7 +221,7 @@ class ItemAutocomplete {
     
     // Focus next field (usually quantity or description)
     const nextField = this.descriptionField || this.input.nextElementSibling;
-    if (nextField && nextField.tagName === 'INPUT' || nextField.tagName === 'TEXTAREA') {
+    if (nextField && (nextField.tagName === 'INPUT' || nextField.tagName === 'TEXTAREA')) {
       nextField.focus();
     }
   }
@@ -270,11 +264,30 @@ function initItemAutocomplete() {
   });
 }
 
+window.initItemAutocomplete = initItemAutocomplete;
+
+if (!window.__projectAlphaItemAutocompleteOutsideClickReady) {
+  window.__projectAlphaItemAutocompleteOutsideClickReady = true;
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll('[data-item-autocomplete]').forEach(input => {
+      const instance = input._itemAutocomplete;
+      if (instance && instance.dropdown && !input.contains(e.target) && !instance.dropdown.contains(e.target)) {
+        instance.hideDropdown();
+      }
+    });
+  });
+}
+
 // Auto-initialize on DOM ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initItemAutocomplete);
 } else {
   initItemAutocomplete();
+}
+
+if (!window.__projectAlphaItemAutocompletePageLoadedReady) {
+  window.__projectAlphaItemAutocompletePageLoadedReady = true;
+  document.addEventListener('pageLoaded', initItemAutocomplete);
 }
 
 // Expose globally for manual initialization

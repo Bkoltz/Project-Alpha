@@ -12,7 +12,6 @@ $backupEncryptionEnabled = trim((string)(getenv('BACKUP_ENCRYPTION_KEY') ?: ''))
 
 // Read retention from env (matches backup_database.php)
 $retentionDays = (int)(getenv('BACKUP_RETENTION_DAYS') ?: '10');
-$retentionLabel = $retentionDays > 0 ? "{$retentionDays} daily backups" : 'Unlimited (retention disabled)';
 
 // Read backup hour from app_config (default 2 = 2:00 AM UTC)
 $backupHour = 2;
@@ -36,6 +35,7 @@ try {
     $cfgRow2 = $cfgStmt2->fetch(PDO::FETCH_ASSOC);
     if ($cfgRow2) $retentionDays = (int)$cfgRow2['config_value'];
 } catch (Exception $e) {}
+$retentionLabel = $retentionDays > 0 ? "{$retentionDays} daily backups" : 'Unlimited (retention disabled)';
 
 $backups = [];
 if (is_dir($backupsDir)) {
@@ -82,6 +82,63 @@ usort($backups, function($a, $b) {
 $lastBackup = isset($backups[0]) ? $backups[0]['created'] : 'Never';
 $backupCount = count($backups);
 
+$cronStatus = null;
+$cronStatusError = '';
+try {
+    $cronStmt = $pdo->prepare('SELECT job_name, last_run, status, started_at, completed_at, result, error_message, updated_at FROM cron_job_runs WHERE job_name = ? LIMIT 1');
+    $cronStmt->execute(['backup_database']);
+    $cronStatus = $cronStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $e) {
+    $cronStatusError = 'Cron status unavailable: ' . $e->getMessage();
+}
+
+$nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$nextExpectedUtc = $nowUtc->setTime($backupHour, 30);
+if ($nextExpectedUtc <= $nowUtc) {
+    $nextExpectedUtc = $nextExpectedUtc->modify('+1 day');
+}
+
+$backupDirChecks = [];
+foreach ([
+    'Backup root' => $backupsDir,
+    'Daily backups' => $backupsDir . '/daily',
+    'Weekly backups' => $backupsDir . '/weekly',
+    'Monthly backups' => $backupsDir . '/monthly',
+] as $label => $dir) {
+    $backupDirChecks[] = [
+        'label' => $label,
+        'path' => $dir,
+        'exists' => is_dir($dir),
+        'readable' => is_dir($dir) && is_readable($dir),
+        'writable' => is_dir($dir) && is_writable($dir),
+    ];
+}
+
+$zeroBackupDiagnostics = [];
+if ($backupCount === 0) {
+    if (!is_dir($backupsDir)) {
+        $zeroBackupDiagnostics[] = 'Backup root does not exist: ' . $backupsDir;
+    } elseif (!is_readable($backupsDir)) {
+        $zeroBackupDiagnostics[] = 'Backup root is not readable by the web process.';
+    }
+    foreach ($backupDirChecks as $check) {
+        if (!$check['exists']) {
+            $zeroBackupDiagnostics[] = $check['label'] . ' directory is missing.';
+        } elseif (!$check['writable']) {
+            $zeroBackupDiagnostics[] = $check['label'] . ' directory is not writable.';
+        }
+    }
+    if ($cronStatus === null) {
+        $zeroBackupDiagnostics[] = 'No cron_job_runs row has been recorded for backup_database yet.';
+    } elseif (($cronStatus['status'] ?? '') === 'failed') {
+        $message = trim((string)($cronStatus['error_message'] ?? ''));
+        $zeroBackupDiagnostics[] = 'Last recorded backup cron run failed' . ($message !== '' ? ': ' . $message : '.');
+    } elseif (($cronStatus['status'] ?? '') === 'running') {
+        $zeroBackupDiagnostics[] = 'The backup cron is currently marked running.';
+    }
+    $zeroBackupDiagnostics[] = 'Next expected scheduled run: ' . $nextExpectedUtc->format('Y-m-d H:i') . ' UTC.';
+}
+
 // Handle flash messages
 $flash = isset($_SESSION['flash_backup']) ? $_SESSION['flash_backup'] : null;
 unset($_SESSION['flash_backup']);
@@ -115,10 +172,70 @@ unset($_SESSION['flash_backup']);
             <span class="status-value">Daily at <?php echo str_pad((string)$backupHour, 2, '0', STR_PAD_LEFT); ?>:30 UTC</span>
         </div>
         <div class="status-item">
+            <span class="status-label">Next Expected Run:</span>
+            <span class="status-value"><?php echo htmlspecialchars($nextExpectedUtc->format('Y-m-d H:i')); ?> UTC</span>
+        </div>
+        <div class="status-item">
             <span class="status-label">Encryption:</span>
             <span class="status-value"><?php echo $backupEncryptionEnabled ? 'AES-256 enabled' : 'Not configured'; ?></span>
         </div>
     </div>
+
+    <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-bottom:1.5rem">
+        <legend style="padding:0 8px;font-weight:600">Backup Diagnostics</legend>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin-bottom:1rem">
+            <div class="status-item">
+                <span class="status-label">Cron Job:</span>
+                <span class="status-value">backup_database</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Cron Status:</span>
+                <span class="status-value"><?php echo htmlspecialchars($cronStatus['status'] ?? ($cronStatusError !== '' ? 'Unavailable' : 'Not recorded')); ?></span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Last Cron Run:</span>
+                <span class="status-value"><?php echo htmlspecialchars($cronStatus['last_run'] ?? 'Never'); ?></span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Completed At:</span>
+                <span class="status-value"><?php echo htmlspecialchars($cronStatus['completed_at'] ?? 'Not completed'); ?></span>
+            </div>
+        </div>
+        <?php if ($cronStatusError !== ''): ?>
+            <div class="alert alert-error"><?php echo htmlspecialchars($cronStatusError); ?></div>
+        <?php endif; ?>
+        <?php if ($cronStatus): ?>
+            <div style="display:grid;gap:0.5rem;margin-bottom:1rem">
+                <div><strong>Last result:</strong> <span class="text-muted"><?php echo htmlspecialchars(trim((string)($cronStatus['result'] ?? '')) ?: 'No result message recorded.'); ?></span></div>
+                <div><strong>Last failure:</strong> <span class="text-muted"><?php echo htmlspecialchars(trim((string)($cronStatus['error_message'] ?? '')) ?: 'No failure recorded.'); ?></span></div>
+            </div>
+        <?php endif; ?>
+
+        <div style="overflow-x:auto">
+            <table class="backup-table">
+                <thead>
+                    <tr>
+                        <th>Directory</th>
+                        <th>Path</th>
+                        <th>Exists</th>
+                        <th>Readable</th>
+                        <th>Writable</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($backupDirChecks as $check): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($check['label']); ?></td>
+                        <td><code><?php echo htmlspecialchars($check['path']); ?></code></td>
+                        <td><?php echo $check['exists'] ? 'Yes' : 'No'; ?></td>
+                        <td><?php echo $check['readable'] ? 'Yes' : 'No'; ?></td>
+                        <td><?php echo $check['writable'] ? 'Yes' : 'No'; ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </fieldset>
 
     <hr>
 
@@ -217,7 +334,15 @@ unset($_SESSION['flash_backup']);
 
     <h4>Existing Backups</h4>
     <?php if (empty($backups)): ?>
-        <p class="muted">No backups found. Run "Backup Now" or wait for the daily scheduled backup.</p>
+        <div style="padding:1rem;border:1px solid #facc15;background:#fffbeb;border-radius:8px;color:#713f12;margin-bottom:1rem">
+            <strong>No backups found.</strong>
+            <ul style="margin:0.75rem 0 0 1.25rem;padding:0">
+                <?php foreach ($zeroBackupDiagnostics as $diagnostic): ?>
+                    <li><?php echo htmlspecialchars($diagnostic); ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <p class="muted">Run "Backup Now" after resolving directory or cron issues, or wait for the next scheduled backup.</p>
     <?php else: ?>
         <div class="pa-table-wrap">
             <table class="pa-table">

@@ -314,11 +314,13 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
       });
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
+    function initAccountCreateForm() {
       var roleSelect = document.getElementById('account-role-select');
       var panel = document.getElementById('permissions-panel');
       var grid = document.getElementById('permissions-grid');
       var adminNote = document.getElementById('admin-permissions-note');
+      if (!roleSelect || roleSelect.dataset.accountCreateReady === '1') return;
+      roleSelect.dataset.accountCreateReady = '1';
 
       function selectedRoleMeta() {
         if (!roleSelect || !window.PA_ROLE_META) return {};
@@ -394,7 +396,13 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
 
       if (roleSelect) roleSelect.addEventListener('change', updateForRole);
       updateForRole();
-    });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initAccountCreateForm);
+    } else {
+      initAccountCreateForm();
+    }
+    document.addEventListener('pageLoaded', initAccountCreateForm);
     </script>
   <?php else: ?>
     <!-- Users List -->

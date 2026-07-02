@@ -16,7 +16,7 @@ $name = trim($_POST['name'] ?? '');
 $client_id = (int)($_POST['client_id'] ?? 0);
 $projectClientIds = $_POST['project_client_ids'] ?? [];
 if (!is_array($projectClientIds)) { $projectClientIds = []; }
-$projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? null;
+$projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? [];
 if ($projectInvoiceRecipientIds !== null && !is_array($projectInvoiceRecipientIds)) { $projectInvoiceRecipientIds = []; }
 $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? null;
 if ($projectInvoiceLinkClientIds !== null && !is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
@@ -60,6 +60,11 @@ $projectInvoiceRecipientIds = $projectInvoiceRecipientIds === null
 $projectInvoiceLinkClientIds = $projectInvoiceLinkClientIds === null
 	? null
 	: array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($id) => $id > 0)));
+$projectClientIds = array_values(array_unique(array_merge(
+	$projectClientIds,
+	$projectInvoiceRecipientIds ?? [],
+	$projectInvoiceLinkClientIds ?? []
+)));
 if ($client_id > 0 && !in_array($client_id, $projectClientIds, true)) {
 	$projectClientIds[] = $client_id;
 }

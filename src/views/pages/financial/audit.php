@@ -20,6 +20,7 @@ $endDate = $currentYear . '-12-31';
   <div style="margin-bottom: 24px;">
     <h2 style="margin: 0 0 8px 0;">Financial Audit Export</h2>
     <p style="color: #6b7280; margin: 0;">Generate and download a complete financial audit report with invoices, contracts, and optional PDFs.</p>
+    <p style="margin: 12px 0 0 0;"><a class="btn" href="#auditSchedulePanel">Schedule audit emails</a></p>
   </div>
 
   <form id="auditForm" method="POST" action="/?page=financial/audit-export" style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
@@ -118,46 +119,6 @@ $endDate = $currentYear . '-12-31';
       </div>
     </fieldset>
 
-    <!-- Email Scheduling Section -->
-    <fieldset style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-      <legend style="padding: 0 8px; font-weight: 600; color: #1f2937;">Automated Email Scheduling (Optional)</legend>
-      <div style="margin-bottom: 16px;">
-        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 12px;">
-          <input type="checkbox" name="enable_scheduling" value="1" id="enableScheduling" style="cursor: pointer;">
-          <span style="color: #374151; font-weight: 500;">Enable automatic email scheduling</span>
-        </label>
-      </div>
-      <div id="schedulingOptions" style="display: none; border-top: 1px solid #e5e7eb; padding-top: 16px;">
-        <div style="margin-bottom: 16px;">
-          <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #374151;">Schedule Frequency</label>
-          <select name="schedule_frequency" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
-            <option value="weekly">Weekly (every Monday)</option>
-            <option value="monthly" selected>Monthly (first day of month)</option>
-            <option value="quarterly">Quarterly (Jan, Apr, Jul, Oct)</option>
-            <option value="annually">Annually (January 1st)</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 16px;">
-          <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #374151;">Date Range for Reports</label>
-          <select name="schedule_date_range" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
-            <option value="last_week">Previous Week</option>
-            <option value="last_month">Previous Month</option>
-            <option value="last_quarter">Previous Quarter</option>
-            <option value="last_year">Previous Year</option>
-            <option value="current_year" selected>Current Year to Date</option>
-            <option value="all_time">All Time</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 16px;">
-          <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #374151;">Email Addresses (up to 5)</label>
-          <div id="emailContainer" style="display: grid; gap: 8px;">
-            <input type="email" name="schedule_email[]" placeholder="email@example.com" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
-          </div>
-          <button type="button" id="addEmailBtn" style="margin-top: 8px; padding: 8px 12px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 14px;">+ Add Email</button>
-        </div>
-      </div>
-    </fieldset>
-
     <!-- Action Buttons -->
     <div style="display: flex; gap: 12px; justify-content: flex-end;">
       <button type="reset" style="padding: 10px 20px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; font-weight: 600; cursor: pointer;">
@@ -166,6 +127,83 @@ $endDate = $currentYear . '-12-31';
       <button type="submit" style="padding: 10px 20px; background: var(--nav-accent); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
         Generate Audit Report
       </button>
+    </div>
+  </form>
+
+  <form id="auditScheduleForm" method="POST" action="/?page=financial/audit-schedule-handler" style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-top: 24px;">
+    <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
+    <input type="hidden" name="action" value="create">
+    <input type="hidden" name="report_type" value="audit">
+    <input type="hidden" name="include_invoices" value="1">
+
+    <div id="auditSchedulePanel" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;">
+      <div>
+        <h3 style="margin:0 0 6px 0;color:#1f2937;">Scheduled Audit Emails</h3>
+        <p style="margin:0;color:#6b7280;">Send recurring audit reports automatically with separate schedule settings.</p>
+      </div>
+      <button type="submit" style="padding: 10px 20px; background: var(--nav-accent); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+        Save Schedule
+      </button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:16px;">
+      <label>
+        <div style="margin-bottom: 8px; font-weight: 500; color: #374151;">Schedule Frequency</div>
+        <select name="schedule_frequency" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+          <option value="weekly">Weekly (every Monday)</option>
+          <option value="monthly" selected>Monthly (first day of month)</option>
+          <option value="quarterly">Quarterly (Jan, Apr, Jul, Oct)</option>
+          <option value="annually">Annually (January 1st)</option>
+        </select>
+      </label>
+      <label>
+        <div style="margin-bottom: 8px; font-weight: 500; color: #374151;">Date Range for Reports</div>
+        <select name="schedule_date_range" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+          <option value="last_week">Previous Week</option>
+          <option value="last_month">Previous Month</option>
+          <option value="last_quarter">Previous Quarter</option>
+          <option value="last_year">Previous Year</option>
+          <option value="current_year" selected>Current Year to Date</option>
+          <option value="all_time">All Time</option>
+        </select>
+      </label>
+      <label>
+        <div style="margin-bottom: 8px; font-weight: 500; color: #374151;">Accounting Basis</div>
+        <select name="accounting_basis" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+          <option value="cash" selected>Cash basis</option>
+          <option value="accrual">Accrual basis</option>
+        </select>
+      </label>
+    </div>
+
+    <fieldset style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+      <legend style="padding: 0 8px; font-weight: 600; color: #1f2937;">Scheduled Report Contents</legend>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="include_unpaid_invoices" value="1">
+          <span style="color:#374151;">Include unpaid invoices</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="include_contracts" value="1">
+          <span style="color:#374151;">Include contracts</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="include_quotes" value="1">
+          <span style="color:#374151;">Include quotes</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="include_pdfs" value="1">
+          <span style="color:#374151;">Generate PDFs</span>
+        </label>
+      </div>
+    </fieldset>
+
+    <div style="margin-bottom: 8px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #374151;">Email Addresses (up to 5)</label>
+      <div id="emailContainer" style="display: grid; gap: 8px;">
+        <input type="email" name="schedule_email[]" placeholder="email@example.com" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+      </div>
+      <button type="button" id="addEmailBtn" style="margin-top: 8px; padding: 8px 12px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 14px;">+ Add Email</button>
     </div>
   </form>
 

@@ -43,4 +43,12 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString("document.addEventListener('pageLoaded'", (string)$audit);
         self::assertStringContainsString("document.addEventListener('pageLoaded'", (string)$organization);
     }
+
+    public function testAuditSchedulingIsASeparateVisibleAction(): void
+    {
+        $auditPage = file_get_contents($this->root . '/src/views/pages/financial/audit.php');
+        self::assertStringContainsString('id="auditScheduleForm"', (string)$auditPage);
+        self::assertStringContainsString('Scheduled Audit Emails', (string)$auditPage);
+        self::assertStringContainsString('Save Schedule', (string)$auditPage);
+    }
 }

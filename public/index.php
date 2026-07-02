@@ -451,6 +451,13 @@ try {
 // ACL middleware — permission check after login, before controller dispatch
 try {
     require_once __DIR__ . '/../src/utils/acl_middleware.php';
+    if (!empty($_SESSION['user']) && $page === 'home') {
+        $dashboardUserId = (int)($_SESSION['user']['id'] ?? 0);
+        if ($dashboardUserId > 0 && ($_SESSION['user']['role'] ?? '') !== 'admin'
+            && !user_can($pdo, $dashboardUserId, 'financial.view', get_active_org_id())) {
+            $page = 'user-dashboard';
+        }
+    }
     acl_middleware($pdo, $page);
 } catch (Throwable $e) {
     @error_log('[acl] middleware failed: ' . $e->getMessage());
@@ -481,6 +488,10 @@ if ($page === 'org-search' || $page === 'organization/org-search') {
 }
 if ($page === 'organization/organization-departments-options') {
     require_once __DIR__ . '/../src/controllers/organization/organization_departments_options.php';
+    exit;
+}
+if ($page === 'project/client-options') {
+    require_once __DIR__ . '/../src/controllers/project/project_client_options.php';
     exit;
 }
 if ($page === 'time-tracking/unbilled') {
@@ -588,6 +599,10 @@ if ($page === 'project/project-invoice-pdf') {
     require_once __DIR__ . '/../src/controllers/project/project_invoice_pdf.php';
     exit;
 }
+if ($page === 'project/project-file-download') {
+    require_once __DIR__ . '/../src/controllers/project/project_file_download.php';
+    exit;
+}
 if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
     require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
     exit;
@@ -665,6 +680,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'project/projects-delete',
         'project/project-add-document',
         'project/project-remove-document',
+        'project/project-files',
         'project/project-invoice-generate',
         'project/project-invoice-email',
         'project/project-invoice-payment',
@@ -751,6 +767,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'financial/mileage-handler',
         'financial/vendor-handler',
         'financial/category-handler',
+        'financial/asset-handler',
         'financial/expense-handler',
         'financial/expense_handler',
         'financial/csv-import',
@@ -935,6 +952,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'project/project-remove-document') {
         require_once __DIR__ . '/../src/controllers/project/project_remove_document.php';
+        exit;
+    }
+    if ($page === 'project/project-files') {
+        require_once __DIR__ . '/../src/controllers/project/project_files_handler.php';
         exit;
     }
     if ($page === 'settings/backup-download') {
@@ -1219,6 +1240,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/category-handler') {
         require_once __DIR__ . '/../src/controllers/financial/category_handler.php';
+        exit;
+    }
+    if ($page === 'financial/asset-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/asset_handler.php';
         exit;
     }
     if ($page === 'financial/expense-handler' || $page === 'financial/expense_handler') {

@@ -207,7 +207,7 @@ foreach ($clients as $c) {
 
     <?php if ((!isset($appConfig['contract_scope_enabled']) || !empty($appConfig['contract_scope_enabled'])) && !empty($inv['scope'])): ?>
       <div>
-        <div style="font-weight:600;margin-bottom:8px">Scope of Project (from contract - read only)</div>
+        <div style="font-weight:600;margin-bottom:8px">Scope of Work (from contract - read only)</div>
         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;white-space:pre-wrap;color:#374151"><?php echo htmlspecialchars($inv['scope'] ?? ''); ?></div>
         <p style="color:#6b7280;font-size:0.875rem;margin-top:8px">To change scope, modify the contract.</p>
       </div>

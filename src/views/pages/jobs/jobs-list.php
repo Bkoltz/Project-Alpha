@@ -82,7 +82,7 @@ if ($selected !== '') {
           ],
           'project_prefix' => [
               'type' => 'text',
-              'label' => 'Project Prefix',
+              'label' => 'Job ID Prefix',
               'value' => $prefix,
               'placeholder' => 'PA-2025'
           ]
@@ -101,7 +101,7 @@ if ($selected !== '') {
           <div style="border:1px solid #eee;border-radius:8px;background:#fff;overflow:hidden">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #eee">
               <div>
-                <strong>Project <?php echo htmlspecialchars($p['project_code']); ?></strong>
+                <strong>Job ID <?php echo htmlspecialchars($p['project_code']); ?></strong>
                 <span style="color:var(--muted)"> · <?php echo htmlspecialchars($p['client_name']); ?></span>
               </div>
               <div style="display:flex;gap:12px;align-items:center">
@@ -213,7 +213,7 @@ if ($selected !== '') {
           }
           ?>
           <div style="position:sticky;top:12px;border:1px solid #eee;border-radius:8px;background:#fff;padding:12px;display:grid;gap:12px">
-            <div style="font-weight:700">Project <?php echo htmlspecialchars($selected); ?> · <?php echo htmlspecialchars($selectedRow['client_name']); ?></div>
+            <div style="font-weight:700">Job ID <?php echo htmlspecialchars($selected); ?> · <?php echo htmlspecialchars($selectedRow['client_name']); ?></div>
             <form method="post" action="/?page=project-notes-update" style="display:grid;gap:8px">
               <input type="hidden" name="project_code" value="<?php echo htmlspecialchars($selected); ?>">
               <input type="hidden" name="client_id" value="<?php echo (int)$selectedRow['client_id']; ?>">
@@ -254,7 +254,7 @@ if ($selected !== '') {
             </div>
           </div>
         <?php else: ?>
-          <div style="position:sticky;top:12px;color:var(--muted);border:1px dashed #e5e7eb;border-radius:8px;padding:12px;background:#fafafa">Select a project to view and edit notes.</div>
+          <div style="position:sticky;top:12px;color:var(--muted);border:1px dashed #e5e7eb;border-radius:8px;padding:12px;background:#fafafa">Select a job to view and edit notes.</div>
         <?php endif; ?>
       </div>
     </div>

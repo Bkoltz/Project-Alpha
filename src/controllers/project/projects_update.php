@@ -9,6 +9,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/projects-update');
 
 $id = (int)($_POST['id'] ?? 0); if (!$id) { header('Location: /?page=project/projects-list&error=Invalid'); exit; }
+$detailsRedirect = '/?page=project/projects-details&id=' . $id;
+$editRedirect = '/?page=project/projects-edit&id=' . $id;
 $name = trim($_POST['name'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
 $client_id = (int)($_POST['client_id'] ?? 0);
@@ -41,7 +43,7 @@ if ($department_id > 0) {
 	$departmentStmt->execute([$department_id]);
 	$departmentOrgId = (int)($departmentStmt->fetchColumn() ?: 0);
 	if ($departmentOrgId <= 0 || ($organization_id > 0 && $departmentOrgId !== $organization_id)) {
-		header('Location: /?page=project/projects-details&id='.$id.'&error=' . urlencode('Selected department does not belong to the project organization.'));
+		header('Location: '.$editRedirect.'&error=' . urlencode('Selected department does not belong to the project organization.'));
 		exit;
 	}
 	$organization_id = $departmentOrgId;
@@ -51,7 +53,7 @@ $projectClientIds = array_values(array_unique(array_filter(array_map('intval', $
 $projectInvoiceRecipientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceRecipientIds), static fn($clientId) => $clientId > 0)));
 $projectInvoiceLinkClientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($clientId) => $clientId > 0)));
 if ($client_id > 0 && !in_array($client_id, $projectClientIds, true)) {
-	header('Location: /?page=project/projects-details&id='.$id.'&error=' . urlencode('Primary invoice receiver must remain attached to the project.'));
+	header('Location: '.$editRedirect.'&error=' . urlencode('Primary invoice receiver must remain attached to the project.'));
 	exit;
 }
 $projectInvoiceRecipientIds = array_values(array_intersect($projectInvoiceRecipientIds, $projectClientIds));
@@ -68,7 +70,7 @@ if ($organization_id > 0) {
 		$expectedClientIds = $projectClientIds;
 		sort($expectedClientIds);
 		if ($validClientIds !== $expectedClientIds) {
-			header('Location: /?page=project/projects-details&id='.$id.'&error=' . urlencode('Project contacts must belong to the project organization.'));
+			header('Location: '.$editRedirect.'&error=' . urlencode('Project contacts must belong to the project organization.'));
 			exit;
 		}
 	}
@@ -80,7 +82,7 @@ if ($organization_id > 0) {
 
 // Validate dates
 if ($estimated_start !== '' && $estimated_end !== '' && strtotime($estimated_start) > strtotime($estimated_end)) {
-	header('Location: /?page=project/projects-list&id='.$id.'&error=Start%20must%20be%20before%20end');
+	header('Location: '.$editRedirect.'&error=Start%20must%20be%20before%20end');
 	exit;
 }
 
@@ -129,5 +131,5 @@ if ($hasAutoEmailColumn) {
 	$stmt->execute($params);
 }
 project_invoice_sync_clients($pdo, $id, $client_id > 0 ? $client_id : null, $projectClientIds, $projectInvoiceRecipientIds, $projectInvoiceLinkClientIds);
-header('Location: /?page=project/projects-details&id='.$id.'&updated=1');
+header('Location: '.$detailsRedirect.'&updated=1');
 exit;

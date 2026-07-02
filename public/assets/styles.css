@@ -626,7 +626,7 @@ body.nav-open{overflow:hidden}
 /* Expenses hub and ledger */
 .expenses-hub__tabs{
   display:grid;
-  grid-template-columns:repeat(6,minmax(0,1fr));
+  grid-template-columns:repeat(7,minmax(0,1fr));
   gap:10px;
   margin-bottom:18px;
 }
@@ -795,10 +795,86 @@ body.nav-open{overflow:hidden}
   gap:12px;
   flex-wrap:wrap;
 }
+.asset-form-page,
+.asset-detail-page{
+  width:100%;
+  max-width:1200px;
+  margin:0 auto;
+}
+.asset-form-grid{
+  display:grid;
+  gap:16px;
+}
+.asset-form-section{
+  border-radius:8px;
+}
+.asset-form-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.asset-detail-grid{
+  margin-top:18px;
+}
+.asset-detail-list{
+  display:grid;
+  gap:10px;
+}
+.asset-detail-list > div{
+  display:grid;
+  grid-template-columns:minmax(120px,180px) minmax(0,1fr);
+  gap:12px;
+  align-items:start;
+  padding:9px 0;
+  border-top:1px solid #f0efeb;
+}
+.asset-detail-list > div:first-child{
+  border-top:0;
+  padding-top:0;
+}
+.asset-detail-list span{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.asset-detail-list strong{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+.asset-notes{
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px solid #f0efeb;
+}
+.asset-notes p{
+  margin:4px 0 0;
+  line-height:1.5;
+}
+.asset-linked-expense{
+  display:grid;
+  gap:6px;
+}
+.asset-linked-expense strong{
+  font-size:22px;
+}
+.asset-linked-expense span,
+.asset-linked-expense p{
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+}
+.asset-dispose-form{
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px solid #f0efeb;
+}
 
 @media (max-width:1300px){
   .finance-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .expenses-hub__tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .expenses-hub__tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 @media (max-width:1050px){
   .finance-grid--main,
@@ -814,6 +890,8 @@ body.nav-open{overflow:hidden}
   .expense-summary,
   .expense-filter-grid,
   .expenses-hub__tabs{grid-template-columns:1fr}
+  .asset-detail-list > div{grid-template-columns:1fr;gap:3px}
+  .asset-form-actions .btn{flex:1 1 150px}
   .finance-filter label{width:100%}
   .finance-trend{gap:6px;overflow-x:auto;padding-bottom:4px}
   .finance-trend__month{min-width:34px}

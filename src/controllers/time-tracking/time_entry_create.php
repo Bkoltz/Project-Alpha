@@ -3,6 +3,12 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
+function time_tracking_create_error(string $message): void
+{
+    header('Location: /?page=time-tracking&error=' . urlencode($message));
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('time-tracking');
 
@@ -24,26 +30,56 @@ $startTime = trim((string)($_POST['start_time'] ?? ''));
 $endTime = trim((string)($_POST['end_time'] ?? ''));
 
 if ($description === '' || !$entryDate) {
-    header('Location: /?page=time-tracking&error=Invalid%20time%20entry');
-    exit;
+    time_tracking_create_error('Invalid time entry');
 }
 
-if ($contractId && (!$clientId || !$projectCode)) {
-    $doc = $pdo->prepare('SELECT client_id, project_code FROM contracts WHERE id = ?');
-    $doc->execute([$contractId]);
-    if ($row = $doc->fetch(PDO::FETCH_ASSOC)) {
-        $clientId = $clientId ?: (int)$row['client_id'];
-        $projectCode = $projectCode ?: ($row['project_code'] ?? null);
-    }
+$hasStart = $startTime !== '';
+$hasEnd = $endTime !== '';
+$hasStartEnd = $hasStart && $hasEnd;
+$hasManualHours = $hours > 0;
+if ($hasStart !== $hasEnd) {
+    time_tracking_create_error('Enter both start and end time, or use manual hours.');
 }
-if ($invoiceId && (!$clientId || !$projectCode || !$contractId)) {
-    $doc = $pdo->prepare('SELECT client_id, project_code, contract_id FROM invoices WHERE id = ?');
+if ($hasStartEnd && $hasManualHours) {
+    time_tracking_create_error('Use either start/end times or manual hours, not both.');
+}
+if (!$hasStartEnd && !$hasManualHours) {
+    time_tracking_create_error('Enter start/end times or manual hours greater than 0.');
+}
+
+if ($invoiceId) {
+    $doc = $pdo->prepare('SELECT client_id, contract_id, project_id, project_code FROM invoices WHERE id = ? AND billing_mode = "hourly" AND status NOT IN ("paid", "cancelled", "void")');
     $doc->execute([$invoiceId]);
-    if ($row = $doc->fetch(PDO::FETCH_ASSOC)) {
-        $clientId = $clientId ?: (int)$row['client_id'];
-        $projectCode = $projectCode ?: ($row['project_code'] ?? null);
-        $contractId = $contractId ?: ((int)($row['contract_id'] ?? 0) ?: null);
+    $row = $doc->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        time_tracking_create_error('Selected invoice is not an open hourly invoice.');
     }
+    $invoiceClientId = (int)$row['client_id'];
+    if ($clientId && $invoiceClientId !== $clientId) {
+        time_tracking_create_error('Selected invoice does not belong to the selected client.');
+    }
+    if ($contractId && (int)($row['contract_id'] ?? 0) > 0 && (int)$row['contract_id'] !== $contractId) {
+        time_tracking_create_error('Selected invoice does not belong to the selected contract.');
+    }
+    $clientId = $clientId ?: $invoiceClientId;
+    $projectId = $projectId ?: ((int)($row['project_id'] ?? 0) ?: null);
+    $projectCode = $projectCode ?: ($row['project_code'] ?? null);
+}
+
+if ($contractId) {
+    $doc = $pdo->prepare('SELECT client_id, project_id, project_code FROM contracts WHERE id = ? AND billing_mode = "hourly" AND status = "active"');
+    $doc->execute([$contractId]);
+    $row = $doc->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        time_tracking_create_error('Selected contract is not an active hourly contract.');
+    }
+    $contractClientId = (int)$row['client_id'];
+    if ($clientId && $contractClientId !== $clientId) {
+        time_tracking_create_error('Selected contract does not belong to the selected client.');
+    }
+    $clientId = $clientId ?: $contractClientId;
+    $projectId = $projectId ?: ((int)($row['project_id'] ?? 0) ?: null);
+    $projectCode = $projectCode ?: ($row['project_code'] ?? null);
 }
 if ($serviceItemId && $rate <= 0) {
     $svc = $pdo->prepare('SELECT unit_price FROM item_library WHERE id = ? AND is_active = 1');
@@ -57,16 +93,14 @@ if ($startTime !== '' && $endTime !== '') {
     $start = strtotime($entryDate . ' ' . $startTime);
     $end = strtotime($entryDate . ' ' . $endTime);
     if (!$start || !$end || $end <= $start) {
-        header('Location: /?page=time-tracking&error=End%20time%20must%20be%20after%20start%20time');
-        exit;
+        time_tracking_create_error('End time must be after start time');
     }
     $hours = round(($end - $start) / 3600, 2);
     $startedAt = date('Y-m-d H:i:s', $start);
     $endedAt = date('Y-m-d H:i:s', $end);
 }
 if ($hours <= 0) {
-    header('Location: /?page=time-tracking&error=Hours%20must%20be%20greater%20than%200');
-    exit;
+    time_tracking_create_error('Hours must be greater than 0');
 }
 
 $stmt = $pdo->prepare('INSERT INTO time_entries (user_id, client_id, project_id, project_code, contract_id, invoice_id, service_item_id, description, started_at, ended_at, hours, billable, rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');

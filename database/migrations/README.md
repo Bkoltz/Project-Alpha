@@ -8,7 +8,7 @@ Project Alpha 0.5.0 starts from the immutable `database/baseline.sql` schema. Th
 
 - Name files `0001_description.sql`, `0002_description.sql`, and so on.
 - Versions must begin at `0001` and remain contiguous and unique.
-- Never edit or remove a migration after it ships. Stored SHA-256 checksums are enforced.
+- Never edit or remove a migration after it ships. Stored SHA-256 checksums are enforced; CRLF/LF-only differences are tolerated so Windows and Linux builds validate the same SQL content.
 - Rollback files, `DELIMITER` blocks, gaps, malformed names, and empty files are rejected.
 - Do not copy historical pre-0.5.0 SQL back into this directory.
 - Before `0.5.0` ships, fold schema work into `database/baseline.sql`; after it ships, add the next immutable migration instead.

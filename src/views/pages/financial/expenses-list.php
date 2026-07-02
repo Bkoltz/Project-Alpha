@@ -1,6 +1,6 @@
 <?php
 // src/views/pages/financial/expenses-list.php
-// Unified expenses hub: Expenses, Receipts, Mileage, Vendors, Categories, Audit
+// Unified assets and expenses hub: Assets, Expenses, Receipts, Mileage, Vendors, Categories, Audit
 
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
@@ -10,6 +10,7 @@ $orgId = get_active_org_id();
 $csrfToken = csrf_sf_token('expense');
 
 $tabs = [
+    'assets'     => ['label' => 'Assets',     'file' => '_assets_tab.php',     'hint' => 'Equipment and depreciation'],
     'expenses'   => ['label' => 'Expenses',   'file' => '_expenses_tab.php',   'hint' => 'Spending ledger'],
     'receipts'   => ['label' => 'Receipts',   'file' => 'receipts-list.php',   'hint' => 'Uploads and matches'],
     'mileage'    => ['label' => 'Mileage',    'file' => 'mileage-list.php',    'hint' => 'Business trips'],
@@ -18,10 +19,11 @@ $tabs = [
     'audit'      => ['label' => 'Audit',      'file' => 'audit.php',           'hint' => 'Export reviews'],
 ];
 
-$active = $_GET['tab'] ?? 'expenses';
-if (!isset($tabs[$active])) $active = 'expenses';
+$active = $_GET['tab'] ?? 'assets';
+if (!isset($tabs[$active])) $active = 'assets';
 
 $stats = [
+    'assets' => 0,
     'expenses' => 0,
     'receipts' => 0,
     'mileage' => 0,
@@ -31,6 +33,10 @@ $stats = [
 ];
 
 try {
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM financial_assets WHERE organization_id=? AND status NOT IN ('disposed','lost')");
+    $countStmt->execute([$orgId]);
+    $stats['assets'] = (int)$countStmt->fetchColumn();
+
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses WHERE organization_id=? AND status != 'void'");
     $countStmt->execute([$orgId]);
     $stats['expenses'] = (int)$countStmt->fetchColumn();
@@ -63,10 +69,11 @@ try {
   <div class="finance-page-head expenses-hub__head">
     <div>
       <p class="finance-eyebrow">Financial workspace</p>
-      <h2>Expenses Hub</h2>
-      <p class="finance-subtitle">Track spending, receipts, mileage, vendors, categories, and audit exports from one place.</p>
+      <h2>Assets &amp; Expenses</h2>
+      <p class="finance-subtitle">Track owned assets, depreciation, spending, receipts, mileage, vendors, categories, and audit exports from one place.</p>
     </div>
     <div class="finance-actions">
+      <a href="/?page=financial/asset-form" class="btn">Add Asset</a>
       <a href="/?page=financial/expense-report" class="btn">Reports</a>
       <a href="/?page=financial/csv-import" class="btn">Import CSV</a>
       <a href="/?page=financial/expense-create" class="btn btn-primary">Add Expense</a>

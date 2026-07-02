@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Discover the immutable, sequential SQL migration history.
  *
- * @return array<int, array{version:int,filename:string,path:string,checksum:string}>
+ * @return array<int, array{version:int,filename:string,path:string,checksum:string,checksums:list<string>}>
  */
 function migration_files(string $directory): array
 {
@@ -38,11 +38,20 @@ function migration_files(string $directory): array
             throw new RuntimeException("Migration '$filename' is unreadable or empty.");
         }
 
+        $normalizedLf = str_replace(["\r\n", "\r"], "\n", $sql);
+        $normalizedCrlf = str_replace("\n", "\r\n", $normalizedLf);
+        $checksums = array_values(array_unique([
+            hash('sha256', $sql),
+            hash('sha256', $normalizedLf),
+            hash('sha256', $normalizedCrlf),
+        ]));
+
         $files[$version] = [
             'version' => $version,
             'filename' => $filename,
             'path' => $path,
-            'checksum' => hash('sha256', $sql),
+            'checksum' => $checksums[0],
+            'checksums' => $checksums,
         ];
         $expected++;
     }
@@ -177,7 +186,7 @@ function migration_ledger(PDO $pdo): array
 }
 
 /**
- * @param array<int, array{version:int,filename:string,path:string,checksum:string}> $files
+ * @param array<int, array{version:int,filename:string,path:string,checksum:string,checksums?:list<string>}> $files
  * @param array<int, array{version:int,filename:string,checksum:?string}> $ledger
  */
 function migration_validate_history(array $files, array $ledger): void
@@ -195,7 +204,15 @@ function migration_validate_history(array $files, array $ledger): void
             if ($row['filename'] !== $file['filename']) {
                 throw new RuntimeException("Applied migration filename differs for version $version.");
             }
-            if (!hash_equals((string) $row['checksum'], $file['checksum'])) {
+            $acceptedChecksums = $file['checksums'] ?? [$file['checksum']];
+            $matchesChecksum = false;
+            foreach ($acceptedChecksums as $checksum) {
+                if (hash_equals((string) $row['checksum'], $checksum)) {
+                    $matchesChecksum = true;
+                    break;
+                }
+            }
+            if (!$matchesChecksum) {
                 throw new RuntimeException("Checksum mismatch for applied migration {$file['filename']}.");
             }
         }

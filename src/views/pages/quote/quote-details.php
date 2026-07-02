@@ -364,7 +364,7 @@ $isPdf = defined('PDF_MODE');
     if ($scopeEnabled && $scopeText !== ''): 
   ?>
   <div style="page-break-before:auto;margin-top:20px">
-    <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Project</h3>
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:12px;color:#111">Scope of Work</h3>
     <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-left:4px solid #3b82f6;font-family: Georgia, 'Times New Roman', serif; font-size:13px; line-height:1.6; color:#374151;border-radius:4px"><?php echo nl2br(htmlspecialchars($scopeText)); ?></div>
   </div>
   <div style="page-break-after:always"></div>

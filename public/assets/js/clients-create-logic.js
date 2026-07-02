@@ -12,7 +12,7 @@ function initializeOrgCreate() {
     const createOrgForm = document.getElementById('createOrgForm');
     const createOrgCsrf = document.getElementById('createOrgCsrf');
     const createOrgNameInput = document.getElementById('createOrgNameInput');
-    const clientForm = document.querySelector('form[action="/?page=clients-create"]');
+    const clientForm = document.querySelector('form[action="/?page=clients-create"], form[action="/?page=client/clients-create"]');
     const orgValidationBanner = document.getElementById('orgValidationBanner');
     const clientNameInput = document.getElementById('clientNameInput');
     const duplicateBanner = document.getElementById('clientDuplicateBanner');
@@ -36,6 +36,10 @@ function initializeOrgCreate() {
         // Silently stop after max retries - we're probably not on the right page
         return;
     }
+    if (orgInput.dataset.orgCreateReady === '1') {
+        return;
+    }
+    orgInput.dataset.orgCreateReady = '1';
 
     // Get CSRF token from meta tag
     function getCsrfToken() {

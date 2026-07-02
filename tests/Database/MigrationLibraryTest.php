@@ -70,6 +70,23 @@ final class MigrationLibraryTest extends TestCase
         migration_validate_history($files, $ledger);
     }
 
+    public function testAppliedChecksumAcceptsLineEndingOnlyChanges(): void
+    {
+        $lfSql = "CREATE TABLE widget (id INT);\nALTER TABLE widget ADD name VARCHAR(50);\n";
+        $crlfSql = str_replace("\n", "\r\n", $lfSql);
+        file_put_contents($this->directory . '/0001_add_widget.sql', $crlfSql);
+        $files = migration_files($this->directory);
+        $ledger = [
+            0 => ['version' => 0, 'filename' => 'baseline.sql', 'checksum' => null],
+            1 => ['version' => 1, 'filename' => '0001_add_widget.sql', 'checksum' => hash('sha256', $lfSql)],
+        ];
+
+        migration_validate_history($files, $ledger);
+
+        $this->assertSame(hash('sha256', $crlfSql), $files[1]['checksum']);
+        $this->assertContains(hash('sha256', $lfSql), $files[1]['checksums']);
+    }
+
     public function testSqlSplitterPreservesQuotedSemicolons(): void
     {
         $statements = migration_statements(

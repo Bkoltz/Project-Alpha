@@ -10,20 +10,24 @@ $userId = (int)($_SESSION['user']['id'] ?? 0);
 $submissionId = (int)($_POST['submission_id'] ?? 0);
 $decision = (string)($_POST['decision'] ?? '');
 $notes = mb_substr(trim((string)($_POST['review_notes'] ?? '')), 0, 1000);
-if ($organizationId <= 0 || $submissionId <= 0 || !in_array($decision, ['approve', 'reject'], true)) {
+if ($userId <= 0 || $submissionId <= 0 || !in_array($decision, ['approve', 'reject'], true)) {
     header('Location: /?page=client/onboarding&error=' . urlencode('Invalid review request.'));
     exit;
 }
 
 try {
     $pdo->beginTransaction();
+    $ownerWhere = $organizationId > 0
+        ? '(i.organization_id=? OR (i.organization_id IS NULL AND i.created_by=?))'
+        : 'i.organization_id IS NULL AND i.created_by=?';
+    $ownerParams = $organizationId > 0 ? [$organizationId, $userId] : [$userId];
     $stmt = $pdo->prepare(
         'SELECT s.*,i.organization_id,i.target_organization_id,i.client_id,i.invited_email
          FROM client_onboarding_submissions s
          JOIN client_onboarding_invitations i ON i.id=s.invitation_id
-         WHERE s.id=? AND i.organization_id=? FOR UPDATE'
+         WHERE s.id=? AND ' . $ownerWhere . ' FOR UPDATE'
     );
-    $stmt->execute([$submissionId, $organizationId]);
+    $stmt->execute(array_merge([$submissionId], $ownerParams));
     $submission = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$submission || ($submission['status'] ?? '') !== 'pending') {
         throw new RuntimeException('This submission is no longer pending.');
@@ -77,16 +81,18 @@ try {
     $pdo->commit();
 
     audit_log($pdo, 'client_onboarding.' . $status, 'client_onboarding_submission', $submissionId, [
-        'organization_id' => $organizationId,
+        'organization_id' => !empty($submission['organization_id']) ? (int)$submission['organization_id'] : null,
         'client_id' => $clientId ?: null,
     ]);
-    EmailService::sendEmail(
-        (string)$submission['invited_email'],
-        'Client information ' . ($decision === 'approve' ? 'approved' : 'reviewed'),
-        $decision === 'approve'
-            ? '<p>Your client information has been approved. Thank you.</p>'
-            : '<p>Your client information was reviewed but not applied. Please contact the business if you need assistance.</p>'
-    );
+    if (!empty($submission['invited_email'])) {
+        EmailService::sendEmail(
+            (string)$submission['invited_email'],
+            'Client information ' . ($decision === 'approve' ? 'approved' : 'reviewed'),
+            $decision === 'approve'
+                ? '<p>Your client information has been approved. Thank you.</p>'
+                : '<p>Your client information was reviewed but not applied. Please contact the business if you need assistance.</p>'
+        );
+    }
     header('Location: /?page=client/onboarding&reviewed=1');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

@@ -35,7 +35,7 @@ $docTab = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', $_GET['doc_tab
     <div class="grid">
       <label>
         <input type="checkbox" name="quote_scope_enabled" value="1" <?php echo !empty($appConfig['quote_scope_enabled']) ? 'checked' : ''; ?>>
-        <span class="font-600">Enable "Scope of Project" field on quotes</span>
+        <span class="font-600">Enable "Scope of Work" field on quotes</span>
         <div style="margin-top:4px;color:var(--muted);font-size:12px">If enabled, quotes will have a scope field. If left blank, it will be excluded from PDF.</div>
       </label>
       <label style="display:block;margin-top:4px">
