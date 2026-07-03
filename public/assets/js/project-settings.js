@@ -211,8 +211,13 @@
       renderAll();
     });
   }
+  initProjectSettingsContactManager.pageInitializerId = 'project-settings-contact-manager';
 
-  initProjectSettingsContactManager();
-  document.addEventListener('DOMContentLoaded', initProjectSettingsContactManager);
-  document.addEventListener('pageLoaded', initProjectSettingsContactManager);
+  if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('project/projects-edit', initProjectSettingsContactManager);
+  } else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initProjectSettingsContactManager, { once: true });
+  } else {
+    initProjectSettingsContactManager();
+  }
 })();

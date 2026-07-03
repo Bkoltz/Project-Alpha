@@ -4,9 +4,11 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
+require_once __DIR__ . '/../../utils/project_selection.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
 $client_id = (int)($_POST['client_id'] ?? 0);
+$project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -25,6 +27,10 @@ $contractTypeStmt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=
 $contractTypeStmt->execute([$id]);
 $contractType = (string)($contractTypeStmt->fetchColumn() ?: '');
 $detailPage = $contractType === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
+if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
+  header('Location: /?page=contract/contracts-edit&id=' . $id . '&error=' . urlencode('Select an active or not-started project for this client or organization.'));
+  exit;
+}
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){
   $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
@@ -42,10 +48,22 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('UPDATE contracts SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
+  $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
   
   // Sync changes to linked invoices
-  $pdo->prepare('UPDATE invoices SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
+  $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
+  $pdo->prepare('DELETE FROM project_documents WHERE document_type="contract" AND document_id=?')->execute([$id]);
+  if ($project_id) {
+    $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $id]);
+  }
+  $linkedInvoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
+  $linkedInvoiceIds->execute([$id]);
+  foreach ($linkedInvoiceIds->fetchAll(PDO::FETCH_COLUMN) as $linkedInvoiceId) {
+    $pdo->prepare('DELETE FROM project_documents WHERE document_type="invoice" AND document_id=?')->execute([(int)$linkedInvoiceId]);
+    if ($project_id) {
+      $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, (int)$linkedInvoiceId]);
+    }
+  }
   
   // Sync items to linked invoices
   $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');

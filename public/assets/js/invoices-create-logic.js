@@ -86,9 +86,13 @@ function initInvoiceClientDropdown() {
             }).catch(() => { sugI.style.display = 'none' });
     });
 }
+initInvoiceClientDropdown.pageInitializerId = 'invoice-create-client-dropdown';
 
-initInvoiceClientDropdown();
-document.addEventListener('pageLoaded', initInvoiceClientDropdown);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('invoice/invoices-create', initInvoiceClientDropdown);
+} else {
+    initInvoiceClientDropdown();
+}
 
 function loadProjectsForClientInv(clientId) {
     const projectSection = document.getElementById('projectSectionInv');

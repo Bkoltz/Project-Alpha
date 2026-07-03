@@ -50,7 +50,7 @@ if ($client_id <= 0) {
     exit;
 }
 if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
-    header('Location: /?page=contract/contracts-create&error=' . urlencode('Select an active project for this client or organization.'));
+    header('Location: /?page=contract/contracts-create&error=' . urlencode('Select an active or not-started project for this client or organization.'));
     exit;
 }
 

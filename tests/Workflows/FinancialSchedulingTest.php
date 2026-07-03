@@ -40,8 +40,8 @@ final class FinancialSchedulingTest extends TestCase
     {
         $audit = file_get_contents($this->root . '/public/assets/js/audit-logic.js');
         $organization = file_get_contents($this->root . '/public/assets/js/organization-view-logic.js');
-        self::assertStringContainsString("document.addEventListener('pageLoaded'", (string)$audit);
-        self::assertStringContainsString("document.addEventListener('pageLoaded'", (string)$organization);
+        self::assertStringContainsString("window.ProjectAlpha.registerPage('financial/audit'", (string)$audit);
+        self::assertStringContainsString("window.ProjectAlpha.registerPage('organization/organization-view'", (string)$organization);
     }
 
     public function testAuditSchedulingIsASeparateVisibleAction(): void

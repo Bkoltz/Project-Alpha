@@ -239,12 +239,20 @@ $formDocuments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $docScopeWhere = [];
 $docScopeParams = [];
+$docScopeClientIds = [];
 if (!empty($project['client_id'])) {
-    $docScopeWhere[] = 'client_id = ?';
-    $docScopeParams[] = (int)$project['client_id'];
+    $docScopeClientIds[] = (int)$project['client_id'];
+}
+foreach ($projectClients as $projectClient) {
+    $docScopeClientIds[] = (int)$projectClient['id'];
+}
+$docScopeClientIds = array_values(array_unique(array_filter($docScopeClientIds, static fn($id) => $id > 0)));
+if ($docScopeClientIds) {
+    $docScopeWhere[] = 'client_id IN (' . implode(',', array_fill(0, count($docScopeClientIds), '?')) . ')';
+    $docScopeParams = array_merge($docScopeParams, $docScopeClientIds);
 }
 if (!empty($project['organization_id'])) {
-    $docScopeWhere[] = 'organization_id = ?';
+    $docScopeWhere[] = 'client_id IN (SELECT id FROM clients WHERE organization_id = ?)';
     $docScopeParams[] = (int)$project['organization_id'];
 }
 $docScopeSql = $docScopeWhere ? '(' . implode(' OR ', $docScopeWhere) . ')' : '1=0';

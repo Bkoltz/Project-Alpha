@@ -397,12 +397,14 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
       if (roleSelect) roleSelect.addEventListener('change', updateForRole);
       updateForRole();
     }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initAccountCreateForm);
+    initAccountCreateForm.pageInitializerId = 'account-create-form';
+    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+      window.ProjectAlpha.registerPage('accounts', initAccountCreateForm);
+    } else if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initAccountCreateForm, { once: true });
     } else {
       initAccountCreateForm();
     }
-    document.addEventListener('pageLoaded', initAccountCreateForm);
     </script>
   <?php else: ?>
     <!-- Users List -->

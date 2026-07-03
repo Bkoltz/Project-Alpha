@@ -453,13 +453,13 @@ function initContractClientDropdown() {
             }).catch(() => { sug.style.display = 'none' });
     });
 }
+initContractClientDropdown.pageInitializerId = 'contract-create-client-dropdown';
 
-// Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)
-initContractClientDropdown();
-document.addEventListener('pageLoaded', initContractClientDropdown);
-// Fallbacks for SPA navigation timing issues
-setTimeout(initContractClientDropdown, 100);
-setTimeout(initContractClientDropdown, 500);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('contract/contracts-create', initContractClientDropdown);
+} else {
+    initContractClientDropdown();
+}
 
 function loadProjectsForClientCo(clientId) {
     const projectSection = document.getElementById('projectSectionCo');

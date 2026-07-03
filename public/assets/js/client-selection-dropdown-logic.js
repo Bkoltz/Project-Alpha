@@ -73,9 +73,12 @@ function initClientDropdown() {
         document.addEventListener('click', document._clientOutsideClickHandler);
     }
 }
+initClientDropdown.pageInitializerId = 'client-selection-dropdown';
 
-// Auto-initialize on full page loads
-document.addEventListener('DOMContentLoaded', initClientDropdown);
-
-// Re-initialize when pages are loaded via AJAX navigation
-document.addEventListener('pageLoaded', initClientDropdown);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage(['project/projects-create', 'quote/quotes-create'], initClientDropdown);
+} else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initClientDropdown, { once: true });
+} else {
+    initClientDropdown();
+}

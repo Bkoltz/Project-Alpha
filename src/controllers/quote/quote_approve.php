@@ -67,7 +67,7 @@ try {
   if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
     // For LT/OD quotes, only create contract if auto-create is enabled
     if ($autoCreateContract) {
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, billing_start_mode, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
           ->execute([
             $id,
             (int)$quote['client_id'],
@@ -90,6 +90,7 @@ try {
             $quote['billing_interval_unit'] ?? 'month',
             $quote['pricing_type'] ?? ($quoteType === 'on_demand' ? 'on_demand' : null),
             $quote['price_per_invoice'] ?? null,
+            $quoteType === 'long_term' ? 'on_upload' : null,
             $quote['scope'] ?? null,
             $quoteOrgId,
             $quoteCreator

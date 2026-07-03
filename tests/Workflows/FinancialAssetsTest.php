@@ -39,6 +39,30 @@ final class FinancialAssetsTest extends TestCase
         self::assertStringContainsString("'financial/asset-handler'          => 'financial.manage'", $acl);
     }
 
+    public function testExpenseRoutesPermissionsAndFormSubmitAreRegistered(): void
+    {
+        $front = $this->read('public/index.php');
+        self::assertStringContainsString("'financial/expense-handler'", $front);
+        self::assertStringContainsString("'financial/expense_handler'", $front);
+        self::assertStringContainsString('src/controllers/financial/expense_handler.php', $front);
+
+        $acl = $this->read('src/utils/acl_middleware.php');
+        self::assertStringContainsString("'financial/expense-create'         => 'financial.manage'", $acl);
+        self::assertStringContainsString("'financial/expense-detail'         => 'financial.view'", $acl);
+        self::assertStringContainsString("'financial/expense-handler'        => 'financial.manage'", $acl);
+        self::assertStringContainsString("'financial/expense_handler'        => 'financial.manage'", $acl);
+
+        $form = $this->read('src/views/pages/financial/expense-create.php');
+        self::assertStringContainsString('action="/?page=financial/expense-handler"', $form);
+        self::assertStringContainsString('(function () {', $form);
+        self::assertStringContainsString("form.action || '/?page=financial/expense-handler'", $form);
+
+        $handler = $this->read('src/controllers/financial/expense_handler.php');
+        self::assertStringContainsString('function expense_handler_is_ajax()', $handler);
+        self::assertStringContainsString("'status_param' => 'created'", $handler);
+        self::assertStringContainsString("'status_param' => 'updated'", $handler);
+    }
+
     public function testAssetsAreExposedInFinancialHubUi(): void
     {
         $hub = $this->read('src/views/pages/financial/expenses-list.php');

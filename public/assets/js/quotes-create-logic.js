@@ -534,13 +534,13 @@ function initQuoteClientDropdown() {
             }).catch(() => { sug.style.display = 'none' });
     });
 }
+initQuoteClientDropdown.pageInitializerId = 'quote-create-client-dropdown';
 
-// Initialize immediately (for hard refresh) and on pageLoaded (for SPA nav)
-initQuoteClientDropdown();
-document.addEventListener('pageLoaded', initQuoteClientDropdown);
-// Fallbacks for SPA navigation timing issues
-setTimeout(initQuoteClientDropdown, 100);
-setTimeout(initQuoteClientDropdown, 500);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('quote/quotes-create', initQuoteClientDropdown);
+} else {
+    initQuoteClientDropdown();
+}
 
 document.getElementById('quoteForm').addEventListener('submit', function (e) {
     var cid = document.getElementById('clientId');

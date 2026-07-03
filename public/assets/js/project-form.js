@@ -331,8 +331,13 @@
         }
         loadClientOptions();
     }
+    initProjectForm.pageInitializerId = 'project-form';
 
-    initProjectForm();
-    document.addEventListener('DOMContentLoaded', initProjectForm);
-    document.addEventListener('pageLoaded', initProjectForm);
+    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+        window.ProjectAlpha.registerPage('project/projects-create', initProjectForm);
+    } else if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initProjectForm, { once: true });
+    } else {
+        initProjectForm();
+    }
 })();

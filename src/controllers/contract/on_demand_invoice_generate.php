@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/crypto.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
+require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/acl.php';
 
@@ -113,8 +114,7 @@ try {
     }
     
     // Assign doc number
-    $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "on_demand"')->fetchColumn();
-    $docNumber = $maxDoc + 1;
+    $docNumber = pa_next_invoice_doc_number($pdo, 'on_demand');
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNumber, $invoiceId]);
     
     // Add invoice items. Preserve itemized contracts; flat contracts get one line.
@@ -136,10 +136,7 @@ try {
             ]);
         }
     } else {
-        $billingInterval = $contract['billing_interval_count'] . ' ' . ucfirst($contract['billing_interval_unit']);
-        if ($contract['billing_interval_count'] > 1) $billingInterval .= 's';
-
-        $description = 'On-demand service fee (' . strtolower($billingInterval) . ')';
+        $description = 'On-demand service fee';
         if (!empty($contract['scope'])) {
             $description .= ' - ' . substr($contract['scope'], 0, 100);
         }
@@ -157,7 +154,7 @@ try {
     
     $pdo->commit();
     
-    @error_log("[on_demand_invoice_generate] Generated invoice I-$maxDoc for contract ODC-{$contract['doc_number']} (\${$total})");
+    @error_log("[on_demand_invoice_generate] Generated invoice ODI-$docNumber for contract ODC-{$contract['doc_number']} (\${$total})");
 
     // Generate-only remains private. The send choice finalizes first; monthly
     // project children are collected later through the project statement.

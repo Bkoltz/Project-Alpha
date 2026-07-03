@@ -102,6 +102,8 @@ function initInvoiceEdit() {
   // Client typeahead for invoice edit
   var ciI = document.getElementById('clientInputInv');
   if (!ciI) return; // Not on invoice edit page
+  if (ciI.dataset.invoiceEditReady === '1') return;
+  ciI.dataset.invoiceEditReady = '1';
 
   var cidI = document.getElementById('clientIdInv');
   var sugI = document.getElementById('clientSuggestInv');
@@ -141,18 +143,15 @@ function initInvoiceEdit() {
     if (elem) elem.addEventListener('input', recalcInv);
   });
 }
+initInvoiceEdit.pageInitializerId = 'invoice-edit';
 
-// Initialize on page load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initInvoiceEdit);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+  window.ProjectAlpha.registerPage('invoice/invoices-edit', initInvoiceEdit);
+} else if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initInvoiceEdit, { once: true });
 } else {
   initInvoiceEdit();
 }
-
-// Re-initialize after AJAX page load (for client-side navigation)
-document.addEventListener('pageLoaded', function () {
-  initInvoiceEdit();
-});
 
 var items = document.querySelectorAll("#item");
 var descriptions = document.querySelectorAll("#description");

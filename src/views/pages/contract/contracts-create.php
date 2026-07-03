@@ -13,7 +13,7 @@ if ($selectedProjectId > 0) {
     FROM projects p
     LEFT JOIN clients c ON c.id = p.client_id
     LEFT JOIN organizations o ON o.id = p.organization_id
-    WHERE p.id = ? AND p.status = "active"
+    WHERE p.id = ? AND p.status IN ("active","not_started")
   ');
   $projectStmt->execute([$selectedProjectId]);
   $selectedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -146,6 +146,24 @@ if ($selectedProjectId > 0) {
             <option value="ongoing">Ongoing (Until Terminated)</option>
             <option value="fixed">Fixed End Date</option>
           </select>
+        </label>
+      </div>
+
+      <div style="margin-top:12px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+        <div style="font-weight:600;margin-bottom:8px;color:#1e3a8a">Billing Start</div>
+        <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="radio" name="billing_start_mode" value="on_upload" checked style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Start when signed contract is uploaded</div>
+            <div style="font-size:13px;color:#6b7280">Default. The first long-term invoice becomes due when the signed contract is received.</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+          <input type="radio" name="billing_start_mode" value="manual" style="margin-top:3px">
+          <div>
+            <div style="font-weight:600;color:#374151">Manual start</div>
+            <div style="font-size:13px;color:#6b7280">Keep recurring invoices paused until you explicitly start billing.</div>
+          </div>
         </label>
       </div>
 

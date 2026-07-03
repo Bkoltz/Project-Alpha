@@ -12,11 +12,91 @@ let currentPage = getCurrentPage();
 const contentCache = new Map();
 const cachedScripts = new Array();
 let navigationInitialized = false;
+const pageInitializers = new Map();
+let pageCleanupCallbacks = [];
 
 function getCurrentPage() {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('page') || 'home';
 }
+
+function normalizePageName(page) {
+    return String(page || getCurrentPage() || 'home').split('&')[0];
+}
+
+function getMainContentRoot() {
+    return document.querySelector('.main-content') || document;
+}
+
+function runPageCleanups() {
+    pageCleanupCallbacks.forEach(cleanup => {
+        try {
+            cleanup();
+        } catch (err) {
+            console.error('Page cleanup failed', err);
+        }
+    });
+    pageCleanupCallbacks = [];
+}
+
+function runPageInitializers(page, root = getMainContentRoot()) {
+    const normalizedPage = normalizePageName(page);
+    const initializers = pageInitializers.get(normalizedPage) || [];
+
+    initializers.forEach(initializer => {
+        try {
+            const cleanup = initializer({
+                page: normalizedPage,
+                fullPage: page || normalizedPage,
+                root: root || document
+            });
+            if (typeof cleanup === 'function') {
+                pageCleanupCallbacks.push(cleanup);
+            }
+        } catch (err) {
+            console.error('Page initializer failed for ' + normalizedPage, err);
+        }
+    });
+}
+
+function registerPageInitializer(pages, initializer) {
+    if (typeof initializer !== 'function') return;
+
+    const pageList = Array.isArray(pages) ? pages : [pages];
+    const normalizedPages = pageList
+        .filter(Boolean)
+        .map(normalizePageName);
+    const initializerId = initializer.pageInitializerId || initializer.__pageInitializerId || initializer.name || '';
+
+    normalizedPages.forEach(page => {
+        const initializers = pageInitializers.get(page) || [];
+        const existingIndex = initializerId
+            ? initializers.findIndex(existing => (
+                existing.pageInitializerId ||
+                existing.__pageInitializerId ||
+                existing.name ||
+                ''
+            ) === initializerId)
+            : -1;
+
+        if (existingIndex >= 0) {
+            initializers[existingIndex] = initializer;
+        } else if (!initializers.includes(initializer)) {
+            initializers.push(initializer);
+        }
+        pageInitializers.set(page, initializers);
+    });
+
+    const activePage = normalizePageName(currentPage || getCurrentPage());
+    if (normalizedPages.includes(activePage)) {
+        runPageInitializers(activePage, getMainContentRoot());
+    }
+}
+
+window.ProjectAlpha = window.ProjectAlpha || {};
+window.ProjectAlpha.registerPage = registerPageInitializer;
+window.ProjectAlpha.runPageInitializers = runPageInitializers;
+window.ProjectAlpha.cleanupPage = runPageCleanups;
 
 /* 
     Updates the navigation sidebar 
@@ -99,18 +179,14 @@ async function loadPageContent(page) {
 
         if (!newMainContent) {
             console.error('ERROR: .main-content not found in response!');
-            console.log('Document body:', document.body ? document.body.innerHTML.substring(0, 500) : 'No body');
-            console.log('Checking for section tag:', doc.querySelector('section') ? 'Found' : 'Not found');
         }
 
         if (newMainContent) {
-            console.log("main content found");
             const scripts = Array.from(newMainContent.querySelectorAll('script'));
 
             // Debug: check if script exists in raw HTML
             if (scripts.length === 0 && html.match(/<script\b[^>]*>/i)) {
                 console.warn('WARNING: Script tags exist in raw HTML but not found in parsed DOM!');
-                console.log('Script tag count in raw HTML:', (html.match(/<script\b[^>]*>/gi) || []).length);
             }
             const inlineScripts = scripts.map(s => ({
                 src: s.getAttribute('src') || null,
@@ -199,7 +275,7 @@ async function navigateToPage(page, updateHistory = true) {
         return; // Already on this page
     }
 
-    console.log("navigatyinh");
+    runPageCleanups();
 
     //Removed previously added scripts
     cachedScripts.forEach(s => {
@@ -248,8 +324,9 @@ async function navigateToPage(page, updateHistory = true) {
             updatePageTitle(page);
 
             await executePageScripts(scripts);
+            runPageInitializers(page, mainContent);
 
-            // Dispatch after injected scripts load so their pageLoaded listeners are registered.
+            // Keep the legacy event for older scripts while new page scripts use ProjectAlpha.registerPage.
             dispatchPageLoaded(page);
         }
 
@@ -418,6 +495,7 @@ function initialize() {
     history.replaceState({ page: currentPage }, '', window.location.href);
     updateActiveNavigation(currentPage);
     initializeDocumentFilterToggles();
+    runPageInitializers(currentPage, getMainContentRoot());
 
     initMobileNav();
 }

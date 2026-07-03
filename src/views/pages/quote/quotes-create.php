@@ -12,7 +12,7 @@ if ($selectedProjectId > 0) {
     FROM projects p
     LEFT JOIN clients c ON c.id = p.client_id
     LEFT JOIN organizations o ON o.id = p.organization_id
-    WHERE p.id = ? AND p.status = "active"
+    WHERE p.id = ? AND p.status IN ("active","not_started")
   ');
   $projectStmt->execute([$selectedProjectId]);
   $selectedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: null;

@@ -1006,6 +1006,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract/long_term_contract_activate.php';
         exit;
     }
+    if ($page === 'long-term-contract-start-billing') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_contract_start_billing.php';
+        exit;
+    }
     if ($page === 'on-demand-contract-activate') {
         require_once __DIR__ . '/../src/controllers/contract/on_demand_contract_activate.php';
         exit;

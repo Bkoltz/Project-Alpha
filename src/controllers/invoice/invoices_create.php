@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
+require_once __DIR__ . '/../../utils/invoice_numbers.php';
 
 $__orgId = get_active_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -20,7 +21,10 @@ $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent'
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
-$invoiceAction = (string)($_POST['invoice_action'] ?? 'draft');
+$invoiceAction = (string)($_POST['invoice_action'] ?? 'save');
+if (!in_array($invoiceAction, ['save', 'draft', 'finalize_send'], true)) {
+    $invoiceAction = 'save';
+}
 $finalizeAndSend = $invoiceAction === 'finalize_send';
 $due_date = $_POST['due_date'] ?? null;
 if (!$due_date || trim($due_date) === '') {
@@ -40,7 +44,7 @@ if ($client_id <= 0 || empty($item)) {
     exit;
 }
 if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
-    header('Location: /?page=invoice/invoices-create&error=' . urlencode('Select an active project for this client or organization.'));
+    header('Location: /?page=invoice/invoices-create&error=' . urlencode('Select an active or not-started project for this client or organization.'));
     exit;
 }
 
@@ -99,8 +103,7 @@ try {
       $up->execute([$projectCode, $client_id, $notes]);
     }
     // Assign per-type doc_number for invoices
-    $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices')->fetchColumn();
-    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
+    $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([pa_next_invoice_doc_number($pdo, 'regular'), $invoice_id]);
 
     $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit, time_entry_id, hours) VALUES (?,?,?,?,?,?,?,?,?)');
     foreach ($items as $idx => $it) {

@@ -25,10 +25,12 @@ function initClientOnboardingPage() {
         });
     });
 }
+initClientOnboardingPage.pageInitializerId = 'client-onboarding';
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initClientOnboardingPage);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('client/onboarding', initClientOnboardingPage);
+} else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initClientOnboardingPage, { once: true });
 } else {
     initClientOnboardingPage();
 }
-document.addEventListener('pageLoaded', initClientOnboardingPage);
