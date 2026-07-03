@@ -14,6 +14,23 @@ function pa_api_keys_table_has_column(PDO $pdo, string $column): bool
     }
 }
 
+function pa_api_keys_existing_columns(PDO $pdo): array
+{
+    try {
+        $stmt = $pdo->query(
+            'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = \'api_keys\''
+        );
+        $columns = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $column) {
+            $columns[(string)$column] = true;
+        }
+        return $columns;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 function pa_ensure_api_keys_schema(PDO $pdo): void
 {
     static $done = false;
@@ -67,6 +84,13 @@ function pa_ensure_api_keys_schema(PDO $pdo): void
                 @error_log('[ApiKeysSchema] Failed to add api_keys.' . $column . ': ' . $e->getMessage());
             }
         }
+    }
+
+    $required = ['name', 'key_prefix', 'key_hash', 'scopes', 'allowed_ips', 'created_at', 'last_used_at', 'revoked_at'];
+    $existing = pa_api_keys_existing_columns($pdo);
+    $missing = array_values(array_filter($required, static fn(string $column): bool => empty($existing[$column])));
+    if ($missing) {
+        throw new RuntimeException('api_keys schema repair incomplete; missing columns: ' . implode(', ', $missing));
     }
 
     try {

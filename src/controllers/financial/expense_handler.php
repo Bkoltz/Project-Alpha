@@ -73,10 +73,10 @@ try {
             $projectId = (int)($_POST['project_id'] ?? 0);
             $receiptId = (int)($_POST['receipt_id'] ?? 0);
             $amount = (float)($_POST['amount'] ?? 0);
-            $taxAmount = $_POST['tax_amount'] !== '' ? (float)$_POST['tax_amount'] : null;
+            $taxAmount = null;
             $expenseDate = $_POST['expense_date'] ?? date('Y-m-d');
             $description = trim($_POST['description'] ?? '');
-            $paymentMethod = $_POST['payment_method'] ?? null;
+            $paymentMethod = null;
             $referenceNumber = trim($_POST['reference_number'] ?? '');
             $isBillable = !empty($_POST['is_billable']) ? 1 : 0;
             $isTaxDeductible = isset($_POST['is_tax_deductible']) ? (int)!empty($_POST['is_tax_deductible']) : 1;
@@ -89,7 +89,7 @@ try {
                 throw new Exception('Expense date is required');
             }
 
-            $totalAmount = $taxAmount !== null ? $amount + $taxAmount : $amount;
+            $totalAmount = $amount;
 
             // Auto-create vendor if name provided but no vendor_id
             if ($vendorId <= 0 && $vendorName !== '') {
@@ -131,16 +131,16 @@ try {
             $clientId = (int)($_POST['client_id'] ?? 0);
             $projectId = (int)($_POST['project_id'] ?? 0);
             $amount = (float)($_POST['amount'] ?? 0);
-            $taxAmount = $_POST['tax_amount'] !== '' ? (float)$_POST['tax_amount'] : null;
+            $taxAmount = null;
             $expenseDate = $_POST['expense_date'] ?? date('Y-m-d');
             $description = trim($_POST['description'] ?? '');
-            $paymentMethod = $_POST['payment_method'] ?? null;
+            $paymentMethod = null;
             $referenceNumber = trim($_POST['reference_number'] ?? '');
             $isBillable = !empty($_POST['is_billable']) ? 1 : 0;
             $isTaxDeductible = isset($_POST['is_tax_deductible']) ? (int)!empty($_POST['is_tax_deductible']) : 1;
             $notes = trim($_POST['notes'] ?? '');
 
-            $totalAmount = $taxAmount !== null ? $amount + $taxAmount : $amount;
+            $totalAmount = $amount;
 
             // Auto-create vendor if name provided but no vendor_id
             if ($vendorId <= 0 && $vendorName !== '') {

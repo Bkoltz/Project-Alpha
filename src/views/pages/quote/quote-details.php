@@ -204,7 +204,9 @@ $isPdf = defined('PDF_MODE');
           if ($finfo) {
             $det = @finfo_buffer($finfo, $imgContents);
             if ($det) { $mime = $det; }
-            @finfo_close($finfo);
+            if (PHP_VERSION_ID < 80500) {
+                @finfo_close($finfo);
+            }
           }
         }
         if ($mime === null) { $mime = 'image/png'; }

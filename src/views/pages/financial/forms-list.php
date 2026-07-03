@@ -82,6 +82,10 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div style="height:220px;background:#f9fafb;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
                         <?php if ($hasDocument): ?>
                             <?php if ($isPdf): ?>
+                                <iframe src="/?page=serve-upload&file=<?php echo urlencode(str_replace('/src/uploads/', '', $category['file_path'])); ?>#toolbar=0&navpanes=0&scrollbar=0&view=FitH"
+                                        title="<?php echo htmlspecialchars($category['title']); ?> preview"
+                                        loading="lazy"
+                                        style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;z-index:1;pointer-events:none"></iframe>
                                 <div style="text-align:center;color:var(--muted)">
                                     <div style="font-size:64px;margin-bottom:12px">📄</div>
                                     <div style="font-size:14px;font-weight:600"><?php echo htmlspecialchars($category['file_name']); ?></div>
@@ -101,7 +105,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             $detailPage = $category['type'] === 'folder' ? 'folder-detail' : 'form-detail';
                             ?>
                             <a href="/?page=financial/<?php echo $detailPage; ?>&id=<?php echo $category['id']; ?>" 
-                               style="position:absolute;top:12px;right:12px;padding:6px 12px;background:var(--nav-accent);color:#fff;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600">
+                               style="position:absolute;top:12px;right:12px;z-index:2;padding:6px 12px;background:var(--nav-accent);color:#fff;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600">
                                 View
                             </a>
                         <?php else: ?>

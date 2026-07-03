@@ -214,7 +214,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
           $mime = 'image/svg+xml';
         } else if (function_exists('finfo_open')) {
           $finfo = @finfo_open(FILEINFO_MIME_TYPE);
-          if ($finfo) { $det = @finfo_buffer($finfo, $imgContents); if ($det) { $mime = $det; } @finfo_close($finfo); }
+          if ($finfo) { $det = @finfo_buffer($finfo, $imgContents); if ($det) { $mime = $det; } if (PHP_VERSION_ID < 80500) { @finfo_close($finfo); } }
         }
         if ($mime === null) { $mime = 'image/png'; }
         $logoSrc = 'data:' . $mime . ';base64,' . base64_encode($imgContents);

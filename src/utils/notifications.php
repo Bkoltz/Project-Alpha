@@ -18,8 +18,37 @@ require_once __DIR__ . '/smtp.php';
  */
 require_once __DIR__ . '/client_ip.php';
 
+function ensure_activity_log_table(PDO $pdo): void {
+    static $done = false;
+    if ($done) {
+        return;
+    }
+
+    $pdo->exec('
+        CREATE TABLE IF NOT EXISTS activity_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            event_type VARCHAR(50) NOT NULL,
+            document_type VARCHAR(20) NULL,
+            document_id INT NULL,
+            client_id INT NULL,
+            description TEXT NOT NULL,
+            ip_address VARCHAR(45) NULL,
+            user_agent TEXT NULL,
+            metadata JSON NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_activity_type (event_type),
+            INDEX idx_activity_doc (document_type, document_id),
+            INDEX idx_activity_client (client_id),
+            INDEX idx_activity_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ');
+
+    $done = true;
+}
+
 function log_activity(PDO $pdo, string $eventType, ?string $documentType, ?int $documentId, ?int $clientId, string $description, array $metadata = []): void {
     try {
+        ensure_activity_log_table($pdo);
         $ip = get_client_ip();
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
         $metaJson = !empty($metadata) ? json_encode($metadata) : null;

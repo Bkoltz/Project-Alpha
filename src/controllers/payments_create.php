@@ -51,6 +51,7 @@ if (($invoice['collection_mode'] ?? 'direct') !== 'direct') {
 $client_id = (int)($invoice['client_id'] ?? 0);
 $contract_id = !empty($invoice['contract_id']) ? (int)$invoice['contract_id'] : null;
 $organization_id = !empty($invoice['organization_id']) ? (int)$invoice['organization_id'] : null;
+invoice_ensure_payments_schema($pdo);
 $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
 $paidStmt->execute([$invoice_id]);
 $outstanding = max(0.0, (float)$invoice['total'] - (float)$paidStmt->fetchColumn());
@@ -81,7 +82,7 @@ try {
       $check_number ?: null,
       null,
       [
-          'organization_id' => get_active_org_id(),
+          'organization_id' => $organization_id,
           'complete_contract_when_paid' => !$paid_in_advance,
           'source' => 'manual_payment',
       ]
@@ -103,7 +104,8 @@ try {
 } catch (Throwable $e) {
   $pdo->rollBack();
   @error_log('[PaymentsCreate] Error: ' . $e->getMessage());
-  header('Location: /?page=payments/payments-create&error=Failed%20to%20save%20payment');
+  $message = trim($e->getMessage()) !== '' ? substr($e->getMessage(), 0, 180) : 'Failed to save payment';
+  header('Location: /?page=payments/payments-create&error=' . urlencode($message));
   exit;
 }
 

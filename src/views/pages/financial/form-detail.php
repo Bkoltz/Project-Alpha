@@ -86,8 +86,11 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     ?>
                     <?php if ($isPdf): ?>
                         <div style="height:900px;max-height:900px;min-height:900px">
-                            <iframe src="<?php echo htmlspecialchars($fileUrl); ?>" 
+                            <iframe src="<?php echo htmlspecialchars($fileUrl . '#toolbar=1&navpanes=0&view=FitH'); ?>" 
                                     style="width:100%;height:900px;max-height:900px;border:0;display:block"></iframe>
+                            <div style="padding:10px 12px;border-top:1px solid #e5e7eb;background:#fff">
+                                <a href="<?php echo htmlspecialchars($fileUrl); ?>" target="_blank" rel="noopener" style="color:var(--nav-accent);font-weight:600;text-decoration:none">Open PDF in new tab</a>
+                            </div>
                         </div>
                     <?php else: ?>
                         <div style="padding:24px;text-align:center;background:#f9fafb">

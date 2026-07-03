@@ -28,6 +28,64 @@ function invoice_public_base_url(array $appConfig): string
     return $scheme . '://' . $host;
 }
 
+function invoice_table_has_column(PDO $pdo, string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . ':' . $column;
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+        $cache[$key] = false;
+        return false;
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$table, $column]);
+        $cache[$key] = $stmt->fetchColumn() !== false;
+        return $cache[$key];
+    } catch (Throwable $e) {
+        $cache[$key] = false;
+        return false;
+    }
+}
+
+function invoice_ensure_payments_schema(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+
+    $columns = [
+        'project_invoice_payment_id' => 'BIGINT NULL AFTER invoice_id',
+        'contract_id' => 'INT NULL AFTER project_invoice_payment_id',
+        'organization_id' => 'INT NULL AFTER contract_id',
+        'refunded_amount' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER amount',
+        'disputed_amount' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER refunded_amount',
+        'reference_number' => 'VARCHAR(255) NULL AFTER payment_date',
+        'notes' => 'TEXT NULL AFTER reference_number',
+        'status' => "VARCHAR(32) NOT NULL DEFAULT 'succeeded'",
+    ];
+
+    foreach ($columns as $column => $definition) {
+        if (!invoice_table_has_column($pdo, 'payments', $column)) {
+            try {
+                $pdo->exec("ALTER TABLE payments ADD COLUMN {$column} {$definition}");
+            } catch (Throwable $e) {
+                @error_log('[invoice_lifecycle] Failed to repair payments.' . $column . ': ' . $e->getMessage());
+            }
+        }
+    }
+
+    $done = true;
+}
+
 function invoice_expire_active_checkout(PDO $pdo, string $table, int $id, array $appConfig): void
 {
     if (!in_array($table, ['invoices', 'project_invoices'], true)) {
@@ -57,6 +115,7 @@ function invoice_expire_active_checkout(PDO $pdo, string $table, int $id, array 
 
 function invoice_effective_paid_total(PDO $pdo, int $invoiceId): float
 {
+    invoice_ensure_payments_schema($pdo);
     $stmt = $pdo->prepare('
         SELECT COALESCE(SUM(GREATEST(amount - refunded_amount - disputed_amount, 0)), 0)
         FROM payments
@@ -123,6 +182,7 @@ function invoice_record_locked_payment(
         throw new RuntimeException('Payment amount must be greater than zero.');
     }
 
+    invoice_ensure_payments_schema($pdo);
     $activeOrgId = $options['organization_id'] ?? null;
     $completeContractWhenPaid = (bool)($options['complete_contract_when_paid'] ?? false);
     $allowUnfinalized = (bool)($options['allow_unfinalized'] ?? false);

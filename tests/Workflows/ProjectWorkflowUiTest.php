@@ -249,4 +249,49 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('reference_number', (string)$paymentController);
         self::assertStringContainsString('referenceLabel.textContent', (string)$paymentScript);
     }
+
+    public function testLegacyServerSchemaRepairsProtectAjaxPages(): void
+    {
+        $migration = file_get_contents($this->root . '/database/migrations/0012_activity_log_and_legacy_schema_repairs.sql');
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $apiKeys = file_get_contents($this->root . '/src/views/pages/api-keys.php');
+        $apiKeysSchema = file_get_contents($this->root . '/src/utils/api_keys_schema.php');
+        $clientsList = file_get_contents($this->root . '/src/controllers/api/clients_list.php');
+        $notifications = file_get_contents($this->root . '/src/utils/notifications.php');
+        $dropbox = file_get_contents($this->root . '/src/controllers/settings/dropbox_oauth.php');
+        $publicSign = file_get_contents($this->root . '/src/controllers/public_view/public_contract_sign.php');
+
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS activity_log', (string)$migration);
+        self::assertStringContainsString('ALTER TABLE api_keys ADD COLUMN name', (string)$migration);
+        self::assertStringContainsString('ALTER TABLE payments ADD COLUMN reference_number', (string)$migration);
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS activity_log', (string)$baseline);
+        self::assertStringContainsString('pa_api_keys_existing_columns($pdo)', (string)$apiKeys);
+        self::assertStringContainsString('schema repair incomplete', (string)$apiKeysSchema);
+        self::assertStringContainsString('api_clients_table_has_column', (string)$clientsList);
+        self::assertStringContainsString('bindValue(count($params) + 1, $limit, PDO::PARAM_INT)', (string)$clientsList);
+        self::assertStringContainsString('ensure_activity_log_table($pdo)', (string)$notifications);
+        self::assertStringContainsString('PHP_VERSION_ID < 80500', (string)$dropbox);
+        self::assertStringContainsString('PHP_VERSION_ID < 80500', (string)$publicSign);
+    }
+
+    public function testPaymentsExpensesAndPdfPreviewsHandleLegacyServers(): void
+    {
+        $paymentController = file_get_contents($this->root . '/src/controllers/payments_create.php');
+        $invoiceLifecycle = file_get_contents($this->root . '/src/utils/invoice_lifecycle.php');
+        $expenseHandler = file_get_contents($this->root . '/src/controllers/financial/expense_handler.php');
+        $expenseCreate = file_get_contents($this->root . '/src/views/pages/financial/expense-create.php');
+        $formsList = file_get_contents($this->root . '/src/views/pages/financial/forms-list.php');
+        $formDetail = file_get_contents($this->root . '/src/views/pages/financial/form-detail.php');
+
+        self::assertStringContainsString('invoice_ensure_payments_schema($pdo)', (string)$paymentController);
+        self::assertStringContainsString("'organization_id' => $organization_id", (string)$paymentController);
+        self::assertStringContainsString('function invoice_ensure_payments_schema', (string)$invoiceLifecycle);
+        self::assertStringContainsString('ALTER TABLE payments ADD COLUMN {$column}', (string)$invoiceLifecycle);
+        self::assertStringContainsString('$taxAmount = null;', (string)$expenseHandler);
+        self::assertStringContainsString('$paymentMethod = null;', (string)$expenseHandler);
+        self::assertStringNotContainsString('id="taxInput"', (string)$expenseCreate);
+        self::assertStringContainsString('style="display:none"', (string)$expenseCreate);
+        self::assertStringContainsString('#toolbar=0&navpanes=0&scrollbar=0&view=FitH', (string)$formsList);
+        self::assertStringContainsString('Open PDF in new tab', (string)$formDetail);
+    }
 }
