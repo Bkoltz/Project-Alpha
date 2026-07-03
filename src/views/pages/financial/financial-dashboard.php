@@ -3,7 +3,8 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Date range filter (default: current year)
 $defaultStartDate = date('Y') . '-01-01';
@@ -17,34 +18,38 @@ $incomeStmt = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(p.amount-p.refunded_am
 $incomeStmt->execute([$orgId, $orgId, $start, $end]);
 $totalIncome = (float)$incomeStmt->fetchColumn();
 
-$expenseStmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count FROM expenses WHERE organization_id=? AND status != 'void' AND expense_date BETWEEN ? AND ?");
-$expenseStmt->execute([$orgId, $start, $end]);
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+[$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
+[$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
+
+$expenseStmt = $pdo->prepare("SELECT COALESCE(SUM(e.total_amount),0) as total, COUNT(*) as count FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?");
+$expenseStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $expenseSummary = $expenseStmt->fetch(PDO::FETCH_ASSOC);
 $totalExpenses = (float)$expenseSummary['total'];
 $expenseCount = (int)$expenseSummary['count'];
 $netProfit = $totalIncome - $totalExpenses;
 
-$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(miles * mileage_rate),0) as total, COALESCE(SUM(miles),0) as miles, COUNT(*) as trips FROM mileage_logs WHERE organization_id=? AND purpose='business' AND trip_date BETWEEN ? AND ?");
-$mileageStmt->execute([$orgId, $start, $end]);
+$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(m.miles * m.mileage_rate),0) as total, COALESCE(SUM(m.miles),0) as miles, COUNT(*) as trips FROM mileage_logs m WHERE {$mileageScopeWhere} AND m.purpose='business' AND m.trip_date BETWEEN ? AND ?");
+$mileageStmt->execute(array_merge($mileageScopeParams, [$start, $end]));
 $mileageSummary = $mileageStmt->fetch(PDO::FETCH_ASSOC);
 $totalMileageDeduction = (float)($mileageSummary['total'] ?? 0);
 $totalMiles = (float)($mileageSummary['miles'] ?? 0);
 $totalTrips = (int)($mileageSummary['trips'] ?? 0);
 
-$receiptStmt = $pdo->prepare("SELECT COUNT(*) as count FROM receipts WHERE organization_id=? AND created_at BETWEEN ? AND ?");
-$receiptStmt->execute([$orgId, $start . ' 00:00:00', $end . ' 23:59:59']);
+$receiptStmt = $pdo->prepare("SELECT COUNT(*) as count FROM receipts r WHERE {$receiptScopeWhere} AND r.created_at BETWEEN ? AND ?");
+$receiptStmt->execute(array_merge($receiptScopeParams, [$start . ' 00:00:00', $end . ' 23:59:59']));
 $receiptCount = (int)$receiptStmt->fetchColumn();
 
 $catStmt = $pdo->prepare("
     SELECT ec.name, ec.color, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
     FROM expense_categories ec
-    LEFT JOIN expenses e ON e.category_id = ec.id AND e.organization_id = ? AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
+    LEFT JOIN expenses e ON e.category_id = ec.id AND {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     WHERE ec.organization_id = ?
     GROUP BY ec.id
     HAVING total > 0
     ORDER BY total DESC
 ");
-$catStmt->execute([$orgId, $start, $end, $orgId]);
+$catStmt->execute(array_merge($expenseScopeParams, [$start, $end, $orgId]));
 $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 $categoryMax = 0;
 foreach ($categories as $c) $categoryMax = max($categoryMax, (float)$c['total']);
@@ -52,14 +57,14 @@ foreach ($categories as $c) $categoryMax = max($categoryMax, (float)$c['total'])
 $vendorStmt = $pdo->prepare("
     SELECT v.name, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
     FROM vendors v
-    LEFT JOIN expenses e ON e.vendor_id = v.id AND e.organization_id = ? AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
+    LEFT JOIN expenses e ON e.vendor_id = v.id AND {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     WHERE v.organization_id = ? AND v.is_active = 1
     GROUP BY v.id
     HAVING total > 0
     ORDER BY total DESC
     LIMIT 8
 ");
-$vendorStmt->execute([$orgId, $start, $end, $orgId]);
+$vendorStmt->execute(array_merge($expenseScopeParams, [$start, $end, $orgId]));
 $vendors = $vendorStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $recentStmt = $pdo->prepare("
@@ -67,21 +72,21 @@ $recentStmt = $pdo->prepare("
     FROM expenses e
     LEFT JOIN expense_categories ec ON ec.id = e.category_id
     LEFT JOIN vendors v ON v.id = e.vendor_id
-    WHERE e.organization_id = ? AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
+    WHERE {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     ORDER BY e.expense_date DESC, e.id DESC
     LIMIT 10
 ");
-$recentStmt->execute([$orgId, $start, $end]);
+$recentStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $recentExpenses = $recentStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $statusStmt = $pdo->prepare("
     SELECT status, COUNT(*) as count, COALESCE(SUM(total_amount),0) as total
-    FROM expenses
-    WHERE organization_id = ? AND expense_date BETWEEN ? AND ?
+    FROM expenses e
+    WHERE {$expenseScopeWhere} AND e.expense_date BETWEEN ? AND ?
     GROUP BY status
     ORDER BY total DESC
 ");
-$statusStmt->execute([$orgId, $start, $end]);
+$statusStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $statusSummary = $statusStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $incomeTrendStmt = $pdo->prepare("
@@ -97,12 +102,12 @@ foreach ($incomeTrendStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 }
 
 $expenseTrendStmt = $pdo->prepare("
-    SELECT DATE_FORMAT(expense_date, '%Y-%m') as period, COALESCE(SUM(total_amount),0) as total
-    FROM expenses
-    WHERE organization_id=? AND status != 'void' AND expense_date BETWEEN ? AND ?
+    SELECT DATE_FORMAT(e.expense_date, '%Y-%m') as period, COALESCE(SUM(e.total_amount),0) as total
+    FROM expenses e
+    WHERE {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     GROUP BY period
 ");
-$expenseTrendStmt->execute([$orgId, $start, $end]);
+$expenseTrendStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $expensesByMonth = [];
 foreach ($expenseTrendStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $expensesByMonth[$row['period']] = (float)$row['total'];

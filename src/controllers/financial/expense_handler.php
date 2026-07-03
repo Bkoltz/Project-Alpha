@@ -39,6 +39,44 @@ function expense_handler_finish(array $response, int $status = 200, string $fall
     expense_handler_redirect_with_message($fallback, 'error', (string)($response['error'] ?? 'Expense request failed'));
 }
 
+function expense_handler_assert_org_row(PDO $pdo, string $table, int $id, int $orgId, string $label, ?string $ownerColumn = null, int $userId = 0): void
+{
+    if ($id <= 0) {
+        return;
+    }
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table)) {
+        throw new RuntimeException('Invalid table.');
+    }
+
+    $where = 'id = ? AND organization_id = ?';
+    $params = [$id, $orgId];
+    if ($ownerColumn !== null && ($_SESSION['user']['role'] ?? '') !== 'admin') {
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $ownerColumn)) {
+            throw new RuntimeException('Invalid owner column.');
+        }
+        $where .= " AND {$ownerColumn} = ?";
+        $params[] = $userId;
+    }
+
+    $stmt = $pdo->prepare("SELECT 1 FROM {$table} WHERE {$where} LIMIT 1");
+    $stmt->execute($params);
+    if (!$stmt->fetchColumn()) {
+        throw new RuntimeException($label . ' was not found for the active organization.');
+    }
+}
+
+function expense_handler_assert_client(PDO $pdo, int $clientId, int $orgId): void
+{
+    if ($clientId <= 0) {
+        return;
+    }
+    $stmt = $pdo->prepare('SELECT 1 FROM clients WHERE id = ? AND organization_id = ? LIMIT 1');
+    $stmt->execute([$clientId, $orgId]);
+    if (!$stmt->fetchColumn()) {
+        throw new RuntimeException('Client was not found for the active organization.');
+    }
+}
+
 $userId = $_SESSION['user']['id'] ?? null;
 if (!$userId) {
     expense_handler_finish(['success' => false, 'error' => 'Not authenticated'], 401, '/?page=login');
@@ -88,6 +126,14 @@ try {
             if (empty($expenseDate)) {
                 throw new Exception('Expense date is required');
             }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$expenseDate)) {
+                throw new Exception('Expense date must be in YYYY-MM-DD format');
+            }
+
+            if ($isBillable !== 1) {
+                $clientId = 0;
+                $projectId = 0;
+            }
 
             $totalAmount = $amount;
 
@@ -103,6 +149,12 @@ try {
                 }
             }
 
+            expense_handler_assert_org_row($pdo, 'vendors', $vendorId, $orgId, 'Vendor');
+            expense_handler_assert_org_row($pdo, 'expense_categories', $categoryId, $orgId, 'Category');
+            expense_handler_assert_client($pdo, $clientId, $orgId);
+            expense_handler_assert_org_row($pdo, 'projects', $projectId, $orgId, 'Project');
+            expense_handler_assert_org_row($pdo, 'receipts', $receiptId, $orgId, 'Receipt', 'uploaded_by', (int)$userId);
+
             $stmt = $pdo->prepare('
                 INSERT INTO expenses (organization_id, vendor_id, category_id, client_id, project_id, receipt_id,
                     amount, tax_amount, total_amount, expense_date, description, payment_method, reference_number,
@@ -117,13 +169,19 @@ try {
             ]);
             $expenseId = (int)$pdo->lastInsertId();
             audit_log($pdo, 'expense.create', 'expense', $expenseId, ['amount' => $amount, 'vendor_id' => $vendorId]);
-            $response = ['success' => true, 'id' => $expenseId, 'redirect' => '/?page=financial/expense-detail&id=' . $expenseId, 'status_param' => 'created'];
+            $response = ['success' => true, 'id' => $expenseId, 'redirect' => '/?page=financial/expense-detail&id=' . $expenseId . '&created=1', 'status_param' => 'created'];
             break;
 
         case 'update':
             $id = (int)($_POST['id'] ?? 0);
             $fallback = $id > 0 ? '/?page=financial/expense-create&id=' . $id : '/?page=financial/expense-create';
             if ($id <= 0) throw new Exception('Invalid expense ID');
+            [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)$userId, $orgId, 'created_by');
+            $exists = $pdo->prepare('SELECT 1 FROM expenses e WHERE e.id = ? AND ' . $expenseScopeWhere . ' LIMIT 1');
+            $exists->execute(array_merge([$id], $expenseScopeParams));
+            if (!$exists->fetchColumn()) {
+                throw new Exception('Expense not found');
+            }
 
             $vendorId = (int)($_POST['vendor_id'] ?? 0);
             $vendorName = trim($_POST['vendor_name'] ?? '');
@@ -140,6 +198,20 @@ try {
             $isTaxDeductible = isset($_POST['is_tax_deductible']) ? (int)!empty($_POST['is_tax_deductible']) : 1;
             $notes = trim($_POST['notes'] ?? '');
 
+            if ($amount <= 0) {
+                throw new Exception('Amount must be greater than 0');
+            }
+            if (empty($expenseDate)) {
+                throw new Exception('Expense date is required');
+            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$expenseDate)) {
+                throw new Exception('Expense date must be in YYYY-MM-DD format');
+            }
+            if ($isBillable !== 1) {
+                $clientId = 0;
+                $projectId = 0;
+            }
+
             $totalAmount = $amount;
 
             // Auto-create vendor if name provided but no vendor_id
@@ -154,6 +226,11 @@ try {
                 }
             }
 
+            expense_handler_assert_org_row($pdo, 'vendors', $vendorId, $orgId, 'Vendor');
+            expense_handler_assert_org_row($pdo, 'expense_categories', $categoryId, $orgId, 'Category');
+            expense_handler_assert_client($pdo, $clientId, $orgId);
+            expense_handler_assert_org_row($pdo, 'projects', $projectId, $orgId, 'Project');
+
             $stmt = $pdo->prepare('
                 UPDATE expenses SET vendor_id=?, category_id=?, client_id=?, project_id=?, amount=?,
                     tax_amount=?, total_amount=?, expense_date=?, description=?, payment_method=?,
@@ -167,14 +244,15 @@ try {
                 $id, $orgId
             ]);
             audit_log($pdo, 'expense.update', 'expense', $id);
-            $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id, 'status_param' => 'updated'];
+            $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id . '&updated=1', 'status_param' => 'updated'];
             break;
 
         case 'delete':
             $id = (int)($_POST['id'] ?? 0);
             $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list&tab=expenses';
             if ($id <= 0) throw new Exception('Invalid expense ID');
-            $pdo->prepare('UPDATE expenses SET status="void" WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
+            [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)$userId, $orgId, 'created_by');
+            $pdo->prepare('UPDATE expenses e SET status="void" WHERE e.id=? AND ' . $expenseScopeWhere)->execute(array_merge([$id], $expenseScopeParams));
             audit_log($pdo, 'expense.delete', 'expense', $id);
             $response = ['success' => true, 'redirect' => '/?page=financial/expenses-list&tab=expenses&deleted=1'];
             break;
@@ -183,7 +261,8 @@ try {
             $id = (int)($_POST['id'] ?? 0);
             $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list&tab=expenses';
             if ($id <= 0) throw new Exception('Invalid expense ID');
-            $pdo->prepare('UPDATE expenses SET is_reimbursed=1, status="reimbursed" WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
+            [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)$userId, $orgId, 'created_by');
+            $pdo->prepare('UPDATE expenses e SET is_reimbursed=1, status="reimbursed" WHERE e.id=? AND ' . $expenseScopeWhere)->execute(array_merge([$id], $expenseScopeParams));
             audit_log($pdo, 'expense.mark_reimbursed', 'expense', $id);
             $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id . '&reimbursed=1'];
             break;
@@ -192,7 +271,8 @@ try {
             $id = (int)($_POST['id'] ?? 0);
             $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list&tab=expenses';
             if ($id <= 0) throw new Exception('Invalid expense ID');
-            $pdo->prepare('UPDATE expenses SET is_reconciled=1 WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
+            [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)$userId, $orgId, 'created_by');
+            $pdo->prepare('UPDATE expenses e SET is_reconciled=1 WHERE e.id=? AND ' . $expenseScopeWhere)->execute(array_merge([$id], $expenseScopeParams));
             audit_log($pdo, 'expense.mark_reconciled', 'expense', $id);
             $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id . '&reconciled=1'];
             break;

@@ -4,15 +4,17 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/financial_assets.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 
 $assetSearch = trim((string)($_GET['asset_search'] ?? ''));
 $assetStatus = (string)($_GET['asset_status'] ?? '');
 $assetType = trim((string)($_GET['asset_type'] ?? ''));
 $assetVendorId = (int)($_GET['asset_vendor_id'] ?? 0);
 
-$where = ['a.organization_id = ?'];
-$params = [$orgId];
+[$assetScopeWhere, $assetScopeParams] = finance_scope_clause($pdo, 'a', $userId, $orgId, 'created_by');
+$where = [$assetScopeWhere];
+$params = $assetScopeParams;
 if ($assetSearch !== '') {
     $where[] = '(a.name LIKE ? OR a.asset_tag LIKE ? OR a.serial_number LIKE ? OR a.location LIKE ?)';
     $like = '%' . $assetSearch . '%';
@@ -46,8 +48,8 @@ $stmt = $pdo->prepare("
 $stmt->execute($params);
 $assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$typeStmt = $pdo->prepare('SELECT DISTINCT asset_type FROM financial_assets WHERE organization_id = ? AND asset_type IS NOT NULL AND asset_type <> "" ORDER BY asset_type');
-$typeStmt->execute([$orgId]);
+$typeStmt = $pdo->prepare('SELECT DISTINCT asset_type FROM financial_assets a WHERE ' . $assetScopeWhere . ' AND asset_type IS NOT NULL AND asset_type <> "" ORDER BY asset_type');
+$typeStmt->execute($assetScopeParams);
 $assetTypes = $typeStmt->fetchAll(PDO::FETCH_COLUMN);
 
 $vendorStmt = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id = ? AND is_active = 1 ORDER BY name');

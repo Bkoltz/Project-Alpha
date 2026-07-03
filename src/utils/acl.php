@@ -203,6 +203,23 @@ function scope_clause(PDO $pdo, string $tableAlias, int $userId): array
     return ["{$tableAlias}.organization_id = ? AND {$tableAlias}.created_by = ?", [$activeOrgId, $userId]];
 }
 
+function finance_scope_clause(PDO $pdo, string $tableAlias, int $userId, int $orgId, string $ownerColumn = 'created_by'): array
+{
+    $orgId = $orgId > 0 ? $orgId : active_or_default_org_id($pdo);
+    $where = ["{$tableAlias}.organization_id = ?"];
+    $params = [$orgId];
+
+    if (($_SESSION['user']['role'] ?? '') !== 'admin') {
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $ownerColumn)) {
+            $ownerColumn = 'created_by';
+        }
+        $where[] = "{$tableAlias}.{$ownerColumn} = ?";
+        $params[] = $userId;
+    }
+
+    return [implode(' AND ', $where), $params];
+}
+
 function can_access_record(PDO $pdo, string $table, int $recordId, int $userId): bool
 {
     if (($_SESSION['user']['role'] ?? '') === 'admin') {

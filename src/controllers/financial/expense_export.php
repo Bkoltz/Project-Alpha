@@ -14,7 +14,7 @@ if (!$userId) {
     exit;
 }
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
     http_response_code(403);
     exit('Permission denied');
@@ -30,8 +30,9 @@ $billable = $_GET['billable'] ?? '';
 $taxDeductible = $_GET['tax_deductible'] ?? '';
 $status = $_GET['status'] ?? '';
 
-$where = ['e.organization_id = ?'];
-$params = [$orgId];
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)$userId, $orgId, 'created_by');
+$where = [$expenseScopeWhere];
+$params = $expenseScopeParams;
 
 if ($start) { $where[] = 'e.expense_date >= ?'; $params[] = $start; }
 if ($end) { $where[] = 'e.expense_date <= ?'; $params[] = $end; }
@@ -67,7 +68,7 @@ header('Content-Disposition: attachment; filename="expenses-' . date('Y-m-d') . 
 $out = fopen('php://output', 'w');
 
 // Header row
-csv_write_row($out, ['Date', 'Vendor', 'Description', 'Category', 'Amount', 'Tax', 'Total', 'Payment Method', 'Reference', 'Billable', 'Client', 'Project', 'Tax-Deductible', 'Reimbursed', 'Reconciled', 'Status', 'Notes']);
+csv_write_row($out, ['Date', 'Vendor', 'Description', 'Category', 'Amount', 'Total', 'Reference', 'Billable', 'Client', 'Project', 'Tax-Deductible', 'Reimbursed', 'Reconciled', 'Status', 'Notes']);
 
 foreach ($expenses as $e) {
     csv_write_row($out, [
@@ -76,9 +77,7 @@ foreach ($expenses as $e) {
         $e['description'] ?? '',
         $e['category_name'] ?? '',
         number_format((float)$e['amount'], 2, '.', ''),
-        $e['tax_amount'] ? number_format((float)$e['tax_amount'], 2, '.', '') : '',
         $e['total_amount'] ? number_format((float)$e['total_amount'], 2, '.', '') : number_format((float)$e['amount'], 2, '.', ''),
-        $e['payment_method'] ?? '',
         $e['reference_number'] ?? '',
         $e['is_billable'] ? 'Yes' : 'No',
         $e['client_name'] ?? '',

@@ -6,13 +6,15 @@ require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/financial_assets.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) {
     header('Location: /?page=financial/expenses-list&tab=assets');
     exit;
 }
 
+[$assetScopeWhere, $assetScopeParams] = finance_scope_clause($pdo, 'a', $userId, $orgId, 'created_by');
 $stmt = $pdo->prepare('
     SELECT a.*, v.name AS vendor_name, ec.name AS category_name,
            e.expense_date AS linked_expense_date, e.total_amount AS linked_expense_total, e.amount AS linked_expense_amount,
@@ -21,9 +23,9 @@ $stmt = $pdo->prepare('
     LEFT JOIN vendors v ON v.id = a.vendor_id
     LEFT JOIN expense_categories ec ON ec.id = a.category_id
     LEFT JOIN expenses e ON e.id = a.expense_id
-    WHERE a.id = ? AND a.organization_id = ?
+    WHERE a.id = ? AND ' . $assetScopeWhere . '
 ');
-$stmt->execute([$id, $orgId]);
+$stmt->execute(array_merge([$id], $assetScopeParams));
 $asset = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$asset) {
     header('Location: /?page=financial/expenses-list&tab=assets');
@@ -157,7 +159,7 @@ $linkedExpenseTotal = (float)($asset['linked_expense_total'] ?? $asset['linked_e
       <?php endif; ?>
 
       <?php if (!in_array((string)$asset['status'], ['disposed', 'lost'], true)): ?>
-        <form id="assetDisposeForm" method="post" action="/?page=financial/asset-handler" class="asset-dispose-form">
+        <form id="assetDisposeForm" method="post" action="/?page=financial/asset-handler" class="asset-dispose-form" onsubmit="return confirm('Mark this asset as disposed?')">
           <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('asset')); ?>">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="action" value="delete">
@@ -168,25 +170,3 @@ $linkedExpenseTotal = (float)($asset['linked_expense_total'] ?? $asset['linked_e
     </aside>
   </div>
 </div>
-
-<script>
-(function() {
-  const form = document.getElementById('assetDisposeForm');
-  if (!form) return;
-  form.addEventListener('submit', async function(event) {
-    event.preventDefault();
-    if (!confirm('Mark this asset as disposed?')) return;
-    const response = await fetch('/?page=financial/asset-handler', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: new FormData(form)
-    });
-    const data = await response.json();
-    if (data.success && data.redirect) {
-      window.location.href = data.redirect;
-    } else {
-      alert(data.message || 'Failed to update asset');
-    }
-  });
-})();
-</script>

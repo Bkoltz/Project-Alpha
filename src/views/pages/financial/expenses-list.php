@@ -6,7 +6,8 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 $csrfToken = csrf_sf_token('expense');
 
 $tabs = [
@@ -33,20 +34,24 @@ $stats = [
 ];
 
 try {
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM financial_assets WHERE organization_id=? AND status NOT IN ('disposed','lost')");
-    $countStmt->execute([$orgId]);
+    [$assetScopeWhere, $assetScopeParams] = finance_scope_clause($pdo, 'a', $userId, $orgId, 'created_by');
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM financial_assets a WHERE {$assetScopeWhere} AND a.status NOT IN ('disposed','lost')");
+    $countStmt->execute($assetScopeParams);
     $stats['assets'] = (int)$countStmt->fetchColumn();
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses WHERE organization_id=? AND status != 'void'");
-    $countStmt->execute([$orgId]);
+    [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void'");
+    $countStmt->execute($expenseScopeParams);
     $stats['expenses'] = (int)$countStmt->fetchColumn();
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM receipts WHERE organization_id=?");
-    $countStmt->execute([$orgId]);
+    [$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM receipts r WHERE {$receiptScopeWhere}");
+    $countStmt->execute($receiptScopeParams);
     $stats['receipts'] = (int)$countStmt->fetchColumn();
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM mileage_logs WHERE organization_id=?");
-    $countStmt->execute([$orgId]);
+    [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM mileage_logs m WHERE {$mileageScopeWhere}");
+    $countStmt->execute($mileageScopeParams);
     $stats['mileage'] = (int)$countStmt->fetchColumn();
 
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM vendors WHERE organization_id=? AND is_active=1");

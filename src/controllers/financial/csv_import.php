@@ -30,7 +30,7 @@ if (!$csrfOk) {
     exit;
 }
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Permission denied']);
@@ -99,7 +99,7 @@ try {
 
         // Suggest mapping based on format
         $suggestedMapping = [];
-        $expenseFields = ['expense_date', 'vendor_name', 'description', 'amount', 'tax_amount', 'total_amount', 'reference_number', 'payment_method'];
+        $expenseFields = ['expense_date', 'vendor_name', 'description', 'amount', 'total_amount', 'reference_number'];
 
         if ($format === 'amazon') {
             foreach ($headers as $i => $h) {
@@ -108,10 +108,8 @@ try {
                 elseif ($hl === 'seller' || $hl === 'seller name') $suggestedMapping['vendor_name'] = $i;
                 elseif ($hl === 'title') $suggestedMapping['description'] = $i;
                 elseif ($hl === 'purchase price per unit' || $hl === 'purchase price') $suggestedMapping['amount'] = $i;
-                elseif ($hl === 'order tax') $suggestedMapping['tax_amount'] = $i;
                 elseif ($hl === 'order total') $suggestedMapping['total_amount'] = $i;
                 elseif ($hl === 'order id') $suggestedMapping['reference_number'] = $i;
-                elseif ($hl === 'payment instrument type') $suggestedMapping['payment_method'] = $i;
             }
         } else {
             // Generic: try to match common column names
@@ -183,26 +181,26 @@ try {
 
         // Cache vendors to avoid repeated lookups
         $vendorCache = [];
+        $mappedIndex = static function (array $mapping, string $field): ?int {
+            return array_key_exists($field, $mapping) && $mapping[$field] !== null ? (int)$mapping[$field] : null;
+        };
 
         foreach ($rows as $rowIdx => $row) {
             try {
                 // Extract fields using mapping
-                $expenseDate = $mapping['expense_date'] !== null && isset($row[$mapping['expense_date']])
-                    ? trim($row[$mapping['expense_date']]) : '';
-                $vendorName = $mapping['vendor_name'] !== null && isset($row[$mapping['vendor_name']])
-                    ? trim($row[$mapping['vendor_name']]) : '';
-                $description = $mapping['description'] !== null && isset($row[$mapping['description']])
-                    ? trim($row[$mapping['description']]) : '';
-                $amountStr = $mapping['amount'] !== null && isset($row[$mapping['amount']])
-                    ? trim($row[$mapping['amount']]) : '0';
-                $taxStr = $mapping['tax_amount'] !== null && isset($row[$mapping['tax_amount']])
-                    ? trim($row[$mapping['tax_amount']]) : '';
-                $totalStr = $mapping['total_amount'] !== null && isset($row[$mapping['total_amount']])
-                    ? trim($row[$mapping['total_amount']]) : '';
-                $reference = $mapping['reference_number'] !== null && isset($row[$mapping['reference_number']])
-                    ? trim($row[$mapping['reference_number']]) : '';
-                $paymentMethod = $mapping['payment_method'] !== null && isset($row[$mapping['payment_method']])
-                    ? trim($row[$mapping['payment_method']]) : '';
+                $expenseDateIdx = $mappedIndex($mapping, 'expense_date');
+                $vendorNameIdx = $mappedIndex($mapping, 'vendor_name');
+                $descriptionIdx = $mappedIndex($mapping, 'description');
+                $amountIdx = $mappedIndex($mapping, 'amount');
+                $totalIdx = $mappedIndex($mapping, 'total_amount');
+                $referenceIdx = $mappedIndex($mapping, 'reference_number');
+
+                $expenseDate = $expenseDateIdx !== null && isset($row[$expenseDateIdx]) ? trim($row[$expenseDateIdx]) : '';
+                $vendorName = $vendorNameIdx !== null && isset($row[$vendorNameIdx]) ? trim($row[$vendorNameIdx]) : '';
+                $description = $descriptionIdx !== null && isset($row[$descriptionIdx]) ? trim($row[$descriptionIdx]) : '';
+                $amountStr = $amountIdx !== null && isset($row[$amountIdx]) ? trim($row[$amountIdx]) : '0';
+                $totalStr = $totalIdx !== null && isset($row[$totalIdx]) ? trim($row[$totalIdx]) : '';
+                $reference = $referenceIdx !== null && isset($row[$referenceIdx]) ? trim($row[$referenceIdx]) : '';
 
                 // Parse date (try multiple formats)
                 $parsedDate = null;
@@ -228,25 +226,9 @@ try {
                 }
                 $amount = abs($amount);
 
-                $taxAmount = $taxStr !== '' ? abs((float)preg_replace('/[^0-9.\-]/', '', $taxStr)) : null;
-                $totalAmount = $totalStr !== '' ? abs((float)preg_replace('/[^0-9.\-]/', '', $totalStr)) : ($taxAmount !== null ? $amount + $taxAmount : $amount);
-
-                // Map payment method
-                $pmLower = strtolower($paymentMethod);
-                $pm = 'other';
-                if (strpos($pmLower, 'visa') !== false || strpos($pmLower, 'master') !== false || strpos($pmLower, 'card') !== false || strpos($pmLower, 'credit') !== false) {
-                    $pm = 'card';
-                } elseif (strpos($pmLower, 'bank') !== false || strpos($pmLower, 'ach') !== false || strpos($pmLower, 'transfer') !== false) {
-                    $pm = 'bank_transfer';
-                } elseif (strpos($pmLower, 'check') !== false) {
-                    $pm = 'check';
-                } elseif (strpos($pmLower, 'cash') !== false) {
-                    $pm = 'cash';
-                } elseif (strpos($pmLower, 'paypal') !== false) {
-                    $pm = 'paypal';
-                } elseif (strpos($pmLower, 'venmo') !== false) {
-                    $pm = 'venmo';
-                }
+                $taxAmount = null;
+                $totalAmount = $totalStr !== '' ? abs((float)preg_replace('/[^0-9.\-]/', '', $totalStr)) : $amount;
+                $pm = null;
 
                 // Find or create vendor
                 $vendorId = null;

@@ -5,7 +5,8 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Filters
 $start = $_GET['start'] ?? '';
@@ -14,8 +15,9 @@ $purpose = $_GET['purpose'] ?? '';
 $clientId = isset($_GET['client_id']) && $_GET['client_id'] !== '' ? (int)$_GET['client_id'] : 0;
 $billable = $_GET['billable'] ?? '';
 
-$where = ['m.organization_id = ?'];
-$params = [$orgId];
+[$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
+$where = [$mileageScopeWhere];
+$params = $mileageScopeParams;
 
 if ($start !== '') {
     $where[] = 'm.trip_date >= ?';
@@ -75,7 +77,8 @@ foreach ($logs as $log) {
 }
 
 // Clients for filter dropdown
-$clientsStmt = $pdo->query('SELECT id, name FROM clients ORDER BY name ASC');
+$clientsStmt = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name ASC');
+$clientsStmt->execute([$orgId]);
 $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
@@ -224,7 +227,7 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
               <td class="text-right">
                 <div class="flex flex-end">
                   <a href="/?page=financial/mileage-create&id=<?php echo (int)$log['id']; ?>" class="btn btn-sm">Edit</a>
-                  <form method="post" action="/?page=financial/mileage-handler" class="inline-form mileage-delete-form" style="display:inline">
+                  <form method="post" action="/?page=financial/mileage-handler" class="inline-form mileage-delete-form" style="display:inline" onsubmit="return confirm('Delete this mileage entry?')">
                     <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('mileage')); ?>">
                     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                     <input type="hidden" name="action" value="delete">
@@ -240,26 +243,3 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
     </table>
   </div>
 </section>
-
-<script>
-  document.querySelectorAll('.mileage-delete-form').forEach(function (form) {
-    form.addEventListener('submit', function (e) {
-      if (!confirm('Delete this mileage entry?')) {
-        e.preventDefault();
-        return false;
-      }
-      e.preventDefault();
-      var data = new FormData(form);
-      fetch(form.action, { method: 'POST', body: data })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-          if (res.success && res.redirect) {
-            window.location.href = res.redirect;
-          } else {
-            alert(res.message || 'Failed to delete mileage entry');
-          }
-        })
-        .catch(function () { alert('Request failed'); });
-    });
-  });
-</script>
