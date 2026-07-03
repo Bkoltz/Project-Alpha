@@ -149,4 +149,4 @@
     <div id="emailTestResult" style="margin-top:8px;font-size:13px"></div>
   </div>
 </fieldset>
-<script src="/assets/js/settings-system.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/settings-system.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

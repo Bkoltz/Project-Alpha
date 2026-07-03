@@ -8,6 +8,21 @@ function get_active_org_id(): int
     return (int)($_SESSION['user']['active_org_id'] ?? 0);
 }
 
+function active_or_default_org_id(PDO $pdo): int
+{
+    $activeOrgId = get_active_org_id();
+    if ($activeOrgId > 0) {
+        return $activeOrgId;
+    }
+
+    try {
+        $id = $pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn();
+        return $id !== false ? (int)$id : 0;
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
 function acl_default_user_org_id(PDO $pdo, int $userId): int
 {
     return 0;

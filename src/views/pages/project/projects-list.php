@@ -191,4 +191,4 @@ $formatDate = static function ($value): string {
   const clientData = <?php echo json_encode($clients, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
   const orgData = <?php echo json_encode($organizations, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 </script>
-<script src="/assets/js/projects-list-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/projects-list-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

@@ -266,4 +266,4 @@ try {
   <?php echo json_encode($items) ?>
 </div>
 
-<script src="/assets/js/contracts-edit-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/contracts-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

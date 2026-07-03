@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
+require_once __DIR__ . '/../../utils/contract_signatures.php';
 
 @error_log('[long_term_contracts_create] POST received', 0);
 
@@ -210,13 +211,7 @@ try{
     $signatureRequired = $_POST['signature_required'] ?? [];
     
     if (!empty($signatureTitles)) {
-        $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
-        foreach ($signatureTitles as $idx => $title) {
-            $title = trim($title);
-            if (empty($title)) continue;
-
-            $sigStmt->execute([$contract_id, $idx === 0 ? 'client' : 'witness']);
-        }
+        pa_save_contract_signatures($pdo, $contract_id, $signatureTitles, $signatureOrders, $signatureRequired);
     }
 
     // Add to project_documents if project_id is set

@@ -25,7 +25,7 @@ if (!csrf_validate()) {
 }
 
 try {
-    $orgId = get_active_org_id() ?: 0;
+    $orgId = active_or_default_org_id($pdo);
     $userId = (int)($_SESSION['user']['id'] ?? 0) ?: null;
     if ($orgId <= 0) {
         throw new Exception('Select an active organization before managing forms and documents.');
@@ -35,7 +35,6 @@ try {
         case 'quick_upload':
             // Quick upload - create category and upload file in one action
             $title = trim($_POST['title'] ?? '');
-            $projectId = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 
             if (empty($title)) {
                 throw new Exception('File name is required');
@@ -85,12 +84,11 @@ try {
                 throw new Exception('Failed to upload file');
             }
 
-            // Insert document with optional project_id
             $stmt = $pdo->prepare('
                 INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
-            $stmt->execute([$orgId, $categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+            $stmt->execute([$orgId, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
 
             $response['success'] = true;
             $response['message'] = 'File uploaded successfully';
@@ -149,7 +147,7 @@ try {
                 SELECT d.file_path
                 FROM form_documents d
                 INNER JOIN form_categories c ON c.id = d.category_id
-                WHERE d.category_id = ? AND c.organization_id = ?
+                WHERE d.category_id = ? AND c.organization_id = ? AND (d.project_id IS NULL OR d.project_id = 0)
             ');
             $stmt->execute([$categoryId, $orgId]);
             $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -178,7 +176,6 @@ try {
 
         case 'upload_document':
             $categoryId = (int)($_POST['category_id'] ?? 0);
-            $projectId = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
 
             if (!$categoryId) {
                 throw new Exception('Category ID is required');
@@ -246,7 +243,7 @@ try {
             // Handle based on category type
             if ($category['type'] === 'file') {
                 // For single file categories, replace existing document
-                $stmt = $pdo->prepare('SELECT file_path FROM form_documents WHERE category_id = ?');
+                $stmt = $pdo->prepare('SELECT file_path FROM form_documents WHERE category_id = ? AND (project_id IS NULL OR project_id = 0)');
                 $stmt->execute([$categoryId]);
                 $oldDoc = $stmt->fetch();
 
@@ -260,17 +257,17 @@ try {
                     // Update existing document
                     $stmt = $pdo->prepare('
                         UPDATE form_documents 
-                        SET file_path = ?, file_name = ?, file_size = ?, mime_type = ?, uploaded_by = ?, project_id = ?, uploaded_at = NOW()
-                        WHERE category_id = ?
+                        SET file_path = ?, file_name = ?, file_size = ?, mime_type = ?, uploaded_by = ?, project_id = NULL, uploaded_at = NOW()
+                        WHERE category_id = ? AND (project_id IS NULL OR project_id = 0)
                     ');
-                    $stmt->execute([$dbPath, $file['name'], $file['size'], $file['type'], $userId, $projectId, $categoryId]);
+                    $stmt->execute([$dbPath, $file['name'], $file['size'], $file['type'], $userId, $categoryId]);
                 } else {
                     // Insert new document
                     $stmt = $pdo->prepare('
                         INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
                     ');
-                    $stmt->execute([$orgId, $categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                    $stmt->execute([$orgId, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
                 }
             } else {
                 // For folder categories, always add new document (allow multiple)
@@ -278,7 +275,7 @@ try {
                     INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 ');
-                $stmt->execute([$orgId, $categoryId, $projectId, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                $stmt->execute([$orgId, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
             }
 
             $response['success'] = true;
@@ -303,7 +300,7 @@ try {
                 SELECT fd.file_path, fc.organization_id, fd.category_id
                 FROM form_documents fd
                 JOIN form_categories fc ON fd.category_id = fc.id
-                WHERE fd.id = ?
+                WHERE fd.id = ? AND (fd.project_id IS NULL OR fd.project_id = 0)
             ');
             $stmt->execute([$documentId]);
             $doc = $stmt->fetch();
@@ -355,7 +352,7 @@ try {
             $stmt = $pdo->prepare('
                 SELECT fc.title, fd.file_path, fd.file_name
                 FROM form_categories fc
-                LEFT JOIN form_documents fd ON fc.id = fd.category_id
+                LEFT JOIN form_documents fd ON fc.id = fd.category_id AND (fd.project_id IS NULL OR fd.project_id = 0)
                 WHERE fc.id = ? AND fc.organization_id = ?
             ');
             $stmt->execute([$categoryId, $orgId]);
@@ -464,7 +461,7 @@ try {
             $stmt = $pdo->prepare("
                 SELECT fd.id, fd.file_path, fd.file_name
                 FROM form_documents fd
-                WHERE fd.id IN ($placeholders) AND fd.category_id = ?
+                WHERE fd.id IN ($placeholders) AND fd.category_id = ? AND (fd.project_id IS NULL OR fd.project_id = 0)
             ");
             $stmt->execute([...$documentIds, $folderId]);
             $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
