@@ -252,7 +252,9 @@ if ($termsText === '') {
             if ($det) {
               $mime = $det;
             }
-            @finfo_close($finfo);
+            if (PHP_VERSION_ID < 80500) {
+                @finfo_close($finfo);
+            }
           }
         }
         if ($mime === null) {

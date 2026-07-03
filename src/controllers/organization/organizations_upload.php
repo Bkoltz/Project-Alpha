@@ -43,7 +43,9 @@ if (function_exists('mime_content_type')) {
 if (!$mime && function_exists('finfo_file')) {
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime = finfo_file($finfo, $tmp);
-    finfo_close($finfo);
+    if (PHP_VERSION_ID < 80500) {
+        finfo_close($finfo);
+    }
 }
 if (!$mime) {
     $mime = $_FILES['tax_exempt_file']['type'];

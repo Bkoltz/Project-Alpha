@@ -47,7 +47,9 @@ try {
     $allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mimeType = finfo_file($finfo, $file['tmp_name']);
-    finfo_close($finfo);
+    if (PHP_VERSION_ID < 80500) {
+        finfo_close($finfo);
+    }
     
     if (!in_array($mimeType, $allowedTypes, true)) {
         throw new Exception('Invalid file type. Please upload a PDF or image file.');

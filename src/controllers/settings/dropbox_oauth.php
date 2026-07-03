@@ -168,7 +168,9 @@ if ($action === 'callback') {
     $response = curl_exec($ch);
     $curlError = curl_error($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    if (PHP_VERSION_ID < 80500) {
+        curl_close($ch);
+    }
     
     if ($response === false || $httpCode !== 200) {
         app_log('dropbox_oauth', 'Token exchange failed', [
@@ -242,7 +244,9 @@ if ($action === 'disconnect') {
                     CURLOPT_RETURNTRANSFER => true
                 ]);
                 curl_exec($ch);
-                curl_close($ch);
+                if (PHP_VERSION_ID < 80500) {
+                    curl_close($ch);
+                }
             }
         }
         

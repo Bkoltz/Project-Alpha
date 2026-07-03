@@ -11,7 +11,19 @@ if (!$isAdmin) { echo '<p>Only admins can manage API keys.</p>'; return; }
 
 try {
   pa_ensure_api_keys_schema($pdo);
-  $keys = $pdo->query("SELECT id, name, key_prefix, scopes, allowed_ips, created_at, last_used_at, revoked_at FROM api_keys ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
+  $columns = pa_api_keys_existing_columns($pdo);
+  $select = [
+    'id' => 'id',
+    'name' => !empty($columns['name']) ? 'name' : "'' AS name",
+    'key_prefix' => !empty($columns['key_prefix']) ? 'key_prefix' : "'' AS key_prefix",
+    'scopes' => !empty($columns['scopes']) ? 'scopes' : "'full' AS scopes",
+    'allowed_ips' => !empty($columns['allowed_ips']) ? 'allowed_ips' : "'' AS allowed_ips",
+    'created_at' => !empty($columns['created_at']) ? 'created_at' : 'NULL AS created_at',
+    'last_used_at' => !empty($columns['last_used_at']) ? 'last_used_at' : 'NULL AS last_used_at',
+    'revoked_at' => !empty($columns['revoked_at']) ? 'revoked_at' : 'NULL AS revoked_at',
+  ];
+  $orderBy = !empty($columns['created_at']) ? 'created_at DESC' : 'id DESC';
+  $keys = $pdo->query('SELECT ' . implode(', ', $select) . ' FROM api_keys ORDER BY ' . $orderBy)->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
   @error_log('[API Keys Page] Failed to load API keys: ' . $e->getMessage());
   $keys = [];

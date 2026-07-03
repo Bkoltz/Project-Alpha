@@ -42,7 +42,7 @@ if ($editId > 0) {
     }
 }
 
-$paymentMethods = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit Card', 'bank_transfer' => 'Bank Transfer', 'paypal' => 'PayPal', 'venmo' => 'Venmo', 'other' => 'Other'];
+$paymentMethods = [];
 ?>
 
 <div style="max-width:800px;margin:0 auto;padding:24px">
@@ -81,29 +81,17 @@ $paymentMethods = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit
       </div>
     </div>
 
-    <div class="grid grid-3">
+    <div class="grid grid-2">
       <div class="field">
         <label class="label">Amount *</label>
         <input type="number" name="amount" id="amountInput" step="0.01" required
                value="<?php echo htmlspecialchars($expense['amount'] ?? $prefillAmount); ?>" class="input">
       </div>
       <div class="field">
-        <label class="label">Tax Amount</label>
-        <input type="number" name="tax_amount" id="taxInput" step="0.01"
-               value="<?php echo htmlspecialchars($expense['tax_amount'] ?? ''); ?>" class="input">
-      </div>
-      <div class="field">
-        <label class="label">Total</label>
-        <input type="text" id="totalDisplay" readonly class="input" style="background:var(--surface-2);font-weight:600">
-      </div>
-    </div>
-
-    <div class="grid grid-2">
-      <div class="field">
         <label class="label">Expense Date *</label>
         <input type="date" name="expense_date" required value="<?php echo htmlspecialchars($expense['expense_date'] ?? $prefillDate); ?>" class="input">
       </div>
-      <div class="field">
+      <div class="field" style="display:none">
         <label class="label">Payment Method</label>
         <select name="payment_method" class="input">
           <option value="">— Select —</option>
@@ -164,16 +152,6 @@ $paymentMethods = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit
 <script>
 (function () {
   'use strict';
-
-// Auto-calculate total
-function updateTotal() {
-  const amount = parseFloat(document.getElementById('amountInput').value) || 0;
-  const tax = parseFloat(document.getElementById('taxInput').value) || 0;
-  document.getElementById('totalDisplay').value = '$' + (amount + tax).toFixed(2);
-}
-document.getElementById('amountInput').addEventListener('input', updateTotal);
-document.getElementById('taxInput').addEventListener('input', updateTotal);
-updateTotal();
 
 // Billable toggle
 const billableCheck = document.getElementById('billableCheck');

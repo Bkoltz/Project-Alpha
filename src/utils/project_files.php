@@ -37,7 +37,9 @@ function project_files_detect_mime(string $path, ?string $fallback = null): stri
         $finfo = @finfo_open(FILEINFO_MIME_TYPE);
         if ($finfo) {
             $mime = @finfo_file($finfo, $path);
-            @finfo_close($finfo);
+            if (PHP_VERSION_ID < 80500) {
+                @finfo_close($finfo);
+            }
             if (is_string($mime) && $mime !== '') {
                 return $mime;
             }
