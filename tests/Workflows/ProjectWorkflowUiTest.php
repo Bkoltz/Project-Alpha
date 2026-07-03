@@ -282,6 +282,7 @@ final class ProjectWorkflowUiTest extends TestCase
         $expenseCreate = file_get_contents($this->root . '/src/views/pages/financial/expense-create.php');
         $formsList = file_get_contents($this->root . '/src/views/pages/financial/forms-list.php');
         $formDetail = file_get_contents($this->root . '/src/views/pages/financial/form-detail.php');
+        $securityHeaders = file_get_contents($this->root . '/src/utils/security_headers.php');
 
         self::assertStringContainsString('invoice_ensure_payments_schema($pdo)', (string)$paymentController);
         self::assertStringContainsString("'organization_id' => $organization_id", (string)$paymentController);
@@ -290,8 +291,13 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('$taxAmount = null;', (string)$expenseHandler);
         self::assertStringContainsString('$paymentMethod = null;', (string)$expenseHandler);
         self::assertStringNotContainsString('id="taxInput"', (string)$expenseCreate);
+        self::assertStringNotContainsString('fetch(form.action', (string)$expenseCreate);
+        self::assertStringContainsString('$_GET[\'error\']', (string)$expenseCreate);
         self::assertStringContainsString('style="display:none"', (string)$expenseCreate);
         self::assertStringContainsString('#toolbar=0&navpanes=0&scrollbar=0&view=FitH', (string)$formsList);
         self::assertStringContainsString('Open PDF in new tab', (string)$formDetail);
+        self::assertStringContainsString('X-Frame-Options: SAMEORIGIN', (string)$securityHeaders);
+        self::assertStringContainsString("frame-src 'self'", (string)$securityHeaders);
+        self::assertStringContainsString("frame-ancestors 'self'", (string)$securityHeaders);
     }
 }

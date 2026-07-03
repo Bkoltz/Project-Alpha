@@ -55,7 +55,8 @@ final class FinancialAssetsTest extends TestCase
         $form = $this->read('src/views/pages/financial/expense-create.php');
         self::assertStringContainsString('action="/?page=financial/expense-handler"', $form);
         self::assertStringContainsString('(function () {', $form);
-        self::assertStringContainsString("form.action || '/?page=financial/expense-handler'", $form);
+        self::assertStringNotContainsString('fetch(form.action', $form);
+        self::assertStringContainsString('$_GET[\'error\']', $form);
 
         $handler = $this->read('src/controllers/financial/expense_handler.php');
         self::assertStringContainsString('function expense_handler_is_ajax()', $handler);

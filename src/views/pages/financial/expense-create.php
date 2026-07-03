@@ -51,6 +51,13 @@ $paymentMethods = [];
     <a href="/?page=financial/expenses-list" class="btn btn-sm">Back to Expenses</a>
   </div>
 
+  <?php if (!empty($_GET['error'])): ?>
+    <div class="alert alert-danger" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['created']) || !empty($_GET['updated'])): ?>
+    <div class="alert alert-success" style="margin-bottom:16px">Expense saved.</div>
+  <?php endif; ?>
+
   <form id="expenseForm" method="post" action="/?page=financial/expense-handler" class="card">
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('expense')); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -173,24 +180,5 @@ vendorNameInput.addEventListener('change', function() {
   if (!found) vendorIdInput.value = 0;
 });
 
-// Form submit via fetch
-document.getElementById('expenseForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const form = this;
-  const formData = new FormData(this);
-  try {
-    const resp = await fetch(form.action || '/?page=financial/expense-handler', {
-      method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData
-    });
-    const data = await resp.json();
-    if (data.success && data.redirect) {
-      const redirectUrl = new URL(data.redirect, window.location.origin);
-      redirectUrl.searchParams.set(data.status_param || (formData.get('action') === 'update' ? 'updated' : 'created'), '1');
-      window.location.href = redirectUrl.pathname + redirectUrl.search + redirectUrl.hash;
-    } else {
-      alert(data.error || 'Failed to save expense');
-    }
-  } catch (err) { alert('Error: ' + err.message); }
-});
 })();
 </script>
