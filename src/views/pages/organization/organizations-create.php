@@ -1,5 +1,6 @@
 <?php
 // src/views/pages/organization/organizations-create.php
+require_once __DIR__ . '/../../../config/app.php';
 ?>
 <section>
   <h2>Create Organization</h2>
@@ -22,7 +23,7 @@
         <input name="address_line1" autocomplete="address-line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
-        <div>Address line 2</div>
+        <div>Apartment / Suite</div>
         <input name="address_line2" autocomplete="address-line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
@@ -32,7 +33,7 @@
         </label>
         <label>
           <div>State</div>
-          <input name="state" autocomplete="address-level1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <input name="state" autocomplete="address-level1" value="<?php echo htmlspecialchars((string)($appConfig['primary_state'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
         <label>
           <div>Postal</div>

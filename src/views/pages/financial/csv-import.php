@@ -19,7 +19,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
       <h2>Import Expenses from CSV</h2>
       <p class="muted-note">Upload a CSV file from Amazon, your bank, or any other source. Map columns to expense fields, preview, then import.</p>
     </div>
-    <a href="/?page=financial/expenses-list" class="btn btn-sm">Back to Expenses</a>
+    <a href="/?page=financial/expenses-list&tab=expenses" class="btn btn-sm">Back to Expenses</a>
   </div>
 
   <div class="card" style="margin-bottom:16px">
@@ -90,7 +90,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
     <h3 class="card-title" style="margin-bottom:16px">Import Results</h3>
     <div id="importResults"></div>
     <div style="margin-top:16px">
-      <a href="/?page=financial/expenses-list" class="btn btn-primary">View Expenses</a>
+      <a href="/?page=financial/expenses-list&tab=expenses" class="btn btn-primary">View Expenses</a>
       <button type="button" class="btn btn-sm" onclick="resetImport()">Import Another</button>
     </div>
   </div>

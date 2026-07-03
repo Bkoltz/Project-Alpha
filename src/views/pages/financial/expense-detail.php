@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../../utils/acl.php';
 
 $orgId = get_active_org_id();
 $id = (int)($_GET['id'] ?? 0);
-if (!$id) { header('Location: /?page=financial/expenses-list'); exit; }
+if (!$id) { header('Location: /?page=financial/expenses-list&tab=expenses'); exit; }
 
 $stmt = $pdo->prepare('
     SELECT e.*, v.name as vendor_name, ec.name as category_name, c.name as client_name, p.name as project_name,
@@ -22,7 +22,7 @@ $stmt = $pdo->prepare('
 ');
 $stmt->execute([$id, $orgId]);
 $e = $stmt->fetch(PDO::FETCH_ASSOC);
-if (!$e) { header('Location: /?page=financial/expenses-list'); exit; }
+if (!$e) { header('Location: /?page=financial/expenses-list&tab=expenses'); exit; }
 
 $hasReceipt = !empty($e['file_path']);
 $isPdf = $hasReceipt && strtolower(pathinfo($e['file_path'], PATHINFO_EXTENSION)) === 'pdf';
@@ -39,7 +39,7 @@ $paymentLabels = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit 
     <h2>Expense Details</h2>
     <div class="flex">
       <a href="/?page=financial/expense-create&id=<?php echo $id; ?>" class="btn btn-sm">Edit</a>
-      <a href="/?page=financial/expenses-list" class="btn btn-sm">Back to List</a>
+      <a href="/?page=financial/expenses-list&tab=expenses" class="btn btn-sm">Back to List</a>
     </div>
   </div>
 

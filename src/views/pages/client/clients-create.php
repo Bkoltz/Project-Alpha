@@ -47,7 +47,7 @@ require_once __DIR__ . '/../../../config/db.php';
         <div>Address line 1</div><input id="clientAddressLine1" name="address_line1" autocomplete="address-line1" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
-        <div>Address line 2</div><input id="clientAddressLine2" name="address_line2" autocomplete="address-line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div>Apartment / Suite</div><input id="clientAddressLine2" name="address_line2" autocomplete="address-line2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
         <label>

@@ -58,20 +58,26 @@
             return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
         }
 
-        function addressIsEmpty() {
-            return Object.values(addressFields).every(field => !field || !field.value.trim());
-        }
-
         function orgHasAddress(org) {
             return ['address_line1', 'address_line2', 'city', 'state', 'postal_code', 'country']
                 .some(key => org && String(org[key] || '').trim() !== '');
         }
 
+        Object.values(addressFields).forEach(field => {
+            if (!field || field.dataset.clientAddressDirtyReady === '1') return;
+            field.dataset.clientAddressDirtyReady = '1';
+            field.addEventListener('input', () => {
+                field.dataset.clientAddressDirty = '1';
+            });
+        });
+
         function fillAddressFromOrg(org) {
-            if (!orgHasAddress(org) || !addressIsEmpty()) return;
+            if (!orgHasAddress(org)) return;
             Object.keys(addressFields).forEach(key => {
-                if (addressFields[key] && org[key]) {
-                    addressFields[key].value = org[key];
+                const field = addressFields[key];
+                const value = org && org[key] ? String(org[key]) : '';
+                if (field && value !== '' && field.dataset.clientAddressDirty !== '1') {
+                    field.value = value;
                 }
             });
             if (orgAddressNotice) orgAddressNotice.style.display = 'block';

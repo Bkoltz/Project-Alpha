@@ -149,7 +149,7 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
       <p class="finance-subtitle"><?php echo finance_dashboard_date($start); ?> to <?php echo finance_dashboard_date($end); ?></p>
     </div>
     <div class="finance-actions">
-      <a href="/?page=financial/expenses-list" class="btn btn-primary">Assets &amp; Expenses</a>
+      <a href="/?page=financial/expenses-list&tab=expenses" class="btn btn-primary">Assets &amp; Expenses</a>
       <a href="/?page=financial/asset-form" class="btn">Add Asset</a>
       <a href="/?page=financial/expense-create" class="btn">Add Expense</a>
       <a href="/?page=financial/expense-report" class="btn">Reports</a>
@@ -321,7 +321,7 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
   <div class="finance-panel">
     <div class="finance-panel__head">
       <h3 class="finance-panel__title">Recent Expenses</h3>
-      <a href="/?page=financial/expenses-list" class="btn btn-sm">View All</a>
+      <a href="/?page=financial/expenses-list&tab=expenses" class="btn btn-sm">View All</a>
     </div>
     <?php if (empty($recentExpenses)): ?>
       <p class="dash-empty">No expenses for the selected period.</p>

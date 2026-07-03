@@ -83,6 +83,52 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('is_primary_department_contact', (string)$endpoint);
     }
 
+    public function testClientAndOrganizationSuiteAddressesFlowToDocuments(): void
+    {
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $migration = file_get_contents($this->root . '/database/migrations/0013_ensure_client_and_org_address_line2.sql');
+        $clientCreate = file_get_contents($this->root . '/src/views/pages/client/clients-create.php');
+        $clientEdit = file_get_contents($this->root . '/src/views/pages/client/clients-edit.php');
+        $clientCreateController = file_get_contents($this->root . '/src/controllers/client/clients_create.php');
+        $clientUpdateController = file_get_contents($this->root . '/src/controllers/client/clients_update.php');
+        $clientOnboarding = file_get_contents($this->root . '/src/controllers/public_view/client_onboarding.php');
+        $orgCreate = file_get_contents($this->root . '/src/views/pages/organization/organizations-create.php');
+        $orgEdit = file_get_contents($this->root . '/src/views/pages/organization/organizations-edit.php');
+        $orgCreateController = file_get_contents($this->root . '/src/controllers/organization/organizations_create.php');
+        $orgUpdateController = file_get_contents($this->root . '/src/controllers/organization/organizations_update.php');
+        $orgSearchController = file_get_contents($this->root . '/src/controllers/organization/org_search.php');
+        $clientCreateScript = file_get_contents($this->root . '/public/assets/js/clients-create-logic.js');
+        $quoteDetail = file_get_contents($this->root . '/src/views/pages/quote/quote-details.php');
+        $longQuoteDetail = file_get_contents($this->root . '/src/views/pages/quote/long-term-quote-details.php');
+        $contractDetail = file_get_contents($this->root . '/src/views/pages/contract/contract-details.php');
+        $longContractDetail = file_get_contents($this->root . '/src/views/pages/contract/long-term-contract-details.php');
+        $invoiceDetail = file_get_contents($this->root . '/src/views/pages/invoice/invoice-details.php');
+        $projectInvoiceDetail = file_get_contents($this->root . '/src/views/pages/project/project-invoice-details.php');
+        $accountEdit = file_get_contents($this->root . '/src/views/pages/auth/account-edit.php');
+        $systemSettings = file_get_contents($this->root . '/src/views/pages/settings/system.php');
+
+        self::assertStringContainsString('address_line2 VARCHAR(255) NULL', (string)$baseline);
+        self::assertStringContainsString('ALTER TABLE clients ADD COLUMN address_line2', (string)$migration);
+        self::assertStringContainsString('ALTER TABLE organizations ADD COLUMN address_line2', (string)$migration);
+        foreach ([$clientCreate, $clientEdit, $clientOnboarding, $orgCreate, $orgEdit, $accountEdit, $systemSettings] as $view) {
+            self::assertStringContainsString('Apartment / Suite', (string)$view);
+        }
+        foreach ([$clientCreateController, $clientUpdateController, $orgCreateController, $orgUpdateController] as $controller) {
+            self::assertStringContainsString('address_line2', (string)$controller);
+        }
+        self::assertStringContainsString('pa_organization_address_select($pdo)', (string)$orgSearchController);
+        self::assertStringContainsString('dataset.clientAddressDirty', (string)$clientCreateScript);
+        self::assertStringContainsString('fillAddressFromOrg(item)', (string)$clientCreateScript);
+        self::assertStringContainsString("\$appConfig['primary_state']", (string)$orgCreate);
+        self::assertStringContainsString("\$org['state'] ?: (\$appConfig['primary_state'] ?? '')", (string)$orgEdit);
+        foreach ([$quoteDetail, $longQuoteDetail, $contractDetail, $longContractDetail, $invoiceDetail] as $documentView) {
+            self::assertStringContainsString('address_line2', (string)$documentView);
+            self::assertStringContainsString('$toLines[] = (string)', (string)$documentView);
+        }
+        self::assertStringContainsString('organization_address_line2', (string)$projectInvoiceDetail);
+        self::assertStringContainsString('$orgLines[] = (string)$pi[\'organization_address_line2\'];', (string)$projectInvoiceDetail);
+    }
+
     public function testTimeTrackingFormIsSplitIntoExpectedSections(): void
     {
         $view = file_get_contents($this->root . '/src/views/pages/time-tracking.php');

@@ -22,7 +22,7 @@ function expense_handler_redirect_with_message(string $url, string $key, string 
     exit;
 }
 
-function expense_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/expenses-list'): void
+function expense_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/expenses-list&tab=expenses'): void
 {
     if (expense_handler_is_ajax()) {
         http_response_code($status);
@@ -32,7 +32,7 @@ function expense_handler_finish(array $response, int $status = 200, string $fall
     }
 
     if (!empty($response['success'])) {
-        header('Location: ' . (string)($response['redirect'] ?? '/?page=financial/expenses-list'));
+        header('Location: ' . (string)($response['redirect'] ?? '/?page=financial/expenses-list&tab=expenses'));
         exit;
     }
 
@@ -57,7 +57,7 @@ if (!$csrfOk) {
 
 $orgId = active_or_default_org_id($pdo);
 if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
-    expense_handler_finish(['success' => false, 'error' => 'Permission denied'], 403, '/?page=financial/expenses-list');
+    expense_handler_finish(['success' => false, 'error' => 'Permission denied'], 403, '/?page=financial/expenses-list&tab=expenses');
 }
 $action = $_POST['action'] ?? '';
 $response = ['success' => false, 'error' => ''];
@@ -172,16 +172,16 @@ try {
 
         case 'delete':
             $id = (int)($_POST['id'] ?? 0);
-            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list';
+            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list&tab=expenses';
             if ($id <= 0) throw new Exception('Invalid expense ID');
             $pdo->prepare('UPDATE expenses SET status="void" WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
             audit_log($pdo, 'expense.delete', 'expense', $id);
-            $response = ['success' => true, 'redirect' => '/?page=financial/expenses-list'];
+            $response = ['success' => true, 'redirect' => '/?page=financial/expenses-list&tab=expenses&deleted=1'];
             break;
 
         case 'mark_reimbursed':
             $id = (int)($_POST['id'] ?? 0);
-            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list';
+            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list&tab=expenses';
             if ($id <= 0) throw new Exception('Invalid expense ID');
             $pdo->prepare('UPDATE expenses SET is_reimbursed=1, status="reimbursed" WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
             audit_log($pdo, 'expense.mark_reimbursed', 'expense', $id);
@@ -190,7 +190,7 @@ try {
 
         case 'mark_reconciled':
             $id = (int)($_POST['id'] ?? 0);
-            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list';
+            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list&tab=expenses';
             if ($id <= 0) throw new Exception('Invalid expense ID');
             $pdo->prepare('UPDATE expenses SET is_reconciled=1 WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
             audit_log($pdo, 'expense.mark_reconciled', 'expense', $id);

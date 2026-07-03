@@ -55,7 +55,7 @@ $organizations = $orgStmt->fetchAll();
         <div>Address line 1</div><input name="address_line1" value="<?php echo htmlspecialchars($client['address_line1'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <label>
-        <div>Address line 2</div><input name="address_line2" value="<?php echo htmlspecialchars($client['address_line2'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div>Apartment / Suite</div><input name="address_line2" value="<?php echo htmlspecialchars($client['address_line2'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
       <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
         <label>

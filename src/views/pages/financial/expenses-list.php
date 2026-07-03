@@ -19,8 +19,8 @@ $tabs = [
     'audit'      => ['label' => 'Audit',      'file' => 'audit.php',           'hint' => 'Export reviews'],
 ];
 
-$active = $_GET['tab'] ?? 'assets';
-if (!isset($tabs[$active])) $active = 'assets';
+$active = $_GET['tab'] ?? 'expenses';
+if (!isset($tabs[$active])) $active = 'expenses';
 
 $stats = [
     'assets' => 0,
