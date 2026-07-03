@@ -1,24 +1,40 @@
-document.addEventListener('DOMContentLoaded', function () {
-    const tabs = document.querySelectorAll('.expenses-hub__tab');
-    const panels = document.querySelectorAll('.expenses-hub__panel');
+(function () {
+    'use strict';
 
-    function switchTab(target) {
-        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === target));
-        panels.forEach(p => p.classList.toggle('active', p.id === 'tab-' + target));
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', target);
-        window.history.replaceState({}, '', url.toString());
-    }
+    function initExpensesHub(context) {
+        const root = context && context.root ? context.root : document;
+        const tabs = root.querySelectorAll('.expenses-hub__tab');
+        const panels = root.querySelectorAll('.expenses-hub__panel');
+        if (!tabs.length || !panels.length) return;
 
-    tabs.forEach(tab => {
-        tab.addEventListener('click', function () {
-            switchTab(this.dataset.tab);
+        function switchTab(target) {
+            tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === target));
+            panels.forEach(panel => panel.classList.toggle('active', panel.id === 'tab-' + target));
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', target);
+            window.history.replaceState({}, '', url.toString());
+        }
+
+        tabs.forEach(tab => {
+            if (tab.dataset.expensesHubReady === '1') return;
+            tab.dataset.expensesHubReady = '1';
+            tab.addEventListener('click', function () {
+                switchTab(this.dataset.tab);
+            });
         });
-    });
 
-    // Initialize from URL
-    const params = new URLSearchParams(window.location.search);
-    const active = params.get('tab') || 'assets';
-    const tabEl = document.querySelector('.expenses-hub__tab[data-tab="' + active + '"]');
-    if (tabEl) switchTab(active);
-});
+        const params = new URLSearchParams(window.location.search);
+        const active = params.get('tab') || 'assets';
+        const tabEl = root.querySelector('.expenses-hub__tab[data-tab="' + active + '"]');
+        if (tabEl) switchTab(active);
+    }
+    initExpensesHub.pageInitializerId = 'expenses-hub';
+
+    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+        window.ProjectAlpha.registerPage('financial/expenses-list', initExpensesHub);
+    } else if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => initExpensesHub({ root: document }), { once: true });
+    } else {
+        initExpensesHub({ root: document });
+    }
+})();

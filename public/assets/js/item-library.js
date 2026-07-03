@@ -99,6 +99,7 @@
         if (!modal) return;
         modal.setAttribute('data-item-library-ready', '1');
     }
+    initItemLibraryPage.pageInitializerId = 'item-library';
 
     window.showCreateModal = showCreateModal;
     window.editItem = editItem;
@@ -110,13 +111,10 @@
         document.addEventListener('click', handleClick);
     }
 
-    if (!window.__projectAlphaItemLibraryPageLoadedReady) {
-        window.__projectAlphaItemLibraryPageLoadedReady = true;
-        document.addEventListener('pageLoaded', initItemLibraryPage);
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initItemLibraryPage);
+    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+        window.ProjectAlpha.registerPage('settings/item-library', initItemLibraryPage);
+    } else if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initItemLibraryPage, { once: true });
     } else {
         initItemLibraryPage();
     }

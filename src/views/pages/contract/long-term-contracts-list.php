@@ -56,6 +56,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php if (!empty($_GET['created'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Long-term contract created successfully.</div>
   <?php endif; ?>
+  <?php if (!empty($_GET['billing_started'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Billing started for the long-term contract.</div>
+  <?php endif; ?>
   <?php if (!empty($_GET['emailed'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
   <?php elseif (!empty($_GET['email_err'])): ?>
@@ -169,7 +172,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($billingText); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($amountText); ?></td>
-            <td style="padding:10px"><?php echo $r['next_invoice_date'] ? date('M j, Y', strtotime($r['next_invoice_date'])) : '—'; ?></td>
+            <td style="padding:10px"><?php echo $r['next_invoice_date'] ? date('M j, Y', strtotime($r['next_invoice_date'])) : ($r['status'] === 'active' ? 'Manual start' : '—'); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <?php $cst = strtolower((string)$r['status']); if (!in_array($cst, ['denied','cancelled','void'], true)): ?>
@@ -203,6 +206,13 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                     <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Activate</button>
                   </form>
                 <?php endif; ?>
+              <?php endif; ?>
+              <?php if ($r['status'] === 'active' && !empty($r['signed_pdf_path']) && empty($r['next_invoice_date'])): ?>
+                <form method="post" action="/?page=long-term-contract-start-billing" style="display:inline">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#2563eb;color:#fff; font-size: small;">Start Billing</button>
+                </form>
               <?php endif; ?>
               <?php if ($r['status'] === 'active'): ?>
                 <form method="post" action="/?page=long-term-contract-pause" style="display:inline">

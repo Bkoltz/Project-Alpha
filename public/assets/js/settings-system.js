@@ -58,15 +58,13 @@
             });
         });
     }
+    initSettingsSystem.pageInitializerId = 'settings-system';
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initSettingsSystem);
+    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+        window.ProjectAlpha.registerPage('settings/system', initSettingsSystem);
+    } else if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSettingsSystem, { once: true });
     } else {
         initSettingsSystem();
-    }
-
-    if (!window.__projectAlphaSettingsSystemPageLoadedReady) {
-        window.__projectAlphaSettingsSystemPageLoadedReady = true;
-        document.addEventListener('pageLoaded', initSettingsSystem);
     }
 })();

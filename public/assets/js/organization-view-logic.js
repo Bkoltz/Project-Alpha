@@ -51,16 +51,22 @@ function closeDepartmentModal() {
     modal.style.display = 'none';
 }
 
-document.addEventListener('keydown', function (event) {
-    if (event.key !== 'Escape') return;
-    closeDepartmentModal();
-});
+if (!window.__projectAlphaOrganizationViewKeydownReady) {
+    window.__projectAlphaOrganizationViewKeydownReady = true;
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') return;
+        closeDepartmentModal();
+    });
+}
 
-document.addEventListener('click', function (event) {
-    const modal = document.getElementById('departmentModal');
-    if (!modal || modal.style.display !== 'flex') return;
-    if (event.target === modal) closeDepartmentModal();
-});
+if (!window.__projectAlphaOrganizationViewClickReady) {
+    window.__projectAlphaOrganizationViewClickReady = true;
+    document.addEventListener('click', function (event) {
+        const modal = document.getElementById('departmentModal');
+        if (!modal || modal.style.display !== 'flex') return;
+        if (event.target === modal) closeDepartmentModal();
+    });
+}
 
 // Client search
 function initOrganizationClientSearch() {
@@ -166,10 +172,12 @@ function initOrganizationClientSearch() {
         }
     });
 }
+initOrganizationClientSearch.pageInitializerId = 'organization-view-client-search';
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initOrganizationClientSearch);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('organization/organization-view', initOrganizationClientSearch);
+} else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initOrganizationClientSearch, { once: true });
 } else {
     initOrganizationClientSearch();
 }
-document.addEventListener('pageLoaded', initOrganizationClientSearch);

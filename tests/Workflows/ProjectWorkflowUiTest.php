@@ -110,14 +110,88 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("' (Job '", (string)$contractEdit);
     }
 
+    public function testInvoiceCreateCanSaveWithoutSendingOrSaveAndSend(): void
+    {
+        $view = file_get_contents($this->root . '/src/views/pages/invoice/invoices-create.php');
+        $controller = file_get_contents($this->root . '/src/controllers/invoice/invoices_create.php');
+
+        self::assertStringContainsString('value="save" class="btn">Save Invoice</button>', (string)$view);
+        self::assertStringContainsString('value="finalize_send" class="btn btn-primary">Save &amp; Send</button>', (string)$view);
+        self::assertStringNotContainsString('Save Draft</button>', (string)$view);
+        self::assertStringContainsString("\$invoiceAction = (string)(\$_POST['invoice_action'] ?? 'save');", (string)$controller);
+        self::assertStringContainsString("['save', 'draft', 'finalize_send']", (string)$controller);
+        self::assertStringContainsString('$finalizeAndSend = $invoiceAction === \'finalize_send\';', (string)$controller);
+    }
+
+    public function testDocumentsCanAttachToActiveOrNotStartedProjects(): void
+    {
+        $projectSelection = file_get_contents($this->root . '/src/utils/project_selection.php');
+        $contractCreate = file_get_contents($this->root . '/src/views/pages/contract/contracts-create.php');
+        $contractEdit = file_get_contents($this->root . '/src/views/pages/contract/contracts-edit.php');
+        $contractUpdate = file_get_contents($this->root . '/src/controllers/contract/contracts_update.php');
+        $details = file_get_contents($this->root . '/src/views/pages/project/projects-details.php');
+
+        self::assertStringContainsString('p.status IN ("active","not_started")', (string)$projectSelection);
+        self::assertStringContainsString('p.status IN ("active","not_started")', (string)$contractCreate);
+        self::assertStringContainsString('name="project_id"', (string)$contractEdit);
+        self::assertStringContainsString('pa_project_is_active_for_client($pdo, $project_id, $client_id', (string)$contractUpdate);
+        self::assertStringContainsString('project_documents WHERE document_type="contract" AND document_id=?', (string)$contractUpdate);
+        self::assertStringContainsString('foreach ($projectClients as $projectClient)', (string)$details);
+        self::assertStringContainsString('client_id IN (SELECT id FROM clients WHERE organization_id = ?)', (string)$details);
+    }
+
+    public function testLongTermAndOnDemandBillingBehaviorsAreExplicit(): void
+    {
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $migration = file_get_contents($this->root . '/database/migrations/0010_long_term_billing_start_mode.sql');
+        $createView = file_get_contents($this->root . '/src/views/pages/contract/contracts-create.php');
+        $ltCreate = file_get_contents($this->root . '/src/controllers/contract/long_term_contracts_create.php');
+        $sign = file_get_contents($this->root . '/src/controllers/public_view/public_contract_sign.php');
+        $start = file_get_contents($this->root . '/src/controllers/contract/long_term_contract_start_billing.php');
+        $odcList = file_get_contents($this->root . '/src/views/pages/contract/on-demand-contracts-list.php');
+
+        self::assertStringContainsString("billing_start_mode ENUM('on_upload','manual')", (string)$baseline);
+        self::assertStringContainsString('ADD COLUMN billing_start_mode', (string)$migration);
+        self::assertStringContainsString('name="billing_start_mode" value="on_upload" checked', (string)$createView);
+        self::assertStringContainsString('$next_invoice_date = null;', (string)$ltCreate);
+        self::assertStringContainsString('pa_long_term_starts_billing_on_upload($contract)', (string)$sign);
+        self::assertStringContainsString('generate_recurring_invoice($pdo, $contract, $appConfig)', (string)$start);
+        self::assertStringContainsString('$billingText = \'Manual invoices\';', (string)$odcList);
+    }
+
+    public function testInvoiceAndContractNumbersArePerDocumentType(): void
+    {
+        $helper = file_get_contents($this->root . '/src/utils/invoice_numbers.php');
+        $invoiceCreate = file_get_contents($this->root . '/src/controllers/invoice/invoices_create.php');
+        $contractCreate = file_get_contents($this->root . '/src/controllers/contract/contracts_create.php');
+        $odcInvoice = file_get_contents($this->root . '/src/controllers/contract/on_demand_invoice_generate.php');
+
+        self::assertStringContainsString('invoice_type = "regular" OR invoice_type IS NULL', (string)$helper);
+        self::assertStringContainsString('pa_next_invoice_doc_number($pdo, \'regular\')', (string)$invoiceCreate);
+        self::assertStringContainsString('contracts WHERE contract_type = "regular"', (string)$contractCreate);
+        self::assertStringContainsString('pa_next_invoice_doc_number($pdo, \'on_demand\')', (string)$odcInvoice);
+    }
+
     public function testCreatePageScriptsInitializeAfterAjaxNavigation(): void
     {
+        $navigation = file_get_contents($this->root . '/public/assets/navigation.js');
         $clientCreate = file_get_contents($this->root . '/public/assets/js/clients-create-logic.js');
+        $clientEdit = file_get_contents($this->root . '/public/assets/js/clients-edit-logic.js');
+        $projectCreate = file_get_contents($this->root . '/public/assets/js/project-form.js');
         $accounts = file_get_contents($this->root . '/src/views/pages/auth/accounts.php');
+        $accountsCreate = file_get_contents($this->root . '/src/controllers/accounts/accounts_create.php');
 
+        self::assertStringContainsString('function registerPageInitializer', (string)$navigation);
+        self::assertStringContainsString('runPageCleanups();', (string)$navigation);
+        self::assertStringContainsString('runPageInitializers(page, mainContent);', (string)$navigation);
         self::assertStringContainsString('form[action="/?page=client/clients-create"]', (string)$clientCreate);
         self::assertStringContainsString('dataset.orgCreateReady', (string)$clientCreate);
+        self::assertStringContainsString("window.ProjectAlpha.registerPage(['client/clients-create', 'clients-create']", (string)$clientCreate);
+        self::assertStringNotContainsString('setTimeout(initializeOrgCreate', (string)$clientCreate);
+        self::assertStringContainsString("window.ProjectAlpha.registerPage(['client/clients-edit', 'clients-edit']", (string)$clientEdit);
+        self::assertStringContainsString("window.ProjectAlpha.registerPage('project/projects-create'", (string)$projectCreate);
         self::assertStringContainsString('function initAccountCreateForm()', (string)$accounts);
-        self::assertStringContainsString("document.addEventListener('pageLoaded', initAccountCreateForm)", (string)$accounts);
+        self::assertStringContainsString("window.ProjectAlpha.registerPage('accounts', initAccountCreateForm)", (string)$accounts);
+        self::assertStringContainsString("header('Location: /?page=accounts&created=1')", (string)$accountsCreate);
     }
 }

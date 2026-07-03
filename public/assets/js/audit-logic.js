@@ -88,10 +88,12 @@ function initAuditReportPage() {
 
     updateAddEmailButton();
 }
+initAuditReportPage.pageInitializerId = 'audit-report';
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initAuditReportPage);
+if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('financial/audit', initAuditReportPage);
+} else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAuditReportPage, { once: true });
 } else {
     initAuditReportPage();
 }
-document.addEventListener('pageLoaded', initAuditReportPage);

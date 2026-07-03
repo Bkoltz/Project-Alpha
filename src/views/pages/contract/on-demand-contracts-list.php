@@ -154,8 +154,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
 <?php 
   $rowStyle = ($r['status']==='active') ? 'background:#fffbeb;' : (($r['status']==='completed') ? 'background:#ecfdf5;' : ((in_array($r['status'], ['cancelled','paused'], true)) ? 'background:#fef2f2;' : ''));
   
-  $billingText = $r['billing_interval_count'] . ' ' . ucfirst($r['billing_interval_unit']);
-  if ($r['billing_interval_count'] > 1) $billingText .= 's';
+  $billingText = 'Manual invoices';
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px">ODC-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>

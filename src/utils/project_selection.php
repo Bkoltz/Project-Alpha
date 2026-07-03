@@ -17,12 +17,13 @@ function pa_project_client_org_id(PDO $pdo, int $clientId): ?int
  */
 function pa_active_project_filter_for_client(PDO $pdo, int $clientId): array
 {
+    $statusClause = 'p.status IN ("active","not_started")';
     $orgId = pa_project_client_org_id($pdo, $clientId);
     if ($orgId !== null) {
-        return [['p.organization_id = ?', 'p.status = "active"'], [$orgId]];
+        return [['p.organization_id = ?', $statusClause], [$orgId]];
     }
 
-    return [['p.client_id = ?', '(p.organization_id IS NULL OR p.organization_id = 0)', 'p.status = "active"'], [$clientId]];
+    return [['p.client_id = ?', '(p.organization_id IS NULL OR p.organization_id = 0)', $statusClause], [$clientId]];
 }
 
 function pa_project_is_active_for_client(PDO $pdo, int $projectId, int $clientId, int $userId = 0): bool

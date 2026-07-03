@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/upload_validator.php';
+require_once __DIR__ . '/../../utils/contract_billing_start.php';
 
 // Verify CSRF
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
@@ -118,14 +119,22 @@ try {
     // Update contract with signed file path and set to active. Keep the
     // pending/unsigned predicate inside the write so concurrent submissions
     // cannot race and overwrite the first signature.
+    $billingStartSql = '';
+    $updateParams = [$fileUrl, 'active'];
+    if (pa_long_term_starts_billing_on_upload($contract)) {
+        $billingStartSql = ', next_invoice_date = ?';
+        $updateParams[] = date('Y-m-d');
+    }
+    $updateParams[] = $contractId;
+
     $update = $pdo->prepare("
         UPDATE contracts
-        SET signed_pdf_path = ?, status = ?
+        SET signed_pdf_path = ?, status = ?{$billingStartSql}
         WHERE id = ?
           AND status = 'pending'
           AND (signed_pdf_path IS NULL OR signed_pdf_path = '')
     ");
-    $update->execute([$fileUrl, 'active', $contractId]);
+    $update->execute($updateParams);
     if ($update->rowCount() !== 1) {
         $storedFile = $uploadDir . DIRECTORY_SEPARATOR . $filename;
         if (is_file($storedFile)) {

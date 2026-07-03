@@ -27,6 +27,8 @@ $billing_interval_unit_val = $_POST['billing_interval_unit'] ?? $_POST['lt_billi
 $billing_interval_unit = in_array($billing_interval_unit_val, ['day','week','month','year']) ? $billing_interval_unit_val : 'month';
 $pricing_type_val = $_POST['pricing_type'] ?? $_POST['lt_pricing_type'] ?? 'per_invoice';
 $pricing_type = in_array($pricing_type_val, ['fixed_total','per_invoice']) ? $pricing_type_val : 'per_invoice';
+$billing_start_mode_val = $_POST['billing_start_mode'] ?? $_POST['lt_billing_start_mode'] ?? 'on_upload';
+$billing_start_mode = in_array($billing_start_mode_val, ['on_upload', 'manual'], true) ? $billing_start_mode_val : 'on_upload';
 $price_per_invoice = ($pricing_type === 'per_invoice') ? (float)($_POST['price_per_invoice'] ?? $_POST['lt_price_per_invoice'] ?? 0) : null;
 $invoice_count_posted = ($pricing_type === 'fixed_total') ? max(1, (int)($_POST['invoice_count'] ?? 1)) : null;
 $scope = trim((string)($_POST['scope'] ?? ''));
@@ -76,7 +78,7 @@ if ($client_id <= 0) {
     exit;
 }
 if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
-    header('Location: /?page=contract/contracts-create&error=' . urlencode('Select an active project for this client or organization.'));
+    header('Location: /?page=contract/contracts-create&error=' . urlencode('Select an active or not-started project for this client or organization.'));
     exit;
 }
 
@@ -140,8 +142,8 @@ elseif($deposit_type === 'fixed') {
     $deposit_amount = max(0, $deposit_value); 
 }
 
-// Calculate next invoice date
-$next_invoice_date = $start_date;
+// Long-term billing starts after the signed contract is uploaded unless manual start is selected.
+$next_invoice_date = null;
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 $sessionUserId = (int)($_SESSION['user']['id'] ?? 0) ?: 1;
@@ -166,15 +168,15 @@ try{
         billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice,
         discount_type, discount_value, tax_percent, subtotal, total,
         deposit_type, deposit_amount, deposit_paid, total_invoiced,
-        next_invoice_date, invoice_count, invoices_generated, scope, organization_id, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        next_invoice_date, billing_start_mode, invoice_count, invoices_generated, scope, organization_id, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
         $client_id, $project_id, $projectCode, 'pending', 'long_term', $billing_mode, $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0, 0,
-        $next_invoice_date, $invoice_count, 0, $scope, $activeOrgId, $sessionUserId
+        $next_invoice_date, $billing_start_mode, $invoice_count, 0, $scope, $activeOrgId, $sessionUserId
     ]);
     
     $contract_id = (int)$pdo->lastInsertId();

@@ -1,44 +1,30 @@
-function initDeleteButton() {
-    const btn = document.getElementById('deleteOrgBtn');
-    const form = document.getElementById('deleteOrgForm');
+(function () {
+    'use strict';
 
-    if (!btn || !form) {
-        console.warn('Delete button or form not found, retrying...');
-        setTimeout(initDeleteButton, 50);
-        return;
-    }
+    function initDeleteButton(context) {
+        const root = context && context.root ? context.root : document;
+        const btn = root.querySelector('#deleteOrgBtn');
+        const form = root.querySelector('#deleteOrgForm');
 
-    // Check if already initialized
-    if (btn.dataset.deleteInitialized === 'true') {
-        console.log('✓ Delete button already initialized');
-        return;
-    }
-
-    // Mark as initialized FIRST before attaching listener
-    btn.dataset.deleteInitialized = 'true';
-
-    // Attach listener without cloning
-    btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (confirm('Delete this organization? Clients will not be deleted, but will no longer be associated with this organization.')) {
-            console.log('Submitting delete form');
-            form.submit();
+        if (!btn || !form || btn.dataset.deleteInitialized === 'true') {
+            return;
         }
-    });
 
-    console.log('✓ Delete button initialized');
-}
+        btn.dataset.deleteInitialized = 'true';
+        btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            if (confirm('Delete this organization? Clients will not be deleted, but will no longer be associated with this organization.')) {
+                form.submit();
+            }
+        });
+    }
+    initDeleteButton.pageInitializerId = 'organization-edit';
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDeleteButton);
-} else {
-    initDeleteButton();
-}
-
-// Re-initialize on AJAX navigation - just call initDeleteButton without resetting flag
-// The guard check in initDeleteButton will handle whether we need to re-initialize
-document.addEventListener('pageLoaded', function () {
-    console.log('pageLoaded: checking delete button');
-    setTimeout(initDeleteButton, 50);
-});
+    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+        window.ProjectAlpha.registerPage(['organization/organizations-edit', 'organizations-edit'], initDeleteButton);
+    } else if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => initDeleteButton({ root: document }), { once: true });
+    } else {
+        initDeleteButton({ root: document });
+    }
+})();

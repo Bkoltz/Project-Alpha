@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/project_selection.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
 $co = $pdo->prepare('SELECT * FROM contracts WHERE id=?');
@@ -17,6 +18,30 @@ $items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
+$projectOptions = [];
+if (!empty($contract['client_id'])) {
+  try {
+    [$projectWhere, $projectParams] = pa_active_project_filter_for_client($pdo, (int)$contract['client_id']);
+    if (function_exists('scope_clause')) {
+      [$scopeWhere, $scopeParams] = scope_clause($pdo, 'p', (int)($_SESSION['user']['id'] ?? 0));
+      if ($scopeWhere !== '') {
+        $projectWhere[] = trim($scopeWhere);
+        $projectParams = array_merge($projectParams, $scopeParams);
+      }
+    }
+    $projectStmt = $pdo->prepare('
+      SELECT p.id, p.name, p.status, o.name AS organization_name
+      FROM projects p
+      LEFT JOIN organizations o ON o.id = p.organization_id
+      WHERE ' . implode(' AND ', $projectWhere) . '
+      ORDER BY p.name
+    ');
+    $projectStmt->execute($projectParams);
+    $projectOptions = $projectStmt->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Throwable $e) {
+    $projectOptions = [];
+  }
+}
 
 // Fetch existing signatures
 $existingSignatures = [];
@@ -51,6 +76,21 @@ try {
       <label>
         <div>Tax (%)</div>
         <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($contract['tax_percent'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label>
+        <div>Project</div>
+        <select name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <option value="">No project</option>
+          <?php foreach ($projectOptions as $projectOption): ?>
+            <option value="<?php echo (int)$projectOption['id']; ?>" <?php echo (int)($contract['project_id'] ?? 0) === (int)$projectOption['id'] ? 'selected' : ''; ?>>
+              <?php echo htmlspecialchars((string)$projectOption['name']); ?>
+              <?php if (!empty($projectOption['organization_name'])): ?>
+                (<?php echo htmlspecialchars((string)$projectOption['organization_name']); ?>)
+              <?php endif; ?>
+              - <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string)$projectOption['status']))); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
       </label>
       <label>
         <div>Discount Type</div>

@@ -766,6 +766,7 @@ CREATE TABLE IF NOT EXISTS contracts (
     price_per_invoice DECIMAL(12,2) NULL,
     total_invoiced DECIMAL(12,2) NOT NULL DEFAULT 0,
     next_invoice_date DATE NULL,
+    billing_start_mode ENUM('on_upload','manual') NULL DEFAULT 'on_upload',
     last_invoice_date DATE NULL,
     invoice_count INT NULL,
     invoices_generated INT NOT NULL DEFAULT 0,

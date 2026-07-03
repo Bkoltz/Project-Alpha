@@ -14,6 +14,8 @@ if (!rate_limit_check($pdo, 'public_contract_action', 30, 60)) {
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/contract_billing_start.php';
+require_once __DIR__ . '/../../utils/upload_validator.php';
 
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_contract_action', $submitted)) {
@@ -86,7 +88,13 @@ try {
   // Save path and activate contract
   $pdo->beginTransaction();
   try {
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=?, signed_at=NOW() WHERE id=?')->execute([$publicUrl, 'active', $cid]);
+    if (pa_long_term_starts_billing_on_upload($contract)) {
+      $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=?, signed_at=NOW(), next_invoice_date=? WHERE id=?')
+          ->execute([$publicUrl, 'active', date('Y-m-d'), $cid]);
+    } else {
+      $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=?, signed_at=NOW() WHERE id=?')
+          ->execute([$publicUrl, 'active', $cid]);
+    }
     $pdo->commit();
   } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();

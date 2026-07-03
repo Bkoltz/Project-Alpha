@@ -9,12 +9,39 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
-header('Content-Type: application/json');
+function expense_handler_is_ajax(): bool
+{
+    $requestedWith = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
+    return $requestedWith === 'xmlhttprequest' || ($_GET['ajax'] ?? '') === '1' || ($_POST['ajax'] ?? '') === '1';
+}
+
+function expense_handler_redirect_with_message(string $url, string $key, string $message): void
+{
+    $join = str_contains($url, '?') ? '&' : '?';
+    header('Location: ' . $url . $join . $key . '=' . urlencode($message));
+    exit;
+}
+
+function expense_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/expenses-list'): void
+{
+    if (expense_handler_is_ajax()) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    if (!empty($response['success'])) {
+        header('Location: ' . (string)($response['redirect'] ?? '/?page=financial/expenses-list'));
+        exit;
+    }
+
+    expense_handler_redirect_with_message($fallback, 'error', (string)($response['error'] ?? 'Expense request failed'));
+}
 
 $userId = $_SESSION['user']['id'] ?? null;
 if (!$userId) {
-    echo json_encode(['success' => false, 'error' => 'Not authenticated']);
-    exit;
+    expense_handler_finish(['success' => false, 'error' => 'Not authenticated'], 401, '/?page=login');
 }
 
 $csrfOk = false;
@@ -25,18 +52,16 @@ if (is_string($submitted) && $submitted !== '') {
     $csrfOk = csrf_validate();
 }
 if (!$csrfOk) {
-    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
-    exit;
+    expense_handler_finish(['success' => false, 'error' => 'Invalid CSRF token'], 400, '/?page=financial/expense-create');
 }
 
 $orgId = get_active_org_id();
 if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Permission denied']);
-    exit;
+    expense_handler_finish(['success' => false, 'error' => 'Permission denied'], 403, '/?page=financial/expenses-list');
 }
 $action = $_POST['action'] ?? '';
 $response = ['success' => false, 'error' => ''];
+$fallback = '/?page=financial/expense-create';
 
 try {
     switch ($action) {
@@ -92,11 +117,12 @@ try {
             ]);
             $expenseId = (int)$pdo->lastInsertId();
             audit_log($pdo, 'expense.create', 'expense', $expenseId, ['amount' => $amount, 'vendor_id' => $vendorId]);
-            $response = ['success' => true, 'id' => $expenseId, 'redirect' => '/?page=financial/expense-detail&id=' . $expenseId];
+            $response = ['success' => true, 'id' => $expenseId, 'redirect' => '/?page=financial/expense-detail&id=' . $expenseId, 'status_param' => 'created'];
             break;
 
         case 'update':
             $id = (int)($_POST['id'] ?? 0);
+            $fallback = $id > 0 ? '/?page=financial/expense-create&id=' . $id : '/?page=financial/expense-create';
             if ($id <= 0) throw new Exception('Invalid expense ID');
 
             $vendorId = (int)($_POST['vendor_id'] ?? 0);
@@ -141,11 +167,12 @@ try {
                 $id, $orgId
             ]);
             audit_log($pdo, 'expense.update', 'expense', $id);
-            $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id];
+            $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id, 'status_param' => 'updated'];
             break;
 
         case 'delete':
             $id = (int)($_POST['id'] ?? 0);
+            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list';
             if ($id <= 0) throw new Exception('Invalid expense ID');
             $pdo->prepare('UPDATE expenses SET status="void" WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
             audit_log($pdo, 'expense.delete', 'expense', $id);
@@ -154,18 +181,20 @@ try {
 
         case 'mark_reimbursed':
             $id = (int)($_POST['id'] ?? 0);
+            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list';
             if ($id <= 0) throw new Exception('Invalid expense ID');
             $pdo->prepare('UPDATE expenses SET is_reimbursed=1, status="reimbursed" WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
             audit_log($pdo, 'expense.mark_reimbursed', 'expense', $id);
-            $response = ['success' => true];
+            $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id . '&reimbursed=1'];
             break;
 
         case 'mark_reconciled':
             $id = (int)($_POST['id'] ?? 0);
+            $fallback = $id > 0 ? '/?page=financial/expense-detail&id=' . $id : '/?page=financial/expenses-list';
             if ($id <= 0) throw new Exception('Invalid expense ID');
             $pdo->prepare('UPDATE expenses SET is_reconciled=1 WHERE id=? AND organization_id=?')->execute([$id, $orgId]);
             audit_log($pdo, 'expense.mark_reconciled', 'expense', $id);
-            $response = ['success' => true];
+            $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id . '&reconciled=1'];
             break;
 
         default:
@@ -175,4 +204,4 @@ try {
     $response = ['success' => false, 'error' => $e->getMessage()];
 }
 
-echo json_encode($response);
+expense_handler_finish($response, !empty($response['success']) ? 200 : 400, $fallback);

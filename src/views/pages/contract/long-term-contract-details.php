@@ -109,6 +109,13 @@ $isOngoing = empty($contract['end_date']);
     <?php if (!empty($contract['signed_pdf_path'])): ?>
       <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-success">View Signed PDF</a>
     <?php endif; ?>
+    <?php if ($contractStatus === 'active' && !empty($contract['signed_pdf_path']) && empty($contract['next_invoice_date'])): ?>
+      <form method="post" action="/?page=long-term-contract-start-billing" style="display:inline">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <button type="submit" class="btn btn-sm">Start Billing</button>
+      </form>
+    <?php endif; ?>
     <?php if (!in_array($contractStatus, ['cancelled', 'completed', 'void'], true)): ?>
       <form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
