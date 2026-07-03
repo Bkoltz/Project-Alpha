@@ -194,4 +194,59 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("window.ProjectAlpha.registerPage('accounts', initAccountCreateForm)", (string)$accounts);
         self::assertStringContainsString("header('Location: /?page=accounts&created=1')", (string)$accountsCreate);
     }
+
+    public function testVersionedAssetsPreventStalePageScripts(): void
+    {
+        $appVersion = file_get_contents($this->root . '/src/utils/app_version.php');
+        $header = file_get_contents($this->root . '/src/views/partials/header.php');
+        $footer = file_get_contents($this->root . '/src/views/partials/footer.php');
+        $payments = file_get_contents($this->root . '/src/views/pages/payments/payments-create.php');
+        $projectCreate = file_get_contents($this->root . '/src/views/pages/project/projects-create.php');
+
+        self::assertStringContainsString('function asset_url(string $path): string', (string)$appVersion);
+        self::assertStringContainsString("filemtime(\$filePath)", (string)$appVersion);
+        self::assertStringContainsString("asset_url('/assets/styles.css')", (string)$header);
+        self::assertStringContainsString("asset_url('/assets/js/csrf-auto-link.js')", (string)$footer);
+        self::assertStringContainsString("asset_url('/assets/js/payments-create-logic.js')", (string)$payments);
+        self::assertStringContainsString("asset_url('/assets/js/project-form.js')", (string)$projectCreate);
+        self::assertStringNotContainsString('<script src="/assets/js/payments-create-logic.js"', (string)$payments);
+    }
+
+    public function testFormsDocsRemainSeparateFromProjectDocuments(): void
+    {
+        $formsList = file_get_contents($this->root . '/src/views/pages/financial/forms-list.php');
+        $formDetail = file_get_contents($this->root . '/src/views/pages/financial/form-detail.php');
+        $folderDetail = file_get_contents($this->root . '/src/views/pages/financial/folder-detail.php');
+        $handler = file_get_contents($this->root . '/src/controllers/forms_handler.php');
+
+        self::assertStringContainsString('active_or_default_org_id($pdo)', (string)$formsList);
+        self::assertStringContainsString('active_or_default_org_id($pdo)', (string)$handler);
+        self::assertStringContainsString('WHERE project_id IS NULL OR project_id = 0', (string)$formsList);
+        self::assertStringContainsString('fd.project_id IS NULL OR fd.project_id = 0', (string)$formDetail);
+        self::assertStringContainsString('fd.project_id IS NULL OR fd.project_id = 0', (string)$folderDetail);
+        self::assertStringNotContainsString('name="project_id"', (string)$formsList);
+        self::assertStringNotContainsString('Project (Optional)', (string)$formDetail);
+    }
+
+    public function testContractSignatureLabelsAndPaymentReferencesArePreserved(): void
+    {
+        $migration = file_get_contents($this->root . '/database/migrations/0011_contract_signature_labels.sql');
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $helper = file_get_contents($this->root . '/src/utils/contract_signatures.php');
+        $contractCreate = file_get_contents($this->root . '/src/controllers/contract/contracts_create.php');
+        $longTermDetails = file_get_contents($this->root . '/src/views/pages/contract/long-term-contract-details.php');
+        $paymentView = file_get_contents($this->root . '/src/views/pages/payments/payments-create.php');
+        $paymentController = file_get_contents($this->root . '/src/controllers/payments_create.php');
+        $paymentScript = file_get_contents($this->root . '/public/assets/js/payments-create-logic.js');
+
+        self::assertStringContainsString('ADD COLUMN signer_title', (string)$migration);
+        self::assertStringContainsString('signer_title VARCHAR(190) NULL', (string)$baseline);
+        self::assertStringContainsString('pa_save_contract_signatures', (string)$helper);
+        self::assertStringContainsString('pa_save_contract_signatures($pdo, $co_id', (string)$contractCreate);
+        self::assertStringContainsString('$sig[\'signer_title\'] ?? \'Client Signature\'', (string)$longTermDetails);
+        self::assertStringContainsString('data-remaining=', (string)$paymentView);
+        self::assertStringContainsString('name="reference_number"', (string)$paymentView);
+        self::assertStringContainsString('reference_number', (string)$paymentController);
+        self::assertStringContainsString('referenceLabel.textContent', (string)$paymentScript);
+    }
 }

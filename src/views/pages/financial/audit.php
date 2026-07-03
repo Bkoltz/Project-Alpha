@@ -279,4 +279,4 @@ $endDate = $currentYear . '-12-31';
   </div>
 </section>
 
-<script src="/assets/js/audit-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/audit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

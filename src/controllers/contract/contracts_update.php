@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
+require_once __DIR__ . '/../../utils/contract_signatures.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
 $client_id = (int)($_POST['client_id'] ?? 0);
@@ -90,23 +91,10 @@ try{
   try {
       $pdo->prepare('DELETE FROM contract_signatures WHERE contract_id=?')->execute([$id]);
       $signatureTitles = $_POST['signature_titles'] ?? [];
+      $signatureOrders = $_POST['signature_orders'] ?? [];
+      $signatureRequired = $_POST['signature_required'] ?? [];
       if (!empty($signatureTitles)) {
-          $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
-          foreach ($signatureTitles as $title) {
-              $title = trim((string)$title);
-              if ($title === '') continue;
-
-              $lower = strtolower($title);
-              if (strpos($lower, 'admin') !== false) {
-                  $signatoryType = 'admin';
-              } elseif (strpos($lower, 'witness') !== false) {
-                  $signatoryType = 'witness';
-              } else {
-                  $signatoryType = 'client';
-              }
-
-              $sigStmt->execute([$id, $signatoryType]);
-          }
+          pa_save_contract_signatures($pdo, $id, $signatureTitles, $signatureOrders, $signatureRequired);
       }
   } catch (Throwable $sigErr) {
       @error_log('contracts_update signature insert failed: ' . $sigErr->getMessage());

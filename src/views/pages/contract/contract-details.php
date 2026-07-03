@@ -26,7 +26,7 @@ $isHourlyBilling = ($contract['billing_mode'] ?? 'fixed') === 'hourly';
 // Fetch contract signatures
 $signatures = [];
 try {
-    $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY id');
+    $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
     $sigStmt->execute([$id]);
     $signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {

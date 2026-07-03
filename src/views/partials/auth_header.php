@@ -1,6 +1,7 @@
 <?php
 // src/views/partials/auth_header.php
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/app_version.php';
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -22,8 +23,8 @@ require_once __DIR__ . '/../../config/app.php';
   <link rel="preload" href="<?php echo htmlspecialchars($logo); ?>" as="image">
   <?php endif; ?>
   
-  <link rel="stylesheet" href="/assets/styles.css">
-  <script src="/assets/js/phone-formatter.js" defer></script>
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('/assets/styles.css'), ENT_QUOTES, 'UTF-8'); ?>">
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/phone-formatter.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
   <style>
     .auth-topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #eee;background:#fff}
     .auth-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}

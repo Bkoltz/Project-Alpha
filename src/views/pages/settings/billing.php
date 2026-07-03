@@ -122,4 +122,4 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
   </div>
 </fieldset>
 
-<script src="/assets/js/billing-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/billing-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

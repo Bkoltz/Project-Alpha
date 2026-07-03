@@ -9,7 +9,7 @@ require_once __DIR__ . '/../utils/invoice_lifecycle.php';
 $invoice_id = (int)($_POST['invoice_id'] ?? 0);
 $amount = (float)($_POST['amount'] ?? 0);
 $method = trim((string)($_POST['method'] ?? 'card'));
-$check_number = trim((string)($_POST['check_number'] ?? ''));
+$check_number = trim((string)($_POST['reference_number'] ?? $_POST['check_number'] ?? ''));
 $paid_in_advance = !empty($_POST['paid_in_advance']);
 
 // If Stripe is selected, redirect to Stripe checkout

@@ -830,6 +830,9 @@ CREATE TABLE IF NOT EXISTS contract_signatures (
     id INT AUTO_INCREMENT PRIMARY KEY,
     contract_id INT NOT NULL,
     signatory_type ENUM('client','admin','witness') NOT NULL DEFAULT 'client',
+    signer_title VARCHAR(190) NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    is_required TINYINT(1) NOT NULL DEFAULT 1,
     signature_data TEXT NULL,
     signed_at TIMESTAMP NULL,
     signed_by_user_id INT NULL,
@@ -837,6 +840,7 @@ CREATE TABLE IF NOT EXISTS contract_signatures (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_cs_contract (contract_id),
+    INDEX idx_cs_contract_order (contract_id, display_order),
     INDEX idx_cs_type (signatory_type),
     CONSTRAINT fk_cs_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE,
     CONSTRAINT fk_cs_user FOREIGN KEY (signed_by_user_id) REFERENCES users(id) ON DELETE SET NULL
