@@ -57,8 +57,8 @@ if ($pref > 0) {
     </div>
     <div id="checkNumberField" style="display:none">
       <label>
-        <div>Check Number</div>
-        <input type="text" name="check_number" id="checkNumberInput" placeholder="Enter check number" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div id="referenceLabel">Check Number</div>
+        <input type="text" name="reference_number" id="checkNumberInput" placeholder="Enter check number" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
     <label>
@@ -69,4 +69,4 @@ if ($pref > 0) {
   </form>
 </section>
 
-<script src="/assets/js/payments-create-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/payments-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $categoryId = (int)($_GET['id'] ?? 0);
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 
 if (!$categoryId) {
     header('Location: /?page=financial/forms-list');
@@ -26,7 +26,7 @@ $stmt = $pdo->prepare('
         fd.file_name,
         fd.uploaded_at
     FROM form_categories fc
-    LEFT JOIN form_documents fd ON fc.id = fd.category_id
+    LEFT JOIN form_documents fd ON fc.id = fd.category_id AND (fd.project_id IS NULL OR fd.project_id = 0)
     WHERE fc.id = ? AND fc.organization_id = ?
 ');
 $stmt->execute([$categoryId, $orgId]);
@@ -190,26 +190,6 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     Accepts: JPEG, PNG, GIF, PDF (Max 20MB)
                 </div>
             </label>
-            
-            <label style="display:block;margin-bottom:16px">
-                <div style="margin-bottom:4px;font-weight:600">Project (Optional)</div>
-                <select name="project_id" id="projectSelectFormDetail" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
-                    <option value="">-- No Project --</option>
-                    <?php
-                    $projectsStmt = $pdo->query('SELECT id, name, status FROM projects ORDER BY name ASC');
-                    $allProjects = $projectsStmt->fetchAll(PDO::FETCH_ASSOC);
-                    foreach ($allProjects as $proj):
-                    ?>
-                        <option value="<?php echo $proj['id']; ?>">
-                            <?php echo htmlspecialchars($proj['name']); ?> (<?php echo ucwords(str_replace('_', ' ', $proj['status'])); ?>)
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                <div style="margin-top:4px;font-size:13px;color:var(--muted)">
-                    Associate this document with a project
-                </div>
-            </label>
-
             <div style="display:flex;gap:12px">
                 <button type="submit" id="uploadBtn"
                         style="flex:1;padding:10px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer">
@@ -335,4 +315,4 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     window.formDocumentId = <?php echo (int)($category['doc_id'] ?? 0); ?>;
 </script>
 
-<script src="/assets/js/form-detail-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/form-detail-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

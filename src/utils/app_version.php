@@ -15,3 +15,20 @@ function app_version(): string {
     $v = 'dev';
     return $v;
 }
+
+function asset_url(string $path): string {
+    $path = '/' . ltrim($path, '/');
+    $publicRoot = dirname(__DIR__, 2) . '/public';
+    $filePath = $publicRoot . $path;
+    $version = app_version();
+
+    if (@is_file($filePath)) {
+        $mtime = @filemtime($filePath);
+        if ($mtime !== false) {
+            $version .= '-' . $mtime;
+        }
+    }
+
+    $separator = str_contains($path, '?') ? '&' : '?';
+    return $path . $separator . 'v=' . rawurlencode($version);
+}

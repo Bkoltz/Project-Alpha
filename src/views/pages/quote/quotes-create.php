@@ -337,5 +337,5 @@ if ($selectedProjectId > 0) {
   </form>
 </section>
 
-<script src="/assets/js/quotes-create-logic.js" defer></script>
-<script src="/assets/js/client-selection-dropdown-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/quotes-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/client-selection-dropdown-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

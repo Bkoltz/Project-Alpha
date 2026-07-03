@@ -55,7 +55,7 @@ if (!$csrfOk) {
     expense_handler_finish(['success' => false, 'error' => 'Invalid CSRF token'], 400, '/?page=financial/expense-create');
 }
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
     expense_handler_finish(['success' => false, 'error' => 'Permission denied'], 403, '/?page=financial/expenses-list');
 }

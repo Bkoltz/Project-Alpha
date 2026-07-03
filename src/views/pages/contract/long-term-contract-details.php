@@ -14,6 +14,18 @@ $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
 
+$signatures = [];
+try {
+    $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
+    $sigStmt->execute([$id]);
+    $signatures = $sigStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $signatures = [];
+}
+if (!$signatures) {
+    $signatures = [['signer_title' => 'Client Signature', 'is_required' => 1]];
+}
+
 // Get items if fixed_total pricing
 $items = [];
 if ($contract['pricing_type'] === 'fixed_total') {
@@ -376,16 +388,18 @@ $isOngoing = empty($contract['end_date']);
 
   <!-- Signature block -->
   <table style="width:100%;border-collapse:collapse;margin-top:20px">
+    <?php foreach ($signatures as $sig): ?>
     <tr>
-      <td style="width:65%;height:50px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
+      <td style="width:65%;height:58px;vertical-align:bottom;padding-right:40px;font-size:12px;color:#4b5563">
         <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
-        Client Signature
+        <?php echo htmlspecialchars($sig['signer_title'] ?? 'Client Signature'); ?>
       </td>
-      <td style="width:35%;height:50px;vertical-align:bottom;font-size:12px;color:#4b5563">
+      <td style="width:35%;height:58px;vertical-align:bottom;font-size:12px;color:#4b5563">
         <div style="border-top:1px solid #333;width:100%;height:1px;margin-bottom:4px"></div>
         Date
       </td>
     </tr>
+    <?php endforeach; ?>
   </table>
 
   <div style="page-break-after:always"></div>

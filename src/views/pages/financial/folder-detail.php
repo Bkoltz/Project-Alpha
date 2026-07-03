@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $folderId = (int)($_GET['id'] ?? 0);
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 
 if (!$folderId) {
     header('Location: /?page=financial/forms-list');
@@ -36,7 +36,7 @@ $stmt = $pdo->prepare('
         fd.file_path,
         fd.uploaded_at
     FROM form_documents fd
-    WHERE fd.category_id = ?
+    WHERE fd.category_id = ? AND (fd.project_id IS NULL OR fd.project_id = 0)
     ORDER BY fd.created_at DESC
 ');
 $stmt->execute([$folderId]);
@@ -348,4 +348,4 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
     window.formFolderId = <?php echo (int)$folderId; ?>;
 </script>
-<script src="/assets/js/folder-detail-logic.js" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/folder-detail-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

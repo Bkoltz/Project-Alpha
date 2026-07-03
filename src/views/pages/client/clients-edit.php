@@ -116,4 +116,4 @@ $organizations = $orgStmt->fetchAll();
     </div>
   </div>
 
-  <script src="/assets/js/clients-edit-logic.js" defer></script>
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/clients-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

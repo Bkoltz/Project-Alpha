@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
+require_once __DIR__ . '/../../utils/contract_signatures.php';
 
 $__orgId = get_active_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -146,23 +147,10 @@ try{
   // Save contract signatures (non-critical; failures must not roll back contract creation)
   try {
       $signatureTitles = $_POST['signature_titles'] ?? [];
+      $signatureOrders = $_POST['signature_orders'] ?? [];
+      $signatureRequired = $_POST['signature_required'] ?? [];
       if (!empty($signatureTitles)) {
-          $sigStmt = $pdo->prepare('INSERT INTO contract_signatures (contract_id, signatory_type) VALUES (?, ?)');
-          foreach ($signatureTitles as $title) {
-              $title = trim((string)$title);
-              if ($title === '') continue;
-
-              $lower = strtolower($title);
-              if (strpos($lower, 'admin') !== false) {
-                  $signatoryType = 'admin';
-              } elseif (strpos($lower, 'witness') !== false) {
-                  $signatoryType = 'witness';
-              } else {
-                  $signatoryType = 'client';
-              }
-
-              $sigStmt->execute([$co_id, $signatoryType]);
-          }
+          pa_save_contract_signatures($pdo, $co_id, $signatureTitles, $signatureOrders, $signatureRequired);
       }
   } catch (Throwable $sigErr) {
       @error_log('contracts_create signature insert failed: ' . $sigErr->getMessage());
