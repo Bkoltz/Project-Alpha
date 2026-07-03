@@ -167,9 +167,9 @@ final class ProjectWorkflowUiTest extends TestCase
         $odcInvoice = file_get_contents($this->root . '/src/controllers/contract/on_demand_invoice_generate.php');
 
         self::assertStringContainsString('invoice_type = "regular" OR invoice_type IS NULL', (string)$helper);
-        self::assertStringContainsString("pa_next_invoice_doc_number($pdo, 'regular')", (string)$invoiceCreate);
+        self::assertStringContainsString('pa_next_invoice_doc_number($pdo, \'regular\')', (string)$invoiceCreate);
         self::assertStringContainsString('contracts WHERE contract_type = "regular"', (string)$contractCreate);
-        self::assertStringContainsString("pa_next_invoice_doc_number($pdo, 'on_demand')", (string)$odcInvoice);
+        self::assertStringContainsString('pa_next_invoice_doc_number($pdo, \'on_demand\')', (string)$odcInvoice);
     }
 
     public function testCreatePageScriptsInitializeAfterAjaxNavigation(): void
