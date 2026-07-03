@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 
 // Get all existing stores for autocomplete
 $stmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
@@ -22,7 +22,11 @@ $stores = $stmt->fetchAll(PDO::FETCH_COLUMN);
     <h1 style="margin:0 0 8px 0">Upload Receipt</h1>
     <p style="margin:0 0 24px 0;color:var(--muted)">Upload an image or PDF of your business expense receipt</p>
 
-    <form id="receiptUploadForm" enctype="multipart/form-data" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px">
+    <?php if (!empty($_GET['error'])): ?>
+        <div class="alert alert-danger" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+    <?php endif; ?>
+
+    <form id="receiptUploadForm" method="post" action="/?page=receipts-handler" enctype="multipart/form-data" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="action" value="create">
 

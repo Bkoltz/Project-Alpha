@@ -3,6 +3,10 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
+
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 
 $editMode = false;
 $log = [
@@ -22,13 +26,14 @@ $log = [
 
 $editId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($editId > 0) {
+    [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
     $stmt = $pdo->prepare('
         SELECT m.*, c.name AS client_name
         FROM mileage_logs m
         LEFT JOIN clients c ON m.client_id = c.id
-        WHERE m.id = ? AND m.organization_id = ?
+        WHERE m.id = ? AND ' . $mileageScopeWhere . '
     ');
-    $stmt->execute([$editId, 1]);
+    $stmt->execute(array_merge([$editId], $mileageScopeParams));
     $existing = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($existing) {
         $editMode = true;
@@ -37,7 +42,8 @@ if ($editId > 0) {
 }
 
 // Clients for billable dropdown
-$clientsStmt = $pdo->query('SELECT id, name FROM clients ORDER BY name ASC');
+$clientsStmt = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name ASC');
+$clientsStmt->execute([$orgId]);
 $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
@@ -220,20 +226,5 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
   updateCalculations();
   updateBillableFields();
 
-  // AJAX form submission for a smoother UX
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var data = new FormData(form);
-    fetch(form.action, { method: 'POST', body: data })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (res.success && res.redirect) {
-          window.location.href = res.redirect;
-        } else {
-          alert(res.message || 'Failed to save mileage entry');
-        }
-      })
-      .catch(function () { alert('Request failed'); });
-  });
 })();
 </script>

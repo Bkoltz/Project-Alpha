@@ -337,9 +337,9 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('$taxAmount = null;', (string)$expenseHandler);
         self::assertStringContainsString('$paymentMethod = null;', (string)$expenseHandler);
         self::assertStringNotContainsString('id="taxInput"', (string)$expenseCreate);
+        self::assertStringNotContainsString('name="payment_method"', (string)$expenseCreate);
         self::assertStringNotContainsString('fetch(form.action', (string)$expenseCreate);
         self::assertStringContainsString('$_GET[\'error\']', (string)$expenseCreate);
-        self::assertStringContainsString('style="display:none"', (string)$expenseCreate);
         self::assertStringContainsString('#toolbar=0&navpanes=0&scrollbar=0&view=FitH', (string)$formsList);
         self::assertStringContainsString('Open PDF in new tab', (string)$formDetail);
         self::assertStringContainsString('X-Frame-Options: SAMEORIGIN', (string)$securityHeaders);

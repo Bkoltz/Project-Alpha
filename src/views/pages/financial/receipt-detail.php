@@ -5,7 +5,8 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $receiptId = (int)($_GET['id'] ?? 0);
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Get existing stores for edit modal
 $storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
@@ -18,13 +19,14 @@ if (!$receiptId) {
 }
 
 // Fetch receipt details
+[$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
 $stmt = $pdo->prepare('
     SELECT r.*, rs.name as store_name
     FROM receipts r
     LEFT JOIN vendors rs ON r.store_id = rs.id
-    WHERE r.id = ? AND r.organization_id = ?
+    WHERE r.id = ? AND ' . $receiptScopeWhere . '
 ');
-$stmt->execute([$receiptId, $orgId]);
+$stmt->execute(array_merge([$receiptId], $receiptScopeParams));
 $receipt = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$receipt) {
@@ -154,7 +156,7 @@ $isPdf = $fileExt === 'pdf';
     <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto">
         <h3 style="margin:0 0 16px 0">Edit Receipt</h3>
         
-        <form id="editForm" enctype="multipart/form-data">
+        <form id="editForm" method="post" action="/?page=receipts-handler" enctype="multipart/form-data">
             <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="receipt_id" value="<?php echo $receiptId; ?>">

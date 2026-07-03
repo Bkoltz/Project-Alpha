@@ -93,6 +93,8 @@ final class FinancialAssetsTest extends TestCase
     {
         $form = $this->read('src/views/pages/financial/asset-form.php');
         self::assertStringContainsString("csrf_sf_token('asset')", $form);
+        self::assertStringContainsString('action="/?page=financial/asset-handler"', $form);
+        self::assertStringNotContainsString("fetch('/?page=financial/asset-handler'", $form);
         self::assertStringContainsString('Useful Life (months)', $form);
         self::assertStringContainsString('Estimated Monthly', $form);
         self::assertStringContainsString('Linked Expense', $form);
@@ -102,6 +104,29 @@ final class FinancialAssetsTest extends TestCase
         self::assertStringContainsString('Accumulated Depreciation', $detail);
         self::assertStringContainsString('Linked Expense', $detail);
         self::assertStringContainsString('Mark Disposed', $detail);
+        self::assertStringNotContainsString("fetch('/?page=financial/asset-handler'", $detail);
+
+        $handler = $this->read('src/controllers/financial/asset_handler.php');
+        self::assertStringContainsString('function asset_handler_finish', $handler);
+        self::assertStringContainsString('active_or_default_org_id($pdo)', $handler);
+        self::assertStringContainsString('finance_scope_clause($pdo, \'a\'', $handler);
+    }
+
+    public function testFinancialHubUsesConsistentFinanceScope(): void
+    {
+        $acl = $this->read('src/utils/acl.php');
+        self::assertStringContainsString('function finance_scope_clause', $acl);
+
+        foreach ([
+            'src/views/pages/financial/expenses-list.php',
+            'src/views/pages/financial/_expenses_tab.php',
+            'src/views/pages/financial/_assets_tab.php',
+            'src/views/pages/financial/financial-dashboard.php',
+            'src/views/pages/financial/expense-report.php',
+            'src/controllers/financial/expense_export.php',
+        ] as $path) {
+            self::assertStringContainsString('finance_scope_clause', $this->read($path), $path);
+        }
     }
 
     private function read(string $relativePath): string

@@ -5,18 +5,20 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
 
 $stmt = $pdo->prepare("
     SELECT c.*, pc.name as parent_name, COUNT(e.id) as expense_count, COALESCE(SUM(e.amount),0) as total_amount
     FROM expense_categories c
     LEFT JOIN expense_categories pc ON c.parent_id = pc.id
-    LEFT JOIN expenses e ON e.category_id = c.id
+    LEFT JOIN expenses e ON e.category_id = c.id AND {$expenseScopeWhere}
     WHERE c.organization_id = ?
     GROUP BY c.id
     ORDER BY c.is_system DESC, c.name
 ");
-$stmt->execute([$orgId]);
+$stmt->execute(array_merge($expenseScopeParams, [$orgId]));
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $csrf = csrf_token();

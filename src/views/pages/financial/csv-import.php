@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 // Fetch categories for default category dropdown
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 $catStmt = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');
 $catStmt->execute([$orgId]);
 $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -32,14 +32,14 @@ $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
           <li>Date: <code>date</code>, <code>transaction date</code>, <code>order date</code></li>
           <li>Amount: <code>amount</code>, <code>debit</code>, <code>withdrawal</code>, <code>purchase price</code></li>
           <li>Vendor: <code>vendor</code>, <code>merchant</code>, <code>payee</code>, <code>seller</code></li>
-          <li>Optional: tax, total, reference/order ID, payment method</li>
+          <li>Optional: total and reference/order ID</li>
           <li>Negative debit amounts are accepted and imported as positive expenses</li>
         </ul>
       </div>
       <div>
         <div class="font-600" style="margin-bottom:6px">Example</div>
-        <pre style="margin:0;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;overflow:auto;font-size:12px">date,vendor,description,amount,tax,total,reference,payment_method
-2026-06-01,Acme Supply,Cable clips,42.50,2.34,44.84,INV-1001,Card</pre>
+        <pre style="margin:0;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;overflow:auto;font-size:12px">date,vendor,description,amount,total,reference
+2026-06-01,Acme Supply,Cable clips,42.50,42.50,INV-1001</pre>
       </div>
     </div>
   </div>
@@ -159,10 +159,8 @@ function buildMappingTable(headers, suggested, previewRows) {
     'vendor_name': 'Vendor Name',
     'description': 'Description',
     'amount': 'Amount',
-    'tax_amount': 'Tax Amount',
     'total_amount': 'Total Amount',
-    'reference_number': 'Reference Number',
-    'payment_method': 'Payment Method'
+    'reference_number': 'Reference Number'
   };
 
   let html = '<table class="pa-table"><thead><tr><th>Expense Field</th><th>CSV Column</th><th>Preview (first row)</th></tr></thead><tbody>';
@@ -182,7 +180,7 @@ function buildMappingTable(headers, suggested, previewRows) {
 
 async function runImport(dryRun) {
   const mapping = {};
-  ['expense_date', 'vendor_name', 'description', 'amount', 'tax_amount', 'total_amount', 'reference_number', 'payment_method'].forEach(field => {
+  ['expense_date', 'vendor_name', 'description', 'amount', 'total_amount', 'reference_number'].forEach(field => {
     const sel = document.getElementById('map_' + field);
     mapping[field] = sel ? (sel.value !== '' ? parseInt(sel.value) : null) : null;
   });

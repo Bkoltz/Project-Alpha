@@ -11,27 +11,53 @@ ini_set('display_errors', '0');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/csrf.php';
 require_once __DIR__ . '/../utils/acl.php';
+require_once __DIR__ . '/../utils/upload_validator.php';
 
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
 
+function receipts_handler_is_ajax(): bool
+{
+    return strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+}
+
+function receipts_handler_redirect_with_message(string $url, string $key, string $message): void
+{
+    $join = str_contains($url, '?') ? '&' : '?';
+    header('Location: ' . $url . $join . rawurlencode($key) . '=' . rawurlencode($message));
+    exit;
+}
+
+function receipts_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/expenses-list&tab=receipts'): void
+{
+    if (receipts_handler_is_ajax()) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    if (!empty($response['success'])) {
+        header('Location: ' . (string)($response['redirect'] ?? '/?page=financial/expenses-list&tab=receipts'));
+        exit;
+    }
+
+    receipts_handler_redirect_with_message($fallback, 'error', (string)($response['message'] ?? 'Receipt request failed'));
+}
+
 // Validate CSRF token
 if (!csrf_validate()) {
     $response['message'] = 'Invalid request (CSRF validation failed)';
-    header('Content-Type: application/json');
-    echo json_encode($response);
-    exit;
+    receipts_handler_finish($response, 400, '/?page=financial/receipt-upload');
 }
 
 try {
     $userId = (int)($_SESSION['user']['id'] ?? 0);
-    $orgId = get_active_org_id();
+    $orgId = active_or_default_org_id($pdo);
     if ($userId <= 0 || $orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
-        http_response_code(403);
         $response['message'] = 'Permission denied';
-        header('Content-Type: application/json');
-        echo json_encode($response);
-        exit;
+        receipts_handler_finish($response, 403, '/?page=financial/expenses-list&tab=receipts');
     }
 
     $resolveStoreId = static function (PDO $pdo, int $orgId, string $storeName): ?int {
@@ -72,7 +98,6 @@ try {
             $file = $_FILES['receipt_file'];
             $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
 
-            require_once __DIR__ . '/../utils/upload_validator.php';
             $uploadErr = validate_upload($file, $allowedTypes, 10 * 1024 * 1024);
             if ($uploadErr !== null) {
                 throw new Exception($uploadErr);
@@ -126,7 +151,7 @@ try {
 
             $response['success'] = true;
             $response['message'] = 'Receipt uploaded successfully';
-            $response['redirect'] = '/?page=financial/receipts-list';
+            $response['redirect'] = '/?page=financial/expenses-list&tab=receipts&created=1';
             break;
 
         case 'delete':
@@ -137,8 +162,9 @@ try {
             }
 
             // Get file path before deleting
-            $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ? AND organization_id = ?');
-            $stmt->execute([$receiptId, $orgId]);
+            [$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
+            $stmt = $pdo->prepare('SELECT r.file_path FROM receipts r WHERE r.id = ? AND ' . $receiptScopeWhere);
+            $stmt->execute(array_merge([$receiptId], $receiptScopeParams));
             $receipt = $stmt->fetch();
 
             if (!$receipt) {
@@ -146,8 +172,8 @@ try {
             }
 
             // Delete database record
-            $stmt = $pdo->prepare('DELETE FROM receipts WHERE id = ? AND organization_id = ?');
-            $stmt->execute([$receiptId, $orgId]);
+            $stmt = $pdo->prepare('DELETE r FROM receipts r WHERE r.id = ? AND ' . $receiptScopeWhere);
+            $stmt->execute(array_merge([$receiptId], $receiptScopeParams));
 
             // Delete file
             $filePath = __DIR__ . '/../..' . $receipt['file_path'];
@@ -157,6 +183,7 @@ try {
 
             $response['success'] = true;
             $response['message'] = 'Receipt deleted successfully';
+            $response['redirect'] = '/?page=financial/expenses-list&tab=receipts&deleted=1';
             break;
 
         case 'update':
@@ -172,13 +199,20 @@ try {
 
             $storeId = $resolveStoreId($pdo, $orgId, $storeName);
 
+            [$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
+            $exists = $pdo->prepare('SELECT 1 FROM receipts r WHERE r.id = ? AND ' . $receiptScopeWhere . ' LIMIT 1');
+            $exists->execute(array_merge([$receiptId], $receiptScopeParams));
+            if (!$exists->fetchColumn()) {
+                throw new Exception('Receipt not found');
+            }
+
             // Update database
             $stmt = $pdo->prepare('
-                UPDATE receipts 
+                UPDATE receipts r
                 SET description = ?, store_id = ?, receipt_date = ?, amount = ?
-                WHERE id = ? AND organization_id = ?
+                WHERE r.id = ? AND ' . $receiptScopeWhere . '
             ');
-            $stmt->execute([$description, $storeId, $receiptDate, $amount, $receiptId, $orgId]);
+            $stmt->execute(array_merge([$description, $storeId, $receiptDate, $amount, $receiptId], $receiptScopeParams));
 
             // Handle new file upload if provided
             if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['error'] === UPLOAD_ERR_OK) {
@@ -191,8 +225,8 @@ try {
                 }
 
                 // Get old file path
-                $stmt = $pdo->prepare('SELECT file_path FROM receipts WHERE id = ? AND organization_id = ?');
-                $stmt->execute([$receiptId, $orgId]);
+                $stmt = $pdo->prepare('SELECT r.file_path FROM receipts r WHERE r.id = ? AND ' . $receiptScopeWhere);
+                $stmt->execute(array_merge([$receiptId], $receiptScopeParams));
                 $oldReceipt = $stmt->fetch();
 
                 // Upload new file with year/month structure
@@ -235,8 +269,8 @@ try {
                 }
 
                 // Update file path in database
-                $stmt = $pdo->prepare('UPDATE receipts SET file_path = ?, file_name = ?, file_size = ?, mime_type = ?, uploaded_by = ? WHERE id = ? AND organization_id = ?');
-                $stmt->execute([$dbPath, $file['name'], $file['size'], $file['type'], $userId, $receiptId, $orgId]);
+                $stmt = $pdo->prepare('UPDATE receipts r SET file_path = ?, file_name = ?, file_size = ?, mime_type = ?, uploaded_by = ? WHERE r.id = ? AND ' . $receiptScopeWhere);
+                $stmt->execute(array_merge([$dbPath, $file['name'], $file['size'], $file['type'], $userId, $receiptId], $receiptScopeParams));
 
                 // Delete old file
                 if ($oldReceipt) {
@@ -260,5 +294,4 @@ try {
     error_log('[receipts_handler] Error: ' . $e->getMessage());
 }
 
-header('Content-Type: application/json');
-echo json_encode($response);
+receipts_handler_finish($response, !empty($response['success']) ? 200 : 400);

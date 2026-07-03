@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 $editId = (int)($_GET['id'] ?? 0);
 
 // Pre-fill from query params (when coming from receipt)
@@ -24,25 +25,31 @@ $vendorsQ = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id=? 
 $vendorsQ->execute([$orgId]);
 $vendors = $vendorsQ->fetchAll(PDO::FETCH_ASSOC);
 
-$clientsQ = $pdo->query('SELECT id, name FROM clients ORDER BY name');
+$clientsQ = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name');
+$clientsQ->execute([$orgId]);
 $clients = $clientsQ->fetchAll(PDO::FETCH_ASSOC);
 
-$projectsQ = $pdo->query('SELECT id, name FROM projects ORDER BY name');
+$projectsQ = $pdo->prepare('SELECT id, name FROM projects WHERE organization_id = ? ORDER BY name');
+$projectsQ->execute([$orgId]);
 $projects = $projectsQ->fetchAll(PDO::FETCH_ASSOC);
 
 // Load existing expense for edit mode
 $expense = null;
 if ($editId > 0) {
-    $stmt = $pdo->prepare('SELECT * FROM expenses WHERE id=? AND organization_id=?');
-    $stmt->execute([$editId, $orgId]);
+    [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+    $stmt = $pdo->prepare('
+        SELECT e.*, v.name AS vendor_name
+        FROM expenses e
+        LEFT JOIN vendors v ON v.id = e.vendor_id
+        WHERE e.id = ? AND ' . $expenseScopeWhere . '
+    ');
+    $stmt->execute(array_merge([$editId], $expenseScopeParams));
     $expense = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$expense) {
         header('Location: /?page=financial/expenses-list&tab=expenses');
         exit;
     }
 }
-
-$paymentMethods = [];
 ?>
 
 <div style="max-width:800px;margin:0 auto;padding:24px">
@@ -73,7 +80,7 @@ $paymentMethods = [];
                value="<?php echo htmlspecialchars($expense['vendor_name'] ?? $prefillVendor); ?>"
                placeholder="Start typing or select vendor" class="input">
         <datalist id="vendorList">
-          <?php foreach ($vendors as $v): ?><option value="<?php echo htmlspecialchars($v['name']); ?>" data-id="<?php echo (int)$v['id']; ?>"><?php endforeach; ?>
+          <?php foreach ($vendors as $v): ?><option value="<?php echo htmlspecialchars($v['name']); ?>" data-id="<?php echo (int)$v['id']; ?>"></option><?php endforeach; ?>
         </datalist>
       </div>
 
@@ -97,15 +104,6 @@ $paymentMethods = [];
       <div class="field">
         <label class="label">Expense Date *</label>
         <input type="date" name="expense_date" required value="<?php echo htmlspecialchars($expense['expense_date'] ?? $prefillDate); ?>" class="input">
-      </div>
-      <div class="field" style="display:none">
-        <label class="label">Payment Method</label>
-        <select name="payment_method" class="input">
-          <option value="">— Select —</option>
-          <?php foreach ($paymentMethods as $val => $label): ?>
-            <option value="<?php echo $val; ?>" <?php echo ($expense['payment_method'] ?? '') === $val ? 'selected' : ''; ?>><?php echo $label; ?></option>
-          <?php endforeach; ?>
-        </select>
       </div>
     </div>
 

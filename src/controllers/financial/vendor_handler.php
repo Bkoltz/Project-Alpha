@@ -15,24 +15,46 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
-header('Content-Type: application/json');
+function vendor_handler_is_ajax(): bool
+{
+    return strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+}
+
+function vendor_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/vendor-form'): void
+{
+    if (vendor_handler_is_ajax()) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    if (!empty($response['success'])) {
+        $redirect = (string)($response['redirect'] ?? '/?page=financial/expenses-list&tab=vendors');
+        $join = str_contains($redirect, '?') ? '&' : '?';
+        header('Location: ' . $redirect . $join . 'success=' . rawurlencode((string)($response['message'] ?? 'Vendor saved')));
+        exit;
+    }
+
+    $join = str_contains($fallback, '?') ? '&' : '?';
+    header('Location: ' . $fallback . $join . 'error=' . rawurlencode((string)($response['message'] ?? 'Vendor request failed')));
+    exit;
+}
 
 $response = ['success' => false, 'message' => ''];
 
 // Auth required
 if (empty($_SESSION['user']['id'])) {
     $response['message'] = 'Authentication required';
-    echo json_encode($response);
-    exit;
+    vendor_handler_finish($response, 401, '/?page=login');
 }
 
 $userId = (int)$_SESSION['user']['id'];
-$orgId  = get_active_org_id();
+$orgId  = active_or_default_org_id($pdo);
 if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
-    http_response_code(403);
     $response['message'] = 'Permission denied';
-    echo json_encode($response);
-    exit;
+    vendor_handler_finish($response, 403, '/?page=financial/expenses-list&tab=vendors');
 }
 
 // CSRF required: accept legacy 'csrf' or Symfony '_token'
@@ -45,15 +67,13 @@ if (is_string($submitted) && $submitted !== '') {
 }
 if (!$csrfOk) {
     $response['message'] = 'Invalid request (CSRF validation failed)';
-    echo json_encode($response);
-    exit;
+    vendor_handler_finish($response, 400, '/?page=financial/vendor-form');
 }
 
 $action = $_POST['action'] ?? '';
 
 function jsonResponse(bool $success, string $message, array $extra = []): void {
-    echo json_encode(array_merge(['success' => $success, 'message' => $message], $extra));
-    exit;
+    vendor_handler_finish(array_merge(['success' => $success, 'message' => $message], $extra), $success ? 200 : 400);
 }
 
 function trimNullable(string $value): ?string {

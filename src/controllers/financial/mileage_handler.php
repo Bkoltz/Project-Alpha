@@ -18,6 +18,36 @@ require_once __DIR__ . '/../../utils/audit.php';
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
 
+function mileage_handler_is_ajax(): bool
+{
+    return strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+}
+
+function mileage_handler_redirect_with_message(string $url, string $key, string $message): void
+{
+    $join = str_contains($url, '?') ? '&' : '?';
+    header('Location: ' . $url . $join . rawurlencode($key) . '=' . rawurlencode($message));
+    exit;
+}
+
+function mileage_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/mileage-list'): void
+{
+    if (mileage_handler_is_ajax()) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    if (!empty($response['success'])) {
+        header('Location: ' . (string)($response['redirect'] ?? '/?page=financial/mileage-list'));
+        exit;
+    }
+
+    mileage_handler_redirect_with_message($fallback, 'error', (string)($response['message'] ?? 'Mileage request failed'));
+}
+
 // CSRF + auth checks: accept legacy 'csrf' or Symfony '_token'
 $csrfOk = false;
 $submitted = $_POST['_token'] ?? '';
@@ -28,27 +58,20 @@ if (is_string($submitted) && $submitted !== '') {
 }
 if (!$csrfOk) {
     $response['message'] = 'Invalid request (CSRF validation failed)';
-    header('Content-Type: application/json');
-    echo json_encode($response);
-    exit;
+    mileage_handler_finish($response, 400, '/?page=financial/mileage-create');
 }
 
 if (empty($_SESSION['user']['id'])) {
     $response['message'] = 'Authentication required';
-    header('Content-Type: application/json');
-    echo json_encode($response);
-    exit;
+    mileage_handler_finish($response, 401, '/?page=login');
 }
 
 try {
     $userId = (int)$_SESSION['user']['id'];
-    $orgId = get_active_org_id();
+    $orgId = active_or_default_org_id($pdo);
     if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
-        http_response_code(403);
         $response['message'] = 'Permission denied';
-        header('Content-Type: application/json');
-        echo json_encode($response);
-        exit;
+        mileage_handler_finish($response, 403, '/?page=financial/mileage-list');
     }
 
     // Make sure mileage_logs table exists
@@ -149,6 +172,7 @@ try {
 
         case 'update':
             $id = (int)($_POST['id'] ?? 0);
+            $fallback = $id > 0 ? '/?page=financial/mileage-create&id=' . $id : '/?page=financial/mileage-create';
             $tripDate = trim($_POST['trip_date'] ?? '');
             $startLocation = trim($_POST['start_location'] ?? '');
             $endLocation = trim($_POST['end_location'] ?? '');
@@ -188,8 +212,9 @@ try {
                 throw new Exception('Mileage rate cannot be negative');
             }
 
-            $stmt = $pdo->prepare('SELECT id FROM mileage_logs WHERE id = ? AND organization_id = ?');
-            $stmt->execute([$id, $orgId]);
+            [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
+            $stmt = $pdo->prepare('SELECT m.id FROM mileage_logs m WHERE m.id = ? AND ' . $mileageScopeWhere);
+            $stmt->execute(array_merge([$id], $mileageScopeParams));
             if (!$stmt->fetch()) {
                 throw new Exception('Mileage entry not found');
             }
@@ -241,19 +266,21 @@ try {
 
         case 'delete':
             $id = (int)($_POST['id'] ?? 0);
+            $fallback = $id > 0 ? '/?page=financial/mileage-list' : '/?page=financial/mileage-list';
 
             if ($id <= 0) {
                 throw new Exception('Invalid mileage entry ID');
             }
 
-            $stmt = $pdo->prepare('SELECT id FROM mileage_logs WHERE id = ? AND organization_id = ?');
-            $stmt->execute([$id, $orgId]);
+            [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
+            $stmt = $pdo->prepare('SELECT m.id FROM mileage_logs m WHERE m.id = ? AND ' . $mileageScopeWhere);
+            $stmt->execute(array_merge([$id], $mileageScopeParams));
             if (!$stmt->fetch()) {
                 throw new Exception('Mileage entry not found');
             }
 
-            $stmt = $pdo->prepare('DELETE FROM mileage_logs WHERE id = ? AND organization_id = ?');
-            $stmt->execute([$id, $orgId]);
+            $stmt = $pdo->prepare('DELETE m FROM mileage_logs m WHERE m.id = ? AND ' . $mileageScopeWhere);
+            $stmt->execute(array_merge([$id], $mileageScopeParams));
 
             audit_log($pdo, 'mileage.delete', 'mileage_log', $id, [
                 'organization_id' => $orgId,
@@ -272,5 +299,4 @@ try {
     error_log('[mileage_handler] Error: ' . $e->getMessage());
 }
 
-header('Content-Type: application/json');
-echo json_encode($response);
+mileage_handler_finish($response, !empty($response['success']) ? 200 : 400, $fallback ?? '/?page=financial/mileage-list');

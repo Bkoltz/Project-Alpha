@@ -5,7 +5,8 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Get filter parameters with defaults to current year/month
 $filterStore = $_GET['store'] ?? '';
@@ -15,8 +16,9 @@ $filterMinAmount = $_GET['min_amount'] ?? '';
 $filterMaxAmount = $_GET['max_amount'] ?? '';
 
 // Build WHERE clause
-$whereClauses = ['r.organization_id = ?'];
-$params = [$orgId];
+[$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
+$whereClauses = [$receiptScopeWhere];
+$params = $receiptScopeParams;
 
 if (!empty($filterStore)) {
     $whereClauses[] = 'rs.name = ?';
@@ -62,8 +64,8 @@ $storeStmt->execute([$orgId]);
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Get available years
-$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(receipt_date) as year FROM receipts WHERE organization_id = ? ORDER BY year DESC');
-$yearStmt->execute([$orgId]);
+$yearStmt = $pdo->prepare('SELECT DISTINCT YEAR(r.receipt_date) as year FROM receipts r WHERE ' . $receiptScopeWhere . ' ORDER BY year DESC');
+$yearStmt->execute($receiptScopeParams);
 $years = $yearStmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Always include current year if not present
@@ -83,6 +85,14 @@ if (!in_array($currentYear, $years)) {
             + Upload Receipt
         </a>
     </div>
+
+    <?php if (!empty($_GET['created'])): ?>
+        <div class="alert alert-success" style="margin-bottom:16px">Receipt uploaded.</div>
+    <?php elseif (!empty($_GET['deleted'])): ?>
+        <div class="alert alert-success" style="margin-bottom:16px">Receipt deleted.</div>
+    <?php elseif (!empty($_GET['error'])): ?>
+        <div class="alert alert-danger" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+    <?php endif; ?>
 
     <!-- Filters -->
     <?php

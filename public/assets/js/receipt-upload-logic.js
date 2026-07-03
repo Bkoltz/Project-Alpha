@@ -34,6 +34,7 @@ document.getElementById('receiptUploadForm').addEventListener('submit', async fu
     try {
         const response = await fetch('/?page=receipts-handler', {
             method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: formData
         });
 

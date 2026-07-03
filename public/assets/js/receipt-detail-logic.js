@@ -20,6 +20,7 @@ document.getElementById('editForm').addEventListener('submit', async function (e
     try {
         const response = await fetch('/?page=receipts-handler', {
             method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: formData
         });
 
@@ -55,6 +56,7 @@ async function confirmDelete() {
     try {
         const response = await fetch('/?page=receipts-handler', {
             method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: formData
         });
 

@@ -5,18 +5,19 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 $editId = (int)($_GET['id'] ?? 0);
 
 $asset = null;
 if ($editId > 0) {
+    [$assetScopeWhere, $assetScopeParams] = finance_scope_clause($pdo, 'a', (int)($_SESSION['user']['id'] ?? 0), $orgId, 'created_by');
     $stmt = $pdo->prepare('
         SELECT a.*, v.name AS vendor_name
         FROM financial_assets a
         LEFT JOIN vendors v ON v.id = a.vendor_id
-        WHERE a.id = ? AND a.organization_id = ?
+        WHERE a.id = ? AND ' . $assetScopeWhere . '
     ');
-    $stmt->execute([$editId, $orgId]);
+    $stmt->execute(array_merge([$editId], $assetScopeParams));
     $asset = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$asset) {
         header('Location: /?page=financial/expenses-list&tab=assets');
@@ -32,15 +33,16 @@ $categoriesQ = $pdo->prepare('SELECT id, name FROM expense_categories WHERE orga
 $categoriesQ->execute([$orgId]);
 $categories = $categoriesQ->fetchAll(PDO::FETCH_ASSOC);
 
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)($_SESSION['user']['id'] ?? 0), $orgId, 'created_by');
 $expensesQ = $pdo->prepare('
     SELECT e.id, e.expense_date, e.total_amount, e.amount, e.description, v.name AS vendor_name
     FROM expenses e
     LEFT JOIN vendors v ON v.id = e.vendor_id
-    WHERE e.organization_id = ? AND e.status != "void"
+    WHERE ' . $expenseScopeWhere . ' AND e.status != "void"
     ORDER BY e.expense_date DESC, e.id DESC
     LIMIT 200
 ');
-$expensesQ->execute([$orgId]);
+$expensesQ->execute($expenseScopeParams);
 $expenses = $expensesQ->fetchAll(PDO::FETCH_ASSOC);
 
 $typesQ = $pdo->prepare('SELECT DISTINCT asset_type FROM financial_assets WHERE organization_id = ? AND asset_type IS NOT NULL AND asset_type <> "" ORDER BY asset_type');
@@ -73,8 +75,12 @@ $selected = static function (string $key, string $value, string $default = '') u
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('asset')); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
     <input type="hidden" name="action" value="<?php echo $editId > 0 ? 'update' : 'create'; ?>">
-    <?php if ($editId > 0): ?><input type="hidden" name="id" value="<?php echo $editId; ?>"><?php endif; ?>
-    <input type="hidden" name="vendor_id" id="assetVendorId" value="<?php echo (int)($asset['vendor_id'] ?? 0); ?>">
+  <?php if ($editId > 0): ?><input type="hidden" name="id" value="<?php echo $editId; ?>"><?php endif; ?>
+  <input type="hidden" name="vendor_id" id="assetVendorId" value="<?php echo (int)($asset['vendor_id'] ?? 0); ?>">
+
+  <?php if (!empty($_GET['error'])): ?>
+    <div class="alert alert-danger"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+  <?php endif; ?>
 
     <section class="card asset-form-section">
       <div class="card-head">
@@ -269,25 +275,8 @@ $selected = static function (string $key, string $value, string $default = '') u
   });
   updateDepreciationEstimate();
 
-  form.addEventListener('submit', async function(event) {
-    event.preventDefault();
+  form.addEventListener('submit', function() {
     updateVendorId();
-    const formData = new FormData(form);
-    try {
-      const response = await fetch('/?page=financial/asset-handler', {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: formData
-      });
-      const data = await response.json();
-      if (data.success && data.redirect) {
-        window.location.href = data.redirect;
-        return;
-      }
-      alert(data.message || 'Failed to save asset');
-    } catch (error) {
-      alert('Error: ' + error.message);
-    }
   });
 })();
 </script>

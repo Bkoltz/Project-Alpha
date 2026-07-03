@@ -6,7 +6,8 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id() ?: 0;
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Fetch filter options
 $catStmt = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');
@@ -17,7 +18,8 @@ $vendorStmt = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id=
 $vendorStmt->execute([$orgId]);
 $vendors = $vendorStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$clientStmt = $pdo->query('SELECT id, name FROM clients ORDER BY name');
+$clientStmt = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name');
+$clientStmt->execute([$orgId]);
 $clients = $clientStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Filters
@@ -31,8 +33,9 @@ $taxDeductible = $_GET['tax_deductible'] ?? '';
 $status = $_GET['status'] ?? '';
 $groupBy = $_GET['group_by'] ?? 'none';
 
-$where = ['e.organization_id = ?'];
-$params = [$orgId];
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+$where = [$expenseScopeWhere];
+$params = $expenseScopeParams;
 
 if ($start) { $where[] = 'e.expense_date >= ?'; $params[] = $start; }
 if ($end) { $where[] = 'e.expense_date <= ?'; $params[] = $end; }
@@ -50,7 +53,6 @@ $whereSQL = implode(' AND ', $where);
 // Summary totals
 $summaryStmt = $pdo->prepare("
     SELECT COALESCE(SUM(e.amount),0) as total_amount,
-           COALESCE(SUM(e.tax_amount),0) as total_tax,
            COALESCE(SUM(e.total_amount),0) as grand_total,
            COALESCE(SUM(CASE WHEN e.is_billable=1 THEN e.total_amount ELSE 0 END),0) as billable_total,
            COALESCE(SUM(CASE WHEN e.is_tax_deductible=1 THEN e.total_amount ELSE 0 END),0) as deductible_total,
@@ -62,14 +64,6 @@ $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC);
 
 // Build query based on group_by
 if ($groupBy === 'category') {
-    $sql = "
-        SELECT ec.name as group_name, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
-        FROM expense_categories ec
-        LEFT JOIN expenses e ON e.category_id = ec.id AND " . implode(' AND ', array_map(function($w) { return 'e.' . $w; }, $where)) . "
-        WHERE ec.organization_id = ?
-        GROUP BY ec.id ORDER BY total DESC
-    ";
-    // This approach is complex with the WHERE clause; simpler to do it directly:
     $groupStmt = $pdo->prepare("
         SELECT ec.name as group_name, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
         FROM expenses e
@@ -217,15 +211,11 @@ $exportParams = http_build_query(array_filter([
   </div>
 
   <!-- Summary Cards -->
-  <div class="grid grid-4" style="margin-bottom:20px">
+  <div class="grid grid-3" style="margin-bottom:20px">
     <div class="card card-tight">
       <div class="muted text-sm">Total Expenses</div>
       <div class="font-600" style="font-size:20px"><?php echo money_format_total($summary['grand_total']); ?></div>
       <div class="muted-note"><?php echo (int)$summary['count']; ?> expenses</div>
-    </div>
-    <div class="card card-tight">
-      <div class="muted text-sm">Tax Amount</div>
-      <div class="font-600" style="font-size:20px"><?php echo money_format_total($summary['total_tax']); ?></div>
     </div>
     <div class="card card-tight">
       <div class="muted text-sm">Billable</div>
@@ -348,9 +338,7 @@ $exportParams = http_build_query(array_filter([
             <th>Description</th>
             <th>Category</th>
             <th class="text-right">Amount</th>
-            <th class="text-right">Tax</th>
             <th class="text-right">Total</th>
-            <th>Payment</th>
             <th>Billable</th>
             <th>Status</th>
           </tr>
@@ -363,9 +351,7 @@ $exportParams = http_build_query(array_filter([
               <td><?php echo htmlspecialchars(mb_substr($d['description'] ?? '', 0, 40)); ?></td>
               <td><?php echo htmlspecialchars($d['category_name'] ?? '—'); ?></td>
               <td class="text-right"><?php echo htmlspecialchars(money_format_total($d['amount'])); ?></td>
-              <td class="text-right"><?php echo $d['tax_amount'] ? htmlspecialchars(money_format_total($d['tax_amount'])) : '—'; ?></td>
               <td class="text-right font-600"><?php echo htmlspecialchars(money_format_total($d['total_amount'] ?? $d['amount'])); ?></td>
-              <td><?php echo htmlspecialchars($d['payment_method'] ?? '—'); ?></td>
               <td><?php echo $d['is_billable'] ? '<span class="status-pill status-pill--active">Billable</span>' : '<span class="muted">—</span>'; ?></td>
               <td><span class="status-pill status-pill--<?php echo htmlspecialchars(strtolower($d['status'])); ?>"><?php echo htmlspecialchars($d['status']); ?></span></td>
             </tr>

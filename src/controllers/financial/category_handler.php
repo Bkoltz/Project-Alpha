@@ -15,24 +15,44 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
-header('Content-Type: application/json');
+function category_handler_is_ajax(): bool
+{
+    return strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+}
+
+function category_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/expenses-list&tab=categories'): void
+{
+    if (category_handler_is_ajax()) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    $base = !empty($response['success'])
+        ? (string)($response['redirect'] ?? '/?page=financial/expenses-list&tab=categories')
+        : $fallback;
+    $key = !empty($response['success']) ? 'success' : 'error';
+    $message = (string)($response['message'] ?? (!empty($response['success']) ? 'Category saved' : 'Category request failed'));
+    $join = str_contains($base, '?') ? '&' : '?';
+    header('Location: ' . $base . $join . $key . '=' . rawurlencode($message));
+    exit;
+}
 
 $response = ['success' => false, 'message' => ''];
 
 // Auth required
 if (empty($_SESSION['user']['id'])) {
     $response['message'] = 'Authentication required';
-    echo json_encode($response);
-    exit;
+    category_handler_finish($response, 401, '/?page=login');
 }
 
 $userId = (int)$_SESSION['user']['id'];
-$orgId  = get_active_org_id();
+$orgId  = active_or_default_org_id($pdo);
 if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
-    http_response_code(403);
     $response['message'] = 'Permission denied';
-    echo json_encode($response);
-    exit;
+    category_handler_finish($response, 403);
 }
 
 // CSRF required: accept legacy 'csrf' or Symfony '_token'
@@ -45,15 +65,13 @@ if (is_string($submitted) && $submitted !== '') {
 }
 if (!$csrfOk) {
     $response['message'] = 'Invalid request (CSRF validation failed)';
-    echo json_encode($response);
-    exit;
+    category_handler_finish($response, 400);
 }
 
 $action = $_POST['action'] ?? '';
 
 function jsonResponse(bool $success, string $message, array $extra = []): void {
-    echo json_encode(array_merge(['success' => $success, 'message' => $message], $extra));
-    exit;
+    category_handler_finish(array_merge(['success' => $success, 'message' => $message], $extra), $success ? 200 : 400);
 }
 
 function trimNullable(string $value): ?string {

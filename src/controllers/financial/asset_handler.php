@@ -12,11 +12,39 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
-header('Content-Type: application/json');
+function asset_handler_is_ajax(): bool
+{
+    return strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+}
+
+function asset_redirect_with_message(string $url, string $key, string $message): void
+{
+    $separator = str_contains($url, '?') ? '&' : '?';
+    header('Location: ' . $url . $separator . rawurlencode($key) . '=' . rawurlencode($message));
+    exit;
+}
+
+function asset_handler_finish(array $response, int $status = 200, string $fallback = '/?page=financial/expenses-list&tab=assets'): void
+{
+    if (asset_handler_is_ajax()) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    if (!empty($response['success'])) {
+        header('Location: ' . (string)($response['redirect'] ?? '/?page=financial/expenses-list&tab=assets'));
+        exit;
+    }
+
+    asset_redirect_with_message($fallback, 'error', (string)($response['message'] ?? 'Asset request failed'));
+}
 
 function asset_json_response(bool $success, string $message, array $extra = []): void
 {
-    echo json_encode(array_merge(['success' => $success, 'message' => $message], $extra));
+    asset_handler_finish(array_merge(['success' => $success, 'message' => $message], $extra), $success ? 200 : 400);
     exit;
 }
 
@@ -55,13 +83,12 @@ function asset_assert_org_row(PDO $pdo, string $table, int $id, int $orgId, stri
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId <= 0) {
-    asset_json_response(false, 'Authentication required');
+    asset_handler_finish(['success' => false, 'message' => 'Authentication required'], 401, '/?page=login');
 }
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
 if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
-    http_response_code(403);
-    asset_json_response(false, 'Permission denied');
+    asset_handler_finish(['success' => false, 'message' => 'Permission denied'], 403, '/?page=financial/expenses-list&tab=assets');
 }
 
 $submitted = $_POST['_token'] ?? '';
@@ -69,7 +96,7 @@ $csrfOk = is_string($submitted) && $submitted !== ''
     ? csrf_sf_is_valid('asset', $submitted)
     : csrf_validate();
 if (!$csrfOk) {
-    asset_json_response(false, 'Invalid request. Please refresh and try again.');
+    asset_handler_finish(['success' => false, 'message' => 'Invalid request. Please refresh and try again.'], 400, '/?page=financial/asset-form');
 }
 
 $allowedStatuses = ['planned', 'active', 'maintenance', 'retired', 'sold', 'lost', 'disposed'];
@@ -78,12 +105,14 @@ $action = (string)($_POST['action'] ?? '');
 
 try {
     if ($action === 'delete') {
+        $fallback = '/?page=financial/expenses-list&tab=assets';
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) {
             throw new RuntimeException('Invalid asset ID.');
         }
-        $stmt = $pdo->prepare('UPDATE financial_assets SET status = "disposed", disposed_on = COALESCE(disposed_on, CURDATE()) WHERE id = ? AND organization_id = ?');
-        $stmt->execute([$id, $orgId]);
+        [$assetScopeWhere, $assetScopeParams] = finance_scope_clause($pdo, 'a', $userId, $orgId, 'created_by');
+        $stmt = $pdo->prepare('UPDATE financial_assets a SET status = "disposed", disposed_on = COALESCE(disposed_on, CURDATE()) WHERE a.id = ? AND ' . $assetScopeWhere);
+        $stmt->execute(array_merge([$id], $assetScopeParams));
         audit_log($pdo, 'asset.dispose', 'financial_asset', $id, ['organization_id' => $orgId]);
         asset_json_response(true, 'Asset marked disposed.', ['redirect' => '/?page=financial/expenses-list&tab=assets&disposed=1']);
     }
@@ -93,6 +122,7 @@ try {
     }
 
     $id = (int)($_POST['id'] ?? 0);
+    $fallback = $id > 0 ? '/?page=financial/asset-form&id=' . $id : '/?page=financial/asset-form';
     if ($action === 'update' && $id <= 0) {
         throw new RuntimeException('Invalid asset ID.');
     }
@@ -156,7 +186,12 @@ try {
         asset_assert_org_row($pdo, 'expense_categories', $categoryId, $orgId, 'Category');
     }
     if ($expenseId !== null) {
-        asset_assert_org_row($pdo, 'expenses', $expenseId, $orgId, 'Expense');
+        [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+        $expenseCheck = $pdo->prepare('SELECT 1 FROM expenses e WHERE e.id = ? AND ' . $expenseScopeWhere . ' LIMIT 1');
+        $expenseCheck->execute(array_merge([$expenseId], $expenseScopeParams));
+        if (!$expenseCheck->fetchColumn()) {
+            throw new RuntimeException('Expense was not found for the active organization.');
+        }
     }
 
     if ($action === 'create') {
@@ -178,8 +213,9 @@ try {
         asset_json_response(true, 'Asset created.', ['id' => $assetId, 'redirect' => '/?page=financial/asset-detail&id=' . $assetId . '&created=1']);
     }
 
-    $exists = $pdo->prepare('SELECT 1 FROM financial_assets WHERE id = ? AND organization_id = ?');
-    $exists->execute([$id, $orgId]);
+    [$assetScopeWhere, $assetScopeParams] = finance_scope_clause($pdo, 'a', $userId, $orgId, 'created_by');
+    $exists = $pdo->prepare('SELECT 1 FROM financial_assets a WHERE a.id = ? AND ' . $assetScopeWhere);
+    $exists->execute(array_merge([$id], $assetScopeParams));
     if (!$exists->fetchColumn()) {
         throw new RuntimeException('Asset not found.');
     }
@@ -202,5 +238,5 @@ try {
     asset_json_response(true, 'Asset updated.', ['id' => $id, 'redirect' => '/?page=financial/asset-detail&id=' . $id . '&updated=1']);
 } catch (Throwable $e) {
     error_log('[asset_handler] Error: ' . $e->getMessage());
-    asset_json_response(false, $e->getMessage());
+    asset_handler_finish(['success' => false, 'message' => $e->getMessage()], 400, $fallback ?? '/?page=financial/asset-form');
 }

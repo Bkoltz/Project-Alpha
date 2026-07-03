@@ -5,10 +5,12 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = get_active_org_id();
+$orgId = active_or_default_org_id($pdo);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: /?page=financial/expenses-list&tab=expenses'); exit; }
 
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
 $stmt = $pdo->prepare('
     SELECT e.*, v.name as vendor_name, ec.name as category_name, c.name as client_name, p.name as project_name,
            r.file_path, r.file_name, r.mime_type
@@ -18,9 +20,9 @@ $stmt = $pdo->prepare('
     LEFT JOIN clients c ON c.id = e.client_id
     LEFT JOIN projects p ON p.id = e.project_id
     LEFT JOIN receipts r ON r.id = e.receipt_id
-    WHERE e.id=? AND e.organization_id=?
+    WHERE e.id=? AND ' . $expenseScopeWhere . '
 ');
-$stmt->execute([$id, $orgId]);
+$stmt->execute(array_merge([$id], $expenseScopeParams));
 $e = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$e) { header('Location: /?page=financial/expenses-list&tab=expenses'); exit; }
 
@@ -31,7 +33,6 @@ if ($hasReceipt) {
     $fileParam = str_replace('/src/uploads/', '', $e['file_path']);
     $fileUrl = '/?page=serve-upload&file=' . urlencode($fileParam);
 }
-$paymentLabels = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit Card', 'bank_transfer' => 'Bank Transfer', 'paypal' => 'PayPal', 'venmo' => 'Venmo', 'other' => 'Other'];
 ?>
 
 <div style="max-width:1200px;margin:0 auto;padding:24px">
@@ -74,14 +75,10 @@ $paymentLabels = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit 
       <div class="field"><label class="label-muted">Category</label><div><?php echo htmlspecialchars($e['category_name'] ?? '—'); ?></div></div>
       <div class="field"><label class="label-muted">Description</label><div><?php echo htmlspecialchars($e['description'] ?? '—'); ?></div></div>
 
-      <div class="grid grid-3" style="margin:12px 0">
+      <div class="grid grid-2" style="margin:12px 0">
         <div class="card-tight" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px">
           <div class="muted text-sm">Amount</div>
           <div class="font-600" style="font-size:18px">$<?php echo number_format((float)$e['amount'], 2); ?></div>
-        </div>
-        <div class="card-tight" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px">
-          <div class="muted text-sm">Tax</div>
-          <div class="font-600" style="font-size:18px"><?php echo $e['tax_amount'] !== null ? '$' . number_format((float)$e['tax_amount'], 2) : '—'; ?></div>
         </div>
         <div class="card-tight" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px">
           <div class="muted text-sm">Total</div>
@@ -89,7 +86,6 @@ $paymentLabels = ['cash' => 'Cash', 'check' => 'Check', 'card' => 'Credit/Debit 
         </div>
       </div>
 
-      <div class="field"><label class="label-muted">Payment Method</label><div><?php echo htmlspecialchars($paymentLabels[$e['payment_method']] ?? $e['payment_method'] ?? '—'); ?></div></div>
       <div class="field"><label class="label-muted">Reference Number</label><div><?php echo htmlspecialchars($e['reference_number'] ?? '—'); ?></div></div>
 
       <div class="grid grid-2" style="margin:12px 0">

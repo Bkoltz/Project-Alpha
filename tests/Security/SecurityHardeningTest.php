@@ -100,9 +100,11 @@ final class SecurityHardeningTest extends TestCase
 
         $csv = $this->read('src/controllers/financial/csv_import.php');
         self::assertStringNotContainsString('$orgId = 1;', $csv);
-        self::assertStringContainsString('get_active_org_id()', $csv);
+        self::assertStringContainsString('active_or_default_org_id($pdo)', $csv);
         self::assertStringContainsString('financial.manage', $csv);
         self::assertStringContainsString('expense_categories WHERE id = ? AND organization_id = ?', $csv);
+        self::assertStringContainsString('$taxAmount = null;', $csv);
+        self::assertStringContainsString('$pm = null;', $csv);
 
         $payments = $this->read('src/controllers/payments_create.php');
         $invoiceLifecycle = $this->read('src/utils/invoice_lifecycle.php');
