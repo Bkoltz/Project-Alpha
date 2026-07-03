@@ -13,7 +13,15 @@ if ($id <= 0) { http_response_code(400); echo 'Invalid project invoice'; return;
 project_invoice_refresh_status($pdo, $id);
 
 $stmt = $pdo->prepare('
-    SELECT pi.*, p.name AS project_name, p.notes AS project_notes, o.name AS organization_name, c.name AS primary_client_name
+    SELECT pi.*, p.name AS project_name, p.notes AS project_notes,
+           o.name AS organization_name,
+           o.address_line1 AS organization_address_line1,
+           o.address_line2 AS organization_address_line2,
+           o.city AS organization_city,
+           o.state AS organization_state,
+           o.postal_code AS organization_postal_code,
+           o.country AS organization_country,
+           c.name AS primary_client_name
     FROM project_invoices pi
     JOIN projects p ON p.id = pi.project_id
     LEFT JOIN organizations o ON o.id = pi.organization_id
@@ -155,7 +163,25 @@ $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
     <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
       <div style="font-weight:700;margin-bottom:8px">Project</div>
       <div><?php echo htmlspecialchars($pi['project_name']); ?></div>
-      <?php if (!empty($pi['organization_name'])): ?><div style="color:#6b7280"><?php echo htmlspecialchars($pi['organization_name']); ?></div><?php endif; ?>
+      <?php
+        $orgLines = [];
+        if (!empty($pi['organization_name'])) { $orgLines[] = (string)$pi['organization_name']; }
+        if (!empty($pi['organization_address_line1'])) { $orgLines[] = (string)$pi['organization_address_line1']; }
+        if (!empty($pi['organization_address_line2'])) { $orgLines[] = (string)$pi['organization_address_line2']; }
+        $orgCity = trim((string)($pi['organization_city'] ?? ''));
+        $orgState = trim((string)($pi['organization_state'] ?? ''));
+        $orgPostal = trim((string)($pi['organization_postal_code'] ?? ''));
+        $orgCityParts = [];
+        if ($orgCity !== '') { $orgCityParts[] = $orgCity; }
+        if ($orgState !== '') { $orgCityParts[] = $orgState; }
+        if ($orgPostal !== '') { $orgCityParts[] = $orgPostal; }
+        $orgCityLine = implode(', ', $orgCityParts);
+        if ($orgCityLine !== '') { $orgLines[] = $orgCityLine; }
+        if (!empty($pi['organization_country']) && strtoupper((string)$pi['organization_country']) !== 'US' && strtoupper((string)$pi['organization_country']) !== 'USA') {
+          $orgLines[] = (string)$pi['organization_country'];
+        }
+      ?>
+      <?php foreach ($orgLines as $line): ?><div style="color:#6b7280"><?php echo htmlspecialchars($line); ?></div><?php endforeach; ?>
     </div>
   </div>
 

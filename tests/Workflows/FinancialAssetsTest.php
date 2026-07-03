@@ -57,26 +57,35 @@ final class FinancialAssetsTest extends TestCase
         self::assertStringContainsString('(function () {', $form);
         self::assertStringNotContainsString('fetch(form.action', $form);
         self::assertStringContainsString('$_GET[\'error\']', $form);
+        self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $form);
 
         $handler = $this->read('src/controllers/financial/expense_handler.php');
         self::assertStringContainsString('function expense_handler_is_ajax()', $handler);
         self::assertStringContainsString("'status_param' => 'created'", $handler);
         self::assertStringContainsString("'status_param' => 'updated'", $handler);
+        self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $handler);
     }
 
     public function testAssetsAreExposedInFinancialHubUi(): void
     {
         $hub = $this->read('src/views/pages/financial/expenses-list.php');
+        $script = $this->read('public/assets/js/expenses-hub.js');
+        $dashboard = $this->read('src/views/pages/financial/financial-dashboard.php');
+        $nav = $this->read('src/views/partials/header.php');
+
         self::assertStringContainsString("'assets'     => ['label' => 'Assets'", $hub);
         self::assertStringContainsString('Assets &amp; Expenses', $hub);
         self::assertStringContainsString('financial_assets', $hub);
+        self::assertStringContainsString("\$active = \$_GET['tab'] ?? 'expenses';", $hub);
+        self::assertStringContainsString("params.get('tab') || 'expenses'", $script);
+        self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $dashboard);
+        self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $nav);
 
         $tab = $this->read('src/views/pages/financial/_assets_tab.php');
         self::assertStringContainsString('financial_asset_depreciation', $tab);
         self::assertStringContainsString('Monthly Depreciation', $tab);
         self::assertStringContainsString('Book Value', $tab);
 
-        $nav = $this->read('src/views/partials/header.php');
         self::assertStringContainsString('Assets &amp; Expenses', $nav);
     }
 

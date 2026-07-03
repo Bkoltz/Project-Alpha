@@ -263,7 +263,7 @@ try {
               <input type="text" name="document_sender_address_line1" value="<?php echo e($user['document_sender_address_line1'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
             </label>
             <label>
-              <span style="font-weight:600">Address Line 2</span>
+              <span style="font-weight:600">Apartment / Suite</span>
               <input type="text" name="document_sender_address_line2" value="<?php echo e($user['document_sender_address_line2'] ?? ''); ?>" style="padding:10px;border-radius:8px;border:1px solid #ddd;">
             </label>
             <label>

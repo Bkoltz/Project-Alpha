@@ -37,7 +37,7 @@ if ($editId > 0) {
     $stmt->execute([$editId, $orgId]);
     $expense = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$expense) {
-        header('Location: /?page=financial/expenses-list');
+        header('Location: /?page=financial/expenses-list&tab=expenses');
         exit;
     }
 }
@@ -48,7 +48,7 @@ $paymentMethods = [];
 <div style="max-width:800px;margin:0 auto;padding:24px">
   <div class="page-head">
     <h2><?php echo $editId > 0 ? 'Edit Expense' : 'Add Expense'; ?></h2>
-    <a href="/?page=financial/expenses-list" class="btn btn-sm">Back to Expenses</a>
+    <a href="/?page=financial/expenses-list&tab=expenses" class="btn btn-sm">Back to Expenses</a>
   </div>
 
   <?php if (!empty($_GET['error'])): ?>
@@ -150,7 +150,7 @@ $paymentMethods = [];
     </div>
 
     <div class="flex-end" style="margin-top:16px">
-      <a href="/?page=financial/expenses-list" class="btn">Cancel</a>
+      <a href="/?page=financial/expenses-list&tab=expenses" class="btn">Cancel</a>
       <button type="submit" class="btn btn-primary"><?php echo $editId > 0 ? 'Update' : 'Create'; ?> Expense</button>
     </div>
   </form>
