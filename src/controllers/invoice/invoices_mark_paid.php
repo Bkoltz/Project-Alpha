@@ -14,7 +14,7 @@ if ($totalValue === false) {
   exit;
 }
 $total = (float)$totalValue;
-$paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
+$paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) FROM payments WHERE invoice_id=? AND status="succeeded"');
 $paidStmt->execute([$id]);
 $paid = (float)$paidStmt->fetchColumn();
 $outstanding = max(0.0, $total - $paid);

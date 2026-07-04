@@ -1851,7 +1851,10 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('invoice_missing_content_links_behavior', 'warn'),
     ('invoice_auto_send_due_7days', '1'),
     ('invoice_auto_send_overdue_weekly', '1'),
-    ('invoice_auto_email_on_generate', '1')
+    ('invoice_auto_email_on_generate', '1'),
+    ('payment_receipts_enabled', '1'),
+    ('email_no_reply_notice_enabled', '0'),
+    ('email_no_reply_notice_text', 'This is an automated message. Please do not reply to this email.')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);
 
 -- ============================================================================

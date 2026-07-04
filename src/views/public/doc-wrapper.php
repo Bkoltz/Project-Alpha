@@ -56,14 +56,14 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
             if ($type === 'project_invoice') {
                 $amountPaid = (float)($invoiceData['amount_paid'] ?? 0);
             } else {
-                $paidSt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+                $paidSt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
                 $paidSt->execute([$rid]);
                 $amountPaid = (float)$paidSt->fetchColumn();
             }
             $invoiceData['amount_paid'] = $amountPaid;
             
             $invStatus = strtolower($invoiceData['status'] ?? '');
-            $calculatedAmountDue = (float)($invoiceData['total'] ?? 0) - $amountPaid;
+            $calculatedAmountDue = max(0, (float)($invoiceData['total'] ?? 0) - $amountPaid);
             $collectionMode = trim((string)($invoiceData['collection_mode'] ?? ''));
             if ($collectionMode === '') {
                 $collectionMode = 'direct';

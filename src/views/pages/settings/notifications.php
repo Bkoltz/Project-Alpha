@@ -95,6 +95,34 @@
   
   <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px">
     <legend style="padding:0 8px;font-weight:600">Email Notifications</legend>
+
+    <div style="margin-bottom:16px">
+      <h3 style="margin:0 0 12px 0;font-size:15px">Payment Receipts</h3>
+
+      <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
+        <input type="checkbox" name="payment_receipts_enabled" value="1" <?php echo !array_key_exists('payment_receipts_enabled', $appConfig) || !empty($appConfig['payment_receipts_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div class="font-600">Enable payment receipts</div>
+          <div style="font-size:13px;color:var(--muted)">Create receipts for successful payments and email them when selected.</div>
+        </div>
+      </label>
+    </div>
+
+    <div style="padding-top:16px;border-top:1px solid #eee;margin-bottom:16px">
+      <h3 style="margin:0 0 12px 0;font-size:15px">Automated Email Notice</h3>
+
+      <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
+        <input type="checkbox" name="email_no_reply_notice_enabled" value="1" <?php echo !empty($appConfig['email_no_reply_notice_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div class="font-600">Add automated-message notice to outgoing emails</div>
+          <div style="font-size:13px;color:var(--muted)">Adds a short footer to system emails sent from PA.</div>
+        </div>
+      </label>
+      <label style="display:block">
+        <div style="margin-bottom:4px;font-weight:500">Notice text</div>
+        <input type="text" name="email_no_reply_notice_text" value="<?php echo htmlspecialchars($appConfig['email_no_reply_notice_text'] ?? 'This is an automated message. Please do not reply to this email.'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+      </label>
+    </div>
     
     <!-- Invoice Reminders -->
     <div style="margin-bottom:16px">

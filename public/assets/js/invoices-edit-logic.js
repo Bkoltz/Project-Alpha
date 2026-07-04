@@ -65,6 +65,8 @@ function addExtraCharge() {
 }
 
 function recalcInv() {
+  var totalsEl = document.getElementById('totalsInv');
+  var baseSubtotal = totalsEl ? (parseFloat(totalsEl.dataset.baseSubtotal) || 0) : 0;
   // Recalculate totals from extra charges if visible
   var extraQtys = Array.from(document.querySelectorAll('[name="extra_qty[]"]')).map(e => parseFloat(e.value) || 0);
   var extraPrices = Array.from(document.querySelectorAll('[name="extra_price[]"]')).map(e => parseFloat(e.value) || 0);
@@ -79,18 +81,19 @@ function recalcInv() {
   var dval = parseFloat(document.getElementById('discountValueInv').value) || 0;
   var taxp = parseFloat(document.getElementById('taxPercentInv').value) || 0;
 
+  var subtotal = baseSubtotal + extraSubtotal;
   var discount = 0;
   if (dtype === 'percent') {
-    discount = Math.max(0, Math.min(100, dval)) * extraSubtotal / 100;
+    discount = Math.max(0, Math.min(100, dval)) * subtotal / 100;
   } else if (dtype === 'fixed') {
     discount = Math.max(0, dval);
   }
 
-  var taxable = Math.max(0, extraSubtotal - discount);
+  var taxable = Math.max(0, subtotal - discount);
   var tax = Math.max(0, taxp) * taxable / 100;
   var total = Math.max(0, taxable + tax);
 
-  document.getElementById('subtotalValInv').textContent = money(extraSubtotal);
+  document.getElementById('subtotalValInv').textContent = money(subtotal);
   document.getElementById('discountValInv').textContent = money(discount);
   document.getElementById('taxValInv').textContent = money(tax);
   document.getElementById('totalValInv').textContent = money(total);
@@ -155,7 +158,7 @@ if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function
 
 var items = document.querySelectorAll("#item");
 var descriptions = document.querySelectorAll("#description");
-var quantities = document.querySelectorAll("#qunatity");
+var quantities = document.querySelectorAll('[name="extra_qty[]"]');
 var prices = document.querySelectorAll("#price");
 
 var confirmButton = document.getElementById("confirm");

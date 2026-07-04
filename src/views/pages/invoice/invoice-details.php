@@ -82,18 +82,19 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" class="btn btn-sm">Download</a>
-    <?php if (strtolower((string)$inv['status']) === 'draft'): ?>
+    <?php
+      $actionStatus = strtolower((string)$inv['status']);
+      $canEditInvoice = $actionStatus === 'draft'
+        || (in_array($actionStatus, ['sent','unpaid','overdue'], true) && (float)($inv['amount_paid'] ?? 0) <= 0.005);
+    ?>
+    <?php if ($canEditInvoice): ?>
       <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
+    <?php endif; ?>
+    <?php if (strtolower((string)$inv['status']) === 'draft'): ?>
       <form method="post" action="/?page=invoice/invoice-finalize" style="display:inline" onsubmit="return confirm('Finalize this invoice and email it to the client?');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
         <button type="submit" class="btn btn-sm btn-success">Finalize &amp; Send</button>
-      </form>
-    <?php elseif (in_array(strtolower((string)$inv['status']), ['sent','unpaid','overdue'], true)): ?>
-      <form method="post" action="/?page=invoice/invoice-reopen" style="display:inline" onsubmit="return confirm('Reopen this invoice as a draft? Existing public links will be revoked.');">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" class="btn btn-sm">Reopen Draft</button>
       </form>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && $invoiceCollectionMode === 'direct'): ?>
@@ -389,10 +390,10 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <?php
     $invoiceTotal = (float)($inv['total'] ?? 0);
     // Calculate amount_paid from payments table for accuracy
-    $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
+    $paidStmt = $pdo->prepare('SELECT COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)), 0) FROM payments WHERE invoice_id = ? AND status = "succeeded"');
     $paidStmt->execute([$id]);
     $amountPaid = (float)$paidStmt->fetchColumn();
-    $amountDue = $invoiceTotal - $amountPaid;
+    $amountDue = max(0, $invoiceTotal - $amountPaid);
     $invStatus = strtolower($inv['status'] ?? 'unpaid');
     $isPartial = $invStatus === 'partial';
     $isPaid = $invStatus === 'paid';

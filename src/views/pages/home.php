@@ -1,17 +1,24 @@
 <?php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/escaper.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 // ------------------------------------------------------------------
 // Data queries
 // ------------------------------------------------------------------
 try {
+  $dashboard_user_id = (int)($_SESSION['user']['id'] ?? 0);
+  $dashboard_org_id = active_or_default_org_id($pdo);
+  [$dashboard_expense_scope_where, $dashboard_expense_scope_params] = finance_scope_clause($pdo, 'e', $dashboard_user_id, $dashboard_org_id, 'created_by');
+
   // Core stats
   $pending_quotes     = (int)$pdo->query("SELECT COUNT(*) FROM quotes WHERE status='pending'")->fetchColumn();
   $active_contracts   = (int)$pdo->query("SELECT COUNT(*) FROM contracts WHERE status IN ('draft','active')")->fetchColumn();
   $unpaid_invoices    = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial')")->fetchColumn();
-  $income_30          = (float)$pdo->query("SELECT COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) FROM payments WHERE created_at >= NOW() - INTERVAL 30 DAY AND status='succeeded'")->fetchColumn();
-  $expenses_30        = (float)$pdo->query("SELECT COALESCE(SUM(total_amount),0) FROM expenses WHERE status != 'void' AND expense_date >= CURDATE() - INTERVAL 29 DAY")->fetchColumn();
+  $income_30          = (float)$pdo->query("SELECT COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) FROM payments WHERE payment_date >= CURDATE() - INTERVAL 29 DAY AND status='succeeded'")->fetchColumn();
+  $expensesStmt       = $pdo->prepare("SELECT COALESCE(SUM(e.total_amount),0) FROM expenses e WHERE {$dashboard_expense_scope_where} AND e.status != 'void' AND e.expense_date >= CURDATE() - INTERVAL 29 DAY");
+  $expensesStmt->execute($dashboard_expense_scope_params);
+  $expenses_30        = (float)$expensesStmt->fetchColumn();
   $net_30             = $income_30 - $expenses_30;
   $overdue_invoices   = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial','overdue') AND due_date IS NOT NULL AND due_date < CURDATE()")->fetchColumn();
   $receipts_30        = (int)$pdo->query("SELECT COUNT(*) FROM receipts WHERE created_at >= NOW() - INTERVAL 30 DAY")->fetchColumn();
@@ -20,10 +27,10 @@ try {
 
   // Charts data — monthly income last 6 months
   $income_monthly = $pdo->query("
-    SELECT DATE_FORMAT(created_at, '%Y-%m') AS month,
+    SELECT DATE_FORMAT(payment_date, '%Y-%m') AS month,
            COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) AS total
     FROM payments
-    WHERE created_at >= DATE_FORMAT(NOW() - INTERVAL 5 MONTH, '%Y-%m-01')
+    WHERE payment_date >= DATE_FORMAT(NOW() - INTERVAL 5 MONTH, '%Y-%m-01')
       AND status='succeeded'
     GROUP BY month
     ORDER BY month
@@ -132,9 +139,9 @@ $daily_labels = [];
 $daily_values = [];
 try {
   $income_daily_rows = $pdo->query("
-    SELECT DATE(created_at) AS d, COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) AS total
+    SELECT payment_date AS d, COALESCE(SUM(GREATEST(amount-refunded_amount-disputed_amount,0)),0) AS total
     FROM payments
-    WHERE created_at >= CURDATE() - INTERVAL 29 DAY
+    WHERE payment_date >= CURDATE() - INTERVAL 29 DAY
       AND status='succeeded'
     GROUP BY d
     ORDER BY d

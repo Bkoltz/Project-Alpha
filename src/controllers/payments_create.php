@@ -4,16 +4,33 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/audit.php';
+require_once __DIR__ . '/../utils/csrf.php';
 require_once __DIR__ . '/../utils/invoice_lifecycle.php';
 
+csrf_verify_post_or_redirect('payments/payments-create');
+
+$payment_scope = ($_POST['payment_scope'] ?? 'invoice') === 'manual' ? 'manual' : 'invoice';
 $invoice_id = (int)($_POST['invoice_id'] ?? 0);
+$client_id_input = (int)($_POST['client_id'] ?? 0);
 $amount = (float)($_POST['amount'] ?? 0);
 $method = trim((string)($_POST['method'] ?? 'card'));
 $check_number = trim((string)($_POST['reference_number'] ?? $_POST['check_number'] ?? ''));
+$notes = trim((string)($_POST['notes'] ?? ''));
+$payment_date = trim((string)($_POST['payment_date'] ?? date('Y-m-d')));
 $paid_in_advance = !empty($_POST['paid_in_advance']);
+$send_receipt = !empty($_POST['send_receipt']);
+
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $payment_date)) {
+  header('Location: /?page=payments/payments-create&error=' . urlencode('Invalid payment date'));
+  exit;
+}
 
 // If Stripe is selected, redirect to Stripe checkout
 if (strtolower($method) === 'stripe') {
+  if ($payment_scope === 'manual') {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Stripe payments must be tied to an invoice.'));
+    exit;
+  }
   if ($invoice_id <= 0) {
     header('Location: /?page=payments/payments-create&error=Please%20select%20an%20invoice');
     exit;
@@ -26,7 +43,72 @@ if (strtolower($method) === 'stripe') {
   exit;
 }
 
-if ($invoice_id <= 0 || $amount <= 0) {
+if ($amount <= 0) {
+  header('Location: /?page=payments/payments-create&error=Invalid%20input');
+  exit;
+}
+
+if ($payment_scope === 'manual') {
+  if ($client_id_input <= 0) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Select a client for manual payments.'));
+    exit;
+  }
+  if (!can_access_record($pdo, 'clients', $client_id_input, (int)($_SESSION['user']['id'] ?? 0))) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('Permission denied'));
+    exit;
+  }
+  if (strtolower($method) === 'check' && empty($check_number)) {
+    header('Location: /?page=payments/payments-create&error=Check%20number%20is%20required');
+    exit;
+  }
+
+  $clientStmt = $pdo->prepare('SELECT organization_id FROM clients WHERE id=?');
+  $clientStmt->execute([$client_id_input]);
+  $organization_id = (int)($clientStmt->fetchColumn() ?: 0) ?: null;
+  invoice_ensure_payments_schema($pdo);
+
+  $pdo->beginTransaction();
+  try {
+    $insert = $pdo->prepare('
+      INSERT INTO payments
+        (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
+      VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, "succeeded", ?)
+    ');
+    $insert->execute([
+      $client_id_input,
+      $organization_id,
+      $amount,
+      $method ?: 'cash',
+      $check_number ?: null,
+      $notes !== '' ? $notes : 'Manual payment not tied to an invoice',
+      $payment_date,
+    ]);
+    $paymentId = (int)$pdo->lastInsertId();
+    $pdo->commit();
+
+    audit_log($pdo, 'payment.manual_recorded', 'payment', $paymentId, ['amount' => $amount, 'method' => $method, 'client_id' => $client_id_input]);
+
+    if (!empty($appConfig['payment_receipts_enabled'])) {
+      try {
+        require_once __DIR__ . '/../utils/payment_receipts.php';
+        payment_receipt_issue($pdo, $paymentId, $appConfig ?? [], $send_receipt);
+      } catch (Throwable $receiptError) {
+        @error_log('[PaymentsCreate] Manual receipt issue failed: ' . $receiptError->getMessage());
+      }
+    }
+  } catch (Throwable $e) {
+    $pdo->rollBack();
+    @error_log('[PaymentsCreate] Manual payment error: ' . $e->getMessage());
+    $message = trim($e->getMessage()) !== '' ? substr($e->getMessage(), 0, 180) : 'Failed to save payment';
+    header('Location: /?page=payments/payments-create&error=' . urlencode($message));
+    exit;
+  }
+
+  header('Location: /?page=payments/payments-list&saved=1');
+  exit;
+}
+
+if ($invoice_id <= 0) {
   header('Location: /?page=payments/payments-create&error=Invalid%20input');
   exit;
 }
@@ -85,6 +167,7 @@ try {
           'organization_id' => $organization_id,
           'complete_contract_when_paid' => !$paid_in_advance,
           'source' => 'manual_payment',
+          'payment_date' => $payment_date,
       ]
   );
   $paymentId = (int)$result['payment_id'];
@@ -96,7 +179,7 @@ try {
 
   try {
     require_once __DIR__ . '/../utils/payment_receipts.php';
-    payment_receipt_issue($pdo, $paymentId, $appConfig ?? []);
+    payment_receipt_issue($pdo, $paymentId, $appConfig ?? [], $send_receipt);
   } catch (Throwable $receiptError) {
     @error_log('[PaymentsCreate] Receipt issue failed: ' . $receiptError->getMessage());
   }
