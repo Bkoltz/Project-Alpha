@@ -61,6 +61,7 @@ function audit_sensitive_map(): array
             'stripe-webhook'                 => ['payment.stripe_webhook', 'payment'],
             'stripe-webhook-legacy'          => ['payment.stripe_webhook', 'payment'],
             'payments-create'                => ['payment.create', 'payment'],
+            'payments/payment-refund'        => ['payment.refund', 'payment'],
             'invoice/invoices-mark-paid'     => ['invoice.mark_paid', 'invoice'],
             'invoices-mark-paid'             => ['invoice.mark_paid', 'invoice'],
 

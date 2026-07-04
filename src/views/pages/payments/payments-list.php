@@ -2,6 +2,8 @@
 // src/views/pages/payments-list.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
+
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
@@ -9,10 +11,10 @@ $end = $_GET['end'] ?? '';
 $where=[];$p=[];
 if($client_id>0){$where[]='c.id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
-if($start!==''){$where[]='p.created_at>=?';$p[]=$start.' 00:00:00';}
-if($end!==''){$where[]='p.created_at<=?';$p[]=$end.' 23:59:59';}
+if($start!==''){$where[]='p.payment_date>=?';$p[]=$start;}
+if($end!==''){$where[]='p.payment_date<=?';$p[]=$end;}
 
-[$scopeWhere, $scopeParams] = scope_clause($pdo, 'i', (int)$_SESSION['user']['id']);
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'p', (int)$_SESSION['user']['id']);
 if ($scopeWhere) {
     $where[] = $scopeWhere;
     $p = array_merge($p, $scopeParams);
@@ -22,16 +24,30 @@ $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM payments p JOIN invoices i ON i.id=p.invoice_id JOIN clients c ON c.id=i.client_id';
+$fromSql = ' FROM payments p JOIN clients c ON c.id=p.client_id LEFT JOIN invoices i ON i.id=p.invoice_id';
+$sqlCount = 'SELECT COUNT(*)' . $fromSql;
 if($where){$sqlCount.=' WHERE '.implode(' AND ',$where);} $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql = 'SELECT p.id, p.amount, p.status, p.created_at, i.id AS invoice_id, c.name AS client FROM payments p JOIN invoices i ON i.id=p.invoice_id JOIN clients c ON c.id=i.client_id';
-if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY p.created_at DESC LIMIT $per OFFSET $offset";
-$rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll();
-$clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
+$sql = 'SELECT p.id, p.amount, p.refunded_amount, p.disputed_amount, p.status, p.payment_date, p.created_at,
+               p.payment_method, p.reference_number, i.id AS invoice_id, i.doc_number, c.name AS client
+        ' . $fromSql;
+if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY p.payment_date DESC, p.created_at DESC LIMIT $per OFFSET $offset";
+$rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <section>
-  <h2>Payments</h2>
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+    <h2 style="margin:0">Payments</h2>
+    <a href="/?page=payments/payments-create" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block;font-size:small">Record Payment</a>
+  </div>
+  <?php if (!empty($_GET['saved'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Payment saved.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['refunded'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Refund recorded.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['error'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+  <?php endif; ?>
   <form method="get" action="/" style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;align-items:end;margin:12px 0;position:relative">
     <input type="hidden" name="page" value="payments-list">
     <input type="hidden" name="client_id" id="clientIdPL" value="<?php echo (int)$client_id; ?>">
@@ -41,8 +57,8 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
     </label>
     <label><div>Start</div><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
     <label><div>End</div><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" style="padding:8px;border-radius:8px;border:1px solid #ddd"></label>
-    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Filter</button>
-    <a href="/?page=payments-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block; font-size: small;">Reset</a>
+    <button type="submit" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small">Filter</button>
+    <a href="/?page=payments-list" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block;font-size:small">Reset</a>
   </form>
   <script>
     (function(){
@@ -52,7 +68,7 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
       input.addEventListener('input', function(){
         hid.value='';
         var t=this.value.trim(); if(!t){sug.style.display='none';sug.innerHTML='';return;}
-  fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
+        fetch('/?page=clients-search&term='+encodeURIComponent(t)).then(r=>r.json()).then(list=>{
           if(!Array.isArray(list)||list.length===0){sug.style.display='none';sug.innerHTML='';return;}
           sug.innerHTML = list.map(x=>`<div data-id="${x.id}" data-name="${x.name}" style=\"padding:8px 10px;cursor:pointer\">${x.name}</div>`).join('');
           Array.from(sug.children).forEach(el=>{ el.addEventListener('click', function(){ input.value=this.dataset.name; hid.value=this.dataset.id; sug.style.display='none'; }); });
@@ -69,20 +85,51 @@ $clients=$pdo->query('SELECT id,name FROM clients ORDER BY name')->fetchAll();
           <th style="padding:10px">ID</th>
           <th style="padding:10px">Invoice</th>
           <th style="padding:10px">Client</th>
-          <th style="padding:10px">Amount</th>
+          <th style="padding:10px">Method</th>
+          <th style="padding:10px;text-align:right">Amount</th>
+          <th style="padding:10px;text-align:right">Refunded</th>
+          <th style="padding:10px;text-align:right">Net</th>
           <th style="padding:10px">Status</th>
-          <th style="padding:10px">Created</th>
+          <th style="padding:10px">Payment Date</th>
+          <th style="padding:10px">Actions</th>
         </tr>
       </thead>
       <tbody>
-        <?php foreach ($rows as $r): ?>
+        <?php foreach ($rows as $r):
+          $amount = (float)$r['amount'];
+          $refunded = (float)$r['refunded_amount'];
+          $disputed = (float)$r['disputed_amount'];
+          $net = max(0, $amount - $refunded - $disputed);
+          $canRefund = strtolower((string)$r['status']) === 'succeeded' && $net > 0.005;
+        ?>
           <tr style="border-top:1px solid #f3f4f6">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
-            <td style="padding:10px">Invoice #<?php echo (int)$r['invoice_id']; ?></td>
+            <td style="padding:10px">
+              <?php if (!empty($r['invoice_id'])): ?>
+                Invoice #<?php echo htmlspecialchars((string)($r['doc_number'] ?: $r['invoice_id'])); ?>
+              <?php else: ?>
+                Manual
+              <?php endif; ?>
+            </td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['client']); ?></td>
-            <td style="padding:10px">$<?php echo number_format((float)$r['amount'], 2); ?></td>
+            <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars(str_replace('_', ' ', (string)$r['payment_method'])); ?></td>
+            <td style="padding:10px;text-align:right">$<?php echo number_format($amount, 2); ?></td>
+            <td style="padding:10px;text-align:right">$<?php echo number_format($refunded + $disputed, 2); ?></td>
+            <td style="padding:10px;text-align:right;font-weight:600">$<?php echo number_format($net, 2); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
-            <td style="padding:10px"><?php echo $r['created_at'] ? date('m/d/Y', strtotime($r['created_at'])) : ''; ?></td>
+            <td style="padding:10px"><?php echo $r['payment_date'] ? date('m/d/Y', strtotime($r['payment_date'])) : ''; ?></td>
+            <td style="padding:10px">
+              <?php if ($canRefund): ?>
+                <form method="post" action="/?page=payments/payment-refund" style="display:flex;gap:6px;align-items:center" onsubmit="return confirm('Record this refund? This changes income and invoice balance.');">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                  <input type="hidden" name="payment_id" value="<?php echo (int)$r['id']; ?>">
+                  <input type="number" name="amount" step="0.01" min="0.01" max="<?php echo htmlspecialchars(number_format($net, 2, '.', '')); ?>" placeholder="0.00" style="width:92px;padding:6px;border-radius:6px;border:1px solid #ddd">
+                  <button type="submit" style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b">Refund</button>
+                </form>
+              <?php else: ?>
+                <span style="color:var(--muted);font-size:13px">-</span>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
       </tbody>

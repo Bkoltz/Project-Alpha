@@ -144,6 +144,7 @@ function page_permission_map(): array
         'payments/payments-list'    => 'payments.view',
         'payments-list'             => 'payments.view',
         'payments/payments-create'  => 'invoices.mark_paid',
+        'payments/payment-refund'   => 'invoices.mark_paid',
 
         // Clients module
         'client/clients-list'    => 'clients.view',

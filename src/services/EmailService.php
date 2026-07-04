@@ -78,6 +78,27 @@ class EmailService {
         return $name;
     }
 
+    public static function applyAutomatedNotice(string $body, bool $isHtml, array $appConfig): string {
+        if (empty($appConfig['email_no_reply_notice_enabled'])) {
+            return $body;
+        }
+
+        $notice = trim((string)($appConfig['email_no_reply_notice_text'] ?? ''));
+        if ($notice === '') {
+            $notice = 'This is an automated message. Please do not reply to this email.';
+        }
+
+        if ($isHtml) {
+            return $body
+                . '<hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0 12px">'
+                . '<p style="color:#6b7280;font-size:12px;margin:0">'
+                . htmlspecialchars($notice, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '</p>';
+        }
+
+        return rtrim($body) . "\n\n" . $notice;
+    }
+
     /**
      * Send an HTML email using the configured SMTP server.
      *
@@ -107,6 +128,7 @@ class EmailService {
         $envelope   = trim((string)($options['envelope_from'] ?? ($cfg['username'] ?: $fromEmail)));
         $attachments = is_array($options['attachments'] ?? null) ? $options['attachments'] : [];
         $isHtml     = (bool)($options['is_html'] ?? true);
+        $body       = self::applyAutomatedNotice($body, $isHtml, $appConfig);
 
         $sent = false;
         $err  = '';

@@ -148,7 +148,7 @@ function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePa
 
     $paidAtSql = $status === 'paid'
         ? ', paid_at = COALESCE(paid_at, NOW())'
-        : '';
+        : ', paid_at = NULL';
     $pdo->prepare("UPDATE invoices SET status = ?, amount_paid = ?, balance_due = ?{$paidAtSql} WHERE id = ?")
         ->execute([$status, $storedPaid, $balanceDue, $invoiceId]);
 
@@ -187,6 +187,10 @@ function invoice_record_locked_payment(
     $completeContractWhenPaid = (bool)($options['complete_contract_when_paid'] ?? false);
     $allowUnfinalized = (bool)($options['allow_unfinalized'] ?? false);
     $source = substr((string)($options['source'] ?? 'manual'), 0, 50);
+    $paymentDate = trim((string)($options['payment_date'] ?? date('Y-m-d')));
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate)) {
+        $paymentDate = date('Y-m-d');
+    }
 
     $ownsTransaction = !$pdo->inTransaction();
     if ($ownsTransaction) {
@@ -229,7 +233,7 @@ function invoice_record_locked_payment(
         $insert = $pdo->prepare('
             INSERT INTO payments
                 (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, "succeeded", CURDATE())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, "succeeded", ?)
         ');
         $insert->execute([
             (int)$invoice['client_id'],
@@ -240,6 +244,7 @@ function invoice_record_locked_payment(
             $method !== '' ? $method : 'cash',
             $reference !== '' ? $reference : null,
             $notes !== '' ? $notes : null,
+            $paymentDate,
         ]);
         $paymentId = (int)$pdo->lastInsertId();
 

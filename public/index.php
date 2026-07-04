@@ -1070,6 +1070,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/payments_create.php';
         exit;
     }
+    if ($page === 'payments/payment-refund') {
+        require_once __DIR__ . '/../src/controllers/payments_refund.php';
+        exit;
+    }
     if ($page === 'quote/quotes-update' || $page === 'quotes-update') {
         require_once __DIR__ . '/../src/controllers/quote/quotes_update.php';
         exit;

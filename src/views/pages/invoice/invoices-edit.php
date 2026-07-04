@@ -185,7 +185,7 @@ foreach ($clients as $c) {
                 <input id="quantity" type="number" step="0.01" min="0" name="extra_qty[]" value="<?php echo htmlspecialchars($it['quantity']); ?>" placeholder="Qty" style="padding:8px;border-radius:4px;border:1px solid #ddd">
                 <input id="price" type="number" step="0.01" min="0" name="extra_price[]" value="<?php echo htmlspecialchars($it['unit_price']); ?>" placeholder="Price" style="padding:8px;border-radius:4px;border:1px solid #ddd">
                 <input type="hidden" name="extra_id[]" value="<?php echo htmlspecialchars($it['id']); ?>">
-                <button id="confirm" type="button" onclick="" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
+                <button type="button" onclick="if(confirm('Remove this extra charge?')){this.parentElement.remove();recalcInv();}" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
               </div>
             <?php endforeach; ?>
           </div>
@@ -216,8 +216,16 @@ foreach ($clients as $c) {
     <?php
     // Calculate totals from database items (contract + extra charges)
     $subtotal = 0;
+    $contractSubtotalForTotals = 0;
+    $extraSubtotalForTotals = 0;
     foreach ($items as $it) {
-      $subtotal += (float)$it['quantity'] * (float)$it['unit_price'];
+      $lineTotal = (float)$it['quantity'] * (float)$it['unit_price'];
+      $subtotal += $lineTotal;
+      if ((int)($it['is_extra_charge'] ?? 0) === 1) {
+        $extraSubtotalForTotals += $lineTotal;
+      } else {
+        $contractSubtotalForTotals += $lineTotal;
+      }
     }
     $dtype = $inv['discount_type'] ?? 'none';
     $dval = (float)($inv['discount_value'] ?? 0);
@@ -232,7 +240,7 @@ foreach ($clients as $c) {
     $tax = max(0, $taxpct) * $taxable / 100;
     $total = max(0, $taxable + $tax);
     ?>
-    <div id="totalsInv" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
+    <div id="totalsInv" data-base-subtotal="<?php echo htmlspecialchars(number_format($contractSubtotalForTotals, 2, '.', '')); ?>" style="margin-top:8px;display:grid;gap:6px;justify-content:end">
       <div style="display:flex;gap:16px;justify-content:flex-end">
         <div style="min-width:140px;text-align:right;color:var(--muted)">Subtotal</div>
         <div id="subtotalValInv" style="min-width:120px;text-align:right">$<?php echo number_format($subtotal, 2); ?></div>

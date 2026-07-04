@@ -37,6 +37,9 @@ $appConfig = [
     'invoice_auto_send_overdue_weekly' => 1,
     'invoice_auto_email_on_generate' => 1,
     'invoice_auto_email_on_contract_complete' => 1,
+    'payment_receipts_enabled' => 1,
+    'email_no_reply_notice_enabled' => 0,
+    'email_no_reply_notice_text' => 'This is an automated message. Please do not reply to this email.',
     // Link resolver / invoice content links are intentionally opt-in.
     'link_resolver_enabled' => 0,
     'org_level_links_only' => 0,
@@ -177,6 +180,7 @@ try {
             'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
             'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
             'invoice_auto_email_on_contract_complete',
+            'payment_receipts_enabled', 'email_no_reply_notice_enabled', 'email_no_reply_notice_text',
             'auto_terminate_contracts', 'link_expiration_checker',
             'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
             'payment_failure_alert',

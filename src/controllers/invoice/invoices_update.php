@@ -5,12 +5,20 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'invoices', $id);
-$statusStmt = $pdo->prepare('SELECT status FROM invoices WHERE id=?');
+$statusStmt = $pdo->prepare('SELECT status, finalized_at FROM invoices WHERE id=?');
 $statusStmt->execute([$id]);
-if (strtolower((string)$statusStmt->fetchColumn()) !== 'draft') {
-  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode('Reopen the invoice as a draft before editing it.'));
+$invoiceState = $statusStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$invoiceStatus = strtolower((string)($invoiceState['status'] ?? ''));
+$isDraft = $invoiceStatus === 'draft';
+if (in_array($invoiceStatus, ['paid', 'partial', 'void', 'cancelled'], true)) {
+  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode('This invoice status cannot be edited.'));
+  exit;
+}
+if (!$isDraft && invoice_effective_paid_total($pdo, $id) > 0.005) {
+  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode('Invoices with payment activity cannot be edited.'));
   exit;
 }
 $client_id = (int)($_POST['client_id'] ?? 0);
@@ -78,12 +86,15 @@ for ($i = 0; $i < count($extraItems); $i++) {
 }
 
 // Fetch all existing items to calculate subtotal including contract items
-$allExistingItems = $pdo->prepare('SELECT description, quantity, unit_price FROM invoice_items WHERE invoice_id=?');
+$allExistingItems = $hasExtraChargeCol
+  ? $pdo->prepare('SELECT description, quantity, unit_price, is_extra_charge FROM invoice_items WHERE invoice_id=?')
+  : $pdo->prepare('SELECT description, quantity, unit_price, 0 AS is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $allExistingItems->execute([$id]);
 $contractSubtotal = 0.0;
 foreach ($allExistingItems->fetchAll(PDO::FETCH_ASSOC) as $item) {
-  // Only count non-extra charge items (contract items)
-  $contractSubtotal += (float)$item['quantity'] * (float)$item['unit_price'];
+  if ((int)($item['is_extra_charge'] ?? 0) === 0) {
+    $contractSubtotal += (float)$item['quantity'] * (float)$item['unit_price'];
+  }
 }
 $subtotal = $contractSubtotal; // Reset and add extras
 
@@ -134,6 +145,10 @@ try {
     foreach ($extraItemsArr as $it) {
       $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
     }
+  }
+
+  if (!$isDraft && !empty($invoiceState['finalized_at'])) {
+    invoice_refresh_payment_totals($pdo, $id, false);
   }
   
   $pdo->commit();

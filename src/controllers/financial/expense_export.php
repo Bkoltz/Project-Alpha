@@ -43,7 +43,14 @@ if ($billable === '1') { $where[] = 'e.is_billable = 1'; }
 if ($billable === '0') { $where[] = 'e.is_billable = 0'; }
 if ($taxDeductible === '1') { $where[] = 'e.is_tax_deductible = 1'; }
 if ($taxDeductible === '0') { $where[] = 'e.is_tax_deductible = 0'; }
-if ($status) { $where[] = 'e.status = ?'; $params[] = $status; }
+if ($status === 'all') {
+    // Explicit audit export, including voided expenses.
+} elseif ($status !== '') {
+    $where[] = 'e.status = ?';
+    $params[] = $status;
+} else {
+    $where[] = "e.status != 'void'";
+}
 
 $whereSQL = implode(' AND ', $where);
 

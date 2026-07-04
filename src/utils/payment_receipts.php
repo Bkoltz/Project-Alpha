@@ -6,8 +6,12 @@ require_once __DIR__ . '/invoice_lifecycle.php';
 /**
  * Create and email one durable Project Alpha receipt per payment.
  */
-function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig): ?array
+function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool $sendEmail = true): ?array
 {
+    if (array_key_exists('payment_receipts_enabled', $appConfig) && empty($appConfig['payment_receipts_enabled'])) {
+        return null;
+    }
+
     $stmt = $pdo->prepare(
         'SELECT p.id,p.invoice_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
                 i.doc_number,c.name AS client_name,c.email
@@ -44,7 +48,7 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig): ?arr
         $receipt = $existing->fetch(PDO::FETCH_ASSOC);
     }
 
-    if (!$receipt || !empty($receipt['emailed_at']) || empty($receipt['email_to'])) {
+    if (!$sendEmail || !$receipt || !empty($receipt['emailed_at']) || empty($receipt['email_to'])) {
         return $receipt ?: null;
     }
 

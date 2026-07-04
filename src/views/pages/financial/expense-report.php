@@ -46,7 +46,14 @@ if ($billable === '1') { $where[] = 'e.is_billable = 1'; }
 if ($billable === '0') { $where[] = 'e.is_billable = 0'; }
 if ($taxDeductible === '1') { $where[] = 'e.is_tax_deductible = 1'; }
 if ($taxDeductible === '0') { $where[] = 'e.is_tax_deductible = 0'; }
-if ($status) { $where[] = 'e.status = ?'; $params[] = $status; }
+if ($status === 'all') {
+    // Explicit audit view, including voided expenses.
+} elseif ($status !== '') {
+    $where[] = 'e.status = ?';
+    $params[] = $status;
+} else {
+    $where[] = "e.status != 'void'";
+}
 
 $whereSQL = implode(' AND ', $where);
 
@@ -189,7 +196,8 @@ $exportParams = http_build_query(array_filter([
       <div class="field">
         <label class="label-muted">Status</label>
         <select name="status" class="input">
-          <option value="">All statuses</option>
+          <option value="">Active statuses</option>
+          <option value="all" <?php echo $status === 'all' ? 'selected' : ''; ?>>All statuses including void</option>
           <?php foreach (['pending' => 'Pending', 'confirmed' => 'Confirmed', 'reimbursed' => 'Reimbursed', 'void' => 'Void'] as $value => $label): ?>
             <option value="<?php echo $value; ?>" <?php echo $status === $value ? 'selected' : ''; ?>><?php echo $label; ?></option>
           <?php endforeach; ?>

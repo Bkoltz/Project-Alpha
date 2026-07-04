@@ -27,7 +27,14 @@ if ($vendorId > 0) { $where[] = 'e.vendor_id = ?'; $params[] = $vendorId; }
 if ($clientId > 0) { $where[] = 'e.client_id = ?'; $params[] = $clientId; }
 if ($billable === '1') { $where[] = 'e.is_billable = 1'; }
 if ($billable === '0') { $where[] = 'e.is_billable = 0'; }
-if ($status) { $where[] = 'e.status = ?'; $params[] = $status; }
+if ($status === 'all') {
+    // Explicit audit view, including voided expenses.
+} elseif ($status !== '') {
+    $where[] = 'e.status = ?';
+    $params[] = $status;
+} else {
+    $where[] = "e.status != 'void'";
+}
 $whereSQL = implode(' AND ', $where);
 
 $per = (int)($_GET['per_page'] ?? 50);
@@ -203,7 +210,8 @@ $paginationFilters = [
       <label>
         <span class="label-muted">Status</span>
         <select name="status" class="input">
-          <option value="">All statuses</option>
+          <option value="">Active statuses</option>
+          <option value="all" <?php echo $status==='all'?'selected':''; ?>>All statuses including void</option>
           <option value="confirmed" <?php echo $status==='confirmed'?'selected':''; ?>>Confirmed</option>
           <option value="pending" <?php echo $status==='pending'?'selected':''; ?>>Pending</option>
           <option value="reimbursed" <?php echo $status==='reimbursed'?'selected':''; ?>>Reimbursed</option>

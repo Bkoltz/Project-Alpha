@@ -94,6 +94,9 @@ $settings = [
     'invoice_auto_send_overdue_weekly' => 1,
     'invoice_auto_email_on_generate' => 1,
     'invoice_auto_email_on_contract_complete' => 1,
+    'payment_receipts_enabled' => 1,
+    'email_no_reply_notice_enabled' => 0,
+    'email_no_reply_notice_text' => 'This is an automated message. Please do not reply to this email.',
     // SMTP configuration (optional)
     'smtp_host' => null,
     'smtp_port' => 587,
@@ -370,6 +373,7 @@ $generalConfigKeys = [
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
     'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
     'invoice_auto_email_on_contract_complete',
+    'payment_receipts_enabled', 'email_no_reply_notice_enabled', 'email_no_reply_notice_text',
     'auto_terminate_contracts', 'link_expiration_checker',
     'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
     'payment_failure_alert',
@@ -458,6 +462,18 @@ if ($isNotificationsTab || isset($_POST['contract_expired_alert'])) {
 // Payment notification settings
 if ($isNotificationsTab || isset($_POST['payment_failure_alert'])) {
     $settings['payment_failure_alert'] = !empty($_POST['payment_failure_alert']) ? 1 : 0;
+}
+if ($isNotificationsTab || isset($_POST['payment_receipts_enabled'])) {
+    $settings['payment_receipts_enabled'] = !empty($_POST['payment_receipts_enabled']) ? 1 : 0;
+}
+if ($isNotificationsTab || isset($_POST['email_no_reply_notice_enabled'])) {
+    $settings['email_no_reply_notice_enabled'] = !empty($_POST['email_no_reply_notice_enabled']) ? 1 : 0;
+}
+if (isset($_POST['email_no_reply_notice_text'])) {
+    $notice = trim((string)$_POST['email_no_reply_notice_text']);
+    $settings['email_no_reply_notice_text'] = $notice !== ''
+        ? mb_substr($notice, 0, 500)
+        : 'This is an automated message. Please do not reply to this email.';
 }
 // Link expiration warning settings
 if ($isNotificationsTab || isset($_POST['link_expiration_warning'])) {
