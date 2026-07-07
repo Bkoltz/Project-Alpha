@@ -199,6 +199,20 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringNotContainsString('exec($cmd', $handler);
     }
 
+    public function testMigrationRunnerRetriesTransientMysqlLockFailures(): void
+    {
+        $runner = $this->read('src/migrations/run_migrations.php');
+
+        self::assertStringContainsString('migration_execute_with_lock_retry', $runner);
+        self::assertStringContainsString('migration_is_retryable_lock_failure', $runner);
+        self::assertStringContainsString("['40001', 'HY000']", $runner);
+        self::assertStringContainsString('[1205, 1213]', $runner);
+        self::assertStringContainsString('MIGRATION_LOCK_RETRY_ATTEMPTS', $runner);
+        self::assertStringContainsString('MIGRATION_LOCK_RETRY_BASE_MS', $runner);
+        self::assertStringContainsString('$pdo->query($statement)', $runner);
+        self::assertStringContainsString('ledger insert', $runner);
+    }
+
     public function testFinancialModuleDoesNotHardCodeOrganizationOne(): void
     {
         foreach ([
