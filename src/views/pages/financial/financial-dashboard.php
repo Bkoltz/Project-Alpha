@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Date range filter (default: current year)
@@ -44,12 +44,11 @@ $catStmt = $pdo->prepare("
     SELECT ec.name, ec.color, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
     FROM expense_categories ec
     LEFT JOIN expenses e ON e.category_id = ec.id AND {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
-    WHERE ec.organization_id = ?
     GROUP BY ec.id
     HAVING total > 0
     ORDER BY total DESC
 ");
-$catStmt->execute(array_merge($expenseScopeParams, [$start, $end, $orgId]));
+$catStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 $categoryMax = 0;
 foreach ($categories as $c) $categoryMax = max($categoryMax, (float)$c['total']);
@@ -58,13 +57,13 @@ $vendorStmt = $pdo->prepare("
     SELECT v.name, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
     FROM vendors v
     LEFT JOIN expenses e ON e.vendor_id = v.id AND {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
-    WHERE v.organization_id = ? AND v.is_active = 1
+    WHERE v.is_active = 1
     GROUP BY v.id
     HAVING total > 0
     ORDER BY total DESC
     LIMIT 8
 ");
-$vendorStmt->execute(array_merge($expenseScopeParams, [$start, $end, $orgId]));
+$vendorStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $vendors = $vendorStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $recentStmt = $pdo->prepare("

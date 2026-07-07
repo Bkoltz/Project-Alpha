@@ -51,8 +51,8 @@ if (empty($_SESSION['user']['id'])) {
 }
 
 $userId = (int)$_SESSION['user']['id'];
-$orgId  = active_or_default_org_id($pdo);
-if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
+$orgId  = request_client_org_id();
+if (!user_can($pdo, $userId, 'financial.manage', 0)) {
     $response['message'] = 'Permission denied';
     vendor_handler_finish($response, 403, '/?page=financial/expenses-list&tab=vendors');
 }
@@ -104,7 +104,7 @@ try {
                     (organization_id, name, email, phone, website, tax_id, default_category_id, notes, address, is_active)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             ');
-            $stmt->execute([$orgId, $name, $email, $phone, $website, $taxId, $defaultCategoryId, $notes, $address]);
+            $stmt->execute([$orgId > 0 ? $orgId : null, $name, $email, $phone, $website, $taxId, $defaultCategoryId, $notes, $address]);
 
             $vendorId = (int)$pdo->lastInsertId();
             audit_log($pdo, 'vendor.create', 'vendor', $vendorId, [
@@ -140,13 +140,13 @@ try {
                 UPDATE vendors
                 SET name = ?, email = ?, phone = ?, website = ?, tax_id = ?,
                     default_category_id = ?, notes = ?, address = ?, updated_at = NOW()
-                WHERE id = ? AND organization_id = ? AND is_active = 1
+                WHERE id = ? AND is_active = 1
             ');
-            $stmt->execute([$name, $email, $phone, $website, $taxId, $defaultCategoryId, $notes, $address, $id, $orgId]);
+            $stmt->execute([$name, $email, $phone, $website, $taxId, $defaultCategoryId, $notes, $address, $id]);
 
             if ($stmt->rowCount() === 0) {
-                $exists = $pdo->prepare('SELECT 1 FROM vendors WHERE id = ? AND organization_id = ?');
-                $exists->execute([$id, $orgId]);
+                $exists = $pdo->prepare('SELECT 1 FROM vendors WHERE id = ?');
+                $exists->execute([$id]);
                 if (!$exists->fetch()) {
                     jsonResponse(false, 'Vendor not found');
                 }
@@ -169,9 +169,9 @@ try {
             $stmt = $pdo->prepare('
                 UPDATE vendors
                 SET is_active = 0, updated_at = NOW()
-                WHERE id = ? AND organization_id = ? AND is_active = 1
+                WHERE id = ? AND is_active = 1
             ');
-            $stmt->execute([$id, $orgId]);
+            $stmt->execute([$id]);
 
             if ($stmt->rowCount() === 0) {
                 jsonResponse(false, 'Vendor not found or already inactive');
@@ -193,8 +193,8 @@ try {
             }
 
             // Verify both vendors belong to this organization
-            $check = $pdo->prepare('SELECT id, is_active FROM vendors WHERE id IN (?, ?) AND organization_id = ?');
-            $check->execute([$sourceId, $targetId, $orgId]);
+            $check = $pdo->prepare('SELECT id, is_active FROM vendors WHERE id IN (?, ?)');
+            $check->execute([$sourceId, $targetId]);
             $found = $check->fetchAll();
             if (count($found) !== 2) {
                 jsonResponse(false, 'One or both vendors not found');
@@ -206,17 +206,17 @@ try {
             }
 
             // Reassign expenses
-            $updateExpenses = $pdo->prepare('UPDATE expenses SET vendor_id = ? WHERE vendor_id = ? AND organization_id = ?');
-            $updateExpenses->execute([$targetId, $sourceId, $orgId]);
+            $updateExpenses = $pdo->prepare('UPDATE expenses SET vendor_id = ? WHERE vendor_id = ?');
+            $updateExpenses->execute([$targetId, $sourceId]);
             $reassigned = (int)$updateExpenses->rowCount();
 
             // Deactivate source vendor
             $deactivate = $pdo->prepare('
                 UPDATE vendors
                 SET is_active = 0, updated_at = NOW()
-                WHERE id = ? AND organization_id = ?
+                WHERE id = ?
             ');
-            $deactivate->execute([$sourceId, $orgId]);
+            $deactivate->execute([$sourceId]);
 
             audit_log($pdo, 'vendor.merge', 'vendor', $targetId, [
                 'organization_id' => $orgId,

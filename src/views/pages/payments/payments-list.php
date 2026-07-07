@@ -24,12 +24,13 @@ $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$fromSql = ' FROM payments p JOIN clients c ON c.id=p.client_id LEFT JOIN invoices i ON i.id=p.invoice_id';
+$fromSql = ' FROM payments p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN invoices i ON i.id=p.invoice_id LEFT JOIN processor_payment_transactions ppt ON ppt.payment_id=p.id';
 $sqlCount = 'SELECT COUNT(*)' . $fromSql;
 if($where){$sqlCount.=' WHERE '.implode(' AND ',$where);} $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
 $sql = 'SELECT p.id, p.amount, p.refunded_amount, p.disputed_amount, p.status, p.payment_date, p.created_at,
-               p.payment_method, p.reference_number, i.id AS invoice_id, i.doc_number, c.name AS client
+               p.payment_method, p.reference_number, p.processor_provider, i.id AS invoice_id, i.doc_number,
+               c.name AS client, ppt.payer_name, ppt.payer_email
         ' . $fromSql;
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY p.payment_date DESC, p.created_at DESC LIMIT $per OFFSET $offset";
 $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FETCH_ASSOC);
@@ -107,11 +108,13 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
             <td style="padding:10px">
               <?php if (!empty($r['invoice_id'])): ?>
                 Invoice #<?php echo htmlspecialchars((string)($r['doc_number'] ?: $r['invoice_id'])); ?>
+              <?php elseif (!empty($r['processor_provider'])): ?>
+                Processor income
               <?php else: ?>
                 Manual
               <?php endif; ?>
             </td>
-            <td style="padding:10px"><?php echo htmlspecialchars($r['client']); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['client'] ?: ($r['payer_name'] ?: ($r['payer_email'] ?: 'No client'))); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars(str_replace('_', ' ', (string)$r['payment_method'])); ?></td>
             <td style="padding:10px;text-align:right">$<?php echo number_format($amount, 2); ?></td>
             <td style="padding:10px;text-align:right">$<?php echo number_format($refunded + $disputed, 2); ?></td>

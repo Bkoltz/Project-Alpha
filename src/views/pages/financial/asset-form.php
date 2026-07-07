@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $editId = (int)($_GET['id'] ?? 0);
 
 $asset = null;
@@ -25,12 +25,12 @@ if ($editId > 0) {
     }
 }
 
-$vendorsQ = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id = ? AND is_active = 1 ORDER BY name');
-$vendorsQ->execute([$orgId]);
+$vendorsQ = $pdo->prepare('SELECT id, name FROM vendors WHERE is_active = 1 ORDER BY name');
+$vendorsQ->execute();
 $vendors = $vendorsQ->fetchAll(PDO::FETCH_ASSOC);
 
-$categoriesQ = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id = ? ORDER BY name');
-$categoriesQ->execute([$orgId]);
+$categoriesQ = $pdo->prepare('SELECT id, name FROM expense_categories ORDER BY name');
+$categoriesQ->execute();
 $categories = $categoriesQ->fetchAll(PDO::FETCH_ASSOC);
 
 [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)($_SESSION['user']['id'] ?? 0), $orgId, 'created_by');
@@ -45,14 +45,14 @@ $expensesQ = $pdo->prepare('
 $expensesQ->execute($expenseScopeParams);
 $expenses = $expensesQ->fetchAll(PDO::FETCH_ASSOC);
 
-$typesQ = $pdo->prepare('SELECT DISTINCT asset_type FROM financial_assets WHERE organization_id = ? AND asset_type IS NOT NULL AND asset_type <> "" ORDER BY asset_type');
-$typesQ->execute([$orgId]);
+$typesQ = $pdo->prepare('SELECT DISTINCT asset_type FROM financial_assets WHERE asset_type IS NOT NULL AND asset_type <> "" ORDER BY asset_type');
+$typesQ->execute();
 $existingTypes = $typesQ->fetchAll(PDO::FETCH_COLUMN);
 $commonTypes = ['Computer', 'Vehicle', 'Tool', 'Equipment', 'Furniture', 'Phone', 'Software', 'Building Improvement'];
 $assetTypes = array_values(array_unique(array_merge($commonTypes, array_map('strval', $existingTypes))));
 
 $statusOptions = ['planned' => 'Planned', 'active' => 'Active', 'maintenance' => 'Maintenance', 'retired' => 'Retired', 'sold' => 'Sold', 'lost' => 'Lost', 'disposed' => 'Disposed'];
-$methodOptions = ['straight_line' => 'Straight-line', 'none' => 'Do not depreciate'];
+$methodOptions = ['none' => 'Do not depreciate', 'straight_line' => 'Straight-line'];
 
 $value = static function (string $key, string $default = '') use ($asset): string {
     return htmlspecialchars((string)($asset[$key] ?? $default));
@@ -174,19 +174,19 @@ $selected = static function (string $key, string $value, string $default = '') u
           <label class="label">Method</label>
           <select name="depreciation_method" id="assetDepreciationMethod" class="input">
             <?php foreach ($methodOptions as $method => $label): ?>
-              <option value="<?php echo htmlspecialchars($method); ?>" <?php echo $selected('depreciation_method', $method, 'straight_line'); ?>><?php echo htmlspecialchars($label); ?></option>
+              <option value="<?php echo htmlspecialchars($method); ?>" <?php echo $selected('depreciation_method', $method, 'none'); ?>><?php echo htmlspecialchars($label); ?></option>
             <?php endforeach; ?>
           </select>
         </div>
         <div class="field">
           <label class="label">Depreciation Start</label>
-          <input type="date" name="depreciation_start_date" class="input" value="<?php echo $value('depreciation_start_date', (string)($asset['purchase_date'] ?? date('Y-m-d'))); ?>">
+          <input type="date" name="depreciation_start_date" class="input" value="<?php echo $value('depreciation_start_date'); ?>">
         </div>
       </div>
       <div class="grid grid-3">
         <div class="field">
           <label class="label">Useful Life (months)</label>
-          <input type="number" name="useful_life_months" id="assetUsefulLife" min="1" step="1" class="input" value="<?php echo $value('useful_life_months', '60'); ?>">
+          <input type="number" name="useful_life_months" id="assetUsefulLife" min="1" step="1" class="input" value="<?php echo $value('useful_life_months'); ?>">
         </div>
         <div class="field">
           <label class="label">Salvage Value</label>

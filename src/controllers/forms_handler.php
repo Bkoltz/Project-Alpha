@@ -25,11 +25,8 @@ if (!csrf_validate()) {
 }
 
 try {
-    $orgId = active_or_default_org_id($pdo);
+    $orgId = request_client_org_id();
     $userId = (int)($_SESSION['user']['id'] ?? 0) ?: null;
-    if ($orgId <= 0) {
-        throw new Exception('Select an active organization before managing forms and documents.');
-    }
 
     switch ($action) {
         case 'quick_upload':
@@ -57,7 +54,7 @@ try {
                 INSERT INTO form_categories (organization_id, title, type, created_by)
                 VALUES (?, ?, ?, ?)
             ');
-            $stmt->execute([$orgId, $title, 'file', $userId]);
+            $stmt->execute([$orgId > 0 ? $orgId : null, $title, 'file', $userId]);
             $categoryId = $pdo->lastInsertId();
 
             // Generate unique filename
@@ -88,7 +85,7 @@ try {
                 INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ');
-            $stmt->execute([$orgId, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+            $stmt->execute([$orgId > 0 ? $orgId : null, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
 
             $response['success'] = true;
             $response['message'] = 'File uploaded successfully';
@@ -107,7 +104,7 @@ try {
                 INSERT INTO form_categories (organization_id, title, type, created_by)
                 VALUES (?, ?, ?, ?)
             ');
-            $stmt->execute([$orgId, $title, 'folder', $userId]);
+            $stmt->execute([$orgId > 0 ? $orgId : null, $title, 'folder', $userId]);
             $categoryId = $pdo->lastInsertId();
 
             $response['success'] = true;
@@ -127,9 +124,9 @@ try {
             $stmt = $pdo->prepare('
                 UPDATE form_categories 
                 SET title = ?
-                WHERE id = ? AND organization_id = ?
+                WHERE id = ?
             ');
-            $stmt->execute([$title, $categoryId, $orgId]);
+            $stmt->execute([$title, $categoryId]);
 
             $response['success'] = true;
             $response['message'] = 'Category updated successfully';
@@ -147,17 +144,17 @@ try {
                 SELECT d.file_path
                 FROM form_documents d
                 INNER JOIN form_categories c ON c.id = d.category_id
-                WHERE d.category_id = ? AND c.organization_id = ? AND (d.project_id IS NULL OR d.project_id = 0)
+                WHERE d.category_id = ? AND (d.project_id IS NULL OR d.project_id = 0)
             ');
-            $stmt->execute([$categoryId, $orgId]);
+            $stmt->execute([$categoryId]);
             $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Delete category (will cascade delete documents due to FK)
             $stmt = $pdo->prepare('
                 DELETE FROM form_categories 
-                WHERE id = ? AND organization_id = ?
+                WHERE id = ?
             ');
-            $stmt->execute([$categoryId, $orgId]);
+            $stmt->execute([$categoryId]);
             if ($stmt->rowCount() !== 1) {
                 throw new Exception('Category not found');
             }
@@ -182,8 +179,8 @@ try {
             }
 
             // Verify category exists and belongs to org, get its type
-            $stmt = $pdo->prepare('SELECT id, type, title FROM form_categories WHERE id = ? AND organization_id = ?');
-            $stmt->execute([$categoryId, $orgId]);
+            $stmt = $pdo->prepare('SELECT id, type, title FROM form_categories WHERE id = ?');
+            $stmt->execute([$categoryId]);
             $category = $stmt->fetch();
             if (!$category) {
                 throw new Exception('Category not found');
@@ -267,7 +264,7 @@ try {
                         INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
                     ');
-                    $stmt->execute([$orgId, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                    $stmt->execute([$orgId > 0 ? $orgId : null, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
                 }
             } else {
                 // For folder categories, always add new document (allow multiple)
@@ -275,7 +272,7 @@ try {
                     INSERT INTO form_documents (organization_id, category_id, project_id, file_path, file_name, file_size, mime_type, uploaded_by, uploaded_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 ');
-                $stmt->execute([$orgId, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+                $stmt->execute([$orgId > 0 ? $orgId : null, $categoryId, null, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
             }
 
             $response['success'] = true;
@@ -305,7 +302,7 @@ try {
             $stmt->execute([$documentId]);
             $doc = $stmt->fetch();
 
-            if (!$doc || $doc['organization_id'] != $orgId) {
+            if (!$doc) {
                 throw new Exception('Document not found');
             }
 
@@ -353,9 +350,9 @@ try {
                 SELECT fc.title, fd.file_path, fd.file_name
                 FROM form_categories fc
                 LEFT JOIN form_documents fd ON fc.id = fd.category_id AND (fd.project_id IS NULL OR fd.project_id = 0)
-                WHERE fc.id = ? AND fc.organization_id = ?
+                WHERE fc.id = ?
             ');
-            $stmt->execute([$categoryId, $orgId]);
+            $stmt->execute([$categoryId]);
             $form = $stmt->fetch();
 
             if (!$form || !$form['file_path']) {
@@ -448,9 +445,9 @@ try {
             // Get folder name
             $stmt = $pdo->prepare('
                 SELECT title FROM form_categories 
-                WHERE id = ? AND organization_id = ? AND type = "folder"
+                WHERE id = ? AND type = "folder"
             ');
-            $stmt->execute([$folderId, $orgId]);
+            $stmt->execute([$folderId]);
             $folder = $stmt->fetch();
             if (!$folder) {
                 throw new Exception('Folder not found');

@@ -11,7 +11,7 @@ require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
 
-$__orgId = get_active_org_id() ?: null;
+$__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 // Route to appropriate handler based on document type
@@ -74,6 +74,7 @@ if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_i
     header('Location: /?page=contract/contracts-create&error=' . urlencode('Select an active or not-started project for this client or organization.'));
     exit;
 }
+$__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
 
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){

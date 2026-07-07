@@ -279,9 +279,8 @@ function acl_middleware(PDO $pdo, string $page): void
     if (($_SESSION['user']['role'] ?? '') === 'admin') return; // super-admin bypass
 
     // Session staleness check
-    $activeOrgId = get_active_org_id();
     if (!empty($_SESSION['user']['permissions_hash'])) {
-        $expected = compute_permissions_hash($pdo, $userId, $activeOrgId);
+        $expected = compute_permissions_hash($pdo, $userId, 0);
         if ($_SESSION['user']['permissions_hash'] !== $expected) {
             audit_log($pdo, 'acl.session_stale', 'permission', null, ['page' => $page, 'user_id' => $userId]);
             session_destroy();
@@ -305,7 +304,7 @@ function acl_middleware(PDO $pdo, string $page): void
         deny_response($page);
     }
 
-    if (user_can($pdo, $userId, $perm, $activeOrgId)) return;
+    if (user_can($pdo, $userId, $perm, 0)) return;
 
     audit_log($pdo, 'acl.denied', 'permission', null, ['page' => $page, 'required' => $perm, 'user_id' => $userId]);
     deny_response($page);

@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $folderId = (int)($_GET['id'] ?? 0);
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 
 if (!$folderId) {
     header('Location: /?page=financial/forms-list');
@@ -16,9 +16,9 @@ if (!$folderId) {
 $stmt = $pdo->prepare('
     SELECT id, organization_id, title, description, created_at
     FROM form_categories 
-    WHERE id = ? AND organization_id = ? AND type = "folder"
+    WHERE id = ? AND type = "folder"
 ');
-$stmt->execute([$folderId, $orgId]);
+$stmt->execute([$folderId]);
 $folder = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$folder) {

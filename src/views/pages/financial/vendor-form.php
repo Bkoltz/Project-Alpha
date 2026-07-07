@@ -5,16 +5,15 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 
 // Fetch categories for default_category_id dropdown
 $catStmt = $pdo->prepare("
     SELECT id, name
     FROM expense_categories
-    WHERE organization_id = ?
     ORDER BY name
 ");
-$catStmt->execute([$orgId]);
+$catStmt->execute();
 $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Edit mode
@@ -24,9 +23,9 @@ if ($vendorId > 0) {
     $vStmt = $pdo->prepare("
         SELECT *
         FROM vendors
-        WHERE id = ? AND organization_id = ? AND is_active = 1
+        WHERE id = ? AND is_active = 1
     ");
-    $vStmt->execute([$vendorId, $orgId]);
+    $vStmt->execute([$vendorId]);
     $vendor = $vStmt->fetch(PDO::FETCH_ASSOC);
 }
 

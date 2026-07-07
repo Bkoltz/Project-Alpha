@@ -14,8 +14,8 @@ if (!$userId) {
     exit;
 }
 
-$orgId = active_or_default_org_id($pdo);
-if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
+$orgId = request_client_org_id();
+if (!user_can($pdo, (int)$userId, 'financial.manage', 0)) {
     http_response_code(403);
     exit('Permission denied');
 }

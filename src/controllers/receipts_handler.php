@@ -54,8 +54,8 @@ if (!csrf_validate()) {
 
 try {
     $userId = (int)($_SESSION['user']['id'] ?? 0);
-    $orgId = active_or_default_org_id($pdo);
-    if ($userId <= 0 || $orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
+    $orgId = request_client_org_id();
+    if ($userId <= 0 || !user_can($pdo, $userId, 'financial.manage', 0)) {
         $response['message'] = 'Permission denied';
         receipts_handler_finish($response, 403, '/?page=financial/expenses-list&tab=receipts');
     }
@@ -66,14 +66,17 @@ try {
             return null;
         }
 
-        $stmt = $pdo->prepare('INSERT INTO vendors (organization_id, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)');
-        $stmt->execute([$orgId, $storeName]);
-
-        $stmt = $pdo->prepare('SELECT id FROM vendors WHERE organization_id = ? AND name = ?');
-        $stmt->execute([$orgId, $storeName]);
+        $stmt = $pdo->prepare('SELECT id FROM vendors WHERE name = ? LIMIT 1');
+        $stmt->execute([$storeName]);
         $storeId = $stmt->fetchColumn();
+        if ($storeId) {
+            return (int)$storeId;
+        }
 
-        return $storeId ? (int)$storeId : null;
+        $stmt = $pdo->prepare('INSERT INTO vendors (organization_id, name) VALUES (?, ?)');
+        $stmt->execute([$orgId > 0 ? $orgId : null, $storeName]);
+
+        return (int)$pdo->lastInsertId();
     };
 
     switch ($action) {
@@ -147,7 +150,7 @@ try {
                 INSERT INTO receipts (organization_id, store_id, receipt_date, amount, description, file_path, file_name, file_size, mime_type, uploaded_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
-            $stmt->execute([$orgId, $storeId, $receiptDate, $amount, $description, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
+            $stmt->execute([$orgId > 0 ? $orgId : null, $storeId, $receiptDate, $amount, $description, $dbPath, $file['name'], $file['size'], $file['type'], $userId]);
 
             $response['success'] = true;
             $response['message'] = 'Receipt uploaded successfully';

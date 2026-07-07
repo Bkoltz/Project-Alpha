@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: /?page=financial/expenses-list&tab=expenses'); exit; }

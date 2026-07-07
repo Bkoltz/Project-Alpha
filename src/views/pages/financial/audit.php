@@ -209,7 +209,7 @@ $endDate = $currentYear . '-12-31';
 
   <!-- Active Schedules -->
   <?php
-  $auditOrgId = (int)(function_exists('get_active_org_id') ? get_active_org_id() : ($_SESSION['active_org_id'] ?? 0));
+  $auditOrgId = request_client_org_id();
   $scheduleStmt = $pdo->prepare('SELECT * FROM audit_schedules WHERE (?=0 OR organization_id=?) AND report_type="audit" ORDER BY created_at DESC LIMIT 10');
   $scheduleStmt->execute([$auditOrgId, $auditOrgId]);
   $schedules = $scheduleStmt->fetchAll(PDO::FETCH_ASSOC);

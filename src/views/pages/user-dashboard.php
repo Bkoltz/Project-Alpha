@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-$orgId = get_active_org_id();
+$orgId = request_client_org_id();
 $displayName = '';
 if ($userId > 0) {
     try {

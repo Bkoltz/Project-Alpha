@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $categoryId = (int)($_GET['id'] ?? 0);
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 
 if (!$categoryId) {
     header('Location: /?page=financial/forms-list');
@@ -27,9 +27,9 @@ $stmt = $pdo->prepare('
         fd.uploaded_at
     FROM form_categories fc
     LEFT JOIN form_documents fd ON fc.id = fd.category_id AND (fd.project_id IS NULL OR fd.project_id = 0)
-    WHERE fc.id = ? AND fc.organization_id = ?
+    WHERE fc.id = ?
 ');
-$stmt->execute([$categoryId, $orgId]);
+$stmt->execute([$categoryId]);
 $category = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$category) {

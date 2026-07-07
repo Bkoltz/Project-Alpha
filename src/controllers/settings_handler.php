@@ -14,6 +14,7 @@ $isDocumentsInvoiceTab = $tab === 'documents' && $docTab === 'invoices';
 $isDocumentsCustomizationTab = $tab === 'documents' && $docTab === 'customization';
 $isNotificationsTab = $tab === 'notifications';
 $isWorkflowTab = $tab === 'workflow';
+$isBillingTab = $tab === 'billing';
 
 if ($tab === 'links') {
     require_once __DIR__ . '/settings/links_handler.php';
@@ -103,6 +104,8 @@ $settings = [
     'smtp_secure' => 'tls', // tls|ssl|none
     'smtp_username' => null,
     'smtp_password_enc' => null,
+    'processor_import_standalone_income' => 0,
+    'processor_import_auto_create_clients' => 0,
 ];
 
 // Read current settings. If public file is writable prefer it; if public exists but is not writable prefer internal fallback
@@ -382,6 +385,7 @@ $generalConfigKeys = [
     'quote_scope_enabled', 'contract_scope_enabled', 'contract_memo_enabled',
     'signature_agreement', 'review_link', 'suppress_assets_warning',
     'cron_enabled', 'cron_schedule', 'cron_custom',
+    'processor_import_standalone_income', 'processor_import_auto_create_clients',
 ];
 // contract_custom_sections is an array — serialize to JSON for DB storage
 if (isset($settings['contract_custom_sections'])) {
@@ -540,6 +544,11 @@ if (isset($_POST['section_title']) && is_array($_POST['section_title'])) {
 if (isset($_POST['review_link'])) {
     $rl = trim((string)$_POST['review_link']);
     $settings['review_link'] = $rl !== '' ? $rl : null;
+}
+
+if ($isBillingTab || isset($_POST['processor_import_standalone_income']) || isset($_POST['processor_import_auto_create_clients'])) {
+    $settings['processor_import_standalone_income'] = !empty($_POST['processor_import_standalone_income']) ? 1 : 0;
+    $settings['processor_import_auto_create_clients'] = !empty($_POST['processor_import_auto_create_clients']) ? 1 : 0;
 }
 
 // Stripe settings — save encrypted to app_config DB table (NOT to .env file)

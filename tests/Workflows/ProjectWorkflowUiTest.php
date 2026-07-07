@@ -265,8 +265,8 @@ final class ProjectWorkflowUiTest extends TestCase
         $folderDetail = file_get_contents($this->root . '/src/views/pages/financial/folder-detail.php');
         $handler = file_get_contents($this->root . '/src/controllers/forms_handler.php');
 
-        self::assertStringContainsString('active_or_default_org_id($pdo)', (string)$formsList);
-        self::assertStringContainsString('active_or_default_org_id($pdo)', (string)$handler);
+        self::assertStringContainsString('request_client_org_id()', (string)$formsList);
+        self::assertStringContainsString('request_client_org_id()', (string)$handler);
         self::assertStringContainsString('WHERE project_id IS NULL OR project_id = 0', (string)$formsList);
         self::assertStringContainsString('fd.project_id IS NULL OR fd.project_id = 0', (string)$formDetail);
         self::assertStringContainsString('fd.project_id IS NULL OR fd.project_id = 0', (string)$folderDetail);

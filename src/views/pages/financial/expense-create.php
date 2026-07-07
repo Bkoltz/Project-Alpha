@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $editId = (int)($_GET['id'] ?? 0);
 
@@ -17,20 +17,20 @@ $prefillVendor = $_GET['vendor'] ?? '';
 $prefillReceiptId = (int)($_GET['receipt_id'] ?? 0);
 
 // Fetch dropdowns
-$cats = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');
-$cats->execute([$orgId]);
+$cats = $pdo->prepare('SELECT id, name FROM expense_categories ORDER BY name');
+$cats->execute();
 $categories = $cats->fetchAll(PDO::FETCH_ASSOC);
 
-$vendorsQ = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id=? AND is_active=1 ORDER BY name');
-$vendorsQ->execute([$orgId]);
+$vendorsQ = $pdo->prepare('SELECT id, name FROM vendors WHERE is_active=1 ORDER BY name');
+$vendorsQ->execute();
 $vendors = $vendorsQ->fetchAll(PDO::FETCH_ASSOC);
 
-$clientsQ = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name');
-$clientsQ->execute([$orgId]);
+$clientsQ = $pdo->prepare('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name');
+$clientsQ->execute();
 $clients = $clientsQ->fetchAll(PDO::FETCH_ASSOC);
 
-$projectsQ = $pdo->prepare('SELECT id, name FROM projects WHERE organization_id = ? ORDER BY name');
-$projectsQ->execute([$orgId]);
+$projectsQ = $pdo->prepare('SELECT id, name FROM projects ORDER BY name');
+$projectsQ->execute();
 $projects = $projectsQ->fetchAll(PDO::FETCH_ASSOC);
 
 // Load existing expense for edit mode

@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
 $start = $_GET['start'] ?? '';
@@ -70,16 +70,16 @@ $sumStmt = $pdo->prepare("
 $sumStmt->execute($params);
 $summary = $sumStmt->fetch(PDO::FETCH_ASSOC);
 
-$cats = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');
-$cats->execute([$orgId]);
+$cats = $pdo->prepare('SELECT id, name FROM expense_categories ORDER BY name');
+$cats->execute();
 $categories = $cats->fetchAll(PDO::FETCH_ASSOC);
 
-$vendorsQ = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id=? AND is_active=1 ORDER BY name');
-$vendorsQ->execute([$orgId]);
+$vendorsQ = $pdo->prepare('SELECT id, name FROM vendors WHERE is_active=1 ORDER BY name');
+$vendorsQ->execute();
 $vendors = $vendorsQ->fetchAll(PDO::FETCH_ASSOC);
 
-$clientsQ = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name');
-$clientsQ->execute([$orgId]);
+$clientsQ = $pdo->prepare('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name');
+$clientsQ->execute();
 $clients = $clientsQ->fetchAll(PDO::FETCH_ASSOC);
 
 $totalPages = max(1, (int)ceil($total / $per));

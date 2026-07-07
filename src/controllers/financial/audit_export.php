@@ -34,7 +34,7 @@ $includeQuotes = isset($_POST['include_quotes']) && $_POST['include_quotes'] ===
 $generateCsv = isset($_POST['generate_csv']) && $_POST['generate_csv'] === '1';
 $includePdfs = isset($_POST['include_pdfs']) && $_POST['include_pdfs'] === '1';
 $enableScheduling = isset($_POST['enable_scheduling']) && $_POST['enable_scheduling'] === '1';
-$activeOrgId = (int)(function_exists('get_active_org_id') ? get_active_org_id() : ($_SESSION['active_org_id'] ?? 0));
+$activeOrgId = request_client_org_id();
 
 // Handle scheduling separately
 if ($enableScheduling) {
@@ -392,7 +392,7 @@ try {
     }
     $zip->close();
 
-    $orgId = get_active_org_id() ?: 0;
+    $orgId = request_client_org_id() ?: 0;
     $artifactDir = '/var/www/config/audits/' . $orgId . '/' . date('Ymd_His');
     if (!is_dir($artifactDir)) {
         @mkdir($artifactDir, 0750, true);

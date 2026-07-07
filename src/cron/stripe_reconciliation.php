@@ -10,6 +10,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../services/StripeService.php';
+require_once __DIR__ . '/../services/PaymentProcessorImportService.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/stripe_financial_events.php';
 
@@ -73,7 +74,18 @@ try {
             // Get invoice ID from metadata
             $invoiceId = $pi['metadata']['pa_invoice_id'] ?? $pi['metadata']['invoice_id'] ?? null;
             if (!$invoiceId) {
-                $skipped++;
+                $result = PaymentProcessorImportService::importStandalone(
+                    $pdo,
+                    $appConfig,
+                    $stripe->normalizePaymentIntentForImport($pi)
+                );
+                if (in_array($result['status'] ?? '', ['imported', 'duplicate'], true)) {
+                    $reconciled++;
+                } elseif (($result['status'] ?? '') === 'failed') {
+                    $errors++;
+                } else {
+                    $skipped++;
+                }
                 continue;
             }
             

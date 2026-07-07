@@ -317,14 +317,15 @@ function processExpenseSchedule(
     string $fromName
 ): string {
     $organizationId = (int)($schedule['organization_id'] ?? 0);
-    if ($organizationId <= 0) {
-        throw new RuntimeException('Expense schedule is missing its organization.');
-    }
 
     $filters = json_decode((string)($schedule['filters'] ?? ''), true);
     $filters = is_array($filters) ? $filters : [];
-    $where = ['e.organization_id=?', 'e.expense_date BETWEEN ? AND ?'];
-    $params = [$organizationId, $startDate, $endDate];
+    $where = ['e.expense_date BETWEEN ? AND ?'];
+    $params = [$startDate, $endDate];
+    if ($organizationId > 0) {
+        $where[] = 'e.organization_id=?';
+        $params[] = $organizationId;
+    }
     foreach (['category_id', 'vendor_id', 'client_id'] as $field) {
         $value = max(0, (int)($filters[$field] ?? 0));
         if ($value > 0) {

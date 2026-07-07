@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Get filter parameters with defaults to current year/month
@@ -59,8 +59,8 @@ $receipts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $totalAmount = array_sum(array_column($receipts, 'amount'));
 
 // Get all stores for filter dropdown
-$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
-$storeStmt->execute([$orgId]);
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors ORDER BY name');
+$storeStmt->execute();
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Get available years

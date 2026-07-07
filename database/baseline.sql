@@ -375,7 +375,7 @@ CREATE TABLE IF NOT EXISTS client_onboarding_invitations (
     UNIQUE KEY uq_client_onboarding_token (token_hash),
     INDEX idx_client_onboarding_owner (organization_id,status,created_at),
     INDEX idx_client_onboarding_email (invited_email),
-    CONSTRAINT fk_client_onboarding_owner FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_client_onboarding_owner FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_client_onboarding_target_org FOREIGN KEY (target_organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_client_onboarding_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_client_onboarding_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
@@ -1283,7 +1283,7 @@ CREATE TABLE IF NOT EXISTS item_library (
 -- EXPENSE CATEGORIES (IRS Schedule C aligned)
 CREATE TABLE IF NOT EXISTS expense_categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     name VARCHAR(100) NOT NULL,
     parent_id INT NULL DEFAULT NULL,
     tax_deductible TINYINT(1) NOT NULL DEFAULT 1,
@@ -1293,7 +1293,7 @@ CREATE TABLE IF NOT EXISTS expense_categories (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_exp_cat_org (organization_id),
     INDEX idx_exp_cat_parent (parent_id),
-    CONSTRAINT fk_exp_cat_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_exp_cat_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_cat_parent FOREIGN KEY (parent_id) REFERENCES expense_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1303,34 +1303,34 @@ ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 -- Pre-seed IRS Schedule C categories
 INSERT INTO expense_categories (organization_id, name, is_system) VALUES
-(1, 'Advertising', 1),
-(1, 'Car & Truck Expenses', 1),
-(1, 'Commissions & Fees', 1),
-(1, 'Contract Labor', 1),
-(1, 'Depletion', 1),
-(1, 'Depreciation', 1),
-(1, 'Employee Benefits', 1),
-(1, 'Insurance', 1),
-(1, 'Interest - Mortgage', 1),
-(1, 'Interest - Other', 1),
-(1, 'Legal & Professional Services', 1),
-(1, 'Office Expense', 1),
-(1, 'Pension & Profit-Sharing', 1),
-(1, 'Rent - Equipment', 1),
-(1, 'Rent - Vehicles/Machinery', 1),
-(1, 'Rent - Other', 1),
-(1, 'Repairs & Maintenance', 1),
-(1, 'Supplies', 1),
-(1, 'Taxes & Licenses', 1),
-(1, 'Travel & Meals', 1),
-(1, 'Utilities', 1),
-(1, 'Wages', 1),
-(1, 'Other', 1);
+(NULL, 'Advertising', 1),
+(NULL, 'Car & Truck Expenses', 1),
+(NULL, 'Commissions & Fees', 1),
+(NULL, 'Contract Labor', 1),
+(NULL, 'Depletion', 1),
+(NULL, 'Depreciation', 1),
+(NULL, 'Employee Benefits', 1),
+(NULL, 'Insurance', 1),
+(NULL, 'Interest - Mortgage', 1),
+(NULL, 'Interest - Other', 1),
+(NULL, 'Legal & Professional Services', 1),
+(NULL, 'Office Expense', 1),
+(NULL, 'Pension & Profit-Sharing', 1),
+(NULL, 'Rent - Equipment', 1),
+(NULL, 'Rent - Vehicles/Machinery', 1),
+(NULL, 'Rent - Other', 1),
+(NULL, 'Repairs & Maintenance', 1),
+(NULL, 'Supplies', 1),
+(NULL, 'Taxes & Licenses', 1),
+(NULL, 'Travel & Meals', 1),
+(NULL, 'Utilities', 1),
+(NULL, 'Wages', 1),
+(NULL, 'Other', 1);
 
 -- VENDORS (was receipt_stores, extended with email/phone/website/tax_id/category)
 CREATE TABLE IF NOT EXISTS vendors (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     name VARCHAR(150) NOT NULL,
     email VARCHAR(255) NULL,
     phone VARCHAR(50) NULL,
@@ -1344,14 +1344,14 @@ CREATE TABLE IF NOT EXISTS vendors (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_vendor_org_name (organization_id, name),
     INDEX idx_vendor_org (organization_id),
-    CONSTRAINT fk_vendor_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_vendor_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_vendor_default_cat FOREIGN KEY (default_category_id) REFERENCES expense_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- RECEIPTS
 CREATE TABLE IF NOT EXISTS receipts (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     store_id INT NULL,
     client_id INT NULL,
     project_id INT NULL,
@@ -1370,7 +1370,7 @@ CREATE TABLE IF NOT EXISTS receipts (
     INDEX idx_receipt_client (client_id),
     INDEX idx_receipt_project (project_id),
     INDEX idx_receipt_date (receipt_date),
-    CONSTRAINT fk_receipts_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_receipts_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_receipts_store FOREIGN KEY (store_id) REFERENCES vendors(id) ON DELETE SET NULL,
     CONSTRAINT fk_receipts_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_receipts_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
@@ -1380,7 +1380,7 @@ CREATE TABLE IF NOT EXISTS receipts (
 -- EXPENSES
 CREATE TABLE IF NOT EXISTS expenses (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     vendor_id INT NULL DEFAULT NULL,
     category_id INT NULL DEFAULT NULL,
     client_id INT NULL DEFAULT NULL,
@@ -1410,7 +1410,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     INDEX idx_exp_date (expense_date),
     INDEX idx_exp_status (status),
     INDEX idx_exp_billable (is_billable),
-    CONSTRAINT fk_exp_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_exp_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_vendor FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_category FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
@@ -1422,7 +1422,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 -- FINANCIAL ASSETS
 CREATE TABLE IF NOT EXISTS financial_assets (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     vendor_id INT NULL DEFAULT NULL,
     category_id INT NULL DEFAULT NULL,
     expense_id INT NULL DEFAULT NULL,
@@ -1452,7 +1452,7 @@ CREATE TABLE IF NOT EXISTS financial_assets (
     INDEX idx_fin_asset_expense (expense_id),
     INDEX idx_fin_asset_status (status),
     INDEX idx_fin_asset_purchase_date (purchase_date),
-    CONSTRAINT fk_fin_asset_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_fin_asset_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_fin_asset_vendor FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE SET NULL,
     CONSTRAINT fk_fin_asset_category FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
     CONSTRAINT fk_fin_asset_expense FOREIGN KEY (expense_id) REFERENCES expenses(id) ON DELETE SET NULL,
@@ -1495,7 +1495,7 @@ CREATE TABLE IF NOT EXISTS time_entries (
 -- MILEAGE LOGS
 CREATE TABLE IF NOT EXISTS mileage_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     user_id INT NULL DEFAULT NULL,
     client_id INT NULL DEFAULT NULL,
     project_id INT NULL DEFAULT NULL,
@@ -1514,7 +1514,7 @@ CREATE TABLE IF NOT EXISTS mileage_logs (
     INDEX idx_mileage_date (trip_date),
     INDEX idx_mileage_client (client_id),
     INDEX idx_mileage_purpose (purpose),
-    CONSTRAINT fk_mileage_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_mileage_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
@@ -1523,7 +1523,7 @@ CREATE TABLE IF NOT EXISTS mileage_logs (
 -- FORM CATEGORIES
 CREATE TABLE IF NOT EXISTS form_categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     title VARCHAR(255) NOT NULL,
     type ENUM('file', 'folder') NOT NULL DEFAULT 'folder',
     description TEXT NULL,
@@ -1532,14 +1532,14 @@ CREATE TABLE IF NOT EXISTS form_categories (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_form_cat_org (organization_id),
     INDEX idx_form_cat_type (type),
-    CONSTRAINT fk_form_cat_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_form_cat_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_form_cat_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- FORM DOCUMENTS
 CREATE TABLE IF NOT EXISTS form_documents (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
+    organization_id INT NULL DEFAULT NULL,
     category_id INT NULL,
     client_id INT NULL,
     project_id INT NULL,
@@ -1557,7 +1557,7 @@ CREATE TABLE IF NOT EXISTS form_documents (
     INDEX idx_form_doc_category (category_id),
     INDEX idx_form_doc_client (client_id),
     INDEX idx_form_doc_project (project_id),
-    CONSTRAINT fk_form_docs_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_form_docs_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_form_docs_category FOREIGN KEY (category_id) REFERENCES form_categories(id) ON DELETE CASCADE,
     CONSTRAINT fk_form_docs_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_form_docs_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,

@@ -13,7 +13,7 @@ $where[] = 'c.name LIKE ?';
 $params = ['%'.$term.'%'];
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-$activeOrgId = get_active_org_id();
+$activeOrgId = request_client_org_id();
 $isAdmin = (($_SESSION['user']['role'] ?? '') === 'admin');
 if (!$isAdmin) {
     if ($activeOrgId > 0) {

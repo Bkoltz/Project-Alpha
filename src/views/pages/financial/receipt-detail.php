@@ -5,12 +5,12 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $receiptId = (int)($_GET['id'] ?? 0);
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Get existing stores for edit modal
-$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
-$storeStmt->execute([$orgId]);
+$storeStmt = $pdo->prepare('SELECT DISTINCT name FROM vendors ORDER BY name');
+$storeStmt->execute();
 $stores = $storeStmt->fetchAll(PDO::FETCH_COLUMN);
 
 if (!$receiptId) {

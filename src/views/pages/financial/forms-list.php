@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 
 // Fetch all form categories with their documents and counts
 $stmt = $pdo->prepare('
@@ -28,10 +28,9 @@ $stmt = $pdo->prepare('
         GROUP BY category_id
     ) fdc ON fdc.category_id = fc.id
     LEFT JOIN form_documents fd ON fd.id = fdc.latest_doc_id
-    WHERE fc.organization_id = ?
     ORDER BY fc.created_at DESC
 ');
-$stmt->execute([$orgId]);
+$stmt->execute();
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 

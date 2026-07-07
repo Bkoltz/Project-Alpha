@@ -19,10 +19,11 @@ if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
 
 $stmt = $pdo->prepare(
     'SELECT r.*,p.payment_date,p.payment_method,p.reference_number,
-            i.doc_number,c.name AS client_name,c.email AS client_email
+            i.doc_number,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS client_email
      FROM payment_receipts r
      JOIN payments p ON p.id=r.payment_id
-     JOIN clients c ON c.id=p.client_id
+     LEFT JOIN clients c ON c.id=p.client_id
+     LEFT JOIN processor_payment_transactions ppt ON ppt.payment_id=p.id
      LEFT JOIN invoices i ON i.id=r.invoice_id
      WHERE r.public_token=?'
 );
@@ -51,7 +52,7 @@ $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
   <main class="receipt">
     <div class="top"><div><div class="label">Receipt</div><h1><?php echo htmlspecialchars($receipt['receipt_number']); ?></h1><div><?php echo htmlspecialchars($brand); ?></div></div><div><div class="label">Amount received</div><div class="amount">$<?php echo number_format((float)$receipt['amount'], 2); ?></div></div></div>
     <div class="grid">
-      <div><div class="label">Received from</div><div class="value"><?php echo htmlspecialchars($receipt['client_name']); ?></div><div><?php echo htmlspecialchars((string)$receipt['client_email']); ?></div></div>
+      <div><div class="label">Received from</div><div class="value"><?php echo htmlspecialchars($receipt['client_name'] ?: 'Processor payment'); ?></div><div><?php echo htmlspecialchars((string)$receipt['client_email']); ?></div></div>
       <div><div class="label">Payment date</div><div class="value"><?php echo htmlspecialchars(date('F j, Y', strtotime((string)$receipt['payment_date']))); ?></div></div>
       <div><div class="label">Invoice</div><div class="value"><?php echo !empty($receipt['doc_number']) ? 'I-' . htmlspecialchars((string)$receipt['doc_number']) : 'Not linked'; ?></div></div>
       <div><div class="label">Payment method</div><div class="value"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string)$receipt['payment_method']))); ?></div></div>

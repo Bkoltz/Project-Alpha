@@ -5,10 +5,16 @@ Project Alpha uses Stripe webhooks to record online payments and reconcile invoi
 ## Endpoint
 
 ```text
-https://YOUR_PROJECT_ALPHA_HOST/?page=stripe-webhook
+https://YOUR_PROJECT_ALPHA_HOST/stripe-webhook
 ```
 
 The endpoint must be reachable over HTTPS from Stripe. Do not use the legacy endpoint for new installations.
+
+For older deployments that do not yet include the clean-path rewrite, use this equivalent fallback endpoint:
+
+```text
+https://YOUR_PROJECT_ALPHA_HOST/?page=stripe-webhook
+```
 
 ## Events
 
@@ -85,14 +91,17 @@ Send duplicate test events and confirm they do not create duplicate payment reco
 ## Troubleshooting
 
 1. Confirm the endpoint URL and HTTPS certificate.
-2. Confirm test/live mode matches the configured keys.
-3. Confirm the webhook signing secret belongs to this exact endpoint.
-4. Review Stripe delivery attempts and response codes.
-5. Review Project Alpha webhook and system logs.
-6. Run reconciliation manually if a successful payment was missed:
+2. If `/stripe-webhook` returns `404`, either deploy an image with the clean-path rewrite or temporarily configure Stripe to use `/?page=stripe-webhook`.
+3. Confirm test/live mode matches the configured keys.
+4. Confirm the webhook signing secret belongs to this exact endpoint.
+5. Review Stripe delivery attempts and response codes.
+6. Review Project Alpha webhook and system logs.
+7. Run reconciliation manually if a successful payment was missed:
 
    ```bash
    docker compose exec cron php /var/www/src/cron/stripe_reconciliation.php
    ```
+
+The cron service also runs `stripe_reconciliation.php` every 6 hours, which is intentionally more frequent than a daily safety net.
 
 Never include Stripe secrets or full event payloads containing customer data in a public issue.

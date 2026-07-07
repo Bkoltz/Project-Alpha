@@ -6,20 +6,20 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
 // Fetch filter options
-$catStmt = $pdo->prepare('SELECT id, name FROM expense_categories WHERE organization_id=? ORDER BY name');
-$catStmt->execute([$orgId]);
+$catStmt = $pdo->prepare('SELECT id, name FROM expense_categories ORDER BY name');
+$catStmt->execute();
 $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$vendorStmt = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id=? AND is_active=1 ORDER BY name');
-$vendorStmt->execute([$orgId]);
+$vendorStmt = $pdo->prepare('SELECT id, name FROM vendors WHERE is_active=1 ORDER BY name');
+$vendorStmt->execute();
 $vendors = $vendorStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$clientStmt = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name');
-$clientStmt->execute([$orgId]);
+$clientStmt = $pdo->prepare('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name');
+$clientStmt->execute();
 $clients = $clientStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Filters
@@ -116,8 +116,8 @@ $detailStmt = $pdo->prepare("
 $detailStmt->execute($params);
 $details = $detailStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$scheduleStmt = $pdo->prepare('SELECT * FROM audit_schedules WHERE organization_id=? AND report_type="expense" ORDER BY created_at DESC');
-$scheduleStmt->execute([$orgId]);
+$scheduleStmt = $pdo->prepare('SELECT * FROM audit_schedules WHERE (organization_id IS NULL OR organization_id = 0) AND report_type="expense" ORDER BY created_at DESC');
+$scheduleStmt->execute();
 $expenseSchedules = $scheduleStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Build export URL with current filters

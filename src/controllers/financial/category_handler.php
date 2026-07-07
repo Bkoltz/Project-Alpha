@@ -49,8 +49,8 @@ if (empty($_SESSION['user']['id'])) {
 }
 
 $userId = (int)$_SESSION['user']['id'];
-$orgId  = active_or_default_org_id($pdo);
-if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
+$orgId  = request_client_org_id();
+if (!user_can($pdo, $userId, 'financial.manage', 0)) {
     $response['message'] = 'Permission denied';
     category_handler_finish($response, 403);
 }
@@ -108,8 +108,8 @@ try {
 
             // Prevent circular parent reference (parent cannot be self)
             if ($parentId !== null) {
-                $parentCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? AND organization_id = ?');
-                $parentCheck->execute([$parentId, $orgId]);
+                $parentCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ?');
+                $parentCheck->execute([$parentId]);
                 if (!$parentCheck->fetch()) {
                     jsonResponse(false, 'Parent category not found');
                 }
@@ -120,7 +120,7 @@ try {
                     (organization_id, name, parent_id, tax_deductible, is_system, color)
                 VALUES (?, ?, ?, ?, 0, ?)
             ');
-            $stmt->execute([$orgId, $name, $parentId, $taxDeductible, $color]);
+            $stmt->execute([$orgId > 0 ? $orgId : null, $name, $parentId, $taxDeductible, $color]);
 
             $categoryId = (int)$pdo->lastInsertId();
             audit_log($pdo, 'expense_category.create', 'expense_category', $categoryId, [
@@ -156,9 +156,9 @@ try {
             $existing = $pdo->prepare('
                 SELECT id, is_system
                 FROM expense_categories
-                WHERE id = ? AND organization_id = ?
+                WHERE id = ?
             ');
-            $existing->execute([$id, $orgId]);
+            $existing->execute([$id]);
             $category = $existing->fetch();
             if (!$category) {
                 jsonResponse(false, 'Category not found');
@@ -171,8 +171,8 @@ try {
                 jsonResponse(false, 'A category cannot be its own parent');
             }
             if ($parentId !== null) {
-                $parentCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? AND organization_id = ?');
-                $parentCheck->execute([$parentId, $orgId]);
+                $parentCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ?');
+                $parentCheck->execute([$parentId]);
                 if (!$parentCheck->fetch()) {
                     jsonResponse(false, 'Parent category not found');
                 }
@@ -183,16 +183,16 @@ try {
                 $stmt = $pdo->prepare('
                     UPDATE expense_categories
                     SET name = ?, color = ?, updated_at = NOW()
-                    WHERE id = ? AND organization_id = ?
+                    WHERE id = ?
                 ');
-                $stmt->execute([$name, $color, $id, $orgId]);
+                $stmt->execute([$name, $color, $id]);
             } else {
                 $stmt = $pdo->prepare('
                     UPDATE expense_categories
                     SET name = ?, parent_id = ?, tax_deductible = ?, color = ?, updated_at = NOW()
-                    WHERE id = ? AND organization_id = ?
+                    WHERE id = ?
                 ');
-                $stmt->execute([$name, $parentId, $taxDeductible, $color, $id, $orgId]);
+                $stmt->execute([$name, $parentId, $taxDeductible, $color, $id]);
             }
 
             audit_log($pdo, 'expense_category.update', 'expense_category', $id, [
@@ -213,9 +213,9 @@ try {
             $existing = $pdo->prepare('
                 SELECT id, is_system, name
                 FROM expense_categories
-                WHERE id = ? AND organization_id = ?
+                WHERE id = ?
             ');
-            $existing->execute([$id, $orgId]);
+            $existing->execute([$id]);
             $category = $existing->fetch();
             if (!$category) {
                 jsonResponse(false, 'Category not found');
@@ -231,20 +231,20 @@ try {
                 SET parent_id = (
                     SELECT parent_id FROM (SELECT parent_id FROM expense_categories WHERE id = ?) AS tmp
                 ), updated_at = NOW()
-                WHERE parent_id = ? AND organization_id = ?
+                WHERE parent_id = ?
             ');
-            $childStmt->execute([$id, $id, $orgId]);
+            $childStmt->execute([$id, $id]);
 
             // Reassign expenses referencing this category to null
             $expenseStmt = $pdo->prepare('
                 UPDATE expenses
                 SET category_id = NULL, updated_at = NOW()
-                WHERE category_id = ? AND organization_id = ?
+                WHERE category_id = ?
             ');
-            $expenseStmt->execute([$id, $orgId]);
+            $expenseStmt->execute([$id]);
 
-            $deleteStmt = $pdo->prepare('DELETE FROM expense_categories WHERE id = ? AND organization_id = ?');
-            $deleteStmt->execute([$id, $orgId]);
+            $deleteStmt = $pdo->prepare('DELETE FROM expense_categories WHERE id = ?');
+            $deleteStmt->execute([$id]);
 
             audit_log($pdo, 'expense_category.delete', 'expense_category', $id, [
                 'organization_id' => $orgId,
@@ -259,8 +259,8 @@ try {
                 jsonResponse(false, 'Invalid category ID');
             }
 
-            $existing = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? AND organization_id = ?');
-            $existing->execute([$id, $orgId]);
+            $existing = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ?');
+            $existing->execute([$id]);
             if (!$existing->fetch()) {
                 jsonResponse(false, 'Category not found');
             }
@@ -272,16 +272,16 @@ try {
             $childStmt = $pdo->prepare('
                 UPDATE expense_categories
                 SET parent_id = NULL, updated_at = NOW()
-                WHERE parent_id = ? AND organization_id = ?
+                WHERE parent_id = ?
             ');
-            $childStmt->execute([$id, $orgId]);
+            $childStmt->execute([$id]);
 
             $expenseStmt = $pdo->prepare('
                 UPDATE expenses
                 SET category_id = NULL, updated_at = NOW()
-                WHERE category_id = ? AND organization_id = ?
+                WHERE category_id = ?
             ');
-            $expenseStmt->execute([$id, $orgId]);
+            $expenseStmt->execute([$id]);
 
             audit_log($pdo, 'expense_category.deactivate', 'expense_category', $id, [
                 'organization_id' => $orgId,

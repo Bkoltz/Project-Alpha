@@ -3,6 +3,12 @@
     RewriteEngine On
     RewriteCond %{HTTP:Authorization} ^(.+)$
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+
+    # Stripe webhook endpoints. Stripe cannot send query-string routes reliably
+    # when the endpoint is configured as a clean path, so map both public paths
+    # to the existing front-controller routes.
+    RewriteRule ^stripe-webhook/?$ index.php?page=stripe-webhook [QSA,L]
+    RewriteRule ^stripe-webhook-legacy/?$ index.php?page=stripe-webhook-legacy [QSA,L]
 </IfModule>
 <IfModule mod_setenvif.c>
     SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1

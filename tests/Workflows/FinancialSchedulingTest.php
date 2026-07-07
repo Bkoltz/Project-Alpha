@@ -20,11 +20,12 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString('filters JSON', (string)$baseline);
     }
 
-    public function testScheduleHandlerScopesMutationsToActiveOrganization(): void
+    public function testScheduleHandlerSupportsBusinessWideSchedules(): void
     {
         $handler = file_get_contents($this->root . '/src/controllers/financial/audit_schedule_handler.php');
-        self::assertStringContainsString('get_active_org_id()', (string)$handler);
-        self::assertStringContainsString('id=? AND organization_id=?', (string)$handler);
+        self::assertStringContainsString('request_client_org_id()', (string)$handler);
+        self::assertStringContainsString('$scheduleOrgId = $organizationId > 0 ? $organizationId : null;', (string)$handler);
+        self::assertStringContainsString('SELECT report_type FROM audit_schedules WHERE id=?', (string)$handler);
         self::assertStringContainsString('$requestedType === \'expense\'', (string)$handler);
     }
 

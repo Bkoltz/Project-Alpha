@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/client_onboarding.php';
 
-$organizationId = get_active_org_id();
+$organizationId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId <= 0) {
     header('Location: /?page=client/onboarding&error=' . urlencode('Sign in before creating an invitation.'));

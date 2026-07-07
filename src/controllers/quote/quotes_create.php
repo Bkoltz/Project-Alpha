@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 
-$__orgId = get_active_org_id() ?: null;
+$__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 $client_id = (int)($_POST['client_id'] ?? 0);
@@ -79,6 +79,7 @@ if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_i
     header('Location: /?page=quote/quotes-create&error=' . urlencode('Select an active or not-started project for this client or organization.'));
     exit;
 }
+$__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
 
 // Items are required for regular quotes, on-demand itemized quotes, and long-term fixed totals.
 // Items are optional for long-term per-invoice pricing and on-demand flat pricing.

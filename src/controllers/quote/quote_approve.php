@@ -28,12 +28,9 @@ try {
   // Resolve creator + organization for derived records
   if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
   $fallbackUserId = (int)($_SESSION['user']['id'] ?? 0) ?: 1;
-  $fallbackOrgId  = (int)(get_active_org_id() ?: 0);
-  if (!$fallbackOrgId) {
-    $fallbackOrgId = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
-  }
+  $fallbackOrgId  = request_client_org_id() ?: null;
   $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
-  $quoteOrgId   = (int)($quote['organization_id'] ?? 0) ?: $fallbackOrgId;
+  $quoteOrgId   = !empty($quote['organization_id']) ? (int)$quote['organization_id'] : $fallbackOrgId;
 
   if ($quote['status'] !== 'pending') throw new Exception('Quote not pending');
   $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');

@@ -71,7 +71,23 @@ function invoice_ensure_payments_schema(PDO $pdo): void
         'reference_number' => 'VARCHAR(255) NULL AFTER payment_date',
         'notes' => 'TEXT NULL AFTER reference_number',
         'status' => "VARCHAR(32) NOT NULL DEFAULT 'succeeded'",
+        'processor_provider' => 'VARCHAR(50) NULL AFTER payment_method',
+        'processor_payment_id' => 'VARCHAR(255) NULL AFTER processor_provider',
+        'processor_transaction_id' => 'BIGINT NULL AFTER processor_payment_id',
+        'processor_gross_amount' => 'DECIMAL(12,2) NULL AFTER processor_transaction_id',
+        'processor_fee_amount' => 'DECIMAL(12,2) NULL AFTER processor_gross_amount',
     ];
+
+    try {
+        $pdo->exec('ALTER TABLE payments MODIFY COLUMN client_id INT NULL');
+    } catch (Throwable $e) {
+        @error_log('[invoice_lifecycle] Failed to relax payments.client_id: ' . $e->getMessage());
+    }
+    try {
+        $pdo->exec("ALTER TABLE payments MODIFY COLUMN payment_method VARCHAR(50) NOT NULL DEFAULT 'cash'");
+    } catch (Throwable $e) {
+        @error_log('[invoice_lifecycle] Failed to widen payments.payment_method: ' . $e->getMessage());
+    }
 
     foreach ($columns as $column => $definition) {
         if (!invoice_table_has_column($pdo, 'payments', $column)) {
@@ -81,6 +97,15 @@ function invoice_ensure_payments_schema(PDO $pdo): void
                 @error_log('[invoice_lifecycle] Failed to repair payments.' . $column . ': ' . $e->getMessage());
             }
         }
+    }
+
+    try {
+        $pdo->exec('CREATE UNIQUE INDEX uq_payments_processor_payment ON payments (processor_provider, processor_payment_id)');
+    } catch (Throwable $e) {
+    }
+    try {
+        $pdo->exec('CREATE INDEX idx_payments_processor_transaction ON payments (processor_transaction_id)');
+    } catch (Throwable $e) {
     }
 
     $done = true;

@@ -14,13 +14,125 @@ $action = $_POST['action'] ?? '';
 $backupsDir = '/var/www/backups';
 $settingsUrl = '/?page=settings&tab=backup';
 
+function backup_run_php_script(string $script): array
+{
+    $output = [];
+    $returnCode = 1;
+    $process = proc_open(
+        [PHP_BINARY, $script],
+        [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ],
+        $pipes
+    );
+
+    if (!is_resource($process)) {
+        return [['Could not start backup process.'], 1];
+    }
+
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $returnCode = proc_close($process);
+    $combined = trim((string)$stdout . "\n" . (string)$stderr);
+    if ($combined !== '') {
+        $output = preg_split('/\r\n|\r|\n/', $combined) ?: [];
+    }
+
+    return [$output, $returnCode];
+}
+
+function backup_restore_database_stream(string $databaseSource, string $host, string $port, string $user, string $password, string $database): array
+{
+    $command = ['mysql', '-h', $host, '-P', $port, '-u', $user, $database];
+    $previousPassword = getenv('MYSQL_PWD');
+    if ($password !== '') {
+        putenv('MYSQL_PWD=' . $password);
+    } else {
+        putenv('MYSQL_PWD');
+    }
+
+    $process = proc_open(
+        $command,
+        [
+            0 => ['pipe', 'w'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ],
+        $pipes
+    );
+
+    if (!is_resource($process)) {
+        if ($previousPassword === false) {
+            putenv('MYSQL_PWD');
+        } else {
+            putenv('MYSQL_PWD=' . $previousPassword);
+        }
+        return [['Could not start mysql restore process.'], 1];
+    }
+
+    $returnCode = 1;
+    try {
+        $isGzip = str_ends_with(strtolower($databaseSource), '.gz');
+        $input = $isGzip ? gzopen($databaseSource, 'rb') : fopen($databaseSource, 'rb');
+        if (!$input) {
+            throw new RuntimeException('Could not open database backup for restore.');
+        }
+
+        try {
+            while ($isGzip ? !gzeof($input) : !feof($input)) {
+                $chunk = $isGzip ? gzread($input, 1024 * 1024) : fread($input, 1024 * 1024);
+                if ($chunk === false) {
+                    throw new RuntimeException('Could not read database backup during restore.');
+                }
+                if ($chunk === '') {
+                    continue;
+                }
+                $offset = 0;
+                $length = strlen($chunk);
+                while ($offset < $length) {
+                    $written = fwrite($pipes[0], substr($chunk, $offset));
+                    if ($written === false || $written === 0) {
+                        throw new RuntimeException('Could not stream database backup to mysql.');
+                    }
+                    $offset += $written;
+                }
+            }
+        } finally {
+            $isGzip ? gzclose($input) : fclose($input);
+        }
+        fclose($pipes[0]);
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $returnCode = proc_close($process);
+        $combined = trim((string)$stdout . "\n" . (string)$stderr);
+        return [$combined !== '' ? (preg_split('/\r\n|\r|\n/', $combined) ?: []) : [], $returnCode];
+    } catch (Throwable $e) {
+        fclose($pipes[0]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_terminate($process);
+        proc_close($process);
+        return [[$e->getMessage()], $returnCode];
+    } finally {
+        if ($previousPassword === false) {
+            putenv('MYSQL_PWD');
+        } else {
+            putenv('MYSQL_PWD=' . $previousPassword);
+        }
+    }
+}
+
 switch ($action) {
     case 'backup_now':
-        // Run the backup script
-        $output = [];
-        $returnCode = 0;
         $backupScript = __DIR__ . '/../cron/backup_database.php';
-        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($backupScript) . ' 2>&1', $output, $returnCode);
+        [$output, $returnCode] = backup_run_php_script($backupScript);
         if ($returnCode === 0) {
             $_SESSION['flash_backup'] = [
                 'type' => 'success',
@@ -110,10 +222,8 @@ switch ($action) {
         }
 
         // Create emergency backup before restore
-        $backupOutput = [];
-        $backupCode = 0;
         $backupScript = __DIR__ . '/../cron/backup_database.php';
-        exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($backupScript) . ' 2>&1', $backupOutput, $backupCode);
+        [$backupOutput, $backupCode] = backup_run_php_script($backupScript);
         if ($backupCode !== 0) {
             $_SESSION['flash_backup'] = ['type' => 'error', 'message' => 'Restore stopped because the pre-restore backup failed.'];
             header('Location: ' . $settingsUrl);
@@ -141,31 +251,8 @@ switch ($action) {
         $user = getenv('MYSQL_USER') ?: 'root';
         $pass = getenv('MYSQL_PASSWORD') ?: getenv('MYSQL_ROOT_PASSWORD') ?: '';
         $host = getenv('DB_HOST') ?: 'db';
-
-        $cmd = '';
-        if (pathinfo($databaseSource, PATHINFO_EXTENSION) === 'gz') {
-            $cmd = sprintf(
-                'gunzip -c %s | mysql -h%s -u%s -p%s %s 2>&1',
-                escapeshellarg($databaseSource),
-                escapeshellarg($host),
-                escapeshellarg($user),
-                escapeshellarg($pass),
-                escapeshellarg($db)
-            );
-        } else {
-            $cmd = sprintf(
-                'mysql -h%s -u%s -p%s %s < %s 2>&1',
-                escapeshellarg($host),
-                escapeshellarg($user),
-                escapeshellarg($pass),
-                escapeshellarg($db),
-                escapeshellarg($databaseSource)
-            );
-        }
-
-        $output = [];
-        $returnCode = 0;
-        exec($cmd, $output, $returnCode);
+        $port = getenv('DB_PORT') ?: '3306';
+        [$output, $returnCode] = backup_restore_database_stream($databaseSource, $host, $port, $user, $pass, $db);
 
         if ($returnCode === 0 && !empty($restoreSource['full']) && $restoreSource['zip'] instanceof ZipArchive) {
             try {

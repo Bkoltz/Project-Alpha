@@ -13,7 +13,7 @@ function two_factor_enabled_for_user(PDO $pdo, int $userId): bool
     }
 }
 
-function two_factor_required_for_user(PDO $pdo, int $userId, ?int $activeOrgId = null): bool
+function two_factor_required_for_user(PDO $pdo, int $userId, ?int $organizationId = null): bool
 {
     if ($userId <= 0) {
         return false;
@@ -23,7 +23,6 @@ function two_factor_required_for_user(PDO $pdo, int $userId, ?int $activeOrgId =
         return true;
     }
 
-    $activeOrgId = $activeOrgId ?: get_active_org_id();
     $privilegedPermissions = [
         'settings.manage',
         'users.manage',
@@ -33,7 +32,7 @@ function two_factor_required_for_user(PDO $pdo, int $userId, ?int $activeOrgId =
         'financial.manage',
     ];
     foreach ($privilegedPermissions as $permission) {
-        if (user_can($pdo, $userId, $permission, $activeOrgId)) {
+        if (user_can($pdo, $userId, $permission, 0)) {
             return true;
         }
     }
