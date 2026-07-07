@@ -15,7 +15,7 @@ final class ProcessorImportTest extends TestCase
 
     public function testProcessorImportMigrationAddsGenericSchema(): void
     {
-        $sql = $this->read('database/migrations/0015_processor_payment_imports.sql');
+        $sql = $this->read('database/migrations/0016_processor_payment_imports.sql');
 
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS processor_payment_transactions', $sql);
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS processor_webhook_events', $sql);
