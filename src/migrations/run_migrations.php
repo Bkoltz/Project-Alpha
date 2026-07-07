@@ -75,6 +75,58 @@ function create_required_migration_backup(): string
     return $archive;
 }
 
+function migration_lock_retry_attempts(): int
+{
+    $configured = (int)(getenv('MIGRATION_LOCK_RETRY_ATTEMPTS') ?: 6);
+    return max(1, min(20, $configured));
+}
+
+function migration_lock_retry_delay_ms(int $attempt): int
+{
+    $baseMs = (int)(getenv('MIGRATION_LOCK_RETRY_BASE_MS') ?: 250);
+    $baseMs = max(50, min(5000, $baseMs));
+    return min(10000, $baseMs * (2 ** max(0, $attempt - 1)));
+}
+
+function migration_is_retryable_lock_failure(Throwable $error): bool
+{
+    if (!$error instanceof PDOException) {
+        return false;
+    }
+
+    $sqlState = (string)$error->getCode();
+    $driverCode = isset($error->errorInfo[1]) ? (int)$error->errorInfo[1] : 0;
+
+    return in_array($sqlState, ['40001', 'HY000'], true)
+        && in_array($driverCode, [1205, 1213], true);
+}
+
+function migration_execute_with_lock_retry(callable $operation, string $description)
+{
+    $attempts = migration_lock_retry_attempts();
+    for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+        try {
+            return $operation();
+        } catch (Throwable $error) {
+            if ($attempt >= $attempts || !migration_is_retryable_lock_failure($error)) {
+                throw $error;
+            }
+
+            $delayMs = migration_lock_retry_delay_ms($attempt);
+            fwrite(STDERR, sprintf(
+                "Retrying %s after transient MySQL lock failure (%s/%s): %s\n",
+                $description,
+                $attempt,
+                $attempts,
+                $error->getMessage()
+            ));
+            usleep($delayMs * 1000);
+        }
+    }
+
+    throw new RuntimeException("Could not complete {$description}.");
+}
+
 try {
     $arguments = $argv ?? [];
     $dryRun = in_array('--dry-run', $arguments, true);
@@ -112,7 +164,10 @@ try {
     foreach ($pending as $file) {
         $sql = file_get_contents($file['path']);
         foreach (migration_statements((string) $sql) as $statement) {
-            $result = $pdo->query($statement);
+            $result = migration_execute_with_lock_retry(
+                static fn() => $pdo->query($statement),
+                $file['filename']
+            );
             if ($result !== false) {
                 $result->closeCursor();
             }
@@ -120,7 +175,10 @@ try {
         $record = $pdo->prepare(
             'INSERT INTO schema_migrations (version, filename, checksum) VALUES (?, ?, ?)'
         );
-        $record->execute([$file['version'], $file['filename'], $file['checksum']]);
+        migration_execute_with_lock_retry(
+            static fn() => $record->execute([$file['version'], $file['filename'], $file['checksum']]),
+            $file['filename'] . ' ledger insert'
+        );
         if ($verbose) {
             fwrite(STDOUT, "Applied {$file['filename']}.\n");
         }
