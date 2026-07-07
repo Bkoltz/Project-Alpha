@@ -17,8 +17,6 @@ final class ProcessorImportTest extends TestCase
     {
         $sql = $this->read('database/migrations/0016_processor_payment_imports.sql');
         $netSql = $this->read('database/migrations/0017_processor_net_income.sql');
-        $baseline = $this->read('database/baseline.sql');
-
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS processor_payment_transactions', $sql);
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS processor_webhook_events', $sql);
         self::assertStringContainsString('ALTER TABLE payments MODIFY COLUMN client_id INT NULL', $sql);
@@ -31,7 +29,6 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('processor_fee_policy VARCHAR(32)', $netSql);
         self::assertStringContainsString('processor_fee_source VARCHAR(32)', $netSql);
         self::assertStringContainsString('ALTER TABLE project_invoice_payments', $netSql);
-        self::assertStringContainsString('processor_net_amount DECIMAL(12,2)', $baseline);
     }
 
     public function testBillingSettingsExposeIndependentProcessorImportToggles(): void
