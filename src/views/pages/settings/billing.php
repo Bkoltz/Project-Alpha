@@ -58,7 +58,10 @@ $stripeImportToday = date('Y-m-d');
   </label>
 </fieldset>
 
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+<details style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <summary style="cursor:pointer;font-weight:600;color:#111827">Advanced</summary>
+  <div style="margin-top:14px">
+  <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
   <legend style="padding:0 6px;color:var(--muted)">Processor Imports</legend>
   <?php if (!empty($_GET['stripe_net_backfill'])): ?>
     <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0"><?php echo htmlspecialchars((string)$_GET['stripe_net_backfill']); ?></div>
@@ -110,7 +113,9 @@ $stripeImportToday = date('Y-m-d');
       <button type="submit" formaction="/?page=settings/stripe-net-backfill" formmethod="post" style="padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-weight:600">Backfill Stripe Net Income</button>
     </div>
   </div>
-</fieldset>
+  </fieldset>
+  </div>
+</details>
 
 <!-- <div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:14px">
   <strong>💡 Looking for Tax Rates?</strong>

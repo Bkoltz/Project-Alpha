@@ -220,6 +220,9 @@ final class SecurityHardeningTest extends TestCase
         $auth = $this->read('src/utils/api_auth.php');
         $scopes = $this->read('src/utils/api_scopes.php');
         $view = $this->read('src/views/pages/api-keys.php');
+        $newView = $this->read('src/views/pages/api-keys-new.php');
+        $editView = $this->read('src/views/pages/api-keys-edit.php');
+        $sharedView = $this->read('src/views/pages/api_keys_shared.php');
         $create = $this->read('src/controllers/api_keys_create.php');
         $update = $this->read('src/controllers/api_keys_update.php');
         $acl = $this->read('src/utils/acl_middleware.php');
@@ -242,14 +245,53 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString("['read', 'write', 'read.write', 'read_write']", $scopes);
         self::assertStringContainsString("['*', 'all', 'admin', 'full_access', 'full-access']", $scopes);
 
-        self::assertStringContainsString('api_scope_options_for_form()', $view);
-        self::assertStringContainsString('api_keys_scope_checkboxes', $view);
-        self::assertStringContainsString('/?page=api-keys-update', $view);
+        self::assertStringContainsString('api_keys_shared.php', $view);
+        self::assertStringContainsString('api_scope_options_for_form()', $newView);
+        self::assertStringContainsString('api_scope_options_for_form()', $editView);
+        self::assertStringContainsString('api_keys_scope_checkboxes', $sharedView);
+        self::assertStringContainsString('/?page=api-keys-update', $editView);
+        self::assertStringContainsString('/?page=api-keys-edit&amp;id=', $view);
         self::assertStringContainsString('pa_api_keys_existing_columns($pdo)', $view);
         self::assertStringContainsString('api_scopes_to_storage($scopes)', $create);
         self::assertStringContainsString('api_scopes_to_storage($scopes)', $update);
+        self::assertStringContainsString("'api-keys-new'", $acl);
+        self::assertStringContainsString("'api-keys-edit'", $acl);
         self::assertStringContainsString("'api-keys-update'", $acl);
         self::assertStringContainsString("'api-keys-update'", $audit);
+    }
+
+    public function testPublicLinkUploadsAndTextInputsAreHardened(): void
+    {
+        $billing = $this->read('src/views/pages/settings/billing.php');
+        self::assertStringContainsString('<summary style="cursor:pointer;font-weight:600;color:#111827">Advanced</summary>', $billing);
+        self::assertStringContainsString('Processor Imports', $billing);
+
+        $uploadValidator = $this->read('src/utils/upload_validator.php');
+        self::assertStringContainsString('array $options = []', $uploadValidator);
+        self::assertStringContainsString('function upload_looks_like_archive', $uploadValidator);
+        self::assertStringContainsString('function validate_image_upload_shape', $uploadValidator);
+        self::assertStringContainsString('function validate_pdf_upload_content', $uploadValidator);
+        self::assertStringContainsString('Virus scanning is required but not configured', $uploadValidator);
+        self::assertStringContainsString('scan_clamav(string $filepath, bool $required = false)', $uploadValidator);
+
+        foreach ([
+            'src/controllers/public_view/public_contract_sign.php',
+            'src/controllers/public_view/public_contract_action.php',
+        ] as $path) {
+            $controller = $this->read($path);
+            self::assertStringContainsString('reject_archives', $controller);
+            self::assertStringContainsString('reject_pdf_active_content', $controller);
+            self::assertStringContainsString('PUBLIC_UPLOAD_CLAMAV_REQUIRED', $controller);
+            self::assertStringContainsString("preg_match('/^[a-f0-9]{32,64}$/", $controller);
+        }
+        self::assertStringContainsString('max_image_pixels', $this->read('src/controllers/public_view/public_contract_sign.php'));
+
+        $onboarding = $this->read('src/utils/client_onboarding.php');
+        self::assertStringContainsString('strip_tags($value)', $onboarding);
+        self::assertStringContainsString('/[^\\P{C}\\t\\r\\n]/u', $onboarding);
+
+        $publicDoc = $this->read('src/views/public/doc-wrapper.php');
+        self::assertStringContainsString('accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/gif,.gif,image/webp,.webp"', $publicDoc);
     }
 
     public function testMigrationRunnerRetriesTransientMysqlLockFailures(): void

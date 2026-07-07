@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_selection.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
-$co = $pdo->prepare('SELECT * FROM contracts WHERE id=?');
+$co = $pdo->prepare('SELECT co.*, c.name AS client_name FROM contracts co LEFT JOIN clients c ON c.id = co.client_id WHERE co.id=?');
 $co->execute([$id]);
 $contract = $co->fetch(PDO::FETCH_ASSOC);
 if (!$contract) {
@@ -17,7 +17,6 @@ if (!$contract) {
 $items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
-$clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 $projectOptions = [];
 if (!empty($contract['client_id'])) {
   try {
@@ -67,11 +66,12 @@ try {
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
       <label>
         <div>Client</div>
-        <select required name="client_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <?php foreach ($clients as $c): ?>
-            <option value="<?php echo (int)$c['id']; ?>" <?php echo (int)$contract['client_id'] === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
-          <?php endforeach; ?>
-        </select>
+        <div style="position:relative">
+          <input type="hidden" name="client_id" id="contractEditClientId" value="<?php echo (int)($contract['client_id'] ?? 0); ?>">
+          <input type="text" id="contractEditClientSearch" value="<?php echo htmlspecialchars($contract['client_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="Type a client name or email..." autocomplete="off" required style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <div id="contractEditClientSuggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:40;max-height:220px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 12px 24px rgba(15,23,42,.12)"></div>
+        </div>
+        <small style="display:block;margin-top:6px;color:var(--muted)">Start typing, then choose the matching client.</small>
       </label>
       <label>
         <div>Tax (%)</div>
@@ -79,7 +79,7 @@ try {
       </label>
       <label>
         <div>Project</div>
-        <select name="project_id" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <select name="project_id" id="contractEditProjectSelect" data-selected-project-id="<?php echo (int)($contract['project_id'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="">No project</option>
           <?php foreach ($projectOptions as $projectOption): ?>
             <option value="<?php echo (int)$projectOption['id']; ?>" <?php echo (int)($contract['project_id'] ?? 0) === (int)$projectOption['id'] ? 'selected' : ''; ?>>

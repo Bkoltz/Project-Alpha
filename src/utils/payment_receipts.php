@@ -13,7 +13,7 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
     }
 
     $stmt = $pdo->prepare(
-        'SELECT p.id,p.invoice_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
+        'SELECT p.id,p.invoice_id,p.processor_transaction_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
                 i.doc_number,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
          FROM payments p
          LEFT JOIN invoices i ON i.id=p.invoice_id
@@ -24,6 +24,9 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
     $stmt->execute([$paymentId]);
     $payment = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$payment) {
+        return null;
+    }
+    if (empty($payment['invoice_id']) && !empty($payment['processor_transaction_id'])) {
         return null;
     }
 

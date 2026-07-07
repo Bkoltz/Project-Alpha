@@ -27,7 +27,7 @@ if (!csrf_sf_is_valid('public_contract_sign', $submitted)) {
 try {
     $token = isset($_POST['token']) ? (string)$_POST['token'] : '';
     
-    if (empty($token)) {
+    if (empty($token) || preg_match('/^[a-f0-9]{32,64}$/', $token) !== 1) {
         throw new Exception('Missing token');
     }
     
@@ -37,23 +37,6 @@ try {
     }
     
     $file = $_FILES['signed_pdf'];
-    $maxSize = 10 * 1024 * 1024; // 10MB
-    
-    if ($file['size'] > $maxSize) {
-        throw new Exception('File too large (max 10MB)');
-    }
-    
-    // Check file type (PDF or images)
-    $allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mimeType = finfo_file($finfo, $file['tmp_name']);
-    if (PHP_VERSION_ID < 80500) {
-        finfo_close($finfo);
-    }
-    
-    if (!in_array($mimeType, $allowedTypes, true)) {
-        throw new Exception('Invalid file type. Please upload a PDF or image file.');
-    }
     
     // Load and validate public link
     $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
@@ -107,7 +90,14 @@ try {
         $allowedMap,
         10 * 1024 * 1024,
         $uploadDir,
-        $uploadError
+        $uploadError,
+        [
+            'reject_archives' => true,
+            'max_image_pixels' => 40000000,
+            'require_pdf_header' => true,
+            'reject_pdf_active_content' => true,
+            'clamav_required' => filter_var(getenv('PUBLIC_UPLOAD_CLAMAV_REQUIRED') ?: '', FILTER_VALIDATE_BOOLEAN),
+        ]
     );
     if ($filename === null) {
         throw new Exception($uploadError ?: 'Failed to store uploaded file');

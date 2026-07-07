@@ -361,6 +361,8 @@ function updatePageTitle(page) {
         'project/projects-create': 'Create Project',
         'project/projects-edit': 'Edit Project',
         'api-keys': 'API Keys',
+        'api-keys-new': 'New API Key',
+        'api-keys-edit': 'Edit API Key',
         'settings': 'Settings',
         'financial/financial-dashboard': 'Financial Dashboard',
         'financial/expenses-list': 'Assets & Expenses',

@@ -62,6 +62,8 @@ function page_permission_map(): array
 
         // API keys
         'api-keys'          => 'api_keys.manage',
+        'api-keys-new'      => 'api_keys.manage',
+        'api-keys-edit'     => 'api_keys.manage',
         'api-keys-create'   => 'api_keys.manage',
         'api-keys-update'   => 'api_keys.manage',
         'api-keys-revoke'   => 'api_keys.manage',

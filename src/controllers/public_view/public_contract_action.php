@@ -25,14 +25,14 @@ if (!csrf_sf_is_valid('public_contract_action', $submitted)) {
 
 try {
   $token = isset($_POST['token']) ? (string)$_POST['token'] : '';
-  if ($token === '') { throw new Exception('notoken'); }
+  if ($token === '' || preg_match('/^[a-f0-9]{32,64}$/', $token) !== 1) { throw new Exception('notoken'); }
 
   // Validate public link
   $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked FROM public_links WHERE token=? LIMIT 1');
   $st->execute([$token]);
   $row = $st->fetch(PDO::FETCH_ASSOC);
   if (!$row) { throw new Exception('notfound'); }
-  if ((int)$row['revoked'] === 1 || strtotime((string)$row['expires_at']) < time()) { throw new Exception('expired'); }
+  if ((int)$row['revoked'] === 1 || (!empty($row['expires_at']) && strtotime((string)$row['expires_at']) < time())) { throw new Exception('expired'); }
   if ($row['document_type'] !== 'contract') { throw new Exception('badtype'); }
   $cid = (int)$row['document_id'];
 
@@ -42,17 +42,6 @@ try {
     exit;
   }
   $f = $_FILES['signed_pdf'];
-  if (!empty($f['size']) && $f['size'] > 25 * 1024 * 1024) {
-    header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&error=' . urlencode('File too large (max 25 MB)'));
-    exit;
-  }
-  $mime = @mime_content_type($f['tmp_name']);
-  $origName = (string)($f['name'] ?? '');
-  $extOk = preg_match('/\.pdf$/i', $origName) === 1;
-  if ($mime !== 'application/pdf' && !$extOk) {
-    header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&error=' . urlencode('Only PDF files are accepted (must be .pdf)'));
-    exit;
-  }
 
   // Load contract and check allowed status
   $c = $pdo->prepare('SELECT * FROM contracts WHERE id=? FOR UPDATE');
@@ -67,34 +56,49 @@ try {
   }
 
   // Store signed PDF in src/uploads directory (same logic as internal contract_sign)
-  $internal = __DIR__ . '/../../uploads';
-  $name = 'contract_' . $cid . '_signed_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.pdf';
+  $internal = __DIR__ . '/../../uploads/signed_contracts';
+  $uploadError = null;
   $filename = validate_and_store_upload(
       $f,
       ['application/pdf' => 'pdf'],
       25 * 1024 * 1024,
       $internal,
-      $uploadError
+      $uploadError,
+      [
+          'reject_archives' => true,
+          'require_pdf_header' => true,
+          'reject_pdf_active_content' => true,
+          'clamav_required' => filter_var(getenv('PUBLIC_UPLOAD_CLAMAV_REQUIRED') ?: '', FILTER_VALIDATE_BOOLEAN),
+      ]
   );
   if ($filename === null) {
       header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&error=' . urlencode($uploadError ?: 'Failed to store uploaded file'));
       exit;
   }
   $name = $filename;
-  $internalDest = $internal . '/' . $name;
-
-  $publicUrl = '/?page=serve-upload&file=' . rawurlencode($name);
+  $publicUrl = '/?page=serve-upload&file=' . rawurlencode('signed_contracts/' . $name);
 
   // Save path and activate contract
   $pdo->beginTransaction();
   try {
+    $billingStartSql = '';
+    $updateParams = [$publicUrl, 'active'];
     if (pa_long_term_starts_billing_on_upload($contract)) {
-      $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=?, signed_at=NOW(), next_invoice_date=? WHERE id=?')
-          ->execute([$publicUrl, 'active', date('Y-m-d'), $cid]);
-    } else {
-      $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=?, signed_at=NOW() WHERE id=?')
-          ->execute([$publicUrl, 'active', $cid]);
+      $billingStartSql = ', next_invoice_date=?';
+      $updateParams[] = date('Y-m-d');
     }
+    $updateParams[] = $cid;
+    $update = $pdo->prepare("UPDATE contracts SET signed_pdf_path=?, status=?, signed_at=NOW(){$billingStartSql} WHERE id=? AND status='pending' AND (signed_pdf_path IS NULL OR signed_pdf_path='')");
+    $update->execute($updateParams);
+    if ($update->rowCount() !== 1) {
+      $storedFile = $internal . DIRECTORY_SEPARATOR . $name;
+      if (is_file($storedFile)) {
+        @unlink($storedFile);
+      }
+      throw new RuntimeException('Contract cannot be uploaded for current status');
+    }
+    $pdo->prepare('UPDATE public_links SET revoked=1 WHERE token=? AND document_type="contract" AND document_id=? AND revoked=0')
+        ->execute([$token, $cid]);
     $pdo->commit();
   } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();

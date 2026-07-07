@@ -360,6 +360,7 @@ CREATE TABLE IF NOT EXISTS client_onboarding_invitations (
     client_id INT NULL,
     invited_email VARCHAR(255) NULL,
     token_hash CHAR(64) NOT NULL,
+    token_enc TEXT NULL,
     status ENUM('pending','verified','submitted','approved','rejected','revoked','expired') NOT NULL DEFAULT 'pending',
     expires_at DATETIME NOT NULL,
     verification_code_hash VARCHAR(255) NULL,

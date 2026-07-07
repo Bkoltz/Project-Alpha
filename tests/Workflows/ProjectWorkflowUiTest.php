@@ -113,6 +113,7 @@ final class ProjectWorkflowUiTest extends TestCase
         foreach ([$clientCreate, $clientEdit, $clientOnboarding, $orgCreate, $orgEdit, $accountEdit, $systemSettings] as $view) {
             self::assertStringContainsString('Apartment / Suite', (string)$view);
         }
+        self::assertStringContainsString('$client[\'postal_code\'] ?? \'\'', (string)$clientEdit);
         foreach ([$clientCreateController, $clientUpdateController, $orgCreateController, $orgUpdateController] as $controller) {
             self::assertStringContainsString('address_line2', (string)$controller);
         }
@@ -193,12 +194,18 @@ final class ProjectWorkflowUiTest extends TestCase
         $projectSelection = file_get_contents($this->root . '/src/utils/project_selection.php');
         $contractCreate = file_get_contents($this->root . '/src/views/pages/contract/contracts-create.php');
         $contractEdit = file_get_contents($this->root . '/src/views/pages/contract/contracts-edit.php');
+        $contractEditScript = file_get_contents($this->root . '/public/assets/js/contracts-edit-logic.js');
         $contractUpdate = file_get_contents($this->root . '/src/controllers/contract/contracts_update.php');
         $details = file_get_contents($this->root . '/src/views/pages/project/projects-details.php');
 
         self::assertStringContainsString('p.status IN ("active","not_started")', (string)$projectSelection);
         self::assertStringContainsString('p.status IN ("active","not_started")', (string)$contractCreate);
         self::assertStringContainsString('name="project_id"', (string)$contractEdit);
+        self::assertStringContainsString('id="contractEditClientSearch"', (string)$contractEdit);
+        self::assertStringContainsString('id="contractEditClientId"', (string)$contractEdit);
+        self::assertStringNotContainsString('SELECT id, name FROM clients ORDER BY name ASC', (string)$contractEdit);
+        self::assertStringContainsString('/?page=clients-search&term=', (string)$contractEditScript);
+        self::assertStringContainsString('/?page=projects-search&client_id=', (string)$contractEditScript);
         self::assertStringContainsString('pa_project_is_active_for_client($pdo, $project_id, $client_id', (string)$contractUpdate);
         self::assertStringContainsString('project_documents WHERE document_type="contract" AND document_id=?', (string)$contractUpdate);
         self::assertStringContainsString('foreach ($projectClients as $projectClient)', (string)$details);
@@ -311,8 +318,13 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('$sig[\'signer_title\'] ?? \'Client Signature\'', (string)$longTermDetails);
         self::assertStringContainsString('data-remaining=', (string)$paymentView);
         self::assertStringContainsString('name="reference_number"', (string)$paymentView);
+        self::assertStringContainsString('id="manualClientSearch"', (string)$paymentView);
+        self::assertStringContainsString('id="manualClientId"', (string)$paymentView);
+        self::assertStringNotContainsString('id="manualClientSelect"', (string)$paymentView);
         self::assertStringContainsString('reference_number', (string)$paymentController);
         self::assertStringContainsString('referenceLabel.textContent', (string)$paymentScript);
+        self::assertStringContainsString('/?page=clients-search&term=', (string)$paymentScript);
+        self::assertStringContainsString('Choose a client from the search results.', (string)$paymentScript);
     }
 
     public function testLegacyServerSchemaRepairsProtectAjaxPages(): void
@@ -336,7 +348,8 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('bindValue(count($params) + 1, $limit, PDO::PARAM_INT)', (string)$clientsList);
         self::assertStringContainsString('ensure_activity_log_table($pdo)', (string)$notifications);
         self::assertStringContainsString('PHP_VERSION_ID < 80500', (string)$dropbox);
-        self::assertStringContainsString('PHP_VERSION_ID < 80500', (string)$publicSign);
+        self::assertStringContainsString('validate_and_store_upload', (string)$publicSign);
+        self::assertStringNotContainsString('finfo_close', (string)$publicSign);
     }
 
     public function testPaymentsExpensesAndPdfPreviewsHandleLegacyServers(): void

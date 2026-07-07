@@ -22,9 +22,10 @@ try {
         : 'i.organization_id IS NULL AND i.created_by=?';
     $ownerParams = $organizationId > 0 ? [$organizationId, $userId] : [$userId];
     $stmt = $pdo->prepare(
-        'SELECT s.*,i.organization_id,i.target_organization_id,i.client_id,i.invited_email
+        'SELECT s.*,i.organization_id,i.target_organization_id,i.client_id,i.invited_email,c.email AS current_client_email
          FROM client_onboarding_submissions s
          JOIN client_onboarding_invitations i ON i.id=s.invitation_id
+         LEFT JOIN clients c ON c.id=i.client_id
          WHERE s.id=? AND ' . $ownerWhere . ' FOR UPDATE'
     );
     $stmt->execute(array_merge([$submissionId], $ownerParams));
@@ -40,9 +41,12 @@ try {
 
     $clientId = (int)($submission['client_id'] ?? 0);
     if ($decision === 'approve') {
+        $emailValue = !empty($submission['invited_email'])
+            ? (string)$submission['invited_email']
+            : ($clientId > 0 ? ((string)($submission['current_client_email'] ?? '') ?: null) : null);
         $values = [
             $data['name'],
-            $submission['invited_email'],
+            $emailValue,
             $data['phone'] ?: null,
             $data['address_line1'] ?: null,
             $data['address_line2'] ?: null,
