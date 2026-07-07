@@ -85,59 +85,128 @@ function get_smtp_config(array $appConfig): array {
     ];
 }
 
-/**
- * Get admin email address
- */
-function get_admin_email(PDO $pdo, array $appConfig): string {
-    $adminEmail = '';
-    try {
-        $r1 = $pdo->prepare('SELECT id, email FROM users WHERE id=1 LIMIT 1'); 
-        $r1->execute(); 
-        $u1 = $r1->fetch(PDO::FETCH_ASSOC);
-        if ($u1 && !empty($u1['email'])) { 
-            $adminEmail = (string)$u1['email']; 
-        }
-        if ($adminEmail === '') { 
-            $adminEmail = (string)($pdo->query("SELECT email FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1")->fetchColumn() ?: ''); 
-        }
-    } catch (Throwable $e) { /* ignore */ }
-    if ($adminEmail === '') { 
-        $adminEmail = (string)($appConfig['from_email'] ?? ''); 
+function notification_setting_enabled(array $appConfig, string $key, bool $default = true): bool {
+    if (!array_key_exists($key, $appConfig)) {
+        return $default;
     }
-    return $adminEmail;
+    $value = $appConfig[$key];
+    if (is_bool($value)) {
+        return $value;
+    }
+    if (is_numeric($value)) {
+        return (float)$value !== 0.0;
+    }
+    return in_array(strtolower(trim((string)$value)), ['1', 'true', 'yes', 'on'], true);
+}
+
+function admin_notification_recipients(PDO $pdo, array $appConfig): array {
+    $emails = [];
+    $sql = "
+            SELECT email
+            FROM users
+            WHERE role IN ('admin','owner')
+              AND is_disabled = 0
+              AND email IS NOT NULL
+              AND email <> ''
+              AND LOWER(email) <> 'admin@project-alpha.local'
+            ORDER BY id ASC
+        ";
+    try {
+        $stmt = $pdo->query($sql);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {
+            $email = trim((string)$email);
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails[strtolower($email)] = $email;
+            }
+        }
+    } catch (Throwable $e) {
+        try {
+            $stmt = $pdo->query("
+                SELECT email
+                FROM users
+                WHERE role IN ('admin','owner')
+                  AND email IS NOT NULL
+                  AND email <> ''
+                  AND LOWER(email) <> 'admin@project-alpha.local'
+                ORDER BY id ASC
+            ");
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {
+                $email = trim((string)$email);
+                if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $emails[strtolower($email)] = $email;
+                }
+            }
+        } catch (Throwable $fallbackError) {
+            @error_log('[admin_notification_recipients] Error: ' . $fallbackError->getMessage());
+        }
+    }
+    return array_values($emails);
 }
 
 /**
- * Send admin notification email
+ * Backward-compatible helper for older callers/tests that expect one admin email.
+ */
+function get_admin_email(PDO $pdo, array $appConfig): string {
+    $recipients = admin_notification_recipients($pdo, $appConfig);
+    return $recipients[0] ?? '';
+}
+
+/**
+ * Send admin notification email to every enabled admin/owner except the built-in local account.
  */
 function send_admin_notification(PDO $pdo, array $appConfig, string $subject, string $html): bool {
     try {
-        $adminEmail = get_admin_email($pdo, $appConfig);
-        if ($adminEmail === '') { return false; }
-        
+        $adminEmails = admin_notification_recipients($pdo, $appConfig);
+        if (!$adminEmails) { return false; }
+
         $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
         $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
         $fromName = (string)($appConfig['from_name'] ?? $brand);
         $cfg = get_smtp_config($appConfig);
-        
-        if (!empty($cfg['host'])) {
-            [$ok, $err] = mailer_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, ($cfg['username'] ?: $fromEmail));
-            if (!$ok) {
-                [$ok, $err] = smtp_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, ($cfg['username'] ?: $fromEmail));
+        $sent = 0;
+
+        foreach ($adminEmails as $adminEmail) {
+            if (!empty($cfg['host'])) {
+                [$ok, $err] = mailer_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, ($cfg['username'] ?: $fromEmail));
+                if (!$ok) {
+                    [$ok, $err] = smtp_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, ($cfg['username'] ?: $fromEmail));
+                }
+                if (!$ok) {
+                    @error_log('[send_admin_notification] Failed for ' . $adminEmail . ': ' . ($err ?? 'unknown error'));
+                    continue;
+                }
+                $sent++;
+            } else {
+                $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: ".($fromName?($fromName.' <'.$fromEmail.'>'):$fromEmail)."\r\n";
+                if (@mail($adminEmail, $subject, $html, $headers)) {
+                    $sent++;
+                }
             }
-            return $ok;
-        } else {
-            $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: ".($fromName?($fromName.' <'.$fromEmail.'>'):$fromEmail)."\r\n";
-            return @mail($adminEmail, $subject, $html, $headers);
         }
+
+        return $sent > 0;
     } catch (Throwable $e) {
         @error_log('[send_admin_notification] Error: ' . $e->getMessage());
         return false;
     }
 }
 
+function admin_invoice_paid_notification_enabled(array $appConfig, array $invoice): bool {
+    if (!notification_setting_enabled($appConfig, 'notify_invoice_paid', true)) {
+        return false;
+    }
+    $type = strtolower((string)($invoice['invoice_type'] ?? 'regular'));
+    if ($type === 'long_term') {
+        return notification_setting_enabled($appConfig, 'notify_invoice_paid_long_term', true);
+    }
+    if ($type === 'on_demand') {
+        return notification_setting_enabled($appConfig, 'notify_invoice_paid_on_demand', true);
+    }
+    return notification_setting_enabled($appConfig, 'notify_invoice_paid_regular', true);
+}
+
 /**
- * Notify the first admin user that a client approved/denied a quote.
+ * Notify admin users that a client approved/denied a quote.
  * @param PDO $pdo
  * @param array $appConfig
  * @param array $quote  Quote row as associative array
@@ -181,14 +250,16 @@ function notify_admin_contract_signed(PDO $pdo, array $appConfig, array $contrac
         $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
         $docnum = (string)($contract['doc_number'] ?? $contract['id'] ?? '');
         $project = (string)($contract['project_code'] ?? '');
-        
-        $subject = sprintf('[%s] Client %s signed contract C-%s', $brand, $clientName, $docnum);
-        $html = sprintf('<p>Client <strong>%s</strong> has uploaded a signed copy of contract <strong>C-%s</strong>%s via the public link.</p><p>The contract is now active. See changes in the app.</p>',
-            htmlspecialchars($clientName), htmlspecialchars($docnum), $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : ''
-        );
-        
-        send_admin_notification($pdo, $appConfig, $subject, $html);
-        
+
+        if (notification_setting_enabled($appConfig, 'notify_signed_contract_uploaded', true)) {
+            $subject = sprintf('[%s] Client %s signed contract C-%s', $brand, $clientName, $docnum);
+            $html = sprintf('<p>Client <strong>%s</strong> has uploaded a signed copy of contract <strong>C-%s</strong>%s via the public link.</p><p>The contract is now active. See changes in the app.</p>',
+                htmlspecialchars($clientName), htmlspecialchars($docnum), $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : ''
+            );
+
+            send_admin_notification($pdo, $appConfig, $subject, $html);
+        }
+
         // Log the activity
         log_activity($pdo, 'contract_signed', 'contract', (int)($contract['id'] ?? 0), (int)($contract['client_id'] ?? 0), 
             "Client $clientName signed contract C-$docnum via public link",
@@ -223,15 +294,17 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
         $total = (float)($invoice['total'] ?? 0);
         
         $statusText = $status === 'paid' ? 'paid in full' : 'partially paid';
-        $subject = sprintf('[%s] Invoice I-%s %s ($%.2f)', $brand, $docnum, $statusText, $amount);
-        $html = sprintf('<p>Invoice <strong>I-%s</strong> for client <strong>%s</strong>%s has been %s.</p><p>Payment amount: <strong>$%.2f</strong></p><p>Invoice total: <strong>$%.2f</strong></p><p>See details in the app.</p>',
-            htmlspecialchars($docnum), htmlspecialchars($clientName), 
-            $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : '',
-            $statusText, $amount, $total
-        );
-        
-        send_admin_notification($pdo, $appConfig, $subject, $html);
-        
+        if (admin_invoice_paid_notification_enabled($appConfig, $invoice)) {
+            $subject = sprintf('[%s] Invoice I-%s %s ($%.2f)', $brand, $docnum, $statusText, $amount);
+            $html = sprintf('<p>Invoice <strong>I-%s</strong> for client <strong>%s</strong>%s has been %s.</p><p>Payment amount: <strong>$%.2f</strong></p><p>Invoice total: <strong>$%.2f</strong></p><p>See details in the app.</p>',
+                htmlspecialchars($docnum), htmlspecialchars($clientName),
+                $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : '',
+                $statusText, $amount, $total
+            );
+
+            send_admin_notification($pdo, $appConfig, $subject, $html);
+        }
+
         // Log the activity
         log_activity($pdo, 'invoice_paid', 'invoice', $invoiceId, (int)($invoice['client_id'] ?? 0), 
             "Invoice I-$docnum $statusText via public link (\$$amount)",
@@ -239,5 +312,43 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
         );
     } catch (Throwable $e) {
         @error_log('[notify_admin_invoice_paid] Error: ' . $e->getMessage());
+    }
+}
+
+function notify_admin_project_invoice_paid(PDO $pdo, array $appConfig, int $projectInvoiceId, float $amount, string $status): void {
+    try {
+        $stmt = $pdo->prepare('
+            SELECT pi.*, p.name AS project_name, c.name AS client_name
+            FROM project_invoices pi
+            JOIN projects p ON p.id = pi.project_id
+            LEFT JOIN clients c ON c.id = pi.primary_client_id
+            WHERE pi.id = ?
+        ');
+        $stmt->execute([$projectInvoiceId]);
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$invoice) { return; }
+
+        $statusText = $status === 'paid' ? 'paid in full' : 'partially paid';
+        $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
+        $docnum = (string)($invoice['doc_number'] ?? $projectInvoiceId);
+        $projectName = (string)($invoice['project_name'] ?? 'Project');
+        $clientName = (string)($invoice['client_name'] ?? 'Client');
+        $total = (float)($invoice['total'] ?? 0);
+
+        if (notification_setting_enabled($appConfig, 'notify_invoice_paid', true)
+            && notification_setting_enabled($appConfig, 'notify_invoice_paid_project', true)) {
+            $subject = sprintf('[%s] Project invoice PI-%s %s ($%.2f)', $brand, $docnum, $statusText, $amount);
+            $html = sprintf('<p>Project invoice <strong>PI-%s</strong> for <strong>%s</strong> has been %s.</p><p>Primary client: <strong>%s</strong></p><p>Payment amount: <strong>$%.2f</strong></p><p>Invoice total: <strong>$%.2f</strong></p><p>See details in the app.</p>',
+                htmlspecialchars($docnum), htmlspecialchars($projectName), $statusText, htmlspecialchars($clientName), $amount, $total
+            );
+            send_admin_notification($pdo, $appConfig, $subject, $html);
+        }
+
+        log_activity($pdo, 'project_invoice_paid', 'project_invoice', $projectInvoiceId, (int)($invoice['primary_client_id'] ?? 0),
+            "Project invoice PI-$docnum $statusText via public link (\$$amount)",
+            ['project_id' => (int)($invoice['project_id'] ?? 0), 'amount' => $amount, 'status' => $status, 'total' => $total]
+        );
+    } catch (Throwable $e) {
+        @error_log('[notify_admin_project_invoice_paid] Error: ' . $e->getMessage());
     }
 }

@@ -96,6 +96,12 @@ $settings = [
     'invoice_auto_email_on_generate' => 1,
     'invoice_auto_email_on_contract_complete' => 1,
     'payment_receipts_enabled' => 1,
+    'notify_signed_contract_uploaded' => 1,
+    'notify_invoice_paid' => 1,
+    'notify_invoice_paid_regular' => 1,
+    'notify_invoice_paid_on_demand' => 1,
+    'notify_invoice_paid_long_term' => 1,
+    'notify_invoice_paid_project' => 1,
     'email_no_reply_notice_enabled' => 0,
     'email_no_reply_notice_text' => 'This is an automated message. Please do not reply to this email.',
     // SMTP configuration (optional)
@@ -376,7 +382,11 @@ $generalConfigKeys = [
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',
     'invoice_auto_send_due_7days', 'invoice_auto_send_overdue_weekly', 'invoice_auto_email_on_generate',
     'invoice_auto_email_on_contract_complete',
-    'payment_receipts_enabled', 'email_no_reply_notice_enabled', 'email_no_reply_notice_text',
+    'payment_receipts_enabled',
+    'notify_signed_contract_uploaded',
+    'notify_invoice_paid', 'notify_invoice_paid_regular', 'notify_invoice_paid_on_demand',
+    'notify_invoice_paid_long_term', 'notify_invoice_paid_project',
+    'email_no_reply_notice_enabled', 'email_no_reply_notice_text',
     'auto_terminate_contracts', 'link_expiration_checker',
     'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',
     'payment_failure_alert',
@@ -462,6 +472,9 @@ if (isset($_POST['contract_expiring_days'])) {
 if ($isNotificationsTab || isset($_POST['contract_expired_alert'])) {
     $settings['contract_expired_alert'] = !empty($_POST['contract_expired_alert']) ? 1 : 0;
 }
+if ($isNotificationsTab || isset($_POST['notify_signed_contract_uploaded'])) {
+    $settings['notify_signed_contract_uploaded'] = !empty($_POST['notify_signed_contract_uploaded']) ? 1 : 0;
+}
 
 // Payment notification settings
 if ($isNotificationsTab || isset($_POST['payment_failure_alert'])) {
@@ -469,6 +482,11 @@ if ($isNotificationsTab || isset($_POST['payment_failure_alert'])) {
 }
 if ($isNotificationsTab || isset($_POST['payment_receipts_enabled'])) {
     $settings['payment_receipts_enabled'] = !empty($_POST['payment_receipts_enabled']) ? 1 : 0;
+}
+foreach (['notify_invoice_paid', 'notify_invoice_paid_regular', 'notify_invoice_paid_on_demand', 'notify_invoice_paid_long_term', 'notify_invoice_paid_project'] as $notifyKey) {
+    if ($isNotificationsTab || isset($_POST[$notifyKey])) {
+        $settings[$notifyKey] = !empty($_POST[$notifyKey]) ? 1 : 0;
+    }
 }
 if ($isNotificationsTab || isset($_POST['email_no_reply_notice_enabled'])) {
     $settings['email_no_reply_notice_enabled'] = !empty($_POST['email_no_reply_notice_enabled']) ? 1 : 0;

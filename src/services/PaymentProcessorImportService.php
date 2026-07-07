@@ -326,10 +326,12 @@ class PaymentProcessorImportService
                  processor_provider, processor_payment_id, processor_transaction_id,
                  processor_gross_amount, processor_fee_amount, processor_net_amount, processor_fee_policy, processor_fee_source,
                  stripe_payment_intent_id, reference_number, notes, status, payment_date, created_at)
-             VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "succeeded", ?, NOW())'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
         );
         $insert->execute([
             $clientId,
+            null,
+            null,
             self::defaultOrganizationId($pdo),
             $net,
             $provider,
@@ -344,6 +346,7 @@ class PaymentProcessorImportService
             $provider === 'stripe' ? $providerPaymentId : null,
             self::nullableString($tx['provider_charge_id'] ?? $providerPaymentId, 255),
             $notes,
+            'succeeded',
             $paymentDate,
         ]);
 

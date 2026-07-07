@@ -334,7 +334,7 @@ try {
         <?php elseif ($logContent === ''): ?>
             <p style="color:var(--muted)">No matching entries in the last 100 lines.</p>
         <?php else: ?>
-            <pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;overflow-x:auto;max-height:500px;font-size:12px;line-height:1.5"><?php echo htmlspecialchars($logContent); ?></pre>
+            <pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;overflow:auto;max-width:100%;max-height:500px;font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word"><?php echo htmlspecialchars($logContent); ?></pre>
         <?php endif; ?>
         <?php else: ?>
             <p style="color:var(--muted)">Select a log file above to view the last 100 lines.</p>

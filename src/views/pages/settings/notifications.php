@@ -109,6 +109,52 @@
     </div>
 
     <div style="padding-top:16px;border-top:1px solid #eee;margin-bottom:16px">
+      <h3 style="margin:0 0 12px 0;font-size:15px">Invoice Paid Admin Emails</h3>
+
+      <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
+        <input type="checkbox" name="notify_invoice_paid" value="1" <?php echo !array_key_exists('notify_invoice_paid', $appConfig) || !empty($appConfig['notify_invoice_paid']) ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div class="font-600">Email admins when an invoice is paid through Stripe</div>
+          <div style="font-size:13px;color:var(--muted)">Manual payment entries do not trigger this email.</div>
+        </div>
+      </label>
+
+      <div style="margin-left:28px;display:grid;gap:10px">
+        <label style="display:flex;align-items:start;gap:10px">
+          <input type="checkbox" name="notify_invoice_paid_regular" value="1" <?php echo !array_key_exists('notify_invoice_paid_regular', $appConfig) || !empty($appConfig['notify_invoice_paid_regular']) ? 'checked' : ''; ?> style="margin-top:3px">
+          <div>
+            <div class="font-600">Regular invoices</div>
+            <div style="font-size:13px;color:var(--muted)">Single invoices created from the invoice workflow.</div>
+          </div>
+        </label>
+
+        <label style="display:flex;align-items:start;gap:10px">
+          <input type="checkbox" name="notify_invoice_paid_on_demand" value="1" <?php echo !array_key_exists('notify_invoice_paid_on_demand', $appConfig) || !empty($appConfig['notify_invoice_paid_on_demand']) ? 'checked' : ''; ?> style="margin-top:3px">
+          <div>
+            <div class="font-600">On-demand invoices</div>
+            <div style="font-size:13px;color:var(--muted)">Invoices generated from on-demand contracts.</div>
+          </div>
+        </label>
+
+        <label style="display:flex;align-items:start;gap:10px">
+          <input type="checkbox" name="notify_invoice_paid_long_term" value="1" <?php echo !array_key_exists('notify_invoice_paid_long_term', $appConfig) || !empty($appConfig['notify_invoice_paid_long_term']) ? 'checked' : ''; ?> style="margin-top:3px">
+          <div>
+            <div class="font-600">Long-term invoices</div>
+            <div style="font-size:13px;color:var(--muted)">Invoices generated from long-term contract billing.</div>
+          </div>
+        </label>
+
+        <label style="display:flex;align-items:start;gap:10px">
+          <input type="checkbox" name="notify_invoice_paid_project" value="1" <?php echo !array_key_exists('notify_invoice_paid_project', $appConfig) || !empty($appConfig['notify_invoice_paid_project']) ? 'checked' : ''; ?> style="margin-top:3px">
+          <div>
+            <div class="font-600">Project invoices</div>
+            <div style="font-size:13px;color:var(--muted)">Aggregate project invoices paid through Stripe.</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div style="padding-top:16px;border-top:1px solid #eee;margin-bottom:16px">
       <h3 style="margin:0 0 12px 0;font-size:15px">Automated Email Notice</h3>
 
       <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
@@ -167,6 +213,14 @@
         <div>
           <div class="font-600">Contract expired alert</div>
           <div style="font-size:13px;color:var(--muted)">Send notification when contract has expired</div>
+        </div>
+      </label>
+
+      <label style="display:flex;align-items:start;gap:10px;margin-top:12px">
+        <input type="checkbox" name="notify_signed_contract_uploaded" value="1" <?php echo !array_key_exists('notify_signed_contract_uploaded', $appConfig) || !empty($appConfig['notify_signed_contract_uploaded']) ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div class="font-600">Email admins when a signed contract is uploaded through a public link</div>
+          <div style="font-size:13px;color:var(--muted)">Manual signed-contract uploads do not trigger this email.</div>
         </div>
       </label>
     </div>
