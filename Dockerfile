@@ -134,7 +134,7 @@ ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
-        default-mysql-client cron curl zlib1g-dev libzip-dev \
+        default-mysql-client cron curl tzdata zlib1g-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli

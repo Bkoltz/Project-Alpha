@@ -3,7 +3,9 @@
 // Database backup settings page
 
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/cron_state.php';
 
 // Get existing database-only and full backups.
 $backupsDir = '/var/www/backups';
@@ -13,7 +15,7 @@ $backupEncryptionEnabled = trim((string)(getenv('BACKUP_ENCRYPTION_KEY') ?: ''))
 // Read retention from env (matches backup_database.php)
 $retentionDays = (int)(getenv('BACKUP_RETENTION_DAYS') ?: '10');
 
-// Read backup hour from app_config (default 2 = 2:00 AM UTC)
+// Read backup hour from app_config (default 2 = 2:30 AM in the configured PA timezone)
 $backupHour = 2;
 try {
     $cfgStmt = $pdo->prepare("SELECT config_value FROM app_config WHERE organization_id = 0 AND config_key = 'backup_hour'");
@@ -27,6 +29,11 @@ try {
     $modeStmt->execute();
     $backupMode = $modeStmt->fetchColumn() === 'full' ? 'full' : 'database';
 } catch (Throwable $e) {}
+$backupTimezone = (string)($appConfig['timezone'] ?? date_default_timezone_get() ?: 'UTC');
+if (!in_array($backupTimezone, DateTimeZone::listIdentifiers(), true)) {
+    $backupTimezone = 'UTC';
+}
+$backupTimeZoneObj = new DateTimeZone($backupTimezone);
 
 // Also check if retention is overridden in app_config
 try {
@@ -85,6 +92,7 @@ $backupCount = count($backups);
 $cronStatus = null;
 $cronStatusError = '';
 try {
+    cron_state_ensure_schema($pdo);
     $cronStmt = $pdo->prepare('SELECT job_name, last_run, status, started_at, completed_at, result, error_message, updated_at FROM cron_job_runs WHERE job_name = ? LIMIT 1');
     $cronStmt->execute(['backup_database']);
     $cronStatus = $cronStmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -92,11 +100,12 @@ try {
     $cronStatusError = 'Cron status unavailable: ' . $e->getMessage();
 }
 
-$nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-$nextExpectedUtc = $nowUtc->setTime($backupHour, 30);
-if ($nextExpectedUtc <= $nowUtc) {
-    $nextExpectedUtc = $nextExpectedUtc->modify('+1 day');
+$nowLocal = new DateTimeImmutable('now', $backupTimeZoneObj);
+$nextExpectedLocal = $nowLocal->setTime($backupHour, 30);
+if ($nextExpectedLocal <= $nowLocal) {
+    $nextExpectedLocal = $nextExpectedLocal->modify('+1 day');
 }
+$nextExpectedUtc = $nextExpectedLocal->setTimezone(new DateTimeZone('UTC'));
 
 $backupDirChecks = [];
 foreach ([
@@ -136,7 +145,7 @@ if ($backupCount === 0) {
     } elseif (($cronStatus['status'] ?? '') === 'running') {
         $zeroBackupDiagnostics[] = 'The backup cron is currently marked running.';
     }
-    $zeroBackupDiagnostics[] = 'Next expected scheduled run: ' . $nextExpectedUtc->format('Y-m-d H:i') . ' UTC.';
+    $zeroBackupDiagnostics[] = 'Next expected scheduled run: ' . $nextExpectedLocal->format('Y-m-d H:i') . ' ' . $backupTimezone . ' (' . $nextExpectedUtc->format('Y-m-d H:i') . ' UTC).';
 }
 
 // Handle flash messages
@@ -169,11 +178,11 @@ unset($_SESSION['flash_backup']);
         </div>
         <div class="status-item">
             <span class="status-label">Schedule:</span>
-            <span class="status-value">Daily at <?php echo str_pad((string)$backupHour, 2, '0', STR_PAD_LEFT); ?>:30 UTC</span>
+            <span class="status-value">Daily at <?php echo str_pad((string)$backupHour, 2, '0', STR_PAD_LEFT); ?>:30 <?php echo htmlspecialchars($backupTimezone); ?></span>
         </div>
         <div class="status-item">
             <span class="status-label">Next Expected Run:</span>
-            <span class="status-value"><?php echo htmlspecialchars($nextExpectedUtc->format('Y-m-d H:i')); ?> UTC</span>
+            <span class="status-value"><?php echo htmlspecialchars($nextExpectedLocal->format('Y-m-d H:i')); ?> <?php echo htmlspecialchars($backupTimezone); ?></span>
         </div>
         <div class="status-item">
             <span class="status-label">Encryption:</span>
@@ -263,15 +272,15 @@ unset($_SESSION['flash_backup']);
             </div>
 
             <div class="form-group" style="margin:0;">
-                <label for="backup_hour" style="font-size:0.85rem; color:#6c757d; margin-bottom:0.35rem; display:block;">Backup Time (UTC)</label>
+                <label for="backup_hour" style="font-size:0.85rem; color:#6c757d; margin-bottom:0.35rem; display:block;">Backup Time (<?php echo htmlspecialchars($backupTimezone); ?>)</label>
                 <select name="backup_hour" id="backup_hour" class="input" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.95rem;">
                     <?php for ($h = 0; $h < 24; $h++): ?>
                     <option value="<?php echo $h; ?>" <?php echo ($h == $backupHour) ? 'selected' : ''; ?>>
-                        <?php echo str_pad($h, 2, '0', STR_PAD_LEFT); ?>:00 UTC
+                        <?php echo str_pad($h, 2, '0', STR_PAD_LEFT); ?>:30 <?php echo htmlspecialchars($backupTimezone); ?>
                     </option>
                     <?php endfor; ?>
                 </select>
-                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">The cron service checks this setting hourly at :30.</span>
+                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">The cron service checks this setting hourly at :30 using the PA system timezone.</span>
             </div>
         </div>
 

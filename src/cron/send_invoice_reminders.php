@@ -13,6 +13,12 @@ require_once __DIR__ . '/../utils/cron_state.php';
 $logPrefix = '[send_invoice_reminders]';
 $jobName = 'send_invoice_reminders';
 
+if (empty($appConfig['cron_enabled'])) {
+    @error_log("$logPrefix Cron is disabled in settings. Skipping.");
+    cron_state_mark_success($pdo, $jobName, 'Cron disabled');
+    exit(0);
+}
+
 // Check if either reminder is enabled
 $due7Enabled = !empty($appConfig['invoice_auto_send_due_7days']);
 $overdueEnabled = !empty($appConfig['invoice_auto_send_overdue_weekly']);

@@ -6,13 +6,19 @@
  */
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/backup_archive.php';
 
 $jobName = 'backup_database';
+$appTimezone = date_default_timezone_get();
 
 $scheduledRun = in_array('--scheduled', $argv ?? [], true);
 if ($scheduledRun) {
+    if (empty($appConfig['cron_enabled'])) {
+        cron_state_mark_success($pdo, $jobName, 'Cron disabled');
+        exit(0);
+    }
     $backupHour = 2;
     try {
         $hourStmt = $pdo->prepare('SELECT config_value FROM app_config WHERE organization_id=0 AND config_key="backup_hour"');
@@ -62,7 +68,7 @@ if (!$gz) {
 
 // Write header
 gzwrite($gz, "-- Project Alpha Database Backup\n");
-gzwrite($gz, "-- Generated: " . date('Y-m-d H:i:s') . " UTC\n");
+gzwrite($gz, "-- Generated: " . date('Y-m-d H:i:s') . " {$appTimezone}\n");
 gzwrite($gz, "-- Database: $db\n\n");
 gzwrite($gz, "SET FOREIGN_KEY_CHECKS=0;\n");
 gzwrite($gz, "SET NAMES utf8mb4;\n\n");

@@ -129,6 +129,25 @@ final class FinancialAssetsTest extends TestCase
         self::assertStringContainsString('COALESCE(e.total_amount, e.amount, 0)', $dashboard);
         self::assertStringContainsString('display_total', $dashboard);
         self::assertStringContainsString('COALESCE(e.total_amount, e.amount, 0)', $expensesTab);
+        self::assertStringContainsString("\$dashboard_finance_period_start = date('Y') . '-01-01'", $home);
+        self::assertStringContainsString('dashboard_finance_subtitle', $home);
+        self::assertStringContainsString('dashboard_actionable_invoice_where', $home);
+        self::assertStringContainsString("invoice_type != 'long_term'", $home);
+        self::assertStringContainsString('actionable_unpaid', $home);
+    }
+
+    public function testDashboardExpenseApisUseScopedActiveTotals(): void
+    {
+        $financialApi = $this->read('src/controllers/api/financial_summary.php');
+        $dashboardApi = $this->read('src/controllers/api/dashboard_summary.php');
+
+        foreach ([$financialApi, $dashboardApi] as $source) {
+            self::assertStringContainsString('finance_scope_clause', $source);
+            self::assertStringContainsString("e.status != 'void'", $source);
+            self::assertStringContainsString('COALESCE(e.total_amount, e.amount, 0)', $source);
+        }
+
+        self::assertStringContainsString("'expense_total'", $dashboardApi);
     }
 
     public function testFinancialHubUsesConsistentFinanceScope(): void

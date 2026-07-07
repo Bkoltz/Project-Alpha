@@ -1,6 +1,7 @@
 <?php
 // src/controllers/api/financial_summary.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/payment_accounting.php';
 header('Content-Type: application/json');
 
@@ -17,8 +18,11 @@ $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) FROM invoices WHERE status=
 $stmt->execute([$start]);
 $invoicedPaid = (float) $stmt->fetchColumn();
 
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(total_amount),0) FROM expenses WHERE DATE(expense_date)>=?");
-$stmt->execute([$start]);
+$userId = (int)($_SESSION['user']['id'] ?? 0);
+$orgId = request_client_org_id();
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void' AND DATE(e.expense_date)>=?");
+$stmt->execute(array_merge($expenseScopeParams, [$start]));
 $expenses = (float) $stmt->fetchColumn();
 
 echo json_encode([

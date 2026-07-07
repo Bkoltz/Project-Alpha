@@ -7,31 +7,33 @@ SHELL=/bin/bash
 # Unified log file for all cron jobs
 CRON_LOG=/var/www/config/logs/cron/cron.log
 
-# Rotate system and cron logs above 10 MB - daily at 1:15 AM UTC
+# Times are interpreted in the PA system timezone applied by entrypoint.sh.
+
+# Rotate system and cron logs above 10 MB - daily at 1:15 AM
 15 1 * * * root . /etc/environment && php /var/www/src/cron/rotate_logs.php >> $CRON_LOG 2>&1
 
-# Generate recurring invoices - daily at 2:00 AM UTC
+# Generate recurring invoices - daily at 2:00 AM
 0 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_invoices.php >> $CRON_LOG 2>&1
 
 # Check hourly at :30; the script honors the configured UTC backup hour.
 30 * * * * root . /etc/environment && php /var/www/src/cron/backup_database.php --scheduled >> $CRON_LOG 2>&1
 
-# Auto-terminate expired contracts - daily at 3:00 AM UTC
+# Auto-terminate expired contracts - daily at 3:00 AM
 0 3 * * * root . /etc/environment && php /var/www/src/cron/auto_terminate_contracts.php >> $CRON_LOG 2>&1
 
-# Check and expire links - daily at 4:00 AM UTC
+# Check and expire links - daily at 4:00 AM
 0 4 * * * root . /etc/environment && php /var/www/src/cron/link_expiration_checker.php >> $CRON_LOG 2>&1
 
-# Process audit schedules - daily at 6:00 AM UTC
+# Process audit schedules - daily at 6:00 AM
 0 6 * * * root . /etc/environment && php /var/www/src/cron/process_audit_schedules.php >> $CRON_LOG 2>&1
 
-# Send invoice reminders (due-7 and overdue-weekly) - daily at 8:00 AM UTC
+# Send invoice reminders (due-7 and overdue-weekly) - daily at 8:00 AM
 0 8 * * * root . /etc/environment && php /var/www/src/cron/send_invoice_reminders.php >> $CRON_LOG 2>&1
 
 # Stripe payment reconciliation - every 6 hours
 0 */6 * * * root . /etc/environment && php /var/www/src/cron/stripe_reconciliation.php >> $CRON_LOG 2>&1
 
-# Sync actual Stripe merchant rate (non-changeable) - daily at 5:00 AM UTC
+# Sync actual Stripe merchant rate (non-changeable) - daily at 5:00 AM
 0 5 * * * root . /etc/environment && php /var/www/src/cron/sync_merchant_rate.php >> $CRON_LOG 2>&1
 
 # Required blank line at end of crontab

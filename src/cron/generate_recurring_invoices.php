@@ -14,6 +14,7 @@ $jobName = 'generate_recurring_invoices';
 // Check if cron is enabled in settings
 if (empty($appConfig['cron_enabled'])) {
     @error_log("$logPrefix Cron is disabled in settings. Skipping invoice generation.");
+    cron_state_mark_success($pdo, $jobName, 'Cron disabled');
     exit(0);
 }
 

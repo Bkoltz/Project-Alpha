@@ -62,11 +62,15 @@ final class ProcessorImportTest extends TestCase
     public function testStripeReconciliationUsesGenericStandaloneImportFallback(): void
     {
         $cron = $this->read('src/cron/stripe_reconciliation.php');
+        $importHelper = $this->read('src/utils/stripe_reconciliation_import.php');
         $stripe = $this->read('src/services/StripeService.php');
         $webhook = $this->read('src/controllers/webhook/stripe_payment_succeeded.php');
 
-        self::assertStringContainsString('PaymentProcessorImportService::importStandalone', $cron);
+        self::assertStringContainsString('stripe_reconcile_payment_intents', $cron);
+        self::assertStringContainsString('PaymentProcessorImportService::importStandalone', $importHelper);
+        self::assertStringContainsString('forceStandaloneImport', $importHelper);
         self::assertStringContainsString('normalizePaymentIntentForImport', $stripe);
+        self::assertStringContainsString('listPaymentIntentsBetween', $stripe);
         self::assertStringContainsString('charges.data.balance_transaction', $stripe);
         self::assertStringContainsString('getPaymentIntentWithBalanceTransaction', $stripe);
         self::assertStringContainsString('PaymentProcessorImportService::importStandalone', $webhook);
@@ -81,6 +85,7 @@ final class ProcessorImportTest extends TestCase
         $checkout = $this->read('src/controllers/stripe/stripe_checkout.php');
         $settings = $this->read('src/views/pages/settings/billing.php');
         $controller = $this->read('src/controllers/settings/stripe_net_backfill.php');
+        $importController = $this->read('src/controllers/settings/stripe_import_payments.php');
         $front = $this->read('public/index.php');
         $acl = $this->read('src/utils/acl_middleware.php');
 
@@ -92,9 +97,14 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('stripe_update_project_payment_processor_fields', $helper);
         self::assertStringContainsString('pa_fee_policy', $checkout);
         self::assertStringContainsString('Backfill Stripe Net Income', $settings);
+        self::assertStringContainsString('Import old Stripe payments', $settings);
         self::assertStringContainsString('stripe_backfill_net_income', $controller);
+        self::assertStringContainsString('stripe_reconcile_payment_intents', $importController);
+        self::assertStringContainsString('stripe_import_start_date', $importController);
         self::assertStringContainsString('settings/stripe-net-backfill', $front);
+        self::assertStringContainsString('settings/stripe-import-payments', $front);
         self::assertStringContainsString("'settings/stripe-net-backfill'", $acl);
+        self::assertStringContainsString("'settings/stripe-import-payments'", $acl);
     }
 
     public function testDashboardsAndPaymentsListUseNetIncomeAccounting(): void

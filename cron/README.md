@@ -1,13 +1,15 @@
 # Project Alpha Cron Service
 
-The cron image runs Project Alpha's scheduled PHP jobs independently from Apache. The current schedule is installed from `cron/crontab` and uses UTC.
+The cron image runs Project Alpha's scheduled PHP jobs independently from Apache. The current schedule is installed from `cron/crontab` and uses the PA system timezone loaded from `app_config.timezone` when the cron container starts.
+
+On container startup, the entrypoint also runs `stripe_reconciliation.php --startup` once before starting cron. This catches recent Stripe payments after downtime, while the normal six-hour schedule continues to reconcile missed webhooks.
 
 ## Installed Schedule
 
-| UTC schedule | Script | Purpose |
+| Local schedule | Script | Purpose |
 |---|---|---|
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
-| Daily 02:30 | `backup_database.php` | Create rotating daily, weekly, and monthly backups |
+| Hourly at :30 | `backup_database.php --scheduled` | Creates rotating backups when the configured local backup hour matches |
 | Daily 03:00 | `auto_terminate_contracts.php` | Complete contracts whose configured end date has passed |
 | Daily 04:00 | `link_expiration_checker.php` | Expire public document links |
 | Every 6 hours | `stripe_reconciliation.php` | Recover Stripe payments missed by webhooks or downtime |
@@ -16,6 +18,8 @@ The cron image runs Project Alpha's scheduled PHP jobs independently from Apache
 | Daily 08:00 | `send_invoice_reminders.php` | Send enabled due and overdue reminders |
 
 All output is appended to `/var/www/config/logs/cron/cron.log` in the cron container.
+
+If the PA system timezone is changed in Settings, restart or recreate the cron container so the daemon reloads `/etc/localtime`. Individual PHP jobs also load `config/app.php`, so their date math uses the configured timezone.
 
 ## Runtime
 

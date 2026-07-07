@@ -638,6 +638,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/document-custom-fields-handler',
         'settings/link-test-connection',
         'settings/stripe-net-backfill',
+        'settings/stripe-import-payments',
         'settings/dropbox-oauth',
         'settings/link-resolver-run',
 
@@ -849,6 +850,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/stripe-net-backfill') {
         require_once __DIR__ . '/../src/controllers/settings/stripe_net_backfill.php';
+        exit;
+    }
+    if ($page === 'settings/stripe-import-payments') {
+        require_once __DIR__ . '/../src/controllers/settings/stripe_import_payments.php';
         exit;
     }
     if ($page === 'settings/custom-fields-handler') {

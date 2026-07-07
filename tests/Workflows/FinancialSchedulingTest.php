@@ -37,6 +37,24 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString('Expense Report', (string)$cron);
     }
 
+    public function testCronStatusSchemaSelfRepairsAndUsesConfiguredTimezone(): void
+    {
+        $migration = file_get_contents($this->root . '/database/migrations/0018_repair_cron_job_runs_schema.sql');
+        $state = file_get_contents($this->root . '/src/utils/cron_state.php');
+        $backup = file_get_contents($this->root . '/src/cron/backup_database.php');
+        $backupPage = file_get_contents($this->root . '/src/views/pages/settings/backup.php');
+        $entrypoint = file_get_contents($this->root . '/cron/entrypoint.sh');
+
+        self::assertStringContainsString('ADD COLUMN updated_at', (string)$migration);
+        self::assertStringContainsString('cron_state_ensure_schema', (string)$state);
+        self::assertStringContainsString('cron_state_ensure_schema($pdo)', (string)$backupPage);
+        self::assertStringContainsString("require_once __DIR__ . '/../config/app.php';", (string)$backup);
+        self::assertStringContainsString('cron_state_mark_success($pdo, $jobName, \'Cron disabled\')', (string)$backup);
+        self::assertStringContainsString("config_key='timezone'", (string)$entrypoint);
+        self::assertStringContainsString('/etc/localtime', (string)$entrypoint);
+        self::assertStringContainsString('stripe_reconciliation.php --startup', (string)$entrypoint);
+    }
+
     public function testAuditAndOrganizationScriptsInitializeAfterAjaxNavigation(): void
     {
         $audit = file_get_contents($this->root . '/public/assets/js/audit-logic.js');
