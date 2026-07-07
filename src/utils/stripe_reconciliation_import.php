@@ -12,7 +12,7 @@ function stripe_reconcile_payment_intents(
     array $appConfig,
     int $since,
     ?int $until = null,
-    int $maxIntents = 1000,
+    ?int $maxIntents = 1000,
     bool $forceStandaloneImport = false
 ): array {
     $paymentIntents = $stripe->listPaymentIntentsBetween($since, $until, $maxIntents);
@@ -161,6 +161,38 @@ function stripe_reconcile_payment_intents(
             }
             $result['errors']++;
             @error_log('[stripe_reconciliation] Error processing PI ' . (string)($pi['id'] ?? 'unknown') . ': ' . $e->getMessage());
+        }
+    }
+
+    $charges = $stripe->listChargesBetween($since, $until, $maxIntents);
+    $result['checked'] += count($charges);
+
+    foreach ($charges as $charge) {
+        try {
+            if (empty($charge['paid']) || !empty($charge['failure_code'])) {
+                $result['skipped']++;
+                continue;
+            }
+
+            $transaction = $stripe->normalizeChargeForImport($charge);
+            $standalone = PaymentProcessorImportService::importStandalone($pdo, $importConfig, $transaction);
+            if (($standalone['status'] ?? '') === 'imported') {
+                $result['imported']++;
+                $result['reconciled']++;
+            } elseif (($standalone['status'] ?? '') === 'duplicate') {
+                $result['duplicates']++;
+                $result['reconciled']++;
+            } elseif (($standalone['status'] ?? '') === 'failed') {
+                $result['errors']++;
+            } else {
+                $result['skipped']++;
+            }
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $result['errors']++;
+            @error_log('[stripe_reconciliation] Error processing charge ' . (string)($charge['id'] ?? 'unknown') . ': ' . $e->getMessage());
         }
     }
 

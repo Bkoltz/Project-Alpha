@@ -363,19 +363,23 @@ class StripeService {
      *
      * @param int $since Unix timestamp, inclusive.
      * @param int|null $until Unix timestamp, inclusive.
-     * @param int $maxItems Safety cap for large historical imports.
+     * @param int|null $maxItems Safety cap for scheduled imports; null imports the full range.
      * @return array List of Payment Intent objects
      */
-    public function listPaymentIntentsBetween(int $since, ?int $until = null, int $maxItems = 1000): array {
+    public function listPaymentIntentsBetween(int $since, ?int $until = null, ?int $maxItems = 1000): array {
         try {
             $allIntents = [];
             $hasMore = true;
             $startingAfter = null;
-            $maxItems = max(1, min(10000, $maxItems));
+            $maxItems = $maxItems !== null ? max(1, $maxItems) : null;
             
             while ($hasMore) {
+                $remaining = $maxItems !== null ? $maxItems - count($allIntents) : 100;
+                if ($remaining <= 0) {
+                    break;
+                }
                 $params = [
-                    'limit' => min(100, $maxItems - count($allIntents)),
+                    'limit' => min(100, $remaining),
                     'created[gte]' => $since,
                     'expand[0]' => 'charges.data',
                     'expand[1]' => 'charges.data.balance_transaction',
@@ -399,7 +403,7 @@ class StripeService {
                 $hasMore = !empty($response['has_more']);
                 
                 // Safety limit
-                if (count($allIntents) >= $maxItems) {
+                if ($maxItems !== null && count($allIntents) >= $maxItems) {
                     break;
                 }
             }
@@ -408,6 +412,56 @@ class StripeService {
             
         } catch (\Throwable $e) {
             @error_log('[StripeService] Error listing payment intents: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * List Charges created within a timestamp range.
+     *
+     * This is used as a fallback for older/direct Stripe payments that may not
+     * be represented in the PaymentIntent import path.
+     */
+    public function listChargesBetween(int $since, ?int $until = null, ?int $maxItems = null): array {
+        try {
+            $allCharges = [];
+            $hasMore = true;
+            $startingAfter = null;
+            $maxItems = $maxItems !== null ? max(1, $maxItems) : null;
+
+            while ($hasMore) {
+                $remaining = $maxItems !== null ? $maxItems - count($allCharges) : 100;
+                if ($remaining <= 0) {
+                    break;
+                }
+                $params = [
+                    'limit' => min(100, $remaining),
+                    'created[gte]' => $since,
+                    'expand[0]' => 'data.balance_transaction',
+                ];
+                if ($until !== null) {
+                    $params['created[lte]'] = $until;
+                }
+                if ($startingAfter) {
+                    $params['starting_after'] = $startingAfter;
+                }
+
+                $response = $this->apiRequest('GET', 'charges?' . http_build_query($params));
+                if (!empty($response['data'])) {
+                    $allCharges = array_merge($allCharges, $response['data']);
+                    $lastItem = end($response['data']);
+                    $startingAfter = $lastItem['id'] ?? null;
+                }
+
+                $hasMore = !empty($response['has_more']);
+                if ($maxItems !== null && count($allCharges) >= $maxItems) {
+                    break;
+                }
+            }
+
+            return $allCharges;
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error listing charges: ' . $e->getMessage());
             return [];
         }
     }
@@ -613,6 +667,59 @@ class StripeService {
             'raw_summary' => [
                 'payment_intent' => $paymentIntent['id'] ?? null,
                 'charge' => is_array($charge) ? ($charge['id'] ?? null) : null,
+                'balance_transaction' => is_array($balanceTransaction) ? ($balanceTransaction['id'] ?? null) : null,
+            ],
+        ];
+    }
+
+    /**
+     * Normalize a Stripe Charge into PA's processor-neutral import shape.
+     */
+    public function normalizeChargeForImport(array $charge): array {
+        $balanceTransaction = is_array($charge['balance_transaction'] ?? null) ? $charge['balance_transaction'] : null;
+        if (!$balanceTransaction && is_string($charge['balance_transaction'] ?? null) && $charge['balance_transaction'] !== '') {
+            try {
+                $balanceTransaction = $this->getBalanceTransaction((string)$charge['balance_transaction']);
+            } catch (\Throwable $e) {
+                $balanceTransaction = null;
+            }
+        }
+
+        $billing = is_array($charge['billing_details'] ?? null) ? $charge['billing_details'] : [];
+        $address = is_array($billing['address'] ?? null) ? $billing['address'] : [];
+        $grossCents = (int)($charge['amount_captured'] ?? $charge['amount'] ?? 0);
+        $feeCents = is_array($balanceTransaction) && isset($balanceTransaction['fee']) ? (int)$balanceTransaction['fee'] : null;
+        $netCents = is_array($balanceTransaction) && isset($balanceTransaction['net']) ? (int)$balanceTransaction['net'] : null;
+        $paymentIntentId = is_string($charge['payment_intent'] ?? null) ? trim((string)$charge['payment_intent']) : '';
+        $chargeId = (string)($charge['id'] ?? '');
+        $metadata = is_array($charge['metadata'] ?? null) ? $charge['metadata'] : [];
+        $paid = !empty($charge['paid']) && empty($charge['failure_code']);
+
+        return [
+            'provider' => 'stripe',
+            'provider_payment_id' => $paymentIntentId !== '' ? $paymentIntentId : $chargeId,
+            'provider_charge_id' => $chargeId !== '' ? $chargeId : null,
+            'provider_customer_id' => is_string($charge['customer'] ?? null) ? $charge['customer'] : null,
+            'status' => $paid ? 'succeeded' : (string)($charge['status'] ?? 'failed'),
+            'currency' => strtolower((string)($charge['currency'] ?? 'usd')),
+            'gross_amount' => round($grossCents / 100, 2),
+            'fee_amount' => $feeCents !== null ? round($feeCents / 100, 2) : null,
+            'net_amount' => $netCents !== null ? round($netCents / 100, 2) : null,
+            'paid_at' => (int)($charge['created'] ?? time()),
+            'payer_name' => $billing['name'] ?? null,
+            'payer_email' => $billing['email'] ?? ($charge['receipt_email'] ?? null),
+            'payer_phone' => $billing['phone'] ?? null,
+            'payer_address_line1' => $address['line1'] ?? null,
+            'payer_address_line2' => $address['line2'] ?? null,
+            'payer_city' => $address['city'] ?? null,
+            'payer_state' => $address['state'] ?? null,
+            'payer_postal_code' => $address['postal_code'] ?? null,
+            'payer_country' => $address['country'] ?? null,
+            'description' => $charge['description'] ?? null,
+            'metadata' => $metadata,
+            'raw_summary' => [
+                'payment_intent' => $paymentIntentId !== '' ? $paymentIntentId : null,
+                'charge' => $chargeId !== '' ? $chargeId : null,
                 'balance_transaction' => is_array($balanceTransaction) ? ($balanceTransaction['id'] ?? null) : null,
             ],
         ];

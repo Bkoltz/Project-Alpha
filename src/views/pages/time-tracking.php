@@ -3,8 +3,14 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/format.php';
+require_once __DIR__ . '/../../utils/time_tracking_schema.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
+try {
+    pa_time_tracking_ensure_schema($pdo);
+} catch (Throwable $e) {
+    @error_log('[TimeTracking] Schema repair failed: ' . $e->getMessage());
+}
 
 function time_tracking_table_exists(PDO $pdo, string $table): bool
 {

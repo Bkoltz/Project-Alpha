@@ -1,10 +1,18 @@
 <?php
 // src/controllers/time-tracking/time_entry_start_timer.php
-require_once __DIR__ . '/../../../config/db.php';
-require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/time_tracking_schema.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('time-tracking');
+try {
+    pa_time_tracking_ensure_schema($pdo);
+} catch (Throwable $e) {
+    @error_log('[TimeTrackingStart] Schema repair failed: ' . $e->getMessage());
+    header('Location: /?page=time-tracking&error=' . urlencode('Time tracking storage is not ready. Run migrations and try again.'));
+    exit;
+}
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId === 0) { http_response_code(401); exit; }

@@ -150,7 +150,7 @@ if ($isApiEndpoint) {
         header('Access-Control-Allow-Origin: ' . $origin);
         header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRF-Token');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-CSRF-Token');
     }
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
         http_response_code(204);
@@ -162,13 +162,19 @@ if ($isApiEndpoint) {
 $apiEnabled = filter_var(getenv('APP_API_ENABLED') !== false ? getenv('APP_API_ENABLED') : 'true', FILTER_VALIDATE_BOOLEAN);
 if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'api-keys')) { // exclude UI page 'api-keys'
     require_once __DIR__ . '/../src/utils/api_auth.php';
-    // Require API key (default scope: full)
-    $apiKey = api_require_key(['full']);
+    $apiEndpointScopes = api_scope_endpoint_map();
+    $requiredApiScope = $apiEndpointScopes[$page] ?? null;
+    if ($requiredApiScope === null) {
+        header('Content-Type: application/json');
+        http_response_code(404);
+        echo json_encode(['error' => 'Unknown API endpoint']);
+        exit;
+    }
+    $apiKey = api_require_key([$requiredApiScope]);
 
     // Map API endpoints
     $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients'];
     if (in_array($page, $dashboardPages, true)) {
-        $apiKey = api_require_key(['dashboard']);
         $map = [
             'api-dashboard-summary'   => __DIR__ . '/../src/controllers/api/dashboard_summary.php',
             'api-financial-summary'   => __DIR__ . '/../src/controllers/api/financial_summary.php',
@@ -658,6 +664,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // API keys
         'api-keys-create',
+        'api-keys-update',
         'api-keys-revoke',
 
         // Clients
@@ -914,6 +921,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'api-keys-create') {
         require_once __DIR__ . '/../src/controllers/api_keys_create.php';
+        exit;
+    }
+    if ($page === 'api-keys-update') {
+        require_once __DIR__ . '/../src/controllers/api_keys_update.php';
         exit;
     }
     if ($page === 'api-keys-revoke') {

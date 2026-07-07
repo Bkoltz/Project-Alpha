@@ -133,14 +133,33 @@ final class ProjectWorkflowUiTest extends TestCase
     {
         $view = file_get_contents($this->root . '/src/views/pages/time-tracking.php');
         $script = file_get_contents($this->root . '/public/assets/js/time-tracking.js');
+        $createController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_create.php');
+        $updateController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_update.php');
+        $startController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_start_timer.php');
+        $deleteController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_delete.php');
+        $optionsController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_options.php');
+        $schema = file_get_contents($this->root . '/src/utils/time_tracking_schema.php');
+        $migration = file_get_contents($this->root . '/database/migrations/0019_repair_time_entries_schema.sql');
 
         self::assertStringContainsString('Date / Time', (string)$view);
         self::assertStringContainsString('Bill To', (string)$view);
         self::assertStringContainsString('Details', (string)$view);
         self::assertStringContainsString('Use start and end time, or enter manual hours. Do not use both.', (string)$view);
+        self::assertStringContainsString('pa_time_tracking_ensure_schema($pdo)', (string)$view);
         self::assertStringContainsString('function syncFromJob(formConfig)', (string)$script);
         self::assertStringContainsString('function syncFromContract(formConfig)', (string)$script);
         self::assertStringContainsString('selectInvoiceForContract(formConfig.invoiceSelect', (string)$script);
+        foreach ([$createController, $updateController, $startController, $deleteController, $optionsController] as $controller) {
+            self::assertStringContainsString("__DIR__ . '/../../config/db.php'", (string)$controller);
+        }
+        foreach ([$createController, $updateController] as $controller) {
+            self::assertStringContainsString('pa_time_tracking_ensure_schema($pdo)', (string)$controller);
+            self::assertStringContainsString('Failed to save time entry', (string)$controller);
+        }
+        self::assertStringContainsString('function pa_time_tracking_ensure_schema', (string)$schema);
+        self::assertStringContainsString('service_item_id', (string)$migration);
+        self::assertStringContainsString('project_code', (string)$migration);
+        self::assertStringContainsString('updated_at', (string)$migration);
     }
 
     public function testPdfFacingDocumentCopyUsesWorkAndJobWording(): void

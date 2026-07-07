@@ -1,6 +1,6 @@
 <?php
 // src/controllers/time-tracking/time_entry_options.php
-require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 
 header('Content-Type: application/json');

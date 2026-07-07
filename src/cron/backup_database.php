@@ -10,14 +10,18 @@ require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/backup_archive.php';
 
+function backup_database_run(array $argv = []): int
+{
+global $pdo, $appConfig;
+
 $jobName = 'backup_database';
 $appTimezone = date_default_timezone_get();
 
-$scheduledRun = in_array('--scheduled', $argv ?? [], true);
+$scheduledRun = in_array('--scheduled', $argv, true);
 if ($scheduledRun) {
     if (empty($appConfig['cron_enabled'])) {
         cron_state_mark_success($pdo, $jobName, 'Cron disabled');
-        exit(0);
+        return 0;
     }
     $backupHour = 2;
     try {
@@ -31,7 +35,7 @@ if ($scheduledRun) {
         // Use the safe default when settings are unavailable.
     }
     if ((int)date('G') !== $backupHour) {
-        exit(0);
+        return 0;
     }
 }
 
@@ -50,7 +54,7 @@ $todayArtifacts = array_merge(
 );
 if ($scheduledRun && $todayArtifacts) {
     cron_state_mark_success($pdo, $jobName, 'Scheduled backup already exists for today');
-    exit(0);
+    return 0;
 }
 
 $db = getenv('MYSQL_DATABASE') ?: 'project_alpha';
@@ -63,7 +67,7 @@ $gz = gzopen($filepath, 'wb9');
 if (!$gz) {
     @error_log("[Backup] FAILED: Could not open $filepath for writing");
     cron_state_mark_failure($pdo, $jobName, new RuntimeException("Could not open {$filepath} for writing"));
-    exit(1);
+    return 1;
 }
 
 // Write header
@@ -120,7 +124,7 @@ if (!file_exists($filepath) || filesize($filepath) < 100) {
     @error_log("[Backup] FAILED: backup file too small or missing");
     if (file_exists($filepath)) unlink($filepath);
     cron_state_mark_failure($pdo, $jobName, new RuntimeException('Backup file too small or missing'));
-    exit(1);
+    return 1;
 }
 
 $backupMode = 'database';
@@ -149,7 +153,7 @@ if ($backupMode === 'full' || $encryptionKey !== '') {
         @unlink($archivePath);
         cron_state_mark_failure($pdo, $jobName, $e);
         @error_log('[Backup] Archive creation failed: ' . $e->getMessage());
-        exit(1);
+        return 1;
     }
 }
 
@@ -207,3 +211,9 @@ foreach ([$weeklyDir => 4, $monthlyDir => 12] as $dir => $keep) {
 
 echo "Backup complete: " . $filepath . " (" . $size . "KB)\n";
 cron_state_mark_success($pdo, $jobName, "Created {$filepath} ({$size}KB)");
+return 0;
+}
+
+if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    exit(backup_database_run($argv ?? []));
+}

@@ -3,6 +3,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/api_keys_schema.php';
+require_once __DIR__ . '/api_scopes.php';
 
 function api_json_error(int $code, string $msg): void {
     header('Content-Type: application/json');
@@ -46,13 +47,9 @@ function api_require_key(array $requiredScopes = []) {
         }
         // Scope check (simple CSV/JSON list in column)
         if ($requiredScopes) {
-            $scopes = strtolower((string)($row['scopes'] ?? 'full'));
-            if ($scopes !== 'full') {
-                $have = array_filter(array_map('trim', preg_split('/[\s,]+/', $scopes)));
-                foreach ($requiredScopes as $need) {
-                    if (!in_array(strtolower($need), $have, true)) {
-                        api_json_error(403, 'Insufficient scope');
-                    }
+            foreach ($requiredScopes as $need) {
+                if (!api_key_has_scope($row['scopes'] ?? '', (string)$need)) {
+                    api_json_error(403, 'Insufficient API scope: ' . (string)$need);
                 }
             }
         }
@@ -68,6 +65,19 @@ function api_require_key(array $requiredScopes = []) {
             $pdo->prepare('INSERT INTO api_usage (api_key_id) VALUES (?)')->execute([(int)$row['id']]);
             $pdo->prepare('UPDATE api_keys SET last_used_at=NOW() WHERE id=?')->execute([(int)$row['id']]);
         } catch (Throwable $e) {}
+        $GLOBALS['pa_api_key'] = $row;
+        $_SESSION['api_key'] = [
+            'id' => (int)$row['id'],
+            'name' => (string)($row['name'] ?? ''),
+            'scopes' => api_normalize_scopes($row['scopes'] ?? ''),
+        ];
+        if (empty($_SESSION['user'])) {
+            $_SESSION['user'] = [
+                'id' => 0,
+                'role' => 'admin',
+                'name' => 'API Key: ' . (string)($row['name'] ?? $row['key_prefix'] ?? 'external'),
+            ];
+        }
         return $row;
     } catch (Throwable $e) {
         api_json_error(500, 'API auth error');
