@@ -16,6 +16,7 @@
  * @param int        $maxBytes     Maximum allowed file size in bytes (default 8 MB).
  * @param string     $targetDir    Directory where the file will be stored (must exist/be writable).
  * @param string|null $error       Populated with an error message on failure.
+ * @param array      $options      Optional hardening flags for higher-risk surfaces.
  * @return string|null The generated safe filename on success, or null on failure.
  */
 function validate_and_store_upload(
@@ -23,7 +24,8 @@ function validate_and_store_upload(
     array $allowedMap,
     int $maxBytes,
     string $targetDir,
-    ?string &$error = null
+    ?string &$error = null,
+    array $options = []
 ): ?string {
     if (!isset($file['error'])) {
         $error = 'No upload data provided';
@@ -32,6 +34,11 @@ function validate_and_store_upload(
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
         $error = 'Upload failed with error code ' . $file['error'];
+        return null;
+    }
+
+    if ((int)$file['size'] <= 0) {
+        $error = 'File is empty';
         return null;
     }
 
@@ -47,6 +54,12 @@ function validate_and_store_upload(
 
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = $finfo->file($file['tmp_name']);
+    $originalExt = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+
+    if (!empty($options['reject_archives']) && upload_looks_like_archive($mime, $originalExt)) {
+        $error = 'Archive files are not accepted';
+        return null;
+    }
 
     if (!array_key_exists($mime, $allowedMap)) {
         $error = 'Invalid file type';
@@ -56,13 +69,32 @@ function validate_and_store_upload(
     $allowedExts = $allowedMap[$mime];
     $exts = is_array($allowedExts) ? $allowedExts : [$allowedExts];
 
-    $originalExt = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
     if (!in_array($originalExt, $exts, true)) {
         $error = 'Invalid file extension';
         return null;
     }
 
-    $clamavError = scan_clamav($file['tmp_name']);
+    if (str_starts_with((string)$mime, 'image/')) {
+        $imageError = validate_image_upload_shape((string)$file['tmp_name'], (int)($options['max_image_pixels'] ?? 0));
+        if ($imageError !== null) {
+            $error = $imageError;
+            return null;
+        }
+    }
+
+    if ($mime === 'application/pdf') {
+        $pdfError = validate_pdf_upload_content(
+            (string)$file['tmp_name'],
+            !empty($options['require_pdf_header']),
+            !empty($options['reject_pdf_active_content'])
+        );
+        if ($pdfError !== null) {
+            $error = $pdfError;
+            return null;
+        }
+    }
+
+    $clamavError = scan_clamav($file['tmp_name'], !empty($options['clamav_required']));
     if ($clamavError !== null) {
         $error = $clamavError;
         return null;
@@ -86,6 +118,66 @@ function validate_and_store_upload(
     }
 
     return $filename;
+}
+
+function upload_looks_like_archive(string|false $mime, string $extension): bool
+{
+    $archiveExts = ['zip', 'rar', '7z', 'gz', 'gzip', 'bz2', 'xz', 'tar', 'tgz', 'tbz', 'jar', 'war', 'ear'];
+    if (in_array($extension, $archiveExts, true)) {
+        return true;
+    }
+
+    $archiveMimes = [
+        'application/zip',
+        'application/x-zip-compressed',
+        'application/x-rar',
+        'application/vnd.rar',
+        'application/x-7z-compressed',
+        'application/gzip',
+        'application/x-gzip',
+        'application/x-bzip2',
+        'application/x-xz',
+        'application/x-tar',
+        'application/java-archive',
+    ];
+
+    return in_array((string)$mime, $archiveMimes, true);
+}
+
+function validate_image_upload_shape(string $path, int $maxPixels): ?string
+{
+    $info = @getimagesize($path);
+    if ($info === false || empty($info[0]) || empty($info[1])) {
+        return 'Invalid image file';
+    }
+
+    if ($maxPixels > 0 && ((int)$info[0] * (int)$info[1]) > $maxPixels) {
+        return 'Image dimensions are too large';
+    }
+
+    return null;
+}
+
+function validate_pdf_upload_content(string $path, bool $requireHeader, bool $rejectActiveContent): ?string
+{
+    if ($requireHeader) {
+        $head = @file_get_contents($path, false, null, 0, 1024);
+        if (!is_string($head) || strpos($head, '%PDF-') === false) {
+            return 'Invalid PDF file';
+        }
+    }
+
+    if ($rejectActiveContent) {
+        $contents = @file_get_contents($path);
+        if (!is_string($contents)) {
+            return 'Failed to inspect PDF file';
+        }
+        if (preg_match('/\/\s*(JavaScript|JS|Launch|EmbeddedFile|RichMedia|OpenAction)\b/i', $contents) === 1) {
+            return 'PDF contains active or embedded content that is not accepted';
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -148,10 +240,13 @@ function validate_upload(array $file, array $allowedMimes, int $maxBytes = 5 * 1
  * @param string $filepath Path to the file to scan
  * @return string|null Error message if malware detected or scan failed, null if clean/skipped
  */
-function scan_clamav(string $filepath): ?string
+function scan_clamav(string $filepath, bool $required = false): ?string
 {
     $host = getenv('CLAMAV_HOST');
     if (!$host) {
+        if ($required) {
+            return 'Virus scanning is required but not configured';
+        }
         // ClamAV not configured — fail open
         return null;
     }
@@ -161,6 +256,9 @@ function scan_clamav(string $filepath): ?string
 
     $socket = @fsockopen($host, $port, $errno, $errstr, $timeout);
     if (!$socket) {
+        if ($required) {
+            return 'Virus scanner is unavailable';
+        }
         // Daemon unreachable — fail open (log for admin awareness)
         @error_log('[clamav] Cannot connect to daemon at ' . $host . ':' . $port . ' — skipping scan');
         return null;
@@ -189,6 +287,9 @@ function scan_clamav(string $filepath): ?string
     fclose($socket);
 
     if ($response === false) {
+        if ($required) {
+            return 'Virus scanner did not respond';
+        }
         @error_log('[clamav] No response from daemon — skipping scan');
         return null;
     }
@@ -204,6 +305,10 @@ function scan_clamav(string $filepath): ?string
     }
 
     // Unknown response — fail open
+    if ($required) {
+        return 'Virus scanner returned an unexpected response';
+    }
+
     @error_log('[clamav] Unexpected response: ' . $response);
     return null;
 }

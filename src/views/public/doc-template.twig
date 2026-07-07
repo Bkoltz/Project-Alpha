@@ -41,7 +41,7 @@
       <form method="post" action="/?page=public-contract-action" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center">
         <input type="hidden" name="csrf" value="{{ csrf|default('') }}">
         <input type="hidden" name="token" value="{{ token|e }}">
-        <input type="file" name="signed_pdf" accept="application/pdf" required style="padding:6px">
+        <input type="file" name="signed_pdf" accept="application/pdf,.pdf" required style="padding:6px">
         <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#0ea5a4;color:#fff">Upload Signed Contract</button>
       </form>
       <div style="margin-top:8px;color:var(--muted);font-size:13px">Upload a signed PDF to mark this contract active. Maximum 25 MB. PDF only.</div>

@@ -5,6 +5,124 @@ itemData.forEach(item => {
     addItemCo(item.item, item.description, Number(item.quantity), Number(item.unit_price), item.billing_unit || 'each');
 });
 
+function escapeHtmlCo(text) {
+    var div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+}
+
+function initContractEditClientSearch() {
+    var form = document.getElementById('coEditForm');
+    var input = document.getElementById('contractEditClientSearch');
+    var hidden = document.getElementById('contractEditClientId');
+    var suggestions = document.getElementById('contractEditClientSuggest');
+    var projectSelect = document.getElementById('contractEditProjectSelect');
+    if (!form || !input || !hidden || !suggestions) return;
+    if (input.dataset.contractEditClientReady === '1') return;
+    input.dataset.contractEditClientReady = '1';
+    var originalClientId = hidden.value || '';
+    var originalProjectId = projectSelect ? (projectSelect.getAttribute('data-selected-project-id') || '') : '';
+
+    function hideSuggestions() {
+        suggestions.style.display = 'none';
+        suggestions.innerHTML = '';
+    }
+
+    function setValidity() {
+        if (hidden.value) {
+            input.setCustomValidity('');
+            return;
+        }
+        input.setCustomValidity('Choose a client from the search results.');
+    }
+
+    function renderProjects(projects, selectedProjectId) {
+        if (!projectSelect) return;
+        var selected = selectedProjectId || '';
+        projectSelect.innerHTML = '<option value="">No project</option>';
+        if (!Array.isArray(projects)) return;
+        projects.forEach(function (project) {
+            var option = document.createElement('option');
+            option.value = project.id;
+            option.textContent = project.name + ' - ' + String(project.status || '').replace('_', ' ');
+            if (String(project.id) === String(selected)) option.selected = true;
+            projectSelect.appendChild(option);
+        });
+    }
+
+    function loadProjects(clientId, selectedProjectId) {
+        if (!projectSelect) return;
+        if (!clientId) {
+            renderProjects([], '');
+            return;
+        }
+        fetch('/?page=projects-search&client_id=' + encodeURIComponent(clientId))
+            .then(function (response) { return response.json(); })
+            .then(function (projects) { renderProjects(projects, selectedProjectId || ''); })
+            .catch(function () { renderProjects([], ''); });
+    }
+
+    function renderSuggestions(list) {
+        if (!Array.isArray(list) || list.length === 0) {
+            hideSuggestions();
+            return;
+        }
+        suggestions.innerHTML = list.map(function (client) {
+            var meta = [];
+            if (client.email) meta.push(client.email);
+            if (client.org_name) meta.push(client.org_name);
+            return '<button type="button" data-client-id="' + escapeHtmlCo(client.id) + '" data-client-name="' + escapeHtmlCo(client.name) + '" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-bottom:1px solid #eef2f7;background:#fff;cursor:pointer">' +
+                '<strong>' + escapeHtmlCo(client.name) + '</strong>' +
+                (meta.length ? '<span style="display:block;margin-top:2px;color:#6b7280;font-size:12px">' + escapeHtmlCo(meta.join(' - ')) + '</span>' : '') +
+                '</button>';
+        }).join('');
+        suggestions.style.display = 'block';
+    }
+
+    var searchTimer = null;
+    input.addEventListener('input', function () {
+        hidden.value = '';
+        setValidity();
+        var term = input.value.trim();
+        clearTimeout(searchTimer);
+        if (!term) {
+            hideSuggestions();
+            loadProjects('', '');
+            return;
+        }
+        searchTimer = setTimeout(function () {
+            fetch('/?page=clients-search&term=' + encodeURIComponent(term))
+                .then(function (response) { return response.json(); })
+                .then(renderSuggestions)
+                .catch(hideSuggestions);
+        }, 160);
+    });
+
+    suggestions.addEventListener('click', function (event) {
+        var option = event.target.closest('[data-client-id]');
+        if (!option) return;
+        hidden.value = option.getAttribute('data-client-id') || '';
+        input.value = option.getAttribute('data-client-name') || '';
+        input.setCustomValidity('');
+        hideSuggestions();
+        loadProjects(hidden.value, String(hidden.value) === String(originalClientId) ? originalProjectId : '');
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!suggestions.contains(event.target) && event.target !== input) {
+            hideSuggestions();
+        }
+    });
+
+    form.addEventListener('submit', function (event) {
+        setValidity();
+        if (!input.checkValidity()) {
+            event.preventDefault();
+            input.reportValidity();
+        }
+    });
+}
+
 function getItemData() {
     const element = document.getElementById("contract-items-data");
     if (!element) {
@@ -128,3 +246,5 @@ if (addItemBtn) addItemBtn.addEventListener('click', function(e) {addItemCo();})
 });
 
 ['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => document.getElementById(id).addEventListener('input', recalcCo));
+
+initContractEditClientSearch();

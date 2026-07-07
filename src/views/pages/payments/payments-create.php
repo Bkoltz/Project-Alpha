@@ -18,7 +18,6 @@ $invoices = $pdo->query("
   ORDER BY i.created_at DESC
   LIMIT 200
 ")->fetchAll(PDO::FETCH_ASSOC);
-$clients = $pdo->query('SELECT id,name,email FROM clients ORDER BY name ASC LIMIT 500')->fetchAll(PDO::FETCH_ASSOC);
 $pref = (int)($_GET['invoice_id'] ?? 0);
 $prefAmount = '';
 if ($pref > 0) {
@@ -42,7 +41,7 @@ if ($pref > 0) {
 ?>
 <section>
   <h2>Record Payment</h2>
-  <form method="post" action="/?page=payments/payments-create" style="display:grid;gap:12px;max-width:560px">
+  <form method="post" action="/?page=payments/payments-create" id="recordPaymentForm" style="display:grid;gap:12px;max-width:560px">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
 
     <div style="display:grid;gap:8px">
@@ -74,14 +73,12 @@ if ($pref > 0) {
     <div id="manualPaymentFields" style="display:none;gap:12px">
       <label>
         <div>Client</div>
-        <select name="client_id" id="manualClientSelect" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-          <option value="">Select client...</option>
-          <?php foreach ($clients as $client): ?>
-            <option value="<?php echo (int)$client['id']; ?>">
-              <?php echo htmlspecialchars($client['name']); ?><?php echo !empty($client['email']) ? ' - ' . htmlspecialchars($client['email']) : ''; ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
+        <div style="position:relative">
+          <input type="hidden" name="client_id" id="manualClientId">
+          <input type="text" id="manualClientSearch" placeholder="Type a client name or email..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          <div id="manualClientSuggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;max-height:220px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 12px 24px rgba(15,23,42,.12)"></div>
+        </div>
+        <small style="display:block;margin-top:6px;color:var(--muted)">Start typing, then choose the matching client.</small>
       </label>
     </div>
 

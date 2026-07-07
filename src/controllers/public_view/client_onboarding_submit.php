@@ -11,8 +11,9 @@ if (!rate_limit_check($pdo, 'client_onboarding_submit', 5, 900, false)) {
 }
 
 $invitationId = (int)($_SESSION['client_onboarding_invitation_id'] ?? 0);
+$token = trim((string)($_POST['token'] ?? ''));
 $name = client_onboarding_clean_text($_POST['name'] ?? '', 150);
-if ($invitationId <= 0 || $name === '') {
+if (($invitationId <= 0 && $token === '') || $name === '') {
     header('Location: /?page=client-onboarding&error=' . urlencode('Name is required.'));
     exit;
 }
@@ -36,19 +37,24 @@ $data = [
 
 try {
     $pdo->beginTransaction();
-    $inviteStmt = $pdo->prepare('SELECT * FROM client_onboarding_invitations WHERE id=? FOR UPDATE');
-    $inviteStmt->execute([$invitationId]);
-    $invite = $inviteStmt->fetch(PDO::FETCH_ASSOC);
-    if (!$invite || ($invite['status'] ?? '') !== 'verified' || strtotime((string)$invite['expires_at']) < time()) {
+    if ($token !== '') {
+        $invite = client_onboarding_find_invitation($pdo, $token, true);
+    } else {
+        $inviteStmt = $pdo->prepare('SELECT * FROM client_onboarding_invitations WHERE id=? FOR UPDATE');
+        $inviteStmt->execute([$invitationId]);
+        $invite = $inviteStmt->fetch(PDO::FETCH_ASSOC);
+    }
+    if (!$invite || ($invite['status'] ?? '') !== 'pending' || strtotime((string)$invite['expires_at']) < time()) {
         throw new RuntimeException('This onboarding session is no longer available.');
     }
+    $invitationId = (int)$invite['id'];
     $pdo->prepare(
         'INSERT INTO client_onboarding_submissions (invitation_id,proposed_data,status)
          VALUES (?,? ,"pending")
          ON DUPLICATE KEY UPDATE proposed_data=VALUES(proposed_data),status="pending",reviewed_by=NULL,reviewed_at=NULL,review_notes=NULL'
     )->execute([$invitationId, json_encode($data, JSON_UNESCAPED_SLASHES)]);
     $submissionId = (int)$pdo->lastInsertId();
-    $pdo->prepare('UPDATE client_onboarding_invitations SET status="submitted" WHERE id=?')->execute([$invitationId]);
+    $pdo->prepare('UPDATE client_onboarding_invitations SET status="submitted", consumed_at=NOW() WHERE id=? AND status="pending"')->execute([$invitationId]);
     $pdo->commit();
 
     unset($_SESSION['client_onboarding_invitation_id']);

@@ -1,8 +1,12 @@
 <?php
 
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/client_onboarding.php';
+
+client_onboarding_revoke_stale($pdo);
 
 $organizationId = request_client_org_id();
 $clients = $pdo->query('SELECT id,name,email FROM clients WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
@@ -90,7 +94,7 @@ unset($_SESSION['client_onboarding_link']);
       </label>
       <label class="field"><span class="label-muted">Existing Client</span><select class="input" name="client_id" data-onboarding-client-select><option value="0">New client</option><?php foreach ($clients as $client): ?><option value="<?php echo (int)$client['id']; ?>" data-email="<?php echo htmlspecialchars((string)($client['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($client['name'] . (!empty($client['email']) ? ' - ' . $client['email'] : '')); ?></option><?php endforeach; ?></select></label>
       <label class="field"><span class="label-muted">Client Organization <span style="font-weight:400;color:var(--muted)">(optional)</span></span><select class="input" name="target_organization_id"><option value="0">No organization</option><?php foreach ($organizations as $organization): ?><option value="<?php echo (int)$organization['id']; ?>"><?php echo htmlspecialchars($organization['name']); ?></option><?php endforeach; ?></select></label>
-      <label class="field"><span class="label-muted">Expires In</span><select class="input" name="expires_hours"><option value="24">24 hours</option><option value="48" selected>48 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label>
+      <label class="field"><span class="label-muted">Expires In</span><select class="input" name="expires_hours"><option value="24">24 hours</option><option value="48">48 hours</option><option value="72">3 days</option><option value="168">7 days</option><option value="336" selected>14 days</option></select></label>
     </div>
     <div class="onboarding-invite-actions">
       <button class="btn" type="submit" name="delivery" value="link">Generate Link</button>
@@ -106,7 +110,7 @@ unset($_SESSION['client_onboarding_link']);
       <?php foreach ($invitations as $invitation): ?>
         <?php $proposal = json_decode((string)($invitation['proposed_data'] ?? ''), true); $proposal = is_array($proposal) ? $proposal : []; ?>
         <tr>
-          <td><?php echo !empty($invitation['invited_email']) ? htmlspecialchars((string)$invitation['invited_email']) : '<span class="muted">Provided during verification</span>'; ?></td>
+          <td><?php echo !empty($invitation['invited_email']) ? htmlspecialchars((string)$invitation['invited_email']) : '<span class="muted">Not required</span>'; ?></td>
           <td><?php echo htmlspecialchars((string)($invitation['client_name'] ?: 'New client')); ?></td>
           <td><?php echo htmlspecialchars((string)($invitation['target_organization_name'] ?: 'None')); ?></td>
           <td><span class="status-pill status-pill--<?php echo htmlspecialchars((string)$invitation['status']); ?>"><?php echo htmlspecialchars(ucfirst((string)$invitation['status'])); ?></span></td>
@@ -123,9 +127,18 @@ unset($_SESSION['client_onboarding_link']);
                 <button class="btn btn-sm btn-primary" name="decision" value="approve">Approve</button><button class="btn btn-sm btn-danger" name="decision" value="reject">Reject</button>
               </form>
             <?php elseif (in_array((string)$invitation['status'], ['pending','verified'], true)): ?>
-              <form method="post" action="/?page=client/onboarding-invite" onsubmit="return confirm('Revoke this invitation?')">
-                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="<?php echo (int)$invitation['id']; ?>"><button class="btn btn-sm btn-danger">Revoke</button>
-              </form>
+              <?php $storedLink = client_onboarding_link_for_invitation($appConfig, $invitation); ?>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <?php if ($storedLink !== ''): ?>
+                  <input id="onboardingLink<?php echo (int)$invitation['id']; ?>" class="input" readonly value="<?php echo htmlspecialchars($storedLink); ?>" style="position:absolute;left:-9999px;width:1px;height:1px">
+                  <button type="button" class="btn btn-sm" data-copy-onboarding-link="onboardingLink<?php echo (int)$invitation['id']; ?>">Copy Link</button>
+                <?php else: ?>
+                  <span class="muted" style="font-size:12px">Original link not recoverable</span>
+                <?php endif; ?>
+                <form method="post" action="/?page=client/onboarding-invite" onsubmit="return confirm('Revoke this invitation?')" style="display:inline">
+                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="<?php echo (int)$invitation['id']; ?>"><button class="btn btn-sm btn-danger">Revoke</button>
+                </form>
+              </div>
             <?php else: ?><span class="muted">Complete</span><?php endif; ?>
           </td>
         </tr>

@@ -6,6 +6,8 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/client_onboarding.php';
 
+client_onboarding_revoke_stale($pdo);
+
 $organizationId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId <= 0) {
@@ -41,7 +43,7 @@ $email = strtolower(trim((string)($_POST['email'] ?? '')));
 $clientId = max(0, (int)($_POST['client_id'] ?? 0));
 $targetOrganizationId = max(0, (int)($_POST['target_organization_id'] ?? 0));
 $delivery = ($_POST['delivery'] ?? 'link') === 'email' ? 'email' : 'link';
-$expiresHours = max(1, min(168, (int)($_POST['expires_hours'] ?? 48)));
+$expiresHours = max(1, min(336, (int)($_POST['expires_hours'] ?? 336)));
 
 if ($delivery === 'email' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     header('Location: /?page=client/onboarding&error=' . urlencode('Enter a valid email address.'));
@@ -85,8 +87,8 @@ if ($email !== '') {
 }
 $stmt = $pdo->prepare(
     'INSERT INTO client_onboarding_invitations
-     (organization_id,target_organization_id,client_id,invited_email,token_hash,expires_at,created_by)
-     VALUES (?,?,?,?,?,?,?)'
+     (organization_id,target_organization_id,client_id,invited_email,token_hash,token_enc,expires_at,created_by)
+     VALUES (?,?,?,?,?,?,?,?)'
 );
 $stmt->execute([
     $ownerOrganizationId,
@@ -94,6 +96,7 @@ $stmt->execute([
     $clientId ?: null,
     $email !== '' ? $email : null,
     hash('sha256', $token),
+    client_onboarding_store_token($token),
     $expiresAt,
     $userId,
 ]);

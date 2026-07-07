@@ -14,17 +14,19 @@ $id = (int)($_POST['id'] ?? 0);
 $name = trim((string)($_POST['name'] ?? ''));
 $allowedIps = trim((string)($_POST['allowed_ips'] ?? '')) ?: null;
 $scopes = api_normalize_scopes($_POST['scopes'] ?? []);
+$returnToEdit = (string)($_POST['return_to'] ?? '') === 'edit';
+$redirectBase = $returnToEdit && $id > 0 ? '/?page=api-keys-edit&id=' . $id : '/?page=api-keys';
 
 if ($id <= 0) {
   header('Location: /?page=api-keys&error=' . urlencode('Invalid key'));
   exit;
 }
 if ($name === '') {
-  header('Location: /?page=api-keys&error=' . urlencode('Name is required'));
+  header('Location: ' . $redirectBase . '&error=' . urlencode('Name is required'));
   exit;
 }
 if (!$scopes) {
-  header('Location: /?page=api-keys&error=' . urlencode('Select at least one API scope'));
+  header('Location: ' . $redirectBase . '&error=' . urlencode('Select at least one API scope'));
   exit;
 }
 
@@ -36,14 +38,14 @@ try {
     $exists = $pdo->prepare('SELECT 1 FROM api_keys WHERE id = ? AND revoked_at IS NULL');
     $exists->execute([$id]);
     if (!$exists->fetchColumn()) {
-      header('Location: /?page=api-keys&error=' . urlencode('API key was not updated'));
+      header('Location: ' . $redirectBase . '&error=' . urlencode('API key was not updated'));
       exit;
     }
   }
-  header('Location: /?page=api-keys&updated=1');
+  header('Location: ' . $redirectBase . '&updated=1');
   exit;
 } catch (Throwable $e) {
   @error_log('[api_keys_update] Failed to update API key: ' . $e->getMessage());
-  header('Location: /?page=api-keys&error=' . urlencode('Failed to update key'));
+  header('Location: ' . $redirectBase . '&error=' . urlencode('Failed to update key'));
   exit;
 }

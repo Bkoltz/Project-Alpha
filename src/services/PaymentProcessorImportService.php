@@ -82,12 +82,6 @@ class PaymentProcessorImportService
 
         $paymentId = self::insertStandalonePayment($pdo, $transaction, $ledgerId, $clientId);
         self::markLedger($pdo, $ledgerId, 'imported', null, $paymentId);
-        try {
-            require_once __DIR__ . '/../utils/payment_receipts.php';
-            payment_receipt_issue($pdo, $paymentId, $appConfig);
-        } catch (Throwable $receiptError) {
-            @error_log('[processor_import] Receipt issue failed for payment ' . $paymentId . ': ' . $receiptError->getMessage());
-        }
 
         return ['status' => 'imported', 'reason' => null, 'payment_id' => $paymentId, 'transaction_id' => $ledgerId];
     }

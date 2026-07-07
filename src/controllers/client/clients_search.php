@@ -9,8 +9,8 @@ $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE
 
 $where = [];
 if ($hasArchived) { $where[] = 'c.archived = 0'; }
-$where[] = 'c.name LIKE ?';
-$params = ['%'.$term.'%'];
+$where[] = '(c.name LIKE ? OR c.email LIKE ?)';
+$params = ['%'.$term.'%', '%'.$term.'%'];
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $activeOrgId = request_client_org_id();
@@ -33,7 +33,7 @@ if (!$isAdmin) {
 }
 
 $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-$sql = "SELECT c.id, c.name, c.organization_id, o.name as org_name, o.tax_exempt_file FROM clients c LEFT JOIN organizations o ON c.organization_id = o.id {$whereSQL} ORDER BY c.name LIMIT 10";
+$sql = "SELECT c.id, c.name, c.email, c.organization_id, o.name as org_name, o.tax_exempt_file FROM clients c LEFT JOIN organizations o ON c.organization_id = o.id {$whereSQL} ORDER BY c.name LIMIT 10";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
