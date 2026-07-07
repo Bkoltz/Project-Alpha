@@ -71,6 +71,8 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('forceStandaloneImport', $importHelper);
         self::assertStringContainsString('normalizePaymentIntentForImport', $stripe);
         self::assertStringContainsString('listPaymentIntentsBetween', $stripe);
+        self::assertStringContainsString('listChargesBetween', $stripe);
+        self::assertStringContainsString('normalizeChargeForImport', $stripe);
         self::assertStringContainsString('charges.data.balance_transaction', $stripe);
         self::assertStringContainsString('getPaymentIntentWithBalanceTransaction', $stripe);
         self::assertStringContainsString('PaymentProcessorImportService::importStandalone', $webhook);
@@ -101,6 +103,8 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('stripe_backfill_net_income', $controller);
         self::assertStringContainsString('stripe_reconcile_payment_intents', $importController);
         self::assertStringContainsString('stripe_import_start_date', $importController);
+        self::assertStringNotContainsString('stripe_import_end_date', $settings);
+        self::assertStringNotContainsString('stripe_import_max_intents', $settings);
         self::assertStringContainsString('settings/stripe-net-backfill', $front);
         self::assertStringContainsString('settings/stripe-import-payments', $front);
         self::assertStringContainsString("'settings/stripe-net-backfill'", $acl);

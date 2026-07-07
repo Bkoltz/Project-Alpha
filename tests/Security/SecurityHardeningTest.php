@@ -199,6 +199,57 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringNotContainsString('exec($cmd', $handler);
     }
 
+    public function testSettingsLogViewerShowsRecentFilesAndNormalViewLinks(): void
+    {
+        $view = $this->read('src/views/pages/settings/logs.php');
+        $handler = $this->read('src/controllers/settings/logs_handler.php');
+
+        self::assertStringContainsString('array_slice($allLogFileMap, 0, 5, true)', $view);
+        self::assertStringContainsString('filemtime($b)', $view);
+        self::assertStringContainsString('Showing the five most recent', $view);
+        self::assertStringContainsString('data-skip-nav href="/?page=settings&amp;tab=logs&amp;file=', $view);
+        self::assertStringContainsString('uasort($files', $handler);
+        self::assertStringContainsString('filemtime($b)', $handler);
+    }
+
+    public function testApiKeysExposeScopedAclControlsAndKeepLegacyScopesWorking(): void
+    {
+        $front = $this->read('public/index.php');
+        $auth = $this->read('src/utils/api_auth.php');
+        $scopes = $this->read('src/utils/api_scopes.php');
+        $view = $this->read('src/views/pages/api-keys.php');
+        $create = $this->read('src/controllers/api_keys_create.php');
+        $update = $this->read('src/controllers/api_keys_update.php');
+        $acl = $this->read('src/utils/acl_middleware.php');
+        $audit = $this->read('src/utils/audit_middleware.php');
+
+        self::assertStringContainsString('api_scope_endpoint_map()', $front);
+        self::assertStringContainsString('api_require_key([$requiredApiScope])', $front);
+        self::assertStringContainsString('X-API-Key', $front);
+        self::assertStringNotContainsString("api_require_key(['full'])", $front);
+
+        foreach (['dashboard.read', 'financial.read', 'clients.read', 'projects.read', 'quotes.read', 'invoices.read'] as $scope) {
+            self::assertStringContainsString($scope, $scopes);
+        }
+        foreach (['api-dashboard-summary', 'api-financial-summary', 'api-clients-search'] as $endpoint) {
+            self::assertStringContainsString($endpoint, $scopes);
+        }
+
+        self::assertStringContainsString('api_key_has_scope', $auth);
+        self::assertStringContainsString('$_SESSION[\'api_key\']', $auth);
+        self::assertStringContainsString("['read', 'write', 'read.write', 'read_write']", $scopes);
+        self::assertStringContainsString("['*', 'all', 'admin', 'full_access', 'full-access']", $scopes);
+
+        self::assertStringContainsString('api_scope_options_for_form()', $view);
+        self::assertStringContainsString('api_keys_scope_checkboxes', $view);
+        self::assertStringContainsString('/?page=api-keys-update', $view);
+        self::assertStringContainsString('pa_api_keys_existing_columns($pdo)', $view);
+        self::assertStringContainsString('api_scopes_to_storage($scopes)', $create);
+        self::assertStringContainsString('api_scopes_to_storage($scopes)', $update);
+        self::assertStringContainsString("'api-keys-update'", $acl);
+        self::assertStringContainsString("'api-keys-update'", $audit);
+    }
+
     public function testMigrationRunnerRetriesTransientMysqlLockFailures(): void
     {
         $runner = $this->read('src/migrations/run_migrations.php');

@@ -1,7 +1,8 @@
 <?php
 // src/controllers/time-tracking/time_entry_create.php
-require_once __DIR__ . '/../../../config/db.php';
-require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/time_tracking_schema.php';
 
 function time_tracking_create_error(string $message): void
 {
@@ -11,6 +12,12 @@ function time_tracking_create_error(string $message): void
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('time-tracking');
+try {
+    pa_time_tracking_ensure_schema($pdo);
+} catch (Throwable $e) {
+    @error_log('[TimeTrackingCreate] Schema repair failed: ' . $e->getMessage());
+    time_tracking_create_error('Time tracking storage is not ready. Run migrations and try again.');
+}
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId === 0) { http_response_code(401); exit; }
@@ -103,8 +110,13 @@ if ($hours <= 0) {
     time_tracking_create_error('Hours must be greater than 0');
 }
 
-$stmt = $pdo->prepare('INSERT INTO time_entries (user_id, client_id, project_id, project_code, contract_id, invoice_id, service_item_id, description, started_at, ended_at, hours, billable, rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-$stmt->execute([$userId, $clientId, $projectId, $projectCode, $contractId, $invoiceId, $serviceItemId, $description, $startedAt, $endedAt, $hours, $billable, $rate]);
+try {
+    $stmt = $pdo->prepare('INSERT INTO time_entries (user_id, client_id, project_id, project_code, contract_id, invoice_id, service_item_id, description, started_at, ended_at, hours, billable, rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$userId, $clientId, $projectId, $projectCode, $contractId, $invoiceId, $serviceItemId, $description, $startedAt, $endedAt, $hours, $billable, $rate]);
+} catch (Throwable $e) {
+    @error_log('[TimeTrackingCreate] Failed to save time entry: ' . $e->getMessage());
+    time_tracking_create_error('Failed to save time entry.');
+}
 
 header('Location: /?page=time-tracking&created=1');
 exit;

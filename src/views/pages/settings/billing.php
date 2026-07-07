@@ -7,8 +7,8 @@ require_once __DIR__ . '/../../../services/StripeService.php';
 $stripeSecretConfigured = StripeService::hasSecretKey($appConfig ?? []);
 $stripeWebhookConfigured = !empty($appConfig['_stripe_webhook_secret']) || !empty($appConfig['stripe_webhook_secret_enc']);
 $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || !empty($appConfig['stripe_publishable_key']);
-$stripeImportEndDefault = date('Y-m-d');
 $stripeImportStartDefault = date('Y-m-d', strtotime('-30 days'));
+$stripeImportToday = date('Y-m-d');
 ?>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
@@ -89,17 +89,11 @@ $stripeImportStartDefault = date('Y-m-d', strtotime('-30 days'));
   <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee;display:grid;gap:8px">
     <div>
       <strong>Import old Stripe payments</strong>
-      <div style="font-size:13px;color:var(--muted);margin-top:2px">Pull successful Stripe payments for a selected date range, including standalone income not linked to PA invoices. Defaults to the last 30 days through today.</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">Pull successful Stripe payments from the selected start date through today, including standalone income not linked to PA invoices. Already imported payments are skipped.</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <label style="display:grid;gap:4px;font-size:13px;color:var(--muted)">Start
-        <input type="date" name="stripe_import_start_date" value="<?php echo htmlspecialchars($stripeImportStartDefault); ?>" max="<?php echo htmlspecialchars($stripeImportEndDefault); ?>" style="padding:7px;border-radius:8px;border:1px solid #ddd">
-      </label>
-      <label style="display:grid;gap:4px;font-size:13px;color:var(--muted)">End
-        <input type="date" name="stripe_import_end_date" value="<?php echo htmlspecialchars($stripeImportEndDefault); ?>" max="<?php echo htmlspecialchars($stripeImportEndDefault); ?>" style="padding:7px;border-radius:8px;border:1px solid #ddd">
-      </label>
-      <label style="display:grid;gap:4px;font-size:13px;color:var(--muted)">Limit
-        <input type="number" name="stripe_import_max_intents" value="2000" min="100" max="10000" step="100" style="width:100px;padding:7px;border-radius:8px;border:1px solid #ddd">
+        <input type="date" name="stripe_import_start_date" value="<?php echo htmlspecialchars($stripeImportStartDefault); ?>" max="<?php echo htmlspecialchars($stripeImportToday); ?>" style="padding:7px;border-radius:8px;border:1px solid #ddd">
       </label>
       <button type="submit" formaction="/?page=settings/stripe-import-payments" formmethod="post" style="padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-weight:600">Import Stripe Payments</button>
     </div>

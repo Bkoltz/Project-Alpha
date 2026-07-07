@@ -70,6 +70,7 @@ function audit_sensitive_map(): array
             'two-factor-verify'              => ['auth.2fa_verify', 'user'],
             'admin-2fa-disable'              => ['auth.2fa_admin_disable', 'user'],
             'api-keys-create'                => ['api_key.create', 'api_key'],
+            'api-keys-update'                => ['api_key.update', 'api_key'],
             'api-keys-revoke'                => ['api_key.revoke', 'api_key'],
             'reset-request'                  => ['auth.password_reset_request', 'user'],
             'reset-verify'                   => ['auth.password_reset_verify', 'user'],

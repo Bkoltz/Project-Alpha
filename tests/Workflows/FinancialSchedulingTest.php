@@ -49,10 +49,21 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString('cron_state_ensure_schema', (string)$state);
         self::assertStringContainsString('cron_state_ensure_schema($pdo)', (string)$backupPage);
         self::assertStringContainsString("require_once __DIR__ . '/../config/app.php';", (string)$backup);
+        self::assertStringContainsString('function backup_database_run', (string)$backup);
         self::assertStringContainsString('cron_state_mark_success($pdo, $jobName, \'Cron disabled\')', (string)$backup);
         self::assertStringContainsString("config_key='timezone'", (string)$entrypoint);
         self::assertStringContainsString('/etc/localtime', (string)$entrypoint);
         self::assertStringContainsString('stripe_reconciliation.php --startup', (string)$entrypoint);
+    }
+
+    public function testManualBackupUsesInlineRunnerWithVisibleFailurePath(): void
+    {
+        $handler = file_get_contents($this->root . '/src/controllers/backup_handler.php');
+
+        self::assertStringContainsString('backup_run_database_inline', (string)$handler);
+        self::assertStringContainsString('backup_database_run([])', (string)$handler);
+        self::assertStringContainsString('proc_open is disabled', (string)$handler);
+        self::assertStringContainsString('set_time_limit', (string)$handler);
     }
 
     public function testAuditAndOrganizationScriptsInitializeAfterAjaxNavigation(): void

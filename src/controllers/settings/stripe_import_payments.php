@@ -55,23 +55,16 @@ try {
 $today = new DateTimeImmutable('today', $timezone);
 $defaultStart = $today->modify('-30 days');
 $startDateRaw = trim((string)($_POST['stripe_import_start_date'] ?? $defaultStart->format('Y-m-d')));
-$endDateRaw = trim((string)($_POST['stripe_import_end_date'] ?? $today->format('Y-m-d')));
 
 $startDate = stripe_import_parse_date($startDateRaw, $timezone);
-$endDate = stripe_import_parse_date($endDateRaw, $timezone);
-if (!$startDate || !$endDate) {
-    stripe_import_redirect('stripe_import_error', 'Enter valid start and end dates.');
+if (!$startDate) {
+    stripe_import_redirect('stripe_import_error', 'Enter a valid start date.');
 }
 
-if ($endDate > $today) {
-    $endDate = $today;
-}
+$endDate = $today;
 if ($startDate > $endDate) {
-    stripe_import_redirect('stripe_import_error', 'Start date must be on or before the end date.');
+    stripe_import_redirect('stripe_import_error', 'Start date must be today or earlier.');
 }
-
-$maxIntents = (int)($_POST['stripe_import_max_intents'] ?? 2000);
-$maxIntents = max(100, min(10000, $maxIntents));
 
 try {
     $result = stripe_reconcile_payment_intents(
@@ -80,7 +73,7 @@ try {
         $appConfig ?? [],
         $startDate->setTime(0, 0, 0)->getTimestamp(),
         $endDate->setTime(23, 59, 59)->getTimestamp(),
-        $maxIntents,
+        null,
         true
     );
 

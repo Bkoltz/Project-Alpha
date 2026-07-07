@@ -17,6 +17,14 @@ $settingsUrl = '/?page=settings&tab=backup';
 
 function backup_run_php_script(string $script): array
 {
+    if (basename($script) === 'backup_database.php') {
+        return backup_run_database_inline($script);
+    }
+
+    if (!function_exists('proc_open')) {
+        return [['Could not start backup process because proc_open is disabled.'], 1];
+    }
+
     $output = [];
     $returnCode = 1;
     $process = proc_open(
@@ -47,8 +55,48 @@ function backup_run_php_script(string $script): array
     return [$output, $returnCode];
 }
 
+function backup_run_database_inline(string $script): array
+{
+    if (!is_file($script)) {
+        return [['Backup script was not found.'], 1];
+    }
+
+    if (function_exists('set_time_limit')) {
+        @set_time_limit(0);
+    }
+    ignore_user_abort(true);
+
+    $output = [];
+    $returnCode = 1;
+    ob_start();
+    try {
+        require_once $script;
+        if (!function_exists('backup_database_run')) {
+            throw new RuntimeException('Backup runner is unavailable.');
+        }
+        $returnCode = backup_database_run([]);
+        $captured = trim((string)ob_get_clean());
+        if ($captured !== '') {
+            $output = preg_split('/\r\n|\r|\n/', $captured) ?: [];
+        }
+    } catch (Throwable $e) {
+        $captured = trim((string)ob_get_clean());
+        if ($captured !== '') {
+            $output = preg_split('/\r\n|\r|\n/', $captured) ?: [];
+        }
+        $output[] = $e->getMessage();
+        $returnCode = 1;
+    }
+
+    return [$output, $returnCode];
+}
+
 function backup_restore_database_stream(string $databaseSource, string $host, string $port, string $user, string $password, string $database): array
 {
+    if (!function_exists('proc_open')) {
+        return [['Could not start mysql restore process because proc_open is disabled.'], 1];
+    }
+
     $command = ['mysql', '-h', $host, '-P', $port, '-u', $user, $database];
     $previousPassword = getenv('MYSQL_PWD');
     if ($password !== '') {

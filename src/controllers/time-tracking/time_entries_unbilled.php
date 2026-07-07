@@ -1,8 +1,9 @@
 <?php
 // src/controllers/time-tracking/time_entries_unbilled.php
 // AJAX endpoint returning unbilled billable time entries as JSON
-require_once __DIR__ . '/../../../config/db.php';
-require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/time_tracking_schema.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $clientId = (int)($_GET['client_id'] ?? 0);
@@ -11,6 +12,14 @@ $contractId = (int)($_GET['contract_id'] ?? 0);
 $invoiceId = (int)($_GET['invoice_id'] ?? 0);
 
 header('Content-Type: application/json');
+try {
+    pa_time_tracking_ensure_schema($pdo);
+} catch (Throwable $e) {
+    @error_log('[TimeTrackingUnbilled] Schema repair failed: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['error' => 'Time tracking storage is not ready.']);
+    exit;
+}
 
 if ($userId === 0) {
     http_response_code(401);

@@ -39,11 +39,16 @@ function allowed_log_files(): array
                 && is_readable($realCandidate)
                 && preg_match('/^[a-zA-Z0-9_.\-]+\.(?:log|txt)$/', $name)
                 && str_starts_with($realCandidate, $realBase . DIRECTORY_SEPARATOR)) {
-                $files[$name] = $realCandidate;
+                if (!isset($files[$name]) || (filemtime($realCandidate) ?: 0) > (filemtime($files[$name]) ?: 0)) {
+                    $files[$name] = $realCandidate;
+                }
             }
         }
     }
-    ksort($files, SORT_NATURAL | SORT_FLAG_CASE);
+    uasort($files, function (string $a, string $b): int {
+        $mtimeCompare = (filemtime($b) ?: 0) <=> (filemtime($a) ?: 0);
+        return $mtimeCompare !== 0 ? $mtimeCompare : strnatcasecmp(basename($a), basename($b));
+    });
     return $files;
 }
 

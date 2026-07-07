@@ -76,12 +76,20 @@ foreach ($logDirs as $dir) {
     }
     foreach (glob(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '*.{log,txt}', GLOB_BRACE) ?: [] as $filePath) {
         if (is_file($filePath) && is_readable($filePath)) {
-            $logFileMap[basename($filePath)] = $filePath;
+            $name = basename($filePath);
+            if (!isset($logFileMap[$name]) || (filemtime($filePath) ?: 0) > (filemtime($logFileMap[$name]) ?: 0)) {
+                $logFileMap[$name] = $filePath;
+            }
         }
     }
 }
-ksort($logFileMap, SORT_NATURAL | SORT_FLAG_CASE);
-$logFiles = array_keys($logFileMap);
+uasort($logFileMap, function (string $a, string $b): int {
+    $mtimeCompare = (filemtime($b) ?: 0) <=> (filemtime($a) ?: 0);
+    return $mtimeCompare !== 0 ? $mtimeCompare : strnatcasecmp(basename($a), basename($b));
+});
+$allLogFileMap = $logFileMap;
+$visibleLogFileMap = array_slice($allLogFileMap, 0, 5, true);
+$logFiles = array_keys($visibleLogFileMap);
 $selectedFile = '';
 $levelFilter = '';
 $logContent = '';
@@ -91,7 +99,7 @@ if (!empty($_GET['file'])) {
     $selectedFile = basename(preg_replace('/[^a-zA-Z0-9_.\-]/', '', (string)$_GET['file']));
     $levelFilter = isset($_GET['level']) ? strtoupper(preg_replace('/[^A-Z]/', '', (string)$_GET['level'])) : '';
 
-    $path = $logFileMap[$selectedFile] ?? '';
+    $path = $allLogFileMap[$selectedFile] ?? '';
     if (!str_contains($selectedFile, '..') && !str_contains($selectedFile, '/') && !str_contains($selectedFile, '\\')
         && is_file($path) && is_readable($path)
     ) {
@@ -262,8 +270,8 @@ try {
         <legend style="padding:0 8px;font-weight:600">Log Files</legend>
 
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-            <p style="margin:0;color:var(--muted);font-size:13px">Allowed files from system and cron log directories are viewable here.</p>
-            <?php if (!empty($logFiles)): ?>
+            <p style="margin:0;color:var(--muted);font-size:13px">Showing the five most recent readable system and cron log files.</p>
+            <?php if (!empty($allLogFileMap)): ?>
                 <a class="btn btn-sm" data-skip-nav href="/?page=settings/logs-handler&amp;bulk=1">Download All ZIP</a>
             <?php endif; ?>
         </div>
@@ -280,13 +288,13 @@ try {
                 </thead>
                 <tbody>
                     <?php foreach ($logFiles as $file): ?>
-                        <?php $logPath = $logFileMap[$file] ?? ''; ?>
+                        <?php $logPath = $visibleLogFileMap[$file] ?? ''; ?>
                         <tr style="border-bottom:1px solid #f1f5f9;<?php echo $selectedFile === $file ? 'background:#f8fafc' : ''; ?>">
                             <td style="padding:10px;font-weight:600"><?php echo htmlspecialchars($file); ?></td>
                             <td style="padding:10px;color:var(--muted)"><?php echo $logPath && is_file($logPath) ? number_format((float)filesize($logPath) / 1024, 1) . ' KB' : '-'; ?></td>
                             <td style="padding:10px;color:var(--muted);white-space:nowrap"><?php echo $logPath && is_file($logPath) ? htmlspecialchars(date('Y-m-d H:i:s', filemtime($logPath))) : '-'; ?></td>
                             <td style="padding:10px;white-space:nowrap">
-                                <a class="btn btn-sm" href="/?page=settings&amp;tab=logs&amp;file=<?php echo urlencode($file); ?>">View</a>
+                                <a class="btn btn-sm" data-skip-nav href="/?page=settings&amp;tab=logs&amp;file=<?php echo urlencode($file); ?>">View</a>
                                 <a class="btn btn-sm" data-skip-nav href="/?page=settings/logs-handler&amp;file=<?php echo urlencode($file); ?>&amp;download=1">Download</a>
                             </td>
                         </tr>
