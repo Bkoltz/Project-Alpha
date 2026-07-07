@@ -279,7 +279,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         
         // Notify admin of payment via public link
         try {
-            notify_admin_invoice_paid($pdo, $invoiceId, $paymentAmount, 'stripe');
+            notify_admin_invoice_paid($pdo, $GLOBALS['appConfig'] ?? [], $invoiceId, $paymentAmount, $status);
         } catch (Throwable $e) {
             @error_log('[StripeWebhook] Failed to send admin notification: ' . $e->getMessage());
         }
@@ -375,7 +375,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         
         // Notify admin of payment via public link
         try {
-            notify_admin_invoice_paid($pdo, $invoiceId, $paymentAmount, 'stripe');
+            notify_admin_invoice_paid($pdo, $GLOBALS['appConfig'] ?? [], $invoiceId, $paymentAmount, $status);
         } catch (Throwable $e) {
             @error_log('[StripeWebhook] Failed to send admin notification: ' . $e->getMessage());
         }

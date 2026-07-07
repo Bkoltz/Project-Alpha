@@ -1853,6 +1853,12 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('invoice_auto_send_overdue_weekly', '1'),
     ('invoice_auto_email_on_generate', '1'),
     ('payment_receipts_enabled', '1'),
+    ('notify_signed_contract_uploaded', '1'),
+    ('notify_invoice_paid', '1'),
+    ('notify_invoice_paid_regular', '1'),
+    ('notify_invoice_paid_on_demand', '1'),
+    ('notify_invoice_paid_long_term', '1'),
+    ('notify_invoice_paid_project', '1'),
     ('email_no_reply_notice_enabled', '0'),
     ('email_no_reply_notice_text', 'This is an automated message. Please do not reply to this email.')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);

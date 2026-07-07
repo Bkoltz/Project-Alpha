@@ -73,7 +73,9 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('listPaymentIntentsBetween', $stripe);
         self::assertStringContainsString('listChargesBetween', $stripe);
         self::assertStringContainsString('normalizeChargeForImport', $stripe);
-        self::assertStringContainsString('charges.data.balance_transaction', $stripe);
+        self::assertStringContainsString('data.latest_charge.balance_transaction', $stripe);
+        self::assertStringContainsString('latest_charge.balance_transaction', $stripe);
+        self::assertStringNotContainsString("'charges.data'", $stripe);
         self::assertStringContainsString('getPaymentIntentWithBalanceTransaction', $stripe);
         self::assertStringContainsString('PaymentProcessorImportService::importStandalone', $webhook);
     }

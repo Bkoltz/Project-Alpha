@@ -365,4 +365,40 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("frame-src 'self'", (string)$securityHeaders);
         self::assertStringContainsString("frame-ancestors 'self'", (string)$securityHeaders);
     }
+
+    public function testAdminPaymentAndContractNotificationsAreConfigurable(): void
+    {
+        $notifications = file_get_contents($this->root . '/src/utils/notifications.php');
+        $settingsView = file_get_contents($this->root . '/src/views/pages/settings/notifications.php');
+        $settingsHandler = file_get_contents($this->root . '/src/controllers/settings_handler.php');
+        $appConfig = file_get_contents($this->root . '/src/config/app.php');
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $projectBilling = file_get_contents($this->root . '/src/utils/project_invoice_billing.php');
+        $legacyWebhook = file_get_contents($this->root . '/src/controllers/stripe/stripe_webhook.php');
+        $manualPayments = file_get_contents($this->root . '/src/controllers/payments_create.php');
+
+        foreach ([
+            'notify_signed_contract_uploaded',
+            'notify_invoice_paid',
+            'notify_invoice_paid_regular',
+            'notify_invoice_paid_on_demand',
+            'notify_invoice_paid_long_term',
+            'notify_invoice_paid_project',
+        ] as $key) {
+            self::assertStringContainsString($key, (string)$settingsView);
+            self::assertStringContainsString($key, (string)$settingsHandler);
+            self::assertStringContainsString($key, (string)$appConfig);
+            self::assertStringContainsString($key, (string)$baseline);
+        }
+
+        self::assertStringContainsString("LOWER(email) <> 'admin@project-alpha.local'", (string)$notifications);
+        self::assertStringContainsString("role IN ('admin','owner')", (string)$notifications);
+        self::assertStringContainsString('foreach ($adminEmails as $adminEmail)', (string)$notifications);
+        self::assertStringContainsString("notification_setting_enabled(\$appConfig, 'notify_signed_contract_uploaded', true)", (string)$notifications);
+        self::assertStringContainsString('admin_invoice_paid_notification_enabled($appConfig, $invoice)', (string)$notifications);
+        self::assertStringContainsString('function notify_admin_project_invoice_paid', (string)$notifications);
+        self::assertStringContainsString('notify_admin_project_invoice_paid($pdo, $GLOBALS[\'appConfig\'] ?? [], $projectInvoiceId, $amount', (string)$projectBilling);
+        self::assertStringContainsString('notify_admin_invoice_paid($pdo, $GLOBALS[\'appConfig\'] ?? [], $invoiceId, $paymentAmount, $status)', (string)$legacyWebhook);
+        self::assertStringNotContainsString('notify_admin_invoice_paid', (string)$manualPayments);
+    }
 }

@@ -655,16 +655,19 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
         ->execute([$ok ? 'succeeded' : 'failed', $projectPaymentId]);
     if ($ok) {
         require_once __DIR__ . '/stripe_financial_events.php';
+        require_once __DIR__ . '/notifications.php';
         stripe_link_pending_project_financial_events($pdo, $projectPaymentId, $paymentIntentId ?: null);
         stripe_allocate_project_processor_fields($pdo, $projectPaymentId, $processorFields);
         $pdo->prepare('UPDATE project_invoices SET stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE id=?')
             ->execute([$projectInvoiceId]);
         $status = $pdo->prepare('SELECT status FROM project_invoices WHERE id=?');
         $status->execute([$projectInvoiceId]);
-        if ($status->fetchColumn() === 'paid') {
+        $statusValue = (string)$status->fetchColumn();
+        if ($statusValue === 'paid') {
             $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="project_invoice" AND document_id=? AND revoked=0')
                 ->execute([$projectInvoiceId]);
         }
+        notify_admin_project_invoice_paid($pdo, $GLOBALS['appConfig'] ?? [], $projectInvoiceId, $amount, $statusValue === 'paid' ? 'paid' : 'partial');
     }
     return $ok;
 }

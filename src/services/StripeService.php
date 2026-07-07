@@ -381,9 +381,7 @@ class StripeService {
                 $params = [
                     'limit' => min(100, $remaining),
                     'created[gte]' => $since,
-                    'expand[0]' => 'charges.data',
-                    'expand[1]' => 'charges.data.balance_transaction',
-                    'expand[2]' => 'latest_charge.balance_transaction'
+                    'expand[0]' => 'data.latest_charge.balance_transaction'
                 ];
                 if ($until !== null) {
                     $params['created[lte]'] = $until;
@@ -581,8 +579,6 @@ class StripeService {
 
         return $this->apiRequest('GET', 'payment_intents/' . rawurlencode($paymentIntentId) . '?' . http_build_query([
             'expand' => [
-                'charges.data',
-                'charges.data.balance_transaction',
                 'latest_charge.balance_transaction',
             ],
         ]));

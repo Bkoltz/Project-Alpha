@@ -208,6 +208,8 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('filemtime($b)', $view);
         self::assertStringContainsString('Showing the five most recent', $view);
         self::assertStringContainsString('data-skip-nav href="/?page=settings&amp;tab=logs&amp;file=', $view);
+        self::assertStringContainsString('white-space:pre-wrap', $view);
+        self::assertStringContainsString('overflow-wrap:anywhere', $view);
         self::assertStringContainsString('uasort($files', $handler);
         self::assertStringContainsString('filemtime($b)', $handler);
     }
