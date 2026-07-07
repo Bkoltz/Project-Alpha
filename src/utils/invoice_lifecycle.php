@@ -76,6 +76,9 @@ function invoice_ensure_payments_schema(PDO $pdo): void
         'processor_transaction_id' => 'BIGINT NULL AFTER processor_payment_id',
         'processor_gross_amount' => 'DECIMAL(12,2) NULL AFTER processor_transaction_id',
         'processor_fee_amount' => 'DECIMAL(12,2) NULL AFTER processor_gross_amount',
+        'processor_net_amount' => 'DECIMAL(12,2) NULL AFTER processor_fee_amount',
+        'processor_fee_policy' => "VARCHAR(32) NOT NULL DEFAULT 'unknown' AFTER processor_net_amount",
+        'processor_fee_source' => "VARCHAR(32) NOT NULL DEFAULT 'unknown' AFTER processor_fee_policy",
     ];
 
     try {

@@ -13,6 +13,7 @@ require_once __DIR__ . '/../services/StripeService.php';
 require_once __DIR__ . '/../services/PaymentProcessorImportService.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/stripe_financial_events.php';
+require_once __DIR__ . '/../utils/stripe_payment_accounting.php';
 
 $logPrefix = '[stripe_reconciliation]';
 $jobName = 'stripe_reconciliation';
@@ -94,12 +95,15 @@ try {
             $amount = ($pi['amount'] ?? 0) / 100; // Convert cents to dollars
             $paymentAmount = isset($pi['metadata']['original_amount']) ? (float)$pi['metadata']['original_amount'] : $amount;
             $surchargeAmount = isset($pi['metadata']['surcharge_amount']) ? (float)$pi['metadata']['surcharge_amount'] : max(0, $amount - $paymentAmount);
+            $processorTx = $stripe->normalizePaymentIntentForImport($pi);
             
             // Check if this payment is already recorded
             $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id = ?');
             $existsStmt->execute([$piId]);
-            if ($existsStmt->fetchColumn()) {
-                $skipped++;
+            $existingPaymentId = (int)($existsStmt->fetchColumn() ?: 0);
+            if ($existingPaymentId > 0) {
+                stripe_update_payment_processor_fields($pdo, $existingPaymentId, $processorTx, $appConfig);
+                $reconciled++;
                 continue;
             }
             
@@ -124,10 +128,19 @@ try {
             $pdo->beginTransaction();
             
             $isAutoPay = 0;
+            $processorFields = stripe_processor_fields_from_normalized($processorTx, $appConfig, $paymentAmount, $surchargeAmount);
             $pdo->prepare('
-                INSERT INTO payments (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_payment_intent_id, auto_pay_attempt, status, payment_date, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), NOW())
-            ')->execute([(int)$invoice['client_id'], $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $piId, $isAutoPay, 'succeeded']);
+                INSERT INTO payments
+                    (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_payment_intent_id, auto_pay_attempt,
+                     processor_provider, processor_payment_id, processor_gross_amount, processor_fee_amount, processor_net_amount,
+                     processor_fee_policy, processor_fee_source, status, payment_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), NOW())
+            ')->execute([
+                (int)$invoice['client_id'], $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $piId, $isAutoPay,
+                $processorFields['processor_provider'], $processorFields['processor_payment_id'] ?: null,
+                $processorFields['processor_gross_amount'], $processorFields['processor_fee_amount'], $processorFields['processor_net_amount'],
+                $processorFields['processor_fee_policy'], $processorFields['processor_fee_source'], 'succeeded'
+            ]);
             $paymentId = (int)$pdo->lastInsertId();
             stripe_link_pending_financial_events($pdo, $paymentId, $piId);
             
@@ -183,6 +196,11 @@ try {
             @error_log("$logPrefix Error processing PI {$pi['id']}: " . $e->getMessage());
         }
     }
+
+    $backfill = stripe_backfill_net_income($pdo, $stripe, $appConfig, 100);
+    $reconciled += (int)$backfill['updated'] + (int)$backfill['estimated'];
+    $skipped += (int)$backfill['unknown'] + (int)$backfill['skipped'];
+    $errors += (int)$backfill['failed'];
     
     cron_state_mark_success($pdo, $jobName, "{$reconciled} reconciled; {$skipped} skipped; {$errors} errors");
     

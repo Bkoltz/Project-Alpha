@@ -16,6 +16,8 @@ final class ProcessorImportTest extends TestCase
     public function testProcessorImportMigrationAddsGenericSchema(): void
     {
         $sql = $this->read('database/migrations/0016_processor_payment_imports.sql');
+        $netSql = $this->read('database/migrations/0017_processor_net_income.sql');
+        $baseline = $this->read('database/baseline.sql');
 
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS processor_payment_transactions', $sql);
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS processor_webhook_events', $sql);
@@ -25,6 +27,11 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('processor_payment_id VARCHAR(255)', $sql);
         self::assertStringContainsString('processor_gross_amount DECIMAL(12,2)', $sql);
         self::assertStringContainsString('processor_fee_amount DECIMAL(12,2)', $sql);
+        self::assertStringContainsString('processor_net_amount DECIMAL(12,2)', $netSql);
+        self::assertStringContainsString('processor_fee_policy VARCHAR(32)', $netSql);
+        self::assertStringContainsString('processor_fee_source VARCHAR(32)', $netSql);
+        self::assertStringContainsString('ALTER TABLE project_invoice_payments', $netSql);
+        self::assertStringContainsString('processor_net_amount DECIMAL(12,2)', $baseline);
     }
 
     public function testBillingSettingsExposeIndependentProcessorImportToggles(): void
@@ -52,6 +59,7 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('payer_name', $service);
         self::assertStringContainsString('payer_email', $service);
         self::assertStringContainsString('processor_provider, processor_payment_id, processor_transaction_id', $service);
+        self::assertStringContainsString('processor_net_amount, processor_fee_policy, processor_fee_source', $service);
     }
 
     public function testStripeReconciliationUsesGenericStandaloneImportFallback(): void
@@ -63,7 +71,52 @@ final class ProcessorImportTest extends TestCase
         self::assertStringContainsString('PaymentProcessorImportService::importStandalone', $cron);
         self::assertStringContainsString('normalizePaymentIntentForImport', $stripe);
         self::assertStringContainsString('charges.data.balance_transaction', $stripe);
+        self::assertStringContainsString('getPaymentIntentWithBalanceTransaction', $stripe);
         self::assertStringContainsString('PaymentProcessorImportService::importStandalone', $webhook);
+    }
+
+    public function testStripeNetIncomeCaptureAndBackfillAreWired(): void
+    {
+        $checkoutWebhook = $this->read('src/controllers/webhook/stripe_checkout_completed.php');
+        $intentWebhook = $this->read('src/controllers/webhook/stripe_payment_succeeded.php');
+        $cron = $this->read('src/cron/stripe_reconciliation.php');
+        $helper = $this->read('src/utils/stripe_payment_accounting.php');
+        $checkout = $this->read('src/controllers/stripe/stripe_checkout.php');
+        $settings = $this->read('src/views/pages/settings/billing.php');
+        $controller = $this->read('src/controllers/settings/stripe_net_backfill.php');
+        $front = $this->read('public/index.php');
+        $acl = $this->read('src/utils/acl_middleware.php');
+
+        self::assertStringContainsString('stripe_processor_fields_from_normalized', $checkoutWebhook);
+        self::assertStringContainsString('processor_net_amount', $checkoutWebhook);
+        self::assertStringContainsString('stripe_processor_fields_from_normalized', $intentWebhook);
+        self::assertStringContainsString('stripe_backfill_net_income', $cron);
+        self::assertStringContainsString('stripe_update_payment_processor_fields', $helper);
+        self::assertStringContainsString('stripe_update_project_payment_processor_fields', $helper);
+        self::assertStringContainsString('pa_fee_policy', $checkout);
+        self::assertStringContainsString('Backfill Stripe Net Income', $settings);
+        self::assertStringContainsString('stripe_backfill_net_income', $controller);
+        self::assertStringContainsString('settings/stripe-net-backfill', $front);
+        self::assertStringContainsString("'settings/stripe-net-backfill'", $acl);
+    }
+
+    public function testDashboardsAndPaymentsListUseNetIncomeAccounting(): void
+    {
+        $helper = $this->read('src/utils/payment_accounting.php');
+        $home = $this->read('src/views/pages/home.php');
+        $dashboard = $this->read('src/views/pages/financial/financial-dashboard.php');
+        $api = $this->read('src/controllers/api/financial_summary.php');
+        $dashboardApi = $this->read('src/controllers/api/dashboard_summary.php');
+        $paymentsList = $this->read('src/views/pages/payments/payments-list.php');
+
+        self::assertStringContainsString('function payment_accounting_net_income_expr', $helper);
+        self::assertStringContainsString('processor_net_amount', $helper);
+        self::assertStringContainsString('payment_accounting_net_income_expr', $home);
+        self::assertStringContainsString('payment_accounting_net_income_expr', $dashboard);
+        self::assertStringContainsString('payment_accounting_net_income_expr', $api);
+        self::assertStringContainsString('payment_accounting_net_income_expr', $dashboardApi);
+        self::assertStringContainsString('Net Received', $paymentsList);
+        self::assertStringContainsString('processor_fee_source', $paymentsList);
     }
 
     public function testStandaloneProcessorIncomeIsVisibleWithoutClient(): void

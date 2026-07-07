@@ -3,8 +3,10 @@
 // Handler for checkout.session.completed events
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/stripe_financial_events.php';
+require_once __DIR__ . '/../../utils/stripe_payment_accounting.php';
 
 function handleCheckoutSessionCompleted($pdo, $session) {
     $metadata = $session['metadata'] ?? [];
@@ -33,6 +35,28 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         @error_log('[StripeWebhook] Session not paid: ' . $paymentStatus);
         return;
     }
+
+    $processorTx = [
+        'provider' => 'stripe',
+        'provider_payment_id' => $paymentIntentId ?: '',
+        'status' => 'succeeded',
+        'gross_amount' => $amountTotal,
+        'fee_amount' => null,
+        'net_amount' => null,
+        'metadata' => $metadata,
+    ];
+    if ($paymentIntentId) {
+        $stripe = StripeService::fromAppConfig($GLOBALS['appConfig'] ?? []);
+        if ($stripe) {
+            try {
+                $processorTx = $stripe->normalizePaymentIntentForImport(
+                    $stripe->getPaymentIntentWithBalanceTransaction($paymentIntentId)
+                );
+            } catch (Throwable $e) {
+                @error_log('[StripeWebhook] Could not fetch fee/net for session ' . ($session['id'] ?? '') . ': ' . $e->getMessage());
+            }
+        }
+    }
     
     try {
     // Serialize payment recording with manual payments and other Stripe events.
@@ -52,18 +76,29 @@ function handleCheckoutSessionCompleted($pdo, $session) {
     // Idempotency check - prevent duplicate processing
     $existsStmt = $pdo->prepare('SELECT id FROM payments WHERE stripe_session_id = ? OR (stripe_payment_intent_id IS NOT NULL AND stripe_payment_intent_id = ?)');
     $existsStmt->execute([$session['id'], $paymentIntentId]);
-    if ($existsStmt->fetchColumn()) {
-        $pdo->rollBack();
+    $existingPaymentId = (int)($existsStmt->fetchColumn() ?: 0);
+    if ($existingPaymentId > 0) {
+        stripe_update_payment_processor_fields($pdo, $existingPaymentId, $processorTx, $GLOBALS['appConfig'] ?? []);
+        $pdo->commit();
         @error_log('[StripeWebhook] Session ' . $session['id'] . ' already processed - skipping');
         return;
     }
     
         // Record the payment
         $stmt = $pdo->prepare('
-            INSERT INTO payments (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_session_id, stripe_payment_intent_id, status, payment_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
+            INSERT INTO payments
+                (client_id, invoice_id, amount, surcharge_paid, payment_method, stripe_session_id, stripe_payment_intent_id,
+                 processor_provider, processor_payment_id, processor_gross_amount, processor_fee_amount, processor_net_amount,
+                 processor_fee_policy, processor_fee_source, status, payment_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
         ');
-        $stmt->execute([$clientId, $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $session['id'], $paymentIntentId, 'succeeded']);
+        $processorFields = stripe_processor_fields_from_normalized($processorTx, $GLOBALS['appConfig'] ?? [], $paymentAmount, $surchargeAmount);
+        $stmt->execute([
+            $clientId, $invoiceId, $paymentAmount, $surchargeAmount, 'stripe', $session['id'], $paymentIntentId,
+            $processorFields['processor_provider'], $processorFields['processor_payment_id'] ?: null,
+            $processorFields['processor_gross_amount'], $processorFields['processor_fee_amount'], $processorFields['processor_net_amount'],
+            $processorFields['processor_fee_policy'], $processorFields['processor_fee_source'], 'succeeded'
+        ]);
         $paymentId = (int)$pdo->lastInsertId();
         stripe_link_pending_financial_events($pdo, $paymentId, $paymentIntentId);
         

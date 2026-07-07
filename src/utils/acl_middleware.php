@@ -42,6 +42,7 @@ function page_permission_map(): array
         'settings/permissions'                 => 'settings.manage',
         'settings/permissions-handler'         => 'settings.manage',
         'settings/link-test-connection'      => 'settings.manage',
+        'settings/stripe-net-backfill'       => 'settings.manage',
         'settings/tax-import-handler'        => 'settings.manage',
         'settings/tax-rates-handler'         => 'settings.manage',
 

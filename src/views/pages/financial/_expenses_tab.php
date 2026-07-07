@@ -61,10 +61,10 @@ $stmt->execute($params);
 $expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $sumStmt = $pdo->prepare("
-    SELECT COALESCE(SUM(e.total_amount),0) as grand_total,
-           COALESCE(SUM(CASE WHEN e.is_billable=1 THEN e.total_amount ELSE 0 END),0) as billable_total,
-           COALESCE(SUM(CASE WHEN e.is_tax_deductible=1 THEN e.total_amount ELSE 0 END),0) as deductible_total,
-           COALESCE(SUM(CASE WHEN e.is_billable=1 AND e.is_reimbursed=0 THEN e.total_amount ELSE 0 END),0) as unreimbursed_total
+    SELECT COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) as grand_total,
+           COALESCE(SUM(CASE WHEN e.is_billable=1 THEN COALESCE(e.total_amount, e.amount, 0) ELSE 0 END),0) as billable_total,
+           COALESCE(SUM(CASE WHEN e.is_tax_deductible=1 THEN COALESCE(e.total_amount, e.amount, 0) ELSE 0 END),0) as deductible_total,
+           COALESCE(SUM(CASE WHEN e.is_billable=1 AND e.is_reimbursed=0 THEN COALESCE(e.total_amount, e.amount, 0) ELSE 0 END),0) as unreimbursed_total
     FROM expenses e WHERE {$whereSQL}
 ");
 $sumStmt->execute($params);

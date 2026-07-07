@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/payment_accounting.php';
 
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
@@ -29,7 +30,9 @@ $sqlCount = 'SELECT COUNT(*)' . $fromSql;
 if($where){$sqlCount.=' WHERE '.implode(' AND ',$where);} $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
 $sql = 'SELECT p.id, p.amount, p.refunded_amount, p.disputed_amount, p.status, p.payment_date, p.created_at,
-               p.payment_method, p.reference_number, p.processor_provider, i.id AS invoice_id, i.doc_number,
+               p.payment_method, p.reference_number, p.surcharge_paid, p.surcharge_refunded, p.surcharge_refund_amount,
+               p.processor_provider, p.processor_gross_amount, p.processor_fee_amount, p.processor_net_amount,
+               p.processor_fee_policy, p.processor_fee_source, i.id AS invoice_id, i.doc_number,
                c.name AS client, ppt.payer_name, ppt.payer_email
         ' . $fromSql;
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY p.payment_date DESC, p.created_at DESC LIMIT $per OFFSET $offset";
@@ -88,8 +91,10 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
           <th style="padding:10px">Client</th>
           <th style="padding:10px">Method</th>
           <th style="padding:10px;text-align:right">Amount</th>
+          <th style="padding:10px;text-align:right">Fee</th>
           <th style="padding:10px;text-align:right">Refunded</th>
-          <th style="padding:10px;text-align:right">Net</th>
+          <th style="padding:10px;text-align:right">Net Received</th>
+          <th style="padding:10px">Fee Source</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Payment Date</th>
           <th style="padding:10px">Actions</th>
@@ -100,8 +105,11 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
           $amount = (float)$r['amount'];
           $refunded = (float)$r['refunded_amount'];
           $disputed = (float)$r['disputed_amount'];
-          $net = max(0, $amount - $refunded - $disputed);
-          $canRefund = strtolower((string)$r['status']) === 'succeeded' && $net > 0.005;
+          $appliedNet = max(0, $amount - $refunded - $disputed);
+          $processorFee = $r['processor_fee_amount'] !== null ? (float)$r['processor_fee_amount'] : 0.0;
+          $net = payment_accounting_net_income($r);
+          $feeSource = (string)($r['processor_fee_source'] ?? 'unknown');
+          $canRefund = strtolower((string)$r['status']) === 'succeeded' && $appliedNet > 0.005;
         ?>
           <tr style="border-top:1px solid #f3f4f6">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
@@ -117,8 +125,10 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
             <td style="padding:10px"><?php echo htmlspecialchars($r['client'] ?: ($r['payer_name'] ?: ($r['payer_email'] ?: 'No client'))); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars(str_replace('_', ' ', (string)$r['payment_method'])); ?></td>
             <td style="padding:10px;text-align:right">$<?php echo number_format($amount, 2); ?></td>
+            <td style="padding:10px;text-align:right">$<?php echo number_format($processorFee, 2); ?></td>
             <td style="padding:10px;text-align:right">$<?php echo number_format($refunded + $disputed, 2); ?></td>
             <td style="padding:10px;text-align:right;font-weight:600">$<?php echo number_format($net, 2); ?></td>
+            <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars(str_replace('_', ' ', $feeSource)); ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo $r['payment_date'] ? date('m/d/Y', strtotime($r['payment_date'])) : ''; ?></td>
             <td style="padding:10px">
@@ -126,7 +136,7 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
                 <form method="post" action="/?page=payments/payment-refund" style="display:flex;gap:6px;align-items:center" onsubmit="return confirm('Record this refund? This changes income and invoice balance.');">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="payment_id" value="<?php echo (int)$r['id']; ?>">
-                  <input type="number" name="amount" step="0.01" min="0.01" max="<?php echo htmlspecialchars(number_format($net, 2, '.', '')); ?>" placeholder="0.00" style="width:92px;padding:6px;border-radius:6px;border:1px solid #ddd">
+                  <input type="number" name="amount" step="0.01" min="0.01" max="<?php echo htmlspecialchars(number_format($appliedNet, 2, '.', '')); ?>" placeholder="0.00" style="width:92px;padding:6px;border-radius:6px;border:1px solid #ddd">
                   <button type="submit" style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b">Refund</button>
                 </form>
               <?php else: ?>

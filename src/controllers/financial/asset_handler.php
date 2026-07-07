@@ -87,6 +87,24 @@ function asset_assert_org_row(PDO $pdo, string $table, int $id, int $orgId, stri
     }
 }
 
+function asset_fetch_expense(PDO $pdo, int $expenseId, int $userId, int $orgId): ?array
+{
+    if ($expenseId <= 0) {
+        return null;
+    }
+
+    [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+    $stmt = $pdo->prepare('
+        SELECT e.id, e.organization_id, e.vendor_id, e.category_id, e.amount, e.total_amount, e.expense_date, e.description
+        FROM expenses e
+        WHERE e.id = ? AND ' . $expenseScopeWhere . ' AND e.status != "void"
+        LIMIT 1
+    ');
+    $stmt->execute(array_merge([$expenseId], $expenseScopeParams));
+    $expense = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $expense ?: null;
+}
+
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId <= 0) {
     asset_handler_finish(['success' => false, 'message' => 'Authentication required'], 401, '/?page=login');
@@ -108,6 +126,7 @@ if (!$csrfOk) {
 $allowedStatuses = ['planned', 'active', 'maintenance', 'retired', 'sold', 'lost', 'disposed'];
 $allowedMethods = ['none', 'straight_line'];
 $action = (string)($_POST['action'] ?? '');
+$assetHandlerTransaction = false;
 
 try {
     if ($action === 'delete') {
@@ -152,11 +171,32 @@ try {
     $vendorId = asset_optional_int('vendor_id');
     $vendorName = trim((string)($_POST['vendor_name'] ?? ''));
     $categoryId = asset_optional_int('category_id');
-    $expenseId = asset_optional_int('expense_id');
+    $rawExpenseId = (string)($_POST['expense_id'] ?? '');
+    $createExpenseFromAsset = $rawExpenseId === 'new' || !empty($_POST['create_expense_from_asset']);
+    $expenseId = $createExpenseFromAsset ? null : asset_optional_int('expense_id');
     $purchaseCost = max(0.0, asset_decimal('purchase_cost'));
     $salvageValue = max(0.0, asset_decimal('salvage_value'));
     $disposalValue = ($_POST['disposal_value'] ?? '') === '' ? null : max(0.0, asset_decimal('disposal_value'));
     $usefulLifeMonths = asset_optional_int('useful_life_months');
+    $linkedExpense = $expenseId !== null ? asset_fetch_expense($pdo, $expenseId, $userId, $orgId) : null;
+
+    if ($expenseId !== null && $linkedExpense === null) {
+        throw new RuntimeException('Expense was not found.');
+    }
+    if ($linkedExpense !== null) {
+        if ($vendorId === null && $vendorName === '' && !empty($linkedExpense['vendor_id'])) {
+            $vendorId = (int)$linkedExpense['vendor_id'];
+        }
+        if ($categoryId === null && !empty($linkedExpense['category_id'])) {
+            $categoryId = (int)$linkedExpense['category_id'];
+        }
+        if ($purchaseDate === null && !empty($linkedExpense['expense_date'])) {
+            $purchaseDate = (string)$linkedExpense['expense_date'];
+        }
+        if ($purchaseCost <= 0) {
+            $purchaseCost = max(0.0, (float)($linkedExpense['total_amount'] ?? $linkedExpense['amount'] ?? 0));
+        }
+    }
 
     if (!in_array($status, $allowedStatuses, true)) {
         throw new RuntimeException('Invalid asset status.');
@@ -169,6 +209,11 @@ try {
     }
     if ($salvageValue > $purchaseCost && $purchaseCost > 0) {
         throw new RuntimeException('Salvage value cannot be greater than purchase cost.');
+    }
+
+    if (!$pdo->inTransaction()) {
+        $pdo->beginTransaction();
+        $assetHandlerTransaction = true;
     }
 
     if ($vendorId === null && $vendorName !== '') {
@@ -191,13 +236,47 @@ try {
     if ($categoryId !== null) {
         asset_assert_org_row($pdo, 'expense_categories', $categoryId, $orgId, 'Category');
     }
-    if ($expenseId !== null) {
-        [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
-        $expenseCheck = $pdo->prepare('SELECT 1 FROM expenses e WHERE e.id = ? AND ' . $expenseScopeWhere . ' LIMIT 1');
-        $expenseCheck->execute(array_merge([$expenseId], $expenseScopeParams));
-        if (!$expenseCheck->fetchColumn()) {
-            throw new RuntimeException('Expense was not found.');
+    if ($createExpenseFromAsset) {
+        if ($purchaseCost <= 0) {
+            throw new RuntimeException('Purchase cost is required to create a linked expense.');
         }
+        if ($purchaseDate === null) {
+            $purchaseDate = date('Y-m-d');
+        }
+        $expenseDescription = 'Asset purchase: ' . $name;
+        $stmt = $pdo->prepare('
+            INSERT INTO expenses (organization_id, vendor_id, category_id, amount, tax_amount, total_amount,
+                expense_date, description, payment_method, is_billable, is_tax_deductible, notes, created_by, status)
+            VALUES (?, ?, ?, ?, NULL, ?, ?, ?, NULL, 0, 1, ?, ?, "confirmed")
+        ');
+        $stmt->execute([
+            $orgId > 0 ? $orgId : null,
+            $vendorId,
+            $categoryId,
+            $purchaseCost,
+            $purchaseCost,
+            $purchaseDate,
+            $expenseDescription,
+            $notes,
+            $userId,
+        ]);
+        $expenseId = (int)$pdo->lastInsertId();
+        $linkedExpense = asset_fetch_expense($pdo, $expenseId, $userId, $orgId);
+        audit_log($pdo, 'expense.create', 'expense', $expenseId, ['amount' => $purchaseCost, 'vendor_id' => $vendorId, 'source' => 'asset']);
+    } elseif ($linkedExpense !== null) {
+        if ($vendorId !== null && empty($linkedExpense['vendor_id'])) {
+            $stmt = $pdo->prepare('UPDATE expenses SET vendor_id = ? WHERE id = ? AND vendor_id IS NULL');
+            $stmt->execute([$vendorId, $expenseId]);
+        }
+        if ($categoryId !== null && empty($linkedExpense['category_id'])) {
+            $stmt = $pdo->prepare('UPDATE expenses SET category_id = ? WHERE id = ? AND category_id IS NULL');
+            $stmt->execute([$categoryId, $expenseId]);
+        }
+    }
+
+    $assetOrgId = $orgId > 0 ? $orgId : null;
+    if ($assetOrgId === null && $linkedExpense !== null && !empty($linkedExpense['organization_id'])) {
+        $assetOrgId = (int)$linkedExpense['organization_id'];
     }
 
     if ($action === 'create') {
@@ -210,12 +289,16 @@ try {
                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
         $stmt->execute([
-            $orgId > 0 ? $orgId : null, $vendorId, $categoryId, $expenseId, $assetTag, $name, $assetType, $serialNumber,
+            $assetOrgId, $vendorId, $categoryId, $expenseId, $assetTag, $name, $assetType, $serialNumber,
             $status, $location, $purchaseDate, $purchaseCost, $method, $depreciationStartDate,
             $usefulLifeMonths, $salvageValue, $warrantyExpiresOn, $disposedOn, $disposalValue, $notes, $userId,
         ]);
         $assetId = (int)$pdo->lastInsertId();
         audit_log($pdo, 'asset.create', 'financial_asset', $assetId, ['organization_id' => $orgId, 'name' => $name]);
+        if ($assetHandlerTransaction && $pdo->inTransaction()) {
+            $pdo->commit();
+            $assetHandlerTransaction = false;
+        }
         asset_json_response(true, 'Asset created.', ['id' => $assetId, 'redirect' => '/?page=financial/asset-detail&id=' . $assetId . '&created=1']);
     }
 
@@ -241,8 +324,15 @@ try {
         $warrantyExpiresOn, $disposedOn, $disposalValue, $notes, $id,
     ]);
     audit_log($pdo, 'asset.update', 'financial_asset', $id, ['organization_id' => $orgId, 'name' => $name]);
+    if ($assetHandlerTransaction && $pdo->inTransaction()) {
+        $pdo->commit();
+        $assetHandlerTransaction = false;
+    }
     asset_json_response(true, 'Asset updated.', ['id' => $id, 'redirect' => '/?page=financial/asset-detail&id=' . $id . '&updated=1']);
 } catch (Throwable $e) {
+    if ($assetHandlerTransaction && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log('[asset_handler] Error: ' . $e->getMessage());
     asset_handler_finish(['success' => false, 'message' => $e->getMessage()], 400, $fallback ?? '/?page=financial/asset-form');
 }

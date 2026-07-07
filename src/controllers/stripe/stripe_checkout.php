@@ -199,6 +199,10 @@ try {
             'original_amount' => (string)$amountDue,
             'surcharge_amount' => (string)$surchargeAmount,
             'surcharge_type' => (string)($surchargeInfo['surcharge_type'] ?? 'merchant'),
+            'pa_fee_policy' => (string)($surchargeInfo['surcharge_type'] ?? 'merchant'),
+            'pa_invoice_amount' => (string)$amountDue,
+            'pa_surcharge_amount' => (string)$surchargeAmount,
+            'pa_fee_split_percent' => (string)($appConfig['stripe_surcharge_split_percent'] ?? ''),
         ]
         : [
             'pa_invoice_id' => (string)$invoiceId,
@@ -208,6 +212,10 @@ try {
             'original_amount' => (string)$amountDue,
             'surcharge_amount' => (string)$surchargeAmount,
             'surcharge_type' => (string)($surchargeInfo['surcharge_type'] ?? 'merchant'),
+            'pa_fee_policy' => (string)($surchargeInfo['surcharge_type'] ?? 'merchant'),
+            'pa_invoice_amount' => (string)$amountDue,
+            'pa_surcharge_amount' => (string)$surchargeAmount,
+            'pa_fee_split_percent' => (string)($appConfig['stripe_surcharge_split_percent'] ?? ''),
         ];
     
     $session = $stripe->createCheckoutSessionWithSurcharge(
