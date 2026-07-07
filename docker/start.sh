@@ -116,6 +116,17 @@ JSON
   fi
 fi
 
+# Ensure application-level .htaccess routing is active even when APP_HOST is not
+# set and the default Apache virtual host is used.
+cat > /etc/apache2/conf-available/project-alpha-routing.conf <<'EOF'
+<Directory /var/www/html>
+    AllowOverride All
+    Require all granted
+</Directory>
+EOF
+a2enmod rewrite >/dev/null
+a2enconf project-alpha-routing >/dev/null
+
 # 5) Ensure uploads directories exist with correct permissions
 UPLOADS_DIR="/var/www/src/uploads"
 if [ ! -d "${UPLOADS_DIR}/receipts" ]; then

@@ -51,9 +51,8 @@ try {
     
     // Resolve creator + organization for derived invoice (no session in on-demand generator)
     $fallbackUserId = 1;
-    $fallbackOrgId  = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
     $contractCreator = (int)($contract['created_by'] ?? 0) ?: $fallbackUserId;
-    $contractOrgId   = (int)($contract['organization_id'] ?? 0) ?: $fallbackOrgId;
+    $contractOrgId   = !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null;
     
     // Calculate invoice amount. Older on-demand contracts may have a zero
     // price_per_invoice even though subtotal/contract_items were saved.

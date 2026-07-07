@@ -21,7 +21,7 @@ function nav_can(string $permission): bool {
     }
   }
   if (!$pdo) return true;
-  return user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), $permission, get_active_org_id());
+  return user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), $permission, 0);
 }
 ?>
 <!doctype html>

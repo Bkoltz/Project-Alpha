@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
 
@@ -14,11 +14,10 @@ $stmt = $pdo->prepare("
     FROM expense_categories c
     LEFT JOIN expense_categories pc ON c.parent_id = pc.id
     LEFT JOIN expenses e ON e.category_id = c.id AND {$expenseScopeWhere}
-    WHERE c.organization_id = ?
     GROUP BY c.id
     ORDER BY c.is_system DESC, c.name
 ");
-$stmt->execute(array_merge($expenseScopeParams, [$orgId]));
+$stmt->execute($expenseScopeParams);
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $csrf = csrf_token();

@@ -9,14 +9,11 @@ $redirectPage = $requestedType === 'expense' ? 'financial/expense-report' : 'fin
 csrf_verify_post_or_redirect($redirectPage);
 
 $action = (string)($_POST['action'] ?? 'create');
-$organizationId = get_active_org_id();
-if ($organizationId <= 0) {
-    header('Location: /?page=' . $redirectPage . '&error=' . urlencode('Select an organization before managing schedules.'));
-    exit;
-}
+$organizationId = request_client_org_id();
+$scheduleOrgId = $organizationId > 0 ? $organizationId : null;
 $requiredPermission = $requestedType === 'expense' ? 'financial.manage' : 'financial.audit';
 if (($_SESSION['user']['role'] ?? '') !== 'admin'
-    && !user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), $requiredPermission, $organizationId)) {
+    && !user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), $requiredPermission, 0)) {
     require_once __DIR__ . '/../../utils/acl_middleware.php';
     deny_response($redirectPage);
 }
@@ -69,7 +66,7 @@ try {
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
         $stmt->execute([
-            $organizationId,
+            $scheduleOrgId,
             $requestedType,
             $frequency,
             $dateRangeType,
@@ -93,8 +90,8 @@ try {
     if ($id <= 0) {
         throw new RuntimeException('Invalid schedule.');
     }
-    $existing = $pdo->prepare('SELECT report_type FROM audit_schedules WHERE id=? AND organization_id=?');
-    $existing->execute([$id, $organizationId]);
+    $existing = $pdo->prepare('SELECT report_type FROM audit_schedules WHERE id=?');
+    $existing->execute([$id]);
     $storedType = $existing->fetchColumn();
     if ($storedType === false) {
         throw new RuntimeException('Schedule not found.');
@@ -102,13 +99,13 @@ try {
     $redirectPage = $storedType === 'expense' ? 'financial/expense-report' : 'financial/audit';
 
     if ($action === 'delete') {
-        $pdo->prepare('DELETE FROM audit_schedules WHERE id=? AND organization_id=?')->execute([$id, $organizationId]);
+        $pdo->prepare('DELETE FROM audit_schedules WHERE id=?')->execute([$id]);
         header('Location: /?page=' . $redirectPage . '&schedule_deleted=1');
         exit;
     }
     if ($action === 'toggle') {
-        $pdo->prepare('UPDATE audit_schedules SET is_active=NOT is_active WHERE id=? AND organization_id=?')
-            ->execute([$id, $organizationId]);
+        $pdo->prepare('UPDATE audit_schedules SET is_active=NOT is_active WHERE id=?')
+            ->execute([$id]);
         header('Location: /?page=' . $redirectPage . '&schedule_updated=1');
         exit;
     }

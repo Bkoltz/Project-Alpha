@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../utils/acl.php';
 
 $documentId = (int)($_GET['id'] ?? 0);
 $folderId = (int)($_GET['folder'] ?? 0);
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 
 if (!$documentId) {
     header('Location: /?page=financial/forms-list');
@@ -25,9 +25,9 @@ $stmt = $pdo->prepare('
         fc.title as folder_title
     FROM form_documents fd
     JOIN form_categories fc ON fd.category_id = fc.id
-    WHERE fd.id = ? AND fc.organization_id = ? AND (fd.project_id IS NULL OR fd.project_id = 0)
+    WHERE fd.id = ? AND (fd.project_id IS NULL OR fd.project_id = 0)
 ');
-$stmt->execute([$documentId, $orgId]);
+$stmt->execute([$documentId]);
 $document = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$document) {

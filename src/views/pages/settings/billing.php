@@ -48,6 +48,24 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
 </fieldset>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">Processor Imports</legend>
+  <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px">
+    <input type="checkbox" name="processor_import_standalone_income" value="1" <?php echo !empty($appConfig['processor_import_standalone_income']) ? 'checked' : ''; ?> style="margin-top:3px">
+    <span>
+      <span style="font-weight:600">Import standalone processor income</span><br>
+      <span style="font-size:13px;color:var(--muted)">Record successful processor payments that are not attached to PA invoices or project invoices.</span>
+    </span>
+  </label>
+  <label style="display:flex;align-items:flex-start;gap:8px">
+    <input type="checkbox" name="processor_import_auto_create_clients" value="1" <?php echo !empty($appConfig['processor_import_auto_create_clients']) ? 'checked' : ''; ?> style="margin-top:3px">
+    <span>
+      <span style="font-weight:600">Auto-create clients from processor payments</span><br>
+      <span style="font-size:13px;color:var(--muted)">When payer name and email are available, create or match a PA client and import address or phone details when provided.</span>
+    </span>
+  </label>
+</fieldset>
+
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
   <legend style="padding:0 6px;color:var(--muted)">Review Request</legend>
   <label>
     <div style="margin-bottom:4px">Review Link <span style="color:#666;font-weight:normal">(Optional)</span></div>

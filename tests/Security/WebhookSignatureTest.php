@@ -33,4 +33,31 @@ class WebhookSignatureTest extends TestCase
         $decrypted = crypto_decrypt($encrypted);
         $this->assertSame($plaintext, $decrypted);
     }
+
+    public function testCleanStripeWebhookPathIsRewrittenToFrontController(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $htaccess = file_get_contents($root . '/public/.htaccess');
+
+        $this->assertIsString($htaccess);
+        $this->assertStringContainsString(
+            'RewriteRule ^stripe-webhook/?$ index.php?page=stripe-webhook [QSA,L]',
+            $htaccess
+        );
+        $this->assertStringContainsString(
+            'RewriteRule ^stripe-webhook-legacy/?$ index.php?page=stripe-webhook-legacy [QSA,L]',
+            $htaccess
+        );
+    }
+
+    public function testApacheStartupAllowsHtaccessRouting(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $startScript = file_get_contents($root . '/docker/start.sh');
+
+        $this->assertIsString($startScript);
+        $this->assertStringContainsString('conf-available/project-alpha-routing.conf', $startScript);
+        $this->assertStringContainsString('AllowOverride All', $startScript);
+        $this->assertStringContainsString('a2enmod rewrite', $startScript);
+    }
 }

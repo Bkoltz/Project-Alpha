@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../services/EmailService.php';
 
-$organizationId = get_active_org_id();
+$organizationId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $submissionId = (int)($_POST['submission_id'] ?? 0);
 $decision = (string)($_POST['decision'] ?? '');

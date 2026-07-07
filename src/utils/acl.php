@@ -1,37 +1,16 @@
 <?php
 // src/utils/acl.php
-// Permission resolver + data scoping helpers for the 0.5.0 single-business model.
+// Permission resolver + data scoping helpers for the single-business model.
 // PA users belong to the app/business install. `organizations` are customer records.
-
-function get_active_org_id(): int
-{
-    return (int)($_SESSION['user']['active_org_id'] ?? 0);
-}
-
-function active_or_default_org_id(PDO $pdo): int
-{
-    $activeOrgId = get_active_org_id();
-    if ($activeOrgId > 0) {
-        return $activeOrgId;
-    }
-
-    try {
-        $id = $pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn();
-        return $id !== false ? (int)$id : 0;
-    } catch (Throwable $e) {
-        return 0;
-    }
-}
 
 function acl_default_user_org_id(PDO $pdo, int $userId): int
 {
     return 0;
 }
 
-function acl_effective_permission_org_id(PDO $pdo, int $userId, ?int $activeOrgId = null): int
+function acl_effective_permission_org_id(PDO $pdo, int $userId, ?int $organizationId = null): int
 {
-    $activeOrgId = (int)($activeOrgId ?: get_active_org_id());
-    return $activeOrgId > 0 ? $activeOrgId : 0;
+    return 0;
 }
 
 function acl_user_role(PDO $pdo, int $userId): string
@@ -63,15 +42,57 @@ function user_org_ids(PDO $pdo, int $userId): array
     return [];
 }
 
-function compute_permissions_hash(PDO $pdo, int $userId, int $activeOrgId): string
+function request_client_org_id(): int
 {
-    $activeOrgId = acl_effective_permission_org_id($pdo, $userId, $activeOrgId);
+    $raw = $_POST['organization_id']
+        ?? $_POST['org_id']
+        ?? $_GET['organization_id']
+        ?? $_GET['org_id']
+        ?? 0;
+    return max(0, (int)$raw);
+}
+
+function resolve_client_context_org_id(PDO $pdo, int $clientId = 0, ?int $projectId = null, ?int $requestedOrgId = null): ?int
+{
+    $requestedOrgId = (int)($requestedOrgId ?? 0);
+    if ($requestedOrgId > 0) {
+        return $requestedOrgId;
+    }
+    $projectId = (int)($projectId ?? 0);
+    if ($clientId <= 0 && $projectId <= 0) {
+        return null;
+    }
+
+    try {
+        if ($projectId > 0) {
+            $stmt = $pdo->prepare('SELECT organization_id FROM projects WHERE id = ? LIMIT 1');
+            $stmt->execute([$projectId]);
+            $orgId = (int)($stmt->fetchColumn() ?: 0);
+            if ($orgId > 0) {
+                return $orgId;
+            }
+        }
+
+        if ($clientId > 0) {
+            $stmt = $pdo->prepare('SELECT organization_id FROM clients WHERE id = ? LIMIT 1');
+            $stmt->execute([$clientId]);
+            $orgId = (int)($stmt->fetchColumn() ?: 0);
+            return $orgId > 0 ? $orgId : null;
+        }
+    } catch (Throwable $e) {
+    }
+
+    return null;
+}
+
+function compute_permissions_hash(PDO $pdo, int $userId, int $organizationId = 0): string
+{
     $role = acl_user_role($pdo, $userId);
     $roleId = role_id_by_name($pdo, $role, null);
 
     try {
-        $stmt = $pdo->prepare('SELECT permission, allowed FROM user_permissions_overrides WHERE user_id = ? AND (organization_id = ? OR organization_id IS NULL) ORDER BY permission');
-        $stmt->execute([$userId, $activeOrgId]);
+        $stmt = $pdo->prepare('SELECT permission, allowed FROM user_permissions_overrides WHERE user_id = ? AND organization_id IS NULL ORDER BY permission');
+        $stmt->execute([$userId]);
         $overrides = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         $overrides = [];
@@ -80,12 +101,11 @@ function compute_permissions_hash(PDO $pdo, int $userId, int $activeOrgId): stri
     return hash('sha256', json_encode(['role' => $role, 'role_id' => $roleId, 'overrides' => $overrides]));
 }
 
-function user_permissions(PDO $pdo, int $userId, ?int $activeOrgId = null): array
+function user_permissions(PDO $pdo, int $userId, ?int $organizationId = null): array
 {
     static $cache = [];
-    $activeOrgId = acl_effective_permission_org_id($pdo, $userId, (int)($activeOrgId ?: get_active_org_id()));
     $role = acl_user_role($pdo, $userId);
-    $key = "{$userId}:{$activeOrgId}:{$role}";
+    $key = "{$userId}:global:{$role}";
     if (isset($cache[$key])) {
         return $cache[$key];
     }
@@ -113,8 +133,8 @@ function user_permissions(PDO $pdo, int $userId, ?int $activeOrgId = null): arra
     try {
         $stmt = $pdo->prepare('SELECT permission, allowed
             FROM user_permissions_overrides
-            WHERE user_id = ? AND (organization_id = ? OR organization_id IS NULL)');
-        $stmt->execute([$userId, $activeOrgId]);
+            WHERE user_id = ? AND organization_id IS NULL');
+        $stmt->execute([$userId]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $permissions[$row['permission']] = (bool)$row['allowed'];
         }
@@ -126,9 +146,9 @@ function user_permissions(PDO $pdo, int $userId, ?int $activeOrgId = null): arra
     return $permissions;
 }
 
-function user_can(PDO $pdo, int $userId, string $permission, ?int $activeOrgId = null): bool
+function user_can(PDO $pdo, int $userId, string $permission, ?int $organizationId = null): bool
 {
-    $perms = user_permissions($pdo, $userId, $activeOrgId);
+    $perms = user_permissions($pdo, $userId, $organizationId);
     if (!empty($perms['*'])) {
         return true;
     }
@@ -148,7 +168,7 @@ function user_can(PDO $pdo, int $userId, string $permission, ?int $activeOrgId =
     return false;
 }
 
-function acl_user_has_org_wide_scope(PDO $pdo, int $userId, ?int $activeOrgId = null): bool
+function acl_user_has_org_wide_scope(PDO $pdo, int $userId, ?int $organizationId = null): bool
 {
     if (($_SESSION['user']['role'] ?? '') === 'admin') {
         return true;
@@ -187,29 +207,24 @@ function acl_table_has_column(PDO $pdo, string $table, string $column): bool
 
 function scope_clause(PDO $pdo, string $tableAlias, int $userId): array
 {
-    if (($_SESSION['user']['role'] ?? '') === 'admin') {
+    if (acl_user_has_org_wide_scope($pdo, $userId, 0)) {
         return ['', []];
     }
 
-    $activeOrgId = get_active_org_id();
-    if ($activeOrgId === 0) {
-        return acl_user_has_org_wide_scope($pdo, $userId, 0) ? ['', []] : ['1=0', []];
-    }
-
-    if (acl_user_has_org_wide_scope($pdo, $userId, $activeOrgId)) {
-        return ["{$tableAlias}.organization_id = ?", [$activeOrgId]];
-    }
-
-    return ["{$tableAlias}.organization_id = ? AND {$tableAlias}.created_by = ?", [$activeOrgId, $userId]];
+    return ["{$tableAlias}.created_by = ?", [$userId]];
 }
 
-function finance_scope_clause(PDO $pdo, string $tableAlias, int $userId, int $orgId, string $ownerColumn = 'created_by'): array
+function finance_scope_clause(PDO $pdo, string $tableAlias, int $userId, int $clientOrgId = 0, string $ownerColumn = 'created_by'): array
 {
-    $orgId = $orgId > 0 ? $orgId : active_or_default_org_id($pdo);
-    $where = ["{$tableAlias}.organization_id = ?"];
-    $params = [$orgId];
+    $where = [];
+    $params = [];
 
-    if (($_SESSION['user']['role'] ?? '') !== 'admin') {
+    if ($clientOrgId > 0) {
+        $where[] = "{$tableAlias}.organization_id = ?";
+        $params[] = $clientOrgId;
+    }
+
+    if (!acl_user_has_org_wide_scope($pdo, $userId, 0)) {
         if (!preg_match('/^[A-Za-z0-9_]+$/', $ownerColumn)) {
             $ownerColumn = 'created_by';
         }
@@ -217,7 +232,7 @@ function finance_scope_clause(PDO $pdo, string $tableAlias, int $userId, int $or
         $params[] = $userId;
     }
 
-    return [implode(' AND ', $where), $params];
+    return [$where ? implode(' AND ', $where) : '1=1', $params];
 }
 
 function can_access_record(PDO $pdo, string $table, int $recordId, int $userId): bool
@@ -229,16 +244,8 @@ function can_access_record(PDO $pdo, string $table, int $recordId, int $userId):
         return false;
     }
 
-    $activeOrgId = get_active_org_id();
-    if ($activeOrgId === 0 && acl_user_has_org_wide_scope($pdo, $userId, 0)) {
-        return true;
-    }
-    if ($activeOrgId === 0) {
-        return false;
-    }
-
     if ($table === 'organizations') {
-        return acl_user_has_org_wide_scope($pdo, $userId, $activeOrgId);
+        return acl_user_has_org_wide_scope($pdo, $userId, 0);
     }
 
     $select = 'organization_id';
@@ -249,11 +256,11 @@ function can_access_record(PDO $pdo, string $table, int $recordId, int $userId):
     $stmt = $pdo->prepare("SELECT {$select} FROM {$table} WHERE id = ? LIMIT 1");
     $stmt->execute([$recordId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$row || (int)$row['organization_id'] !== $activeOrgId) {
+    if (!$row) {
         return false;
     }
 
-    if (acl_user_has_org_wide_scope($pdo, $userId, $activeOrgId)) {
+    if (acl_user_has_org_wide_scope($pdo, $userId, 0)) {
         return true;
     }
 

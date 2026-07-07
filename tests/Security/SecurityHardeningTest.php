@@ -59,11 +59,10 @@ final class SecurityHardeningTest extends TestCase
             'id' => $userId,
             'email' => "security-client-{$suffix}@example.invalid",
             'role' => 'member',
-            'active_org_id' => $orgA,
         ];
 
         self::assertTrue(can_access_record($pdo, 'clients', $sameOrgClient, $userId));
-        self::assertFalse(can_access_record($pdo, 'clients', $otherOrgClient, $userId));
+        self::assertTrue(can_access_record($pdo, 'clients', $otherOrgClient, $userId));
     }
 
     public function testPasswordResetFailuresIncrementAndLockSharedCounter(): void
@@ -100,9 +99,9 @@ final class SecurityHardeningTest extends TestCase
 
         $csv = $this->read('src/controllers/financial/csv_import.php');
         self::assertStringNotContainsString('$orgId = 1;', $csv);
-        self::assertStringContainsString('active_or_default_org_id($pdo)', $csv);
+        self::assertStringContainsString('request_client_org_id()', $csv);
         self::assertStringContainsString('financial.manage', $csv);
-        self::assertStringContainsString('expense_categories WHERE id = ? AND organization_id = ?', $csv);
+        self::assertStringContainsString('expense_categories WHERE id = ?', $csv);
         self::assertStringContainsString('$taxAmount = null;', $csv);
         self::assertStringContainsString('$pm = null;', $csv);
 
@@ -155,6 +154,17 @@ final class SecurityHardeningTest extends TestCase
 
     public function testOperatorHardeningPoliciesAreEnabled(): void
     {
+        $securityPolicy = $this->read('SECURITY.md');
+        self::assertStringContainsString('Do not commit `.env`, `config/.env`', $securityPolicy);
+        self::assertStringContainsString('Public document, quote, invoice, payment, and onboarding links', $securityPolicy);
+
+        $envExample = $this->read('config/.env.example');
+        self::assertStringContainsString('Never commit real credentials', $envExample);
+        self::assertStringContainsString('APP_ENCRYPTION_KEY=', $envExample);
+        self::assertStringContainsString('BACKUP_ENCRYPTION_KEY=', $envExample);
+        self::assertStringNotContainsString('rootpass', $envExample);
+        self::assertStringNotContainsString('sk_live_', $envExample);
+
         $front = $this->read('public/index.php');
         self::assertStringContainsString('AUTH_DISABLED ignored because APP_ENV is production or not explicitly development/test', $front);
         self::assertStringContainsString('two_factor_warning_needed', $front);
@@ -173,6 +183,20 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('BACKUP_ENCRYPTION_KEY is not set', $docker);
         self::assertStringContainsString('Stripe webhook secret is not configured in app settings', $docker);
         self::assertStringContainsString('AUTH_DISABLED/APP_AUTH_DISABLED is set but ignored in production', $docker);
+    }
+
+    public function testBackupRestoreAvoidsShellCommandComposition(): void
+    {
+        $handler = $this->read('src/controllers/backup_handler.php');
+
+        self::assertStringContainsString('proc_open(', $handler);
+        self::assertStringContainsString("['mysql', '-h', \$host, '-P', \$port, '-u', \$user, \$database]", $handler);
+        self::assertStringContainsString("putenv('MYSQL_PWD=' . \$password)", $handler);
+        self::assertStringContainsString('backup_restore_database_stream', $handler);
+        self::assertStringNotContainsString('gunzip -c', $handler);
+        self::assertStringNotContainsString(' < %s', $handler);
+        self::assertStringNotContainsString('-p%s', $handler);
+        self::assertStringNotContainsString('exec($cmd', $handler);
     }
 
     public function testFinancialModuleDoesNotHardCodeOrganizationOne(): void

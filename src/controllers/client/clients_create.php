@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
-$__orgId = get_active_org_id() ?: null;
+$__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 $name = trim($_POST['name'] ?? '');

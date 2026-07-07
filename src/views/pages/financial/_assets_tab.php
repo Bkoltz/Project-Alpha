@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/financial_assets.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
 $assetSearch = trim((string)($_GET['asset_search'] ?? ''));
@@ -52,8 +52,8 @@ $typeStmt = $pdo->prepare('SELECT DISTINCT asset_type FROM financial_assets a WH
 $typeStmt->execute($assetScopeParams);
 $assetTypes = $typeStmt->fetchAll(PDO::FETCH_COLUMN);
 
-$vendorStmt = $pdo->prepare('SELECT id, name FROM vendors WHERE organization_id = ? AND is_active = 1 ORDER BY name');
-$vendorStmt->execute([$orgId]);
+$vendorStmt = $pdo->prepare('SELECT id, name FROM vendors WHERE is_active = 1 ORDER BY name');
+$vendorStmt->execute();
 $assetVendors = $vendorStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $summary = [

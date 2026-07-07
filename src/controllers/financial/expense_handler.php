@@ -48,8 +48,12 @@ function expense_handler_assert_org_row(PDO $pdo, string $table, int $id, int $o
         throw new RuntimeException('Invalid table.');
     }
 
-    $where = 'id = ? AND organization_id = ?';
-    $params = [$id, $orgId];
+    $where = 'id = ?';
+    $params = [$id];
+    if ($orgId > 0) {
+        $where .= ' AND organization_id = ?';
+        $params[] = $orgId;
+    }
     if ($ownerColumn !== null && ($_SESSION['user']['role'] ?? '') !== 'admin') {
         if (!preg_match('/^[A-Za-z0-9_]+$/', $ownerColumn)) {
             throw new RuntimeException('Invalid owner column.');
@@ -61,7 +65,7 @@ function expense_handler_assert_org_row(PDO $pdo, string $table, int $id, int $o
     $stmt = $pdo->prepare("SELECT 1 FROM {$table} WHERE {$where} LIMIT 1");
     $stmt->execute($params);
     if (!$stmt->fetchColumn()) {
-        throw new RuntimeException($label . ' was not found for the active organization.');
+        throw new RuntimeException($label . ' was not found.');
     }
 }
 
@@ -70,10 +74,16 @@ function expense_handler_assert_client(PDO $pdo, int $clientId, int $orgId): voi
     if ($clientId <= 0) {
         return;
     }
-    $stmt = $pdo->prepare('SELECT 1 FROM clients WHERE id = ? AND organization_id = ? LIMIT 1');
-    $stmt->execute([$clientId, $orgId]);
+    $where = 'id = ?';
+    $params = [$clientId];
+    if ($orgId > 0) {
+        $where .= ' AND organization_id = ?';
+        $params[] = $orgId;
+    }
+    $stmt = $pdo->prepare("SELECT 1 FROM clients WHERE {$where} LIMIT 1");
+    $stmt->execute($params);
     if (!$stmt->fetchColumn()) {
-        throw new RuntimeException('Client was not found for the active organization.');
+        throw new RuntimeException('Client was not found.');
     }
 }
 
@@ -93,8 +103,8 @@ if (!$csrfOk) {
     expense_handler_finish(['success' => false, 'error' => 'Invalid CSRF token'], 400, '/?page=financial/expense-create');
 }
 
-$orgId = active_or_default_org_id($pdo);
-if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
+$orgId = request_client_org_id();
+if (!user_can($pdo, (int)$userId, 'financial.manage', 0)) {
     expense_handler_finish(['success' => false, 'error' => 'Permission denied'], 403, '/?page=financial/expenses-list&tab=expenses');
 }
 $action = $_POST['action'] ?? '';
@@ -139,12 +149,12 @@ try {
 
             // Auto-create vendor if name provided but no vendor_id
             if ($vendorId <= 0 && $vendorName !== '') {
-                $vStmt = $pdo->prepare('SELECT id FROM vendors WHERE organization_id=? AND name=? LIMIT 1');
-                $vStmt->execute([$orgId, $vendorName]);
+                $vStmt = $pdo->prepare('SELECT id FROM vendors WHERE name=? LIMIT 1');
+                $vStmt->execute([$vendorName]);
                 $vendorId = (int)$vStmt->fetchColumn();
                 if ($vendorId <= 0) {
                     $insV = $pdo->prepare('INSERT INTO vendors (organization_id, name) VALUES (?, ?)');
-                    $insV->execute([$orgId, $vendorName]);
+                    $insV->execute([$orgId > 0 ? $orgId : null, $vendorName]);
                     $vendorId = (int)$pdo->lastInsertId();
                 }
             }
@@ -162,7 +172,7 @@ try {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "confirmed")
             ');
             $stmt->execute([
-                $orgId, $vendorId ?: null, $categoryId ?: null, $clientId ?: null, $projectId ?: null,
+                $orgId > 0 ? $orgId : null, $vendorId ?: null, $categoryId ?: null, $clientId ?: null, $projectId ?: null,
                 $receiptId ?: null, $amount, $taxAmount, $totalAmount, $expenseDate, $description,
                 $paymentMethod, $referenceNumber ?: null, $isBillable, $isTaxDeductible, $notes ?: null,
                 $userId
@@ -216,12 +226,12 @@ try {
 
             // Auto-create vendor if name provided but no vendor_id
             if ($vendorId <= 0 && $vendorName !== '') {
-                $vStmt = $pdo->prepare('SELECT id FROM vendors WHERE organization_id=? AND name=? LIMIT 1');
-                $vStmt->execute([$orgId, $vendorName]);
+                $vStmt = $pdo->prepare('SELECT id FROM vendors WHERE name=? LIMIT 1');
+                $vStmt->execute([$vendorName]);
                 $vendorId = (int)$vStmt->fetchColumn();
                 if ($vendorId <= 0) {
                     $insV = $pdo->prepare('INSERT INTO vendors (organization_id, name) VALUES (?, ?)');
-                    $insV->execute([$orgId, $vendorName]);
+                    $insV->execute([$orgId > 0 ? $orgId : null, $vendorName]);
                     $vendorId = (int)$pdo->lastInsertId();
                 }
             }
@@ -235,13 +245,13 @@ try {
                 UPDATE expenses SET vendor_id=?, category_id=?, client_id=?, project_id=?, amount=?,
                     tax_amount=?, total_amount=?, expense_date=?, description=?, payment_method=?,
                     reference_number=?, is_billable=?, is_tax_deductible=?, notes=?
-                WHERE id=? AND organization_id=?
+                WHERE id=?
             ');
             $stmt->execute([
                 $vendorId ?: null, $categoryId ?: null, $clientId ?: null, $projectId ?: null,
                 $amount, $taxAmount, $totalAmount, $expenseDate, $description,
                 $paymentMethod, $referenceNumber ?: null, $isBillable, $isTaxDeductible, $notes ?: null,
-                $id, $orgId
+                $id
             ]);
             audit_log($pdo, 'expense.update', 'expense', $id);
             $response = ['success' => true, 'redirect' => '/?page=financial/expense-detail&id=' . $id . '&updated=1', 'status_param' => 'updated'];

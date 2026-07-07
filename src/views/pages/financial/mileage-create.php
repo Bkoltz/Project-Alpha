@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 
 $editMode = false;
@@ -42,8 +42,8 @@ if ($editId > 0) {
 }
 
 // Clients for billable dropdown
-$clientsStmt = $pdo->prepare('SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name ASC');
-$clientsStmt->execute([$orgId]);
+$clientsStmt = $pdo->prepare('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name ASC');
+$clientsStmt->execute();
 $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 

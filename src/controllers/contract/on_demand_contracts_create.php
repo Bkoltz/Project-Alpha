@@ -121,10 +121,7 @@ elseif($deposit_type === 'fixed') {
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 $sessionUserId = (int)($_SESSION['user']['id'] ?? 0) ?: 1;
-$activeOrgId   = (int)(get_active_org_id() ?: 0);
-if (!$activeOrgId) {
-    $activeOrgId = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
-}
+$contractOrgId = resolve_client_context_org_id($pdo, $client_id, $project_id, request_client_org_id());
 
 $pdo->beginTransaction();
 try{
@@ -150,7 +147,7 @@ try{
         $billing_interval_count, $billing_interval_unit, 'on_demand', $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0,
-        0, 0, $scope, $activeOrgId, $sessionUserId
+        0, 0, $scope, $contractOrgId, $sessionUserId
     ]);
     
     $contract_id = (int)$pdo->lastInsertId();

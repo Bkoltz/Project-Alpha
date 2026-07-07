@@ -108,7 +108,7 @@ final class FinancialAssetsTest extends TestCase
 
         $handler = $this->read('src/controllers/financial/asset_handler.php');
         self::assertStringContainsString('function asset_handler_finish', $handler);
-        self::assertStringContainsString('active_or_default_org_id($pdo)', $handler);
+        self::assertStringContainsString('request_client_org_id()', $handler);
         self::assertStringContainsString('finance_scope_clause($pdo, \'a\'', $handler);
     }
 

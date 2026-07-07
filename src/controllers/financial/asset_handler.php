@@ -74,10 +74,16 @@ function asset_assert_org_row(PDO $pdo, string $table, int $id, int $orgId, stri
     if ($id <= 0) {
         return;
     }
-    $stmt = $pdo->prepare("SELECT 1 FROM {$table} WHERE id = ? AND organization_id = ? LIMIT 1");
-    $stmt->execute([$id, $orgId]);
+    $where = 'id = ?';
+    $params = [$id];
+    if ($orgId > 0) {
+        $where .= ' AND organization_id = ?';
+        $params[] = $orgId;
+    }
+    $stmt = $pdo->prepare("SELECT 1 FROM {$table} WHERE {$where} LIMIT 1");
+    $stmt->execute($params);
     if (!$stmt->fetchColumn()) {
-        throw new RuntimeException($label . ' was not found for the active organization.');
+        throw new RuntimeException($label . ' was not found.');
     }
 }
 
@@ -86,8 +92,8 @@ if ($userId <= 0) {
     asset_handler_finish(['success' => false, 'message' => 'Authentication required'], 401, '/?page=login');
 }
 
-$orgId = active_or_default_org_id($pdo);
-if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
+$orgId = request_client_org_id();
+if (!user_can($pdo, $userId, 'financial.manage', 0)) {
     asset_handler_finish(['success' => false, 'message' => 'Permission denied'], 403, '/?page=financial/expenses-list&tab=assets');
 }
 
@@ -142,7 +148,7 @@ try {
     $warrantyExpiresOn = asset_trim_nullable($_POST['warranty_expires_on'] ?? null);
     $disposedOn = asset_trim_nullable($_POST['disposed_on'] ?? null);
     $status = (string)($_POST['status'] ?? 'active');
-    $method = (string)($_POST['depreciation_method'] ?? 'straight_line');
+    $method = (string)($_POST['depreciation_method'] ?? 'none');
     $vendorId = asset_optional_int('vendor_id');
     $vendorName = trim((string)($_POST['vendor_name'] ?? ''));
     $categoryId = asset_optional_int('category_id');
@@ -166,14 +172,14 @@ try {
     }
 
     if ($vendorId === null && $vendorName !== '') {
-        $vendorLookup = $pdo->prepare('SELECT id FROM vendors WHERE organization_id = ? AND name = ? LIMIT 1');
-        $vendorLookup->execute([$orgId, $vendorName]);
+        $vendorLookup = $pdo->prepare('SELECT id FROM vendors WHERE name = ? LIMIT 1');
+        $vendorLookup->execute([$vendorName]);
         $foundVendorId = (int)$vendorLookup->fetchColumn();
         if ($foundVendorId > 0) {
             $vendorId = $foundVendorId;
         } else {
             $insertVendor = $pdo->prepare('INSERT INTO vendors (organization_id, name) VALUES (?, ?)');
-            $insertVendor->execute([$orgId, $vendorName]);
+            $insertVendor->execute([$orgId > 0 ? $orgId : null, $vendorName]);
             $vendorId = (int)$pdo->lastInsertId();
             audit_log($pdo, 'vendor.create', 'vendor', $vendorId, ['organization_id' => $orgId, 'name' => $vendorName, 'source' => 'asset']);
         }
@@ -190,7 +196,7 @@ try {
         $expenseCheck = $pdo->prepare('SELECT 1 FROM expenses e WHERE e.id = ? AND ' . $expenseScopeWhere . ' LIMIT 1');
         $expenseCheck->execute(array_merge([$expenseId], $expenseScopeParams));
         if (!$expenseCheck->fetchColumn()) {
-            throw new RuntimeException('Expense was not found for the active organization.');
+            throw new RuntimeException('Expense was not found.');
         }
     }
 
@@ -204,7 +210,7 @@ try {
                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
         $stmt->execute([
-            $orgId, $vendorId, $categoryId, $expenseId, $assetTag, $name, $assetType, $serialNumber,
+            $orgId > 0 ? $orgId : null, $vendorId, $categoryId, $expenseId, $assetTag, $name, $assetType, $serialNumber,
             $status, $location, $purchaseDate, $purchaseCost, $method, $depreciationStartDate,
             $usefulLifeMonths, $salvageValue, $warrantyExpiresOn, $disposedOn, $disposalValue, $notes, $userId,
         ]);
@@ -226,13 +232,13 @@ try {
             serial_number = ?, status = ?, location = ?, purchase_date = ?, purchase_cost = ?,
             depreciation_method = ?, depreciation_start_date = ?, useful_life_months = ?, salvage_value = ?,
             warranty_expires_on = ?, disposed_on = ?, disposal_value = ?, notes = ?
-        WHERE id = ? AND organization_id = ?
+        WHERE id = ?
     ');
     $stmt->execute([
         $vendorId, $categoryId, $expenseId, $assetTag, $name, $assetType,
         $serialNumber, $status, $location, $purchaseDate, $purchaseCost,
         $method, $depreciationStartDate, $usefulLifeMonths, $salvageValue,
-        $warrantyExpiresOn, $disposedOn, $disposalValue, $notes, $id, $orgId,
+        $warrantyExpiresOn, $disposedOn, $disposalValue, $notes, $id,
     ]);
     audit_log($pdo, 'asset.update', 'financial_asset', $id, ['organization_id' => $orgId, 'name' => $name]);
     asset_json_response(true, 'Asset updated.', ['id' => $id, 'redirect' => '/?page=financial/asset-detail&id=' . $id . '&updated=1']);

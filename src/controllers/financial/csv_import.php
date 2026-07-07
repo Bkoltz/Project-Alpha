@@ -30,8 +30,8 @@ if (!$csrfOk) {
     exit;
 }
 
-$orgId = active_or_default_org_id($pdo);
-if ($orgId <= 0 || !user_can($pdo, (int)$userId, 'financial.manage', $orgId)) {
+$orgId = request_client_org_id();
+if (!user_can($pdo, (int)$userId, 'financial.manage', 0)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Permission denied']);
     exit;
@@ -163,8 +163,8 @@ try {
 
         $defaultCategoryId = (int)($_POST['default_category_id'] ?? 0);
         if ($defaultCategoryId > 0) {
-            $catCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? AND organization_id = ? LIMIT 1');
-            $catCheck->execute([$defaultCategoryId, $orgId]);
+            $catCheck = $pdo->prepare('SELECT 1 FROM expense_categories WHERE id = ? LIMIT 1');
+            $catCheck->execute([$defaultCategoryId]);
             if (!$catCheck->fetchColumn()) {
                 throw new Exception('Invalid expense category');
             }
@@ -236,13 +236,13 @@ try {
                     if (isset($vendorCache[$vendorName])) {
                         $vendorId = $vendorCache[$vendorName];
                     } else {
-                        $vStmt = $pdo->prepare('SELECT id FROM vendors WHERE organization_id=? AND name=? LIMIT 1');
-                        $vStmt->execute([$orgId, $vendorName]);
+                        $vStmt = $pdo->prepare('SELECT id FROM vendors WHERE name=? LIMIT 1');
+                        $vStmt->execute([$vendorName]);
                         $vendorId = $vStmt->fetchColumn();
                         if (!$vendorId) {
                             // Auto-create vendor
                             $insV = $pdo->prepare('INSERT INTO vendors (organization_id, name) VALUES (?, ?)');
-                            $insV->execute([$orgId, $vendorName]);
+                            $insV->execute([$orgId > 0 ? $orgId : null, $vendorName]);
                             $vendorId = (int)$pdo->lastInsertId();
                         }
                         $vendorCache[$vendorName] = (int)$vendorId;
@@ -250,8 +250,8 @@ try {
                 }
 
                 // Check for duplicate (same date + amount + vendor)
-                $dupStmt = $pdo->prepare('SELECT id FROM expenses WHERE organization_id=? AND expense_date=? AND amount=? AND vendor_id <=> ? LIMIT 1');
-                $dupStmt->execute([$orgId, $parsedDate, $amount, $vendorId]);
+                $dupStmt = $pdo->prepare('SELECT id FROM expenses WHERE expense_date=? AND amount=? AND vendor_id <=> ? LIMIT 1');
+                $dupStmt->execute([$parsedDate, $amount, $vendorId]);
                 if ($dupStmt->fetchColumn()) {
                     $skipped++;
                     $errors[] = "Row " . ($rowIdx + 2) . ": Duplicate (same date, amount, vendor)";
@@ -264,7 +264,7 @@ try {
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ');
                     $stmt->execute([
-                        $orgId,
+                        $orgId > 0 ? $orgId : null,
                         $vendorId,
                         $defaultCategoryId ?: null,
                         $amount,

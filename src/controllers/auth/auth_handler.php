@@ -141,14 +141,12 @@ if ($action === 'login') {
         
         // Build the full session user data before storing or redirecting
         require_once __DIR__ . '/../../utils/acl.php';
-        $defaultOrgId = 0;
         $userSession = [
             'id'               => (int)$u['id'],
             'email'            => $u['email'],
             'role'             => $u['role'],
             'app_role'         => $u['role'],
-            'active_org_id'    => $defaultOrgId,
-            'permissions_hash' => compute_permissions_hash($pdo, (int)$u['id'], $defaultOrgId),
+            'permissions_hash' => compute_permissions_hash($pdo, (int)$u['id'], 0),
         ];
 
         if ($twofa_enabled) {
@@ -227,7 +225,7 @@ if ($action === 'login') {
 
         // Route user to appropriate landing page based on permissions
         require_once __DIR__ . '/../../utils/acl.php';
-        if (user_can($pdo, (int)$u['id'], 'financial.view', $defaultOrgId)) {
+        if (user_can($pdo, (int)$u['id'], 'financial.view', 0)) {
             header('Location: /');
         } else {
             header('Location: /?page=user-dashboard');

@@ -68,8 +68,8 @@ if (empty($_SESSION['user']['id'])) {
 
 try {
     $userId = (int)$_SESSION['user']['id'];
-    $orgId = active_or_default_org_id($pdo);
-    if ($orgId <= 0 || !user_can($pdo, $userId, 'financial.manage', $orgId)) {
+    $orgId = request_client_org_id();
+    if (!user_can($pdo, $userId, 'financial.manage', 0)) {
         $response['message'] = 'Permission denied';
         mileage_handler_finish($response, 403, '/?page=financial/mileage-list');
     }
@@ -77,7 +77,7 @@ try {
     // Make sure mileage_logs table exists
     $pdo->exec("CREATE TABLE IF NOT EXISTS mileage_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        organization_id INT NOT NULL DEFAULT 1,
+        organization_id INT NULL DEFAULT NULL,
         user_id INT NOT NULL,
         client_id INT DEFAULT NULL,
         project_id INT DEFAULT NULL,
@@ -139,7 +139,7 @@ try {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([
-                $orgId,
+                $orgId > 0 ? $orgId : null,
                 $userId,
                 $clientId,
                 $projectId,
@@ -232,7 +232,7 @@ try {
                     is_billable = ?,
                     client_id = ?,
                     project_id = ?
-                WHERE id = ? AND organization_id = ?
+                WHERE id = ?
             ');
             $stmt->execute([
                 $tripDate,
@@ -247,7 +247,6 @@ try {
                 $clientId,
                 $projectId,
                 $id,
-                $orgId,
             ]);
 
             audit_log($pdo, 'mileage.update', 'mileage_log', $id, [

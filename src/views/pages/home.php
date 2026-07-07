@@ -8,7 +8,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 // ------------------------------------------------------------------
 try {
   $dashboard_user_id = (int)($_SESSION['user']['id'] ?? 0);
-  $dashboard_org_id = active_or_default_org_id($pdo);
+  $dashboard_org_id = request_client_org_id();
   [$dashboard_expense_scope_where, $dashboard_expense_scope_params] = finance_scope_clause($pdo, 'e', $dashboard_user_id, $dashboard_org_id, 'created_by');
 
   // Core stats

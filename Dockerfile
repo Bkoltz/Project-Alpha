@@ -122,7 +122,10 @@ COPY ./public/ /var/www/public/
 COPY ./cron/ /var/www/cron/
 COPY ./docker/ /var/www/docker/
 COPY ./.github/ /var/www/.github/
-RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/.github /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock
+COPY ./SECURITY.md /var/www/SECURITY.md
+RUN mkdir -p /var/www/config
+COPY ./config/.env.example /var/www/config/.env.example
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.

@@ -66,7 +66,7 @@ if ($projectOrganizationId > 0) {
     $allClientsStmt->execute([$projectOrganizationId]);
     $allClients = $allClientsStmt->fetchAll(PDO::FETCH_ASSOC);
 } else {
-    $activeOrgId = get_active_org_id();
+    $activeOrgId = request_client_org_id();
     if ($activeOrgId > 0) {
         $allClientsStmt = $pdo->prepare('
             SELECT id, name, email

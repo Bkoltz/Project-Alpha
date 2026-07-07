@@ -14,10 +14,11 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
 
     $stmt = $pdo->prepare(
         'SELECT p.id,p.invoice_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
-                i.doc_number,c.name AS client_name,c.email
+                i.doc_number,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
          FROM payments p
          LEFT JOIN invoices i ON i.id=p.invoice_id
-         JOIN clients c ON c.id=p.client_id
+         LEFT JOIN clients c ON c.id=p.client_id
+         LEFT JOIN processor_payment_transactions ppt ON ppt.payment_id=p.id
          WHERE p.id=? AND p.status="succeeded"'
     );
     $stmt->execute([$paymentId]);

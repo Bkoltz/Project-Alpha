@@ -364,7 +364,9 @@ class StripeService {
                 $params = [
                     'limit' => 100,
                     'created[gte]' => $since,
-                    'expand[]' => 'charges.data'
+                    'expand[0]' => 'charges.data',
+                    'expand[1]' => 'charges.data.balance_transaction',
+                    'expand[2]' => 'latest_charge.balance_transaction'
                 ];
                 if ($startingAfter) {
                     $params['starting_after'] = $startingAfter;
@@ -496,6 +498,90 @@ class StripeService {
             @error_log('[StripeService] Error fetching balance transaction: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Fetch a Stripe Charge with balance transaction details expanded.
+     */
+    public function getCharge(string $chargeId): array {
+        try {
+            return $this->apiRequest('GET', 'charges/' . rawurlencode($chargeId) . '?' . http_build_query([
+                'expand' => ['balance_transaction']
+            ]));
+        } catch (\Throwable $e) {
+            @error_log('[StripeService] Error fetching charge: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Normalize a Stripe PaymentIntent into PA's processor-neutral import shape.
+     */
+    public function normalizePaymentIntentForImport(array $paymentIntent): array {
+        $charge = $paymentIntent['charges']['data'][0] ?? null;
+        if (!is_array($charge) && is_array($paymentIntent['latest_charge'] ?? null)) {
+            $charge = $paymentIntent['latest_charge'];
+        }
+        if (!is_array($charge) && is_string($paymentIntent['latest_charge'] ?? null) && $paymentIntent['latest_charge'] !== '') {
+            try {
+                $charge = $this->getCharge((string)$paymentIntent['latest_charge']);
+            } catch (\Throwable $e) {
+                $charge = null;
+            }
+        }
+
+        $balanceTransaction = is_array($charge['balance_transaction'] ?? null) ? $charge['balance_transaction'] : null;
+        if (!$balanceTransaction && is_string($charge['balance_transaction'] ?? null) && $charge['balance_transaction'] !== '') {
+            try {
+                $balanceTransaction = $this->getBalanceTransaction((string)$charge['balance_transaction']);
+            } catch (\Throwable $e) {
+                $balanceTransaction = null;
+            }
+        }
+
+        $metadata = [];
+        if (is_array($paymentIntent['metadata'] ?? null)) {
+            $metadata = $paymentIntent['metadata'];
+        }
+        if (is_array($charge['metadata'] ?? null)) {
+            $metadata = array_merge($metadata, $charge['metadata']);
+        }
+
+        $billing = is_array($charge['billing_details'] ?? null) ? $charge['billing_details'] : [];
+        $address = is_array($billing['address'] ?? null) ? $billing['address'] : [];
+        $grossCents = (int)($paymentIntent['amount_received'] ?? $paymentIntent['amount'] ?? $charge['amount'] ?? 0);
+        $feeCents = is_array($balanceTransaction) && isset($balanceTransaction['fee']) ? (int)$balanceTransaction['fee'] : null;
+        $netCents = is_array($balanceTransaction) && isset($balanceTransaction['net']) ? (int)$balanceTransaction['net'] : null;
+        $status = (string)($paymentIntent['status'] ?? '');
+
+        return [
+            'provider' => 'stripe',
+            'provider_payment_id' => (string)($paymentIntent['id'] ?? ''),
+            'provider_charge_id' => is_array($charge) ? (string)($charge['id'] ?? '') : null,
+            'provider_customer_id' => is_string($paymentIntent['customer'] ?? null) ? $paymentIntent['customer'] : null,
+            'status' => $status === 'succeeded' ? 'succeeded' : $status,
+            'currency' => strtolower((string)($paymentIntent['currency'] ?? $charge['currency'] ?? 'usd')),
+            'gross_amount' => round($grossCents / 100, 2),
+            'fee_amount' => $feeCents !== null ? round($feeCents / 100, 2) : null,
+            'net_amount' => $netCents !== null ? round($netCents / 100, 2) : null,
+            'paid_at' => (int)($charge['created'] ?? $paymentIntent['created'] ?? time()),
+            'payer_name' => $billing['name'] ?? null,
+            'payer_email' => $billing['email'] ?? ($paymentIntent['receipt_email'] ?? null),
+            'payer_phone' => $billing['phone'] ?? null,
+            'payer_address_line1' => $address['line1'] ?? null,
+            'payer_address_line2' => $address['line2'] ?? null,
+            'payer_city' => $address['city'] ?? null,
+            'payer_state' => $address['state'] ?? null,
+            'payer_postal_code' => $address['postal_code'] ?? null,
+            'payer_country' => $address['country'] ?? null,
+            'description' => $paymentIntent['description'] ?? ($charge['description'] ?? null),
+            'metadata' => $metadata,
+            'raw_summary' => [
+                'payment_intent' => $paymentIntent['id'] ?? null,
+                'charge' => is_array($charge) ? ($charge['id'] ?? null) : null,
+                'balance_transaction' => is_array($balanceTransaction) ? ($balanceTransaction['id'] ?? null) : null,
+            ],
+        ];
     }
 
     /**

@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
 
@@ -14,11 +14,10 @@ $stmt = $pdo->prepare("
     FROM vendors v
     LEFT JOIN expenses e ON e.vendor_id = v.id AND {$expenseScopeWhere}
     LEFT JOIN expense_categories ec ON v.default_category_id = ec.id
-    WHERE v.organization_id = ?
     GROUP BY v.id
     ORDER BY v.name
 ");
-$stmt->execute(array_merge($expenseScopeParams, [$orgId]));
+$stmt->execute($expenseScopeParams);
 $vendors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $totalVendors = count($vendors);

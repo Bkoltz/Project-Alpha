@@ -196,6 +196,7 @@ try {
             'project_specific_links_enabled', 'invoice_content_links_enabled',
             'invoice_missing_content_links_behavior',
             'link_expiration_email_enabled',
+            'processor_import_standalone_income', 'processor_import_auto_create_clients',
             // Surcharge settings (user-editable via billing settings)
             'stripe_surcharge_type', 'stripe_surcharge_percent', 'stripe_surcharge_fixed',
             'stripe_surcharge_split_percent', 'stripe_surcharge_message',

@@ -3,6 +3,8 @@
 // Handler for payment_intent.succeeded events
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../services/StripeService.php';
+require_once __DIR__ . '/../../services/PaymentProcessorImportService.php';
 require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/stripe_financial_events.php';
 
@@ -37,6 +39,18 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
     }
     
     if (!$invoiceId || !$piId) {
+        if ($piId) {
+            $stripe = StripeService::fromAppConfig($GLOBALS['appConfig'] ?? []);
+            if ($stripe) {
+                $result = PaymentProcessorImportService::importStandalone(
+                    $pdo,
+                    $GLOBALS['appConfig'] ?? [],
+                    $stripe->normalizePaymentIntentForImport($paymentIntent)
+                );
+                @error_log('[StripeWebhook] Standalone processor import for ' . $piId . ': ' . ($result['status'] ?? 'unknown'));
+                return;
+            }
+        }
         @error_log('[StripeWebhook] PaymentIntent missing invoice_id or id. metadata=' . json_encode($metadata) . ' piId=' . $piId);
         return;
     }

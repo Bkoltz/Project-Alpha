@@ -72,9 +72,8 @@ try {
 
         // Resolve creator + organization for derived records (no session user for public link)
         $fallbackUserId = 1;
-        $fallbackOrgId  = (int)($pdo->query('SELECT id FROM organizations ORDER BY id ASC LIMIT 1')->fetchColumn() ?: 1);
         $quoteCreator = (int)($quote['created_by'] ?? 0) ?: $fallbackUserId;
-        $quoteOrgId   = (int)($quote['organization_id'] ?? 0) ?: $fallbackOrgId;
+        $quoteOrgId   = !empty($quote['organization_id']) ? (int)$quote['organization_id'] : null;
         $billingMode = (($quote['billing_mode'] ?? 'fixed') === 'hourly') ? 'hourly' : 'fixed';
         $depositType = $quote['deposit_type'] ?? 'none';
         $depositValue = (float)($quote['deposit_amount'] ?? 0);

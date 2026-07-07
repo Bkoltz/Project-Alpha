@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
-$organizationId = get_active_org_id();
+$organizationId = request_client_org_id();
 $clients = $pdo->query('SELECT id,name,email FROM clients WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $organizations = $pdo->query('SELECT id,name FROM organizations ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 $userId = (int)($_SESSION['user']['id'] ?? 0);

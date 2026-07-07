@@ -4,11 +4,11 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 
 // Get all existing stores for autocomplete
-$stmt = $pdo->prepare('SELECT DISTINCT name FROM vendors WHERE organization_id = ? ORDER BY name');
-$stmt->execute([$orgId]);
+$stmt = $pdo->prepare('SELECT DISTINCT name FROM vendors ORDER BY name');
+$stmt->execute();
 $stores = $stmt->fetchAll(PDO::FETCH_COLUMN);
 ?>
 

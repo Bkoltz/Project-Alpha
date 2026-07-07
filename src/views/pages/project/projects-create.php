@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-$activeOrgId = get_active_org_id();
+$activeOrgId = request_client_org_id();
 $activeOrgName = '';
 $activeOrgId = (int)$activeOrgId;
 if ($activeOrgId > 0) {

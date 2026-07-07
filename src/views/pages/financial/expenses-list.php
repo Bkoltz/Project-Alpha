@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = active_or_default_org_id($pdo);
+$orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $csrfToken = csrf_sf_token('expense');
 
@@ -54,16 +54,16 @@ try {
     $countStmt->execute($mileageScopeParams);
     $stats['mileage'] = (int)$countStmt->fetchColumn();
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM vendors WHERE organization_id=? AND is_active=1");
-    $countStmt->execute([$orgId]);
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM vendors WHERE is_active=1");
+    $countStmt->execute();
     $stats['vendors'] = (int)$countStmt->fetchColumn();
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expense_categories WHERE organization_id=?");
-    $countStmt->execute([$orgId]);
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expense_categories");
+    $countStmt->execute();
     $stats['categories'] = (int)$countStmt->fetchColumn();
 
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_schedules WHERE organization_id=?");
-    $countStmt->execute([$orgId]);
+    $countStmt = $pdo->prepare('SELECT COUNT(*) FROM audit_schedules WHERE (?=0 OR organization_id=?)');
+    $countStmt->execute([$orgId, $orgId]);
     $stats['audit'] = (int)$countStmt->fetchColumn();
 } catch (Throwable $ignored) {
     // Some dev databases may be mid-migration; the tab content handles its own errors.
@@ -79,6 +79,7 @@ try {
     </div>
     <div class="finance-actions">
       <a href="/?page=financial/asset-form" class="btn">Add Asset</a>
+      <a href="/?page=financial/mileage-create" class="btn">Log Mileage</a>
       <a href="/?page=financial/expense-report" class="btn">Reports</a>
       <a href="/?page=financial/csv-import" class="btn">Import CSV</a>
       <a href="/?page=financial/expense-create" class="btn btn-primary">Add Expense</a>
