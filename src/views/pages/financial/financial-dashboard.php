@@ -2,6 +2,7 @@
 // src/views/pages/financial/financial-dashboard.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/payment_accounting.php';
 
 $orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
@@ -14,7 +15,8 @@ $end = !empty($_GET['end']) ? $_GET['end'] : $defaultEndDate;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start)) $start = $defaultStartDate;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) $end = $defaultEndDate;
 
-$incomeStmt = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)),0) as total FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id WHERE p.status='succeeded' AND (?=0 OR COALESCE(p.organization_id,i.organization_id,0)=?) AND p.payment_date BETWEEN ? AND ?");
+$incomeExpr = payment_accounting_net_income_expr('p');
+$incomeStmt = $pdo->prepare("SELECT COALESCE(SUM({$incomeExpr}),0) as total FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id WHERE p.status='succeeded' AND (?=0 OR COALESCE(p.organization_id,i.organization_id,0)=?) AND p.payment_date BETWEEN ? AND ?");
 $incomeStmt->execute([$orgId, $orgId, $start, $end]);
 $totalIncome = (float)$incomeStmt->fetchColumn();
 
@@ -22,7 +24,7 @@ $totalIncome = (float)$incomeStmt->fetchColumn();
 [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
 [$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
 
-$expenseStmt = $pdo->prepare("SELECT COALESCE(SUM(e.total_amount),0) as total, COUNT(*) as count FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?");
+$expenseStmt = $pdo->prepare("SELECT COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) as total, COUNT(*) as count FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?");
 $expenseStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $expenseSummary = $expenseStmt->fetch(PDO::FETCH_ASSOC);
 $totalExpenses = (float)$expenseSummary['total'];
@@ -41,7 +43,7 @@ $receiptStmt->execute(array_merge($receiptScopeParams, [$start . ' 00:00:00', $e
 $receiptCount = (int)$receiptStmt->fetchColumn();
 
 $catStmt = $pdo->prepare("
-    SELECT ec.name, ec.color, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
+    SELECT ec.name, ec.color, COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) as total, COUNT(e.id) as count
     FROM expense_categories ec
     LEFT JOIN expenses e ON e.category_id = ec.id AND {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     GROUP BY ec.id
@@ -54,7 +56,7 @@ $categoryMax = 0;
 foreach ($categories as $c) $categoryMax = max($categoryMax, (float)$c['total']);
 
 $vendorStmt = $pdo->prepare("
-    SELECT v.name, COALESCE(SUM(e.total_amount),0) as total, COUNT(e.id) as count
+    SELECT v.name, COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) as total, COUNT(e.id) as count
     FROM vendors v
     LEFT JOIN expenses e ON e.vendor_id = v.id AND {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     WHERE v.is_active = 1
@@ -67,7 +69,7 @@ $vendorStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $vendors = $vendorStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $recentStmt = $pdo->prepare("
-    SELECT e.id, e.expense_date, e.total_amount, e.description, e.status, ec.name as category, v.name as vendor
+    SELECT e.id, e.expense_date, COALESCE(e.total_amount, e.amount, 0) AS display_total, e.description, e.status, ec.name as category, v.name as vendor
     FROM expenses e
     LEFT JOIN expense_categories ec ON ec.id = e.category_id
     LEFT JOIN vendors v ON v.id = e.vendor_id
@@ -79,7 +81,7 @@ $recentStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $recentExpenses = $recentStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $statusStmt = $pdo->prepare("
-    SELECT status, COUNT(*) as count, COALESCE(SUM(total_amount),0) as total
+    SELECT status, COUNT(*) as count, COALESCE(SUM(COALESCE(total_amount, amount, 0)),0) as total
     FROM expenses e
     WHERE {$expenseScopeWhere} AND e.expense_date BETWEEN ? AND ?
     GROUP BY status
@@ -89,7 +91,7 @@ $statusStmt->execute(array_merge($expenseScopeParams, [$start, $end]));
 $statusSummary = $statusStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $incomeTrendStmt = $pdo->prepare("
-    SELECT DATE_FORMAT(p.payment_date, '%Y-%m') as period, COALESCE(SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)),0) as total
+    SELECT DATE_FORMAT(p.payment_date, '%Y-%m') as period, COALESCE(SUM({$incomeExpr}),0) as total
     FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id
     WHERE p.status='succeeded' AND (?=0 OR COALESCE(p.organization_id,i.organization_id,0)=?) AND p.payment_date BETWEEN ? AND ?
     GROUP BY period
@@ -101,7 +103,7 @@ foreach ($incomeTrendStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 }
 
 $expenseTrendStmt = $pdo->prepare("
-    SELECT DATE_FORMAT(e.expense_date, '%Y-%m') as period, COALESCE(SUM(e.total_amount),0) as total
+    SELECT DATE_FORMAT(e.expense_date, '%Y-%m') as period, COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) as total
     FROM expenses e
     WHERE {$expenseScopeWhere} AND e.status != 'void' AND e.expense_date BETWEEN ? AND ?
     GROUP BY period
@@ -339,7 +341,7 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
                 <td><?php echo finance_dashboard_date($e['expense_date']); ?></td>
                 <td><strong><?php echo htmlspecialchars($e['vendor'] ?: '-'); ?></strong><div class="muted text-sm"><?php echo htmlspecialchars(mb_strimwidth($e['description'] ?? '', 0, 60, '...')); ?></div></td>
                 <td><?php echo htmlspecialchars($e['category'] ?: 'Uncategorized'); ?></td>
-                <td class="text-right"><?php echo finance_dashboard_money((float)$e['total_amount']); ?></td>
+                <td class="text-right"><?php echo finance_dashboard_money((float)$e['display_total']); ?></td>
                 <td><span class="status-badge status-<?php echo finance_dashboard_status_class($e['status']); ?>"><?php echo htmlspecialchars(ucfirst($e['status'])); ?></span></td>
               </tr>
             <?php endforeach; ?>

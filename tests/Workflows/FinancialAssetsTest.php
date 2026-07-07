@@ -98,6 +98,9 @@ final class FinancialAssetsTest extends TestCase
         self::assertStringContainsString('Useful Life (months)', $form);
         self::assertStringContainsString('Estimated Monthly', $form);
         self::assertStringContainsString('Linked Expense', $form);
+        self::assertStringContainsString('Make new expense from this asset', $form);
+        self::assertStringContainsString('data-vendor-id', $form);
+        self::assertStringContainsString('applyLinkedExpense', $form);
         self::assertStringContainsString('Warranty Expires', $form);
 
         $detail = $this->read('src/views/pages/financial/asset-detail.php');
@@ -108,8 +111,24 @@ final class FinancialAssetsTest extends TestCase
 
         $handler = $this->read('src/controllers/financial/asset_handler.php');
         self::assertStringContainsString('function asset_handler_finish', $handler);
+        self::assertStringContainsString('function asset_fetch_expense', $handler);
+        self::assertStringContainsString('$createExpenseFromAsset', $handler);
+        self::assertStringContainsString('Asset purchase: ', $handler);
+        self::assertStringContainsString('UPDATE expenses SET vendor_id = ?', $handler);
         self::assertStringContainsString('request_client_org_id()', $handler);
         self::assertStringContainsString('finance_scope_clause($pdo, \'a\'', $handler);
+    }
+
+    public function testFinancialDashboardsUseExpenseAmountFallbacks(): void
+    {
+        $home = $this->read('src/views/pages/home.php');
+        $dashboard = $this->read('src/views/pages/financial/financial-dashboard.php');
+        $expensesTab = $this->read('src/views/pages/financial/_expenses_tab.php');
+
+        self::assertStringContainsString('COALESCE(e.total_amount, e.amount, 0)', $home);
+        self::assertStringContainsString('COALESCE(e.total_amount, e.amount, 0)', $dashboard);
+        self::assertStringContainsString('display_total', $dashboard);
+        self::assertStringContainsString('COALESCE(e.total_amount, e.amount, 0)', $expensesTab);
     }
 
     public function testFinancialHubUsesConsistentFinanceScope(): void

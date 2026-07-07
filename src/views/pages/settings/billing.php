@@ -49,6 +49,12 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
   <legend style="padding:0 6px;color:var(--muted)">Processor Imports</legend>
+  <?php if (!empty($_GET['stripe_net_backfill'])): ?>
+    <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0"><?php echo htmlspecialchars((string)$_GET['stripe_net_backfill']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['stripe_net_error'])): ?>
+    <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['stripe_net_error']); ?></div>
+  <?php endif; ?>
   <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px">
     <input type="checkbox" name="processor_import_standalone_income" value="1" <?php echo !empty($appConfig['processor_import_standalone_income']) ? 'checked' : ''; ?> style="margin-top:3px">
     <span>
@@ -63,6 +69,18 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
       <span style="font-size:13px;color:var(--muted)">When payer name and email are available, create or match a PA client and import address or phone details when provided.</span>
     </span>
   </label>
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee;display:grid;gap:8px">
+    <div>
+      <strong>Stripe net income backfill</strong>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">Fetch actual Stripe balance transaction fees for older Stripe-paid invoices without changing invoice paid status.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)">Batch
+        <input type="number" name="limit" value="100" min="1" max="500" style="width:90px;padding:7px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <button type="submit" formaction="/?page=settings/stripe-net-backfill" formmethod="post" style="padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-weight:600">Backfill Stripe Net Income</button>
+    </div>
+  </div>
 </fieldset>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">

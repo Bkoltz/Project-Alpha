@@ -501,6 +501,24 @@ class StripeService {
     }
 
     /**
+     * Fetch a PaymentIntent with charge and balance transaction data expanded.
+     */
+    public function getPaymentIntentWithBalanceTransaction(string $paymentIntentId): array {
+        $paymentIntentId = trim($paymentIntentId);
+        if ($paymentIntentId === '') {
+            throw new \InvalidArgumentException('PaymentIntent ID is required.');
+        }
+
+        return $this->apiRequest('GET', 'payment_intents/' . rawurlencode($paymentIntentId) . '?' . http_build_query([
+            'expand' => [
+                'charges.data',
+                'charges.data.balance_transaction',
+                'latest_charge.balance_transaction',
+            ],
+        ]));
+    }
+
+    /**
      * Fetch a Stripe Charge with balance transaction details expanded.
      */
     public function getCharge(string $chargeId): array {

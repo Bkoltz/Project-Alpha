@@ -560,6 +560,9 @@ function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float
 
 function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): bool
 {
+    require_once __DIR__ . '/../services/StripeService.php';
+    require_once __DIR__ . '/stripe_payment_accounting.php';
+
     $metadata = $stripeObject['metadata'] ?? [];
     $projectInvoiceId = (int)($metadata['pa_project_invoice_id'] ?? $metadata['project_invoice_id'] ?? 0);
     if ($projectInvoiceId <= 0) {
@@ -570,16 +573,56 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
         ? (is_string($stripeObject['payment_intent'] ?? null) ? $stripeObject['payment_intent'] : null)
         : (string)($stripeObject['id'] ?? '');
     $amountCents = $sessionId ? ($stripeObject['amount_total'] ?? 0) : ($stripeObject['amount_received'] ?? $stripeObject['amount'] ?? 0);
-    $amount = ((float)$amountCents) / 100;
+    $grossAmount = ((float)$amountCents) / 100;
+    $amount = isset($metadata['original_amount']) ? (float)$metadata['original_amount'] : $grossAmount;
     if ($amount <= 0 || (!$sessionId && $paymentIntentId === '')) {
         return false;
     }
 
+    $processorTx = [
+        'provider' => 'stripe',
+        'provider_payment_id' => $paymentIntentId ?: '',
+        'status' => 'succeeded',
+        'gross_amount' => $grossAmount,
+        'fee_amount' => null,
+        'net_amount' => null,
+        'metadata' => $metadata,
+    ];
+    if ($paymentIntentId) {
+        $stripe = StripeService::fromAppConfig($GLOBALS['appConfig'] ?? []);
+        if ($stripe) {
+            try {
+                $processorTx = $stripe->normalizePaymentIntentForImport(
+                    str_starts_with((string)($stripeObject['id'] ?? ''), 'pi_')
+                        ? $stripeObject
+                        : $stripe->getPaymentIntentWithBalanceTransaction($paymentIntentId)
+                );
+            } catch (Throwable $e) {
+                @error_log('[project_invoice_billing] Stripe fee/net lookup failed for ' . $paymentIntentId . ': ' . $e->getMessage());
+            }
+        }
+    }
+    $processorFields = stripe_processor_fields_from_normalized($processorTx, $GLOBALS['appConfig'] ?? [], $amount, 0.0);
+
     $pdo->prepare(
         'INSERT IGNORE INTO project_invoice_payments
-         (project_invoice_id,amount,payment_method,stripe_session_id,stripe_payment_intent_id,status,payment_date)
-         VALUES (?,? ,"stripe",?,? ,"processing",CURDATE())'
-    )->execute([$projectInvoiceId, $amount, $sessionId, $paymentIntentId ?: null]);
+         (project_invoice_id,amount,payment_method,processor_provider,processor_payment_id,processor_gross_amount,
+          processor_fee_amount,processor_net_amount,processor_fee_policy,processor_fee_source,
+          stripe_session_id,stripe_payment_intent_id,status,payment_date)
+         VALUES (?,? ,"stripe",?,?,?,?,?,?,?,?,? ,"processing",CURDATE())'
+    )->execute([
+        $projectInvoiceId,
+        $amount,
+        $processorFields['processor_provider'],
+        $processorFields['processor_payment_id'] ?: null,
+        $processorFields['processor_gross_amount'],
+        $processorFields['processor_fee_amount'],
+        $processorFields['processor_net_amount'],
+        $processorFields['processor_fee_policy'],
+        $processorFields['processor_fee_source'],
+        $sessionId,
+        $paymentIntentId ?: null,
+    ]);
     $lookup = $pdo->prepare(
         'SELECT id,status FROM project_invoice_payments
          WHERE (stripe_payment_intent_id IS NOT NULL AND stripe_payment_intent_id=?)
@@ -592,10 +635,12 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
     }
     $projectPaymentId = (int)$projectPayment['id'];
     if (($projectPayment['status'] ?? '') === 'succeeded') {
+        stripe_update_project_payment_processor_fields($pdo, $projectPaymentId, $processorTx, $GLOBALS['appConfig'] ?? []);
         return true;
     }
     $pdo->prepare('UPDATE project_invoice_payments SET stripe_session_id=COALESCE(stripe_session_id,?),stripe_payment_intent_id=COALESCE(stripe_payment_intent_id,?),amount=? WHERE id=?')
         ->execute([$sessionId, $paymentIntentId ?: null, $amount, $projectPaymentId]);
+    stripe_update_project_payment_processor_fields($pdo, $projectPaymentId, $processorTx, $GLOBALS['appConfig'] ?? []);
 
     $ok = project_invoice_allocate_payment(
         $pdo,
@@ -611,6 +656,7 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
     if ($ok) {
         require_once __DIR__ . '/stripe_financial_events.php';
         stripe_link_pending_project_financial_events($pdo, $projectPaymentId, $paymentIntentId ?: null);
+        stripe_allocate_project_processor_fields($pdo, $projectPaymentId, $processorFields);
         $pdo->prepare('UPDATE project_invoices SET stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE id=?')
             ->execute([$projectInvoiceId]);
         $status = $pdo->prepare('SELECT status FROM project_invoices WHERE id=?');

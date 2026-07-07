@@ -324,8 +324,9 @@ class PaymentProcessorImportService
             'INSERT INTO payments
                 (client_id, invoice_id, contract_id, organization_id, amount, payment_method,
                  processor_provider, processor_payment_id, processor_transaction_id,
-                 processor_gross_amount, processor_fee_amount, stripe_payment_intent_id, reference_number, notes, status, payment_date, created_at)
-             VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "succeeded", ?, NOW())'
+                 processor_gross_amount, processor_fee_amount, processor_net_amount, processor_fee_policy, processor_fee_source,
+                 stripe_payment_intent_id, reference_number, notes, status, payment_date, created_at)
+             VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "succeeded", ?, NOW())'
         );
         $insert->execute([
             $clientId,
@@ -337,6 +338,9 @@ class PaymentProcessorImportService
             $ledgerId,
             $gross,
             $fee,
+            $net,
+            'unknown',
+            ($fee > 0 || $net > 0) ? 'actual' : 'unknown',
             $provider === 'stripe' ? $providerPaymentId : null,
             self::nullableString($tx['provider_charge_id'] ?? $providerPaymentId, 255),
             $notes,

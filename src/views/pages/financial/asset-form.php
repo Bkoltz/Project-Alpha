@@ -35,7 +35,7 @@ $categories = $categoriesQ->fetchAll(PDO::FETCH_ASSOC);
 
 [$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', (int)($_SESSION['user']['id'] ?? 0), $orgId, 'created_by');
 $expensesQ = $pdo->prepare('
-    SELECT e.id, e.expense_date, e.total_amount, e.amount, e.description, v.name AS vendor_name
+    SELECT e.id, e.vendor_id, e.category_id, e.expense_date, e.total_amount, e.amount, e.description, v.name AS vendor_name
     FROM expenses e
     LEFT JOIN vendors v ON v.id = e.vendor_id
     WHERE ' . $expenseScopeWhere . ' AND e.status != "void"
@@ -119,6 +119,28 @@ $selected = static function (string $key, string $value, string $default = '') u
       <div class="card-head">
         <h3 class="card-title">Purchase</h3>
       </div>
+      <div class="field">
+        <label class="label">Linked Expense</label>
+        <select name="expense_id" id="assetExpenseId" class="input">
+          <option value="0">No linked expense</option>
+          <option value="new">Make new expense from this asset</option>
+          <?php foreach ($expenses as $expense):
+            $amount = (float)($expense['total_amount'] ?? $expense['amount']);
+            $label = trim(($expense['vendor_name'] ?: 'No vendor') . ' / ' . ($expense['expense_date'] ?: '-') . ' / $' . number_format($amount, 2) . ' / ' . mb_strimwidth((string)($expense['description'] ?? ''), 0, 60, '...'));
+          ?>
+            <option
+              value="<?php echo (int)$expense['id']; ?>"
+              data-vendor-id="<?php echo (int)($expense['vendor_id'] ?? 0); ?>"
+              data-vendor-name="<?php echo htmlspecialchars((string)($expense['vendor_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+              data-category-id="<?php echo (int)($expense['category_id'] ?? 0); ?>"
+              data-expense-date="<?php echo htmlspecialchars((string)($expense['expense_date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+              data-amount="<?php echo htmlspecialchars(number_format($amount, 2, '.', ''), ENT_QUOTES, 'UTF-8'); ?>"
+              <?php echo (int)($asset['expense_id'] ?? 0) === (int)$expense['id'] ? 'selected' : ''; ?>
+            ><?php echo htmlspecialchars($label); ?></option>
+          <?php endforeach; ?>
+        </select>
+        <p class="muted text-sm" style="margin:6px 0 0">Choose an existing expense to prefill purchase details, or create a matching expense when the asset is saved.</p>
+      </div>
       <div class="grid grid-2">
         <div class="field">
           <label class="label">Vendor</label>
@@ -129,7 +151,7 @@ $selected = static function (string $key, string $value, string $default = '') u
         </div>
         <div class="field">
           <label class="label">Expense Category</label>
-          <select name="category_id" class="input">
+          <select name="category_id" id="assetCategoryId" class="input">
             <option value="0">No category</option>
             <?php foreach ($categories as $category): ?>
               <option value="<?php echo (int)$category['id']; ?>" <?php echo (int)($asset['category_id'] ?? 0) === (int)$category['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($category['name']); ?></option>
@@ -140,7 +162,7 @@ $selected = static function (string $key, string $value, string $default = '') u
       <div class="grid grid-3">
         <div class="field">
           <label class="label">Purchase Date</label>
-          <input type="date" name="purchase_date" class="input" value="<?php echo $value('purchase_date', date('Y-m-d')); ?>">
+          <input type="date" name="purchase_date" id="assetPurchaseDate" class="input" value="<?php echo $value('purchase_date', date('Y-m-d')); ?>">
         </div>
         <div class="field">
           <label class="label">Purchase Cost</label>
@@ -152,16 +174,7 @@ $selected = static function (string $key, string $value, string $default = '') u
         </div>
       </div>
       <div class="field">
-        <label class="label">Linked Expense</label>
-        <select name="expense_id" class="input">
-          <option value="0">No linked expense</option>
-          <?php foreach ($expenses as $expense):
-            $amount = (float)($expense['total_amount'] ?? $expense['amount']);
-            $label = trim(($expense['vendor_name'] ?: 'No vendor') . ' / ' . ($expense['expense_date'] ?: '-') . ' / $' . number_format($amount, 2) . ' / ' . mb_strimwidth((string)($expense['description'] ?? ''), 0, 60, '...'));
-          ?>
-            <option value="<?php echo (int)$expense['id']; ?>" <?php echo (int)($asset['expense_id'] ?? 0) === (int)$expense['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
-          <?php endforeach; ?>
-        </select>
+        <input type="hidden" name="create_expense_from_asset" id="assetCreateExpenseFlag" value="0">
       </div>
     </section>
 
@@ -239,6 +252,10 @@ $selected = static function (string $key, string $value, string $default = '') u
   const form = document.getElementById('assetForm');
   const vendorName = document.getElementById('assetVendorName');
   const vendorId = document.getElementById('assetVendorId');
+  const expenseSelect = document.getElementById('assetExpenseId');
+  const createExpenseFlag = document.getElementById('assetCreateExpenseFlag');
+  const category = document.getElementById('assetCategoryId');
+  const purchaseDate = document.getElementById('assetPurchaseDate');
   const method = document.getElementById('assetDepreciationMethod');
   const cost = document.getElementById('assetPurchaseCost');
   const life = document.getElementById('assetUsefulLife');
@@ -257,6 +274,29 @@ $selected = static function (string $key, string $value, string $default = '') u
     if (!found) vendorId.value = '0';
   }
 
+  function applyLinkedExpense() {
+    const option = expenseSelect.options[expenseSelect.selectedIndex];
+    if (!option) return;
+
+    createExpenseFlag.value = option.value === 'new' ? '1' : '0';
+    if (option.value === '0' || option.value === 'new') return;
+
+    if (option.dataset.vendorName) {
+      vendorName.value = option.dataset.vendorName;
+      vendorId.value = option.dataset.vendorId || '0';
+    }
+    if (option.dataset.categoryId && option.dataset.categoryId !== '0') {
+      category.value = option.dataset.categoryId;
+    }
+    if (option.dataset.expenseDate) {
+      purchaseDate.value = option.dataset.expenseDate;
+    }
+    if (option.dataset.amount) {
+      cost.value = option.dataset.amount;
+      updateDepreciationEstimate();
+    }
+  }
+
   function updateDepreciationEstimate() {
     const purchaseCost = parseFloat(cost.value) || 0;
     const salvageValue = parseFloat(salvage.value) || 0;
@@ -269,6 +309,7 @@ $selected = static function (string $key, string $value, string $default = '') u
   }
 
   vendorName.addEventListener('change', updateVendorId);
+  expenseSelect.addEventListener('change', applyLinkedExpense);
   [method, cost, life, salvage].forEach(function(input) {
     input.addEventListener('input', updateDepreciationEstimate);
     input.addEventListener('change', updateDepreciationEstimate);
@@ -277,6 +318,7 @@ $selected = static function (string $key, string $value, string $default = '') u
 
   form.addEventListener('submit', function() {
     updateVendorId();
+    if (expenseSelect.value === 'new') createExpenseFlag.value = '1';
   });
 })();
 </script>
