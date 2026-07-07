@@ -76,5 +76,37 @@ if [ $counter -ge $RETRIES ]; then
 fi
 
 # ── Start cron in the foreground ──
+APP_TIMEZONE="${APP_TIMEZONE:-}"
+if command -v mysql > /dev/null 2>&1; then
+  APP_TIMEZONE="$(mysql --skip-ssl \
+    -h "${DB_HOST}" -P "${DB_PORT}" \
+    -u"${MYSQL_USER:-root}" \
+    --password="${MYSQL_PASSWORD:-${MYSQL_ROOT_PASSWORD:-rootpass}}" \
+    -D "${MYSQL_DATABASE:-project_alpha}" \
+    --batch --skip-column-names \
+    -e "SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='timezone' LIMIT 1" 2>/dev/null || true)"
+fi
+
+if [ -z "$APP_TIMEZONE" ]; then
+  APP_TIMEZONE="${TZ:-UTC}"
+fi
+
+if [ -f "/usr/share/zoneinfo/${APP_TIMEZONE}" ]; then
+  ln -snf "/usr/share/zoneinfo/${APP_TIMEZONE}" /etc/localtime
+  echo "${APP_TIMEZONE}" > /etc/timezone
+  export TZ="${APP_TIMEZONE}"
+  echo "[cron-entrypoint] Using PA timezone: ${APP_TIMEZONE}"
+else
+  export TZ="UTC"
+  echo "[cron-entrypoint] Timezone '${APP_TIMEZONE}' is unavailable; using UTC."
+fi
+
+grep -v '^TZ=' /etc/environment > /tmp/project-alpha-environment || true
+echo "TZ=\"${TZ}\"" >> /tmp/project-alpha-environment
+mv /tmp/project-alpha-environment /etc/environment
+
+echo "[cron-entrypoint] Running startup Stripe reconciliation..."
+php /var/www/src/cron/stripe_reconciliation.php --startup || echo "[cron-entrypoint] Startup Stripe reconciliation failed; cron will continue."
+
 echo "[cron-entrypoint] Starting cron..."
 exec cron -f

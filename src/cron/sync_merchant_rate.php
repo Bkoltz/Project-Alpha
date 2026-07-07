@@ -23,6 +23,12 @@ require_once __DIR__ . '/../utils/cron_state.php';
 $logPrefix = '[sync_merchant_rate]';
 $jobName = 'sync_merchant_rate';
 
+if (empty($appConfig['cron_enabled'])) {
+    @error_log("$logPrefix Cron is disabled in settings. Skipping.");
+    cron_state_mark_success($pdo, $jobName, 'Cron disabled');
+    exit(0);
+}
+
 // Initialize Stripe service
 $stripe = StripeService::fromAppConfig($appConfig);
 if (!$stripe) {

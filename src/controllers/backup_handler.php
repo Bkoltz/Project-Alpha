@@ -8,6 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/backup_archive.php';
 
 $action = $_POST['action'] ?? '';
@@ -152,6 +153,10 @@ switch ($action) {
         $retentionDays = (int)($_POST['retention_days'] ?? 10);
         $backupHour = (int)($_POST['backup_hour'] ?? 2);
         $backupMode = ($_POST['backup_mode'] ?? 'database') === 'full' ? 'full' : 'database';
+        $backupTimezone = (string)($appConfig['timezone'] ?? date_default_timezone_get() ?: 'UTC');
+        if (!in_array($backupTimezone, DateTimeZone::listIdentifiers(), true)) {
+            $backupTimezone = 'UTC';
+        }
 
         if ($retentionDays < 0 || $retentionDays > 365) {
             $_SESSION['flash_backup'] = [
@@ -178,7 +183,7 @@ switch ($action) {
 
         $_SESSION['flash_backup'] = [
             'type' => 'success',
-                'message' => "Backup settings saved. Mode: {$backupMode}; retention: {$retentionDays} backups; schedule check: " . str_pad($backupHour, 2, '0', STR_PAD_LEFT) . ":30 UTC."
+            'message' => "Backup settings saved. Mode: {$backupMode}; retention: {$retentionDays} backups; schedule check: " . str_pad($backupHour, 2, '0', STR_PAD_LEFT) . ":30 {$backupTimezone}."
         ];
         header('Location: ' . $settingsUrl);
         exit;

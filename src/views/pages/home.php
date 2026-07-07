@@ -8,20 +8,51 @@ require_once __DIR__ . '/../../utils/payment_accounting.php';
 // Data queries
 // ------------------------------------------------------------------
 $dashboard_income_expr = payment_accounting_net_income_expr('p');
+$db_error = false;
+$pending_quotes = $active_contracts = $unpaid_invoices = $total_clients = $total_users = 0;
+$income_30 = $expenses_30 = $net_30 = 0.0;
+$overdue_invoices = $receipts_30 = 0;
+$income_monthly = [];
+$quote_status = $contract_status = $invoice_status = [];
+$clients_recent = $payments_recent = $login_recent = [];
+$failed_logins_24h = 0;
+$db_status = 'Connected';
+$php_version = PHP_VERSION;
+$sys_mem_total = $sys_mem_avail = $sys_mem_used = 0;
+$disk_free = $disk_total = false;
+$uptime = '';
+$dashboard_finance_period_start = date('Y') . '-01-01';
+$dashboard_finance_subtitle = date('Y') . ' finance summary';
+$dashboard_actionable_invoice_where = "
+    status IN ('partial','overdue')
+    OR (
+      status = 'unpaid'
+      AND (
+        due_date IS NULL
+        OR due_date <= CURDATE()
+        OR invoice_type != 'long_term'
+      )
+    )
+";
+
 try {
   $dashboard_user_id = (int)($_SESSION['user']['id'] ?? 0);
   $dashboard_org_id = request_client_org_id();
   [$dashboard_expense_scope_where, $dashboard_expense_scope_params] = finance_scope_clause($pdo, 'e', $dashboard_user_id, $dashboard_org_id, 'created_by');
 
+  // Financial snapshot first, so unrelated dashboard widget failures do not hide expenses.
+  $incomeStmt         = $pdo->prepare("SELECT COALESCE(SUM({$dashboard_income_expr}),0) FROM payments p WHERE p.payment_date >= ? AND p.status='succeeded'");
+  $incomeStmt->execute([$dashboard_finance_period_start]);
+  $income_30          = (float)$incomeStmt->fetchColumn();
+  $expensesStmt       = $pdo->prepare("SELECT COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) FROM expenses e WHERE {$dashboard_expense_scope_where} AND e.status != 'void' AND e.expense_date >= ?");
+  $expensesStmt->execute(array_merge($dashboard_expense_scope_params, [$dashboard_finance_period_start]));
+  $expenses_30        = (float)$expensesStmt->fetchColumn();
+  $net_30             = $income_30 - $expenses_30;
+
   // Core stats
   $pending_quotes     = (int)$pdo->query("SELECT COUNT(*) FROM quotes WHERE status='pending'")->fetchColumn();
   $active_contracts   = (int)$pdo->query("SELECT COUNT(*) FROM contracts WHERE status IN ('draft','active')")->fetchColumn();
-  $unpaid_invoices    = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial')")->fetchColumn();
-  $income_30          = (float)$pdo->query("SELECT COALESCE(SUM({$dashboard_income_expr}),0) FROM payments p WHERE p.payment_date >= CURDATE() - INTERVAL 29 DAY AND p.status='succeeded'")->fetchColumn();
-  $expensesStmt       = $pdo->prepare("SELECT COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) FROM expenses e WHERE {$dashboard_expense_scope_where} AND e.status != 'void' AND e.expense_date >= CURDATE() - INTERVAL 29 DAY");
-  $expensesStmt->execute($dashboard_expense_scope_params);
-  $expenses_30        = (float)$expensesStmt->fetchColumn();
-  $net_30             = $income_30 - $expenses_30;
+  $unpaid_invoices    = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE {$dashboard_actionable_invoice_where}")->fetchColumn();
   $overdue_invoices   = (int)$pdo->query("SELECT COUNT(*) FROM invoices WHERE status IN ('unpaid','partial','overdue') AND due_date IS NOT NULL AND due_date < CURDATE()")->fetchColumn();
   $receipts_30        = (int)$pdo->query("SELECT COUNT(*) FROM receipts WHERE created_at >= NOW() - INTERVAL 30 DAY")->fetchColumn();
   $total_clients      = (int)$pdo->query("SELECT COUNT(*) FROM clients WHERE archived=0 AND deleted_at IS NULL")->fetchColumn();
@@ -41,7 +72,17 @@ try {
   // Status breakdowns
   $quote_status = $pdo->query("SELECT status, COUNT(*) AS cnt FROM quotes GROUP BY status")->fetchAll(PDO::FETCH_KEY_PAIR);
   $contract_status = $pdo->query("SELECT status, COUNT(*) AS cnt FROM contracts GROUP BY status")->fetchAll(PDO::FETCH_KEY_PAIR);
-  $invoice_status = $pdo->query("SELECT status, COUNT(*) AS cnt FROM invoices GROUP BY status")->fetchAll(PDO::FETCH_KEY_PAIR);
+  $invoice_status = $pdo->query("
+    SELECT dashboard_status, COUNT(*) AS cnt
+    FROM (
+      SELECT CASE
+        WHEN {$dashboard_actionable_invoice_where} THEN 'actionable_unpaid'
+        ELSE status
+      END AS dashboard_status
+      FROM invoices
+    ) invoice_dashboard_statuses
+    GROUP BY dashboard_status
+  ")->fetchAll(PDO::FETCH_KEY_PAIR);
 
   // Recent lists
   $clients_recent = $pdo->query("SELECT id,name,created_at FROM clients WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 6")->fetchAll();
@@ -88,18 +129,9 @@ try {
   }
 } catch (PDOException $e) {
   $db_error = true;
-  $pending_quotes = $active_contracts = $unpaid_invoices = $total_clients = $total_users = 0;
-  $income_30 = $expenses_30 = $net_30 = 0;
-  $overdue_invoices = $receipts_30 = 0;
-  $income_monthly = [];
-  $quote_status = $contract_status = $invoice_status = [];
-  $clients_recent = $payments_recent = $login_recent = [];
-  $failed_logins_24h = 0;
+  error_log('[Dashboard] Failed to load dashboard data: ' . $e->getMessage());
   $db_status = 'Disconnected';
   $php_version = PHP_VERSION;
-  $sys_mem_total = $sys_mem_avail = $sys_mem_used = 0;
-  $disk_free = $disk_total = false;
-  $uptime = '';
 }
 
 // Build chart-ready arrays
@@ -208,12 +240,12 @@ function svg_line_chart(array $labels, array $values, int $w = 720, int $h = 220
 $status_rows = [
   ['Pending Quotes',   (int)($quote_status['pending'] ?? 0),  '#f59e0b'],
   ['Active Contracts', (int)($contract_status['active'] ?? 0), '#10b981'],
-  ['Unpaid Invoices',  (int)($invoice_status['unpaid'] ?? 0) + (int)($invoice_status['partial'] ?? 0), '#ef4444'],
+  ['Unpaid Invoices',  (int)($invoice_status['actionable_unpaid'] ?? 0), '#ef4444'],
   ['Paid Invoices',    (int)($invoice_status['paid'] ?? 0),   '#22c55e'],
   ['Draft / Other',
     (int)($quote_status['draft'] ?? 0) + (int)($quote_status['approved'] ?? 0) + (int)($quote_status['denied'] ?? 0) + (int)($quote_status['rejected'] ?? 0) + (int)($quote_status['expired'] ?? 0) +
     (int)($contract_status['draft'] ?? 0) + (int)($contract_status['pending'] ?? 0) + (int)($contract_status['paused'] ?? 0) + (int)($contract_status['completed'] ?? 0) + (int)($contract_status['cancelled'] ?? 0) + (int)($contract_status['denied'] ?? 0) + (int)($contract_status['void'] ?? 0) +
-    (int)($invoice_status['draft'] ?? 0) + (int)($invoice_status['sent'] ?? 0) + (int)($invoice_status['overdue'] ?? 0) + (int)($invoice_status['cancelled'] ?? 0) + (int)($invoice_status['void'] ?? 0),
+    (int)($invoice_status['draft'] ?? 0) + (int)($invoice_status['sent'] ?? 0) + (int)($invoice_status['unpaid'] ?? 0) + (int)($invoice_status['partial'] ?? 0) + (int)($invoice_status['overdue'] ?? 0) + (int)($invoice_status['cancelled'] ?? 0) + (int)($invoice_status['void'] ?? 0),
     '#9ca3af'],
 ];
 $status_max = max(1, max(array_column($status_rows, 1)));
@@ -256,7 +288,7 @@ if ($disk_total !== false && $disk_total > 0) {
         </svg>
       </div>
       <div>
-        <div class="dash-card__label">Income (30d)</div>
+        <div class="dash-card__label">Income (YTD)</div>
         <div class="dash-card__value">$<?php echo number_format($income_30, 2); ?></div>
       </div>
     </article>
@@ -337,7 +369,7 @@ if ($disk_total !== false && $disk_total > 0) {
     <div class="dash-panel__head">
       <div>
         <h3 class="dash-panel__title">Financial Snapshot</h3>
-        <p class="dash-finance-snapshot__sub">30-day cash flow summary</p>
+        <p class="dash-finance-snapshot__sub"><?php echo htmlspecialchars($dashboard_finance_subtitle); ?></p>
       </div>
       <a class="dash-panel__link" href="/?page=financial/financial-dashboard">Open financial dashboard</a>
     </div>

@@ -355,19 +355,35 @@ class StripeService {
      * @return array List of Payment Intent objects
      */
     public function listPaymentIntents($since) {
+        return $this->listPaymentIntentsBetween((int)$since, null, 1000);
+    }
+
+    /**
+     * List Payment Intents created within a timestamp range.
+     *
+     * @param int $since Unix timestamp, inclusive.
+     * @param int|null $until Unix timestamp, inclusive.
+     * @param int $maxItems Safety cap for large historical imports.
+     * @return array List of Payment Intent objects
+     */
+    public function listPaymentIntentsBetween(int $since, ?int $until = null, int $maxItems = 1000): array {
         try {
             $allIntents = [];
             $hasMore = true;
             $startingAfter = null;
+            $maxItems = max(1, min(10000, $maxItems));
             
             while ($hasMore) {
                 $params = [
-                    'limit' => 100,
+                    'limit' => min(100, $maxItems - count($allIntents)),
                     'created[gte]' => $since,
                     'expand[0]' => 'charges.data',
                     'expand[1]' => 'charges.data.balance_transaction',
                     'expand[2]' => 'latest_charge.balance_transaction'
                 ];
+                if ($until !== null) {
+                    $params['created[lte]'] = $until;
+                }
                 if ($startingAfter) {
                     $params['starting_after'] = $startingAfter;
                 }
@@ -383,7 +399,7 @@ class StripeService {
                 $hasMore = !empty($response['has_more']);
                 
                 // Safety limit
-                if (count($allIntents) >= 1000) {
+                if (count($allIntents) >= $maxItems) {
                     break;
                 }
             }

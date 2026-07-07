@@ -7,6 +7,8 @@ require_once __DIR__ . '/../../../services/StripeService.php';
 $stripeSecretConfigured = StripeService::hasSecretKey($appConfig ?? []);
 $stripeWebhookConfigured = !empty($appConfig['_stripe_webhook_secret']) || !empty($appConfig['stripe_webhook_secret_enc']);
 $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || !empty($appConfig['stripe_publishable_key']);
+$stripeImportEndDefault = date('Y-m-d');
+$stripeImportStartDefault = date('Y-m-d', strtotime('-30 days'));
 ?>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
@@ -48,12 +50,27 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
 </fieldset>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
+  <legend style="padding:0 6px;color:var(--muted)">Review Request</legend>
+  <label>
+    <div style="margin-bottom:4px">Review Link <span style="color:#666;font-weight:normal">(Optional)</span></div>
+    <input type="url" name="review_link" value="<?php echo htmlspecialchars($appConfig['review_link'] ?? ''); ?>" placeholder="https://g.page/your-business/review" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <div style="font-size:0.85em;color:#666;margin-top:4px">If set, this link will appear on invoices to encourage clients to leave a review.</div>
+  </label>
+</fieldset>
+
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
   <legend style="padding:0 6px;color:var(--muted)">Processor Imports</legend>
   <?php if (!empty($_GET['stripe_net_backfill'])): ?>
     <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0"><?php echo htmlspecialchars((string)$_GET['stripe_net_backfill']); ?></div>
   <?php endif; ?>
   <?php if (!empty($_GET['stripe_net_error'])): ?>
     <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['stripe_net_error']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['stripe_import_result'])): ?>
+    <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0"><?php echo htmlspecialchars((string)$_GET['stripe_import_result']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['stripe_import_error'])): ?>
+    <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['stripe_import_error']); ?></div>
   <?php endif; ?>
   <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px">
     <input type="checkbox" name="processor_import_standalone_income" value="1" <?php echo !empty($appConfig['processor_import_standalone_income']) ? 'checked' : ''; ?> style="margin-top:3px">
@@ -71,6 +88,24 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
   </label>
   <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee;display:grid;gap:8px">
     <div>
+      <strong>Import old Stripe payments</strong>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">Pull successful Stripe payments for a selected date range, including standalone income not linked to PA invoices. Defaults to the last 30 days through today.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="display:grid;gap:4px;font-size:13px;color:var(--muted)">Start
+        <input type="date" name="stripe_import_start_date" value="<?php echo htmlspecialchars($stripeImportStartDefault); ?>" max="<?php echo htmlspecialchars($stripeImportEndDefault); ?>" style="padding:7px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label style="display:grid;gap:4px;font-size:13px;color:var(--muted)">End
+        <input type="date" name="stripe_import_end_date" value="<?php echo htmlspecialchars($stripeImportEndDefault); ?>" max="<?php echo htmlspecialchars($stripeImportEndDefault); ?>" style="padding:7px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <label style="display:grid;gap:4px;font-size:13px;color:var(--muted)">Limit
+        <input type="number" name="stripe_import_max_intents" value="2000" min="100" max="10000" step="100" style="width:100px;padding:7px;border-radius:8px;border:1px solid #ddd">
+      </label>
+      <button type="submit" formaction="/?page=settings/stripe-import-payments" formmethod="post" style="padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-weight:600">Import Stripe Payments</button>
+    </div>
+  </div>
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee;display:grid;gap:8px">
+    <div>
       <strong>Stripe net income backfill</strong>
       <div style="font-size:13px;color:var(--muted);margin-top:2px">Fetch actual Stripe balance transaction fees for older Stripe-paid invoices without changing invoice paid status.</div>
     </div>
@@ -83,19 +118,10 @@ $stripePanelConfigured = $stripeSecretConfigured || $stripeWebhookConfigured || 
   </div>
 </fieldset>
 
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px">
-  <legend style="padding:0 6px;color:var(--muted)">Review Request</legend>
-  <label>
-    <div style="margin-bottom:4px">Review Link <span style="color:#666;font-weight:normal">(Optional)</span></div>
-    <input type="url" name="review_link" value="<?php echo htmlspecialchars($appConfig['review_link'] ?? ''); ?>" placeholder="https://g.page/your-business/review" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-    <div style="font-size:0.85em;color:#666;margin-top:4px">If set, this link will appear on invoices to encourage clients to leave a review.</div>
-  </label>
-</fieldset>
-
-<div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:14px">
+<!-- <div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:14px">
   <strong>💡 Looking for Tax Rates?</strong>
   <div style="margin-top:8px;color:#1e40af">Tax rate management has been moved to the <a href="/?page=settings&tab=taxes" style="color:var(--nav-accent);font-weight:600">Taxes</a> tab for better organization.</div>
-</div>
+</div> -->
 
 <fieldset id="stripeConfig" data-configured="<?php echo $stripePanelConfigured ? '1' : '0'; ?>" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-top:16px;display:none">
   <legend style="padding:0 6px;color:var(--muted)">Stripe Configuration</legend>

@@ -2,10 +2,17 @@
 // src/cron/link_expiration_checker.php
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 
 $logPrefix = '[LinkExpirationChecker]';
 $jobName = 'link_expiration_checker';
+
+if (empty($appConfig['cron_enabled'])) {
+    echo $logPrefix . " Cron is disabled. Exiting.\n";
+    cron_state_mark_success($pdo, $jobName, 'Cron disabled');
+    exit(0);
+}
 
 /**
  * Link Expiration Checker Cron Job

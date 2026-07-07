@@ -2,6 +2,7 @@
 // src/controllers/api/dashboard_summary.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/app_version.php';
+require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/payment_accounting.php';
 header('Content-Type: application/json');
 
@@ -14,6 +15,13 @@ function _count($pdo, $sql) {
 }
 
 $incomeExpr = payment_accounting_net_income_expr('p');
+$userId = (int)($_SESSION['user']['id'] ?? 0);
+$orgId = request_client_org_id();
+[$expenseScopeWhere, $expenseScopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
+$expenseCountStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void'");
+$expenseCountStmt->execute($expenseScopeParams);
+$expenseTotalStmt = $pdo->prepare("SELECT COALESCE(SUM(COALESCE(e.total_amount, e.amount, 0)),0) FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void'");
+$expenseTotalStmt->execute($expenseScopeParams);
 
 $resp = [
     'generated_at' => gmdate('c'),
@@ -23,7 +31,8 @@ $resp = [
     'quotes'       => _count($pdo, "SELECT COUNT(*) FROM quotes"),
     'contracts'    => _count($pdo, "SELECT COUNT(*) FROM contracts"),
     'invoices'     => _count($pdo, "SELECT COUNT(*) FROM invoices"),
-    'expenses'     => _count($pdo, "SELECT COUNT(*) FROM expenses"),
+    'expenses'     => (int)$expenseCountStmt->fetchColumn(),
+    'expense_total'=> (float)$expenseTotalStmt->fetchColumn(),
     'revenue'      => _scalar($pdo, "SELECT COALESCE(SUM({$incomeExpr}),0) FROM payments p WHERE p.status='succeeded'"),
     'outstanding'  => _scalar($pdo, "SELECT COALESCE(SUM(balance_due),0) FROM invoices WHERE status NOT IN ('paid','cancelled','void')"),
 ];
