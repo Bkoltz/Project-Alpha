@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../services/LinkResolverService.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -13,6 +14,36 @@ $action = (string)($_POST['action'] ?? '');
 $organizationId = (int)($_POST['organization_id'] ?? 0);
 $redirect = '/?page=organization/organization-view&id=' . max(0, $organizationId);
 
+function organization_department_created_link_transition(PDO $pdo, int $organizationId, int $departmentId): void
+{
+    try {
+        $pdo->prepare('UPDATE organizations SET link_strategy = "department_links_only", updated_at = NOW() WHERE id = ?')
+            ->execute([$organizationId]);
+
+        $run = static function () use ($pdo, $organizationId, $departmentId): void {
+            try {
+                $service = new LinkResolverService($pdo);
+                $service->autoGenerateForDepartment($departmentId);
+                $service->removeResolverOrganizationLinks($organizationId);
+                $service->autoGenerateForOrganization($organizationId);
+            } catch (Throwable $e) {
+                @error_log('[organization_departments] background link transition failed: ' . $e->getMessage());
+            }
+        };
+
+        if (function_exists('fastcgi_finish_request')) {
+            register_shutdown_function(static function () use ($run): void {
+                @fastcgi_finish_request();
+                $run();
+            });
+        } else {
+            $run();
+        }
+    } catch (Throwable $e) {
+        @error_log('[organization_departments] link transition failed: ' . $e->getMessage());
+    }
+}
+
 try {
     if ($organizationId <= 0) {
         throw new RuntimeException('Invalid organization');
@@ -20,15 +51,22 @@ try {
     require_record_ownership($pdo, 'organizations', $organizationId);
 
     if ($action === 'save_link_strategy') {
-        $strategy = (string)($_POST['link_strategy'] ?? 'department_links_only');
+        $strategy = (string)($_POST['link_strategy'] ?? 'overall_folder');
         if (!in_array($strategy, ['department_links_only', 'overall_folder', 'shared_folder'], true)) {
-            $strategy = 'department_links_only';
+            $strategy = 'overall_folder';
         }
         $stmt = $pdo->prepare('UPDATE organizations SET link_strategy = ?, updated_at = NOW() WHERE id = ?');
         $stmt->execute([$strategy, $organizationId]);
         $flag = 'link_strategy_saved=1';
     } elseif ($action === 'save_department') {
         $departmentId = (int)($_POST['department_id'] ?? 0);
+        $creatingDepartment = $departmentId <= 0;
+        $existingDepartmentCount = 0;
+        if ($creatingDepartment) {
+            $countStmt = $pdo->prepare('SELECT COUNT(*) FROM organization_departments WHERE organization_id = ?');
+            $countStmt->execute([$organizationId]);
+            $existingDepartmentCount = (int)$countStmt->fetchColumn();
+        }
         $name = trim((string)($_POST['name'] ?? ''));
         $folderName = trim((string)($_POST['folder_name'] ?? ''));
         $aliasesText = trim((string)($_POST['folder_aliases'] ?? ''));
@@ -71,6 +109,10 @@ try {
                 VALUES (?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([$organizationId, $name, $folderName !== '' ? $folderName : null, $aliasesJson, $resolverMode, $notes !== '' ? $notes : null]);
+            $departmentId = (int)$pdo->lastInsertId();
+            if ($existingDepartmentCount === 0) {
+                organization_department_created_link_transition($pdo, $organizationId, $departmentId);
+            }
             $flag = 'department_created=1';
         }
     } elseif ($action === 'delete_department') {

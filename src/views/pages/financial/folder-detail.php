@@ -42,15 +42,6 @@ $stmt = $pdo->prepare('
 $stmt->execute([$folderId]);
 $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch clients for email modal
-$stmt = $pdo->prepare('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name');
-$stmt->execute();
-$clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Fetch organizations for email modal
-$stmt = $pdo->prepare('SELECT id, name FROM organizations ORDER BY name');
-$stmt->execute();
-$organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div style="max-width:1400px;margin:0 auto;padding:24px">
@@ -224,76 +215,49 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div style="margin-bottom:16px">
                 <label style="display:block;margin-bottom:8px;font-weight:600">Send To:</label>
                 <div style="display:flex;gap:8px;margin-bottom:12px">
-                    <button type="button" onclick="selectRecipientType('client')" id="clientTypeBtn"
+                    <button type="button" data-recipient-type="clients" id="clientTypeBtn"
                             style="flex:1;padding:8px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer">
-                        Individual Client
+                        Clients
                     </button>
-                    <button type="button" onclick="selectRecipientType('clients')" id="clientsTypeBtn"
+                    <button type="button" data-recipient-type="organization" id="orgTypeBtn"
                             style="flex:1;padding:8px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer">
-                        Multiple Clients
-                    </button>
-                    <button type="button" onclick="selectRecipientType('organization')" id="orgTypeBtn"
-                            style="flex:1;padding:8px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer">
-                        Organization
+                        Organization / Departments
                     </button>
                 </div>
             </div>
 
             <input type="hidden" name="recipient_type" id="recipientType">
-            
-            <div id="clientSelector" style="display:none;margin-bottom:16px">
-                <label style="display:block;margin-bottom:4px;font-weight:600">Select Client *</label>
-                <select name="recipient_id" id="clientSelect" 
-                        style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
-                    <option value="">-- Select a client --</option>
-                    <?php foreach ($clients as $client): ?>
-                        <option value="<?php echo $client['id']; ?>">
-                            <?php echo htmlspecialchars($client['name']); ?>
-                            <?php if ($client['email']): ?>
-                                (<?php echo htmlspecialchars($client['email']); ?>)
-                            <?php endif; ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            
-            <div id="clientsSelector" style="display:none;margin-bottom:16px">
-                <label style="display:block;margin-bottom:4px;font-weight:600">Select Clients *</label>
-                <div style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:8px">
-                    <?php foreach ($clients as $client): ?>
-                        <label style="display:block;padding:8px;cursor:pointer;border-radius:4px" 
-                               onmouseover="this.style.background='#f9fafb'" 
-                               onmouseout="this.style.background='transparent'">
-                            <input type="checkbox" name="client_ids[]" value="<?php echo $client['id']; ?>" 
-                                   style="margin-right:8px">
-                            <?php echo htmlspecialchars($client['name']); ?>
-                            <?php if ($client['email']): ?>
-                                <span class="muted text-sm">
-                                    (<?php echo htmlspecialchars($client['email']); ?>)
-                                </span>
-                            <?php endif; ?>
-                        </label>
-                    <?php endforeach; ?>
+
+            <style>
+                .forms-email-search{position:relative}.forms-email-suggestions{display:none;position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid #dfe3e8;border-radius:8px;box-shadow:0 12px 24px rgba(15,23,42,.12);max-height:220px;overflow:auto}.forms-email-suggestion{display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-bottom:1px solid #eef2f7;background:#fff;cursor:pointer}.forms-email-suggestion:hover{background:#f8fafc}.forms-email-suggestion strong,.forms-email-chip strong{display:block}.forms-email-suggestion small,.forms-email-chip small{display:block;color:var(--muted);font-size:12px;margin-top:2px}.forms-email-selected{display:grid;gap:8px;margin-top:10px}.forms-email-chip{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #dfe3e8;border-radius:8px;background:#fbfcfd;padding:9px 10px}.forms-email-chip button{width:26px;height:26px;border:0;border-radius:999px;background:#f3f4f6;font-weight:800;cursor:pointer}.forms-email-empty{padding:10px;border:1px dashed #d1d5db;border-radius:8px;color:var(--muted);font-size:13px;background:#fff}.forms-email-check{display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;font-size:13px}.forms-email-check input{margin-top:2px}
+            </style>
+
+            <div id="clientSelector" data-forms-email-panel="clients" style="display:none;margin-bottom:16px">
+                <label style="display:block;margin-bottom:4px;font-weight:600">Find clients *</label>
+                <div class="forms-email-search">
+                    <input type="text" data-forms-email-client-search autocomplete="off" placeholder="Type a client name or email..."
+                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+                    <div class="forms-email-suggestions" data-forms-email-client-suggestions></div>
                 </div>
-                <div style="margin-top:4px;font-size:13px;color:var(--muted)">
-                    Each client will receive a separate email
-                </div>
+                <div class="forms-email-selected" data-forms-email-selected-clients></div>
+                <div data-forms-email-client-hidden></div>
+                <div style="margin-top:4px;font-size:13px;color:var(--muted)">Each selected client receives a separate email.</div>
             </div>
 
-            <div id="orgSelector" style="display:none;margin-bottom:16px">
-                <label style="display:block;margin-bottom:4px;font-weight:600">Select Organization *</label>
-                <select name="recipient_id" id="orgSelect" 
-                        style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
-                    <option value="">-- Select an organization --</option>
-                    <?php foreach ($organizations as $org): ?>
-                        <option value="<?php echo $org['id']; ?>">
-                            <?php echo htmlspecialchars($org['name']); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                <div style="margin-top:4px;font-size:13px;color:var(--muted)">
-                    Will email all clients in this organization
+            <div id="orgSelector" data-forms-email-panel="organization" style="display:none;margin-bottom:16px">
+                <label style="display:block;margin-bottom:4px;font-weight:600">Find organization *</label>
+                <div class="forms-email-search">
+                    <input type="text" data-forms-email-org-search autocomplete="off" placeholder="Type an organization name..."
+                           style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px">
+                    <div class="forms-email-suggestions" data-forms-email-org-suggestions></div>
                 </div>
+                <input type="hidden" name="recipient_id" data-forms-email-org-id>
+                <div class="forms-email-empty" data-forms-email-selected-org style="margin-top:10px">No organization selected.</div>
+                <div style="margin-top:12px;font-weight:600;font-size:13px">Departments</div>
+                <div data-forms-email-departments style="display:grid;gap:8px;margin-top:8px">
+                    <div class="forms-email-empty">Select an organization to choose departments.</div>
+                </div>
+                <div style="margin-top:4px;font-size:13px;color:var(--muted)">Leave departments blank to email every client in the organization.</div>
             </div>
 
             <div style="display:flex;gap:12px">
@@ -348,4 +312,5 @@ $organizations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     window.formCsrfToken = <?php echo json_encode(csrf_token()); ?>;
     window.formFolderId = <?php echo (int)$folderId; ?>;
 </script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/forms-email-recipient-picker.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/folder-detail-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

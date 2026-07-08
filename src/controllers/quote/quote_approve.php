@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 // Auto-create settings (default to true/on when not explicitly set)
 $autoCreateContract = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
@@ -46,6 +47,7 @@ try {
 
   // Mark quote approved
   $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$id]);
+  pa_public_link_terminalize($pdo, 'quote', $id, 'approved');
 
   // Get project_id from quote for inheritance
   $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
+require_once __DIR__ . '/../../../utils/public_links.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
@@ -132,6 +133,8 @@ $isPdf = defined('PDF_MODE');
     <strong>Created:</strong> <?php echo !empty($quote['created_at']) ? date('M j, Y g:i A', strtotime($quote['created_at'])) : 'N/A'; ?>
     <span style="margin:0 8px">|</span>
     <strong>Document Date:</strong> <?php echo !empty($quote['document_date']) ? date('M j, Y g:i A', strtotime($quote['document_date'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <?php echo pa_public_link_status_badge_html($pdo, 'quote', $id); ?>
     <?php if (!empty($quote['document_date_updated_at'])): ?>
       <span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated: <?php echo date('M j, Y g:i A', strtotime($quote['document_date_updated_at'])); ?>)</span>
     <?php endif; ?>

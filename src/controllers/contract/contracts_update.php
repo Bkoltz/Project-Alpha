@@ -24,9 +24,11 @@ $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
 if ($id<=0 || $client_id<=0) { header('Location: /?page=contract/contracts-list&error=Invalid'); exit; }
-$contractTypeStmt = $pdo->prepare('SELECT contract_type FROM contracts WHERE id=? LIMIT 1');
+$contractTypeStmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? LIMIT 1');
 $contractTypeStmt->execute([$id]);
-$contractType = (string)($contractTypeStmt->fetchColumn() ?: '');
+$existingContract = $contractTypeStmt->fetch(PDO::FETCH_ASSOC);
+$contractType = (string)($existingContract['contract_type'] ?? '');
+$isLongTermContract = $contractType === 'long_term';
 $detailPage = $contractType === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
 if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
   header('Location: /?page=contract/contracts-edit&id=' . $id . '&error=' . urlencode('Select an active or not-started project for this client or organization.'));
@@ -37,6 +39,55 @@ for($i=0;$i<count($item);$i++){
   $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
   if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $unit=(($billingUnits[$i]??'each')==='hour'||$billing_mode==='hourly')?'hour':'each'; $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line,'u'=>$unit];
 }
+
+$longTerm = null;
+if ($isLongTermContract) {
+  $startDate = !empty($_POST['start_date']) ? (string)$_POST['start_date'] : null;
+  $endDateType = (string)($_POST['end_date_type'] ?? 'ongoing');
+  $endDate = $endDateType === 'fixed' && !empty($_POST['end_date']) ? (string)$_POST['end_date'] : null;
+  $nextInvoiceDate = !empty($_POST['next_invoice_date']) ? (string)$_POST['next_invoice_date'] : null;
+  $billingIntervalCount = max(1, (int)($_POST['billing_interval_count'] ?? 1));
+  $billingIntervalUnit = (string)($_POST['billing_interval_unit'] ?? 'month');
+  if (!in_array($billingIntervalUnit, ['day', 'week', 'month', 'year'], true)) {
+    $billingIntervalUnit = 'month';
+  }
+  $pricingType = (string)($_POST['pricing_type'] ?? ($existingContract['pricing_type'] ?? 'per_invoice'));
+  if (!in_array($pricingType, ['per_invoice', 'fixed_total'], true)) {
+    $pricingType = 'per_invoice';
+  }
+  $billingStartMode = (string)($_POST['billing_start_mode'] ?? ($existingContract['billing_start_mode'] ?? 'on_upload'));
+  if (!in_array($billingStartMode, ['on_upload', 'manual'], true)) {
+    $billingStartMode = 'on_upload';
+  }
+  $pricePerInvoice = $pricingType === 'per_invoice' ? (float)($_POST['price_per_invoice'] ?? 0) : null;
+  if ($pricingType === 'per_invoice') {
+    if ($pricePerInvoice <= 0) {
+      header('Location: /?page=' . $detailPage . '&id=' . $id . '&error=' . urlencode('Amount per invoice must be greater than 0'));
+      exit;
+    }
+    $subtotal = $pricePerInvoice;
+    $items = [];
+  } elseif (!$items) {
+    header('Location: /?page=' . $detailPage . '&id=' . $id . '&error=' . urlencode('Add at least one item for fixed total pricing'));
+    exit;
+  }
+  $invoicesGenerated = max(0, (int)($existingContract['invoices_generated'] ?? 0));
+  $invoiceCount = $pricingType === 'fixed_total'
+    ? max(1, $invoicesGenerated, (int)($_POST['invoice_count'] ?? ($existingContract['invoice_count'] ?? 1)))
+    : null;
+  $longTerm = [
+    'start_date' => $startDate,
+    'end_date' => $endDate,
+    'billing_interval_count' => $billingIntervalCount,
+    'billing_interval_unit' => $billingIntervalUnit,
+    'pricing_type' => $pricingType,
+    'price_per_invoice' => $pricePerInvoice,
+    'billing_start_mode' => $billingStartMode,
+    'invoice_count' => $invoiceCount,
+    'next_invoice_date' => $nextInvoiceDate,
+  ];
+}
+
 $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(100,$discount_value))*$subtotal/100;} elseif($discount_type==='fixed'){$discount_amount=max(0,$discount_value);} $tax=max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
 $terms = trim((string)($_POST['terms'] ?? '')) ?: null;
 $estimated = trim((string)($_POST['estimated_completion'] ?? '')) ?: null;
@@ -49,30 +100,55 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 
 $pdo->beginTransaction();
 try{
-  $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
+  if ($isLongTermContract && $longTerm) {
+    $pdo->prepare('
+      UPDATE contracts
+      SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
+          subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?,
+          deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=?,
+          start_date=?, end_date=?, billing_interval_count=?, billing_interval_unit=?, pricing_type=?,
+          price_per_invoice=?, billing_start_mode=?, invoice_count=?, next_invoice_date=?
+      WHERE id=?
+    ')->execute([
+      $client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,
+      $subtotal,$total,$terms,$estimated,$weather,$deposit_type,
+      $deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,
+      $longTerm['start_date'],$longTerm['end_date'],$longTerm['billing_interval_count'],$longTerm['billing_interval_unit'],$longTerm['pricing_type'],
+      $longTerm['price_per_invoice'],$longTerm['billing_start_mode'],$longTerm['invoice_count'],$longTerm['next_invoice_date'],
+      $id
+    ]);
+  } else {
+    $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
+  }
   
-  // Sync changes to linked invoices
-  $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
+  // Sync changes to regular linked invoices. Long-term recurring invoices are historical billing records and must not be rewritten.
+  if (!$isLongTermContract) {
+    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
+  }
   $pdo->prepare('DELETE FROM project_documents WHERE document_type="contract" AND document_id=?')->execute([$id]);
   if ($project_id) {
     $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $id]);
   }
-  $linkedInvoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
-  $linkedInvoiceIds->execute([$id]);
-  foreach ($linkedInvoiceIds->fetchAll(PDO::FETCH_COLUMN) as $linkedInvoiceId) {
-    $pdo->prepare('DELETE FROM project_documents WHERE document_type="invoice" AND document_id=?')->execute([(int)$linkedInvoiceId]);
-    if ($project_id) {
-      $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, (int)$linkedInvoiceId]);
+  if (!$isLongTermContract) {
+    $linkedInvoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
+    $linkedInvoiceIds->execute([$id]);
+    foreach ($linkedInvoiceIds->fetchAll(PDO::FETCH_COLUMN) as $linkedInvoiceId) {
+      $pdo->prepare('DELETE FROM project_documents WHERE document_type="invoice" AND document_id=?')->execute([(int)$linkedInvoiceId]);
+      if ($project_id) {
+        $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, (int)$linkedInvoiceId]);
+      }
     }
   }
   
-  // Sync items to linked invoices
-  $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
-  $invoiceIds->execute([$id]);
-  foreach($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invId) {
-    $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invId]);
-    $insInv=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
-    foreach($items as $it){ $insInv->execute([$invId,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+  // Sync items to regular linked invoices only.
+  if (!$isLongTermContract) {
+    $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
+    $invoiceIds->execute([$id]);
+    foreach($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invId) {
+      $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invId]);
+      $insInv=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+      foreach($items as $it){ $insInv->execute([$invId,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+    }
   }
   $row = $pdo->prepare('SELECT project_code FROM contracts WHERE id=?');
   $row->execute([$id]);

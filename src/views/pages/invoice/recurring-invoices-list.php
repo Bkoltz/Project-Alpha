@@ -164,6 +164,9 @@ $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
                   LTC-<?php echo (int)($ltc['doc_number'] ?? $ltc['id']); ?>
                 </a>
                 <div style="font-size:13px;color:#6b7280"><?php echo htmlspecialchars($ltc['project_code'] ?? ''); ?></div>
+                <?php if (in_array((string)$ltc['status'], ['pending', 'active', 'paused'], true)): ?>
+                  <a href="/?page=contract/contracts-edit&id=<?php echo (int)$ltc['id']; ?>" style="display:inline-block;margin-top:4px;font-size:12px;color:#2563eb;text-decoration:none">Edit billing</a>
+                <?php endif; ?>
               </td>
               <td style="padding:10px">
                 <a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$ltc['client_id']; ?>">

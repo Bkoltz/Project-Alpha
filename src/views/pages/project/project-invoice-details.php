@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../../../utils/invoice_content_links.php';
+require_once __DIR__ . '/../../../utils/public_links.php';
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { http_response_code(400); echo 'Invalid project invoice'; return; }
@@ -87,6 +88,13 @@ $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
     <?php foreach (['email_err', 'payment_err'] as $key): ?>
       <?php if (!empty($_GET[$key])): ?><div class="alert alert-danger no-print"><?php echo htmlspecialchars((string)$_GET[$key]); ?></div><?php endif; ?>
     <?php endforeach; ?>
+    <div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:12px;font-size:13px;color:#374151">
+      <strong>Created:</strong> <?php echo !empty($pi['created_at']) ? date('M j, Y g:i A', strtotime($pi['created_at'])) : 'N/A'; ?>
+      <span style="margin:0 8px">|</span>
+      <strong>Generated:</strong> <?php echo !empty($pi['generated_at']) ? date('M j, Y g:i A', strtotime($pi['generated_at'])) : 'N/A'; ?>
+      <span style="margin:0 8px">|</span>
+      <?php echo pa_public_link_status_badge_html($pdo, 'project_invoice', $id); ?>
+    </div>
   <?php endif; ?>
 
   <?php if (!$isPdf && !$isPublic): ?>

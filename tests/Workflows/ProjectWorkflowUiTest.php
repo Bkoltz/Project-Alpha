@@ -71,6 +71,42 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('src/uploads/projects', (string)$helpers);
     }
 
+    public function testProjectPublicLinksHavePasswordAndCapabilityControls(): void
+    {
+        $migration = file_get_contents($this->root . '/database/migrations/0021_project_public_links.sql');
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $edit = file_get_contents($this->root . '/src/views/pages/project/projects-edit.php');
+        $details = file_get_contents($this->root . '/src/views/pages/project/projects-details.php');
+        $update = file_get_contents($this->root . '/src/controllers/project/projects_update.php');
+        $portal = file_get_contents($this->root . '/src/controllers/public_view/public_project.php');
+        $upload = file_get_contents($this->root . '/src/controllers/public_view/public_project_upload.php');
+        $download = file_get_contents($this->root . '/src/controllers/public_view/public_project_file.php');
+        $router = file_get_contents($this->root . '/public/index.php');
+        $acl = file_get_contents($this->root . '/src/utils/acl_middleware.php');
+        $helper = file_get_contents($this->root . '/src/utils/public_project_links.php');
+
+        foreach (['public_project_enabled', 'public_project_token', 'public_project_password_hash', 'public_project_can_upload', 'public_project_can_request_changes'] as $column) {
+            self::assertStringContainsString($column, (string)$migration);
+            self::assertStringContainsString($column, (string)$baseline);
+            self::assertStringContainsString($column, (string)$edit);
+            self::assertStringContainsString($column, (string)$update);
+        }
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS project_public_events', (string)$migration);
+        self::assertStringContainsString('Public Project Link', (string)$edit);
+        self::assertStringContainsString('pa_project_public_badge_html', (string)$details);
+        self::assertStringContainsString('Public Link Activity', (string)$details);
+        self::assertStringContainsString('password_hash($publicProjectPassword', (string)$update);
+        self::assertStringContainsString('password_verify($code, $hash)', (string)$portal);
+        self::assertStringContainsString('pa_project_public_document_url', (string)$portal);
+        self::assertStringContainsString('validate_and_store_upload', (string)$upload);
+        self::assertStringContainsString('reject_pdf_active_content', (string)$upload);
+        self::assertStringContainsString('pa_project_public_is_unlocked($project, $token)', (string)$download);
+        self::assertStringContainsString('public-project-upload', (string)$router);
+        self::assertStringContainsString('public-project-file', (string)$router);
+        self::assertStringContainsString("'public-project'      => null", (string)$acl);
+        self::assertStringContainsString('function pa_project_public_resolve', (string)$helper);
+    }
+
     public function testDepartmentPrimaryContactsCanBeManaged(): void
     {
         $view = file_get_contents($this->root . '/src/views/pages/organization/organization-view.php');
@@ -81,6 +117,25 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('set_primary_contact', (string)$view);
         self::assertStringContainsString('SET is_primary = 0 WHERE department_id = ?', (string)$handler);
         self::assertStringContainsString('is_primary_department_contact', (string)$endpoint);
+    }
+
+    public function testOrganizationLinksSwitchFromOverallFolderToDepartmentLinks(): void
+    {
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $migration = file_get_contents($this->root . '/database/migrations/0022_dynamic_org_link_strategy.sql');
+        $view = file_get_contents($this->root . '/src/views/pages/organization/organization-view.php');
+        $handler = file_get_contents($this->root . '/src/controllers/organization/organization_departments.php');
+        $resolver = file_get_contents($this->root . '/src/services/LinkResolverService.php');
+
+        self::assertStringContainsString("DEFAULT 'overall_folder'", (string)$baseline);
+        self::assertStringContainsString("DEFAULT 'overall_folder'", (string)$migration);
+        self::assertStringContainsString('PA uses the overall organization folder until the first department is added.', (string)$view);
+        self::assertStringContainsString('When a first department is created, PA switches this organization to department links only', (string)$view);
+        self::assertStringContainsString('$existingDepartmentCount === 0', (string)$handler);
+        self::assertStringContainsString('link_strategy = "department_links_only"', (string)$handler);
+        self::assertStringContainsString('removeResolverOrganizationLinks($organizationId)', (string)$handler);
+        self::assertStringContainsString('autoGenerateForDepartment($departmentId)', (string)$handler);
+        self::assertStringContainsString('function removeResolverOrganizationLinks', (string)$resolver);
     }
 
     public function testClientAndOrganizationSuiteAddressesFlowToDocuments(): void
@@ -231,6 +286,12 @@ final class ProjectWorkflowUiTest extends TestCase
         $sign = file_get_contents($this->root . '/src/controllers/public_view/public_contract_sign.php');
         $start = file_get_contents($this->root . '/src/controllers/contract/long_term_contract_start_billing.php');
         $odcList = file_get_contents($this->root . '/src/views/pages/contract/on-demand-contracts-list.php');
+        $editView = file_get_contents($this->root . '/src/views/pages/contract/contracts-edit.php');
+        $editScript = file_get_contents($this->root . '/public/assets/js/contracts-edit-logic.js');
+        $update = file_get_contents($this->root . '/src/controllers/contract/contracts_update.php');
+        $ltDetails = file_get_contents($this->root . '/src/views/pages/contract/long-term-contract-details.php');
+        $ltList = file_get_contents($this->root . '/src/views/pages/contract/long-term-contracts-list.php');
+        $recurringList = file_get_contents($this->root . '/src/views/pages/invoice/recurring-invoices-list.php');
 
         self::assertStringContainsString("billing_start_mode ENUM('on_upload','manual')", (string)$baseline);
         self::assertStringContainsString('ADD COLUMN billing_start_mode', (string)$migration);
@@ -239,6 +300,18 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('pa_long_term_starts_billing_on_upload($contract)', (string)$sign);
         self::assertStringContainsString('generate_recurring_invoice($pdo, $contract, $appConfig)', (string)$start);
         self::assertStringContainsString('$billingText = \'Manual invoices\';', (string)$odcList);
+        self::assertStringContainsString('Recurring Billing Settings', (string)$editView);
+        self::assertStringContainsString('name="billing_interval_unit"', (string)$editView);
+        self::assertStringContainsString('name="next_invoice_date"', (string)$editView);
+        self::assertStringContainsString('id="pricePerInvoiceEditCo"', (string)$editView);
+        self::assertStringContainsString('function initLongTermEditFieldsCo()', (string)$editScript);
+        self::assertStringContainsString('$isLongTermContract = $contractType === \'long_term\';', (string)$update);
+        self::assertStringContainsString('next_invoice_date=?', (string)$update);
+        self::assertStringContainsString('Long-term recurring invoices are historical billing records and must not be rewritten.', (string)$update);
+        self::assertStringContainsString('if (!$isLongTermContract)', (string)$update);
+        self::assertStringContainsString("['pending', 'active', 'paused']", (string)$ltDetails);
+        self::assertStringContainsString('Edit Billing', (string)$ltList);
+        self::assertStringContainsString('Edit billing', (string)$recurringList);
     }
 
     public function testInvoiceAndContractNumbersArePerDocumentType(): void
@@ -300,6 +373,9 @@ final class ProjectWorkflowUiTest extends TestCase
         $formDetail = file_get_contents($this->root . '/src/views/pages/financial/form-detail.php');
         $folderDetail = file_get_contents($this->root . '/src/views/pages/financial/folder-detail.php');
         $handler = file_get_contents($this->root . '/src/controllers/forms_handler.php');
+        $formScript = file_get_contents($this->root . '/public/assets/js/form-detail-logic.js');
+        $folderScript = file_get_contents($this->root . '/public/assets/js/folder-detail-logic.js');
+        $pickerScript = file_get_contents($this->root . '/public/assets/js/forms-email-recipient-picker.js');
 
         self::assertStringContainsString('request_client_org_id()', (string)$formsList);
         self::assertStringContainsString('request_client_org_id()', (string)$handler);
@@ -308,6 +384,22 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('fd.project_id IS NULL OR fd.project_id = 0', (string)$folderDetail);
         self::assertStringNotContainsString('name="project_id"', (string)$formsList);
         self::assertStringNotContainsString('Project (Optional)', (string)$formDetail);
+        foreach ([$formDetail, $folderDetail] as $detailView) {
+            self::assertStringContainsString('data-forms-email-client-search', (string)$detailView);
+            self::assertStringContainsString('data-forms-email-org-search', (string)$detailView);
+            self::assertStringContainsString('/assets/js/forms-email-recipient-picker.js', (string)$detailView);
+            self::assertStringNotContainsString('name="client_ids[]" value="<?php echo $client[\'id\']; ?>"', (string)$detailView);
+            self::assertStringNotContainsString('-- Select a client --', (string)$detailView);
+            self::assertStringNotContainsString('-- Select an organization --', (string)$detailView);
+        }
+        self::assertStringContainsString('FormsEmailRecipientPicker', (string)$formScript);
+        self::assertStringContainsString('FormsEmailRecipientPicker', (string)$folderScript);
+        self::assertStringContainsString('/?page=clients-search&term=', (string)$pickerScript);
+        self::assertStringContainsString('/?page=organization/org-search&term=', (string)$pickerScript);
+        self::assertStringContainsString('/?page=organization/organization-departments-options&organization_id=', (string)$pickerScript);
+        self::assertStringContainsString('name="department_ids[]"', (string)$pickerScript);
+        self::assertStringContainsString('function forms_email_recipients', (string)$handler);
+        self::assertStringContainsString('organization_department_contacts', (string)$handler);
     }
 
     public function testContractSignatureLabelsAndPaymentReferencesArePreserved(): void

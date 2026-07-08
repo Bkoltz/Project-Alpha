@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../utils/public_project_links.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/projects-update');
@@ -29,12 +30,21 @@ $invoiceBillingPeriod = ($_POST['invoice_billing_period'] ?? 'per_invoice') === 
 $invoiceNetTermsDays = trim((string)($_POST['invoice_net_terms_days'] ?? ''));
 $invoiceNetTermsDays = $invoiceNetTermsDays === '' ? null : max(0, (int)$invoiceNetTermsDays);
 $projectInvoiceAutoEmail = !empty($_POST['project_invoice_auto_email']) ? 1 : 0;
+$publicProjectEnabled = !empty($_POST['public_project_enabled']) ? 1 : 0;
+$publicProjectRequirePassword = !empty($_POST['public_project_require_password']) ? 1 : 0;
+$publicProjectPassword = trim((string)($_POST['public_project_password'] ?? ''));
+$publicProjectCanViewDocuments = !empty($_POST['public_project_can_view_documents']) ? 1 : 0;
+$publicProjectCanViewInvoices = !empty($_POST['public_project_can_view_invoices']) ? 1 : 0;
+$publicProjectCanUpload = !empty($_POST['public_project_can_upload']) ? 1 : 0;
+$publicProjectCanRequestChanges = !empty($_POST['public_project_can_request_changes']) ? 1 : 0;
 
 require_record_ownership($pdo, 'projects', $id);
+pa_project_public_link_ensure_schema($pdo);
 
-$projectStmt = $pdo->prepare('SELECT organization_id FROM projects WHERE id = ? LIMIT 1');
+$projectStmt = $pdo->prepare('SELECT organization_id, public_project_token, public_project_password_hash FROM projects WHERE id = ? LIMIT 1');
 $projectStmt->execute([$id]);
-$storedOrganizationId = (int)($projectStmt->fetchColumn() ?: 0);
+$storedProject = $projectStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$storedOrganizationId = (int)($storedProject['organization_id'] ?? 0);
 if ($storedOrganizationId > 0) {
 	$organization_id = $storedOrganizationId;
 }
@@ -85,6 +95,10 @@ if ($estimated_start !== '' && $estimated_end !== '' && strtotime($estimated_sta
 	header('Location: '.$editRedirect.'&error=Start%20must%20be%20before%20end');
 	exit;
 }
+if ($publicProjectRequirePassword && $publicProjectPassword === '' && trim((string)($storedProject['public_project_password_hash'] ?? '')) === '') {
+	header('Location: '.$editRedirect.'&error=' . urlencode('Enter an access code before requiring one for the public project link.'));
+	exit;
+}
 
 $hasAutoEmailColumn = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
 $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'department_id');
@@ -131,5 +145,37 @@ if ($hasAutoEmailColumn) {
 	$stmt->execute($params);
 }
 project_invoice_sync_clients($pdo, $id, $client_id > 0 ? $client_id : null, $projectClientIds, $projectInvoiceRecipientIds, $projectInvoiceLinkClientIds);
+
+$publicProjectToken = trim((string)($storedProject['public_project_token'] ?? ''));
+if ($publicProjectEnabled && $publicProjectToken === '') {
+	$publicProjectToken = pa_project_public_token();
+}
+$publicProjectPasswordHash = trim((string)($storedProject['public_project_password_hash'] ?? ''));
+if ($publicProjectPassword !== '') {
+	$publicProjectPasswordHash = password_hash($publicProjectPassword, PASSWORD_DEFAULT);
+}
+$publicStmt = $pdo->prepare('
+	UPDATE projects
+	SET public_project_enabled = ?,
+	    public_project_token = ?,
+	    public_project_require_password = ?,
+	    public_project_password_hash = ?,
+	    public_project_can_view_documents = ?,
+	    public_project_can_view_invoices = ?,
+	    public_project_can_upload = ?,
+	    public_project_can_request_changes = ?
+	WHERE id = ?
+');
+$publicStmt->execute([
+	$publicProjectEnabled,
+	$publicProjectToken !== '' ? $publicProjectToken : null,
+	$publicProjectRequirePassword,
+	$publicProjectPasswordHash !== '' ? $publicProjectPasswordHash : null,
+	$publicProjectCanViewDocuments,
+	$publicProjectCanViewInvoices,
+	$publicProjectCanUpload,
+	$publicProjectCanRequestChanges,
+	$id,
+]);
 header('Location: '.$detailsRedirect.'&updated=1');
 exit;

@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/stripe_financial_events.php';
 require_once __DIR__ . '/../../utils/stripe_payment_accounting.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 function handleCheckoutSessionCompleted($pdo, $session) {
     $metadata = $session['metadata'] ?? [];
@@ -115,11 +116,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         
         // Revoke public links if fully paid
         if ($status === 'paid') {
-            try {
-                $redir = '/?page=public-redirect&type=invoice&reason=paid';
-                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0');
-                $rv->execute([$redir, $invoiceId]);
-            } catch (Throwable $e) { /* ignore */ }
+            pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
             
             // Mark linked contract as completed if exists
             $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');

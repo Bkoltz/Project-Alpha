@@ -6,6 +6,8 @@ require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../../../utils/project_files.php';
+require_once __DIR__ . '/../../../utils/public_project_links.php';
+require_once __DIR__ . '/../../../config/app.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
 if ($projectId <= 0) {
@@ -13,6 +15,7 @@ if ($projectId <= 0) {
     exit;
 }
 require_record_ownership($pdo, 'projects', $projectId);
+pa_project_public_link_ensure_schema($pdo);
 
 // Fetch project details
 $stmt = $pdo->prepare('
@@ -198,6 +201,7 @@ foreach ($projectClients as $client) {
 
 $projectFileFolders = [];
 $projectFiles = [];
+$projectPublicEvents = [];
 try {
     $folderStmt = $pdo->prepare('
         SELECT f.*, COUNT(pf.id) AS file_count
@@ -222,6 +226,16 @@ try {
         $folderKey = !empty($fileRow['folder_id']) ? (int)$fileRow['folder_id'] : 0;
         $projectFiles[$folderKey][] = $fileRow;
     }
+    $eventStmt = $pdo->prepare('
+        SELECT e.*, pf.display_name AS file_display_name, pf.original_name AS file_original_name
+        FROM project_public_events e
+        LEFT JOIN project_files pf ON pf.id = e.file_id
+        WHERE e.project_id = ?
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT 10
+    ');
+    $eventStmt->execute([$projectId]);
+    $projectPublicEvents = $eventStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     @error_log('[projects-details] project files query failed: ' . $e->getMessage());
 }
@@ -283,6 +297,7 @@ $autoEmailEnabled = !array_key_exists('project_invoice_auto_email', $project) ||
 $lastProjectInvoice = $projectInvoices[0] ?? null;
 $monthlyBilling = ($project['invoice_billing_period'] ?? 'per_invoice') === 'monthly';
 $nextBillingLabel = $monthlyBilling ? date('M j, Y', strtotime('first day of next month')) : 'Per invoice';
+$publicProjectUrl = pa_project_public_url($appConfig ?? [], (string)($project['public_project_token'] ?? ''));
 
 ?>
 
@@ -396,9 +411,10 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                         <?php echo $currentStatus['text']; ?>
                     </div>
                 </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center">
                     <a class="btn btn-primary" href="/?page=project/projects-edit&amp;id=<?php echo $projectId; ?>">Edit Project</a>
                     <a class="btn" href="/?page=project/projects-list">All Projects</a>
+                    <?php echo pa_project_public_badge_html($project, $appConfig ?? []); ?>
                 </div>
 
                 <div class="project-facts">
@@ -818,11 +834,43 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                 <div class="project-section-head" style="margin-bottom:10px">
                     <div>
                         <div class="project-sidebar-title" style="margin-bottom:3px">Project Settings</div>
-                        <div class="project-muted">Contacts, invoice recipients, schedule, billing defaults, and notes are managed on the edit page.</div>
+                        <div class="project-muted">Contacts, invoice recipients, schedule, billing defaults, notes, and public project access are managed on the edit page.</div>
                     </div>
                 </div>
+                <?php if (!empty($project['public_project_enabled']) && $publicProjectUrl !== ''): ?>
+                    <label class="project-field" style="margin-bottom:10px">
+                        <span>Public project link</span>
+                        <input readonly value="<?php echo htmlspecialchars($publicProjectUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" onclick="this.select()">
+                    </label>
+                    <div class="project-muted" style="margin-bottom:12px">
+                        Code <?php echo !empty($project['public_project_require_password']) ? 'required' : 'not required'; ?>.
+                        Uploads <?php echo !empty($project['public_project_can_upload']) ? 'allowed' : 'off'; ?>.
+                    </div>
+                <?php endif; ?>
                 <a class="btn btn-primary project-action-wide" href="/?page=project/projects-edit&amp;id=<?php echo $projectId; ?>" style="width:100%">Edit Project Settings</a>
             </div>
+
+            <?php if (!empty($projectPublicEvents)): ?>
+            <div class="project-panel">
+                <div class="project-sidebar-title">Public Link Activity</div>
+                <div class="grid" style="gap:8px">
+                    <?php foreach ($projectPublicEvents as $event): ?>
+                        <div style="padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#fbfcfd">
+                            <div style="font-weight:700;font-size:13px">
+                                <?php echo htmlspecialchars((string)$event['event_type'] === 'upload' ? 'File uploaded' : 'Update request'); ?>
+                            </div>
+                            <?php if (!empty($event['file_display_name']) || !empty($event['file_original_name'])): ?>
+                                <div style="font-size:12px;color:var(--muted);margin-top:2px"><?php echo htmlspecialchars((string)($event['file_display_name'] ?: $event['file_original_name'])); ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($event['message'])): ?>
+                                <div style="font-size:13px;margin-top:6px;line-height:1.4"><?php echo nl2br(htmlspecialchars((string)$event['message'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')); ?></div>
+                            <?php endif; ?>
+                            <div style="font-size:12px;color:var(--muted);margin-top:6px"><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime((string)$event['created_at']))); ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <div class="project-panel" data-legacy-project-settings-panel style="display:none">
                 <div class="project-section-head" style="margin-bottom:10px">

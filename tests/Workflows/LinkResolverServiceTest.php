@@ -161,10 +161,11 @@ final class LinkResolverServiceTest extends TestCase
         self::assertSame('entity_only', $link['visibility_scope']);
     }
 
-    public function testDepartmentedOrganizationDefaultsToDepartmentLinksOnly(): void
+    public function testDepartmentedOrganizationInDepartmentOnlyModeRemovesResolverOrgLinks(): void
     {
         $orgName = 'Dept Only ' . bin2hex(random_bytes(3));
         $orgId = $this->insertOrganization($orgName);
+        $this->pdo->prepare('UPDATE organizations SET link_strategy = "department_links_only" WHERE id = ?')->execute([$orgId]);
         $deptId = $this->insertDepartment($orgId, 'Football', 'Football', 'auto_attach');
         $staleOrgLinkId = $this->insertResolverLink('organization', $orgId, 'https://example.invalid/stale-org');
 

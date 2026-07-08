@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/webhook_logger.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 // Get raw POST body for signature verification
 $endpointName = 'stripe-webhook-legacy';
@@ -259,11 +260,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         
         // Revoke public links if fully paid
         if ($status === 'paid') {
-            try {
-                $redir = '/?page=public-redirect&type=invoice&reason=paid';
-                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0');
-                $rv->execute([$redir, $invoiceId]);
-            } catch (Throwable $e) { /* ignore */ }
+            pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
             
             // Mark linked contract as completed if exists
             $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
@@ -356,11 +353,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         
         // If paid, revoke public links and complete contract
         if ($status === 'paid') {
-            try {
-                $redir = '/?page=public-redirect&type=invoice&reason=paid';
-                $rv = $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0');
-                $rv->execute([$redir, $invoiceId]);
-            } catch (Throwable $e) { /* ignore */ }
+            pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
             
             $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
             $co->execute([$invoiceId]);

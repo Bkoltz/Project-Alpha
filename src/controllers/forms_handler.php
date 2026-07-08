@@ -16,6 +16,84 @@ require_once __DIR__ . '/../utils/acl.php';
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
 
+function forms_email_normalize_ids(mixed $value): array
+{
+    if (!is_array($value)) {
+        return [];
+    }
+    return array_values(array_unique(array_filter(array_map('intval', $value), static fn($id) => $id > 0)));
+}
+
+function forms_email_recipients(PDO $pdo, string $recipientType, int $recipientId, array $clientIds, array $departmentIds): array
+{
+    if ($recipientType === 'client' && $recipientId > 0) {
+        $clientIds[] = $recipientId;
+        $recipientType = 'clients';
+    }
+
+    if ($recipientType === 'clients') {
+        $clientIds = array_values(array_unique(array_filter($clientIds, static fn($id) => $id > 0)));
+        if (!$clientIds) {
+            throw new Exception('At least one client must be selected');
+        }
+        $placeholders = implode(',', array_fill(0, count($clientIds), '?'));
+        $stmt = $pdo->prepare("
+            SELECT email, name
+            FROM clients
+            WHERE id IN ({$placeholders}) AND email IS NOT NULL AND email != ''
+            ORDER BY name
+        ");
+        $stmt->execute($clientIds);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    if ($recipientType === 'organization') {
+        if ($recipientId <= 0) {
+            throw new Exception('Organization ID is required');
+        }
+        require_record_ownership($pdo, 'organizations', $recipientId);
+        $departmentIds = array_values(array_unique(array_filter($departmentIds, static fn($id) => $id > 0)));
+        if ($departmentIds) {
+            $placeholders = implode(',', array_fill(0, count($departmentIds), '?'));
+            $deptCheck = $pdo->prepare("
+                SELECT id
+                FROM organization_departments
+                WHERE organization_id = ? AND id IN ({$placeholders})
+            ");
+            $deptCheck->execute(array_merge([$recipientId], $departmentIds));
+            $validDepartmentIds = array_map('intval', $deptCheck->fetchAll(PDO::FETCH_COLUMN));
+            sort($validDepartmentIds);
+            $expectedDepartmentIds = $departmentIds;
+            sort($expectedDepartmentIds);
+            if ($validDepartmentIds !== $expectedDepartmentIds) {
+                throw new Exception('One or more selected departments do not belong to the organization');
+            }
+            $stmt = $pdo->prepare("
+                SELECT DISTINCT c.email, c.name
+                FROM organization_department_contacts odc
+                JOIN clients c ON c.id = odc.client_id
+                WHERE odc.department_id IN ({$placeholders})
+                  AND c.organization_id = ?
+                  AND c.email IS NOT NULL AND c.email != ''
+                ORDER BY c.name
+            ");
+            $stmt->execute(array_merge($departmentIds, [$recipientId]));
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $stmt = $pdo->prepare('
+            SELECT c.email, c.name
+            FROM clients c
+            WHERE c.organization_id = ? AND c.email IS NOT NULL AND c.email != ""
+            ORDER BY c.name
+        ');
+        $stmt->execute([$recipientId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    throw new Exception('Choose who should receive the email');
+}
+
 // Validate CSRF token
 if (!csrf_validate()) {
     $response['message'] = 'Invalid request (CSRF validation failed)';
@@ -335,13 +413,14 @@ try {
             $categoryId = (int)($_POST['category_id'] ?? 0);
             $recipientType = $_POST['recipient_type'] ?? ''; // 'client', 'clients', or 'organization'
             $recipientId = (int)($_POST['recipient_id'] ?? 0);
-            $clientIds = $_POST['client_ids'] ?? [];
+            $clientIds = forms_email_normalize_ids($_POST['client_ids'] ?? []);
+            $departmentIds = forms_email_normalize_ids($_POST['department_ids'] ?? []);
 
             if (!$categoryId || !$recipientType) {
                 throw new Exception('Missing required parameters');
             }
 
-            if ($recipientType !== 'clients' && !$recipientId) {
+            if (!in_array($recipientType, ['client', 'clients', 'organization'], true)) {
                 throw new Exception('Missing required parameters');
             }
 
@@ -359,35 +438,7 @@ try {
                 throw new Exception('Form not found or no document uploaded');
             }
 
-            // Get recipient email(s)
-            $emails = [];
-            if ($recipientType === 'client') {
-                $stmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
-                $stmt->execute([$recipientId]);
-                $client = $stmt->fetch();
-                if ($client && $client['email']) {
-                    $emails[] = ['email' => $client['email'], 'name' => $client['name']];
-                }
-            } elseif ($recipientType === 'clients') {
-                if (empty($clientIds) || !is_array($clientIds)) {
-                    throw new Exception('At least one client must be selected');
-                }
-                $placeholders = str_repeat('?,', count($clientIds) - 1) . '?';
-                $stmt = $pdo->prepare("
-                    SELECT email, name FROM clients 
-                    WHERE id IN ($placeholders) AND email IS NOT NULL AND email != ''
-                ");
-                $stmt->execute($clientIds);
-                $emails = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            } elseif ($recipientType === 'organization') {
-                $stmt = $pdo->prepare('
-                    SELECT c.email, c.name 
-                    FROM clients c 
-                    WHERE c.organization_id = ? AND c.email IS NOT NULL AND c.email != ""
-                ');
-                $stmt->execute([$recipientId]);
-                $emails = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            }
+            $emails = forms_email_recipients($pdo, (string)$recipientType, $recipientId, $clientIds, $departmentIds);
 
             if (empty($emails)) {
                 throw new Exception('No email addresses found for selected recipient');
@@ -431,7 +482,8 @@ try {
             $documentIdsJson = $_POST['document_ids'] ?? '';
             $recipientType = $_POST['recipient_type'] ?? ''; // 'client', 'clients', or 'organization'
             $recipientId = (int)($_POST['recipient_id'] ?? 0);
-            $clientIds = $_POST['client_ids'] ?? [];
+            $clientIds = forms_email_normalize_ids($_POST['client_ids'] ?? []);
+            $departmentIds = forms_email_normalize_ids($_POST['department_ids'] ?? []);
 
             if (!$folderId || !$documentIdsJson || !$recipientType) {
                 throw new Exception('Missing required parameters');
@@ -467,41 +519,7 @@ try {
                 throw new Exception('No valid documents found');
             }
 
-            // Get recipient email(s)
-            $emails = [];
-            if ($recipientType === 'client') {
-                if (!$recipientId) {
-                    throw new Exception('Client ID is required');
-                }
-                $stmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
-                $stmt->execute([$recipientId]);
-                $client = $stmt->fetch();
-                if ($client && $client['email']) {
-                    $emails[] = ['email' => $client['email'], 'name' => $client['name']];
-                }
-            } elseif ($recipientType === 'clients') {
-                if (empty($clientIds) || !is_array($clientIds)) {
-                    throw new Exception('At least one client must be selected');
-                }
-                $placeholders = str_repeat('?,', count($clientIds) - 1) . '?';
-                $stmt = $pdo->prepare("
-                    SELECT email, name FROM clients 
-                    WHERE id IN ($placeholders) AND email IS NOT NULL AND email != ''
-                ");
-                $stmt->execute($clientIds);
-                $emails = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            } elseif ($recipientType === 'organization') {
-                if (!$recipientId) {
-                    throw new Exception('Organization ID is required');
-                }
-                $stmt = $pdo->prepare('
-                    SELECT c.email, c.name 
-                    FROM clients c 
-                    WHERE c.organization_id = ? AND c.email IS NOT NULL AND c.email != ""
-                ');
-                $stmt->execute([$recipientId]);
-                $emails = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            }
+            $emails = forms_email_recipients($pdo, (string)$recipientType, $recipientId, $clientIds, $departmentIds);
 
             if (empty($emails)) {
                 throw new Exception('No email addresses found for selected recipient(s)');

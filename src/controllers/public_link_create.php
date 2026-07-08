@@ -5,6 +5,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/acl.php';
+require_once __DIR__ . '/../utils/public_links.php';
 
 header('Content-Type: application/json');
 
@@ -125,12 +126,7 @@ try {
             INDEX idx_public_type_doc (document_type, document_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
     } catch (Throwable $e) { /* table exists */ }
-    try {
-        $pdo->exec('ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL');
-    } catch (Throwable $e) { /* older/non-MySQL schemas can ignore */ }
-    try {
-        $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
-    } catch (Throwable $e) { /* column already exists */ }
+    pa_public_link_ensure_schema($pdo);
     
     // If force_new is set, revoke all existing links for this document
     if ($forceNew) {

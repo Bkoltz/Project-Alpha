@@ -5,6 +5,7 @@ require_once __DIR__ . '/../services/StripeService.php';
 require_once __DIR__ . '/../services/PaymentProcessorImportService.php';
 require_once __DIR__ . '/stripe_financial_events.php';
 require_once __DIR__ . '/stripe_payment_accounting.php';
+require_once __DIR__ . '/public_links.php';
 
 function stripe_reconcile_payment_intents(
     PDO $pdo,
@@ -131,11 +132,7 @@ function stripe_reconcile_payment_intents(
             }
 
             if ($newStatus === 'paid') {
-                try {
-                    $pdo->prepare('UPDATE public_links SET revoked = 1, redirect = ? WHERE document_type = "invoice" AND document_id = ? AND revoked = 0')
-                        ->execute(['/?page=public-redirect&type=invoice&reason=paid', $invoiceId]);
-                } catch (Throwable $e) {
-                }
+                pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
 
                 $coStmt = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
                 $coStmt->execute([$invoiceId]);

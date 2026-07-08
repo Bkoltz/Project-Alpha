@@ -238,6 +238,11 @@ class LinkResolverService
         }
     }
 
+    public function removeResolverOrganizationLinks(int $orgId): void
+    {
+        $this->deleteResolverOrgLinks($orgId);
+    }
+
     public function autoGenerateForDepartment(int $departmentId, ?string $provider = null): array
     {
         if (!$this->config['enabled']) {

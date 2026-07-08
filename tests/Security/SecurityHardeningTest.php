@@ -118,7 +118,7 @@ final class SecurityHardeningTest extends TestCase
         $sign = $this->read('src/controllers/public_view/public_contract_sign.php');
         self::assertStringContainsString("\$status !== 'pending'", $sign);
         self::assertStringContainsString("AND status = 'pending'", $sign);
-        self::assertStringContainsString('UPDATE public_links SET revoked = 1 WHERE token = ?', $sign);
+        self::assertStringContainsString("pa_public_link_terminalize(\$pdo, 'contract', \$contractId, 'signed')", $sign);
 
         $resetVerify = $this->read('src/controllers/auth/reset_verify.php');
         $resetUpdate = $this->read('src/controllers/auth/reset_update.php');

@@ -2,6 +2,7 @@
 // src/controllers/contract_void.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
@@ -17,14 +18,18 @@ try {
 
   // Contracts enum historically doesn't include 'void' in older schemas; set to 'cancelled' to avoid enum truncation
   $pdo->prepare("UPDATE contracts SET status='cancelled', voided_at=CURRENT_TIMESTAMP WHERE id=?")->execute([$id]);
+  pa_public_link_terminalize($pdo, 'contract', $id, 'cancelled');
 
   // Void related invoices (invoices.status ENUM does include 'void')
   $pdo->prepare('UPDATE time_entries SET billed=0, invoice_item_id=NULL, invoice_id=NULL WHERE invoice_id IN (SELECT id FROM invoices WHERE contract_id=?)')->execute([$id]);
   $pdo->prepare("UPDATE invoices SET status='void' WHERE contract_id=?")->execute([$id]);
   // Revoke public links for those invoices
   try {
-    $redir = '/?page=public-redirect&type=invoice&reason=void';
-    $pdo->prepare('UPDATE public_links SET revoked=1, redirect=? WHERE document_type="invoice" AND document_id IN (SELECT id FROM invoices WHERE contract_id=? ) AND revoked=0')->execute([$redir, $id]);
+    $invoiceIds = $pdo->prepare('SELECT id FROM invoices WHERE contract_id=?');
+    $invoiceIds->execute([$id]);
+    foreach ($invoiceIds->fetchAll(PDO::FETCH_COLUMN) as $invoiceId) {
+      pa_public_link_terminalize($pdo, 'invoice', (int)$invoiceId, 'void');
+    }
   } catch (Throwable $_e) { /* ignore */ }
 
   $pdo->commit();

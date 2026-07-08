@@ -14,6 +14,7 @@ if (!$contract) {
   echo '<p>Contract not found</p>';
   return;
 }
+$isLongTermContract = ($contract['contract_type'] ?? 'regular') === 'long_term';
 $items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
@@ -188,8 +189,129 @@ try {
       </label>
     </div>
 
+    <?php if ($isLongTermContract): ?>
+      <?php
+        $intervalCount = max(1, (int)($contract['billing_interval_count'] ?? 1));
+        $intervalCountOptions = array_values(array_unique(array_merge([1, 2, 3, 6, 12], [$intervalCount])));
+        sort($intervalCountOptions);
+        $intervalUnit = in_array((string)($contract['billing_interval_unit'] ?? 'month'), ['day', 'week', 'month', 'year'], true)
+          ? (string)$contract['billing_interval_unit']
+          : 'month';
+        $pricingType = in_array((string)($contract['pricing_type'] ?? 'per_invoice'), ['per_invoice', 'fixed_total'], true)
+          ? (string)$contract['pricing_type']
+          : 'per_invoice';
+        $billingStartMode = in_array((string)($contract['billing_start_mode'] ?? 'on_upload'), ['on_upload', 'manual'], true)
+          ? (string)$contract['billing_start_mode']
+          : 'on_upload';
+        $hasEndDate = !empty($contract['end_date']);
+      ?>
+      <div id="longTermEditFields" style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
+        <h3 style="margin:0 0 8px;color:#374151;font-size:16px">Recurring Billing Settings</h3>
+        <p style="margin:0 0 12px;color:#6b7280;font-size:13px;line-height:1.45">
+          Changes here apply to future recurring invoices. Existing invoices and payments are left as-is.
+        </p>
+
+        <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">
+          <label>
+            <div>Start Date</div>
+            <input type="date" name="start_date" value="<?php echo htmlspecialchars((string)($contract['start_date'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          </label>
+          <label>
+            <div>Contract Duration</div>
+            <select id="editEndDateTypeCo" name="end_date_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              <option value="ongoing" <?php echo !$hasEndDate ? 'selected' : ''; ?>>Ongoing</option>
+              <option value="fixed" <?php echo $hasEndDate ? 'selected' : ''; ?>>Fixed End Date</option>
+            </select>
+          </label>
+          <label id="editEndDateFieldCo" style="<?php echo $hasEndDate ? '' : 'display:none'; ?>">
+            <div>End Date</div>
+            <input type="date" name="end_date" value="<?php echo htmlspecialchars((string)($contract['end_date'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          </label>
+          <label>
+            <div>Next Invoice Date</div>
+            <input type="date" name="next_invoice_date" value="<?php echo htmlspecialchars((string)($contract['next_invoice_date'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          </label>
+        </div>
+
+        <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));margin-top:12px">
+          <label>
+            <div>Bill Every</div>
+            <select id="billingIntervalCountEditCo" name="billing_interval_count" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              <?php foreach ($intervalCountOptions as $countOption): ?>
+                <option value="<?php echo (int)$countOption; ?>" <?php echo $intervalCount === (int)$countOption ? 'selected' : ''; ?>><?php echo (int)$countOption; ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label>
+            <div>Period</div>
+            <select id="billingIntervalUnitEditCo" name="billing_interval_unit" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+              <?php foreach (['day' => 'Day(s)', 'week' => 'Week(s)', 'month' => 'Month(s)', 'year' => 'Year(s)'] as $value => $label): ?>
+                <option value="<?php echo htmlspecialchars($value); ?>" <?php echo $intervalUnit === $value ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+        </div>
+
+        <div style="margin-top:12px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+          <div style="font-weight:600;margin-bottom:8px;color:#1e3a8a">Billing Start</div>
+          <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+            <input type="radio" name="billing_start_mode" value="on_upload" <?php echo $billingStartMode === 'on_upload' ? 'checked' : ''; ?> style="margin-top:3px">
+            <span>
+              <strong style="display:block;color:#374151">Start when signed contract is uploaded</strong>
+              <span style="display:block;font-size:13px;color:#6b7280">The first long-term invoice becomes due when the signed contract is received.</span>
+            </span>
+          </label>
+          <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+            <input type="radio" name="billing_start_mode" value="manual" <?php echo $billingStartMode === 'manual' ? 'checked' : ''; ?> style="margin-top:3px">
+            <span>
+              <strong style="display:block;color:#374151">Manual start</strong>
+              <span style="display:block;font-size:13px;color:#6b7280">Keep recurring invoices paused until billing is explicitly started.</span>
+            </span>
+          </label>
+        </div>
+
+        <div style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:8px;border:1px solid #fbbf24">
+          <div style="font-weight:600;margin-bottom:8px;color:#92400e">Pricing</div>
+          <label style="display:flex;align-items:start;gap:8px;margin-bottom:8px;cursor:pointer">
+            <input type="radio" name="pricing_type" value="per_invoice" <?php echo $pricingType === 'per_invoice' ? 'checked' : ''; ?> style="margin-top:3px">
+            <span>
+              <strong style="display:block;color:#374151">Recurring Amount</strong>
+              <span style="display:block;font-size:13px;color:#6b7280">Client pays the same amount on each invoice.</span>
+            </span>
+          </label>
+          <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
+            <input type="radio" name="pricing_type" value="fixed_total" <?php echo $pricingType === 'fixed_total' ? 'checked' : ''; ?> style="margin-top:3px">
+            <span>
+              <strong style="display:block;color:#374151">Fixed Total</strong>
+              <span style="display:block;font-size:13px;color:#6b7280">Total contract amount is divided across a set number of invoices.</span>
+            </span>
+          </label>
+        </div>
+
+        <div id="perInvoiceEditFieldCo" style="<?php echo $pricingType === 'per_invoice' ? '' : 'display:none'; ?>;margin-top:12px">
+          <label>
+            <div>Amount Per Invoice</div>
+            <input id="pricePerInvoiceEditCo" type="number" step="0.01" min="0" name="price_per_invoice" value="<?php echo htmlspecialchars((string)($contract['price_per_invoice'] ?? $contract['subtotal'] ?? 0)); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          </label>
+        </div>
+
+        <div id="fixedTotalEditFieldCo" style="<?php echo $pricingType === 'fixed_total' ? '' : 'display:none'; ?>;margin-top:12px">
+          <label>
+            <div>Number of Invoices</div>
+            <input type="number" step="1" min="<?php echo max(1, (int)($contract['invoices_generated'] ?? 0)); ?>" name="invoice_count" value="<?php echo htmlspecialchars((string)max(1, (int)($contract['invoice_count'] ?? 1))); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+          </label>
+          <?php if ((int)($contract['invoices_generated'] ?? 0) > 0): ?>
+            <small style="display:block;margin-top:6px;color:#6b7280">Already generated invoices: <?php echo (int)$contract['invoices_generated']; ?>.</small>
+          <?php endif; ?>
+        </div>
+      </div>
+    <?php endif; ?>
+
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
+      <div style="font-weight:600;margin-bottom:8px"><?php echo $isLongTermContract ? 'Items / Fixed Total Rates' : 'Items / Rates'; ?></div>
+      <?php if ($isLongTermContract): ?>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:8px">For recurring amount contracts, items are optional. For fixed total contracts, items define the contract total.</div>
+      <?php endif; ?>
 
       <div id="itemsCo" style="display:grid;gap:8px"></div>
       <button id="addItemBtn" type="button" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>

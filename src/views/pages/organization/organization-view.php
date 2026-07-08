@@ -304,14 +304,32 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
     </aside>
 
     <main class="org-view__main">
-      <?php $linkStrategy = (string)($org['link_strategy'] ?? 'department_links_only'); ?>
+      <?php
+        $hasDepartments = !empty($departments);
+        $storedLinkStrategy = (string)($org['link_strategy'] ?? 'overall_folder');
+        if (!in_array($storedLinkStrategy, ['department_links_only', 'overall_folder', 'shared_folder'], true)) {
+            $storedLinkStrategy = 'overall_folder';
+        }
+        $linkStrategy = (!$hasDepartments && $storedLinkStrategy === 'department_links_only')
+            ? 'overall_folder'
+            : $storedLinkStrategy;
+      ?>
       <div class="org-link-strategy">
         <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
           <div>
             <h3 style="margin:0 0 4px">Automatic Link Strategy</h3>
             <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.45">
-              Choose how PA resolves provider folders for this organization when departments exist.
+              <?php if ($hasDepartments): ?>
+                PA resolves provider folders by department unless you choose an org-level sharing mode.
+              <?php else: ?>
+                PA uses the overall organization folder until the first department is added.
+              <?php endif; ?>
             </p>
+            <?php if (!$hasDepartments): ?>
+              <p style="margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.45">
+                When a first department is created, PA switches this organization to department links only, scans that department, and removes resolver-created org folder links.
+              </p>
+            <?php endif; ?>
           </div>
           <form method="post" action="/?page=organization/organization-departments" style="margin:0">
             <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
@@ -319,8 +337,8 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
             <input type="hidden" name="organization_id" value="<?php echo (int)$id; ?>">
             <div class="org-link-strategy__options">
               <?php foreach ([
-                'department_links_only' => ['Department links only', 'Default for orgs with departments. PA removes resolver-created org folder links and generates department links.'],
-                'overall_folder' => ['Overall org folder', 'PA resolves the folder that exactly matches the organization and shares it with department recipients.'],
+                'department_links_only' => ['Department links only', 'Default once departments exist. PA removes resolver-created org folder links and generates department links.'],
+                'overall_folder' => ['Overall org folder', 'Default before departments exist. PA resolves the folder that exactly matches the organization.'],
                 'shared_folder' => ['_shared folder', 'PA resolves a folder named _shared inside the organization folder and shares it with department recipients.'],
               ] as $value => [$label, $help]): ?>
                 <label class="org-link-strategy__option">
