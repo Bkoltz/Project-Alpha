@@ -13,6 +13,7 @@ if (!rate_limit_check($pdo, 'public_doc', 30, 60)) {
 }
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 $token = isset($_GET['token']) ? (string)$_GET['token'] : '';
 if ($token === '') {
@@ -43,6 +44,15 @@ try {
   }
   
   if (!$row) { throw new Exception('notfound'); }
+  if (in_array((string)$row['document_type'], ['quote', 'contract', 'invoice', 'project_invoice'], true)) {
+    $terminalReason = pa_public_link_terminalize($pdo, (string)$row['document_type'], (int)$row['document_id']);
+    if ($terminalReason !== null) {
+      $st = $pdo->prepare('SELECT document_type, document_id, expires_at, revoked, redirect, expire_when_paid FROM public_links WHERE token=? LIMIT 1');
+      $st->execute([$token]);
+      $row = $st->fetch(PDO::FETCH_ASSOC);
+      if (!$row) { throw new Exception('notfound'); }
+    }
+  }
 
   if (in_array((string)$row['document_type'], ['invoice', 'project_invoice'], true) && empty($row['expire_when_paid'])) {
     try {
@@ -59,7 +69,8 @@ try {
   // Check if revoked
   if ((int)($row['revoked'] ?? 0) === 1) {
     $redirect = trim((string)($row['redirect'] ?? ''));
-    if ($redirect !== '') {
+    $redirectExpiresAt = !empty($row['expires_at']) ? strtotime((string)$row['expires_at']) : null;
+    if ($redirect !== '' && ($redirectExpiresAt === null || $redirectExpiresAt > time())) {
       header('Location: ' . $redirect);
       exit;
     }

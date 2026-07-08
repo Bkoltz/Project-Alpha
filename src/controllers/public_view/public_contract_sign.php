@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/upload_validator.php';
 require_once __DIR__ . '/../../utils/contract_billing_start.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 // Verify CSRF
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
@@ -135,8 +136,7 @@ try {
         throw new Exception('This contract has already been signed or is no longer pending');
     }
 
-    $revoke = $pdo->prepare('UPDATE public_links SET revoked = 1 WHERE token = ? AND document_type = ? AND document_id = ? AND revoked = 0');
-    $revoke->execute([$token, 'contract', $contractId]);
+    pa_public_link_terminalize($pdo, 'contract', $contractId, 'signed');
     
     $pdo->commit();
     

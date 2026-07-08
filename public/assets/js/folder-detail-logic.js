@@ -92,6 +92,15 @@ document.getElementById('editForm').addEventListener('submit', async function (e
 });
 
 // Email Modal
+let formsEmailPicker = null;
+
+function getFormsEmailPicker() {
+    if (!formsEmailPicker && window.FormsEmailRecipientPicker) {
+        formsEmailPicker = window.FormsEmailRecipientPicker.init(document.getElementById('emailForm'));
+    }
+    return formsEmailPicker;
+}
+
 function updateSelectedCount() {
     const checkboxes = document.querySelectorAll('.doc-checkbox:checked');
     const count = checkboxes.length;
@@ -108,60 +117,13 @@ function showEmailModal() {
     const docIds = Array.from(checkboxes).map(cb => cb.dataset.docId);
     document.getElementById('documentIds').value = JSON.stringify(docIds);
     document.getElementById('emailModal').style.display = 'flex';
+    getFormsEmailPicker();
 }
 
 function closeEmailModal() {
     document.getElementById('emailModal').style.display = 'none';
     document.getElementById('emailForm').reset();
-    document.getElementById('clientSelector').style.display = 'none';
-    document.getElementById('clientsSelector').style.display = 'none';
-    document.getElementById('orgSelector').style.display = 'none';
-    document.getElementById('clientTypeBtn').style.background = '#fff';
-    document.getElementById('clientsTypeBtn').style.background = '#fff';
-    document.getElementById('orgTypeBtn').style.background = '#fff';
-}
-
-function selectRecipientType(type) {
-    if (type === 'organization') {
-        if (!confirm('This will email the documents to ALL clients in the selected organization. Do you want to continue?')) {
-            return;
-        }
-    }
-
-    document.getElementById('recipientType').value = type;
-
-    // Reset all buttons
-    document.getElementById('clientTypeBtn').style.background = '#fff';
-    document.getElementById('clientTypeBtn').style.color = 'inherit';
-    document.getElementById('clientsTypeBtn').style.background = '#fff';
-    document.getElementById('clientsTypeBtn').style.color = 'inherit';
-    document.getElementById('orgTypeBtn').style.background = '#fff';
-    document.getElementById('orgTypeBtn').style.color = 'inherit';
-
-    // Hide all selectors
-    document.getElementById('clientSelector').style.display = 'none';
-    document.getElementById('clientsSelector').style.display = 'none';
-    document.getElementById('orgSelector').style.display = 'none';
-
-    // Reset required attributes
-    document.getElementById('clientSelect').required = false;
-    document.getElementById('orgSelect').required = false;
-
-    if (type === 'client') {
-        document.getElementById('clientSelector').style.display = 'block';
-        document.getElementById('clientSelect').required = true;
-        document.getElementById('clientTypeBtn').style.background = 'var(--nav-accent)';
-        document.getElementById('clientTypeBtn').style.color = '#fff';
-    } else if (type === 'clients') {
-        document.getElementById('clientsSelector').style.display = 'block';
-        document.getElementById('clientsTypeBtn').style.background = 'var(--nav-accent)';
-        document.getElementById('clientsTypeBtn').style.color = '#fff';
-    } else if (type === 'organization') {
-        document.getElementById('orgSelector').style.display = 'block';
-        document.getElementById('orgSelect').required = true;
-        document.getElementById('orgTypeBtn').style.background = 'var(--nav-accent)';
-        document.getElementById('orgTypeBtn').style.color = '#fff';
-    }
+    getFormsEmailPicker()?.reset();
 }
 
 document.getElementById('emailForm').addEventListener('submit', async function (e) {
@@ -171,27 +133,8 @@ document.getElementById('emailForm').addEventListener('submit', async function (
     const msg = document.getElementById('emailMessage');
     const formData = new FormData(this);
 
-    const recipientType = document.getElementById('recipientType').value;
-    if (!recipientType) {
-        msg.style.display = 'block';
-        msg.style.background = '#fee2e2';
-        msg.style.border = '1px solid #fca5a5';
-        msg.style.color = '#991b1b';
-        msg.textContent = 'Please select a recipient type';
+    if (!getFormsEmailPicker()?.validate(msg)) {
         return;
-    }
-
-    // Validate multiple clients selection
-    if (recipientType === 'clients') {
-        const checkedClients = document.querySelectorAll('input[name="client_ids[]"]:checked');
-        if (checkedClients.length === 0) {
-            msg.style.display = 'block';
-            msg.style.background = '#fee2e2';
-            msg.style.border = '1px solid #fca5a5';
-            msg.style.color = '#991b1b';
-            msg.textContent = 'Please select at least one client';
-            return;
-        }
     }
 
     btn.disabled = true;

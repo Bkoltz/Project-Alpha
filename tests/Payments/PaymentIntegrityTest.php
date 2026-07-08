@@ -96,7 +96,10 @@ final class PaymentIntegrityTest extends TestCase
         self::assertSame('paid', $result['status']);
         self::assertEqualsWithDelta(100.00, $result['amount_paid'], 0.005);
         self::assertEqualsWithDelta(0.00, $result['balance_due'], 0.005);
-        self::assertSame(1, $this->publicLinkRevoked($publicLinkId), 'Paid invoices should revoke public invoice links.');
+        $publicLink = $this->publicLinkState($publicLinkId);
+        self::assertSame(1, (int)$publicLink['revoked'], 'Paid invoices should leave the public link in a redirected terminal state.');
+        self::assertStringContainsString('reason=paid', (string)$publicLink['redirect']);
+        self::assertNotEmpty($publicLink['expires_at']);
 
         $status = $this->pdo->prepare('SELECT status FROM contracts WHERE id = ?');
         $status->execute([$contractId]);
@@ -168,6 +171,13 @@ final class PaymentIntegrityTest extends TestCase
         $stmt = $this->pdo->prepare('SELECT revoked FROM public_links WHERE id = ?');
         $stmt->execute([$publicLinkId]);
         return (int)$stmt->fetchColumn();
+    }
+
+    private function publicLinkState(int $publicLinkId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT revoked, redirect, expires_at FROM public_links WHERE id = ?');
+        $stmt->execute([$publicLinkId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     }
 
     private function remember(string $bucket, int $id): int

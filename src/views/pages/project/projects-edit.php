@@ -4,6 +4,8 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../../utils/public_project_links.php';
+require_once __DIR__ . '/../../../config/app.php';
 
 $projectId = (int)($_GET['id'] ?? 0);
 if ($projectId <= 0) {
@@ -11,6 +13,7 @@ if ($projectId <= 0) {
     exit;
 }
 require_record_ownership($pdo, 'projects', $projectId);
+pa_project_public_link_ensure_schema($pdo);
 
 $stmt = $pdo->prepare('
     SELECT p.*, c.name AS client_name, o.name AS organization_name, od.name AS department_name
@@ -150,6 +153,8 @@ foreach ($projectClients as $client) {
 }
 
 $autoEmailEnabled = !array_key_exists('project_invoice_auto_email', $project) || !empty($project['project_invoice_auto_email']);
+$publicProjectUrl = pa_project_public_url($appConfig ?? [], (string)($project['public_project_token'] ?? ''));
+$publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?? '')) !== '';
 ?>
 
 <style>
@@ -175,6 +180,7 @@ $autoEmailEnabled = !array_key_exists('project_invoice_auto_email', $project) ||
       <a href="#project-contacts">Contacts</a>
       <a href="#project-billing">Invoice Defaults</a>
       <a href="#project-schedule">Schedule &amp; Notes</a>
+      <a href="#project-public-link">Public Link</a>
     </nav>
 
     <form method="post" action="/?page=project/projects-update" class="project-edit-form">
@@ -292,6 +298,59 @@ $autoEmailEnabled = !array_key_exists('project_invoice_auto_email', $project) ||
           <span>Notes</span>
           <textarea name="notes" rows="5"><?php echo htmlspecialchars((string)($project['notes'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></textarea>
         </label>
+      </section>
+
+      <section id="project-public-link" class="project-edit-section">
+        <h2>Public Project Link</h2>
+        <p>Share a long-term project portal link with optional access-code protection and link-specific permissions.</p>
+        <label class="project-check">
+          <input type="checkbox" name="public_project_enabled" value="1" <?php echo !empty($project['public_project_enabled']) ? 'checked' : ''; ?>>
+          <span>
+            <strong>Enable public project link</strong>
+            <small style="display:block;color:var(--muted)">The link stays active until you turn it off here.</small>
+          </span>
+        </label>
+        <?php if ($publicProjectUrl !== ''): ?>
+          <label class="project-field">
+            <span>Project portal URL</span>
+            <input readonly value="<?php echo htmlspecialchars($publicProjectUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" onclick="this.select()">
+            <small>Copy this URL for the client. Turning the link off blocks access without deleting the token.</small>
+          </label>
+        <?php else: ?>
+          <div class="project-info-box">A share URL will be generated after you save with the public link enabled.</div>
+        <?php endif; ?>
+        <div class="project-edit-grid">
+          <label class="project-check">
+            <input type="checkbox" name="public_project_require_password" value="1" <?php echo !empty($project['public_project_require_password']) ? 'checked' : ''; ?>>
+            <span>
+              <strong>Require an access code</strong>
+              <small style="display:block;color:var(--muted)">Use a simple shared code like Football2026 when the link needs a light gate.</small>
+            </span>
+          </label>
+          <label class="project-field">
+            <span>Access code</span>
+            <input type="text" name="public_project_password" autocomplete="new-password" placeholder="<?php echo $publicProjectHasCode ? 'Leave blank to keep current code' : 'Set a code before requiring one'; ?>">
+            <small><?php echo $publicProjectHasCode ? 'A code is already saved. Enter a new one only if you want to replace it.' : 'Codes are stored as a password hash.'; ?></small>
+          </label>
+        </div>
+        <div class="project-edit-grid">
+          <label class="project-check">
+            <input type="checkbox" name="public_project_can_view_documents" value="1" <?php echo !array_key_exists('public_project_can_view_documents', $project) || !empty($project['public_project_can_view_documents']) ? 'checked' : ''; ?>>
+            <span><strong>View project docs and files</strong><small style="display:block;color:var(--muted)">Shows linked quotes, contracts, and project files.</small></span>
+          </label>
+          <label class="project-check">
+            <input type="checkbox" name="public_project_can_view_invoices" value="1" <?php echo !array_key_exists('public_project_can_view_invoices', $project) || !empty($project['public_project_can_view_invoices']) ? 'checked' : ''; ?>>
+            <span><strong>View project invoices</strong><small style="display:block;color:var(--muted)">Shows project invoices and regular invoices tied to this project.</small></span>
+          </label>
+          <label class="project-check">
+            <input type="checkbox" name="public_project_can_upload" value="1" <?php echo !empty($project['public_project_can_upload']) ? 'checked' : ''; ?>>
+            <span><strong>Allow uploads</strong><small style="display:block;color:var(--muted)">Uploaded files are saved to this project's file area.</small></span>
+          </label>
+          <label class="project-check">
+            <input type="checkbox" name="public_project_can_request_changes" value="1" <?php echo !empty($project['public_project_can_request_changes']) ? 'checked' : ''; ?>>
+            <span><strong>Allow update requests</strong><small style="display:block;color:var(--muted)">Lets the link visitor send notes or requested changes without editing records directly.</small></span>
+          </label>
+        </div>
       </section>
 
       <div class="project-edit-actions">

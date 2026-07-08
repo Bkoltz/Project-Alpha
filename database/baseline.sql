@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     country VARCHAR(100) NULL,
     tax_exempt_file VARCHAR(255) NULL,
     tax_exempt_uploaded_at TIMESTAMP NULL,
-    link_strategy ENUM('department_links_only','overall_folder','shared_folder') NOT NULL DEFAULT 'department_links_only',
+    link_strategy ENUM('department_links_only','overall_folder','shared_folder') NOT NULL DEFAULT 'overall_folder',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_organizations_name (name)
@@ -412,6 +412,14 @@ CREATE TABLE IF NOT EXISTS projects (
     invoice_billing_period ENUM('per_invoice','monthly') NOT NULL DEFAULT 'monthly',
     invoice_net_terms_days INT NULL,
     project_invoice_auto_email TINYINT(1) NOT NULL DEFAULT 1,
+    public_project_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    public_project_token VARCHAR(64) NULL,
+    public_project_require_password TINYINT(1) NOT NULL DEFAULT 0,
+    public_project_password_hash VARCHAR(255) NULL,
+    public_project_can_view_documents TINYINT(1) NOT NULL DEFAULT 1,
+    public_project_can_view_invoices TINYINT(1) NOT NULL DEFAULT 1,
+    public_project_can_upload TINYINT(1) NOT NULL DEFAULT 0,
+    public_project_can_request_changes TINYINT(1) NOT NULL DEFAULT 0,
     start_date DATE NULL,
     end_date DATE NULL,
     estimated_start DATE NULL,
@@ -425,6 +433,7 @@ CREATE TABLE IF NOT EXISTS projects (
     INDEX idx_projects_department (department_id),
     INDEX idx_projects_status (status),
     INDEX idx_projects_parent (parent_id),
+    UNIQUE KEY uq_projects_public_project_token (public_project_token),
     CONSTRAINT fk_projects_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_projects_parent FOREIGN KEY (parent_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_projects_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
@@ -546,6 +555,20 @@ CREATE TABLE IF NOT EXISTS project_files (
     CONSTRAINT fk_project_files_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     CONSTRAINT fk_project_files_folder FOREIGN KEY (folder_id) REFERENCES project_file_folders(id) ON DELETE CASCADE,
     CONSTRAINT fk_project_files_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_public_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    event_type VARCHAR(40) NOT NULL,
+    message TEXT NULL,
+    file_id INT NULL,
+    client_label VARCHAR(190) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_project_public_events_project (project_id),
+    INDEX idx_project_public_events_type (event_type),
+    CONSTRAINT fk_project_public_events_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_public_events_file FOREIGN KEY (file_id) REFERENCES project_files(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PROJECT CLIENTS

@@ -224,6 +224,11 @@ function recalcCo() {
     var qtys = Array.from(document.querySelectorAll('[name=\"item_qty[]\"]')).map(e => parseFloat(e.value) || 0);
     var prices = Array.from(document.querySelectorAll('[name=\"item_price[]\"]')).map(e => parseFloat(e.value) || 0);
     var subtotal = 0; for (var i = 0; i < qtys.length; i++) { subtotal += qtys[i] * prices[i]; }
+    var pricingType = document.querySelector('[name="pricing_type"]:checked');
+    var pricePerInvoice = document.getElementById('pricePerInvoiceEditCo');
+    if (pricingType && pricingType.value === 'per_invoice' && pricePerInvoice) {
+        subtotal = parseFloat(pricePerInvoice.value) || 0;
+    }
     var dtype = document.getElementById('discountTypeCo').value;
     var dval = parseFloat(document.getElementById('discountValueCo').value) || 0;
     var taxp = parseFloat(document.getElementById('taxPercentCo').value) || 0;
@@ -237,6 +242,40 @@ function recalcCo() {
     document.getElementById('totalValCo').textContent = money(total);
 }
 
+function initLongTermEditFieldsCo() {
+    var longTermFields = document.getElementById('longTermEditFields');
+    if (!longTermFields) return;
+    var endDateType = document.getElementById('editEndDateTypeCo');
+    var endDateField = document.getElementById('editEndDateFieldCo');
+    var perInvoiceField = document.getElementById('perInvoiceEditFieldCo');
+    var fixedTotalField = document.getElementById('fixedTotalEditFieldCo');
+
+    function updateEndDate() {
+        if (!endDateType || !endDateField) return;
+        endDateField.style.display = endDateType.value === 'fixed' ? '' : 'none';
+    }
+
+    function updatePricing() {
+        var selected = document.querySelector('[name="pricing_type"]:checked');
+        var isPerInvoice = !selected || selected.value === 'per_invoice';
+        if (perInvoiceField) perInvoiceField.style.display = isPerInvoice ? '' : 'none';
+        if (fixedTotalField) fixedTotalField.style.display = isPerInvoice ? 'none' : '';
+        recalcCo();
+    }
+
+    if (endDateType) endDateType.addEventListener('change', updateEndDate);
+    document.querySelectorAll('[name="pricing_type"]').forEach(function (input) {
+        input.addEventListener('change', updatePricing);
+    });
+    ['pricePerInvoiceEditCo', 'billingIntervalCountEditCo', 'billingIntervalUnitEditCo'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', recalcCo);
+        if (el) el.addEventListener('change', recalcCo);
+    });
+    updateEndDate();
+    updatePricing();
+}
+
 var addItemBtn = document.getElementById("addItemBtn");
 if (addItemBtn) addItemBtn.addEventListener('click', function(e) {addItemCo();});
 
@@ -245,6 +284,5 @@ if (addItemBtn) addItemBtn.addEventListener('click', function(e) {addItemCo();})
     if (el) el.addEventListener('input', recalcCo);
 });
 
-['discountTypeCo', 'discountValueCo', 'taxPercentCo'].forEach(id => document.getElementById(id).addEventListener('input', recalcCo));
-
 initContractEditClientSearch();
+initLongTermEditFieldsCo();

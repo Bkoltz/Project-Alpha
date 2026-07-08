@@ -244,7 +244,7 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'payment-receipt', 'client-onboarding', 'client-onboarding-send-code', 'client-onboarding-verify', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -815,6 +815,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   public-quote-action          - controller validates CSRF (csrf_sf_is_valid 'public_quote_action')
     //   public-contract-sign         - controller validates CSRF (csrf_sf_is_valid 'public_contract_sign')
     //   public-contract-action       - controller validates CSRF (csrf_sf_is_valid 'public_contract_action')
+    //   public-project-upload        - controller validates CSRF and public project ACLs
     //   organization/org-create      - controller validates CSRF (legacy session hash_equals)
     //   organization/organization-update-notes - controller validates CSRF (csrf_validate)
     //   stripe-webhook               - tokenless: Stripe webhook uses signature verification (HMAC + replay protection)
@@ -822,7 +823,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   settings/link-resolver-run    - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -919,6 +920,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/public_view/public_contract_sign.php';
         exit;
     }
+    if ($page === 'public-project-upload') {
+        require_once __DIR__ . '/../src/controllers/public_view/public_project_upload.php';
+        exit;
+    }
     if ($page === 'api-keys-create') {
         require_once __DIR__ . '/../src/controllers/api_keys_create.php';
         exit;
@@ -941,14 +946,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'client/onboarding-review') {
         require_once __DIR__ . '/../src/controllers/client/client_onboarding_review.php';
-        exit;
-    }
-    if ($page === 'client-onboarding-send-code') {
-        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_send_code.php';
-        exit;
-    }
-    if ($page === 'client-onboarding-verify') {
-        require_once __DIR__ . '/../src/controllers/public_view/client_onboarding_verify.php';
         exit;
     }
     if ($page === 'client-onboarding-submit') {
@@ -1387,6 +1384,14 @@ if ($page === 'client-onboarding') {
 if ($page === 'public-redirect') {
     require_once __DIR__ . '/../src/views/partials/auth_header.php';
     require_once __DIR__ . '/../src/controllers/public_view/public_redirect.php';
+    exit;
+}
+if ($page === 'public-project') {
+    require_once __DIR__ . '/../src/controllers/public_view/public_project.php';
+    exit;
+}
+if ($page === 'public-project-file') {
+    require_once __DIR__ . '/../src/controllers/public_view/public_project_file.php';
     exit;
 }
 if ($page === 'legal/tos-accept') {

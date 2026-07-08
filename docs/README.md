@@ -6,7 +6,8 @@ This directory contains current operating guides and historical engineering reco
 
 | Document | Audience | Purpose |
 |---|---|---|
-| [Project README](../README.md) | Everyone | Product overview, quick start, architecture, and project status |
+| [Project README](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/README.md) | Everyone | Product overview, quick start, architecture, and project status |
+| [GitHub Pages Setup](GITHUB_PAGES_SETUP.md) | Maintainers | Publishing source, custom domain, Cloudflare DNS, and HTTPS checklist |
 | [Document Workflow](DOCUMENT_WORKFLOW.md) | Operators and contributors | Quote, contract, invoice, payment, and public-link behavior |
 | [TrueNAS Scale Deployment](truenas-scale-deployment.md) | Operators | Production and staging deployment guidance |
 | [Stripe Webhook Setup](stripe-webhook-setup.md) | Operators | Stripe events, endpoint configuration, and verification |
@@ -25,10 +26,10 @@ This directory contains current operating guides and historical engineering reco
 - [Security Checklist](SECURITY_CHECKLIST.md)
 - [AutoPay Beta Foundation](AUTOPAY_BETA.md)
 - [Deferred Client Onboarding Portal](CLIENT_ONBOARDING_PORTAL_PLAN.md)
-- [Database Migrations](../database/migrations/README.md)
-- [Cron Service](../cron/README.md)
-- [Twig Templates](../src/views/templates/README.md)
-- [Document Filter Component](../src/views/components/FILTER_COMPONENT_README.md)
+- [Database Migrations](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/database/migrations/README.md)
+- [Cron Service](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/cron/README.md)
+- [Twig Templates](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/src/views/templates/README.md)
+- [Document Filter Component](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/src/views/components/FILTER_COMPONENT_README.md)
 
 ## Historical Records
 

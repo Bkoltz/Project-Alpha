@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
+require_once __DIR__ . '/../../../utils/public_links.php';
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'quotes', $id);
 }
@@ -142,6 +143,16 @@ $isOngoing = empty($quote['end_date']);
   <?php if (!empty($_GET['date_updated'])): ?>
     <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#dbeafe;color:#1e3a8a;border:1px solid #93c5fd">Document date updated successfully.</div>
   <?php endif; ?>
+  <div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:8px;font-size:13px;color:#374151">
+    <strong>Created:</strong> <?php echo !empty($quote['created_at']) ? date('M j, Y g:i A', strtotime($quote['created_at'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <strong>Document Date:</strong> <?php echo !empty($quote['document_date']) ? date('M j, Y g:i A', strtotime($quote['document_date'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <?php echo pa_public_link_status_badge_html($pdo, 'quote', $id); ?>
+    <?php if (!empty($quote['document_date_updated_at'])): ?>
+      <span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated: <?php echo date('M j, Y g:i A', strtotime($quote['document_date_updated_at'])); ?>)</span>
+    <?php endif; ?>
+  </div>
   <?php endif; ?>
 
   <?php

@@ -8,7 +8,7 @@ SET @org_link_strategy_exists := (
 
 SET @org_link_strategy_sql := IF(
     @org_link_strategy_exists = 0,
-    'ALTER TABLE organizations ADD COLUMN link_strategy ENUM(''department_links_only'',''overall_folder'',''shared_folder'') NOT NULL DEFAULT ''department_links_only'' AFTER tax_exempt_uploaded_at',
+    'ALTER TABLE organizations ADD COLUMN link_strategy ENUM(''department_links_only'',''overall_folder'',''shared_folder'') NOT NULL DEFAULT ''overall_folder'' AFTER tax_exempt_uploaded_at',
     'SELECT 1'
 );
 

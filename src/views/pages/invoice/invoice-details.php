@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
 require_once __DIR__ . '/../../../utils/invoice_content_links.php';
 require_once __DIR__ . '/../../../utils/payment_methods.php';
+require_once __DIR__ . '/../../../utils/public_links.php';
 require_once __DIR__ . '/../../../services/StripeService.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
@@ -155,6 +156,8 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <strong>Created:</strong> <?php echo !empty($inv['created_at']) ? date('M j, Y g:i A', strtotime($inv['created_at'])) : 'N/A'; ?>
     <span style="margin:0 8px">|</span>
     <strong>Document Date:</strong> <?php echo !empty($inv['document_date']) ? date('M j, Y g:i A', strtotime($inv['document_date'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <?php echo pa_public_link_status_badge_html($pdo, 'invoice', $id); ?>
     <?php if (!empty($inv['document_date_updated_at'])): ?>
       <span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated: <?php echo date('M j, Y g:i A', strtotime($inv['document_date_updated_at'])); ?>)</span>
     <?php endif; ?>

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/contract_billing_start.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
 if ($contract_id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
@@ -89,6 +90,8 @@ try {
     $pdo->prepare('UPDATE contracts SET signed_pdf_path=? WHERE id=?')
         ->execute([$publicUrl, $contract_id]);
   }
+
+  pa_public_link_terminalize($pdo, 'contract', $contract_id, 'signed');
 
   $pdo->commit();
 } catch (Throwable $e) {

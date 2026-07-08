@@ -1,6 +1,7 @@
 <?php
 // src/utils/project_invoice_billing.php
 require_once __DIR__ . '/../services/EmailService.php';
+require_once __DIR__ . '/public_links.php';
 require_once __DIR__ . '/invoice_content_links.php';
 
 function project_invoice_table_has_column(PDO $pdo, string $table, string $column): bool
@@ -664,8 +665,7 @@ function project_invoice_record_stripe_payment(PDO $pdo, array $stripeObject): b
         $status->execute([$projectInvoiceId]);
         $statusValue = (string)$status->fetchColumn();
         if ($statusValue === 'paid') {
-            $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="project_invoice" AND document_id=? AND revoked=0')
-                ->execute([$projectInvoiceId]);
+            pa_public_link_terminalize($pdo, 'project_invoice', $projectInvoiceId, 'paid');
         }
         notify_admin_project_invoice_paid($pdo, $GLOBALS['appConfig'] ?? [], $projectInvoiceId, $amount, $statusValue === 'paid' ? 'paid' : 'partial');
     }

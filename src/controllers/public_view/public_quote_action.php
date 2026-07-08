@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/smtp.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
   header('Location: /?page=public-doc&error=' . urlencode('Invalid request'));
@@ -181,6 +182,8 @@ try {
       // Ignore notification failures but keep normal flow
     }
   }
+
+  pa_public_link_terminalize($pdo, 'quote', $qid, $action === 'approve' ? 'approved' : 'denied');
 
   // Redirect back to public view with success notice always (even if no change due to non-pending)
   header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&ok=1');

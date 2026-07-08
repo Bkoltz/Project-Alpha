@@ -207,6 +207,7 @@ function page_permission_map(): array
         'organization/organization-remove-client'  => 'organizations.manage',
         'organization/organization-update-notes'   => 'organizations.manage',
         'organization/organizations_upload'        => 'organizations.manage',
+        'organization/organization-departments-options' => 'organizations.view',
         'organization/org-create'                => 'organizations.manage',
         'organization/org-search'                => 'organizations.view',
         'organizations-create'                   => 'organizations.manage',
@@ -250,6 +251,9 @@ function page_permission_map(): array
         // Public links
         'public-link-create'  => 'public_links.create',
         'public-link-revoke'  => 'public_links.revoke',
+        'public-project'      => null,
+        'public-project-upload' => null,
+        'public-project-file' => null,
 
         // Legal / misc
         'legal/tos-accept' => null,
@@ -275,7 +279,7 @@ function page_permission_map(): array
 
 function acl_middleware(PDO $pdo, string $page): void
 {
-    $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'payment-receipt', 'client-onboarding', 'client-onboarding-send-code', 'client-onboarding-verify', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+    $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
     if (in_array($page, $publicPages, true)) return;
 
     $userId = (int)($_SESSION['user']['id'] ?? 0);

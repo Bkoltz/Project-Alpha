@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
+require_once __DIR__ . '/../../../utils/public_links.php';
 
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
@@ -166,6 +167,8 @@ if ($termsText === '') {
       <strong>Created:</strong> <?php echo !empty($contract['created_at']) ? date('M j, Y g:i A', strtotime($contract['created_at'])) : 'N/A'; ?>
       <span style="margin:0 8px">|</span>
       <strong>Document Date:</strong> <?php echo !empty($contract['document_date']) ? date('M j, Y g:i A', strtotime($contract['document_date'])) : 'N/A'; ?>
+      <span style="margin:0 8px">|</span>
+      <?php echo pa_public_link_status_badge_html($pdo, 'contract', $id); ?>
       <?php if (!empty($contract['document_date_updated_at'])): ?>
         <span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated: <?php echo date('M j, Y g:i A', strtotime($contract['document_date_updated_at'])); ?>)</span>
       <?php endif; ?>

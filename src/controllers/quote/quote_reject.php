@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 // CSRF verification
 require_once __DIR__ . '/../../utils/csrf.php';
@@ -44,6 +45,7 @@ try {
     header('Location: /?page=' . $redirectPage . '&error=Cannot%20reject%20this%20quote');
     exit;
   }
+  pa_public_link_terminalize($pdo, 'quote', $id, 'denied');
 } catch (Throwable $e) {
   header('Location: /?page=' . $redirectPage . '&error=Failed%20to%20reject');
   exit;

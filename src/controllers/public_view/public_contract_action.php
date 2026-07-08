@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/contract_billing_start.php';
 require_once __DIR__ . '/../../utils/upload_validator.php';
+require_once __DIR__ . '/../../utils/public_links.php';
 
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_contract_action', $submitted)) {
@@ -97,8 +98,7 @@ try {
       }
       throw new RuntimeException('Contract cannot be uploaded for current status');
     }
-    $pdo->prepare('UPDATE public_links SET revoked=1 WHERE token=? AND document_type="contract" AND document_id=? AND revoked=0')
-        ->execute([$token, $cid]);
+    pa_public_link_terminalize($pdo, 'contract', $cid, 'signed');
     $pdo->commit();
   } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();

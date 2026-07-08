@@ -40,6 +40,8 @@ unset($_SESSION['client_onboarding_link']);
 
   <?php if (!empty($_GET['error'])): ?><div class="alert alert-danger"><?php echo htmlspecialchars((string)$_GET['error']); ?></div><?php endif; ?>
   <?php if (!empty($_GET['email_error'])): ?><div class="alert alert-danger">The link was created, but the invitation email could not be sent.</div><?php endif; ?>
+  <?php if (!empty($_GET['revoked'])): ?><div class="alert alert-success">Onboarding invitation revoked.</div><?php endif; ?>
+  <?php if (!empty($_GET['regenerated'])): ?><div class="alert alert-success">Onboarding link regenerated. Copy it below.</div><?php endif; ?>
   <?php if ($generatedLink !== ''): ?>
     <div style="padding:14px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:20px">
       <label class="label-muted" for="generatedOnboardingLink">New onboarding link</label>
@@ -73,6 +75,26 @@ unset($_SESSION['client_onboarding_link']);
       flex-wrap: wrap;
       padding-top: 2px;
     }
+    .onboarding-link-tools {
+      display: grid;
+      gap: 8px;
+      min-width: min(100%, 340px);
+    }
+    .onboarding-link-row {
+      display: grid;
+      grid-template-columns: minmax(170px, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .onboarding-link-row .input {
+      min-width: 0;
+      font-size: 12px;
+    }
+    .onboarding-row-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
     @media (max-width: 900px) {
       .onboarding-invite-grid { grid-template-columns: 1fr 1fr; }
     }
@@ -80,6 +102,7 @@ unset($_SESSION['client_onboarding_link']);
       .onboarding-invite-grid { grid-template-columns: 1fr; }
       .onboarding-invite-actions { justify-content: stretch; }
       .onboarding-invite-actions .btn { flex: 1; }
+      .onboarding-link-row { grid-template-columns: 1fr; }
     }
   </style>
 
@@ -120,24 +143,31 @@ unset($_SESSION['client_onboarding_link']);
               <details><summary><?php echo htmlspecialchars((string)($proposal['name'] ?? 'Review')); ?></summary><div style="font-size:13px;line-height:1.55;margin-top:8px"><?php foreach ($proposal as $label => $value): ?><?php if ($value !== ''): ?><div><strong><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $label))); ?>:</strong> <?php echo htmlspecialchars((string)$value); ?></div><?php endif; ?><?php endforeach; ?></div></details>
             <?php else: ?><span class="muted">Not submitted</span><?php endif; ?>
           </td>
-          <td style="min-width:220px">
+          <td style="min-width:260px">
             <?php if (($invitation['submission_status'] ?? '') === 'pending'): ?>
               <form method="post" action="/?page=client/onboarding-review" style="display:flex;gap:6px;flex-wrap:wrap">
                 <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="submission_id" value="<?php echo (int)$invitation['submission_id']; ?>">
                 <button class="btn btn-sm btn-primary" name="decision" value="approve">Approve</button><button class="btn btn-sm btn-danger" name="decision" value="reject">Reject</button>
               </form>
-            <?php elseif (in_array((string)$invitation['status'], ['pending','verified'], true)): ?>
+            <?php elseif (in_array((string)$invitation['status'], ['pending','verified','expired'], true)): ?>
               <?php $storedLink = client_onboarding_link_for_invitation($appConfig, $invitation); ?>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <div class="onboarding-link-tools">
                 <?php if ($storedLink !== ''): ?>
-                  <input id="onboardingLink<?php echo (int)$invitation['id']; ?>" class="input" readonly value="<?php echo htmlspecialchars($storedLink); ?>" style="position:absolute;left:-9999px;width:1px;height:1px">
-                  <button type="button" class="btn btn-sm" data-copy-onboarding-link="onboardingLink<?php echo (int)$invitation['id']; ?>">Copy Link</button>
+                  <div class="onboarding-link-row">
+                    <input id="onboardingLink<?php echo (int)$invitation['id']; ?>" class="input" readonly value="<?php echo htmlspecialchars($storedLink); ?>">
+                    <button type="button" class="btn btn-sm" data-copy-onboarding-link="onboardingLink<?php echo (int)$invitation['id']; ?>">Copy</button>
+                  </div>
                 <?php else: ?>
-                  <span class="muted" style="font-size:12px">Original link not recoverable</span>
+                  <span class="muted" style="font-size:12px">This older link cannot be recovered. Regenerate it to get a copyable link.</span>
                 <?php endif; ?>
-                <form method="post" action="/?page=client/onboarding-invite" onsubmit="return confirm('Revoke this invitation?')" style="display:inline">
-                  <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="<?php echo (int)$invitation['id']; ?>"><button class="btn btn-sm btn-danger">Revoke</button>
-                </form>
+                <div class="onboarding-row-actions">
+                  <form method="post" action="/?page=client/onboarding-invite" style="display:inline">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="regenerate_link"><input type="hidden" name="id" value="<?php echo (int)$invitation['id']; ?>"><button class="btn btn-sm">Regenerate Link</button>
+                  </form>
+                  <form method="post" action="/?page=client/onboarding-invite" onsubmit="return confirm('Revoke this invitation?')" style="display:inline">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="<?php echo (int)$invitation['id']; ?>"><button class="btn btn-sm btn-danger">Revoke</button>
+                  </form>
+                </div>
               </div>
             <?php else: ?><span class="muted">Complete</span><?php endif; ?>
           </td>

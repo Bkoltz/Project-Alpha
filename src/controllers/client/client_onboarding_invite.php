@@ -39,6 +39,42 @@ if ($action === 'revoke') {
     exit;
 }
 
+if ($action === 'regenerate_link') {
+    $id = (int)($_POST['id'] ?? 0);
+    $token = bin2hex(random_bytes(32));
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+14 days'));
+
+    if ($ownerOrganizationId !== null) {
+        $stmt = $pdo->prepare('
+            UPDATE client_onboarding_invitations
+            SET token_hash=?, token_enc=?, status="pending", expires_at=?, consumed_at=NULL,
+                verification_code_hash=NULL, code_expires_at=NULL, verification_attempts=0, email_verified_at=NULL
+            WHERE id=? AND (organization_id=? OR (organization_id IS NULL AND created_by=?)) AND status IN ("pending","verified","expired")
+        ');
+        $stmt->execute([hash('sha256', $token), client_onboarding_store_token($token), $expiresAt, $id, $ownerOrganizationId, $userId]);
+    } else {
+        $stmt = $pdo->prepare('
+            UPDATE client_onboarding_invitations
+            SET token_hash=?, token_enc=?, status="pending", expires_at=?, consumed_at=NULL,
+                verification_code_hash=NULL, code_expires_at=NULL, verification_attempts=0, email_verified_at=NULL
+            WHERE id=? AND organization_id IS NULL AND created_by=? AND status IN ("pending","verified","expired")
+        ');
+        $stmt->execute([hash('sha256', $token), client_onboarding_store_token($token), $expiresAt, $id, $userId]);
+    }
+
+    if ($stmt->rowCount() <= 0) {
+        header('Location: /?page=client/onboarding&error=' . urlencode('That onboarding invitation cannot be regenerated. Create a new link instead.'));
+        exit;
+    }
+
+    $_SESSION['client_onboarding_link'] = client_onboarding_base_url($appConfig) . '/?page=client-onboarding&token=' . rawurlencode($token);
+    audit_log($pdo, 'client_onboarding.regenerate_link', 'client_onboarding_invitation', $id, [
+        'organization_id' => $ownerOrganizationId,
+    ]);
+    header('Location: /?page=client/onboarding&regenerated=1');
+    exit;
+}
+
 $email = strtolower(trim((string)($_POST['email'] ?? '')));
 $clientId = max(0, (int)($_POST['client_id'] ?? 0));
 $targetOrganizationId = max(0, (int)($_POST['target_organization_id'] ?? 0));

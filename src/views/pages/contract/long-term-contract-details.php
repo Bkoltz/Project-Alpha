@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 $id = (int)($_GET['id'] ?? 0);
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
+require_once __DIR__ . '/../../../utils/public_links.php';
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'contracts', $id);
 }
@@ -97,7 +98,7 @@ $isOngoing = empty($contract['end_date']);
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=contract/long-term-contract-pdf&id=<?php echo (int)$id; ?>" download="longterm-contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
     <?php $contractStatus = strtolower((string)($contract['status'] ?? '')); ?>
-    <?php if (($contract['status'] ?? '') === 'pending'): ?>
+    <?php if (in_array($contractStatus, ['pending', 'active', 'paused'], true)): ?>
       <a href="/?page=contract/contracts-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
     <?php if (!in_array($contractStatus, ['denied','cancelled','void'], true)): ?>
@@ -170,6 +171,16 @@ $isOngoing = empty($contract['end_date']);
   <?php if (!empty($_GET['date_updated'])): ?>
     <div class="no-print" style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#dbeafe;color:#1e3a8a;border:1px solid #93c5fd">Document date updated successfully.</div>
   <?php endif; ?>
+  <div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:8px;font-size:13px;color:#374151">
+    <strong>Created:</strong> <?php echo !empty($contract['created_at']) ? date('M j, Y g:i A', strtotime($contract['created_at'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <strong>Document Date:</strong> <?php echo !empty($contract['document_date']) ? date('M j, Y g:i A', strtotime($contract['document_date'])) : 'N/A'; ?>
+    <span style="margin:0 8px">|</span>
+    <?php echo pa_public_link_status_badge_html($pdo, 'contract', $id); ?>
+    <?php if (!empty($contract['document_date_updated_at'])): ?>
+      <span style="margin-left:8px;color:#6b7280;font-size:12px">(Updated: <?php echo date('M j, Y g:i A', strtotime($contract['document_date_updated_at'])); ?>)</span>
+    <?php endif; ?>
+  </div>
   <?php endif; ?>
 
   <?php

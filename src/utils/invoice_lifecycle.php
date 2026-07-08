@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/../services/StripeService.php';
+require_once __DIR__ . '/public_links.php';
 
 function invoice_is_collectible_status(string $status): bool
 {
@@ -181,12 +182,7 @@ function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePa
         ->execute([$status, $storedPaid, $balanceDue, $invoiceId]);
 
     if ($revokePaidPublicLinks && !in_array($status, ['unpaid', 'partial'], true)) {
-        $redirect = '/?page=public-redirect&type=invoice&reason=' . rawurlencode($status);
-        $pdo->prepare('
-            UPDATE public_links
-            SET revoked = 1, redirect = ?
-            WHERE document_type = "invoice" AND document_id = ? AND revoked = 0
-        ')->execute([$redirect, $invoiceId]);
+        pa_public_link_terminalize($pdo, 'invoice', $invoiceId, $status);
     }
 
     return [
