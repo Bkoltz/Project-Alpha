@@ -30,7 +30,7 @@ $csrf = csrf_token();
       <p class="muted" style="margin:4px 0 0">Manage expense categories and IRS Schedule C defaults</p>
     </div>
     <div class="flex">
-      <a href="/?page=financial/vendor-form" class="btn btn-primary">+ Add Category</a>
+      <button type="button" class="btn btn-primary" onclick="createCategory()">+ Add Category</button>
     </div>
   </div>
 
@@ -118,7 +118,7 @@ $csrf = csrf_token();
   <form method="post" action="/?page=financial/category-handler">
     <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('category')); ?>">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
-    <input type="hidden" name="action" value="update">
+    <input type="hidden" name="action" id="categoryAction" value="update">
     <input type="hidden" name="id" id="categoryId">
 
     <div class="field">
@@ -167,17 +167,40 @@ $csrf = csrf_token();
     backdrop.style.display = 'block';
   }
 
+  function resetParentOptions() {
+    var parent = document.getElementById('cat-parent');
+    parent.disabled = false;
+    for (var i = 0; i < parent.options.length; i++) {
+      parent.options[i].disabled = false;
+    }
+  }
+
   window.closeModal = function() {
     modal.style.display = 'none';
     backdrop.style.display = 'none';
   };
 
+  window.createCategory = function() {
+    document.getElementById('categoryAction').value = 'create';
+    document.getElementById('categoryId').value = '';
+    document.getElementById('cat-name').value = '';
+    document.getElementById('cat-parent').value = '';
+    document.getElementById('cat-tax').checked = true;
+    document.getElementById('cat-color').value = '#3b82f6';
+    document.getElementById('taxDeductibleField').style.display = 'block';
+    document.getElementById('modalTitle').textContent = 'Add Category';
+    resetParentOptions();
+    openModal();
+  };
+
   window.editCategory = function(category) {
+    document.getElementById('categoryAction').value = 'update';
     document.getElementById('categoryId').value = category.id;
     document.getElementById('cat-name').value = category.name || '';
     document.getElementById('cat-parent').value = category.parent_id || '';
     document.getElementById('cat-tax').checked = parseInt(category.tax_deductible, 10) === 1;
     document.getElementById('cat-color').value = category.color || '#3b82f6';
+    resetParentOptions();
 
     var taxField = document.getElementById('taxDeductibleField');
     if (parseInt(category.is_system, 10) === 1) {

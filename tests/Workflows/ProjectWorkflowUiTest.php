@@ -157,6 +157,7 @@ final class ProjectWorkflowUiTest extends TestCase
             self::assertStringContainsString('pa_time_tracking_ensure_schema($pdo)', (string)$controller);
             self::assertStringContainsString('Failed to save time entry', (string)$controller);
         }
+        self::assertStringContainsString('invoice_item_id=NULL', (string)$updateController);
         self::assertStringContainsString('function pa_time_tracking_ensure_schema', (string)$schema);
         self::assertStringContainsString('service_item_id', (string)$migration);
         self::assertStringContainsString('project_code', (string)$migration);
@@ -180,13 +181,22 @@ final class ProjectWorkflowUiTest extends TestCase
     {
         $view = file_get_contents($this->root . '/src/views/pages/invoice/invoices-create.php');
         $controller = file_get_contents($this->root . '/src/controllers/invoice/invoices_create.php');
+        $updateController = file_get_contents($this->root . '/src/controllers/invoice/invoices_update.php');
+        $unbilledTime = file_get_contents($this->root . '/src/controllers/time-tracking/time_entries_unbilled.php');
 
         self::assertStringContainsString('value="save" class="btn">Save Invoice</button>', (string)$view);
         self::assertStringContainsString('value="finalize_send" class="btn btn-primary">Save &amp; Send</button>', (string)$view);
+        self::assertStringContainsString('display:flex;gap:8px;flex-wrap:wrap;padding-top:8px', (string)$view);
         self::assertStringNotContainsString('Save Draft</button>', (string)$view);
         self::assertStringContainsString("\$invoiceAction = (string)(\$_POST['invoice_action'] ?? 'save');", (string)$controller);
         self::assertStringContainsString("['save', 'draft', 'finalize_send']", (string)$controller);
         self::assertStringContainsString('$finalizeAndSend = $invoiceAction === \'finalize_send\';', (string)$controller);
+        self::assertStringContainsString('client_id = ? OR client_id IS NULL OR client_id = 0', (string)$controller);
+        self::assertStringContainsString('CASE WHEN client_id IS NULL OR client_id = 0 THEN ? ELSE client_id END', (string)$controller);
+        self::assertStringContainsString('UPDATE time_entries te', (string)$updateController);
+        self::assertStringContainsString('SET te.client_id = ?, te.invoice_id = ?', (string)$updateController);
+        self::assertStringContainsString('SET te.billed = 0, te.invoice_item_id = NULL, te.invoice_id = NULL', (string)$updateController);
+        self::assertStringContainsString('te.client_id = ? OR te.client_id IS NULL OR te.client_id = 0', (string)$unbilledTime);
     }
 
     public function testDocumentsCanAttachToActiveOrNotStartedProjects(): void

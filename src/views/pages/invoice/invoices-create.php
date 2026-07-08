@@ -104,7 +104,7 @@ if ($selectedProjectId > 0) {
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items / Time</div>
       <div id="itemsInv" style="display:grid;gap:8px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:8px">
         <button type="button" onclick="addItemInv()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
         <button type="button" id="btnAddFromTrackedTime" style="padding:8px 12px;border-radius:8px;border:1px solid #2ea3d6;background:#eff6ff;color:#0b4a6a;font-weight:600">+ Add from Tracked Time</button>
       </div>

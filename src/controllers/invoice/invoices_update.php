@@ -132,6 +132,13 @@ try {
   
   // Delete only extra charge items (if column exists), otherwise do not delete contract items
   if ($hasExtraChargeCol) {
+    $releaseExtraTime = $pdo->prepare('
+      UPDATE time_entries te
+      INNER JOIN invoice_items ii ON ii.id = te.invoice_item_id
+      SET te.billed = 0, te.invoice_item_id = NULL, te.invoice_id = NULL
+      WHERE ii.invoice_id = ? AND ii.is_extra_charge = 1
+    ');
+    $releaseExtraTime->execute([$id]);
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=? AND is_extra_charge=1')->execute([$id]);
 
     // Insert new extra charges with the flag
@@ -146,6 +153,14 @@ try {
       $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
     }
   }
+
+  $syncTimeEntries = $pdo->prepare('
+    UPDATE time_entries te
+    LEFT JOIN invoice_items ii ON ii.id = te.invoice_item_id
+    SET te.client_id = ?, te.invoice_id = ?
+    WHERE te.invoice_id = ? OR ii.invoice_id = ?
+  ');
+  $syncTimeEntries->execute([$client_id, $id, $id, $id]);
 
   if (!$isDraft && !empty($invoiceState['finalized_at'])) {
     invoice_refresh_payment_totals($pdo, $id, false);

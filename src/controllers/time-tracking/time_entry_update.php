@@ -125,7 +125,7 @@ if ($hours <= 0) {
 }
 
 try {
-    $stmt = $pdo->prepare('UPDATE time_entries SET client_id=?, project_id=?, project_code=?, contract_id=?, invoice_id=?, service_item_id=?, description=?, started_at=?, ended_at=?, hours=?, billable=?, rate=? WHERE id=? AND user_id=? AND billed=0');
+    $stmt = $pdo->prepare('UPDATE time_entries SET client_id=?, project_id=?, project_code=?, contract_id=?, invoice_id=?, invoice_item_id=NULL, service_item_id=?, description=?, started_at=?, ended_at=?, hours=?, billable=?, rate=? WHERE id=? AND user_id=? AND billed=0');
     $stmt->execute([$clientId, $projectId, $projectCode, $contractId, $invoiceId, $serviceItemId, $description, $startedAt, $endedAt, $hours, $billable, $rate, $id, $userId]);
 } catch (Throwable $e) {
     @error_log('[TimeTrackingUpdate] Failed to save time entry: ' . $e->getMessage());

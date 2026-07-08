@@ -58,12 +58,27 @@ final class FinancialAssetsTest extends TestCase
         self::assertStringNotContainsString('fetch(form.action', $form);
         self::assertStringContainsString('$_GET[\'error\']', $form);
         self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $form);
+        self::assertStringContainsString('id="newCategoryForm"', $form);
+        self::assertStringContainsString('id="expenseCategory"', $form);
+        self::assertStringContainsString('New Category', $form);
+        self::assertStringContainsString('payload.id', $form);
 
         $handler = $this->read('src/controllers/financial/expense_handler.php');
         self::assertStringContainsString('function expense_handler_is_ajax()', $handler);
         self::assertStringContainsString("'status_param' => 'created'", $handler);
         self::assertStringContainsString("'status_param' => 'updated'", $handler);
         self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $handler);
+
+        $categoryHandler = $this->read('src/controllers/financial/category_handler.php');
+        self::assertStringContainsString('function category_handler_safe_return_url', $categoryHandler);
+        self::assertStringContainsString('category_id', $categoryHandler);
+        self::assertStringContainsString("'name' => \$name", $categoryHandler);
+
+        $categories = $this->read('src/views/pages/financial/categories-list.php');
+        self::assertStringContainsString('onclick="createCategory()"', $categories);
+        self::assertStringContainsString('id="categoryAction"', $categories);
+        self::assertStringContainsString('window.createCategory', $categories);
+        self::assertStringNotContainsString('/?page=financial/vendor-form" class="btn btn-primary">+ Add Category', $categories);
     }
 
     public function testAssetsAreExposedInFinancialHubUi(): void
