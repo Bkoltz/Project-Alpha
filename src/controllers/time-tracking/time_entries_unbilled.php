@@ -34,7 +34,7 @@ $sql = 'SELECT te.id, te.started_at, te.ended_at, te.project_code, te.contract_i
         LEFT JOIN item_library il ON il.id = te.service_item_id
         WHERE te.user_id = ? AND te.billable = ? AND te.billed = ?';
 if ($clientId > 0) {
-    $sql .= ' AND te.client_id = ?';
+    $sql .= ' AND (te.client_id = ? OR te.client_id IS NULL OR te.client_id = 0)';
     $params[] = $clientId;
 }
 if ($projectCode !== '') {

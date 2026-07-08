@@ -40,6 +40,26 @@ function category_handler_finish(array $response, int $status = 200, string $fal
     exit;
 }
 
+function category_handler_safe_return_url(?string $url, string $default = '/?page=financial/expenses-list&tab=categories'): string
+{
+    $url = trim((string)$url);
+    if ($url === '' || str_starts_with($url, '//') || preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:/', $url)) {
+        return $default;
+    }
+
+    if (!str_starts_with($url, '/?page=')) {
+        return $default;
+    }
+
+    return $url;
+}
+
+function category_handler_append_query(string $url, string $key, string $value): string
+{
+    $join = str_contains($url, '?') ? '&' : '?';
+    return $url . $join . rawurlencode($key) . '=' . rawurlencode($value);
+}
+
 $response = ['success' => false, 'message' => ''];
 
 // Auth required
@@ -131,7 +151,12 @@ try {
                 'color' => $color,
             ]);
 
-            jsonResponse(true, 'Category created successfully', ['id' => $categoryId]);
+            $redirect = category_handler_safe_return_url($_POST['return_to'] ?? null);
+            if (str_contains($redirect, 'page=financial/expense-create')) {
+                $redirect = category_handler_append_query($redirect, 'category_id', (string)$categoryId);
+            }
+
+            jsonResponse(true, 'Category created successfully', ['id' => $categoryId, 'name' => $name, 'redirect' => $redirect]);
 
         case 'update':
             $id = (int)($_POST['id'] ?? 0);

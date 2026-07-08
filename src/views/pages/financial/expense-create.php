@@ -15,6 +15,7 @@ $prefillAmount = $_GET['amount'] ?? '';
 $prefillDate = $_GET['date'] ?? date('Y-m-d');
 $prefillVendor = $_GET['vendor'] ?? '';
 $prefillReceiptId = (int)($_GET['receipt_id'] ?? 0);
+$prefillCategoryId = (int)($_GET['category_id'] ?? 0);
 
 // Fetch dropdowns
 $cats = $pdo->prepare('SELECT id, name FROM expense_categories ORDER BY name');
@@ -50,6 +51,11 @@ if ($editId > 0) {
         exit;
     }
 }
+$selectedCategoryId = (int)($expense['category_id'] ?? $prefillCategoryId);
+$expenseCreateReturnUrl = '/?page=financial/expense-create';
+if ($editId > 0) {
+    $expenseCreateReturnUrl .= '&id=' . $editId;
+}
 ?>
 
 <div style="max-width:800px;margin:0 auto;padding:24px">
@@ -60,6 +66,8 @@ if ($editId > 0) {
 
   <?php if (!empty($_GET['error'])): ?>
     <div class="alert alert-danger" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+  <?php elseif (!empty($_GET['success'])): ?>
+    <div class="alert alert-success" style="margin-bottom:16px"><?php echo htmlspecialchars((string)$_GET['success']); ?></div>
   <?php endif; ?>
   <?php if (!empty($_GET['created']) || !empty($_GET['updated'])): ?>
     <div class="alert alert-success" style="margin-bottom:16px">Expense saved.</div>
@@ -85,11 +93,14 @@ if ($editId > 0) {
       </div>
 
       <div class="field">
-        <label class="label">Category</label>
-        <select name="category_id" class="input">
-          <option value="0">— No category —</option>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <label class="label" for="expenseCategory">Category</label>
+          <button type="button" class="btn btn-sm" id="openCategoryModal">New Category</button>
+        </div>
+        <select name="category_id" id="expenseCategory" class="input">
+          <option value="0">No category</option>
           <?php foreach ($categories as $cat): ?>
-            <option value="<?php echo (int)$cat['id']; ?>" <?php echo ($expense['category_id'] ?? 0) === (int)$cat['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($cat['name']); ?></option>
+            <option value="<?php echo (int)$cat['id']; ?>" <?php echo $selectedCategoryId === (int)$cat['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($cat['name']); ?></option>
           <?php endforeach; ?>
         </select>
       </div>
@@ -152,6 +163,43 @@ if ($editId > 0) {
       <button type="submit" class="btn btn-primary"><?php echo $editId > 0 ? 'Update' : 'Create'; ?> Expense</button>
     </div>
   </form>
+
+  <div id="categoryModalBackdrop" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:998"></div>
+  <div id="categoryModal" class="card" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,calc(100vw - 32px));z-index:999">
+    <div class="card-head">
+      <h3 class="card-title">New Category</h3>
+      <button type="button" class="btn btn-sm" id="closeCategoryModal">Close</button>
+    </div>
+    <form id="newCategoryForm" method="post" action="/?page=financial/category-handler">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('category')); ?>">
+      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <input type="hidden" name="action" value="create">
+      <input type="hidden" name="return_to" value="<?php echo htmlspecialchars($expenseCreateReturnUrl); ?>">
+
+      <div id="categoryFormError" class="alert alert-danger" style="display:none;margin-bottom:12px"></div>
+
+      <div class="field">
+        <label for="newCategoryName" class="label">Name *</label>
+        <input type="text" id="newCategoryName" name="name" required class="input" autocomplete="off">
+      </div>
+
+      <div class="grid grid-2">
+        <label class="label" style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" name="tax_deductible" value="1" checked>
+          Tax Deductible
+        </label>
+        <div class="field">
+          <label for="newCategoryColor" class="label">Color</label>
+          <input type="color" id="newCategoryColor" name="color" value="#3b82f6" class="input" style="padding:4px;height:40px">
+        </div>
+      </div>
+
+      <div class="flex-end" style="margin-top:16px">
+        <button type="button" class="btn" id="cancelCategoryCreate">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Category</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script>
@@ -176,6 +224,77 @@ vendorNameInput.addEventListener('change', function() {
     if (opt.value === val) { vendorIdInput.value = opt.dataset.id; found = true; }
   });
   if (!found) vendorIdInput.value = 0;
+});
+
+const openCategoryModal = document.getElementById('openCategoryModal');
+const closeCategoryModal = document.getElementById('closeCategoryModal');
+const cancelCategoryCreate = document.getElementById('cancelCategoryCreate');
+const categoryModal = document.getElementById('categoryModal');
+const categoryBackdrop = document.getElementById('categoryModalBackdrop');
+const newCategoryForm = document.getElementById('newCategoryForm');
+const categorySelect = document.getElementById('expenseCategory');
+const categoryFormError = document.getElementById('categoryFormError');
+const newCategoryName = document.getElementById('newCategoryName');
+
+function setCategoryModal(open) {
+  categoryModal.style.display = open ? 'block' : 'none';
+  categoryBackdrop.style.display = open ? 'block' : 'none';
+  if (open) {
+    categoryFormError.style.display = 'none';
+    categoryFormError.textContent = '';
+    setTimeout(function() { newCategoryName.focus(); }, 0);
+  }
+}
+
+openCategoryModal.addEventListener('click', function() { setCategoryModal(true); });
+closeCategoryModal.addEventListener('click', function() { setCategoryModal(false); });
+cancelCategoryCreate.addEventListener('click', function() { setCategoryModal(false); });
+categoryBackdrop.addEventListener('click', function() { setCategoryModal(false); });
+
+newCategoryForm.addEventListener('submit', function(event) {
+  event.preventDefault();
+  categoryFormError.style.display = 'none';
+  categoryFormError.textContent = '';
+
+  fetch(newCategoryForm.action, {
+    method: 'POST',
+    body: new FormData(newCategoryForm),
+    headers: {
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  })
+    .then(function(response) {
+      return response.text().then(function(text) {
+        let payload = null;
+        try {
+          payload = JSON.parse(text);
+        } catch (error) {
+          throw new Error('Category request failed. Please refresh and try again.');
+        }
+        if (!response.ok) {
+          throw new Error(payload.message || 'Category could not be created.');
+        }
+        return payload;
+      });
+    })
+    .then(function(payload) {
+      if (!payload || !payload.success) {
+        throw new Error((payload && payload.message) || 'Category could not be created.');
+      }
+      const option = document.createElement('option');
+      option.value = String(payload.id);
+      option.textContent = payload.name || newCategoryName.value;
+      option.selected = true;
+      categorySelect.appendChild(option);
+      newCategoryForm.reset();
+      document.getElementById('newCategoryColor').value = '#3b82f6';
+      setCategoryModal(false);
+    })
+    .catch(function(error) {
+      categoryFormError.textContent = error.message || 'Category could not be created.';
+      categoryFormError.style.display = 'block';
+    });
 });
 
 })();
