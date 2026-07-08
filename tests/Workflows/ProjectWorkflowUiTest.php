@@ -387,7 +387,6 @@ final class ProjectWorkflowUiTest extends TestCase
         foreach ([$formDetail, $folderDetail] as $detailView) {
             self::assertStringContainsString('data-forms-email-client-search', (string)$detailView);
             self::assertStringContainsString('data-forms-email-org-search', (string)$detailView);
-            self::assertStringContainsString('name="department_ids[]"', (string)$detailView);
             self::assertStringContainsString('/assets/js/forms-email-recipient-picker.js', (string)$detailView);
             self::assertStringNotContainsString('name="client_ids[]" value="<?php echo $client[\'id\']; ?>"', (string)$detailView);
             self::assertStringNotContainsString('-- Select a client --', (string)$detailView);
@@ -398,6 +397,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('/?page=clients-search&term=', (string)$pickerScript);
         self::assertStringContainsString('/?page=organization/org-search&term=', (string)$pickerScript);
         self::assertStringContainsString('/?page=organization/organization-departments-options&organization_id=', (string)$pickerScript);
+        self::assertStringContainsString('name="department_ids[]"', (string)$pickerScript);
         self::assertStringContainsString('function forms_email_recipients', (string)$handler);
         self::assertStringContainsString('organization_department_contacts', (string)$handler);
     }
