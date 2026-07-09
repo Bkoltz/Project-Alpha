@@ -44,6 +44,9 @@ final class InvoiceContentLinksTest extends TestCase
         foreach (array_reverse($this->ids['project_invoices'] ?? []) as $id) {
             $this->pdo->prepare('DELETE FROM project_invoices WHERE id = ?')->execute([$id]);
         }
+        foreach (array_reverse($this->ids['invoices'] ?? []) as $id) {
+            $this->pdo->prepare('DELETE FROM invoices WHERE id = ?')->execute([$id]);
+        }
         foreach (array_reverse($this->ids['projects'] ?? []) as $id) {
             $this->pdo->prepare('DELETE FROM projects WHERE id = ?')->execute([$id]);
         }
@@ -211,6 +214,18 @@ final class InvoiceContentLinksTest extends TestCase
         $this->assertSame([], invoice_content_links_for_project_invoice($this->pdo, $projectInvoiceId));
     }
 
+    public function testStandaloneClientInvoiceUsesClientContentLinks(): void
+    {
+        $suffix = bin2hex(random_bytes(5));
+        $clientId = $this->insertClient('Standalone Client ' . $suffix, null, 'standalone-' . $suffix . '@example.invalid');
+        $invoiceId = $this->insertInvoice($clientId);
+        $this->insertLink('client', $clientId, 'Standalone folder', 'https://example.invalid/standalone-' . $suffix, 'manual_dropbox', 'entity_only');
+
+        $urls = array_column(invoice_content_links_for_invoice($this->pdo, $invoiceId), 'url');
+
+        $this->assertContains('https://example.invalid/standalone-' . $suffix, $urls, 'Standalone clients without an organization should still pull client links.');
+    }
+
     public function testMissingContentLinksWarningIsEnforcedBeforeEmailSend(): void
     {
         $emailSend = file_get_contents(dirname(__DIR__, 2) . '/src/controllers/email_send.php');
@@ -220,8 +235,12 @@ final class InvoiceContentLinksTest extends TestCase
         $invoiceDetails = file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/invoice/invoice-details.php');
         $projectInvoiceDetails = file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/project/project-invoice-details.php');
         $contentLinks = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_content_links.php');
+        $invoiceLinks = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_links.php');
 
         self::assertStringContainsString('invoice_missing_content_links_behavior', (string)$contentLinks);
+        self::assertStringContainsString('link_resolver_invoice_auto_attach_enabled', (string)$invoiceLinks);
+        self::assertStringContainsString('pa_invoice_links_run_just_in_time_refresh', (string)$invoiceLinks);
+        self::assertStringContainsString('refreshLinks(\'client\'', (string)$invoiceLinks);
         self::assertStringContainsString('invoice_should_prompt_for_missing_content_links', (string)$emailSend);
         self::assertStringContainsString('confirm_missing_content_links', (string)$emailSend);
         self::assertStringContainsString('invoice_should_prompt_for_missing_content_links', (string)$projectEmail);
@@ -257,11 +276,22 @@ final class InvoiceContentLinksTest extends TestCase
         return $this->remember('departments', (int)$this->pdo->lastInsertId());
     }
 
-    private function insertClient(string $name, int $organizationId, string $email): int
+    private function insertClient(string $name, ?int $organizationId, string $email): int
     {
         $stmt = $this->pdo->prepare('INSERT INTO clients (name, email, organization_id) VALUES (?, ?, ?)');
         $stmt->execute([$name, $email, $organizationId]);
         return $this->remember('clients', (int)$this->pdo->lastInsertId());
+    }
+
+    private function insertInvoice(int $clientId): int
+    {
+        $stmt = $this->pdo->prepare('
+            INSERT INTO invoices
+                (client_id, status, billing_mode, subtotal, total, balance_due, collection_mode, finalized_at)
+            VALUES (?, "sent", "fixed", 100, 100, 100, "direct", NOW())
+        ');
+        $stmt->execute([$clientId]);
+        return $this->remember('invoices', (int)$this->pdo->lastInsertId());
     }
 
     private function insertProject(int $organizationId, int $departmentId, int $clientId, string $name): int
