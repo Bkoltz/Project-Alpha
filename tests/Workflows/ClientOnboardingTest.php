@@ -68,6 +68,9 @@ final class ClientOnboardingTest extends TestCase
         self::assertStringContainsString('client_onboarding_submitted_email($data, $submission)', (string)$review);
         self::assertStringContainsString("in_array(\$resolution, ['keep_existing', 'merge_existing']", (string)$review);
         self::assertStringContainsString('client_onboarding_merge_value', (string)$review);
+        self::assertStringNotContainsString('EmailService::sendEmail', (string)$review);
+        self::assertStringNotContainsString('Your client information has been approved', (string)$review);
+        self::assertStringNotContainsString('Your client information was reviewed but not applied', (string)$review);
     }
 
     public function testPublicOnboardingIsRateLimitedAndDoesNotCollectPaymentData(): void

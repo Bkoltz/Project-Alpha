@@ -4,7 +4,6 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/client_onboarding.php';
-require_once __DIR__ . '/../../services/EmailService.php';
 
 $organizationId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
@@ -161,16 +160,6 @@ try {
         'client_id' => $clientId ?: null,
         'resolution' => $resolution ?: null,
     ]);
-    $notifyEmail = $data && is_array($data) ? client_onboarding_submitted_email($data, $submission) : client_onboarding_normalize_email($submission['invited_email'] ?? '');
-    if ($notifyEmail !== '' && filter_var($notifyEmail, FILTER_VALIDATE_EMAIL)) {
-        EmailService::sendEmail(
-            $notifyEmail,
-            'Client information ' . ($decision === 'approve' ? 'approved' : 'reviewed'),
-            $decision === 'approve'
-                ? '<p>Your client information has been approved. Thank you.</p>'
-                : '<p>Your client information was reviewed but not applied. Please contact the business if you need assistance.</p>'
-        );
-    }
     header('Location: /?page=client/onboarding&reviewed=1');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

@@ -29,6 +29,8 @@ ignore_user_abort(true);
 const TAX_IMPORT_BATCH_SIZE = 2000;
 const TAX_IMPORT_SCAN_LOG_INTERVAL = 50000;
 
+$sources = [];
+
 try {
     $runId = 0;
     $stats = [
@@ -48,9 +50,14 @@ try {
 
     ensureTablesExist($pdo);
 
-    $hasFipsFile = taxImportHasUpload('fips_file');
-    $hasRateFile = taxImportHasUpload('rate_file');
-    $hasBoundaryFile = taxImportHasUpload('boundary_file');
+    $sources = [
+        'fips_file' => taxImportResolveSource('fips_file', ['txt']),
+        'rate_file' => taxImportResolveSource('rate_file', ['csv']),
+        'boundary_file' => taxImportResolveSource('boundary_file', ['csv']),
+    ];
+    $hasFipsFile = $sources['fips_file'] !== null;
+    $hasRateFile = $sources['rate_file'] !== null;
+    $hasBoundaryFile = $sources['boundary_file'] !== null;
     if (!$hasFipsFile && !$hasRateFile && !$hasBoundaryFile) {
         throw new Exception('Upload at least one FIPS, tax rate, or boundary file.');
     }
@@ -67,9 +74,8 @@ try {
 
     if ($hasFipsFile) {
         taxImportLog($pdo, $runId, 'importing_fips', 'Reading selected-state counties from the FIPS file.');
-        taxImportValidateFile('fips_file', ['txt']);
-        [$importStateFips, $importStateAbbr] = importFipsFile($pdo, $_FILES['fips_file']['tmp_name'], $stats, $importStateFips, $runId);
-        taxImportRememberFile($pdo, $importStateFips, 'fips', $_FILES['fips_file'], null);
+        [$importStateFips, $importStateAbbr] = importFipsFile($pdo, $sources['fips_file']['path'], $stats, $importStateFips, $runId);
+        taxImportRememberFile($pdo, $importStateFips, 'fips', $sources['fips_file'], null);
         $stats['files_uploaded'][] = 'FIPS counties';
         taxImportLog($pdo, $runId, 'importing_fips', 'FIPS counties imported.', [
             'fips_rows' => $stats['counties_loaded'],
@@ -79,11 +85,10 @@ try {
 
     if ($hasRateFile) {
         taxImportLog($pdo, $runId, 'importing_rates', 'Reading active tax jurisdiction rows from the rate file.');
-        taxImportValidateFile('rate_file', ['csv']);
-        [$rateStateFips, $rateStateAbbr] = importRateFile($pdo, $_FILES['rate_file']['tmp_name'], $stateTaxRate, $stats, $importStateFips, $runId);
+        [$rateStateFips, $rateStateAbbr] = importRateFile($pdo, $sources['rate_file']['path'], $stateTaxRate, $stats, $importStateFips, $runId);
         $importStateFips = $rateStateFips;
         $importStateAbbr = $rateStateAbbr;
-        taxImportRememberFile($pdo, $rateStateFips, 'rates', $_FILES['rate_file'], $stateTaxRate);
+        taxImportRememberFile($pdo, $rateStateFips, 'rates', $sources['rate_file'], $stateTaxRate);
         $stats['files_uploaded'][] = 'Tax rates';
     } else {
         $stats['files_reused'][] = 'Existing tax rates';
@@ -93,11 +98,10 @@ try {
 
     if ($hasBoundaryFile) {
         taxImportLog($pdo, $runId, 'importing_boundaries', 'Streaming boundary rows into the staging table.');
-        taxImportValidateFile('boundary_file', ['csv']);
-        [$boundaryStateFips, $boundaryStateAbbr] = importBoundaryFile($pdo, $_FILES['boundary_file']['tmp_name'], $stats, $importStateFips, $runId);
+        [$boundaryStateFips, $boundaryStateAbbr] = importBoundaryFile($pdo, $sources['boundary_file']['path'], $stats, $importStateFips, $runId);
         $importStateFips = $boundaryStateFips;
         $importStateAbbr = $boundaryStateAbbr;
-        taxImportRememberFile($pdo, $boundaryStateFips, 'boundaries', $_FILES['boundary_file'], null);
+        taxImportRememberFile($pdo, $boundaryStateFips, 'boundaries', $sources['boundary_file'], null);
         $stats['files_uploaded'][] = 'Boundaries';
     } else {
         $stats['files_reused'][] = 'Existing boundaries';
@@ -107,6 +111,7 @@ try {
     $_SESSION['tax_import_summary'] = buildImportSummary($stats, $importStateAbbr);
     $_SESSION['tax_import_stats'] = $stats;
     taxImportFinishRun($pdo, $runId, $stats, 'completed');
+    taxImportCleanupSources($sources);
 
     header('Location: /?page=settings&tab=taxes&import_success=1&tax_state=' . rawurlencode($importStateAbbr));
     exit;
@@ -119,6 +124,7 @@ try {
     } else {
         taxImportServerLog(0, 'failed', $e->getMessage());
     }
+    taxImportCleanupSources($sources);
     $stateParam = isset($_SESSION['tax_import_state']) ? '&tax_state=' . rawurlencode((string)$_SESSION['tax_import_state']) : '';
     header('Location: /?page=settings&tab=taxes&import_error=' . rawurlencode($e->getMessage()) . $stateParam);
     exit;
@@ -127,6 +133,64 @@ try {
 function taxImportHasUpload(string $field): bool
 {
     return isset($_FILES[$field]) && ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+}
+
+function taxImportResolveSource(string $field, array $extensions): ?array
+{
+    if (taxImportHasUpload($field)) {
+        taxImportValidateFile($field, $extensions);
+        return [
+            'path' => (string)$_FILES[$field]['tmp_name'],
+            'name' => basename((string)$_FILES[$field]['name']),
+            'size' => (int)($_FILES[$field]['size'] ?? 0),
+            'is_chunk' => false,
+            'token' => null,
+        ];
+    }
+
+    $token = trim((string)($_POST[$field . '_chunk_token'] ?? ''));
+    if ($token === '') {
+        return null;
+    }
+
+    return taxImportResolveChunkSource($field, $token, $extensions);
+}
+
+function taxImportResolveChunkSource(string $field, string $token, array $extensions): array
+{
+    if (!preg_match('/^[a-f0-9]{32}$/', $token)) {
+        throw new Exception('Invalid chunked upload token.');
+    }
+
+    $dir = taxImportChunkDir($token);
+    $metaPath = $dir . DIRECTORY_SEPARATOR . 'meta.json';
+    $metaJson = is_readable($metaPath) ? file_get_contents($metaPath) : false;
+    $meta = is_string($metaJson) ? json_decode($metaJson, true) : null;
+    if (!is_array($meta) || empty($meta['complete'])) {
+        throw new Exception('Chunked tax import upload is not complete yet.');
+    }
+    if (($meta['session_hash'] ?? '') !== hash('sha256', session_id()) || ($meta['field'] ?? '') !== $field) {
+        throw new Exception('Chunked tax import upload does not match this session.');
+    }
+
+    $name = basename((string)($meta['file_name'] ?? ''));
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    if ($name === '' || !in_array($ext, $extensions, true)) {
+        throw new Exception('Chunked tax import upload has an invalid file type.');
+    }
+
+    $path = (string)($meta['final_path'] ?? ($dir . DIRECTORY_SEPARATOR . 'source.' . $ext));
+    if (!is_readable($path)) {
+        throw new Exception('Chunked tax import upload could not be read by the server.');
+    }
+
+    return [
+        'path' => $path,
+        'name' => $name,
+        'size' => (int)($meta['file_size'] ?? filesize($path)),
+        'is_chunk' => true,
+        'token' => $token,
+    ];
 }
 
 function taxImportValidateFile(string $field, array $extensions): void
@@ -144,6 +208,11 @@ function taxImportValidateFile(string $field, array $extensions): void
     if (!is_readable((string)$_FILES[$field]['tmp_name'])) {
         throw new Exception(ucwords(str_replace('_', ' ', $field)) . ' could not be read by the server.');
     }
+}
+
+function taxImportReadCsvRow($handle): array|false
+{
+    return fgetcsv($handle, 0, ',', '"', '\\');
 }
 
 function importFipsFile(PDO $pdo, string $path, array &$stats, string $expectedStateFips, int $runId = 0): array
@@ -251,7 +320,7 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
              start_date, end_date, is_active)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
     );
-    while (($parts = fgetcsv($handle)) !== false) {
+    while (($parts = taxImportReadCsvRow($handle)) !== false) {
         $lineNum++;
         if ($lineNum % TAX_IMPORT_SCAN_LOG_INTERVAL === 0) {
             taxImportServerLog($runId, 'importing_rates', 'Scanned rate CSV row ' . number_format($lineNum) . '; inserted ' . number_format($stats['jurisdictions_inserted']) . ' active jurisdictions so far.', [
@@ -499,7 +568,7 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expec
     );
 
     $pdo->beginTransaction();
-    while (($row = fgetcsv($handle)) !== false) {
+    while (($row = taxImportReadCsvRow($handle)) !== false) {
         $lineNum++;
         if ($lineNum % TAX_IMPORT_SCAN_LOG_INTERVAL === 0) {
             taxImportServerLog($runId, 'importing_boundaries', 'Scanned boundary CSV row ' . number_format($lineNum) . '; staged ' . number_format($rowCount) . ' selected-state rows so far.', [
@@ -657,7 +726,7 @@ function stateAbbrForFips(string $stateFips): string
 
 function taxImportRememberFile(PDO $pdo, string $stateFips, string $fileType, array $file, ?float $stateTaxRate): void
 {
-    $hash = @hash_file('sha256', (string)$file['tmp_name']) ?: null;
+    $hash = @hash_file('sha256', (string)$file['path']) ?: null;
     $stmt = $pdo->prepare(
         'INSERT INTO tax_import_files
             (state_fips, file_type, original_name, content_hash, size_bytes, state_tax_rate, imported_at)
@@ -677,6 +746,34 @@ function taxImportRememberFile(PDO $pdo, string $stateFips, string $fileType, ar
         (int)($file['size'] ?? 0),
         $stateTaxRate,
     ]);
+}
+
+function taxImportCleanupSources(array $sources): void
+{
+    foreach ($sources as $source) {
+        if (!is_array($source) || empty($source['is_chunk']) || empty($source['token']) || !preg_match('/^[a-f0-9]{32}$/', (string)$source['token'])) {
+            continue;
+        }
+        $dir = taxImportChunkDir((string)$source['token']);
+        foreach (['source.csv', 'source.txt', 'upload.part', 'meta.json'] as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+        if (is_dir($dir)) {
+            @rmdir($dir);
+        }
+    }
+}
+
+function taxImportChunkDir(string $uploadId): string
+{
+    return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR)
+        . DIRECTORY_SEPARATOR
+        . 'project_alpha_tax_import_chunks'
+        . DIRECTORY_SEPARATOR
+        . $uploadId;
 }
 
 function taxImportStartRun(PDO $pdo, string $stateFips, string $stateAbbr): int

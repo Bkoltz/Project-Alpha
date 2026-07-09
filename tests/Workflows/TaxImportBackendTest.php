@@ -16,8 +16,10 @@ final class TaxImportBackendTest extends TestCase
     public function testImporterStreamsLargeBoundaryFilesThroughStaging(): void
     {
         $handler = file_get_contents($this->root . '/src/controllers/settings/tax-import-handler.php');
+        $chunkHandler = file_get_contents($this->root . '/src/controllers/settings/tax_import_chunk.php');
 
         self::assertIsString($handler);
+        self::assertIsString($chunkHandler);
         self::assertStringContainsString('TAX_IMPORT_BATCH_SIZE', $handler);
         self::assertStringContainsString('TAX_IMPORT_SCAN_LOG_INTERVAL', $handler);
         self::assertStringContainsString('set_time_limit(0)', $handler);
@@ -28,8 +30,14 @@ final class TaxImportBackendTest extends TestCase
         self::assertStringContainsString('Processed rate CSV row', $handler);
         self::assertStringContainsString('Scanned boundary CSV row', $handler);
         self::assertStringContainsString('Streamed ', $handler);
+        self::assertStringContainsString("fgetcsv(\$handle, 0, ',', '\"', '\\\\')", $handler);
+        self::assertStringContainsString('taxImportResolveChunkSource', $handler);
+        self::assertStringContainsString('taxImportCleanupSources', $handler);
+        self::assertStringContainsString('taxImportChunkDir', (string)$chunkHandler);
+        self::assertStringContainsString('session_hash', (string)$chunkHandler);
+        self::assertStringContainsString('12 * 1024 * 1024', (string)$chunkHandler);
         self::assertStringContainsString('batch_key', $handler);
-        self::assertStringContainsString('fgetcsv($handle)', $handler);
+        self::assertStringNotContainsString('fgetcsv($handle)', $handler);
         self::assertStringContainsString('Upload at least one FIPS, tax rate, or boundary file.', $handler);
         self::assertStringNotContainsString('No complex zip ranges found in boundary file', $handler);
         self::assertStringContainsString('DELETE FROM tax_rates', $handler);
@@ -49,7 +57,14 @@ final class TaxImportBackendTest extends TestCase
         self::assertIsString($view);
         self::assertStringContainsString('Upload one or more files', $view);
         self::assertStringContainsString('Reused when omitted', $view);
+        self::assertStringContainsString('name="tax_county"', $view);
+        self::assertStringContainsString('Search county...', $view);
+        self::assertStringContainsString('No tax rates matched that county search.', $view);
         self::assertStringContainsString('name="tax_state"', $view);
+        self::assertStringContainsString('data-tax-import-form', $view);
+        self::assertStringContainsString('settings/tax-import-chunk', $view);
+        self::assertStringContainsString('80 * 1024 * 1024', $view);
+        self::assertStringContainsString('data-tax-import-file="boundary_file"', $view);
         self::assertStringContainsString('Imported State Coverage', $view);
         self::assertStringContainsString('Recent Import Runs', $view);
         self::assertStringContainsString('[tax-import]', $view);
@@ -82,7 +97,9 @@ final class TaxImportBackendTest extends TestCase
         $clientSearch = file_get_contents($this->root . '/src/controllers/client/clients_search.php');
         self::assertStringContainsString('$page === \'tax-lookup\'', (string)$router);
         self::assertStringContainsString('src/controllers/tax_lookup.php', (string)$router);
+        self::assertStringContainsString('settings/tax-import-chunk', (string)$router);
         self::assertStringContainsString('\'tax-lookup\'          => null', (string)$acl);
+        self::assertStringContainsString('settings/tax-import-chunk', (string)$acl);
         self::assertStringContainsString('preferred_tax_zip', (string)$clientSearch);
         self::assertStringContainsString('preferred_tax_state', (string)$clientSearch);
         self::assertStringContainsString("COALESCE(NULLIF(o.postal_code, ''), NULLIF(c.postal_code, ''))", (string)$clientSearch);
@@ -92,6 +109,8 @@ final class TaxImportBackendTest extends TestCase
         $script = file_get_contents($this->root . '/public/assets/js/tax-lookup-control.js');
         $lookup = file_get_contents($this->root . '/src/controllers/tax_lookup.php');
         self::assertStringContainsString('pa-tax-lookup__input', (string)$component);
+        self::assertStringContainsString('padding:10px', (string)$component);
+        self::assertStringContainsString('padding-bottom:14px', (string)$component);
         self::assertStringContainsString('uniqueChoices', (string)$script);
         self::assertStringContainsString('fillZipFromSelectedClient', (string)$script);
         self::assertStringContainsString('data-tax-state-hint', (string)$script);
@@ -183,7 +202,7 @@ final class TaxImportBackendTest extends TestCase
         $rates = [];
         $handle = fopen($ratePath, 'rb');
         self::assertIsResource($handle);
-        while (($parts = fgetcsv($handle)) !== false) {
+        while (($parts = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
             if (count($parts) < 9 || trim((string)$parts[0]) !== '55') {
                 continue;
             }
