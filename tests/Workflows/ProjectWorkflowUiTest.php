@@ -122,12 +122,14 @@ final class ProjectWorkflowUiTest extends TestCase
     public function testOrganizationLinksSwitchFromOverallFolderToDepartmentLinks(): void
     {
         $baseline = file_get_contents($this->root . '/database/baseline.sql');
+        $originalMigration = file_get_contents($this->root . '/database/migrations/0006_org_link_strategy_and_link_only_onboarding.sql');
         $migration = file_get_contents($this->root . '/database/migrations/0022_dynamic_org_link_strategy.sql');
         $view = file_get_contents($this->root . '/src/views/pages/organization/organization-view.php');
         $handler = file_get_contents($this->root . '/src/controllers/organization/organization_departments.php');
         $resolver = file_get_contents($this->root . '/src/services/LinkResolverService.php');
 
         self::assertStringContainsString("DEFAULT 'overall_folder'", (string)$baseline);
+        self::assertStringContainsString("DEFAULT ''department_links_only''", (string)$originalMigration);
         self::assertStringContainsString("DEFAULT 'overall_folder'", (string)$migration);
         self::assertStringContainsString('PA uses the overall organization folder until the first department is added.', (string)$view);
         self::assertStringContainsString('When a first department is created, PA switches this organization to department links only', (string)$view);
