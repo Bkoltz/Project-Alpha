@@ -157,7 +157,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
             <label style="display:flex;align-items:flex-start;gap:10px">
                 <input type="checkbox" name="link_resolver_invoice_auto_attach_enabled" value="1" <?php echo !empty($appConfig['link_resolver_invoice_auto_attach_enabled']) ? 'checked' : ''; ?> style="margin-top:3px">
                 <span>
-                    <span class="font-600">Just-in-time invoice link scan<?php echo $helpIcon('Before emailing an invoice, PA may check only the relevant org/department if the invoice has no content links.'); ?></span>
+                    <span class="font-600">Just-in-time invoice link scan<?php echo $helpIcon('Before emailing an invoice, PA may check the relevant department, organization, or standalone client if the invoice has no content links.'); ?></span>
                     <span class="pa-setting-note">Ambiguous matches must be reviewed instead of auto-attached.</span>
                 </span>
             </label>

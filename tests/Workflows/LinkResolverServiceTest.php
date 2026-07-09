@@ -228,6 +228,27 @@ final class LinkResolverServiceTest extends TestCase
         self::assertSame(0, $this->countLinks('client', $clientId));
     }
 
+    public function testStandaloneClientAutoGenerationAttachesClientFolder(): void
+    {
+        $clientName = 'Standalone Client ' . bin2hex(random_bytes(3));
+        $clientId = $this->insertClient(null, $clientName);
+        $service = $this->service(new FakeResolverProvider([
+            $clientName => [
+                ['folder_id' => '/' . $clientName, 'name' => $clientName, 'path' => '/' . $clientName],
+            ],
+        ]));
+
+        $result = $service->autoGenerateForClient($clientId);
+
+        self::assertTrue($result['success'], json_encode($result));
+        $link = $this->fetchOneLink('client', $clientId);
+        $this->remember('links', (int)$link['id']);
+        self::assertSame('auto_dropbox', $link['link_type']);
+        self::assertSame('resolver', $link['link_source']);
+        self::assertSame(1, (int)$link['include_on_invoices']);
+        self::assertSame('https://example.invalid/' . $clientName, $link['url']);
+    }
+
     private function service(FakeResolverProvider $provider): LinkResolverService
     {
         return new LinkResolverService($this->pdo, static fn(string $name, array $credentials): object => $provider);
@@ -260,7 +281,7 @@ final class LinkResolverServiceTest extends TestCase
         return $this->remember('departments', (int)$this->pdo->lastInsertId());
     }
 
-    private function insertClient(int $orgId, string $name): int
+    private function insertClient(?int $orgId, string $name): int
     {
         $stmt = $this->pdo->prepare('INSERT INTO clients (name, email, organization_id) VALUES (?, ?, ?)');
         $stmt->execute([$name, strtolower(str_replace(' ', '-', $name)) . '-' . bin2hex(random_bytes(3)) . '@example.invalid', $orgId]);
