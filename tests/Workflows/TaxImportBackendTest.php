@@ -1,0 +1,153 @@
+<?php
+
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+final class TaxImportBackendTest extends TestCase
+{
+    private string $root;
+
+    protected function setUp(): void
+    {
+        $this->root = dirname(__DIR__, 2);
+    }
+
+    public function testImporterStreamsLargeBoundaryFilesThroughStaging(): void
+    {
+        $handler = file_get_contents($this->root . '/src/controllers/settings/tax-import-handler.php');
+
+        self::assertIsString($handler);
+        self::assertStringContainsString('TAX_IMPORT_BATCH_SIZE', $handler);
+        self::assertStringContainsString('set_time_limit(0)', $handler);
+        self::assertStringContainsString('tax_boundaries_stage', $handler);
+        self::assertStringContainsString('batch_key', $handler);
+        self::assertStringContainsString('fgetcsv($handle)', $handler);
+        self::assertStringContainsString('Upload at least one FIPS, tax rate, or boundary file.', $handler);
+        self::assertStringNotContainsString('No complex zip ranges found in boundary file', $handler);
+        self::assertStringContainsString('DELETE FROM tax_rates', $handler);
+        self::assertStringContainsString('SELECT county_name', $handler);
+        self::assertStringContainsString('rebuildCountyTaxRateMirror', $handler);
+        self::assertStringContainsString('addCountyRateSanityWarnings', $handler);
+        self::assertStringNotContainsString('UPDATE tax_rates SET rate = ?', $handler);
+    }
+
+    public function testTaxImportUiAllowsPartialSourceUploads(): void
+    {
+        $view = file_get_contents($this->root . '/src/views/pages/settings/taxes.php');
+
+        self::assertIsString($view);
+        self::assertStringContainsString('Upload one or more files', $view);
+        self::assertStringContainsString('Reused when omitted', $view);
+        self::assertStringNotContainsString('name="fips_file" accept=".txt" required', $view);
+        self::assertStringNotContainsString('name="rate_file" accept=".csv" required', $view);
+    }
+
+    public function testTaxLookupWorkflowIsWiredIntoDocumentPages(): void
+    {
+        $pages = [
+            '/src/views/pages/quote/quotes-create.php',
+            '/src/views/pages/quote/quotes-edit.php',
+            '/src/views/pages/invoice/invoices-create.php',
+            '/src/views/pages/invoice/invoices-edit.php',
+            '/src/views/pages/contract/contracts-create.php',
+            '/src/views/pages/contract/contracts-edit.php',
+        ];
+
+        foreach ($pages as $page) {
+            $contents = file_get_contents($this->root . $page);
+            self::assertIsString($contents);
+            self::assertStringContainsString('tax_lookup_control.php', $contents, $page);
+            self::assertStringContainsString('render_tax_lookup_control', $contents, $page);
+            self::assertStringContainsString('tax-lookup-control.js', $contents, $page);
+        }
+
+        $router = file_get_contents($this->root . '/public/index.php');
+        $acl = file_get_contents($this->root . '/src/utils/acl_middleware.php');
+        self::assertStringContainsString('$page === \'tax-lookup\'', (string)$router);
+        self::assertStringContainsString('src/controllers/tax_lookup.php', (string)$router);
+        self::assertStringContainsString('\'tax-lookup\'          => null', (string)$acl);
+    }
+
+    public function testTaxImportRateColumnsUseActualRateValue(): void
+    {
+        require_once $this->root . '/src/utils/tax_lookup.php';
+
+        self::assertSame(0.9, pa_tax_rate_from_import_columns(['55', '00', '079', '0.009', '0.009', '0.009', '0.009', '20240101', '99991231']));
+        self::assertSame(2.0, pa_tax_rate_from_import_columns(['55', '01', '53000', '0.02', '0.02', '0.02', '0.02', '20240101', '99991231']));
+    }
+
+    public function testSchemaIncludesTaxImportSourceCacheTables(): void
+    {
+        $migration = file_get_contents($this->root . '/database/migrations/0024_tax_import_source_cache.sql');
+        $baseline = file_get_contents($this->root . '/database/baseline.sql');
+
+        self::assertIsString($migration);
+        self::assertIsString($baseline);
+
+        foreach ([
+            'fips_counties',
+            'tax_jurisdictions',
+            'tax_boundaries',
+            'tax_boundaries_stage',
+            'tax_zip_complexity',
+            'tax_import_files',
+        ] as $table) {
+            self::assertStringContainsString($table, $migration);
+            self::assertStringContainsString($table, $baseline);
+        }
+
+        self::assertStringContainsString('ADD COLUMN country', $migration);
+        self::assertStringContainsString('ADD COLUMN is_active', file_get_contents($this->root . '/database/migrations/0025_tax_rates_active_column.sql'));
+        self::assertStringContainsString('country VARCHAR(100) NULL DEFAULT', $baseline);
+        self::assertStringContainsString('is_active TINYINT(1) NOT NULL DEFAULT 1', $baseline);
+    }
+
+    public function testWisconsinFixtureKeepsCountyRateExceptions(): void
+    {
+        $fipsPath = $this->root . '/tests/tax_rates/st55_wi_cou2020.txt';
+        $ratePath = $this->root . '/tests/tax_rates/WIR072026.csv';
+
+        if (!is_readable($fipsPath) || !is_readable($ratePath)) {
+            self::markTestSkipped('Wisconsin tax rate fixtures are not available.');
+        }
+
+        $countyNames = [];
+        foreach (file($fipsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            $parts = explode('|', $line);
+            if (count($parts) >= 5) {
+                $countyNames[str_pad(trim($parts[2]), 3, '0', STR_PAD_LEFT)] = preg_replace('/\s+County$/i', '', trim($parts[4]));
+            }
+        }
+
+        $rates = [];
+        $handle = fopen($ratePath, 'rb');
+        self::assertIsResource($handle);
+        while (($parts = fgetcsv($handle)) !== false) {
+            if (count($parts) < 9 || trim((string)$parts[0]) !== '55') {
+                continue;
+            }
+            if (trim((string)$parts[1]) !== '00') {
+                continue;
+            }
+            if ('20260708' < trim((string)$parts[7]) || '20260708' > trim((string)$parts[8])) {
+                continue;
+            }
+
+            $countyFips = str_pad(trim((string)$parts[2]), 3, '0', STR_PAD_LEFT);
+            $countyName = $countyNames[$countyFips] ?? null;
+            if ($countyName === null) {
+                continue;
+            }
+            require_once $this->root . '/src/utils/tax_lookup.php';
+            $localRate = pa_tax_rate_from_import_columns($parts);
+            $rates[$countyName] = round(5.0 + $localRate, 4);
+        }
+        fclose($handle);
+
+        self::assertSame(5.9, $rates['Milwaukee'] ?? null);
+        self::assertSame(5.0, $rates['Waukesha'] ?? null);
+        self::assertSame(5.0, $rates['Winnebago'] ?? null);
+        self::assertSame(5.5, $rates['Dane'] ?? null);
+    }
+}

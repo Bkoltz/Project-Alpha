@@ -283,8 +283,10 @@ final class SecurityHardeningTest extends TestCase
             self::assertStringContainsString('reject_pdf_active_content', $controller);
             self::assertStringContainsString('PUBLIC_UPLOAD_CLAMAV_REQUIRED', $controller);
             self::assertStringContainsString("preg_match('/^[a-f0-9]{32,64}$/", $controller);
+            self::assertStringContainsString("pa_public_link_redirect_path('contract', 'signed')", $controller);
         }
         self::assertStringContainsString('max_image_pixels', $this->read('src/controllers/public_view/public_contract_sign.php'));
+        self::assertStringContainsString('is_readable($storedFile)', $this->read('src/controllers/public_view/public_contract_sign.php'));
 
         $onboarding = $this->read('src/utils/client_onboarding.php');
         self::assertStringContainsString('strip_tags($value)', $onboarding);
@@ -292,6 +294,12 @@ final class SecurityHardeningTest extends TestCase
 
         $publicDoc = $this->read('src/views/public/doc-wrapper.php');
         self::assertStringContainsString('accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/gif,.gif,image/webp,.webp"', $publicDoc);
+        self::assertStringContainsString('download it to your device first', $publicDoc);
+
+        $publicTwig = $this->read('src/views/public/doc-template.twig');
+        self::assertStringContainsString('/?page=public-contract-sign', $publicTwig);
+        self::assertStringContainsString('contractSignCsrf', $publicTwig);
+        self::assertStringContainsString('accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/gif,.gif,image/webp,.webp"', $publicTwig);
     }
 
     public function testMigrationRunnerRetriesTransientMysqlLockFailures(): void

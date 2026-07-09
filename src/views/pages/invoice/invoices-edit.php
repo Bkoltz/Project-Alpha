@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'invoices', $id);
 $iv = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
@@ -41,10 +42,9 @@ foreach ($clients as $c) {
         <div>Due Date</div>
         <input type="date" name="due_date" value="<?php echo htmlspecialchars($inv['due_date'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
-      <label>
-        <div>Tax (%)</div>
-        <input id="taxPercentInv" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($inv['tax_percent']); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
+      <div>
+        <?php echo render_tax_lookup_control('taxPercentInv', 'tax_percent', (float)($inv['tax_percent'] ?? 0)); ?>
+      </div>
       <label>
         <div>Discount Type</div>
         <select id="discountTypeInv" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -266,3 +266,4 @@ foreach ($clients as $c) {
 </section>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/invoices-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

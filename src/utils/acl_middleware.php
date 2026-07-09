@@ -24,6 +24,7 @@ function page_permission_map(): array
         'logout'              => null,
         'logout-confirm'      => null,
         'serveupload'         => null,
+        'tax-lookup'          => null,
 
         // Settings module
         'settings'                         => 'settings.view',

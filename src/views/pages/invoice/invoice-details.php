@@ -152,6 +152,33 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <?php if (!empty($_GET['date_updated'])): ?>
     <div class="no-print" style="padding:8px 12px;background:#dbeafe;color:#1e3a8a;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Document date updated successfully</div>
   <?php endif; ?>
+  <?php if (!empty($_GET['emailed'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">Invoice emailed.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['email_err'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;margin-bottom:8px;font-size:14px">Email error: <?php echo htmlspecialchars((string)$_GET['email_err']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['content_link_warning'])): ?>
+    <?php
+      $invoiceWarningParams = $_GET;
+      unset($invoiceWarningParams['content_link_warning']);
+      $invoiceWarningReturn = '/?' . http_build_query($invoiceWarningParams);
+      $invoiceWarningIsDraft = strtolower((string)($inv['status'] ?? '')) === 'draft';
+    ?>
+    <div class="no-print" style="display:block;padding:12px 14px;background:#fffbeb;color:#92400e;border:1px solid #facc15;border-radius:8px;margin-bottom:8px;font-size:14px">
+      <strong>No invoice content links found.</strong>
+      <div style="margin-top:4px">This invoice has no eligible links marked "Include on invoices." Add a content link first, or send it anyway.</div>
+      <form method="post" action="<?php echo $invoiceWarningIsDraft ? '/?page=invoice/invoice-finalize' : '/?page=invoice/email-send'; ?>" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <?php if (!$invoiceWarningIsDraft): ?><input type="hidden" name="type" value="invoice"><?php endif; ?>
+        <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <?php if (!$invoiceWarningIsDraft): ?><input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars($invoiceWarningReturn); ?>"><?php endif; ?>
+        <input type="hidden" name="confirm_missing_content_links" value="1">
+        <button type="submit" class="btn btn-sm btn-warning"><?php echo $invoiceWarningIsDraft ? 'Finalize & Send Anyway' : 'Send Anyway'; ?></button>
+        <a class="btn btn-sm" href="<?php echo htmlspecialchars($invoiceWarningReturn); ?>">Cancel</a>
+      </form>
+    </div>
+  <?php endif; ?>
   <div class="no-print" style="padding:8px 12px;background:#f3f4f6;border-radius:6px;margin-bottom:8px;font-size:13px;color:#374151">
     <strong>Created:</strong> <?php echo !empty($inv['created_at']) ? date('M j, Y g:i A', strtotime($inv['created_at'])) : 'N/A'; ?>
     <span style="margin:0 8px">|</span>

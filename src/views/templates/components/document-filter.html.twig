@@ -156,11 +156,16 @@
 // Client autocomplete functionality
 document.querySelectorAll('[data-autocomplete="client"]').forEach(input => {
     const hiddenId = input.getAttribute('data-hidden-id');
+    const hiddenInput = document.getElementById(hiddenId);
     const suggestionsDiv = document.getElementById(input.id + '_suggestions');
+    let selectedName = input.value.trim();
     
     // Fetch clients on input
     input.addEventListener('input', function() {
         const query = this.value.trim();
+        if (hiddenInput && query !== selectedName) {
+            hiddenInput.value = '';
+        }
         if (query.length < 2) {
             suggestionsDiv.style.display = 'none';
             return;
@@ -179,7 +184,10 @@ document.querySelectorAll('[data-autocomplete="client"]').forEach(input => {
                 Array.from(suggestionsDiv.children).forEach(el => {
                     el.addEventListener('click', function() {
                         input.value = this.dataset.name;
-                        document.getElementById(hiddenId).value = this.dataset.id;
+                        selectedName = input.value.trim();
+                        if (hiddenInput) {
+                            hiddenInput.value = this.dataset.id;
+                        }
                         suggestionsDiv.style.display = 'none';
                     });
                 });

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
+require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 $selectedProject = null;
 $selectedProjectId = (int)($_GET['project_id'] ?? 0);
@@ -39,11 +40,9 @@ if ($selectedProjectId > 0) {
         <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
 
-      <!-- Tax input -->
-      <label style="grid-column:2/3">
-        <div>Tax (%)</div>
-        <input id="taxPercent" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
+      <div style="grid-column:2/3">
+        <?php echo render_tax_lookup_control('taxPercent', 'tax_percent', 0.0); ?>
+      </div>
 
       <label>
         <div>Discount Type</div>
@@ -338,4 +337,5 @@ if ($selectedProjectId > 0) {
 </section>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/quotes-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/client-selection-dropdown-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

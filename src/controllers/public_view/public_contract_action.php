@@ -105,8 +105,9 @@ try {
     throw $e;
   }
 
-  // Redirect back to public view with success
-  header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&ok=1');
+  // Redirect directly to the terminal status page. The tokenized document link
+  // is revoked after signing, so avoid routing the client back through it.
+  header('Location: ' . pa_public_link_redirect_path('contract', 'signed'));
   exit;
 } catch (Throwable $e) {
   $t = isset($token) ? (string)$token : '';

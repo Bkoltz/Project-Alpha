@@ -35,16 +35,22 @@ if ($invitationId > 0) {
     }
 }
 if ($invite && !empty($invite['client_id'])) {
-    $clientStmt = $pdo->prepare('SELECT name,phone,address_line1,address_line2,city,state,postal_code,country,client_type FROM clients WHERE id=?');
+    $clientStmt = $pdo->prepare('SELECT name,email,phone,address_line1,address_line2,city,state,postal_code,country,client_type FROM clients WHERE id=?');
     $clientStmt->execute([(int)$invite['client_id']]);
     $existingClient = $clientStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+}
+$existingOrganizationName = '';
+if ($invite && !empty($invite['target_organization_id'])) {
+    $orgStmt = $pdo->prepare('SELECT name FROM organizations WHERE id=?');
+    $orgStmt->execute([(int)$invite['target_organization_id']]);
+    $existingOrganizationName = (string)($orgStmt->fetchColumn() ?: '');
 }
 ?>
 <main>
   <div class="auth-wrap" style="max-width:680px">
     <?php if ($submitted): ?>
       <h1 style="margin-top:0">Information submitted</h1>
-      <p>Your information has been sent for review. No existing client record is changed until it is approved.</p>
+      <p>Your information has been sent for review.</p>
     <?php elseif (!$invite): ?>
       <h1 style="margin-top:0">Invitation unavailable</h1>
       <p>This invitation is invalid, expired, or already used. Contact the business that sent it for a new link.</p>
@@ -55,8 +61,10 @@ if ($invite && !empty($invite['client_id'])) {
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
         <label style="grid-column:1/-1"><span>Name</span><input class="input" name="name" maxlength="150" required value="<?php echo htmlspecialchars((string)($existingClient['name'] ?? '')); ?>"></label>
+        <label><span>Email</span><input class="input" type="email" name="email" maxlength="255" autocomplete="email" value="<?php echo htmlspecialchars((string)($existingClient['email'] ?? $invite['invited_email'] ?? '')); ?>"></label>
         <label><span>Phone</span><input class="input" name="phone" maxlength="50" autocomplete="tel" value="<?php echo htmlspecialchars((string)($existingClient['phone'] ?? '')); ?>"></label>
         <label><span>Client type</span><select class="input" name="client_type"><?php foreach (['unknown' => 'Not specified', 'business' => 'Business', 'consumer' => 'Individual'] as $value => $label): ?><option value="<?php echo $value; ?>" <?php echo ($existingClient['client_type'] ?? 'unknown') === $value ? 'selected' : ''; ?>><?php echo $label; ?></option><?php endforeach; ?></select></label>
+        <label style="grid-column:1/-1"><span>Organization</span><input class="input" name="organization_name" maxlength="150" autocomplete="organization" value="<?php echo htmlspecialchars($existingOrganizationName); ?>"></label>
         <label style="grid-column:1/-1"><span>Address</span><input class="input" name="address_line1" maxlength="255" autocomplete="address-line1" value="<?php echo htmlspecialchars((string)($existingClient['address_line1'] ?? '')); ?>"></label>
         <label style="grid-column:1/-1"><span>Apartment / Suite</span><input class="input" name="address_line2" maxlength="255" autocomplete="address-line2" value="<?php echo htmlspecialchars((string)($existingClient['address_line2'] ?? '')); ?>"></label>
         <label><span>City</span><input class="input" name="city" maxlength="100" autocomplete="address-level2" value="<?php echo htmlspecialchars((string)($existingClient['city'] ?? '')); ?>"></label>

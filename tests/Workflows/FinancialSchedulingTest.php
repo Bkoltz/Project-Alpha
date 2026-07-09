@@ -50,7 +50,12 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString('cron_state_ensure_schema($pdo)', (string)$backupPage);
         self::assertStringContainsString("require_once __DIR__ . '/../config/app.php';", (string)$backup);
         self::assertStringContainsString('function backup_database_run', (string)$backup);
+        self::assertStringContainsString('backup_database_today_artifacts', (string)$backup);
+        self::assertStringContainsString('$currentHour < $backupHour', (string)$backup);
+        self::assertStringContainsString('Waiting for configured backup window', (string)$backup);
         self::assertStringContainsString('cron_state_mark_success($pdo, $jobName, \'Cron disabled\')', (string)$backup);
+        self::assertStringContainsString('The configured backup time has passed today; cron will catch up on the next hourly check', (string)$backupPage);
+        self::assertStringContainsString("the next hourly check creates today's missing backup", (string)$backupPage);
         self::assertStringContainsString("config_key='timezone'", (string)$entrypoint);
         self::assertStringContainsString('/etc/localtime', (string)$entrypoint);
         self::assertStringContainsString('stripe_reconciliation.php --startup', (string)$entrypoint);

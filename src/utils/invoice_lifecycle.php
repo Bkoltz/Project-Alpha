@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/../services/StripeService.php';
 require_once __DIR__ . '/public_links.php';
+require_once __DIR__ . '/invoice_content_links.php';
 
 function invoice_is_collectible_status(string $status): bool
 {
@@ -369,6 +370,10 @@ function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, stri
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
         return false;
     }
+    if (invoice_missing_content_links_behavior($appConfig) === 'block'
+        && invoice_should_prompt_for_missing_content_links($pdo, 'invoice', $invoiceId, $appConfig)) {
+        return false;
+    }
 
     $claim = $pdo->prepare(
         'INSERT IGNORE INTO invoice_notifications
@@ -419,6 +424,10 @@ function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, stri
         . number_format((float)$invoice['total'], 2) . '</strong>.</p>'
         . (!empty($invoice['due_date']) ? '<p>Due date: ' . htmlspecialchars((string)$invoice['due_date']) . '</p>' : '')
         . '<p><a href="' . htmlspecialchars($url) . '">View and pay this invoice</a></p>';
+    $contentLinksHtml = invoice_content_links_html(invoice_content_links_for_invoice($pdo, $invoiceId, $appConfig));
+    if ($contentLinksHtml !== '') {
+        $body .= $contentLinksHtml;
+    }
 
     [$ok, $error] = EmailService::sendEmail($to, $subject, $body);
     if (!$ok) {
