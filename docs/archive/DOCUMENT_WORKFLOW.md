@@ -182,7 +182,7 @@ The cron service handles:
 - Scheduled financial audits
 - Rotating database-only or full backups, with optional environment-key encryption
 
-See [Cron Service](../cron/README.md) for the installed UTC schedule.
+See [Cron Service](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/cron/README.md) for the installed UTC schedule.
 
 ## Operational Checklist
 

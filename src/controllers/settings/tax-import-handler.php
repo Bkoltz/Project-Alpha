@@ -28,20 +28,6 @@ ignore_user_abort(true);
 
 const TAX_IMPORT_BATCH_SIZE = 2000;
 
-$stateFipsToAbbr = [
-    '01' => 'AL', '02' => 'AK', '04' => 'AZ', '05' => 'AR', '06' => 'CA',
-    '08' => 'CO', '09' => 'CT', '10' => 'DE', '11' => 'DC', '12' => 'FL',
-    '13' => 'GA', '15' => 'HI', '16' => 'ID', '17' => 'IL', '18' => 'IN',
-    '19' => 'IA', '20' => 'KS', '21' => 'KY', '22' => 'LA', '23' => 'ME',
-    '24' => 'MD', '25' => 'MA', '26' => 'MI', '27' => 'MN', '28' => 'MS',
-    '29' => 'MO', '30' => 'MT', '31' => 'NE', '32' => 'NV', '33' => 'NH',
-    '34' => 'NJ', '35' => 'NM', '36' => 'NY', '37' => 'NC', '38' => 'ND',
-    '39' => 'OH', '40' => 'OK', '41' => 'OR', '42' => 'PA', '44' => 'RI',
-    '45' => 'SC', '46' => 'SD', '47' => 'TN', '48' => 'TX', '49' => 'UT',
-    '50' => 'VT', '51' => 'VA', '53' => 'WA', '54' => 'WV', '55' => 'WI',
-    '56' => 'WY', '72' => 'PR', '78' => 'VI',
-];
-
 try {
     $stats = [
         'counties_loaded' => 0,
@@ -67,58 +53,56 @@ try {
         throw new Exception('Upload at least one FIPS, tax rate, or boundary file.');
     }
 
-    $importStateFips = '';
-    $importStateAbbr = '';
+    $importStateFips = pa_tax_state_fips_for_hint((string)($_POST['tax_state'] ?? ''));
+    if ($importStateFips === null) {
+        throw new Exception('Choose the state these tax files belong to before importing.');
+    }
+    $importStateAbbr = pa_tax_state_abbr_for_fips($importStateFips);
+    $_SESSION['tax_import_state'] = $importStateAbbr;
     $stateTaxRate = max(0.0, min(20.0, (float)($_POST['state_tax_rate'] ?? 5.0)));
 
     if ($hasFipsFile) {
         taxImportValidateFile('fips_file', ['txt']);
-        [$importStateFips, $importStateAbbr] = importFipsFile($pdo, $_FILES['fips_file']['tmp_name'], $stats);
+        [$importStateFips, $importStateAbbr] = importFipsFile($pdo, $_FILES['fips_file']['tmp_name'], $stats, $importStateFips);
         taxImportRememberFile($pdo, $importStateFips, 'fips', $_FILES['fips_file'], null);
         $stats['files_uploaded'][] = 'FIPS counties';
     }
 
     if ($hasRateFile) {
         taxImportValidateFile('rate_file', ['csv']);
-        [$rateStateFips, $rateStateAbbr] = importRateFile($pdo, $_FILES['rate_file']['tmp_name'], $stateTaxRate, $stats);
-        $importStateFips = $importStateFips ?: $rateStateFips;
-        $importStateAbbr = $importStateAbbr ?: $rateStateAbbr;
+        [$rateStateFips, $rateStateAbbr] = importRateFile($pdo, $_FILES['rate_file']['tmp_name'], $stateTaxRate, $stats, $importStateFips);
+        $importStateFips = $rateStateFips;
+        $importStateAbbr = $rateStateAbbr;
         taxImportRememberFile($pdo, $rateStateFips, 'rates', $_FILES['rate_file'], $stateTaxRate);
         $stats['files_uploaded'][] = 'Tax rates';
-    } elseif ($importStateFips !== '') {
+    } else {
         $stats['files_reused'][] = 'Existing tax rates';
         refreshTaxRateNamesFromFips($pdo, $importStateFips);
     }
 
     if ($hasBoundaryFile) {
         taxImportValidateFile('boundary_file', ['csv']);
-        [$boundaryStateFips, $boundaryStateAbbr] = importBoundaryFile($pdo, $_FILES['boundary_file']['tmp_name'], $stats);
-        $importStateFips = $importStateFips ?: $boundaryStateFips;
-        $importStateAbbr = $importStateAbbr ?: $boundaryStateAbbr;
+        [$boundaryStateFips, $boundaryStateAbbr] = importBoundaryFile($pdo, $_FILES['boundary_file']['tmp_name'], $stats, $importStateFips);
+        $importStateFips = $boundaryStateFips;
+        $importStateAbbr = $boundaryStateAbbr;
         taxImportRememberFile($pdo, $boundaryStateFips, 'boundaries', $_FILES['boundary_file'], null);
         $stats['files_uploaded'][] = 'Boundaries';
-    } elseif ($importStateFips !== '') {
+    } else {
         $stats['files_reused'][] = 'Existing boundaries';
-    }
-
-    if ($importStateFips === '') {
-        throw new Exception('Could not determine state from uploaded files.');
-    }
-    if ($importStateAbbr === '') {
-        $importStateAbbr = $stateFipsToAbbr[$importStateFips] ?? $importStateFips;
     }
 
     $_SESSION['tax_import_summary'] = buildImportSummary($stats, $importStateAbbr);
     $_SESSION['tax_import_stats'] = $stats;
 
-    header('Location: /?page=settings&tab=taxes&import_success=1');
+    header('Location: /?page=settings&tab=taxes&import_success=1&tax_state=' . rawurlencode($importStateAbbr));
     exit;
 } catch (Throwable $e) {
     if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
     @error_log('[tax-import] Error: ' . $e->getMessage());
-    header('Location: /?page=settings&tab=taxes&import_error=' . rawurlencode($e->getMessage()));
+    $stateParam = isset($_SESSION['tax_import_state']) ? '&tax_state=' . rawurlencode((string)$_SESSION['tax_import_state']) : '';
+    header('Location: /?page=settings&tab=taxes&import_error=' . rawurlencode($e->getMessage()) . $stateParam);
     exit;
 }
 
@@ -144,7 +128,7 @@ function taxImportValidateFile(string $field, array $extensions): void
     }
 }
 
-function importFipsFile(PDO $pdo, string $path, array &$stats): array
+function importFipsFile(PDO $pdo, string $path, array &$stats, string $expectedStateFips): array
 {
     $handle = fopen($path, 'rb');
     if (!$handle) {
@@ -180,6 +164,9 @@ function importFipsFile(PDO $pdo, string $path, array &$stats): array
         if ($stateAbbr === '' || $stateFips === '' || $countyFips === '' || $countyName === '') {
             continue;
         }
+        if ($stateFips !== $expectedStateFips) {
+            continue;
+        }
         $rows[$stateFips . $countyFips] = [$stateFips, $countyFips, $stateAbbr, $countyName];
         $importStateFips = $importStateFips ?: $stateFips;
         $importStateAbbr = $importStateAbbr ?: $stateAbbr;
@@ -187,7 +174,7 @@ function importFipsFile(PDO $pdo, string $path, array &$stats): array
     fclose($handle);
 
     if (!$rows) {
-        throw new Exception('No counties found in FIPS file.');
+        throw new Exception('No counties found in the FIPS file for selected state ' . pa_tax_state_abbr_for_fips($expectedStateFips) . '.');
     }
 
     $pdo->beginTransaction();
@@ -205,7 +192,7 @@ function importFipsFile(PDO $pdo, string $path, array &$stats): array
     return [$importStateFips, $importStateAbbr];
 }
 
-function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$stats): array
+function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$stats, string $expectedStateFips): array
 {
     $handle = fopen($path, 'rb');
     if (!$handle) {
@@ -219,12 +206,20 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
     }
 
     $today = date('Ymd');
-    $stateFips = '';
-    $stateAbbr = '';
+    $stateFips = $expectedStateFips;
+    $stateAbbr = pa_tax_state_abbr_for_fips($expectedStateFips);
     $lineNum = 0;
     $batch = 0;
     $hasDefault = taxRatesHasColumn($pdo, 'is_default');
     $hasCountry = taxRatesHasColumn($pdo, 'country');
+    $stateFipsRows = array_filter($fipsLookup, static fn($row) => $row['state_fips'] === $stateFips);
+    if (!$stateFipsRows) {
+        fclose($handle);
+        throw new Exception("No FIPS counties stored for {$stateAbbr}. Upload that state's FIPS file before importing rates.");
+    }
+    $stateAbbr = reset($stateFipsRows)['state_abbr'] ?? $stateAbbr;
+    $pdo->beginTransaction();
+    $pdo->prepare('DELETE FROM tax_jurisdictions WHERE state_fips = ?')->execute([$stateFips]);
 
     $insertJurisdiction = $pdo->prepare(
         'INSERT INTO tax_jurisdictions
@@ -241,18 +236,7 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
         }
 
         $rowStateFips = str_pad(trim($parts[0]), 2, '0', STR_PAD_LEFT);
-        if ($stateFips === '') {
-            $stateFips = $rowStateFips;
-            $stateAbbr = stateAbbrForFips($stateFips);
-            $stateFipsRows = array_filter($fipsLookup, static fn($row) => $row['state_fips'] === $stateFips);
-            if (!$stateFipsRows) {
-                fclose($handle);
-                throw new Exception("No FIPS counties stored for state {$stateFips}. Upload that state's FIPS file before importing rates.");
-            }
-            $stateAbbr = reset($stateFipsRows)['state_abbr'] ?? $stateAbbr;
-            $pdo->beginTransaction();
-            $pdo->prepare('DELETE FROM tax_jurisdictions WHERE state_fips = ?')->execute([$stateFips]);
-        } elseif ($rowStateFips !== $stateFips) {
+        if ($rowStateFips !== $stateFips) {
             $stats['errors'][] = "Rate line {$lineNum}: skipped mixed state FIPS {$rowStateFips}";
             continue;
         }
@@ -327,11 +311,11 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
     }
     fclose($handle);
 
-    if ($stateFips === '') {
+    if ($stats['jurisdictions_inserted'] === 0) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        throw new Exception('No usable rows found in tax rate file.');
+        throw new Exception('No usable rows found in the tax rate file for selected state ' . $stateAbbr . '.');
     }
     if ($pdo->inTransaction()) {
         $pdo->commit();
@@ -451,7 +435,7 @@ function addCountyRateSanityWarnings(PDO $pdo, string $stateFips, array &$stats)
     }
 }
 
-function importBoundaryFile(PDO $pdo, string $path, array &$stats): array
+function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expectedStateFips): array
 {
     $handle = fopen($path, 'rb');
     if (!$handle) {
@@ -459,8 +443,8 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats): array
     }
 
     $batchKey = bin2hex(random_bytes(12));
-    $stateFips = '';
-    $stateAbbr = '';
+    $stateFips = $expectedStateFips;
+    $stateAbbr = pa_tax_state_abbr_for_fips($expectedStateFips);
     $rowCount = 0;
     $batch = 0;
 
@@ -487,10 +471,7 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats): array
         if ($zip5Start === '' || strlen($zip5Start) !== 5 || $rowStateFips === '00') {
             continue;
         }
-        if ($stateFips === '') {
-            $stateFips = $rowStateFips;
-            $stateAbbr = stateAbbrForFips($stateFips);
-        } elseif ($rowStateFips !== $stateFips) {
+        if ($rowStateFips !== $stateFips) {
             $stats['errors'][] = 'Boundary row skipped for mixed state FIPS ' . $rowStateFips;
             continue;
         }
@@ -521,9 +502,9 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats): array
         $pdo->commit();
     }
 
-    if ($stateFips === '' || $rowCount === 0) {
+    if ($rowCount === 0) {
         $pdo->prepare('DELETE FROM tax_boundaries_stage WHERE batch_key = ?')->execute([$batchKey]);
-        throw new Exception('No usable boundary rows found.');
+        throw new Exception('No usable boundary rows found for selected state ' . $stateAbbr . '.');
     }
 
     $pdo->beginTransaction();
@@ -608,20 +589,7 @@ function taxRatesHasColumn(PDO $pdo, string $column): bool
 
 function stateAbbrForFips(string $stateFips): string
 {
-    $map = [
-        '01' => 'AL', '02' => 'AK', '04' => 'AZ', '05' => 'AR', '06' => 'CA',
-        '08' => 'CO', '09' => 'CT', '10' => 'DE', '11' => 'DC', '12' => 'FL',
-        '13' => 'GA', '15' => 'HI', '16' => 'ID', '17' => 'IL', '18' => 'IN',
-        '19' => 'IA', '20' => 'KS', '21' => 'KY', '22' => 'LA', '23' => 'ME',
-        '24' => 'MD', '25' => 'MA', '26' => 'MI', '27' => 'MN', '28' => 'MS',
-        '29' => 'MO', '30' => 'MT', '31' => 'NE', '32' => 'NV', '33' => 'NH',
-        '34' => 'NJ', '35' => 'NM', '36' => 'NY', '37' => 'NC', '38' => 'ND',
-        '39' => 'OH', '40' => 'OK', '41' => 'OR', '42' => 'PA', '44' => 'RI',
-        '45' => 'SC', '46' => 'SD', '47' => 'TN', '48' => 'TX', '49' => 'UT',
-        '50' => 'VT', '51' => 'VA', '53' => 'WA', '54' => 'WV', '55' => 'WI',
-        '56' => 'WY', '72' => 'PR', '78' => 'VI',
-    ];
-    return $map[$stateFips] ?? $stateFips;
+    return pa_tax_state_abbr_for_fips($stateFips);
 }
 
 function taxImportRememberFile(PDO $pdo, string $stateFips, string $fileType, array $file, ?float $stateTaxRate): void
@@ -737,12 +705,15 @@ function ensureTablesExist(PDO $pdo): void
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS tax_zip_complexity (
-        zip5 VARCHAR(5) PRIMARY KEY,
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        zip5 VARCHAR(5) NOT NULL,
         is_complex TINYINT(1) NOT NULL DEFAULT 0,
         reason VARCHAR(50) DEFAULT NULL,
         state_fips VARCHAR(2) DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_tax_zip_complexity_state_zip (state_fips, zip5),
+        INDEX idx_tax_zip_complexity_zip5 (zip5),
         INDEX idx_tax_zip_complexity_state (state_fips)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 

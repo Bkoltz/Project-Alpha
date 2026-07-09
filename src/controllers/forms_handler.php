@@ -12,6 +12,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/csrf.php';
 require_once __DIR__ . '/../utils/upload_validator.php';
 require_once __DIR__ . '/../utils/acl.php';
+require_once __DIR__ . '/../utils/email_identity.php';
 
 $action = $_POST['action'] ?? null;
 $response = ['success' => false, 'message' => ''];
@@ -448,6 +449,7 @@ try {
             require_once __DIR__ . '/../config/app.php';
             $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
             $fromEmail = $appConfig['from_email'] ?? 'noreply@localhost';
+            $fromName = pa_email_sender_name($appConfig);
 
             $subject = $brandName . ' - ' . $form['title'];
             $filePath = __DIR__ . '/../../' . ltrim($form['file_path'], '/');
@@ -459,7 +461,7 @@ try {
                 $body .= "Best regards,\n" . $brandName;
 
                 // Simple email (in production, use PHPMailer or similar for attachments)
-                $headers = "From: " . $fromEmail . "\r\n";
+                $headers = "From: " . ($fromName ? ($fromName . ' <' . $fromEmail . '>') : $fromEmail) . "\r\n";
                 $headers .= "Reply-To: " . $fromEmail . "\r\n";
 
                 // Note: Basic mail() doesn't support attachments well
@@ -529,6 +531,7 @@ try {
             require_once __DIR__ . '/../config/app.php';
             $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
             $fromEmail = $appConfig['from_email'] ?? 'noreply@localhost';
+            $fromName = pa_email_sender_name($appConfig);
 
             $subject = $brandName . ' - ' . $folder['title'] . ' Documents';
 
@@ -544,7 +547,7 @@ try {
                 $body .= "\nBest regards,\n" . $brandName;
 
                 // Simple email (in production, use PHPMailer or similar for attachments)
-                $headers = "From: " . $fromEmail . "\r\n";
+                $headers = "From: " . ($fromName ? ($fromName . ' <' . $fromEmail . '>') : $fromEmail) . "\r\n";
                 $headers .= "Reply-To: " . $fromEmail . "\r\n";
 
                 // Note: Basic mail() doesn't support attachments well

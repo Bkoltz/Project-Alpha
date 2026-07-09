@@ -2,6 +2,7 @@
 // src/views/pages/settings/taxes.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/tax_lookup.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
@@ -15,6 +16,19 @@ if ($importSuccess) unset($_SESSION['tax_import_summary']);
 
 $editTaxId = (int)($_GET['edit_tax_id'] ?? 0);
 $taxRates = [];
+$taxImportStates = pa_tax_state_options();
+$taxImportStatus = [];
+foreach ($taxImportStates as $stateOption) {
+  $taxImportStatus[$stateOption['fips']] = [
+    'state' => $stateOption,
+    'counties' => 0,
+    'jurisdictions' => 0,
+    'boundaries' => 0,
+    'files' => [],
+  ];
+}
+$selectedImportFips = pa_tax_state_fips_for_hint((string)($_GET['tax_state'] ?? ($_SESSION['tax_import_state'] ?? 'WI'))) ?? '55';
+$selectedImportState = pa_tax_state_abbr_for_fips($selectedImportFips);
 // Detect whether the tax_rates table includes an `is_default` column (older DBs may not)
 $hasDefault = false;
 try {
@@ -29,6 +43,38 @@ try {
 } catch (Throwable $e) {
   // ignore if table doesn't exist or other DB issues
 }
+try {
+  $rows = $pdo->query("SELECT state_fips, file_type, original_name, size_bytes, state_tax_rate, imported_at FROM tax_import_files ORDER BY imported_at DESC")->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($rows as $row) {
+    $stateFips = (string)($row['state_fips'] ?? '');
+    $fileType = (string)($row['file_type'] ?? '');
+    if (isset($taxImportStatus[$stateFips]) && $fileType !== '') {
+      $taxImportStatus[$stateFips]['files'][$fileType] = $row;
+    }
+  }
+} catch (Throwable $e) {
+  // ignore if import cache is not created yet
+}
+foreach ([
+  'counties' => 'SELECT state_fips, COUNT(*) AS row_count FROM fips_counties GROUP BY state_fips',
+  'jurisdictions' => 'SELECT state_fips, COUNT(*) AS row_count FROM tax_jurisdictions WHERE is_active = 1 GROUP BY state_fips',
+  'boundaries' => 'SELECT state_fips, COUNT(*) AS row_count FROM tax_boundaries GROUP BY state_fips',
+] as $key => $sql) {
+  try {
+    foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $row) {
+      $stateFips = (string)($row['state_fips'] ?? '');
+      if (isset($taxImportStatus[$stateFips])) {
+        $taxImportStatus[$stateFips][$key] = (int)($row['row_count'] ?? 0);
+      }
+    }
+  } catch (Throwable $e) {
+    // ignore if import tables are not created yet
+  }
+}
+$selectedRateFile = $taxImportStatus[$selectedImportFips]['files']['rates'] ?? null;
+$selectedStateTaxRateValue = $selectedRateFile && $selectedRateFile['state_tax_rate'] !== null
+  ? number_format((float)$selectedRateFile['state_tax_rate'], 2, '.', '')
+  : ($selectedImportState === 'WI' ? '5.00' : '0.00');
 ?>
 
 <div style="max-width:1000px">
@@ -217,6 +263,60 @@ try {
     <p style="margin:0 0 16px;color:#6b7280;font-size:14px">
       Import official source files for counties, rates, and ZIP boundaries. Upload one or more files; any missing file type is reused from the last successful import for that state.
     </p>
+
+    <div style="margin-bottom:18px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:#f9fafb;border-bottom:1px solid #e5e7eb">
+        <div>
+          <div style="font-weight:600;color:#374151">Imported State Coverage</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">Each state keeps separate county, rate, boundary, and source-file status.</div>
+        </div>
+        <div style="font-size:12px;color:#6b7280">Selected: <?php echo htmlspecialchars($selectedImportState); ?></div>
+      </div>
+      <div style="max-height:260px;overflow:auto">
+        <table class="pa-table">
+          <thead style="position:sticky;top:0;background:#f9fafb;z-index:1">
+            <tr style="text-align:left;border-bottom:1px solid #e5e7eb">
+              <th style="padding:10px 12px">State</th>
+              <th style="padding:10px 12px">Counties</th>
+              <th style="padding:10px 12px">Rates</th>
+              <th style="padding:10px 12px">Boundaries</th>
+              <th style="padding:10px 12px">Files</th>
+              <th style="padding:10px 12px">State Tax</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($taxImportStatus as $stateFips => $stateStatus): ?>
+              <?php
+                $state = $stateStatus['state'];
+                $files = $stateStatus['files'];
+                $fileLabels = [];
+                foreach (['fips' => 'FIPS', 'rates' => 'Rates', 'boundaries' => 'Boundaries'] as $fileType => $fileLabel) {
+                  if (isset($files[$fileType])) {
+                    $fileLabels[] = $fileLabel . ': ' . (string)$files[$fileType]['original_name'];
+                  }
+                }
+                $rateFile = $files['rates'] ?? null;
+                $rateDisplay = $rateFile && $rateFile['state_tax_rate'] !== null ? number_format((float)$rateFile['state_tax_rate'], 2) . '%' : '--';
+                $isSelectedState = $stateFips === $selectedImportFips;
+              ?>
+              <tr style="border-bottom:1px solid #f3f4f6;<?php echo $isSelectedState ? 'background:#f0f9ff' : ''; ?>">
+                <td style="padding:10px 12px;font-weight:600;white-space:nowrap">
+                  <?php echo htmlspecialchars($state['abbr']); ?>
+                  <span style="font-weight:400;color:#6b7280">- <?php echo htmlspecialchars($state['name']); ?></span>
+                </td>
+                <td style="padding:10px 12px"><?php echo number_format((int)$stateStatus['counties']); ?></td>
+                <td style="padding:10px 12px"><?php echo number_format((int)$stateStatus['jurisdictions']); ?></td>
+                <td style="padding:10px 12px"><?php echo number_format((int)$stateStatus['boundaries']); ?></td>
+                <td style="padding:10px 12px;font-size:12px;color:#374151">
+                  <?php echo $fileLabels ? htmlspecialchars(implode(' | ', $fileLabels)) : '<span style="color:#9ca3af">Not imported</span>'; ?>
+                </td>
+                <td style="padding:10px 12px;white-space:nowrap"><?php echo htmlspecialchars($rateDisplay); ?></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
     
     <?php if ($importSuccess && $importSummary): ?>
       <div style="margin-bottom:16px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px">
@@ -229,8 +329,20 @@ try {
       </div>
     <?php endif; ?>
     
-    <form method="post" action="/?page=settings/tax-import-handler" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:600px">
+    <form method="post" action="/?page=settings/tax-import-handler" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:760px">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+
+      <label>
+        <div style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">State</div>
+        <select name="tax_state" style="padding:10px 12px;border-radius:8px;border:1px solid #d1d5db;width:100%;max-width:360px;font-size:14px;background:#fff">
+          <?php foreach ($taxImportStates as $stateOption): ?>
+            <option value="<?php echo htmlspecialchars($stateOption['abbr']); ?>" <?php echo $stateOption['fips'] === $selectedImportFips ? 'selected' : ''; ?>>
+              <?php echo htmlspecialchars($stateOption['abbr'] . ' - ' . $stateOption['name']); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+        <div style="margin-top:4px;color:var(--muted);font-size:11px">PA imports and replaces rows only for this selected state.</div>
+      </label>
       
       <div class="grid">
         <div>
@@ -256,9 +368,9 @@ try {
 
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">State Tax Rate (%)</label>
-          <input type="number" step="0.01" min="0" max="20" name="state_tax_rate" value="5.00" 
+          <input type="number" step="0.01" min="0" max="20" name="state_tax_rate" value="<?php echo htmlspecialchars($selectedStateTaxRateValue); ?>"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:120px;font-size:13px;background:#fff">
-          <div style="margin-top:4px;color:var(--muted);font-size:11px">State sales tax to add (e.g., 5.00 for Wisconsin)</div>
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">State sales tax to add before local county/city rates.</div>
         </div>
       </div>
       
@@ -271,9 +383,11 @@ try {
       <strong>📋 How it works:</strong>
       <ul style="margin:8px 0 0 16px;padding:0;color:#1e40af">
         <li>FIPS, rate, and boundary files are stored as reusable import sources.</li>
-        <li>If you upload only one updated file, PA reuses the other previously imported sources for that state.</li>
-        <li>Rate imports replace current imported jurisdiction rows for the state and mirror county totals into the normal tax rate list.</li>
-        <li>Boundary imports load into a staging table first, then replace the live boundary rows after the full file succeeds.</li>
+        <li>Select the state before uploading; PA only replaces imported rows for that state.</li>
+        <li>If you upload only one updated file, PA keeps the other previously imported tables for that state.</li>
+        <li>Rate imports replace current imported jurisdiction rows for the selected state and mirror county totals into the normal tax rate list.</li>
+        <li>Boundary imports load into a staging table first, then replace the selected state's live boundary rows after the full file succeeds.</li>
+        <li>ZIP lookup can still show multiple states when an imported ZIP crosses a state line.</li>
       </ul>
     </div>
     

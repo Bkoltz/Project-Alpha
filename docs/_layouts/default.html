@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.title }}</title>
+  <meta name="description" content="{{ page.description | default: site.description | escape }}">
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{{ '/' | relative_url }}">
+      <span class="brand-mark">PA</span>
+      <span>
+        <strong>Project Alpha</strong>
+        <small>Business workflow docs</small>
+      </span>
+    </a>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="{{ '/getting-started/' | relative_url }}">Start</a>
+      <a href="{{ '/workflows/' | relative_url }}">Workflows</a>
+      <a href="{{ '/admin/' | relative_url }}">Admin</a>
+      <a href="{{ '/reference/' | relative_url }}">Reference</a>
+      <a href="https://github.com/ledgetoptechnologies/Project-Alpha">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="page-shell">
+    <aside class="sidebar" aria-label="Documentation sections">
+      <p class="sidebar-label">Learn PA</p>
+      <a href="{{ '/' | relative_url }}">Overview</a>
+      <a href="{{ '/getting-started/' | relative_url }}">Getting Started</a>
+      <a href="{{ '/getting-started/core-concepts.html' | relative_url }}">Core Concepts</a>
+      <a href="{{ '/getting-started/first-week.html' | relative_url }}">First Week Checklist</a>
+
+      <p class="sidebar-label">Workflows</p>
+      <a href="{{ '/workflows/' | relative_url }}">Workflow Map</a>
+      <a href="{{ '/workflows/documents.html' | relative_url }}">Quotes, Contracts, Invoices</a>
+      <a href="{{ '/workflows/projects.html' | relative_url }}">Projects and Jobs</a>
+      <a href="{{ '/workflows/client-onboarding.html' | relative_url }}">Client Onboarding</a>
+      <a href="{{ '/workflows/payments.html' | relative_url }}">Payments</a>
+      <a href="{{ '/workflows/recurring-billing.html' | relative_url }}">Recurring Billing</a>
+
+      <p class="sidebar-label">Admin</p>
+      <a href="{{ '/admin/' | relative_url }}">Admin Overview</a>
+      <a href="{{ '/admin/settings.html' | relative_url }}">Settings</a>
+      <a href="{{ '/admin/deployment.html' | relative_url }}">Deployment</a>
+      <a href="{{ '/admin/backups.html' | relative_url }}">Backups</a>
+      <a href="{{ '/admin/security.html' | relative_url }}">Security</a>
+      <a href="{{ '/admin/payments-stripe.html' | relative_url }}">Stripe</a>
+      <a href="{{ '/admin/tax-rates.html' | relative_url }}">Tax Rates</a>
+
+      <p class="sidebar-label">Reference</p>
+      <a href="{{ '/reference/' | relative_url }}">Reference Index</a>
+      <a href="{{ '/reference/public-links.html' | relative_url }}">Public Links</a>
+      <a href="{{ '/reference/pages-setup.html' | relative_url }}">Docs Site Setup</a>
+      <a href="{{ '/archive/' | relative_url }}">Archive</a>
+    </aside>
+
+    <article class="content">
+      {{ content }}
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <span>Project Alpha documentation</span>
+    <span><a href="https://github.com/ledgetoptechnologies/Project-Alpha/issues">Report an issue</a></span>
+  </footer>
+</body>
+</html>

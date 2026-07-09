@@ -184,7 +184,8 @@ try {
             $items = $itemsSt->fetchAll(PDO::FETCH_ASSOC);
 
             // Prepare sender info
-            $fromName = ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha');
+            require_once __DIR__ . '/../../utils/email_identity.php';
+            $fromName = pa_email_sender_name($appConfig, false);
             $fromPhone = $appConfig['from_phone'] ?? '';
             $fromEmail = $appConfig['from_email'] ?? '';
 

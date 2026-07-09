@@ -13,6 +13,7 @@ $appConfig = [
     'brand_name' => 'Project Alpha',
     'logo_path'  => null,
     // User info for documents
+    'from_company' => null,
     'from_name' => null,
     'from_address_line1' => null,
     'from_address_line2' => null,
@@ -179,7 +180,7 @@ try {
             'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_username', 'smtp_password_enc',
             'smtp_from_email', 'smtp_from_name',
             // General UI settings (now stored in app_config DB)
-            'brand_name', 'logo_path', 'from_name', 'from_address_line1', 'from_address_line2',
+            'brand_name', 'logo_path', 'from_company', 'from_name', 'from_address_line1', 'from_address_line2',
             'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
             'app_host', 'public_links_in_email', 'primary_state', 'timezone',
             'terms', 'long_term_terms', 'on_demand_terms',

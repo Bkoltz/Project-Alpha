@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/smtp.php';
 require_once __DIR__ . '/../utils/mailer.php';
+require_once __DIR__ . '/../utils/email_identity.php';
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
 $isAjax = ((string)($_POST['ajax'] ?? '') === '1')
@@ -39,7 +40,7 @@ $body = 'testing';
 $smtpHost = $postHost !== '' ? $postHost : ($appConfig['smtp_host'] ?? null);
 $smtpHostL = $smtpHost ? strtolower((string)$smtpHost) : null;
 $fromEmail = $postFrom !== '' ? $postFrom : ($appConfig['from_email'] ?? '');
-$fromName = $appConfig['from_name'] ?? 'Project Alpha';
+$fromName = pa_email_sender_name($appConfig);
 $sent = false; $err = '';
 if ($smtpHost) {
   $pass = $postPass !== '' ? $postPass : null;

@@ -5,6 +5,7 @@
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/smtp.php';
+require_once __DIR__ . '/email_identity.php';
 
 /**
  * Log an activity event to the activity_log table
@@ -161,7 +162,7 @@ function send_admin_notification(PDO $pdo, array $appConfig, string $subject, st
 
         $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
         $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-        $fromName = (string)($appConfig['from_name'] ?? $brand);
+        $fromName = pa_email_sender_name($appConfig);
         $cfg = get_smtp_config($appConfig);
         $sent = 0;
 

@@ -1,5 +1,12 @@
-title: Project Alpha
-description: Operating guides and engineering records for Project Alpha.
+title: Project Alpha Docs
+description: Learn how Project Alpha helps small teams manage clients, quotes, contracts, invoices, projects, payments, and operations.
 theme: jekyll-theme-minimal
 show_downloads: false
 repository: ledgetoptechnologies/Project-Alpha
+url: https://docs.project-alpha.tech
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

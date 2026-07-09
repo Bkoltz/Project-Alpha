@@ -1,13 +1,19 @@
 <?php
 // src/utils/document_sender.php
 // Optional per-user sender profile for quote, contract, and invoice documents.
+require_once __DIR__ . '/email_identity.php';
 
 function document_sender_defaults(array $appConfig): array
 {
+    $company = trim((string)($appConfig['from_company'] ?? ''));
+    if ($company === '') {
+        $company = (string)($appConfig['brand_name'] ?? 'Project Alpha');
+    }
+
     return [
         'enabled' => false,
-        'name' => ($appConfig['from_name'] ?? '') ?: ($appConfig['brand_name'] ?? 'Project Alpha'),
-        'company' => $appConfig['brand_name'] ?? 'Project Alpha',
+        'name' => ($appConfig['from_name'] ?? '') ?: pa_email_sender_name($appConfig, false),
+        'company' => $company,
         'address_line1' => $appConfig['from_address_line1'] ?? '',
         'address_line2' => $appConfig['from_address_line2'] ?? '',
         'city' => $appConfig['from_city'] ?? '',
