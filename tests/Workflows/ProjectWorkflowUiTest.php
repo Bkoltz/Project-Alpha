@@ -285,6 +285,7 @@ final class ProjectWorkflowUiTest extends TestCase
         $ltCreate = file_get_contents($this->root . '/src/controllers/contract/long_term_contracts_create.php');
         $sign = file_get_contents($this->root . '/src/controllers/public_view/public_contract_sign.php');
         $start = file_get_contents($this->root . '/src/controllers/contract/long_term_contract_start_billing.php');
+        $activate = file_get_contents($this->root . '/src/controllers/contract/long_term_contract_activate.php');
         $odcList = file_get_contents($this->root . '/src/views/pages/contract/on-demand-contracts-list.php');
         $editView = file_get_contents($this->root . '/src/views/pages/contract/contracts-edit.php');
         $editScript = file_get_contents($this->root . '/public/assets/js/contracts-edit-logic.js');
@@ -299,6 +300,9 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('$next_invoice_date = null;', (string)$ltCreate);
         self::assertStringContainsString('pa_long_term_starts_billing_on_upload($contract)', (string)$sign);
         self::assertStringContainsString('generate_recurring_invoice($pdo, $contract, $appConfig)', (string)$start);
+        self::assertStringContainsString('$hasGeneratedInvoices', (string)$activate);
+        self::assertStringContainsString('recurring_invoice_send_on_generate_if_enabled($pdo, $invoiceId, $appConfig)', (string)$start);
+        self::assertStringContainsString('UPDATE invoices SET sent_at=COALESCE(sent_at,NOW())', (string)file_get_contents($this->root . '/src/controllers/email_send.php'));
         self::assertStringContainsString('$billingText = \'Manual invoices\';', (string)$odcList);
         self::assertStringContainsString('Recurring Billing Settings', (string)$editView);
         self::assertStringContainsString('name="billing_interval_unit"', (string)$editView);
@@ -310,7 +314,11 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('Long-term recurring invoices are historical billing records and must not be rewritten.', (string)$update);
         self::assertStringContainsString('if (!$isLongTermContract)', (string)$update);
         self::assertStringContainsString("['pending', 'active', 'paused']", (string)$ltDetails);
+        self::assertStringContainsString('Generate Invoice Now', (string)$ltDetails);
+        self::assertStringContainsString('Email Latest Invoice', (string)$ltDetails);
         self::assertStringContainsString('Edit Billing', (string)$ltList);
+        self::assertStringContainsString('invoices_generated', (string)$ltList);
+        self::assertStringContainsString('latest_invoice_id', (string)$ltList);
         self::assertStringContainsString('Edit billing', (string)$recurringList);
     }
 

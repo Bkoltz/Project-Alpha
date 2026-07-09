@@ -71,6 +71,7 @@ $status = strtolower((string)$pi['status']);
 $docNum = $pi['doc_number'] ?: $pi['id'];
 $isPdf = defined('PDF_MODE') && PDF_MODE;
 $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
+$showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_warning']);
 ?>
 <section class="document-detail-page" style="max-width:980px;margin:0 auto;padding:<?php echo $isPublic ? '0' : '24px'; ?>">
   <?php if (!$isPdf && !$isPublic): ?>
@@ -98,10 +99,17 @@ $isPublic = defined('PUBLIC_VIEW') && PUBLIC_VIEW;
   <?php endif; ?>
 
   <?php if (!$isPdf && !$isPublic): ?>
-    <div id="emailPanel" class="no-print" style="display:none;border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:14px;margin-bottom:16px">
+    <div id="emailPanel" class="no-print" style="display:<?php echo $showEmailPanel ? 'block' : 'none'; ?>;border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:14px;margin-bottom:16px">
       <form method="post" action="/?page=project/project-invoice-email" style="display:grid;gap:10px">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+        <?php if (!empty($_GET['content_link_warning'])): ?>
+          <div style="padding:12px 14px;background:#fffbeb;color:#92400e;border:1px solid #facc15;border-radius:8px;font-size:14px">
+            <strong>No invoice content links found.</strong>
+            <div style="margin-top:4px">This project invoice has no eligible links marked "Include on invoices." Add a content link first, or send it anyway.</div>
+            <input type="hidden" name="confirm_missing_content_links" value="1">
+          </div>
+        <?php endif; ?>
         <div>
           <div style="font-weight:700;margin-bottom:4px">Send Project Invoice</div>
           <div style="font-size:13px;color:#4b5563">Choose which project clients should receive this email.</div>

@@ -315,7 +315,7 @@ if (in_array($type, ['invoice', 'project_invoice'], true)) {
       <input type="file" name="signed_pdf" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/gif,.gif,image/webp,.webp" required style="padding:8px;border:1px solid #93c5fd;border-radius:8px;background:#fff">
       <button type="submit" style="padding:12px 28px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-weight:600;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,0.3)">📤 Upload Signed Contract</button>
     </form>
-    <p style="margin-top:12px;font-size:13px;color:#6b7280">Accepts PDF or image files. Maximum 10 MB.</p>
+    <p style="margin-top:12px;font-size:13px;color:#6b7280">Accepts PDF or image files. Maximum 25 MB. If the file is stored in a cloud drive, download it to your device first, then upload it here.</p>
   </div>
   <?php
     endif;

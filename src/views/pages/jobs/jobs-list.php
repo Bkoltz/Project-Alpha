@@ -47,10 +47,12 @@ $subAndUnionParams = $scopeWhere !== '' ? array_merge($scopeParams, $scopeParams
 $outerScopeParams = $scopeWhere !== '' ? $scopeParams : [];
 $rows->execute(array_merge($subAndUnionParams, $params, $outerScopeParams));
 $projects = $rows->fetchAll();
-$clientSql = 'SELECT c.id, c.name FROM clients c ORDER BY c.name';
-$clientStmt = $pdo->prepare($clientSql);
-$clientStmt->execute();
-$clients = $clientStmt->fetchAll();
+$clientName = '';
+if ($client_id > 0) {
+  $clientStmt = $pdo->prepare('SELECT name FROM clients WHERE id=?');
+  $clientStmt->execute([$client_id]);
+  $clientName = (string)($clientStmt->fetchColumn() ?: '');
+}
 
 $selectedRow = null;
 if ($selected !== '') {
@@ -65,20 +67,15 @@ if ($selected !== '') {
 <section>
   <h2>Jobs</h2>
   <?php
-  // Prepare client options for dropdown
-  $clientOptions = [['value' => '0', 'label' => 'All Clients']];
-  foreach ($clients as $c) {
-      $clientOptions[] = ['value' => (string)$c['id'], 'label' => $c['name']];
-  }
-  
   $filterConfig = [
       'page' => 'jobs/jobs-list',
       'filters' => [
-          'client_id' => [
-              'type' => 'select',
+          'client' => [
+              'type' => 'client_autocomplete',
               'label' => 'Client',
-              'value' => (string)$client_id,
-              'options' => $clientOptions
+              'value' => $clientName,
+              'id_value' => $client_id,
+              'placeholder' => 'Type client name...'
           ],
           'project_prefix' => [
               'type' => 'text',

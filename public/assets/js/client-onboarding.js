@@ -24,6 +24,38 @@ function initClientOnboardingPage() {
             }
         });
     });
+
+    document.querySelectorAll('[data-open-onboarding-review]').forEach(button => {
+        if (button.dataset.reviewInitialized === '1') return;
+        button.dataset.reviewInitialized = '1';
+        button.addEventListener('click', function () {
+            const modal = document.getElementById(this.dataset.openOnboardingReview || '');
+            if (!modal) return;
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+        });
+    });
+
+    document.querySelectorAll('[data-close-onboarding-review]').forEach(button => {
+        if (button.dataset.reviewInitialized === '1') return;
+        button.dataset.reviewInitialized = '1';
+        button.addEventListener('click', function () {
+            const modal = document.getElementById(this.dataset.closeOnboardingReview || '');
+            if (!modal) return;
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+        });
+    });
+
+    document.querySelectorAll('.onboarding-review-modal').forEach(modal => {
+        if (modal.dataset.backdropInitialized === '1') return;
+        modal.dataset.backdropInitialized = '1';
+        modal.addEventListener('click', function (event) {
+            if (event.target !== this) return;
+            this.classList.remove('is-open');
+            this.setAttribute('aria-hidden', 'true');
+        });
+    });
 }
 initClientOnboardingPage.pageInitializerId = 'client-onboarding';
 

@@ -15,6 +15,15 @@ $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if(!$contract){ echo '<p>Long-term contract not found</p>'; return; }
 
+$latestLongTermInvoice = null;
+try {
+    $latestInvoiceStmt = $pdo->prepare('SELECT id, doc_number, sent_at FROM invoices WHERE contract_id=? AND invoice_type="long_term" ORDER BY created_at DESC, id DESC LIMIT 1');
+    $latestInvoiceStmt->execute([$id]);
+    $latestLongTermInvoice = $latestInvoiceStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $e) {
+    $latestLongTermInvoice = null;
+}
+
 $signatures = [];
 try {
     $sigStmt = $pdo->prepare('SELECT * FROM contract_signatures WHERE contract_id = ? ORDER BY display_order, id');
@@ -122,12 +131,30 @@ $isOngoing = empty($contract['end_date']);
     <?php if (!empty($contract['signed_pdf_path'])): ?>
       <a href="<?php echo htmlspecialchars($contract['signed_pdf_path']); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-success">View Signed PDF</a>
     <?php endif; ?>
-    <?php if ($contractStatus === 'active' && !empty($contract['signed_pdf_path']) && empty($contract['next_invoice_date'])): ?>
+    <?php
+      $noInvoicesYet = (int)($contract['invoices_generated'] ?? 0) === 0 && empty($contract['last_invoice_date']);
+      $canGenerateFirstInvoice = $contractStatus === 'active' && !empty($contract['signed_pdf_path']) && $noInvoicesYet;
+      $firstInvoiceButtonLabel = empty($contract['next_invoice_date']) ? 'Start Billing' : 'Generate Invoice Now';
+    ?>
+    <?php if ($canGenerateFirstInvoice): ?>
       <form method="post" action="/?page=long-term-contract-start-billing" style="display:inline">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" class="btn btn-sm">Start Billing</button>
+        <button type="submit" class="btn btn-sm"><?php echo htmlspecialchars($firstInvoiceButtonLabel); ?></button>
       </form>
+    <?php endif; ?>
+    <?php if ($latestLongTermInvoice): ?>
+      <?php if (empty($latestLongTermInvoice['sent_at'])): ?>
+        <form method="post" action="/?page=invoice/email-send" style="display:inline">
+          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+          <input type="hidden" name="type" value="invoice">
+          <input type="hidden" name="id" value="<?php echo (int)$latestLongTermInvoice['id']; ?>">
+          <input type="hidden" name="redirect_to" value="/?page=invoice/invoice-details&id=<?php echo (int)$latestLongTermInvoice['id']; ?>">
+          <button type="submit" class="btn btn-sm">Email Latest Invoice</button>
+        </form>
+      <?php else: ?>
+        <a href="/?page=invoice/invoice-details&id=<?php echo (int)$latestLongTermInvoice['id']; ?>" class="btn btn-sm">Latest Invoice</a>
+      <?php endif; ?>
     <?php endif; ?>
     <?php if (!in_array($contractStatus, ['cancelled', 'completed', 'void'], true)): ?>
       <form method="post" action="/?page=contract/contract-void" onsubmit="return confirm('Void this contract and linked invoices?')" style="display:inline">

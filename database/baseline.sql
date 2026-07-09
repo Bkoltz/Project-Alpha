@@ -370,6 +370,7 @@ CREATE TABLE IF NOT EXISTS client_onboarding_invitations (
     email_verified_at DATETIME NULL,
     consumed_at DATETIME NULL,
     sent_at DATETIME NULL,
+    notify_on_submit TINYINT(1) NOT NULL DEFAULT 1,
     created_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1274,17 +1275,109 @@ CREATE TABLE IF NOT EXISTS tax_rates (
     id INT AUTO_INCREMENT PRIMARY KEY,
     organization_id INT NULL,
     name VARCHAR(100) NOT NULL,
+    country VARCHAR(100) NULL DEFAULT 'USA',
     rate DECIMAL(5, 2) NOT NULL DEFAULT 0,
     county VARCHAR(100) NULL,
     state VARCHAR(2) NULL,
     zip_code VARCHAR(10) NULL,
     is_default TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_tax_org (organization_id),
     INDEX idx_tax_county (county),
     INDEX idx_tax_state (state),
     INDEX idx_tax_zip (zip_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS fips_counties (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    state_fips VARCHAR(2) NOT NULL,
+    county_fips VARCHAR(3) NOT NULL,
+    state_abbr VARCHAR(2) NOT NULL,
+    county_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_fips (state_fips, county_fips)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tax_jurisdictions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    state_fips VARCHAR(2) NOT NULL,
+    county_fips VARCHAR(3) NOT NULL,
+    jurisdiction_code VARCHAR(10) DEFAULT NULL,
+    jurisdiction_type ENUM('state','county','city','special') NOT NULL DEFAULT 'county',
+    state_rate DECIMAL(8,4) NOT NULL DEFAULT 0,
+    county_rate DECIMAL(8,4) NOT NULL DEFAULT 0,
+    city_rate DECIMAL(8,4) NOT NULL DEFAULT 0,
+    special_rate DECIMAL(8,4) NOT NULL DEFAULT 0,
+    total_rate DECIMAL(8,4) NOT NULL DEFAULT 0,
+    start_date DATE DEFAULT NULL,
+    end_date DATE DEFAULT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_tax_jurisdiction_state (state_fips, county_fips),
+    INDEX idx_tax_jurisdiction_code (state_fips, county_fips, jurisdiction_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tax_boundaries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    zip5_start VARCHAR(5) NOT NULL,
+    zip4_start VARCHAR(4) NOT NULL,
+    zip5_end VARCHAR(5) NOT NULL,
+    zip4_end VARCHAR(4) NOT NULL,
+    state_fips VARCHAR(2) NOT NULL,
+    county_fips VARCHAR(3) NOT NULL,
+    jurisdiction_code VARCHAR(10) DEFAULT NULL,
+    start_date DATE DEFAULT NULL,
+    end_date DATE DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tax_boundaries_state_zip (state_fips, zip5_start),
+    INDEX idx_tax_boundaries_county (state_fips, county_fips),
+    INDEX idx_tax_boundaries_jurisdiction (state_fips, county_fips, jurisdiction_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tax_boundaries_stage (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    batch_key VARCHAR(32) NOT NULL,
+    zip5_start VARCHAR(5) NOT NULL,
+    zip4_start VARCHAR(4) NOT NULL,
+    zip5_end VARCHAR(5) NOT NULL,
+    zip4_end VARCHAR(4) NOT NULL,
+    state_fips VARCHAR(2) NOT NULL,
+    county_fips VARCHAR(3) NOT NULL,
+    jurisdiction_code VARCHAR(10) DEFAULT NULL,
+    start_date DATE DEFAULT NULL,
+    end_date DATE DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tax_boundary_stage_batch (batch_key),
+    INDEX idx_tax_boundary_stage_state_zip (state_fips, zip5_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tax_zip_complexity (
+    zip5 VARCHAR(5) PRIMARY KEY,
+    is_complex TINYINT(1) NOT NULL DEFAULT 0,
+    reason VARCHAR(50) DEFAULT NULL,
+    state_fips VARCHAR(2) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_tax_zip_complexity_state (state_fips)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tax_import_files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    state_fips VARCHAR(2) NOT NULL,
+    file_type ENUM('fips','rates','boundaries') NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    content_hash CHAR(64) NULL,
+    size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    state_tax_rate DECIMAL(8,4) NULL,
+    imported_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tax_import_file (state_fips, file_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ITEM LIBRARY
@@ -1883,6 +1976,7 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('notify_invoice_paid_on_demand', '1'),
     ('notify_invoice_paid_long_term', '1'),
     ('notify_invoice_paid_project', '1'),
+    ('notify_client_onboarding_submit', '1'),
     ('email_no_reply_notice_enabled', '0'),
     ('email_no_reply_notice_text', 'This is an automated message. Please do not reply to this email.')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);

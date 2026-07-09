@@ -22,13 +22,13 @@
   {% if showActions %}
     <div style="margin:16px 0 64px; display:flex; gap:8px">
       <form method="post" action="/?page=public-quote-action">
-        <input type="hidden" name="csrf" value="{{ csrf|default('') }}">
+        <input type="hidden" name="csrf" value="{{ quoteCsrf|default('') }}">
         <input type="hidden" name="token" value="{{ token|e }}">
         <input type="hidden" name="action" value="approve">
         <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#16a34a;color:#fff">Approve</button>
       </form>
       <form method="post" action="/?page=public-quote-action">
-        <input type="hidden" name="csrf" value="{{ csrf|default('') }}">
+        <input type="hidden" name="csrf" value="{{ quoteCsrf|default('') }}">
         <input type="hidden" name="token" value="{{ token|e }}">
         <input type="hidden" name="action" value="deny">
         <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#ef4444;color:#fff">Deny</button>
@@ -38,13 +38,13 @@
 
   {% if showUpload %}
     <div style="margin:16px 0 64px">
-      <form method="post" action="/?page=public-contract-action" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center">
-        <input type="hidden" name="csrf" value="{{ csrf|default('') }}">
+      <form method="post" action="/?page=public-contract-sign" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center">
+        <input type="hidden" name="csrf" value="{{ contractSignCsrf|default('') }}">
         <input type="hidden" name="token" value="{{ token|e }}">
-        <input type="file" name="signed_pdf" accept="application/pdf,.pdf" required style="padding:6px">
+        <input type="file" name="signed_pdf" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/gif,.gif,image/webp,.webp" required style="padding:6px">
         <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#0ea5a4;color:#fff">Upload Signed Contract</button>
       </form>
-      <div style="margin-top:8px;color:var(--muted);font-size:13px">Upload a signed PDF to mark this contract active. Maximum 25 MB. PDF only.</div>
+      <div style="margin-top:8px;color:var(--muted);font-size:13px">Upload a signed PDF or image. Maximum 25 MB. If the file is stored in a cloud drive, download it to your device first.</div>
     </div>
   {% endif %}
 

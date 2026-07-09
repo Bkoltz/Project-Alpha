@@ -1,8 +1,10 @@
 <?php
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/rate_limiter.php';
 require_once __DIR__ . '/../../utils/client_onboarding.php';
+require_once __DIR__ . '/../../utils/notifications.php';
 
 if (!rate_limit_check($pdo, 'client_onboarding_submit', 5, 900, false)) {
     http_response_code(429);
@@ -19,13 +21,20 @@ if (($invitationId <= 0 && $token === '') || $name === '') {
 }
 
 $state = strtoupper(client_onboarding_clean_text($_POST['state'] ?? '', 2));
+$email = client_onboarding_normalize_email($_POST['email'] ?? '');
+if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    header('Location: /?page=client-onboarding&error=' . urlencode('Enter a valid email address.'));
+    exit;
+}
 $clientType = (string)($_POST['client_type'] ?? 'unknown');
 if (!in_array($clientType, ['unknown', 'business', 'consumer'], true)) {
     $clientType = 'unknown';
 }
 $data = [
     'name' => $name,
+    'email' => $email,
     'phone' => client_onboarding_clean_text($_POST['phone'] ?? '', 50),
+    'organization_name' => client_onboarding_clean_text($_POST['organization_name'] ?? '', 150),
     'address_line1' => client_onboarding_clean_text($_POST['address_line1'] ?? '', 255),
     'address_line2' => client_onboarding_clean_text($_POST['address_line2'] ?? '', 255),
     'city' => client_onboarding_clean_text($_POST['city'] ?? '', 100),
@@ -62,6 +71,15 @@ try {
         'organization_id' => (int)$invite['organization_id'],
         'invitation_id' => $invitationId,
     ]);
+    if (!empty($invite['notify_on_submit'])) {
+        send_admin_notification(
+            $pdo,
+            $appConfig,
+            'New client onboarding submission',
+            '<p>A client onboarding form was submitted by <strong>' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</strong>.</p>'
+            . '<p><a href="' . htmlspecialchars(client_onboarding_base_url($appConfig) . '/?page=client/onboarding', ENT_QUOTES, 'UTF-8') . '">Review onboarding submissions</a></p>'
+        );
+    }
     header('Location: /?page=client-onboarding&submitted=1');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

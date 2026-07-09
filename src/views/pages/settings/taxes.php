@@ -215,7 +215,7 @@ try {
     <legend style="padding:0 12px;font-weight:600;font-size:16px">📥 Import Tax Rates</legend>
     
     <p style="margin:0 0 16px;color:#6b7280;font-size:14px">
-      Import county-level tax rates from official state sources. Upload the required files and click Import.
+      Import official source files for counties, rates, and ZIP boundaries. Upload one or more files; any missing file type is reused from the last successful import for that state.
     </p>
     
     <?php if ($importSuccess && $importSummary): ?>
@@ -234,24 +234,24 @@ try {
       
       <div class="grid">
         <div>
-          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">📍 FIPS County File (.txt) *</label>
-          <input type="file" name="fips_file" accept=".txt" required
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">📍 FIPS County File (.txt)</label>
+          <input type="file" name="fips_file" accept=".txt"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-          <div style="margin-top:4px;color:var(--muted);font-size:11px">Census Bureau county file (e.g., st55_wi_cou2020.txt)</div>
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">Census Bureau county file (e.g., st55_wi_cou2020.txt). Reused when omitted.</div>
         </div>
         
         <div>
-          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">💰 Tax Rate File (.csv) *</label>
-          <input type="file" name="rate_file" accept=".csv" required
+          <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">💰 Tax Rate File (.csv)</label>
+          <input type="file" name="rate_file" accept=".csv"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-          <div style="margin-top:4px;color:var(--muted);font-size:11px">State tax rate file (e.g., WIR062026.csv)</div>
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">State tax rate file (e.g., WIR072026.csv). Reused when omitted.</div>
         </div>
 
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">🗺️ Boundary File (.csv)</label>
           <input type="file" name="boundary_file" accept=".csv"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
-          <div style="margin-top:4px;color:var(--muted);font-size:11px">Optional: state boundary file (e.g., WIB062026.csv). Enables ZIP-level complexity lookup.</div>
+          <div style="margin-top:4px;color:var(--muted);font-size:11px">State boundary file (e.g., WIB072026.csv). Large files are streamed and may take several minutes.</div>
         </div>
 
         <div>
@@ -270,10 +270,10 @@ try {
     <div style="margin-top:20px;padding:12px;background:#f0f9ff;border-left:4px solid #0284c7;border-radius:4px;font-size:13px">
       <strong>📋 How it works:</strong>
       <ul style="margin:8px 0 0 16px;padding:0;color:#1e40af">
-        <li>FIPS file provides county names (parsed first)</li>
-        <li>Rates file provides local tax rates (county-level only, cities skipped)</li>
-        <li>State tax is added to each county's local rate for the total</li>
-        <li>Existing rates for the state are replaced on import</li>
+        <li>FIPS, rate, and boundary files are stored as reusable import sources.</li>
+        <li>If you upload only one updated file, PA reuses the other previously imported sources for that state.</li>
+        <li>Rate imports replace current imported jurisdiction rows for the state and mirror county totals into the normal tax rate list.</li>
+        <li>Boundary imports load into a staging table first, then replace the live boundary rows after the full file succeeds.</li>
       </ul>
     </div>
     

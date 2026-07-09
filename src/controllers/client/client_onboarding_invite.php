@@ -80,6 +80,17 @@ $clientId = max(0, (int)($_POST['client_id'] ?? 0));
 $targetOrganizationId = max(0, (int)($_POST['target_organization_id'] ?? 0));
 $delivery = ($_POST['delivery'] ?? 'link') === 'email' ? 'email' : 'link';
 $expiresHours = max(1, min(336, (int)($_POST['expires_hours'] ?? 336)));
+$notifyOnSubmit = !empty($_POST['notify_on_submit']) ? 1 : 0;
+try {
+    $pdo->prepare(
+        'INSERT INTO app_config (organization_id, config_key, config_value)
+         VALUES (0, "notify_client_onboarding_submit", ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)'
+    )->execute([(string)$notifyOnSubmit]);
+    $appConfig['notify_client_onboarding_submit'] = $notifyOnSubmit;
+} catch (Throwable $e) {
+    @error_log('[client_onboarding] Failed to sync notify_client_onboarding_submit setting: ' . $e->getMessage());
+}
 
 if ($delivery === 'email' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     header('Location: /?page=client/onboarding&error=' . urlencode('Enter a valid email address.'));
@@ -123,8 +134,8 @@ if ($email !== '') {
 }
 $stmt = $pdo->prepare(
     'INSERT INTO client_onboarding_invitations
-     (organization_id,target_organization_id,client_id,invited_email,token_hash,token_enc,expires_at,created_by)
-     VALUES (?,?,?,?,?,?,?,?)'
+     (organization_id,target_organization_id,client_id,invited_email,token_hash,token_enc,expires_at,notify_on_submit,created_by)
+     VALUES (?,?,?,?,?,?,?,?,?)'
 );
 $stmt->execute([
     $ownerOrganizationId,
@@ -134,6 +145,7 @@ $stmt->execute([
     hash('sha256', $token),
     client_onboarding_store_token($token),
     $expiresAt,
+    $notifyOnSubmit,
     $userId,
 ]);
 $invitationId = (int)$pdo->lastInsertId();
@@ -161,6 +173,7 @@ audit_log($pdo, 'client_onboarding.create', 'client_onboarding_invitation', $inv
     'delivery' => $delivery,
     'email_provided' => $email !== '',
     'email_sent' => $emailSent,
+    'notify_on_submit' => $notifyOnSubmit === 1,
 ]);
 header('Location: /?page=client/onboarding&created=1' . ($delivery === 'email' && !$emailSent ? '&email_error=1' : ''));
 exit;

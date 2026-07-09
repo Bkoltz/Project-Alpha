@@ -3,12 +3,18 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/client_onboarding.php';
 require_once __DIR__ . '/../../services/EmailService.php';
 
 $organizationId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $submissionId = (int)($_POST['submission_id'] ?? 0);
 $decision = (string)($_POST['decision'] ?? '');
+$resolution = (string)($_POST['resolution'] ?? '');
+$matchClientId = max(0, (int)($_POST['match_client_id'] ?? 0));
+$matchOrganizationId = max(0, (int)($_POST['match_organization_id'] ?? 0));
+$organizationResolution = (string)($_POST['organization_resolution'] ?? '');
+$mergeFields = array_values(array_filter(array_map('strval', (array)($_POST['merge_fields'] ?? []))));
 $notes = mb_substr(trim((string)($_POST['review_notes'] ?? '')), 0, 1000);
 if ($userId <= 0 || $submissionId <= 0 || !in_array($decision, ['approve', 'reject'], true)) {
     header('Location: /?page=client/onboarding&error=' . urlencode('Invalid review request.'));
@@ -41,12 +47,34 @@ try {
 
     $clientId = (int)($submission['client_id'] ?? 0);
     if ($decision === 'approve') {
-        $emailValue = !empty($submission['invited_email'])
-            ? (string)$submission['invited_email']
-            : ($clientId > 0 ? ((string)($submission['current_client_email'] ?? '') ?: null) : null);
+        $emailValue = client_onboarding_submitted_email($data, $submission);
+        if ($emailValue !== '' && !filter_var($emailValue, FILTER_VALIDATE_EMAIL)) {
+            $emailValue = '';
+        }
+        $targetOrganizationId = !empty($submission['target_organization_id']) ? (int)$submission['target_organization_id'] : null;
+        $submittedOrganizationName = client_onboarding_clean_text($data['organization_name'] ?? '', 150);
+        if ($organizationResolution === 'match' && $matchOrganizationId > 0) {
+            $orgStmt = $pdo->prepare('SELECT id FROM organizations WHERE id=?');
+            $orgStmt->execute([$matchOrganizationId]);
+            if (!$orgStmt->fetchColumn()) {
+                throw new RuntimeException('The selected organization match is unavailable.');
+            }
+            $targetOrganizationId = $matchOrganizationId;
+        } elseif ($organizationResolution === 'create' && $submittedOrganizationName !== '') {
+            $orgInsert = $pdo->prepare('INSERT INTO organizations (name) VALUES (?)');
+            try {
+                $orgInsert->execute([$submittedOrganizationName]);
+                $targetOrganizationId = (int)$pdo->lastInsertId();
+            } catch (Throwable $orgError) {
+                $orgLookup = $pdo->prepare('SELECT id FROM organizations WHERE name=?');
+                $orgLookup->execute([$submittedOrganizationName]);
+                $targetOrganizationId = (int)($orgLookup->fetchColumn() ?: 0) ?: $targetOrganizationId;
+            }
+        }
+
         $values = [
             $data['name'],
-            $emailValue,
+            $emailValue !== '' ? $emailValue : null,
             $data['phone'] ?: null,
             $data['address_line1'] ?: null,
             $data['address_line2'] ?: null,
@@ -56,11 +84,55 @@ try {
             $data['country'] ?: 'US',
             $data['client_type'] ?? 'unknown',
         ];
-        if ($clientId > 0) {
+        if ($resolution === '') {
+            $resolution = $clientId > 0 ? 'update_invited' : 'create';
+        }
+        if (in_array($resolution, ['keep_existing', 'merge_existing'], true)) {
+            if ($matchClientId <= 0) {
+                throw new RuntimeException('Choose an existing client match before approving this way.');
+            }
+            $existingStmt = $pdo->prepare('SELECT * FROM clients WHERE id=? AND archived=0 FOR UPDATE');
+            $existingStmt->execute([$matchClientId]);
+            $existingClient = $existingStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$existingClient) {
+                throw new RuntimeException('The selected client match is unavailable.');
+            }
+            $clientId = $matchClientId;
+            if ($resolution === 'merge_existing') {
+                $fields = ['name','email','phone','address_line1','address_line2','city','state','postal_code','country','client_type'];
+                $merged = [];
+                foreach ($fields as $field) {
+                    $sourceData = $data;
+                    if ($field === 'email') {
+                        $sourceData['email'] = $emailValue;
+                    }
+                    $merged[$field] = client_onboarding_merge_value($sourceData, $existingClient, $field, $mergeFields);
+                }
+                $update = $pdo->prepare(
+                    'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=COALESCE(?, organization_id) WHERE id=?'
+                );
+                $update->execute([
+                    $merged['name'] ?: $existingClient['name'],
+                    $merged['email'],
+                    $merged['phone'],
+                    $merged['address_line1'],
+                    $merged['address_line2'],
+                    $merged['city'],
+                    $merged['state'],
+                    $merged['postal_code'],
+                    $merged['country'] ?: 'US',
+                    $merged['client_type'] ?: 'unknown',
+                    $targetOrganizationId,
+                    $clientId,
+                ]);
+            }
+            $pdo->prepare('UPDATE client_onboarding_invitations SET client_id=?,target_organization_id=COALESCE(?, target_organization_id) WHERE id=?')
+                ->execute([$clientId, $targetOrganizationId, (int)$submission['invitation_id']]);
+        } elseif ($clientId > 0) {
             $update = $pdo->prepare(
-                'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=? WHERE id=?'
+                'UPDATE clients SET name=?,email=?,phone=?,address_line1=?,address_line2=?,city=?,state=?,postal_code=?,country=?,client_type=?,organization_id=COALESCE(?, organization_id) WHERE id=?'
             );
-            $update->execute(array_merge($values, [$clientId]));
+            $update->execute(array_merge($values, [$targetOrganizationId, $clientId]));
         } else {
             $insert = $pdo->prepare(
                 'INSERT INTO clients
@@ -68,7 +140,7 @@ try {
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
             );
             $insert->execute(array_merge($values, [
-                !empty($submission['target_organization_id']) ? (int)$submission['target_organization_id'] : null,
+                $targetOrganizationId,
                 $userId,
             ]));
             $clientId = (int)$pdo->lastInsertId();
@@ -87,10 +159,12 @@ try {
     audit_log($pdo, 'client_onboarding.' . $status, 'client_onboarding_submission', $submissionId, [
         'organization_id' => !empty($submission['organization_id']) ? (int)$submission['organization_id'] : null,
         'client_id' => $clientId ?: null,
+        'resolution' => $resolution ?: null,
     ]);
-    if (!empty($submission['invited_email'])) {
+    $notifyEmail = $data && is_array($data) ? client_onboarding_submitted_email($data, $submission) : client_onboarding_normalize_email($submission['invited_email'] ?? '');
+    if ($notifyEmail !== '' && filter_var($notifyEmail, FILTER_VALIDATE_EMAIL)) {
         EmailService::sendEmail(
-            (string)$submission['invited_email'],
+            $notifyEmail,
             'Client information ' . ($decision === 'approve' ? 'approved' : 'reviewed'),
             $decision === 'approve'
                 ? '<p>Your client information has been approved. Thank you.</p>'
