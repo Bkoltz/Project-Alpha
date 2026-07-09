@@ -46,6 +46,7 @@ function page_permission_map(): array
         'settings/stripe-net-backfill'       => 'settings.manage',
         'settings/stripe-import-payments'    => 'settings.manage',
         'settings/tax-import-handler'        => 'settings.manage',
+        'settings/tax-import-chunk'          => 'settings.manage',
         'settings/tax-rates-handler'         => 'settings.manage',
 
         // Accounts / users

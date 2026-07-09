@@ -640,6 +640,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/backup-download',
         'settings/tax-rates-handler',
         'settings/tax-import-handler',
+        'settings/tax-import-chunk',
         'settings/links-handler',
         'settings/permissions-handler',
         'settings/custom-fields-handler',
@@ -846,6 +847,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'settings/tax-import-handler') {
         require_once __DIR__ . '/../src/controllers/settings/tax-import-handler.php';
+        exit;
+    }
+    if ($page === 'settings/tax-import-chunk') {
+        require_once __DIR__ . '/../src/controllers/settings/tax_import_chunk.php';
         exit;
     }
     if ($page === 'settings/links-handler') {

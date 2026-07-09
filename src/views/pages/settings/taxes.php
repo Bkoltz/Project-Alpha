@@ -16,6 +16,7 @@ if ($importSuccess) unset($_SESSION['tax_import_summary']);
 
 $editTaxId = (int)($_GET['edit_tax_id'] ?? 0);
 $taxRates = [];
+$taxCountySearch = trim((string)($_GET['tax_county'] ?? ''));
 $taxImportStates = pa_tax_state_options();
 $taxImportStatus = [];
 $taxImportRuns = [];
@@ -40,7 +41,16 @@ try {
 try {
   $cols = 'id, name, country, state, county, rate, is_active' . ($hasDefault ? ', is_default' : '') . ', created_at';
   $order = $hasDefault ? 'is_default DESC, country, state, county, name' : 'country, state, county, name';
-  $taxRates = $pdo->query("SELECT {$cols} FROM tax_rates ORDER BY {$order}")->fetchAll(PDO::FETCH_ASSOC);
+  $where = '';
+  $params = [];
+  if ($taxCountySearch !== '') {
+    $where = ' WHERE county LIKE ? OR name LIKE ?';
+    $like = '%' . $taxCountySearch . '%';
+    $params = [$like, $like];
+  }
+  $stmt = $pdo->prepare("SELECT {$cols} FROM tax_rates{$where} ORDER BY {$order}");
+  $stmt->execute($params);
+  $taxRates = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
   // ignore if table doesn't exist or other DB issues
 }
@@ -92,11 +102,26 @@ $selectedStateTaxRateValue = $selectedRateFile && $selectedRateFile['state_tax_r
   <h2 style="margin:0 0 8px 0">Tax Rates</h2>
   <p style="margin:0 0 24px 0;color:var(--muted)">Manage predefined tax rates for different jurisdictions. Select a tax rate when creating documents to auto-populate tax calculations.</p>
 
-  <?php if ($taxRates): ?>
+  <?php if ($taxRates || $taxCountySearch !== ''): ?>
     <div style="margin-bottom:20px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
-      <div style="padding:12px 16px;background:#f9fafb;border-bottom:1px solid #e5e7eb;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:600;color:#374151"><?php echo count($taxRates); ?> Tax Rate<?php echo count($taxRates) !== 1 ? 's' : ''; ?></span>
-        <span style="font-size:12px;color:#6b7280">Scroll to view all</span>
+      <div style="padding:12px 16px;background:#f9fafb;border-bottom:1px solid #e5e7eb;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+        <div>
+          <span style="font-weight:600;color:#374151"><?php echo count($taxRates); ?> Tax Rate<?php echo count($taxRates) !== 1 ? 's' : ''; ?></span>
+          <?php if ($taxCountySearch !== ''): ?>
+            <span style="font-size:12px;color:#6b7280;margin-left:8px">matching "<?php echo htmlspecialchars($taxCountySearch); ?>"</span>
+          <?php endif; ?>
+        </div>
+        <form method="get" action="/" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0">
+          <input type="hidden" name="page" value="settings">
+          <input type="hidden" name="tab" value="taxes">
+          <label style="font-size:12px;color:#374151;font-weight:600" for="taxCountySearch">County</label>
+          <input id="taxCountySearch" type="search" name="tax_county" value="<?php echo htmlspecialchars($taxCountySearch); ?>" placeholder="Search county..."
+                 style="width:220px;max-width:100%;padding:8px 10px;border-radius:8px;border:1px solid #d1d5db;font-size:13px;background:#fff">
+          <button type="submit" style="padding:8px 12px;border-radius:8px;border:0;background:#111827;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Search</button>
+          <?php if ($taxCountySearch !== ''): ?>
+            <a href="/?page=settings&amp;tab=taxes" style="padding:8px 12px;border-radius:8px;border:1px solid #d1d5db;background:#fff;text-decoration:none;color:#374151;font-size:13px">Clear</a>
+          <?php endif; ?>
+        </form>
       </div>
       <div style="max-height:400px;overflow-y:auto">
         <table class="pa-table">
@@ -113,6 +138,13 @@ $selectedStateTaxRateValue = $selectedRateFile && $selectedRateFile['state_tax_r
             </tr>
           </thead>
           <tbody>
+          <?php if (!$taxRates): ?>
+            <tr>
+              <td colspan="<?php echo $hasDefault ? 8 : 7; ?>" style="padding:24px;text-align:center;color:#6b7280">
+                No tax rates matched that county search.
+              </td>
+            </tr>
+          <?php endif; ?>
           <?php foreach ($taxRates as $tr): ?>
             <tr style="border-bottom:1px solid #f3f4f6">
               <td style="padding:12px;font-weight:600"><?php echo htmlspecialchars($tr['name']); ?></td>
@@ -392,8 +424,9 @@ $selectedStateTaxRateValue = $selectedRateFile && $selectedRateFile['state_tax_r
       </div>
     <?php endif; ?>
     
-    <form method="post" action="/?page=settings/tax-import-handler" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:760px">
+    <form method="post" action="/?page=settings/tax-import-handler" enctype="multipart/form-data" style="display:grid;gap:16px;max-width:760px" data-tax-import-form>
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <div data-tax-import-chunk-fields></div>
 
       <label>
         <div style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">State</div>
@@ -410,21 +443,21 @@ $selectedStateTaxRateValue = $selectedRateFile && $selectedRateFile['state_tax_r
       <div class="grid">
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">📍 FIPS County File (.txt)</label>
-          <input type="file" name="fips_file" accept=".txt"
+          <input type="file" name="fips_file" accept=".txt" data-tax-import-file="fips_file"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
           <div style="margin-top:4px;color:var(--muted);font-size:11px">Census Bureau county file (e.g., st55_wi_cou2020.txt). Reused when omitted.</div>
         </div>
         
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">💰 Tax Rate File (.csv)</label>
-          <input type="file" name="rate_file" accept=".csv"
+          <input type="file" name="rate_file" accept=".csv" data-tax-import-file="rate_file"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
           <div style="margin-top:4px;color:var(--muted);font-size:11px">State tax rate file (e.g., WIR072026.csv). Reused when omitted.</div>
         </div>
 
         <div>
           <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px">🗺️ Boundary File (.csv)</label>
-          <input type="file" name="boundary_file" accept=".csv"
+          <input type="file" name="boundary_file" accept=".csv" data-tax-import-file="boundary_file"
                  style="padding:10px 12px;border-radius:6px;border:1px solid #d1d5db;width:100%;font-size:13px;background:#fff">
           <div style="margin-top:4px;color:var(--muted);font-size:11px">State boundary file (e.g., WIB072026.csv). Large files are streamed and may take several minutes.</div>
         </div>
@@ -440,8 +473,120 @@ $selectedStateTaxRateValue = $selectedRateFile && $selectedRateFile['state_tax_r
       <button type="submit" style="padding:12px 24px;border-radius:8px;border:0;background:#059669;color:#fff;font-weight:600;cursor:pointer;font-size:14px;width:fit-content">
         📥 Import Tax Rates
       </button>
+      <div data-tax-import-progress style="display:none;padding:10px 12px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px"></div>
     </form>
-    
+    <script>
+      (function () {
+        var form = document.querySelector('[data-tax-import-form]');
+        if (!form || form.dataset.taxChunkReady === '1') return;
+        form.dataset.taxChunkReady = '1';
+        var threshold = 80 * 1024 * 1024;
+        var chunkSize = 8 * 1024 * 1024;
+        var progress = form.querySelector('[data-tax-import-progress]');
+        var fields = form.querySelector('[data-tax-import-chunk-fields]');
+
+        function setProgress(message, tone) {
+          if (!progress) return;
+          progress.style.display = message ? 'block' : 'none';
+          progress.style.background = tone === 'error' ? '#fef2f2' : '#eff6ff';
+          progress.style.borderColor = tone === 'error' ? '#fecaca' : '#bfdbfe';
+          progress.style.color = tone === 'error' ? '#991b1b' : '#1e40af';
+          progress.textContent = message || '';
+        }
+
+        function randomToken() {
+          var bytes = new Uint8Array(16);
+          if (window.crypto && window.crypto.getRandomValues) {
+            window.crypto.getRandomValues(bytes);
+          } else {
+            for (var i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+          }
+          return Array.prototype.map.call(bytes, function (byte) {
+            return byte.toString(16).padStart(2, '0');
+          }).join('');
+        }
+
+        function putHidden(name, value) {
+          var input = fields.querySelector('input[name="' + name + '"]');
+          if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            fields.appendChild(input);
+          }
+          input.value = value;
+        }
+
+        async function uploadLargeFile(input, file) {
+          var field = input.getAttribute('data-tax-import-file');
+          var token = randomToken();
+          var total = Math.ceil(file.size / chunkSize);
+          var csrf = form.querySelector('input[name="csrf"]').value;
+          for (var index = 0; index < total; index += 1) {
+            var start = index * chunkSize;
+            var chunk = file.slice(start, Math.min(start + chunkSize, file.size));
+            var body = new FormData();
+            body.append('csrf', csrf);
+            body.append('field', field);
+            body.append('upload_id', token);
+            body.append('file_name', file.name);
+            body.append('file_size', String(file.size));
+            body.append('chunk_index', String(index));
+            body.append('total_chunks', String(total));
+            body.append('chunk', chunk, file.name + '.part' + index);
+            setProgress('Uploading ' + file.name + ' chunk ' + (index + 1) + ' of ' + total + '...');
+            var response = await fetch('/?page=settings/tax-import-chunk', {
+              method: 'POST',
+              body: body,
+              headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            var result = await response.json();
+            if (!result.ok) {
+              throw new Error(result.error || 'Chunk upload failed.');
+            }
+          }
+          return token;
+        }
+
+        form.addEventListener('submit', async function (event) {
+          if (form.dataset.taxChunkComplete === '1') return;
+          var largeInputs = Array.prototype.filter.call(form.querySelectorAll('[data-tax-import-file]'), function (input) {
+            return input.files && input.files[0] && input.files[0].size > threshold;
+          });
+          if (!largeInputs.length) return;
+
+          event.preventDefault();
+          var submitter = form.querySelector('button[type="submit"]');
+          if (submitter) submitter.disabled = true;
+          try {
+            fields.innerHTML = '';
+            var uploaded = [];
+            for (var i = 0; i < largeInputs.length; i += 1) {
+              uploaded.push({
+                input: largeInputs[i],
+                field: largeInputs[i].getAttribute('data-tax-import-file'),
+                token: await uploadLargeFile(largeInputs[i], largeInputs[i].files[0])
+              });
+            }
+            uploaded.forEach(function (item) {
+              putHidden(item.field + '_chunk_token', item.token);
+              item.input.value = '';
+            });
+            form.dataset.taxChunkComplete = '1';
+            setProgress('Large files uploaded. Starting tax import...');
+            if (form.requestSubmit) {
+              form.requestSubmit(submitter || undefined);
+            } else {
+              form.submit();
+            }
+          } catch (error) {
+            setProgress(error.message || 'Large file upload failed.', 'error');
+            if (submitter) submitter.disabled = false;
+          }
+        });
+      })();
+    </script>
+
     <div style="margin-top:20px;padding:12px;background:#f0f9ff;border-left:4px solid #0284c7;border-radius:4px;font-size:13px">
       <strong>📋 How it works:</strong>
       <ul style="margin:8px 0 0 16px;padding:0;color:#1e40af">

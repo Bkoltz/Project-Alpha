@@ -19,6 +19,8 @@ Document create/edit pages can look up imported rates by ZIP or county. ZIP look
 
 The tax import page is state-scoped. Select the state before uploading files. PA keeps separate status for each state and only replaces imported rows for the selected state.
 
+The Tax settings page also shows recent import runs. Refresh the page during a long import to see the current phase, row counts, warnings, and last updated time. Server logs include `tax-import` entries for the same import phases.
+
 ## Import Files
 
 PA expects:
@@ -28,6 +30,10 @@ PA expects:
 - Boundary CSV
 
 If one file changes later, upload only that file for the selected state. PA keeps the other imported tables for that state.
+
+## Large Files
+
+For tax source files over 80 MB, PA uploads the file in smaller chunks before starting the import. This avoids the Cloudflare 100 MB request limit. After the chunks finish, PA starts the normal import using the assembled server-side file.
 
 ## Important Tax Note
 
