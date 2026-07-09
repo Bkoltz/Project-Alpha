@@ -19,8 +19,15 @@ final class TaxImportBackendTest extends TestCase
 
         self::assertIsString($handler);
         self::assertStringContainsString('TAX_IMPORT_BATCH_SIZE', $handler);
+        self::assertStringContainsString('TAX_IMPORT_SCAN_LOG_INTERVAL', $handler);
         self::assertStringContainsString('set_time_limit(0)', $handler);
         self::assertStringContainsString('tax_boundaries_stage', $handler);
+        self::assertStringContainsString('tax_import_runs', $handler);
+        self::assertStringContainsString('taxImportLog', $handler);
+        self::assertStringContainsString('[tax-import]', $handler);
+        self::assertStringContainsString('Processed rate CSV row', $handler);
+        self::assertStringContainsString('Scanned boundary CSV row', $handler);
+        self::assertStringContainsString('Streamed ', $handler);
         self::assertStringContainsString('batch_key', $handler);
         self::assertStringContainsString('fgetcsv($handle)', $handler);
         self::assertStringContainsString('Upload at least one FIPS, tax rate, or boundary file.', $handler);
@@ -44,6 +51,8 @@ final class TaxImportBackendTest extends TestCase
         self::assertStringContainsString('Reused when omitted', $view);
         self::assertStringContainsString('name="tax_state"', $view);
         self::assertStringContainsString('Imported State Coverage', $view);
+        self::assertStringContainsString('Recent Import Runs', $view);
+        self::assertStringContainsString('[tax-import]', $view);
         self::assertStringContainsString('PA imports and replaces rows only for this selected state.', $view);
         self::assertStringNotContainsString('name="fips_file" accept=".txt" required', $view);
         self::assertStringNotContainsString('name="rate_file" accept=".csv" required', $view);
@@ -140,6 +149,8 @@ final class TaxImportBackendTest extends TestCase
         self::assertStringContainsString('country VARCHAR(100) NULL DEFAULT', $baseline);
         self::assertStringContainsString('is_active TINYINT(1) NOT NULL DEFAULT 1', $baseline);
         self::assertStringContainsString('uq_tax_zip_complexity_state_zip', $baseline);
+        self::assertStringContainsString('tax_import_runs', $baseline);
+        self::assertStringContainsString('tax_import_runs', file_get_contents($this->root . '/database/migrations/0027_tax_import_run_logging.sql'));
     }
 
     public function testTaxStateHelpersNormalizeNamesAndAbbreviations(): void
