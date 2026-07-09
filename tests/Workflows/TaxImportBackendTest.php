@@ -29,6 +29,9 @@ final class TaxImportBackendTest extends TestCase
         self::assertStringContainsString('SELECT county_name', $handler);
         self::assertStringContainsString('rebuildCountyTaxRateMirror', $handler);
         self::assertStringContainsString('addCountyRateSanityWarnings', $handler);
+        self::assertStringContainsString('$_POST[\'tax_state\']', $handler);
+        self::assertStringContainsString('pa_tax_state_fips_for_hint', $handler);
+        self::assertStringContainsString('$expectedStateFips', $handler);
         self::assertStringNotContainsString('UPDATE tax_rates SET rate = ?', $handler);
     }
 
@@ -39,6 +42,9 @@ final class TaxImportBackendTest extends TestCase
         self::assertIsString($view);
         self::assertStringContainsString('Upload one or more files', $view);
         self::assertStringContainsString('Reused when omitted', $view);
+        self::assertStringContainsString('name="tax_state"', $view);
+        self::assertStringContainsString('Imported State Coverage', $view);
+        self::assertStringContainsString('PA imports and replaces rows only for this selected state.', $view);
         self::assertStringNotContainsString('name="fips_file" accept=".txt" required', $view);
         self::assertStringNotContainsString('name="rate_file" accept=".csv" required', $view);
     }
@@ -64,9 +70,25 @@ final class TaxImportBackendTest extends TestCase
 
         $router = file_get_contents($this->root . '/public/index.php');
         $acl = file_get_contents($this->root . '/src/utils/acl_middleware.php');
+        $clientSearch = file_get_contents($this->root . '/src/controllers/client/clients_search.php');
         self::assertStringContainsString('$page === \'tax-lookup\'', (string)$router);
         self::assertStringContainsString('src/controllers/tax_lookup.php', (string)$router);
         self::assertStringContainsString('\'tax-lookup\'          => null', (string)$acl);
+        self::assertStringContainsString('preferred_tax_zip', (string)$clientSearch);
+        self::assertStringContainsString('preferred_tax_state', (string)$clientSearch);
+        self::assertStringContainsString("COALESCE(NULLIF(o.postal_code, ''), NULLIF(c.postal_code, ''))", (string)$clientSearch);
+        self::assertStringContainsString("COALESCE(NULLIF(o.state, ''), NULLIF(c.state, ''))", (string)$clientSearch);
+
+        $component = file_get_contents($this->root . '/src/views/components/tax_lookup_control.php');
+        $script = file_get_contents($this->root . '/public/assets/js/tax-lookup-control.js');
+        $lookup = file_get_contents($this->root . '/src/controllers/tax_lookup.php');
+        self::assertStringContainsString('pa-tax-lookup__input', (string)$component);
+        self::assertStringContainsString('uniqueChoices', (string)$script);
+        self::assertStringContainsString('fillZipFromSelectedClient', (string)$script);
+        self::assertStringContainsString('data-tax-state-hint', (string)$script);
+        self::assertStringContainsString('[data-id], [data-client-id]', (string)$script);
+        self::assertStringContainsString("window.ProjectAlpha.registerPage", (string)$script);
+        self::assertStringContainsString('$stateHint', (string)$lookup);
     }
 
     public function testTaxImportRateColumnsUseActualRateValue(): void
@@ -75,6 +97,21 @@ final class TaxImportBackendTest extends TestCase
 
         self::assertSame(0.9, pa_tax_rate_from_import_columns(['55', '00', '079', '0.009', '0.009', '0.009', '0.009', '20240101', '99991231']));
         self::assertSame(2.0, pa_tax_rate_from_import_columns(['55', '01', '53000', '0.02', '0.02', '0.02', '0.02', '20240101', '99991231']));
+    }
+
+    public function testTaxLookupDeduplicatesEquivalentChoices(): void
+    {
+        require_once $this->root . '/src/utils/tax_lookup.php';
+
+        $choices = pa_tax_dedupe_choices([
+            pa_tax_choice(5.5, 'Brown County, WI', 'zip'),
+            pa_tax_choice(5.5, ' Brown   County, WI ', 'zip'),
+            pa_tax_choice(5.5, 'Manitowoc County, WI', 'zip'),
+        ]);
+
+        self::assertCount(2, $choices);
+        self::assertSame('Brown County, WI', $choices[0]['label']);
+        self::assertSame('Manitowoc County, WI', $choices[1]['label']);
     }
 
     public function testSchemaIncludesTaxImportSourceCacheTables(): void
@@ -99,8 +136,20 @@ final class TaxImportBackendTest extends TestCase
 
         self::assertStringContainsString('ADD COLUMN country', $migration);
         self::assertStringContainsString('ADD COLUMN is_active', file_get_contents($this->root . '/database/migrations/0025_tax_rates_active_column.sql'));
+        self::assertStringContainsString('uq_tax_zip_complexity_state_zip', file_get_contents($this->root . '/database/migrations/0026_tax_zip_complexity_state_key.sql'));
         self::assertStringContainsString('country VARCHAR(100) NULL DEFAULT', $baseline);
         self::assertStringContainsString('is_active TINYINT(1) NOT NULL DEFAULT 1', $baseline);
+        self::assertStringContainsString('uq_tax_zip_complexity_state_zip', $baseline);
+    }
+
+    public function testTaxStateHelpersNormalizeNamesAndAbbreviations(): void
+    {
+        require_once $this->root . '/src/utils/tax_lookup.php';
+
+        self::assertSame('55', pa_tax_state_fips_for_hint('WI'));
+        self::assertSame('48', pa_tax_state_fips_for_hint('Texas'));
+        self::assertSame('WI', pa_tax_state_abbr_for_fips('55'));
+        self::assertNotEmpty(pa_tax_state_options());
     }
 
     public function testWisconsinFixtureKeepsCountyRateExceptions(): void

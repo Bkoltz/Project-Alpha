@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/smtp.php';
+require_once __DIR__ . '/../utils/email_identity.php';
 
 class EmailService {
     /**
@@ -68,14 +69,7 @@ class EmailService {
      * @return string
      */
     public static function getFromName(array $appConfig): string {
-        $name = trim((string)($appConfig['smtp_from_name'] ?? ''));
-        if ($name === '') {
-            $name = trim((string)($appConfig['from_name'] ?? ''));
-        }
-        if ($name === '') {
-            $name = (string)($appConfig['brand_name'] ?? 'Project Alpha');
-        }
-        return $name;
+        return pa_email_sender_name($appConfig, true);
     }
 
     public static function applyAutomatedNotice(string $body, bool $isHtml, array $appConfig): string {

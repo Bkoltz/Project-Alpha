@@ -7,6 +7,7 @@ require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/recurring_billing.php';
 require_once __DIR__ . '/../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../utils/email_identity.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
@@ -98,7 +99,7 @@ try {
             'password' => $smtpPass,
         ];
         $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-        $fromName = (string)($appConfig['from_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+        $fromName = pa_email_sender_name($appConfig);
 
         // small helper to create a short public link for invoice viewing
         $createPublicLink = function(int $invoiceId) use ($pdo, $appConfig) {

@@ -26,15 +26,18 @@ if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     header('Location: /?page=client-onboarding&error=' . urlencode('Enter a valid email address.'));
     exit;
 }
-$clientType = (string)($_POST['client_type'] ?? 'unknown');
-if (!in_array($clientType, ['unknown', 'business', 'consumer'], true)) {
-    $clientType = 'unknown';
+$clientType = (string)($_POST['client_type'] ?? 'consumer');
+if (!in_array($clientType, ['business', 'consumer'], true)) {
+    $clientType = 'consumer';
 }
+$organizationName = $clientType === 'business'
+    ? client_onboarding_clean_text($_POST['organization_name'] ?? '', 150)
+    : '';
 $data = [
     'name' => $name,
     'email' => $email,
     'phone' => client_onboarding_clean_text($_POST['phone'] ?? '', 50),
-    'organization_name' => client_onboarding_clean_text($_POST['organization_name'] ?? '', 150),
+    'organization_name' => $organizationName,
     'address_line1' => client_onboarding_clean_text($_POST['address_line1'] ?? '', 255),
     'address_line2' => client_onboarding_clean_text($_POST['address_line2'] ?? '', 255),
     'city' => client_onboarding_clean_text($_POST['city'] ?? '', 100),

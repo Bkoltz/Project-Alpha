@@ -1357,12 +1357,15 @@ CREATE TABLE IF NOT EXISTS tax_boundaries_stage (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tax_zip_complexity (
-    zip5 VARCHAR(5) PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    zip5 VARCHAR(5) NOT NULL,
     is_complex TINYINT(1) NOT NULL DEFAULT 0,
     reason VARCHAR(50) DEFAULT NULL,
     state_fips VARCHAR(2) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tax_zip_complexity_state_zip (state_fips, zip5),
+    INDEX idx_tax_zip_complexity_zip5 (zip5),
     INDEX idx_tax_zip_complexity_state (state_fips)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1956,6 +1959,7 @@ VALUES (0, 'baseline.sql', NULL);
 -- DEFAULT APP CONFIG
 INSERT INTO app_config (config_key, config_value) VALUES
     ('brand_name', 'Project Alpha'),
+    ('from_company', ''),
     ('timezone', 'UTC'),
     ('primary_state', ''),
     ('cron_enabled', '1'),

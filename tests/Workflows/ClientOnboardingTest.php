@@ -77,8 +77,15 @@ final class ClientOnboardingTest extends TestCase
         self::assertStringContainsString("rate_limit_check(\$pdo, 'client_onboarding_submit'", (string)$submit);
         self::assertStringContainsString('name="email"', (string)$page);
         self::assertStringContainsString('name="organization_name"', (string)$page);
+        self::assertStringContainsString("'consumer' => 'Individual'", (string)$page);
+        self::assertStringContainsString("'business' => 'Organization'", (string)$page);
+        self::assertStringContainsString('data-client-type-select', (string)$page);
+        self::assertStringContainsString('data-organization-name-field', (string)$page);
+        self::assertStringContainsString("\$clientType = (string)(\$_POST['client_type'] ?? 'consumer')", (string)$submit);
+        self::assertStringContainsString("\$clientType = 'consumer';", (string)$submit);
+        self::assertStringContainsString("\$organizationName = \$clientType === 'business'", (string)$submit);
         self::assertStringContainsString("'email' => \$email", (string)$submit);
-        self::assertStringContainsString("'organization_name' => client_onboarding_clean_text", (string)$submit);
+        self::assertStringContainsString("'organization_name' => \$organizationName", (string)$submit);
         self::assertStringContainsString('send_admin_notification', (string)$submit);
         self::assertStringNotContainsString('card_number', (string)$submit . (string)$page);
         self::assertStringNotContainsString('payment_method', (string)$submit . (string)$page);

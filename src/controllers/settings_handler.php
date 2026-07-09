@@ -71,6 +71,7 @@ $settingsFile = $configDir . '/settings.json';
 $settings = [
     'brand_name' => 'Project Alpha',
     'logo_path'  => null,
+    'from_company' => null,
     'from_name' => null,
     'from_address_line1' => null,
     'from_address_line2' => null,
@@ -211,7 +212,7 @@ if ($isSystemTab || isset($_POST['app_host']) || isset($_POST['public_links_in_e
 }
 
 // From and contact fields
-foreach (['from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
+foreach (['from_company','from_name','from_address_line1','from_address_line2','from_city','from_state','from_postal','from_country','from_email','from_phone'] as $k) {
     if (isset($_POST[$k])) {
         $val = trim((string)$_POST[$k]);
         $settings[$k] = $val !== '' ? mb_substr($val, 0, 200) : null;
@@ -375,7 +376,7 @@ if (!empty($smtpConfigKeys)) {
 
 // General UI settings persistence: store all non-secret settings in app_config DB
 $generalConfigKeys = [
-    'brand_name', 'logo_path', 'from_name', 'from_address_line1', 'from_address_line2',
+    'brand_name', 'logo_path', 'from_company', 'from_name', 'from_address_line1', 'from_address_line2',
     'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
     'app_host', 'public_links_in_email', 'primary_state', 'timezone',
     'terms', 'long_term_terms', 'on_demand_terms',

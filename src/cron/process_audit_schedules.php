@@ -9,6 +9,7 @@ require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/csv.php';
+require_once __DIR__ . '/../utils/email_identity.php';
 
 $logPrefix = '[process_audit_schedules]';
 $jobName = 'process_audit_schedules';
@@ -36,7 +37,7 @@ $mailCfg = [
     'password' => $smtpPass,
 ];
 $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-$fromName = (string)($appConfig['from_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+$fromName = pa_email_sender_name($appConfig);
 
 $processed = 0;
 $errors = 0;

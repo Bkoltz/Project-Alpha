@@ -9,6 +9,7 @@ require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/mailer.php';
 require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/cron_state.php';
+require_once __DIR__ . '/../utils/email_identity.php';
 
 $logPrefix = '[send_invoice_reminders]';
 $jobName = 'send_invoice_reminders';
@@ -60,7 +61,7 @@ try {
         'password' => $smtpPass,
     ];
     $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-    $fromName = (string)($appConfig['from_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+    $fromName = pa_email_sender_name($appConfig);
 
     if ($fromEmail === 'no-reply@localhost' && empty($appConfig['smtp_host'])) {
         @error_log("$logPrefix Warning: No SMTP configured and from_email not set. Reminders may fail to send.");

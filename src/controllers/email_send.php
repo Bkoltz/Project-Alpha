@@ -6,6 +6,7 @@ require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/smtp.php';
 require_once __DIR__ . '/../utils/logger.php';
 require_once __DIR__ . '/../utils/mailer.php';
+require_once __DIR__ . '/../utils/email_identity.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/invoice_content_links.php';
 require_once __DIR__ . '/../utils/payment_methods.php';
@@ -279,7 +280,7 @@ try {
   // Try PHPMailer first (supports attachments), else fallback to SMTP client, else mail()
   $smtpHost = $appConfig['smtp_host'] ?? null;
   $fromEmail = $appConfig['from_email'] ?? '';
-  $fromName = $appConfig['from_name'] ?? 'Project Alpha';
+  $fromName = pa_email_sender_name($appConfig);
   $sent = false; $err = '';
   if ($smtpHost) {
     $pass = '';

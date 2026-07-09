@@ -28,6 +28,9 @@
     });
     clearChoices(root);
     setStatus(root, mode === 'manual' ? 'Enter a tax percentage directly.' : '');
+    if (mode === 'zip') {
+      fillZipFromSelectedClient(root);
+    }
   }
 
   function setStatus(root, message, tone) {
@@ -55,9 +58,22 @@
     clearChoices(root);
   }
 
+  function uniqueChoices(choices) {
+    var seen = {};
+    return (choices || []).filter(function (choice) {
+      var rate = Number(choice.rate || 0).toFixed(4);
+      var label = String(choice.label || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      var key = rate + '|' + label;
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+
   function renderChoices(root, choices, message) {
     var box = qs(root, '[data-tax-choices]');
     if (!box) return;
+    choices = uniqueChoices(choices);
     box.innerHTML = '';
     if (!choices || choices.length === 0) {
       box.style.display = 'none';
@@ -74,7 +90,7 @@
     choices.forEach(function (choice) {
       var button = document.createElement('button');
       button.type = 'button';
-      button.style.cssText = 'display:flex;width:100%;justify-content:space-between;gap:12px;text-align:left;padding:10px 12px;border:0;border-bottom:1px solid #f3f4f6;background:#fff;cursor:pointer';
+      button.className = 'pa-tax-lookup__choice';
       button.innerHTML = '<span>' + escapeHtml(choice.label) + '</span><strong>' + escapeHtml(choice.rate_display || '') + '</strong>';
       button.addEventListener('click', function () {
         applyChoice(root, choice);
@@ -85,6 +101,10 @@
   }
 
   function fetchLookup(root, params) {
+    var stateHint = root.getAttribute('data-tax-state-hint') || '';
+    if (stateHint && !params.state) {
+      params.state = stateHint;
+    }
     setStatus(root, 'Looking up tax rate...');
     clearChoices(root);
     fetch('/?page=tax-lookup&' + new URLSearchParams(params).toString(), {
@@ -99,6 +119,62 @@
       });
   }
 
+  function selectedClientId(root) {
+    var form = root.closest('form') || document;
+    var selectors = [
+      '#clientId',
+      '#clientIdInv',
+      '#clientIdCo',
+      '#contractEditClientId',
+      'input[name="client_id"]'
+    ];
+    for (var i = 0; i < selectors.length; i += 1) {
+      var input = form.querySelector(selectors[i]);
+      if (input && input.value) return input.value;
+    }
+    return '';
+  }
+
+  function fillZipFromSelectedClient(root) {
+    var zipInput = qs(root, '[data-tax-zip]');
+    if (!zipInput || zipInput.value.trim() !== '') return;
+
+    var clientId = selectedClientId(root);
+    if (!clientId) {
+      setStatus(root, 'Enter a 5 digit ZIP code.');
+      return;
+    }
+
+    fetch('/?page=clients-search&id=' + encodeURIComponent(clientId), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (rows) {
+        var client = Array.isArray(rows) && rows.length ? rows[0] : null;
+        var zip = client ? String(client.preferred_tax_zip || client.organization_postal_code || client.postal_code || '').replace(/\D+/g, '').slice(0, 5) : '';
+        var stateHint = client ? String(client.preferred_tax_state || client.organization_state || client.state || '').trim() : '';
+        if (stateHint) {
+          root.setAttribute('data-tax-state-hint', stateHint);
+        } else {
+          root.removeAttribute('data-tax-state-hint');
+        }
+        if (zip.length !== 5 || zipInput.value.trim() !== '') {
+          setStatus(root, 'Enter a 5 digit ZIP code.');
+          return;
+        }
+        zipInput.value = zip;
+        fetchLookup(root, { mode: 'zip', zip: zip, state: stateHint });
+      })
+      .catch(function () {
+        setStatus(root, 'Enter a 5 digit ZIP code.');
+      });
+  }
+
+  function activeMode(root) {
+    var active = qs(root, '[data-tax-mode][aria-pressed="true"]');
+    return active ? active.getAttribute('data-tax-mode') || 'manual' : 'manual';
+  }
+
   function debounce(fn, delay) {
     var timer = null;
     return function () {
@@ -109,6 +185,8 @@
   }
 
   function init(root) {
+    if (!root || root.dataset.taxLookupReady === '1') return;
+    root.dataset.taxLookupReady = '1';
     qsa(root, '[data-tax-mode]').forEach(function (button) {
       button.addEventListener('click', function () {
         setMode(root, button.getAttribute('data-tax-mode') || 'manual');
@@ -141,10 +219,46 @@
       }, 250));
     }
 
+    var form = root.closest('form');
+    if (form) {
+      form.addEventListener('click', function (event) {
+        if (!event.target.closest('[data-id], [data-client-id]')) return;
+        window.setTimeout(function () {
+          if (activeMode(root) !== 'zip') return;
+          var input = qs(root, '[data-tax-zip]');
+          if (input) input.value = '';
+          fillZipFromSelectedClient(root);
+        }, 0);
+      });
+    }
+
     setMode(root, 'manual');
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    qsa(document, '.pa-tax-lookup').forEach(init);
-  });
+  function initTaxLookupPage(context) {
+    var root = context && context.root ? context.root : document;
+    qsa(root, '.pa-tax-lookup').forEach(init);
+  }
+  initTaxLookupPage.pageInitializerId = 'tax-lookup-control';
+
+  if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage([
+      'quote/quotes-create',
+      'quotes-create',
+      'quote/quotes-edit',
+      'quotes-edit',
+      'invoice/invoices-create',
+      'invoices-create',
+      'invoice/invoices-edit',
+      'invoices-edit',
+      'contract/contracts-create',
+      'contracts-create',
+      'contract/contracts-edit',
+      'contracts-edit'
+    ], initTaxLookupPage);
+  } else if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { initTaxLookupPage({ root: document }); }, { once: true });
+  } else {
+    initTaxLookupPage({ root: document });
+  }
 })();

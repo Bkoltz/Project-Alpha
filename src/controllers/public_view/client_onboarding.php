@@ -45,6 +45,11 @@ if ($invite && !empty($invite['target_organization_id'])) {
     $orgStmt->execute([(int)$invite['target_organization_id']]);
     $existingOrganizationName = (string)($orgStmt->fetchColumn() ?: '');
 }
+$selectedClientType = (string)($existingClient['client_type'] ?? '');
+if (!in_array($selectedClientType, ['business', 'consumer'], true)) {
+    $selectedClientType = $existingOrganizationName !== '' ? 'business' : 'consumer';
+}
+$showOrganizationField = $selectedClientType === 'business';
 ?>
 <main>
   <div class="auth-wrap" style="max-width:680px">
@@ -63,8 +68,8 @@ if ($invite && !empty($invite['target_organization_id'])) {
         <label style="grid-column:1/-1"><span>Name</span><input class="input" name="name" maxlength="150" required value="<?php echo htmlspecialchars((string)($existingClient['name'] ?? '')); ?>"></label>
         <label><span>Email</span><input class="input" type="email" name="email" maxlength="255" autocomplete="email" value="<?php echo htmlspecialchars((string)($existingClient['email'] ?? $invite['invited_email'] ?? '')); ?>"></label>
         <label><span>Phone</span><input class="input" name="phone" maxlength="50" autocomplete="tel" value="<?php echo htmlspecialchars((string)($existingClient['phone'] ?? '')); ?>"></label>
-        <label><span>Client type</span><select class="input" name="client_type"><?php foreach (['unknown' => 'Not specified', 'business' => 'Business', 'consumer' => 'Individual'] as $value => $label): ?><option value="<?php echo $value; ?>" <?php echo ($existingClient['client_type'] ?? 'unknown') === $value ? 'selected' : ''; ?>><?php echo $label; ?></option><?php endforeach; ?></select></label>
-        <label style="grid-column:1/-1"><span>Organization</span><input class="input" name="organization_name" maxlength="150" autocomplete="organization" value="<?php echo htmlspecialchars($existingOrganizationName); ?>"></label>
+        <label><span>Client type</span><select class="input" name="client_type" data-client-type-select><?php foreach (['consumer' => 'Individual', 'business' => 'Organization'] as $value => $label): ?><option value="<?php echo $value; ?>" <?php echo $selectedClientType === $value ? 'selected' : ''; ?>><?php echo $label; ?></option><?php endforeach; ?></select></label>
+        <label style="grid-column:1/-1;<?php echo $showOrganizationField ? '' : 'display:none'; ?>" data-organization-name-field><span>Organization</span><input class="input" name="organization_name" maxlength="150" autocomplete="organization" value="<?php echo htmlspecialchars($existingOrganizationName); ?>"></label>
         <label style="grid-column:1/-1"><span>Address</span><input class="input" name="address_line1" maxlength="255" autocomplete="address-line1" value="<?php echo htmlspecialchars((string)($existingClient['address_line1'] ?? '')); ?>"></label>
         <label style="grid-column:1/-1"><span>Apartment / Suite</span><input class="input" name="address_line2" maxlength="255" autocomplete="address-line2" value="<?php echo htmlspecialchars((string)($existingClient['address_line2'] ?? '')); ?>"></label>
         <label><span>City</span><input class="input" name="city" maxlength="100" autocomplete="address-level2" value="<?php echo htmlspecialchars((string)($existingClient['city'] ?? '')); ?>"></label>
@@ -73,6 +78,24 @@ if ($invite && !empty($invite['target_organization_id'])) {
         <label><span>Country</span><input class="input" name="country" maxlength="100" autocomplete="country-name" value="<?php echo htmlspecialchars((string)($existingClient['country'] ?? 'US')); ?>"></label>
         <button type="submit" class="btn btn-primary" style="grid-column:1/-1">Submit for Review</button>
       </form>
+      <script>
+      (function () {
+        var select = document.querySelector('[data-client-type-select]');
+        var field = document.querySelector('[data-organization-name-field]');
+        if (!select || !field) return;
+        function syncOrganizationField() {
+          var show = select.value === 'business';
+          field.style.display = show ? '' : 'none';
+          var input = field.querySelector('input[name="organization_name"]');
+          if (input) {
+            input.disabled = !show;
+            if (!show) input.value = '';
+          }
+        }
+        select.addEventListener('change', syncOrganizationField);
+        syncOrganizationField();
+      })();
+      </script>
     <?php endif; ?>
   </div>
 </main>

@@ -18,7 +18,7 @@ The June 23 work established:
 - `.github/workflows/docker-publish.yml`
 - `.github/workflows/codeql.yml`
 - `.github/workflows/gitleaks.yml`
-- [Contributing](../CONTRIBUTING.md)
+- [Contributing](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/CONTRIBUTING.md)
 - [TrueNAS Deployment](truenas-scale-deployment.md)
 
 Repository branch protection and auto-merge settings live in GitHub and cannot be inferred from this historical file. Do not store tokens, credentials, private addresses, or production access details in documentation.

@@ -141,6 +141,7 @@ function handlePaymentFailed($pdo, $appConfig, $paymentIntent) {
         try {
             require_once __DIR__ . '/../../utils/mailer.php';
             require_once __DIR__ . '/../../utils/crypto.php';
+            require_once __DIR__ . '/../../utils/email_identity.php';
             $smtpPass = '';
             if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
                 $encVal = $appConfig['smtp_password_enc'];
@@ -155,7 +156,7 @@ function handlePaymentFailed($pdo, $appConfig, $paymentIntent) {
                 'password' => $smtpPass,
             ];
             $fromEmail = (string)$appConfig['from_email'];
-            $fromName = (string)($appConfig['from_name'] ?? ($appConfig['brand_name'] ?? 'Project Alpha'));
+            $fromName = pa_email_sender_name($appConfig);
             
             // Get client/invoice details
             $details = '';

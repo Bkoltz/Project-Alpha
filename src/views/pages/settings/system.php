@@ -51,9 +51,14 @@
 </fieldset>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">User Info (From)</legend>
+  <legend style="padding:0 6px;color:var(--muted)">Business Info</legend>
   <label>
-    <div>Name</div><input name="from_name" value="<?php echo htmlspecialchars($appConfig['from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <div>Business / Organization Name</div>
+    <input name="from_company" value="<?php echo htmlspecialchars($appConfig['from_company'] ?? ($appConfig['brand_name'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+    <div style="font-size:0.85em;color:#666;margin-top:4px">Used as the email sender name unless an SMTP override is set.</div>
+  </label>
+  <label>
+    <div>Contact Name</div><input name="from_name" value="<?php echo htmlspecialchars($appConfig['from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
   </label>
   <label>
     <div>Address line 1</div><input name="from_address_line1" value="<?php echo htmlspecialchars($appConfig['from_address_line1'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -132,7 +137,7 @@
       <div>From Email (override)</div><input name="smtp_from_email" value="<?php echo htmlspecialchars($appConfig['smtp_from_email'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="leave empty to use User Info Email">
     </label>
     <label>
-      <div>From Name (override)</div><input name="smtp_from_name" value="<?php echo htmlspecialchars($appConfig['smtp_from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="leave empty to use Brand/User Info Name">
+      <div>From Name (override)</div><input name="smtp_from_name" value="<?php echo htmlspecialchars($appConfig['smtp_from_name'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="leave empty to use Business / Organization Name">
     </label>
   </div>
   <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
