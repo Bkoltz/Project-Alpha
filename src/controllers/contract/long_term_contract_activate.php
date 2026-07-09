@@ -33,8 +33,10 @@ try {
         throw new Exception('Upload signed contract first');
     }
 
-    // Manual-start contracts begin billing when the user activates them.
-    $nextInvoiceDate = $contract['next_invoice_date'] ?: date('Y-m-d');
+    // The first recurring invoice is due immediately when a signed contract is activated.
+    $today = date('Y-m-d');
+    $hasGeneratedInvoices = (int)($contract['invoices_generated'] ?? 0) > 0 || !empty($contract['last_invoice_date']);
+    $nextInvoiceDate = $hasGeneratedInvoices ? ($contract['next_invoice_date'] ?: $today) : $today;
 
     // Update contract status to active
     $update = $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=? WHERE id=? AND contract_type="long_term"');
@@ -50,7 +52,8 @@ try {
     // Generate the first invoice immediately if the contract is now due.
     if ($contract && $contract['status'] === 'active' && $contract['next_invoice_date'] <= date('Y-m-d')) {
         try {
-            generate_recurring_invoice($pdo, $contract, $appConfig);
+            $invoiceId = generate_recurring_invoice($pdo, $contract, $appConfig);
+            recurring_invoice_send_on_generate_if_enabled($pdo, $invoiceId, $appConfig);
         } catch (Throwable $e) {
             @error_log('[long_term_contract_activate] First invoice generation failed: ' . $e->getMessage());
         }

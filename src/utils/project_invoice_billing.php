@@ -422,16 +422,13 @@ function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appC
         . '<p><strong>Total due:</strong> $' . number_format((float)$projectInvoice['balance_due'], 2) . '</p>'
         . '<p><strong>Billing period:</strong> ' . htmlspecialchars(date('M j, Y', strtotime($projectInvoice['billing_period_start']))) . ' - ' . htmlspecialchars(date('M j, Y', strtotime($projectInvoice['billing_period_end']))) . '</p>'
         . '<p><a href="' . htmlspecialchars($url) . '">View project invoice</a></p>';
-    $contentLinksHtml = invoice_content_links_html(invoice_content_links_for_project_invoice($pdo, $projectInvoiceId, $appConfig));
-    if ($contentLinksHtml !== '') {
-        $body .= $contentLinksHtml;
-    }
-    $invoiceLinks = pa_invoice_links_for_project_invoice(
+    $invoiceLinks = invoice_content_links_for_project_invoice(
         $pdo,
         $projectInvoiceId,
+        $appConfig,
         array_map(static fn($row) => (int)$row['id'], $pendingRecipients)
     );
-    $body .= pa_invoice_links_html($invoiceLinks);
+    $body .= invoice_content_links_html($invoiceLinks);
 
     $sent = 0;
     foreach ($pendingRecipients as $recipient) {

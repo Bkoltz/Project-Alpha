@@ -169,6 +169,18 @@
         <input type="text" name="email_no_reply_notice_text" value="<?php echo htmlspecialchars($appConfig['email_no_reply_notice_text'] ?? 'This is an automated message. Please do not reply to this email.'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
     </div>
+
+    <div style="padding-top:16px;border-top:1px solid #eee;margin-bottom:16px">
+      <h3 style="margin:0 0 12px 0;font-size:15px">Client Onboarding Admin Emails</h3>
+
+      <label style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
+        <input type="checkbox" name="notify_client_onboarding_submit" value="1" <?php echo !array_key_exists('notify_client_onboarding_submit', $appConfig) || !empty($appConfig['notify_client_onboarding_submit']) ? 'checked' : ''; ?> style="margin-top:3px">
+        <div>
+          <div class="font-600">Email admins when an onboarding form is submitted</div>
+          <div style="font-size:13px;color:var(--muted)">This is the same default used by the checkbox on the client onboarding invite page.</div>
+        </div>
+      </label>
+    </div>
     
     <!-- Invoice Reminders -->
     <div style="margin-bottom:16px">

@@ -44,6 +44,7 @@ $appConfig = [
     'notify_invoice_paid_on_demand' => 1,
     'notify_invoice_paid_long_term' => 1,
     'notify_invoice_paid_project' => 1,
+    'notify_client_onboarding_submit' => 1,
     'email_no_reply_notice_enabled' => 0,
     'email_no_reply_notice_text' => 'This is an automated message. Please do not reply to this email.',
     // Link resolver / invoice content links are intentionally opt-in.
@@ -190,6 +191,7 @@ try {
             'notify_signed_contract_uploaded',
             'notify_invoice_paid', 'notify_invoice_paid_regular', 'notify_invoice_paid_on_demand',
             'notify_invoice_paid_long_term', 'notify_invoice_paid_project',
+            'notify_client_onboarding_submit',
             'email_no_reply_notice_enabled', 'email_no_reply_notice_text',
             'auto_terminate_contracts', 'link_expiration_checker',
             'contract_expiring_warning', 'contract_expiring_days', 'contract_expired_alert',

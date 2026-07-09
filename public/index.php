@@ -516,6 +516,10 @@ if ($page === 'settings/item-library-search') {
     require_once __DIR__ . '/../src/controllers/settings/item_library_search.php';
     exit;
 }
+if ($page === 'tax-lookup') {
+    require_once __DIR__ . '/../src/controllers/tax_lookup.php';
+    exit;
+}
 if ($page === 'settings/logs') {
     require_once __DIR__ . '/../src/views/pages/settings/logs.php';
     exit;

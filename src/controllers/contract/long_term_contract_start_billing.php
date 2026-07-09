@@ -28,6 +28,9 @@ try {
     if (in_array((string)$contract['status'], ['cancelled', 'completed', 'void'], true)) {
         throw new Exception('Billing cannot be started for this contract status');
     }
+    if ((int)($contract['invoices_generated'] ?? 0) > 0 || !empty($contract['last_invoice_date'])) {
+        throw new Exception('Initial billing has already started. Open the latest invoice instead.');
+    }
 
     $startDate = date('Y-m-d');
     $update = $pdo->prepare('UPDATE contracts SET status="active", next_invoice_date=? WHERE id=? AND contract_type="long_term"');
@@ -40,7 +43,12 @@ try {
     $contract = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($contract && $contract['status'] === 'active' && !empty($contract['next_invoice_date']) && $contract['next_invoice_date'] <= date('Y-m-d')) {
         try {
-            generate_recurring_invoice($pdo, $contract, $appConfig);
+            $invoiceId = generate_recurring_invoice($pdo, $contract, $appConfig);
+            recurring_invoice_send_on_generate_if_enabled($pdo, $invoiceId, $appConfig);
+            if ($invoiceId !== null) {
+                header('Location: /?page=invoice/invoice-details&id=' . (int)$invoiceId . '&generated=1');
+                exit;
+            }
         } catch (Throwable $e) {
             @error_log('[long_term_contract_start_billing] First invoice generation failed: ' . $e->getMessage());
         }

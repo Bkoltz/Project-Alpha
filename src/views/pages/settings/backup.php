@@ -88,6 +88,16 @@ usort($backups, function($a, $b) {
 // Check last backup
 $lastBackup = isset($backups[0]) ? $backups[0]['created'] : 'Never';
 $backupCount = count($backups);
+$databaseName = getenv('MYSQL_DATABASE') ?: 'project_alpha';
+$todayBackupFiles = [];
+if (is_dir($backupsDir . '/daily')) {
+    $todayPrefix = $backupsDir . '/daily/' . $databaseName . '_' . date('Y-m-d') . '_';
+    $todayBackupFiles = array_merge(
+        glob($todayPrefix . '*.sql.gz') ?: [],
+        glob($todayPrefix . '*.zip') ?: []
+    );
+}
+$todayBackupExists = !empty($todayBackupFiles);
 
 $cronStatus = null;
 $cronStatusError = '';
@@ -101,8 +111,14 @@ try {
 }
 
 $nowLocal = new DateTimeImmutable('now', $backupTimeZoneObj);
-$nextExpectedLocal = $nowLocal->setTime($backupHour, 30);
-if ($nextExpectedLocal <= $nowLocal) {
+$scheduledTodayLocal = $nowLocal->setTime($backupHour, 30);
+if (!$todayBackupExists && $nowLocal >= $scheduledTodayLocal) {
+    $nextCronCheck = ((int)$nowLocal->format('i') < 30) ? $nowLocal : $nowLocal->modify('+1 hour');
+    $nextExpectedLocal = $nextCronCheck->setTime((int)$nextCronCheck->format('G'), 30);
+} else {
+    $nextExpectedLocal = $scheduledTodayLocal;
+}
+if ($nextExpectedLocal <= $nowLocal && $todayBackupExists) {
     $nextExpectedLocal = $nextExpectedLocal->modify('+1 day');
 }
 $nextExpectedUtc = $nextExpectedLocal->setTimezone(new DateTimeZone('UTC'));
@@ -145,6 +161,9 @@ if ($backupCount === 0) {
     } elseif (($cronStatus['status'] ?? '') === 'running') {
         $zeroBackupDiagnostics[] = 'The backup cron is currently marked running.';
     }
+    if (!$todayBackupExists && $nowLocal >= $scheduledTodayLocal) {
+        $zeroBackupDiagnostics[] = 'The configured backup time has passed today; cron will catch up on the next hourly check if the cron service is running.';
+    }
     $zeroBackupDiagnostics[] = 'Next expected scheduled run: ' . $nextExpectedLocal->format('Y-m-d H:i') . ' ' . $backupTimezone . ' (' . $nextExpectedUtc->format('Y-m-d H:i') . ' UTC).';
 }
 
@@ -181,7 +200,7 @@ unset($_SESSION['flash_backup']);
             <span class="status-value">Daily at <?php echo str_pad((string)$backupHour, 2, '0', STR_PAD_LEFT); ?>:30 <?php echo htmlspecialchars($backupTimezone); ?></span>
         </div>
         <div class="status-item">
-            <span class="status-label">Next Expected Run:</span>
+            <span class="status-label">Next Expected Check:</span>
             <span class="status-value"><?php echo htmlspecialchars($nextExpectedLocal->format('Y-m-d H:i')); ?> <?php echo htmlspecialchars($backupTimezone); ?></span>
         </div>
         <div class="status-item">
@@ -280,7 +299,7 @@ unset($_SESSION['flash_backup']);
                     </option>
                     <?php endfor; ?>
                 </select>
-                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">The cron service checks this setting hourly at :30 using the PA system timezone.</span>
+                <span class="help-text" style="display:block; margin-top:0.35rem; font-size:0.8rem;">The cron service checks hourly at :30 using the PA system timezone. If the configured time was missed, the next hourly check creates today's missing backup.</span>
             </div>
         </div>
 

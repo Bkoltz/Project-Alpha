@@ -15,7 +15,7 @@ CRON_LOG=/var/www/config/logs/cron/cron.log
 # Generate recurring invoices - daily at 2:00 AM
 0 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_invoices.php >> $CRON_LOG 2>&1
 
-# Check hourly at :30; the script honors the configured UTC backup hour.
+# Check hourly at :30; the script honors the configured PA timezone backup hour.
 30 * * * * root . /etc/environment && php /var/www/src/cron/backup_database.php --scheduled >> $CRON_LOG 2>&1
 
 # Auto-terminate expired contracts - daily at 3:00 AM

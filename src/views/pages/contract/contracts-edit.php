@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/project_selection.php';
+require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
 $co = $pdo->prepare('SELECT co.*, c.name AS client_name FROM contracts co LEFT JOIN clients c ON c.id = co.client_id WHERE co.id=?');
@@ -74,10 +75,9 @@ try {
         </div>
         <small style="display:block;margin-top:6px;color:var(--muted)">Start typing, then choose the matching client.</small>
       </label>
-      <label>
-        <div>Tax (%)</div>
-        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="<?php echo htmlspecialchars($contract['tax_percent'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
+      <div>
+        <?php echo render_tax_lookup_control('taxPercentCo', 'tax_percent', (float)($contract['tax_percent'] ?? 0)); ?>
+      </div>
       <label>
         <div>Project</div>
         <select name="project_id" id="contractEditProjectSelect" data-selected-project-id="<?php echo (int)($contract['project_id'] ?? 0); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -389,3 +389,4 @@ try {
 </div>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/contracts-edit-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

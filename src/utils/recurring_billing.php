@@ -2,6 +2,16 @@
 // src/utils/recurring_billing.php
 // Idempotent helper for generating a single long-term recurring invoice.
 
+function recurring_invoice_send_on_generate_if_enabled(PDO $pdo, ?int $invoiceId, array $appConfig): bool
+{
+    if ($invoiceId === null || empty($appConfig['invoice_auto_email_on_generate'])) {
+        return false;
+    }
+
+    require_once __DIR__ . '/invoice_lifecycle.php';
+    return invoice_send_finalized($pdo, $invoiceId, $appConfig, 'on_generate');
+}
+
 function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig): ?int {
     $logPrefix = '[generate_recurring_invoice]';
     $today = date('Y-m-d');

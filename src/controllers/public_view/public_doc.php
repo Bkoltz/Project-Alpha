@@ -13,6 +13,7 @@ if (!rate_limit_check($pdo, 'public_doc', 30, 60)) {
 }
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/public_links.php';
 
 $token = isset($_GET['token']) ? (string)$_GET['token'] : '';
@@ -169,6 +170,8 @@ try {
       $templateVars = ['type'=>$type, 'id'=>$rid, 'token'=>$token, 'notice'=>$notice, 'error'=>$err,
         'showActions'=>$showActions, 'showUpload'=>$showUpload, 'appConfig'=>$appConfig
       ];
+      $templateVars['quoteCsrf'] = csrf_sf_token('public_quote_action');
+      $templateVars['contractSignCsrf'] = csrf_sf_token('public_contract_sign');
       if ($type === 'quote') {
         try {
           $idParam = (int)$rid;

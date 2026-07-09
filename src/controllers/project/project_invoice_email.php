@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../utils/invoice_content_links.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/project-invoice-email');
@@ -26,6 +27,17 @@ if ($recipientClientIds !== null && !is_array($recipientClientIds)) {
     $recipientClientIds = [];
 }
 $recipientClientIds = $recipientClientIds === null ? null : array_map('intval', $recipientClientIds);
+if (invoice_should_prompt_for_missing_content_links($pdo, 'project_invoice', $id, $appConfig, $recipientClientIds)) {
+    $missingLinkBehavior = invoice_missing_content_links_behavior($appConfig);
+    if ($missingLinkBehavior === 'block') {
+        header('Location: /?page=project/project-invoice-details&id=' . $id . '&email_err=' . urlencode(invoice_missing_content_links_message()));
+        exit;
+    }
+    if (empty($_POST['confirm_missing_content_links'])) {
+        header('Location: /?page=project/project-invoice-details&id=' . $id . '&content_link_warning=1&email_panel=1');
+        exit;
+    }
+}
 $sent = project_invoice_send_email($pdo, $id, $appConfig, $recipientClientIds, true);
 $param = $sent > 0 ? 'emailed=1' : 'email_err=' . urlencode('No new project invoice emails were sent.');
 header('Location: /?page=project/project-invoice-details&id=' . $id . '&' . $param);

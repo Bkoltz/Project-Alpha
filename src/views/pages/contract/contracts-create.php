@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
+require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $csrf = csrf_sf_token('contracts-create');
 $selectedProject = null;
 $selectedProjectId = (int)($_GET['project_id'] ?? 0);
@@ -44,10 +45,9 @@ if ($selectedProjectId > 0) {
         <input id="clientIdCo" type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>">
         <div id="clientSuggestCo" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
-      <label>
-        <div>Tax (%)</div>
-        <input id="taxPercentCo" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
+      <div>
+        <?php echo render_tax_lookup_control('taxPercentCo', 'tax_percent', 0.0); ?>
+      </div>
       <label>
         <div>Discount Type</div>
         <select id="discountTypeCo" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -362,3 +362,4 @@ if ($selectedProjectId > 0) {
   </form>
 </section>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/contracts-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

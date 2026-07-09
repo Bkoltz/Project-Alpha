@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
+require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
 $netDays = (int)($appConfig['net_terms_days'] ?? 30); if ($netDays < 0) { $netDays = 0; }
 $defaultDue = date('Y-m-d', strtotime('+' . $netDays . ' days'));
@@ -41,10 +42,9 @@ if ($selectedProjectId > 0) {
         <div>Due Date</div>
         <input type="date" name="due_date" value="<?php echo htmlspecialchars($defaultDue); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
-      <label>
-        <div>Tax (%)</div>
-        <input id="taxPercentInv" type="number" step="0.01" name="tax_percent" value="0" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-      </label>
+      <div>
+        <?php echo render_tax_lookup_control('taxPercentInv', 'tax_percent', 0.0); ?>
+      </div>
       <label>
         <div>Discount Type</div>
         <select id="discountTypeInv" name="discount_type" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -163,3 +163,4 @@ if ($selectedProjectId > 0) {
 </div>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/invoices-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

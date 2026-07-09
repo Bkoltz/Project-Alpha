@@ -79,6 +79,20 @@ try {
       header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('Finalize this invoice before emailing it. Project-billed invoices are sent through the project statement.'));
       exit;
     }
+
+    if (invoice_should_prompt_for_missing_content_links($pdo, 'invoice', $id, $appConfig)) {
+      $missingLinkBehavior = invoice_missing_content_links_behavior($appConfig);
+      $toUrl = $redirectTo ?: $baseView;
+      $join = strpos($toUrl, '?') !== false ? '&' : '?';
+      if ($missingLinkBehavior === 'block') {
+        header('Location: ' . $toUrl . $join . 'email_err=' . urlencode(invoice_missing_content_links_message()));
+        exit;
+      }
+      if (empty($_POST['confirm_missing_content_links'])) {
+        header('Location: ' . $toUrl . $join . 'content_link_warning=1');
+        exit;
+      }
+    }
   }
 
   $to = $row['email'];
@@ -313,6 +327,18 @@ try {
   $join = (strpos($toUrl,'?')!==false)?'&':'?';
   if ($sent) {
     app_log('email', 'email sent', ['type'=>$type, 'id'=>$id, 'to'=>$to]);
+    if ($type === 'invoice') {
+      try {
+        $pdo->prepare('UPDATE invoices SET sent_at=COALESCE(sent_at,NOW()) WHERE id=?')->execute([$id]);
+        $notifType = 'manual_email_' . date('YmdHis');
+        $pdo->prepare(
+          'INSERT IGNORE INTO invoice_notifications (invoice_id,notification_type,sent_at,email_to,email_subject,email_body)
+           VALUES (?,?,NOW(),?,?,?)'
+        )->execute([$id, $notifType, $to, $subject, $body]);
+      } catch (Throwable $trackError) {
+        app_log('email', 'invoice sent tracking failed', ['id'=>$id, 'ex'=>$trackError->getMessage()]);
+      }
+    }
   } else {
     app_log('email', 'email failed', ['type'=>$type, 'id'=>$id, 'error'=>$err]);
   }

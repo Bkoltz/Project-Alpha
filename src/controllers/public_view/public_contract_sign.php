@@ -89,7 +89,7 @@ try {
     $filename = validate_and_store_upload(
         $file,
         $allowedMap,
-        10 * 1024 * 1024,
+        25 * 1024 * 1024,
         $uploadDir,
         $uploadError,
         [
@@ -102,6 +102,10 @@ try {
     );
     if ($filename === null) {
         throw new Exception($uploadError ?: 'Failed to store uploaded file');
+    }
+    $storedFile = $uploadDir . DIRECTORY_SEPARATOR . $filename;
+    if (!is_file($storedFile) || !is_readable($storedFile)) {
+        throw new Exception('Signed contract was uploaded but could not be verified on the server');
     }
 
     // Build the file URL - serve from signed_contracts subdirectory
@@ -122,7 +126,7 @@ try {
 
     $update = $pdo->prepare("
         UPDATE contracts
-        SET signed_pdf_path = ?, status = ?{$billingStartSql}
+        SET signed_pdf_path = ?, status = ?, signed_at = NOW(){$billingStartSql}
         WHERE id = ?
           AND status = 'pending'
           AND (signed_pdf_path IS NULL OR signed_pdf_path = '')
@@ -147,8 +151,10 @@ try {
         @error_log('[public_contract_sign] Notification failed: ' . $e->getMessage());
     }
     
-    // Redirect back with success
-    header('Location: /?page=public-doc&token=' . rawurlencode($token) . '&signed=1');
+    // Redirect directly to the terminal status page. The public link is
+    // intentionally revoked above, so avoid sending the client back through a
+    // tokenized document/PDF URL that may already redirect or be blocked.
+    header('Location: ' . pa_public_link_redirect_path('contract', 'signed'));
     exit;
     
 } catch (Throwable $e) {
