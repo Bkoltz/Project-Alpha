@@ -120,6 +120,49 @@ function pa_invoice_links_for_context(
         return [];
     }
 
+    $links = pa_invoice_links_query_for_context(
+        $pdo,
+        $projectId,
+        $organizationId,
+        $departmentId,
+        $primaryClientId,
+        $recipientClientIds
+    );
+    if ($links) {
+        return $links;
+    }
+
+    pa_invoice_links_run_just_in_time_refresh(
+        $pdo,
+        $projectId,
+        $organizationId,
+        $departmentId,
+        $primaryClientId,
+        $recipientClientIds
+    );
+
+    return pa_invoice_links_query_for_context(
+        $pdo,
+        $projectId,
+        $organizationId,
+        $departmentId,
+        $primaryClientId,
+        $recipientClientIds
+    );
+}
+
+/**
+ * @return list<array{id:int,title:?string,url:string,link_type:string,entity_type:string,entity_id:int,source_label:string}>
+ */
+function pa_invoice_links_query_for_context(
+    PDO $pdo,
+    ?int $projectId,
+    ?int $organizationId,
+    ?int $departmentId,
+    ?int $primaryClientId,
+    ?array $recipientClientIds
+): array {
+
     $projectSpecificEnabled = (string)pa_config_value($pdo, 'project_specific_links_enabled', '0') === '1';
     $candidateClauses = [];
     $params = [];
@@ -223,6 +266,61 @@ function pa_invoice_links_for_context(
     }
 
     return $links;
+}
+
+function pa_invoice_links_run_just_in_time_refresh(
+    PDO $pdo,
+    ?int $projectId,
+    ?int $organizationId,
+    ?int $departmentId,
+    ?int $primaryClientId,
+    ?array $recipientClientIds
+): void {
+    if ((string)pa_config_value($pdo, 'link_resolver_invoice_auto_attach_enabled', '0') !== '1') {
+        return;
+    }
+    if ((string)pa_config_value($pdo, 'link_resolver_enabled', '0') !== '1') {
+        return;
+    }
+
+    $servicePath = __DIR__ . '/../services/LinkResolverService.php';
+    if (!is_file($servicePath)) {
+        return;
+    }
+    require_once $servicePath;
+    if (!class_exists('LinkResolverService')) {
+        return;
+    }
+
+    try {
+        $service = new LinkResolverService($pdo);
+        if ($departmentId) {
+            $service->refreshLinks('department', $departmentId);
+            return;
+        }
+        if ($organizationId) {
+            $service->refreshLinks('organization', $organizationId);
+            return;
+        }
+
+        $clientIds = [];
+        if ($recipientClientIds !== null) {
+            $clientIds = array_values(array_unique(array_filter(array_map('intval', $recipientClientIds), static fn($id) => $id > 0)));
+        } elseif ($primaryClientId) {
+            $clientIds[] = $primaryClientId;
+        }
+        if ($projectId && pa_table_has_column($pdo, 'project_clients', 'can_view_invoice_links')) {
+            $stmt = $pdo->prepare('SELECT client_id FROM project_clients WHERE project_id = ? AND can_view_invoice_links = 1');
+            $stmt->execute([$projectId]);
+            $clientIds = array_values(array_unique(array_map('intval', array_merge($clientIds, $stmt->fetchAll(PDO::FETCH_COLUMN)))));
+        }
+
+        foreach ($clientIds as $clientId) {
+            $service->refreshLinks('client', $clientId);
+        }
+    } catch (Throwable $e) {
+        @error_log('[invoice_links] Just-in-time link resolver refresh failed: ' . $e->getMessage());
+    }
 }
 
 function pa_invoice_links_html(array $links): string
