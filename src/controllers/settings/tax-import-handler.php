@@ -27,8 +27,10 @@ if (empty($_SESSION['csrf']) || !is_string($token) || !hash_equals($_SESSION['cs
 ignore_user_abort(true);
 
 const TAX_IMPORT_BATCH_SIZE = 2000;
+const TAX_IMPORT_SCAN_LOG_INTERVAL = 50000;
 
 try {
+    $runId = 0;
     $stats = [
         'counties_loaded' => 0,
         'fips_reused' => 0,
@@ -60,39 +62,51 @@ try {
     $importStateAbbr = pa_tax_state_abbr_for_fips($importStateFips);
     $_SESSION['tax_import_state'] = $importStateAbbr;
     $stateTaxRate = max(0.0, min(20.0, (float)($_POST['state_tax_rate'] ?? 5.0)));
+    $runId = taxImportStartRun($pdo, $importStateFips, $importStateAbbr);
+    taxImportLog($pdo, $runId, 'validating_uploads', 'Validating uploaded tax source files.');
 
     if ($hasFipsFile) {
+        taxImportLog($pdo, $runId, 'importing_fips', 'Reading selected-state counties from the FIPS file.');
         taxImportValidateFile('fips_file', ['txt']);
-        [$importStateFips, $importStateAbbr] = importFipsFile($pdo, $_FILES['fips_file']['tmp_name'], $stats, $importStateFips);
+        [$importStateFips, $importStateAbbr] = importFipsFile($pdo, $_FILES['fips_file']['tmp_name'], $stats, $importStateFips, $runId);
         taxImportRememberFile($pdo, $importStateFips, 'fips', $_FILES['fips_file'], null);
         $stats['files_uploaded'][] = 'FIPS counties';
+        taxImportLog($pdo, $runId, 'importing_fips', 'FIPS counties imported.', [
+            'fips_rows' => $stats['counties_loaded'],
+            'warning_count' => count($stats['errors']),
+        ]);
     }
 
     if ($hasRateFile) {
+        taxImportLog($pdo, $runId, 'importing_rates', 'Reading active tax jurisdiction rows from the rate file.');
         taxImportValidateFile('rate_file', ['csv']);
-        [$rateStateFips, $rateStateAbbr] = importRateFile($pdo, $_FILES['rate_file']['tmp_name'], $stateTaxRate, $stats, $importStateFips);
+        [$rateStateFips, $rateStateAbbr] = importRateFile($pdo, $_FILES['rate_file']['tmp_name'], $stateTaxRate, $stats, $importStateFips, $runId);
         $importStateFips = $rateStateFips;
         $importStateAbbr = $rateStateAbbr;
         taxImportRememberFile($pdo, $rateStateFips, 'rates', $_FILES['rate_file'], $stateTaxRate);
         $stats['files_uploaded'][] = 'Tax rates';
     } else {
         $stats['files_reused'][] = 'Existing tax rates';
+        taxImportLog($pdo, $runId, 'refreshing_rates', 'No new rate file uploaded; refreshing cached names from stored FIPS counties.');
         refreshTaxRateNamesFromFips($pdo, $importStateFips);
     }
 
     if ($hasBoundaryFile) {
+        taxImportLog($pdo, $runId, 'importing_boundaries', 'Streaming boundary rows into the staging table.');
         taxImportValidateFile('boundary_file', ['csv']);
-        [$boundaryStateFips, $boundaryStateAbbr] = importBoundaryFile($pdo, $_FILES['boundary_file']['tmp_name'], $stats, $importStateFips);
+        [$boundaryStateFips, $boundaryStateAbbr] = importBoundaryFile($pdo, $_FILES['boundary_file']['tmp_name'], $stats, $importStateFips, $runId);
         $importStateFips = $boundaryStateFips;
         $importStateAbbr = $boundaryStateAbbr;
         taxImportRememberFile($pdo, $boundaryStateFips, 'boundaries', $_FILES['boundary_file'], null);
         $stats['files_uploaded'][] = 'Boundaries';
     } else {
         $stats['files_reused'][] = 'Existing boundaries';
+        taxImportLog($pdo, $runId, 'reusing_boundaries', 'No new boundary file uploaded; existing boundary rows remain in place.');
     }
 
     $_SESSION['tax_import_summary'] = buildImportSummary($stats, $importStateAbbr);
     $_SESSION['tax_import_stats'] = $stats;
+    taxImportFinishRun($pdo, $runId, $stats, 'completed');
 
     header('Location: /?page=settings&tab=taxes&import_success=1&tax_state=' . rawurlencode($importStateAbbr));
     exit;
@@ -100,7 +114,11 @@ try {
     if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    @error_log('[tax-import] Error: ' . $e->getMessage());
+    if (!empty($runId)) {
+        taxImportFinishRun($pdo, (int)$runId, $stats ?? [], 'failed', $e->getMessage());
+    } else {
+        taxImportServerLog(0, 'failed', $e->getMessage());
+    }
     $stateParam = isset($_SESSION['tax_import_state']) ? '&tax_state=' . rawurlencode((string)$_SESSION['tax_import_state']) : '';
     header('Location: /?page=settings&tab=taxes&import_error=' . rawurlencode($e->getMessage()) . $stateParam);
     exit;
@@ -128,7 +146,7 @@ function taxImportValidateFile(string $field, array $extensions): void
     }
 }
 
-function importFipsFile(PDO $pdo, string $path, array &$stats, string $expectedStateFips): array
+function importFipsFile(PDO $pdo, string $path, array &$stats, string $expectedStateFips, int $runId = 0): array
 {
     $handle = fopen($path, 'rb');
     if (!$handle) {
@@ -188,11 +206,15 @@ function importFipsFile(PDO $pdo, string $path, array &$stats, string $expectedS
         $stats['counties_loaded']++;
     }
     $pdo->commit();
+    taxImportLog($pdo, $runId, 'importing_fips', 'Loaded ' . number_format($stats['counties_loaded']) . ' selected-state FIPS counties.', [
+        'fips_rows' => $stats['counties_loaded'],
+        'warning_count' => count($stats['errors']),
+    ]);
 
     return [$importStateFips, $importStateAbbr];
 }
 
-function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$stats, string $expectedStateFips): array
+function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$stats, string $expectedStateFips, int $runId = 0): array
 {
     $handle = fopen($path, 'rb');
     if (!$handle) {
@@ -218,6 +240,7 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
         throw new Exception("No FIPS counties stored for {$stateAbbr}. Upload that state's FIPS file before importing rates.");
     }
     $stateAbbr = reset($stateFipsRows)['state_abbr'] ?? $stateAbbr;
+    taxImportLog($pdo, $runId, 'importing_rates', 'Clearing previous imported tax jurisdictions for ' . $stateAbbr . '.');
     $pdo->beginTransaction();
     $pdo->prepare('DELETE FROM tax_jurisdictions WHERE state_fips = ?')->execute([$stateFips]);
 
@@ -230,6 +253,12 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
     );
     while (($parts = fgetcsv($handle)) !== false) {
         $lineNum++;
+        if ($lineNum % TAX_IMPORT_SCAN_LOG_INTERVAL === 0) {
+            taxImportServerLog($runId, 'importing_rates', 'Scanned rate CSV row ' . number_format($lineNum) . '; inserted ' . number_format($stats['jurisdictions_inserted']) . ' active jurisdictions so far.', [
+                'rate_rows' => $stats['jurisdictions_inserted'],
+                'warning_count' => count($stats['errors']),
+            ]);
+        }
         if (count($parts) < 9) {
             $stats['errors'][] = "Rate line {$lineNum}: expected 9 columns, got " . count($parts);
             continue;
@@ -305,6 +334,10 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
 
         if ($batch >= TAX_IMPORT_BATCH_SIZE) {
             $pdo->commit();
+            taxImportLog($pdo, $runId, 'importing_rates', 'Processed rate CSV row ' . number_format($lineNum) . '; inserted ' . number_format($stats['jurisdictions_inserted']) . ' active jurisdictions.', [
+                'rate_rows' => $stats['jurisdictions_inserted'],
+                'warning_count' => count($stats['errors']),
+            ]);
             $pdo->beginTransaction();
             $batch = 0;
         }
@@ -320,10 +353,19 @@ function importRateFile(PDO $pdo, string $path, float $stateTaxRate, array &$sta
     if ($pdo->inTransaction()) {
         $pdo->commit();
     }
+    taxImportLog($pdo, $runId, 'importing_rates', 'Finished reading rate CSV row ' . number_format($lineNum) . '; inserted ' . number_format($stats['jurisdictions_inserted']) . ' active jurisdictions.', [
+        'rate_rows' => $stats['jurisdictions_inserted'],
+        'warning_count' => count($stats['errors']),
+    ]);
 
+    taxImportLog($pdo, $runId, 'refreshing_cached_rates', 'Mirroring county totals into the tax rate list.');
     $stats['county_rates_mirrored'] = rebuildCountyTaxRateMirror($pdo, $stateFips, $stateAbbr, $hasCountry, $hasDefault);
     summarizeCountyRates($pdo, $stateFips, $stats);
     addCountyRateSanityWarnings($pdo, $stateFips, $stats);
+    taxImportLog($pdo, $runId, 'refreshing_cached_rates', 'Mirrored ' . number_format($stats['county_rates_mirrored']) . ' county tax rates.', [
+        'rate_rows' => $stats['jurisdictions_inserted'],
+        'warning_count' => count($stats['errors']),
+    ]);
 
     return [$stateFips, $stateAbbr];
 }
@@ -435,7 +477,7 @@ function addCountyRateSanityWarnings(PDO $pdo, string $stateFips, array &$stats)
     }
 }
 
-function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expectedStateFips): array
+function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expectedStateFips, int $runId = 0): array
 {
     $handle = fopen($path, 'rb');
     if (!$handle) {
@@ -445,6 +487,7 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expec
     $batchKey = bin2hex(random_bytes(12));
     $stateFips = $expectedStateFips;
     $stateAbbr = pa_tax_state_abbr_for_fips($expectedStateFips);
+    $lineNum = 0;
     $rowCount = 0;
     $batch = 0;
 
@@ -457,6 +500,13 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expec
 
     $pdo->beginTransaction();
     while (($row = fgetcsv($handle)) !== false) {
+        $lineNum++;
+        if ($lineNum % TAX_IMPORT_SCAN_LOG_INTERVAL === 0) {
+            taxImportServerLog($runId, 'importing_boundaries', 'Scanned boundary CSV row ' . number_format($lineNum) . '; staged ' . number_format($rowCount) . ' selected-state rows so far.', [
+                'boundary_rows' => $rowCount,
+                'warning_count' => count($stats['errors']),
+            ]);
+        }
         if (count($row) < 26 || trim((string)$row[0]) !== '4') {
             continue;
         }
@@ -493,6 +543,10 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expec
 
         if ($batch >= TAX_IMPORT_BATCH_SIZE) {
             $pdo->commit();
+            taxImportLog($pdo, $runId, 'importing_boundaries', 'Streamed ' . number_format($rowCount) . ' selected-state boundary rows into staging.', [
+                'boundary_rows' => $rowCount,
+                'warning_count' => count($stats['errors']),
+            ]);
             $pdo->beginTransaction();
             $batch = 0;
         }
@@ -501,12 +555,17 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expec
     if ($pdo->inTransaction()) {
         $pdo->commit();
     }
+    taxImportLog($pdo, $runId, 'importing_boundaries', 'Finished staging ' . number_format($rowCount) . ' selected-state boundary rows.', [
+        'boundary_rows' => $rowCount,
+        'warning_count' => count($stats['errors']),
+    ]);
 
     if ($rowCount === 0) {
         $pdo->prepare('DELETE FROM tax_boundaries_stage WHERE batch_key = ?')->execute([$batchKey]);
         throw new Exception('No usable boundary rows found for selected state ' . $stateAbbr . '.');
     }
 
+    taxImportLog($pdo, $runId, 'publishing_boundaries', 'Replacing live boundary rows for ' . $stateAbbr . '.');
     $pdo->beginTransaction();
     $pdo->prepare('DELETE FROM tax_boundaries WHERE state_fips = ?')->execute([$stateFips]);
     $pdo->prepare(
@@ -542,6 +601,10 @@ function importBoundaryFile(PDO $pdo, string $path, array &$stats, string $expec
     $pdo->commit();
 
     $stats['boundaries_imported'] = $rowCount;
+    taxImportLog($pdo, $runId, 'publishing_boundaries', 'Published ' . number_format($rowCount) . ' boundary rows and flagged ' . number_format($stats['complex_zips']) . ' complex ZIPs.', [
+        'boundary_rows' => $rowCount,
+        'warning_count' => count($stats['errors']),
+    ]);
     return [$stateFips, $stateAbbr];
 }
 
@@ -614,6 +677,94 @@ function taxImportRememberFile(PDO $pdo, string $stateFips, string $fileType, ar
         (int)($file['size'] ?? 0),
         $stateTaxRate,
     ]);
+}
+
+function taxImportStartRun(PDO $pdo, string $stateFips, string $stateAbbr): int
+{
+    $stmt = $pdo->prepare(
+        'INSERT INTO tax_import_runs
+            (state_fips, state_abbr, status, phase, message, started_at, updated_at)
+         VALUES (?, ?, "running", "starting", "Tax import queued.", NOW(), NOW())'
+    );
+    try {
+        $stmt->execute([$stateFips, $stateAbbr]);
+        $runId = (int)$pdo->lastInsertId();
+    } catch (Throwable $e) {
+        taxImportServerLog(0, 'starting', 'Could not create import run record: ' . $e->getMessage());
+        return 0;
+    }
+    taxImportServerLog($runId, 'starting', 'Tax import started for ' . $stateAbbr . '.');
+    return $runId;
+}
+
+function taxImportLog(PDO $pdo, int $runId, string $phase, string $message, array $counts = [], string $status = 'running'): void
+{
+    taxImportServerLog($runId, $phase, $message, $counts);
+    if ($runId <= 0) {
+        return;
+    }
+
+    $allowedCounts = [
+        'fips_rows' => true,
+        'rate_rows' => true,
+        'boundary_rows' => true,
+        'warning_count' => true,
+    ];
+    $sets = ['status = ?', 'phase = ?', 'message = ?', 'updated_at = NOW()'];
+    $params = [$status, substr($phase, 0, 80), substr($message, 0, 255)];
+    foreach ($counts as $column => $value) {
+        if (isset($allowedCounts[$column])) {
+            $sets[] = $column . ' = ?';
+            $params[] = max(0, (int)$value);
+        }
+    }
+    $params[] = $runId;
+
+    try {
+        $stmt = $pdo->prepare('UPDATE tax_import_runs SET ' . implode(', ', $sets) . ' WHERE id = ?');
+        $stmt->execute($params);
+    } catch (Throwable $e) {
+        taxImportServerLog($runId, 'logging_failed', $e->getMessage());
+    }
+}
+
+function taxImportFinishRun(PDO $pdo, int $runId, array $stats, string $status, ?string $error = null): void
+{
+    $message = $status === 'completed'
+        ? 'Import completed.'
+        : 'Import failed: ' . (string)$error;
+    taxImportLog($pdo, $runId, $status, $message, [
+        'fips_rows' => (int)($stats['counties_loaded'] ?? 0),
+        'rate_rows' => (int)($stats['jurisdictions_inserted'] ?? 0),
+        'boundary_rows' => (int)($stats['boundaries_imported'] ?? 0),
+        'warning_count' => count($stats['errors'] ?? []),
+    ], $status);
+
+    if ($runId <= 0) {
+        return;
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'UPDATE tax_import_runs
+             SET completed_at = NOW(),
+                 error_message = ?
+             WHERE id = ?'
+        );
+        $stmt->execute([$error, $runId]);
+    } catch (Throwable $e) {
+        taxImportServerLog($runId, 'logging_failed', $e->getMessage());
+    }
+}
+
+function taxImportServerLog(int $runId, string $phase, string $message, array $counts = []): void
+{
+    $parts = [];
+    foreach ($counts as $key => $value) {
+        $parts[] = $key . '=' . (int)$value;
+    }
+    $suffix = $parts ? ' (' . implode(', ', $parts) . ')' : '';
+    @error_log('[tax-import][' . ($runId > 0 ? (string)$runId : 'no-run') . '][' . $phase . '] ' . $message . $suffix);
 }
 
 function ensureTablesExist(PDO $pdo): void
@@ -729,6 +880,25 @@ function ensureTablesExist(PDO $pdo): void
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_tax_import_file (state_fips, file_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS tax_import_runs (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        state_fips VARCHAR(2) NOT NULL,
+        state_abbr VARCHAR(2) NOT NULL,
+        status ENUM('running','completed','failed') NOT NULL DEFAULT 'running',
+        phase VARCHAR(80) NOT NULL DEFAULT 'starting',
+        message VARCHAR(255) NULL,
+        fips_rows INT NOT NULL DEFAULT 0,
+        rate_rows INT NOT NULL DEFAULT 0,
+        boundary_rows INT NOT NULL DEFAULT 0,
+        warning_count INT NOT NULL DEFAULT 0,
+        started_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        completed_at DATETIME NULL,
+        error_message TEXT NULL,
+        INDEX idx_tax_import_runs_state (state_fips, started_at),
+        INDEX idx_tax_import_runs_status (status, updated_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 

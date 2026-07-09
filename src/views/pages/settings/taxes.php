@@ -18,6 +18,7 @@ $editTaxId = (int)($_GET['edit_tax_id'] ?? 0);
 $taxRates = [];
 $taxImportStates = pa_tax_state_options();
 $taxImportStatus = [];
+$taxImportRuns = [];
 foreach ($taxImportStates as $stateOption) {
   $taxImportStatus[$stateOption['fips']] = [
     'state' => $stateOption,
@@ -54,6 +55,16 @@ try {
   }
 } catch (Throwable $e) {
   // ignore if import cache is not created yet
+}
+try {
+  $taxImportRuns = $pdo->query(
+    "SELECT id, state_fips, state_abbr, status, phase, message, fips_rows, rate_rows, boundary_rows, warning_count, started_at, updated_at, completed_at, error_message
+     FROM tax_import_runs
+     ORDER BY started_at DESC, id DESC
+     LIMIT 8"
+  )->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+  // ignore if import runs table is not created yet
 }
 foreach ([
   'counties' => 'SELECT state_fips, COUNT(*) AS row_count FROM fips_counties GROUP BY state_fips',
@@ -317,6 +328,58 @@ $selectedStateTaxRateValue = $selectedRateFile && $selectedRateFile['state_tax_r
         </table>
       </div>
     </div>
+
+    <?php if ($taxImportRuns): ?>
+      <div style="margin-bottom:18px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:#f9fafb;border-bottom:1px solid #e5e7eb">
+          <div>
+            <div style="font-weight:600;color:#374151">Recent Import Runs</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px">Refresh this page to see the latest database progress. Server logs also include <code>[tax-import]</code> entries.</div>
+          </div>
+        </div>
+        <div style="overflow:auto">
+          <table class="pa-table">
+            <thead style="background:#f9fafb">
+              <tr style="text-align:left;border-bottom:1px solid #e5e7eb">
+                <th style="padding:10px 12px">State</th>
+                <th style="padding:10px 12px">Status</th>
+                <th style="padding:10px 12px">Phase</th>
+                <th style="padding:10px 12px">Rows</th>
+                <th style="padding:10px 12px">Message</th>
+                <th style="padding:10px 12px">Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($taxImportRuns as $run): ?>
+                <?php
+                  $status = (string)($run['status'] ?? '');
+                  $statusStyle = match ($status) {
+                    'completed' => 'background:#d1fae5;color:#065f46',
+                    'failed' => 'background:#fee2e2;color:#991b1b',
+                    default => 'background:#dbeafe;color:#1e40af',
+                  };
+                  $rowCounts = 'FIPS ' . number_format((int)($run['fips_rows'] ?? 0))
+                    . ' | Rates ' . number_format((int)($run['rate_rows'] ?? 0))
+                    . ' | Boundaries ' . number_format((int)($run['boundary_rows'] ?? 0))
+                    . ' | Warnings ' . number_format((int)($run['warning_count'] ?? 0));
+                  $message = $run['error_message'] ?: ($run['message'] ?? '');
+                ?>
+                <tr style="border-bottom:1px solid #f3f4f6">
+                  <td style="padding:10px 12px;font-weight:600;white-space:nowrap"><?php echo htmlspecialchars((string)$run['state_abbr']); ?></td>
+                  <td style="padding:10px 12px;white-space:nowrap">
+                    <span style="padding:4px 8px;border-radius:6px;font-size:12px;font-weight:600;<?php echo $statusStyle; ?>"><?php echo htmlspecialchars(ucfirst($status)); ?></span>
+                  </td>
+                  <td style="padding:10px 12px;white-space:nowrap"><?php echo htmlspecialchars(str_replace('_', ' ', (string)$run['phase'])); ?></td>
+                  <td style="padding:10px 12px;font-size:12px;white-space:nowrap;color:#374151"><?php echo htmlspecialchars($rowCounts); ?></td>
+                  <td style="padding:10px 12px;min-width:220px;color:#374151"><?php echo htmlspecialchars((string)$message); ?></td>
+                  <td style="padding:10px 12px;white-space:nowrap;color:#6b7280;font-size:12px"><?php echo htmlspecialchars((string)$run['updated_at']); ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <?php endif; ?>
     
     <?php if ($importSuccess && $importSummary): ?>
       <div style="margin-bottom:16px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px">
