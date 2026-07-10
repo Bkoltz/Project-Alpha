@@ -106,6 +106,26 @@ final class PaymentIntegrityTest extends TestCase
         self::assertSame('completed', (string)$status->fetchColumn());
     }
 
+    public function testFullPaymentDoesNotCompleteAnOngoingLongTermContract(): void
+    {
+        $orgId = $this->insertOrganization();
+        $clientId = $this->insertClient($orgId);
+        $contractId = $this->insertContract($orgId, $clientId, 'long_term', 'active');
+        $invoiceId = $this->insertInvoice($orgId, $clientId, 120.00, $contractId, 'long_term');
+
+        $result = invoice_record_locked_payment($this->pdo, $invoiceId, 120.00, 'check', 'LT-1001', null, [
+            'organization_id' => $orgId,
+            'complete_contract_when_paid' => true,
+            'source' => 'test',
+        ]);
+        $this->ids['payments'][] = (int)$result['payment_id'];
+
+        self::assertSame('paid', $result['status']);
+        $status = $this->pdo->prepare('SELECT status FROM contracts WHERE id = ?');
+        $status->execute([$contractId]);
+        self::assertSame('active', (string)$status->fetchColumn(), 'A recurring installment must not complete its long-term contract.');
+    }
+
     public function testDepositControllersUseCentralizedPaymentGuardrails(): void
     {
         $deposit = (string)file_get_contents(dirname(__DIR__, 2) . '/src/controllers/contract/contract_deposit_received.php');
@@ -141,21 +161,21 @@ final class PaymentIntegrityTest extends TestCase
         return $this->remember('clients', (int)$this->pdo->lastInsertId());
     }
 
-    private function insertContract(int $orgId, int $clientId): int
+    private function insertContract(int $orgId, int $clientId, string $contractType = 'regular', string $status = 'pending'): int
     {
-        $stmt = $this->pdo->prepare('INSERT INTO contracts (client_id, organization_id, status, total, deposit_type, deposit_amount, deposit_paid) VALUES (?, ?, "pending", 100, "none", 0, 0)');
-        $stmt->execute([$clientId, $orgId]);
+        $stmt = $this->pdo->prepare('INSERT INTO contracts (client_id, organization_id, status, contract_type, total, deposit_type, deposit_amount, deposit_paid) VALUES (?, ?, ?, ?, 100, "none", 0, 0)');
+        $stmt->execute([$clientId, $orgId, $status, $contractType]);
         return $this->remember('contracts', (int)$this->pdo->lastInsertId());
     }
 
-    private function insertInvoice(int $orgId, int $clientId, float $total, ?int $contractId = null): int
+    private function insertInvoice(int $orgId, int $clientId, float $total, ?int $contractId = null, string $invoiceType = 'regular'): int
     {
         $stmt = $this->pdo->prepare('
             INSERT INTO invoices
-                (client_id, contract_id, organization_id, status, subtotal, total, amount_paid, balance_due, finalized_at, collection_mode)
-            VALUES (?, ?, ?, "unpaid", ?, ?, 0, ?, NOW(), "direct")
+                (client_id, contract_id, organization_id, invoice_type, status, subtotal, total, amount_paid, balance_due, finalized_at, collection_mode)
+            VALUES (?, ?, ?, ?, "unpaid", ?, ?, 0, ?, NOW(), "direct")
         ');
-        $stmt->execute([$clientId, $contractId, $orgId, $total, $total, $total]);
+        $stmt->execute([$clientId, $contractId, $orgId, $invoiceType, $total, $total, $total]);
         return $this->remember('invoices', (int)$this->pdo->lastInsertId());
     }
 

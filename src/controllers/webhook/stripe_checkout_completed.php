@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/stripe_financial_events.php';
 require_once __DIR__ . '/../../utils/stripe_payment_accounting.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 
 function handleCheckoutSessionCompleted($pdo, $session) {
     $metadata = $session['metadata'] ?? [];
@@ -118,13 +119,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
         if ($status === 'paid') {
             pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
             
-            // Mark linked contract as completed if exists
-            $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
-            $co->execute([$invoiceId]);
-            $contractId = (int)$co->fetchColumn();
-            if ($contractId > 0) {
-                $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')->execute(['completed', $contractId]);
-            }
+            invoice_complete_linked_contract_if_eligible($pdo, $invoiceId);
         }
         
         $pdo->commit();

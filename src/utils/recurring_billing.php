@@ -1,6 +1,8 @@
 <?php
 // src/utils/recurring_billing.php
 // Idempotent helper for generating a single long-term recurring invoice.
+require_once __DIR__ . '/recurring_services.php';
+require_once __DIR__ . '/invoice_lifecycle.php';
 
 function recurring_invoice_send_on_generate_if_enabled(PDO $pdo, ?int $invoiceId, array $appConfig): bool
 {
@@ -8,7 +10,6 @@ function recurring_invoice_send_on_generate_if_enabled(PDO $pdo, ?int $invoiceId
         return false;
     }
 
-    require_once __DIR__ . '/invoice_lifecycle.php';
     return invoice_send_finalized($pdo, $invoiceId, $appConfig, 'on_generate');
 }
 
@@ -48,10 +49,25 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         // Calculate invoice amount
         $subtotal = 0;
         $items = [];
+        $dueServices = [];
+        $usesServiceSchedules = false;
 
         if ($contract['pricing_type'] === 'per_invoice') {
-            // Simple per-invoice pricing - recurring amount
-            $subtotal = (float)$contract['price_per_invoice'];
+            $usesServiceSchedules = pa_recurring_services_exist($pdo, (int)$contractId);
+            if ($usesServiceSchedules) {
+                $dueServices = pa_recurring_services_due($pdo, (int)$contractId, $today);
+                if (!$dueServices) {
+                    pa_recurring_service_sync_contract_next_date($pdo, (int)$contractId);
+                    $pdo->commit();
+                    return null;
+                }
+                foreach ($dueServices as $service) {
+                    $subtotal += max(0.0, (float)$service['amount']);
+                }
+            } else {
+                // Compatibility fallback for a database awaiting the service-schedule migration.
+                $subtotal = (float)$contract['price_per_invoice'];
+            }
         } elseif ($contract['pricing_type'] === 'fixed_total') {
             // Fixed total - divide total by invoice_count
             $invoiceCount = (int)($contract['invoice_count'] ?? 1);
@@ -98,7 +114,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
 
             if ($contractInvoicesGenerated >= $invoiceCount) {
                 // All invoices generated - mark as completed
-                $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"')
+                $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL, completed_at=COALESCE(completed_at,NOW()) WHERE id=? AND contract_type="long_term"')
                     ->execute(['completed', $contractId]);
                 @error_log("$logPrefix Contract LTC-{$contract['doc_number']} all {$invoiceCount} invoices generated, marked as completed");
                 $pdo->commit();
@@ -113,8 +129,8 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             INSERT INTO invoices (
                 contract_id, client_id, project_id, project_code, organization_id, created_by, invoice_type,
                 discount_type, discount_value, tax_percent,
-                subtotal, total, status, due_date, finalized_at, finalization_source, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), "recurring_schedule", NOW())
+                subtotal, total, balance_due, status, due_date, finalized_at, finalization_source, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), "recurring_schedule", NOW())
         ');
 
         $insertInvoice->execute([
@@ -129,6 +145,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             $discountValue,
             $contract['tax_percent'],
             $subtotal,
+            $total,
             $total,
             'unpaid',
             $dueDate
@@ -148,17 +165,31 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
 
         // Add invoice items
         if ($contract['pricing_type'] === 'per_invoice') {
-            // Single line item for recurring service
-            $billingInterval = $contract['billing_interval_count'] . ' ' . ucfirst($contract['billing_interval_unit']);
-            if ($contract['billing_interval_count'] > 1) $billingInterval .= 's';
-
-            $description = 'Recurring service fee (' . strtolower($billingInterval) . ')';
-            if (!empty($contract['scope'])) {
-                $description .= ' - ' . substr($contract['scope'], 0, 100);
+            $itemInsert = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?,?)');
+            if ($usesServiceSchedules) {
+                foreach ($dueServices as $service) {
+                    $serviceName = trim((string)$service['name']) ?: 'Recurring service';
+                    $serviceDescription = trim((string)($service['description'] ?? ''));
+                    $interval = max(1, (int)$service['billing_interval_count']) . ' ' . ucfirst((string)$service['billing_interval_unit']);
+                    if ((int)$service['billing_interval_count'] > 1) {
+                        $interval .= 's';
+                    }
+                    $description = 'Billed every ' . strtolower($interval);
+                    if ($serviceDescription !== '') {
+                        $description .= ' — ' . $serviceDescription;
+                    }
+                    $amount = max(0.0, (float)$service['amount']);
+                    $itemInsert->execute([$invoiceId, $serviceName, $description, 1, $amount, $amount]);
+                }
+            } else {
+                $billingInterval = $contract['billing_interval_count'] . ' ' . ucfirst($contract['billing_interval_unit']);
+                if ($contract['billing_interval_count'] > 1) $billingInterval .= 's';
+                $description = 'Recurring service fee (' . strtolower($billingInterval) . ')';
+                if (!empty($contract['scope'])) {
+                    $description .= ' - ' . substr($contract['scope'], 0, 100);
+                }
+                $itemInsert->execute([$invoiceId, 'Recurring service', $description, 1, $subtotal, $subtotal]);
             }
-
-            $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)')
-                ->execute([$invoiceId, $description, 1, $total, $total]);
         } elseif ($contract['pricing_type'] === 'fixed_total') {
             // For fixed_total, show items proportionally divided
             $invoiceCount = (int)($contract['invoice_count'] ?? 1);
@@ -183,7 +214,35 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             }
         }
 
-        // Calculate next invoice date
+        $newTotalInvoiced = (float)$contract['total_invoiced'] + $total;
+        $newInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0) + 1;
+
+        if ($usesServiceSchedules) {
+            foreach ($dueServices as $service) {
+                $serviceNextDate = pa_recurring_service_next_date(
+                    (string)$service['next_invoice_date'],
+                    (int)$service['billing_interval_count'],
+                    (string)$service['billing_interval_unit'],
+                    (string)$service['effective_from']
+                );
+                $serviceStatus = 'active';
+                if (!empty($service['effective_until']) && $serviceNextDate > (string)$service['effective_until']) {
+                    $serviceNextDate = null;
+                    $serviceStatus = 'ended';
+                }
+                $pdo->prepare('UPDATE contract_recurring_services SET next_invoice_date=?,last_invoice_date=?,status=? WHERE id=? AND contract_id=?')
+                    ->execute([$serviceNextDate, $today, $serviceStatus, (int)$service['id'], $contractId]);
+            }
+            pa_recurring_service_sync_contract_next_date($pdo, (int)$contractId);
+            $pdo->prepare('UPDATE contracts SET last_invoice_date=?,total_invoiced=?,invoices_generated=? WHERE id=? AND contract_type="long_term"')
+                ->execute([$today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
+
+            $pdo->commit();
+            @error_log("$logPrefix Generated recurring-service invoice {$invoiceId} for contract LTC-{$contract['doc_number']} (\${$total})");
+            return $invoiceId;
+        }
+
+        // Calculate next invoice date for legacy/fixed-total schedules.
         $currentDate = $contract['next_invoice_date'];
         $intervalCount = (int)$contract['billing_interval_count'];
         $intervalUnit = $contract['billing_interval_unit'];
@@ -199,15 +258,11 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             }
         }
 
-        // Update contract
-        $newTotalInvoiced = (float)$contract['total_invoiced'] + $total;
-        $newInvoicesGenerated = (int)($contract['invoices_generated'] ?? 0) + 1;
-
         if ($shouldContinue) {
             $pdo->prepare('UPDATE contracts SET next_invoice_date=?, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=? AND contract_type="long_term"')
                 ->execute([$nextDate, $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
         } else {
-            $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=? WHERE id=? AND contract_type="long_term"')
+            $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=?, completed_at=COALESCE(completed_at,NOW()) WHERE id=? AND contract_type="long_term"')
                 ->execute(['completed', $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
         }
 
@@ -220,5 +275,98 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         if ($pdo->inTransaction()) $pdo->rollBack();
         @error_log("$logPrefix Error processing contract {$contract['id']}: " . $e->getMessage());
         return null;
+    }
+}
+
+function generate_recurring_proration_invoice(
+    PDO $pdo,
+    int $contractId,
+    int $serviceId,
+    float $subtotal,
+    string $description,
+    array $appConfig
+): ?int {
+    if ($subtotal <= 0) {
+        return null;
+    }
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $stmt = $pdo->prepare('
+            SELECT c.*,s.name AS service_name
+            FROM contracts c
+            JOIN contract_recurring_services s ON s.contract_id=c.id
+            WHERE c.id=? AND s.id=? AND c.contract_type="long_term"
+            FOR UPDATE
+        ');
+        $stmt->execute([$contractId, $serviceId]);
+        $contract = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$contract) {
+            throw new RuntimeException('Recurring service not found for proration.');
+        }
+
+        $discount = 0.0;
+        if (($contract['discount_type'] ?? 'none') === 'percent') {
+            $discount = max(0, min(100, (float)$contract['discount_value'])) * $subtotal / 100;
+        } elseif (($contract['discount_type'] ?? 'none') === 'fixed') {
+            $discount = min($subtotal, max(0, (float)$contract['discount_value']));
+        }
+        $taxable = max(0, $subtotal - $discount);
+        $tax = max(0, (float)$contract['tax_percent']) * $taxable / 100;
+        $total = max(0, $taxable + $tax);
+        $dueDate = date('Y-m-d', strtotime('+' . max(0, (int)($appConfig['net_terms_days'] ?? 30)) . ' days'));
+
+        $insert = $pdo->prepare('
+            INSERT INTO invoices
+                (contract_id,client_id,project_id,project_code,organization_id,created_by,invoice_type,
+                 discount_type,discount_value,tax_percent,subtotal,total,balance_due,status,due_date,
+                 finalized_at,finalization_source,generated_at,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),"amendment_proration",NOW(),NOW())
+        ');
+        $insert->execute([
+            $contractId,
+            (int)$contract['client_id'],
+            !empty($contract['project_id']) ? (int)$contract['project_id'] : null,
+            $contract['project_code'] ?? null,
+            !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null,
+            !empty($contract['created_by']) ? (int)$contract['created_by'] : null,
+            'long_term',
+            $contract['discount_type'] ?? 'none',
+            (float)($contract['discount_value'] ?? 0),
+            (float)($contract['tax_percent'] ?? 0),
+            $subtotal,
+            $total,
+            $total,
+            'unpaid',
+            $dueDate,
+        ]);
+        $invoiceId = (int)$pdo->lastInsertId();
+        $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type="long_term"')->fetchColumn();
+        $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $invoiceId]);
+
+        $lineDescription = trim($description) !== '' ? trim($description) : 'Prorated recurring service charge';
+        $pdo->prepare('INSERT INTO invoice_items (invoice_id,item,description,quantity,unit_price,line_total) VALUES (?,?,?,?,?,?)')
+            ->execute([$invoiceId, (string)$contract['service_name'], $lineDescription, 1, $subtotal, $subtotal]);
+
+        if (!empty($contract['project_id'])) {
+            require_once __DIR__ . '/project_billing.php';
+            if (project_uses_monthly_invoice_billing($pdo, (int)$contract['project_id'])) {
+                $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoiceId]);
+            }
+        }
+
+        $pdo->prepare('UPDATE contracts SET total_invoiced=total_invoiced+?,invoices_generated=invoices_generated+1,last_invoice_date=? WHERE id=?')
+            ->execute([$total, date('Y-m-d'), $contractId]);
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+        return $invoiceId;
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
     }
 }

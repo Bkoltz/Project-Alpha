@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/recurring_services.php';
 
 // Auto-create settings (default to true/on when not explicitly set)
 $autoCreateContract = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
@@ -95,6 +96,9 @@ try {
             $quoteCreator
           ]);
       $contract_id = (int)$pdo->lastInsertId();
+      if ($quoteType === 'long_term' && ($quote['pricing_type'] ?? '') === 'per_invoice') {
+        pa_recurring_service_ensure_base($pdo, $contract_id);
+      }
 
       if (!empty($qitems)) {
         $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');

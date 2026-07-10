@@ -98,6 +98,8 @@ function audit_sensitive_map(): array
             'contract-sign'                  => ['contract.sign', 'contract'],
             'contract/contract-complete'     => ['contract.complete', 'contract'],
             'contract-complete'              => ['contract.complete', 'contract'],
+            'long-term-recurring-service-save' => ['contract.recurring_service_save', 'contract'],
+            'long-term-recurring-service-action' => ['contract.recurring_service_action', 'contract'],
 
             // Email
             'email-send'                     => ['email.send', 'email'],

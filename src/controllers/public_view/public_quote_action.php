@@ -13,6 +13,7 @@ if (!rate_limit_check($pdo, 'public_quote_action', 30, 60)) {
 }
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../utils/recurring_services.php';
 require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/smtp.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
@@ -115,6 +116,9 @@ try {
              $quoteCreator
            ]);
         $contract_id = (int)$pdo->lastInsertId();
+        if ($quoteType === 'long_term' && ($quote['pricing_type'] ?? '') === 'per_invoice') {
+          pa_recurring_service_ensure_base($pdo, $contract_id);
+        }
 
         $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
         foreach ($qitems as $it) {

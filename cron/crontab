@@ -3,6 +3,7 @@
 # so they are available to cron jobs via the shell wrapper below.
 
 SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Unified log file for all cron jobs
 CRON_LOG=/var/www/config/logs/cron/cron.log

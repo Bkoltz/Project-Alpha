@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/contract_billing_start.php';
 require_once __DIR__ . '/../../utils/upload_validator.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/recurring_services.php';
 
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_contract_action', $submitted)) {
@@ -97,6 +98,9 @@ try {
         @unlink($storedFile);
       }
       throw new RuntimeException('Contract cannot be uploaded for current status');
+    }
+    if (($contract['contract_type'] ?? '') === 'long_term' && pa_long_term_starts_billing_on_upload($contract)) {
+      pa_recurring_services_activate($pdo, $cid, date('Y-m-d'));
     }
     pa_public_link_terminalize($pdo, 'contract', $cid, 'signed');
     $pdo->commit();

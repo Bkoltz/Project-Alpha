@@ -6,6 +6,7 @@ require_once __DIR__ . '/../services/PaymentProcessorImportService.php';
 require_once __DIR__ . '/stripe_financial_events.php';
 require_once __DIR__ . '/stripe_payment_accounting.php';
 require_once __DIR__ . '/public_links.php';
+require_once __DIR__ . '/invoice_lifecycle.php';
 
 function stripe_reconcile_payment_intents(
     PDO $pdo,
@@ -134,12 +135,7 @@ function stripe_reconcile_payment_intents(
             if ($newStatus === 'paid') {
                 pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
 
-                $coStmt = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
-                $coStmt->execute([$invoiceId]);
-                $contractId = (int)$coStmt->fetchColumn();
-                if ($contractId > 0) {
-                    $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')->execute(['completed', $contractId]);
-                }
+                invoice_complete_linked_contract_if_eligible($pdo, $invoiceId);
             }
 
             $pdo->commit();

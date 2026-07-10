@@ -18,13 +18,15 @@ fi
 # ── Export environment variables so cron jobs can access them ──
 # Cron does NOT inherit the container's env vars, so we dump them
 # to /etc/environment which each cron job sources before running.
-printenv | awk -F= '
-  /^(MYSQL_|DB_|APP_|STRIPE_|SMTP_|BACKUP_)/ {
-    value = substr($0, index($0, "=") + 1)
-    gsub(/"/, "\\\"", value)
-    print $1 "=\"" value "\""
-  }
-' > /etc/environment
+ENV_FILE="/etc/environment"
+: > "$ENV_FILE"
+while IFS='=' read -r name value; do
+  case "$name" in
+    MYSQL_*|DB_*|APP_*|STRIPE_*|SMTP_*|BACKUP_*)
+      printf 'export %s=%q\n' "$name" "$value" >> "$ENV_FILE"
+      ;;
+  esac
+done < <(printenv)
 
 # ── Create log directory if it doesn't exist ──
 LOG_DIR="/var/www/config/logs/cron"
@@ -107,9 +109,12 @@ else
   echo "[cron-entrypoint] Timezone '${APP_TIMEZONE}' is unavailable; using UTC."
 fi
 
-grep -v '^TZ=' /etc/environment > /tmp/project-alpha-environment || true
-echo "TZ=\"${TZ}\"" >> /tmp/project-alpha-environment
-mv /tmp/project-alpha-environment /etc/environment
+grep -vE '^(export[[:space:]]+)?TZ=' "$ENV_FILE" > /tmp/project-alpha-environment || true
+printf 'export TZ=%q\n' "$TZ" >> /tmp/project-alpha-environment
+mv /tmp/project-alpha-environment "$ENV_FILE"
+
+echo "[cron-entrypoint] Running startup scheduled backup check..."
+php /var/www/src/cron/backup_database.php --scheduled || echo "[cron-entrypoint] Startup scheduled backup check failed; cron will retry at the next hourly check."
 
 echo "[cron-entrypoint] Running startup Stripe reconciliation..."
 php /var/www/src/cron/stripe_reconciliation.php --startup || echo "[cron-entrypoint] Startup Stripe reconciliation failed; cron will continue."

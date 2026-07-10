@@ -123,6 +123,8 @@ function page_permission_map(): array
         'long-term-contract-pause'    => 'contracts.edit',
         'long-term-contract-resume'   => 'contracts.edit',
         'long-term-contract-terminate' => 'contracts.void',
+        'long-term-recurring-service-save' => 'contracts.edit',
+        'long-term-recurring-service-action' => 'contracts.edit',
         'on-demand-contract-activate'  => 'contracts.edit',
         'on-demand-contract-pause'     => 'contracts.edit',
         'on-demand-contract-resume'    => 'contracts.edit',

@@ -49,6 +49,7 @@ try {
         $invoiceId = generate_recurring_invoice($pdo, $contract, $appConfig);
         if ($invoiceId !== null) {
             $invoicesGenerated++;
+            recurring_invoice_send_on_generate_if_enabled($pdo, $invoiceId, $appConfig);
         } elseif ($invoiceId === null) {
             // A null can also mean idempotency guard tripped or no invoice needed.
             // Track actual errors through helper logging rather than here.
