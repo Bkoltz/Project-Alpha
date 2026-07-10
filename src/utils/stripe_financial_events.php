@@ -99,12 +99,17 @@ function stripe_link_pending_project_financial_events(PDO $pdo, int $projectPaym
     stripe_refresh_project_payment_totals($pdo, $projectPaymentId);
 }
 
-function stripe_record_refund(PDO $pdo, array $refund): void
+function stripe_record_refund(
+    PDO $pdo,
+    array $refund,
+    ?int $knownPaymentId = null,
+    ?int $knownProjectPaymentId = null
+): void
 {
     if (str_starts_with((string)($refund['id'] ?? ''), 'ch_')) {
         foreach (($refund['refunds']['data'] ?? []) as $item) {
             if (is_array($item)) {
-                stripe_record_refund($pdo, $item);
+                stripe_record_refund($pdo, $item, $knownPaymentId, $knownProjectPaymentId);
             }
         }
         return;
@@ -115,9 +120,11 @@ function stripe_record_refund(PDO $pdo, array $refund): void
         return;
     }
     $paymentIntentId = is_string($refund['payment_intent'] ?? null) ? $refund['payment_intent'] : null;
-    $paymentId = null;
-    $projectPaymentId = null;
-    if ($paymentIntentId) {
+    $paymentId = $knownPaymentId && $knownPaymentId > 0 ? $knownPaymentId : null;
+    $projectPaymentId = $knownProjectPaymentId && $knownProjectPaymentId > 0
+        ? $knownProjectPaymentId
+        : null;
+    if (!$paymentId && !$projectPaymentId && $paymentIntentId) {
         $payment = $pdo->prepare('SELECT id FROM payments WHERE stripe_payment_intent_id=? LIMIT 1');
         $payment->execute([$paymentIntentId]);
         $paymentId = (int)($payment->fetchColumn() ?: 0) ?: null;

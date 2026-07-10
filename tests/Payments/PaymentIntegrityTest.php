@@ -6,6 +6,7 @@ require_once dirname(__DIR__, 2) . '/src/migrations/migration_lib.php';
 require_once dirname(__DIR__, 2) . '/src/utils/invoice_lifecycle.php';
 require_once dirname(__DIR__, 2) . '/src/utils/payment_corrections.php';
 require_once dirname(__DIR__, 2) . '/src/utils/stripe_financial_events.php';
+require_once dirname(__DIR__, 2) . '/src/utils/payment_accounting.php';
 
 use PHPUnit\Framework\TestCase;
 
@@ -167,7 +168,9 @@ final class PaymentIntegrityTest extends TestCase
             $this->pdo,
             $stripePaymentId,
             $targetInvoiceId,
-            $cashPaymentId,
+            [$cashPaymentId],
+            false,
+            null,
             true,
             [],
             'Duplicate first-month invoice; move the real Stripe payment to the recurring invoice.',
@@ -225,6 +228,175 @@ final class PaymentIntegrityTest extends TestCase
         self::assertSame(0, (int)$refunds->fetchColumn(), 'A correction must not create a Stripe refund record.');
     }
 
+    public function testLegacyLocalRefundCanBeVerifiedClearedAndTwoDuplicateCashEntriesReversed(): void
+    {
+        $orgId = $this->insertOrganization();
+        $clientId = $this->insertClient($orgId);
+        $contractId = $this->insertContract($orgId, $clientId, 'long_term', 'active');
+        $sourceInvoiceId = $this->insertInvoice($orgId, $clientId, 300.00);
+        $targetInvoiceId = $this->insertInvoice($orgId, $clientId, 300.00, $contractId, 'long_term');
+        $sourcePublicLinkId = $this->insertInvoicePublicLink($sourceInvoiceId);
+        $this->pdo->prepare('UPDATE invoices SET doc_number=2 WHERE id=?')->execute([$sourceInvoiceId]);
+        $this->pdo->prepare('UPDATE invoices SET doc_number=1 WHERE id=?')->execute([$targetInvoiceId]);
+
+        $stripe = invoice_record_locked_payment($this->pdo, $sourceInvoiceId, 300.00, 'stripe', null, null, [
+            'organization_id' => $orgId,
+            'source' => 'test_stripe',
+        ]);
+        $stripePaymentId = $this->remember('payments', (int)$stripe['payment_id']);
+        $stripeIntentId = 'pi_legacy_correction_' . bin2hex(random_bytes(5));
+        $this->pdo->prepare('
+            UPDATE payments
+            SET stripe_payment_intent_id=?,processor_provider="stripe",processor_payment_id=?,
+                processor_gross_amount=300,processor_fee_amount=9,processor_net_amount=291,
+                processor_fee_source="actual",refunded_amount=291
+            WHERE id=?
+        ')->execute([$stripeIntentId, $stripeIntentId, $stripePaymentId]);
+
+        $sourceCash = invoice_record_locked_payment($this->pdo, $sourceInvoiceId, 291.00, 'cash', null, 'Net deposit entered as cash', [
+            'organization_id' => $orgId,
+            'source' => 'test_manual',
+        ]);
+        $sourceCashId = $this->remember('payments', (int)$sourceCash['payment_id']);
+        $targetCash = invoice_record_locked_payment($this->pdo, $targetInvoiceId, 300.00, 'cash', null, 'Recurring invoice marked paid manually', [
+            'organization_id' => $orgId,
+            'complete_contract_when_paid' => true,
+            'source' => 'test_manual',
+        ]);
+        $targetCashId = $this->remember('payments', (int)$targetCash['payment_id']);
+
+        $result = payment_reallocate_to_invoice(
+            $this->pdo,
+            $stripePaymentId,
+            $targetInvoiceId,
+            [$sourceCashId, $targetCashId],
+            true,
+            0.0,
+            true,
+            [],
+            'Restore the real Stripe payment, reverse duplicate cash entries, and void the duplicate invoice.',
+            null
+        );
+        $this->remember('payment_corrections', (int)$result['correction_id']);
+
+        self::assertSame([$sourceCashId, $targetCashId], $result['reversed_payment_ids']);
+        self::assertEqualsWithDelta(291.0, $result['cleared_local_refund_amount'], 0.005);
+        self::assertTrue($result['source_voided']);
+
+        $moved = $this->pdo->prepare('SELECT * FROM payments WHERE id=?');
+        $moved->execute([$stripePaymentId]);
+        $moved = $moved->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame($targetInvoiceId, (int)$moved['invoice_id']);
+        self::assertSame($contractId, (int)$moved['contract_id']);
+        self::assertSame('stripe', $moved['payment_method']);
+        self::assertEqualsWithDelta(300.0, (float)$moved['amount'], 0.005, 'The invoice receives the gross client payment.');
+        self::assertEqualsWithDelta(0.0, (float)$moved['refunded_amount'], 0.005);
+        self::assertEqualsWithDelta(9.0, (float)$moved['processor_fee_amount'], 0.005);
+        self::assertEqualsWithDelta(291.0, payment_accounting_net_income($moved), 0.005, 'Stripe net income remains gross less the processor fee.');
+
+        $manualRows = $this->pdo->prepare('SELECT id,status,refunded_amount FROM payments WHERE id IN (?,?) ORDER BY id');
+        $manualRows->execute([$sourceCashId, $targetCashId]);
+        foreach ($manualRows->fetchAll(PDO::FETCH_ASSOC) as $manual) {
+            self::assertSame('reversed', $manual['status']);
+            self::assertEqualsWithDelta(0.0, (float)$manual['refunded_amount'], 0.005, 'Duplicate entries are reversed, not refunded.');
+        }
+
+        $source = $this->pdo->prepare('SELECT status,amount_paid,balance_due FROM invoices WHERE id=?');
+        $source->execute([$sourceInvoiceId]);
+        $source = $source->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame('void', $source['status']);
+        self::assertEqualsWithDelta(0.0, (float)$source['amount_paid'], 0.005);
+        self::assertEqualsWithDelta(0.0, (float)$source['balance_due'], 0.005);
+        self::assertStringContainsString('reason=void', (string)$this->publicLinkState($sourcePublicLinkId)['redirect']);
+
+        $target = $this->pdo->prepare('SELECT status,amount_paid,balance_due FROM invoices WHERE id=?');
+        $target->execute([$targetInvoiceId]);
+        $target = $target->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame('paid', $target['status']);
+        self::assertEqualsWithDelta(300.0, (float)$target['amount_paid'], 0.005);
+        self::assertEqualsWithDelta(0.0, (float)$target['balance_due'], 0.005);
+
+        $contract = $this->pdo->prepare('SELECT status FROM contracts WHERE id=?');
+        $contract->execute([$contractId]);
+        self::assertSame('active', (string)$contract->fetchColumn());
+
+        $correction = $this->pdo->prepare('SELECT reversed_payment_ids,cleared_local_refund_amount,processor_refund_verified_amount FROM payment_corrections WHERE id=?');
+        $correction->execute([(int)$result['correction_id']]);
+        $correction = $correction->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame([$sourceCashId, $targetCashId], array_map('intval', json_decode((string)$correction['reversed_payment_ids'], true)));
+        self::assertEqualsWithDelta(291.0, (float)$correction['cleared_local_refund_amount'], 0.005);
+        self::assertEqualsWithDelta(0.0, (float)$correction['processor_refund_verified_amount'], 0.005);
+
+        $refunds = $this->pdo->prepare('SELECT COUNT(*) FROM stripe_refunds WHERE payment_id=?');
+        $refunds->execute([$stripePaymentId]);
+        self::assertSame(0, (int)$refunds->fetchColumn());
+    }
+
+    public function testLegacyLocalRefundCannotBeClearedWhenStripeReportsARealRefund(): void
+    {
+        $orgId = $this->insertOrganization();
+        $clientId = $this->insertClient($orgId);
+        $sourceInvoiceId = $this->insertInvoice($orgId, $clientId, 300.00);
+        $targetInvoiceId = $this->insertInvoice($orgId, $clientId, 300.00, null, 'long_term');
+        $payment = invoice_record_locked_payment($this->pdo, $sourceInvoiceId, 300.00, 'stripe', null, null, [
+            'organization_id' => $orgId,
+        ]);
+        $paymentId = $this->remember('payments', (int)$payment['payment_id']);
+        $this->pdo->prepare('UPDATE payments SET stripe_payment_intent_id=?,refunded_amount=291 WHERE id=?')
+            ->execute(['pi_real_refund_' . bin2hex(random_bytes(5)), $paymentId]);
+
+        try {
+            payment_reallocate_to_invoice(
+                $this->pdo,
+                $paymentId,
+                $targetInvoiceId,
+                [],
+                true,
+                25.00,
+                false,
+                [],
+                'Should be rejected because Stripe reports a real refund.',
+                null
+            );
+            self::fail('A locally recorded refund was cleared despite Stripe reporting a real refund.');
+        } catch (RuntimeException $error) {
+            self::assertStringContainsString('actually refunded', $error->getMessage());
+        }
+
+        $state = $this->pdo->prepare('SELECT invoice_id,refunded_amount FROM payments WHERE id=?');
+        $state->execute([$paymentId]);
+        $state = $state->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame($sourceInvoiceId, (int)$state['invoice_id']);
+        self::assertEqualsWithDelta(291.0, (float)$state['refunded_amount'], 0.005);
+    }
+
+    public function testCorrectionPageUsesRealInvoiceDateAndShowsErrorsInsteadOfGoingBlank(): void
+    {
+        $view = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/payments/payment-correction.php');
+        self::assertStringNotContainsString('i.issue_date', $view);
+        self::assertStringContainsString('i.document_date', $view);
+        self::assertStringContainsString('catch (Throwable $e)', $view);
+        self::assertStringContainsString('No accounting data was changed', $view);
+        self::assertStringContainsString('replacement_payment_ids[]', $view);
+        self::assertStringContainsString('clear_local_refund', $view);
+    }
+
+    public function testLongTermSequenceDoesNotAdvanceRegularInvoiceSequence(): void
+    {
+        $orgId = $this->insertOrganization();
+        $clientId = $this->insertClient($orgId);
+        $regularBefore = pa_next_invoice_doc_number($this->pdo, 'regular');
+
+        $longTermOne = $this->insertInvoice($orgId, $clientId, 10.00, null, 'long_term');
+        $longTermTwo = $this->insertInvoice($orgId, $clientId, 20.00, null, 'long_term');
+        $this->pdo->prepare('UPDATE invoices SET doc_number=900001 WHERE id=?')->execute([$longTermOne]);
+        $this->pdo->prepare('UPDATE invoices SET doc_number=900002 WHERE id=?')->execute([$longTermTwo]);
+
+        self::assertSame($regularBefore, pa_next_invoice_doc_number($this->pdo, 'regular'));
+        $source = (string)file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_numbers.php');
+        self::assertStringContainsString('WHERE invoice_type = "regular" OR invoice_type IS NULL', $source);
+    }
+
     public function testStripeRefundWebhookClearsPaidAtAndIsIdempotent(): void
     {
         $orgId = $this->insertOrganization();
@@ -280,12 +452,55 @@ final class PaymentIntegrityTest extends TestCase
         self::assertSame('active', (string)$contract->fetchColumn());
     }
 
-    public function testProcessorRefundActionCannotRecordALocalOnlyRefund(): void
+    public function testDirectStripeRefundLinksLegacyChargeOnlyPaymentImmediately(): void
+    {
+        $orgId = $this->insertOrganization();
+        $clientId = $this->insertClient($orgId);
+        $invoiceId = $this->insertInvoice($orgId, $clientId, 100.00);
+        $payment = invoice_record_locked_payment($this->pdo, $invoiceId, 100.00, 'stripe', null, null, [
+            'organization_id' => $orgId,
+        ]);
+        $paymentId = $this->remember('payments', (int)$payment['payment_id']);
+        $this->pdo->prepare('UPDATE payments SET processor_provider="stripe",processor_payment_id=? WHERE id=?')
+            ->execute(['ch_legacy_' . bin2hex(random_bytes(6)), $paymentId]);
+
+        $refundId = 're_direct_' . bin2hex(random_bytes(6));
+        stripe_record_refund($this->pdo, [
+            'id' => $refundId,
+            'payment_intent' => 'pi_not_stored_' . bin2hex(random_bytes(6)),
+            'amount' => 2500,
+            'status' => 'succeeded',
+        ], $paymentId);
+
+        $refund = $this->pdo->prepare('SELECT id,payment_id FROM stripe_refunds WHERE stripe_refund_id=?');
+        $refund->execute([$refundId]);
+        $refund = $refund->fetch(PDO::FETCH_ASSOC) ?: [];
+        $this->remember('stripe_refunds', (int)$refund['id']);
+        self::assertSame($paymentId, (int)$refund['payment_id']);
+
+        $invoice = $this->pdo->prepare('SELECT status,amount_paid,balance_due FROM invoices WHERE id=?');
+        $invoice->execute([$invoiceId]);
+        $invoice = $invoice->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame('partial', (string)$invoice['status']);
+        self::assertEqualsWithDelta(75.0, (float)$invoice['amount_paid'], 0.005);
+        self::assertEqualsWithDelta(25.0, (float)$invoice['balance_due'], 0.005);
+    }
+
+    public function testProcessorRefundActionCreatesARealIdempotentStripeRefund(): void
     {
         $controller = (string)file_get_contents(dirname(__DIR__, 2) . '/src/controllers/payments_refund.php');
-        self::assertStringContainsString('$isProcessorBacked', $controller);
-        self::assertStringContainsString('must be refunded in Stripe', $controller);
-        self::assertStringContainsString('use Correct allocation instead', $controller);
+        $service = (string)file_get_contents(dirname(__DIR__, 2) . '/src/services/StripeService.php');
+        $paymentsList = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/payments/payments-list.php');
+
+        self::assertStringContainsString('processor_refund', $controller);
+        self::assertStringContainsString('refund_request_token', $controller);
+        self::assertStringContainsString('$stripe->refundCharge(', $controller);
+        self::assertStringContainsString('stripe_record_refund($pdo, $refund, $paymentId)', $controller);
+        self::assertStringContainsString('pa-refund-v1-', $controller);
+        self::assertStringContainsString('?string $idempotencyKey = null', $service);
+        self::assertStringContainsString("\$this->apiRequest('POST', 'refunds', \$payload, \$idempotencyKey)", $service);
+        self::assertStringContainsString('Send Stripe refund', $paymentsList);
+        self::assertStringContainsString('sends real money back', $paymentsList);
     }
 
     public function testUnpaidInvoiceCanBeVoidedAndSafelyReenabled(): void

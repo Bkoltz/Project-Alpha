@@ -10,11 +10,13 @@ $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $client_name = trim($_GET['client'] ?? '');
 $start = $_GET['start'] ?? '';
 $end = $_GET['end'] ?? '';
+$showReversed = !empty($_GET['show_reversed']);
 $where=[];$p=[];
 if($client_id>0){$where[]='c.id=?';$p[]=$client_id;}
 elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
 if($start!==''){$where[]='p.payment_date>=?';$p[]=$start;}
 if($end!==''){$where[]='p.payment_date<=?';$p[]=$end;}
+if(!$showReversed){$where[]='p.status<>"reversed"';}
 
 [$scopeWhere, $scopeParams] = scope_clause($pdo, 'p', (int)$_SESSION['user']['id']);
 if ($scopeWhere) {
@@ -44,13 +46,22 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
 <section>
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
     <h2 style="margin:0">Payments</h2>
-    <a href="/?page=payments/payments-create" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block;font-size:small">Record Payment</a>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <a href="/?page=payments-list<?php echo $showReversed ? '' : '&show_reversed=1'; ?>" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block;font-size:small"><?php echo $showReversed ? 'Hide reversed corrections' : 'Show reversed corrections'; ?></a>
+      <a href="/?page=payments/payments-create" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;display:inline-block;font-size:small">Record Payment</a>
+    </div>
   </div>
   <?php if (!empty($_GET['saved'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Payment saved.</div>
   <?php endif; ?>
   <?php if (!empty($_GET['refunded'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Refund recorded.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['stripe_refunded'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Stripe accepted the refund. PA has recorded the Stripe refund and will continue reconciling webhook updates.</div>
+  <?php endif; ?>
+  <?php if ($showReversed): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">Showing reversed accounting corrections. These entries remain for audit history but do not count as income or invoice payments.</div>
   <?php endif; ?>
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
@@ -119,11 +130,15 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
             || trim((string)($r['stripe_payment_intent_id'] ?? '')) !== ''
             || trim((string)($r['stripe_session_id'] ?? '')) !== '';
           $canRecordRefund = $isSucceeded && !$isProcessorBacked && $appliedNet > 0.005;
+          $processorGross = $r['processor_gross_amount'] !== null
+            ? (float)$r['processor_gross_amount']
+            : $amount + max(0.0, (float)$r['surcharge_paid']);
+          $processorRefundRemaining = max(0.0, $processorGross - $refunded - $disputed);
           $canCorrect = $isSucceeded
             && !empty($r['invoice_id'])
             && (string)($r['collection_mode'] ?? 'direct') === 'direct'
             && empty($r['project_invoice_payment_id'])
-            && $refunded <= 0.005
+            && ($refunded <= 0.005 || $isProcessorBacked)
             && $disputed <= 0.005;
         ?>
           <tr style="border-top:1px solid #f3f4f6">
@@ -158,9 +173,22 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
                   <input type="number" name="amount" step="0.01" min="0.01" max="<?php echo htmlspecialchars(number_format($appliedNet, 2, '.', '')); ?>" placeholder="0.00" style="width:92px;padding:6px;border-radius:6px;border:1px solid #ddd">
                   <button type="submit" style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;white-space:nowrap">Record refund</button>
                 </form>
-              <?php elseif ($isProcessorBacked && $isSucceeded): ?>
-                <span title="Refund the payment in Stripe. Project Alpha will sync the Stripe refund webhook." style="color:var(--muted);font-size:12px">Refund via Stripe</span>
-              <?php elseif (!$canCorrect): ?>
+              <?php endif; ?>
+              <?php if ($isProcessorBacked && $isSucceeded && $processorRefundRemaining > 0.005): ?>
+                <details style="position:relative">
+                  <summary style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;cursor:pointer;white-space:nowrap;list-style:none">Refund via Stripe</summary>
+                  <form method="post" action="/?page=payments/payment-refund" style="position:absolute;z-index:30;right:0;top:calc(100% + 6px);width:280px;display:grid;gap:8px;padding:12px;background:#fff;border:1px solid #fecaca;border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,.16)" onsubmit="return confirm('This sends real money back to the client through Stripe and cannot be undone. Continue?');">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="payment_id" value="<?php echo (int)$r['id']; ?>">
+                    <input type="hidden" name="processor_refund" value="1">
+                    <input type="hidden" name="refund_request_token" value="<?php echo bin2hex(random_bytes(16)); ?>">
+                    <label><span style="display:block;font-size:12px;margin-bottom:3px">Amount to return (max $<?php echo number_format($processorRefundRemaining, 2); ?>)</span><input type="number" name="amount" step="0.01" min="0.01" max="<?php echo htmlspecialchars(number_format($processorRefundRemaining, 2, '.', '')); ?>" value="<?php echo htmlspecialchars(number_format($processorRefundRemaining, 2, '.', '')); ?>" required style="width:100%;padding:7px;box-sizing:border-box"></label>
+                    <label><span style="display:block;font-size:12px;margin-bottom:3px">Reason</span><select name="refund_reason" style="width:100%;padding:7px"><option value="requested_by_customer">Requested by customer</option><option value="duplicate">Duplicate charge</option><option value="fraudulent">Fraudulent</option></select></label>
+                    <div style="font-size:12px;color:#991b1b">This is a real Stripe refund, not an accounting correction.</div>
+                    <button type="submit" style="padding:7px 9px;border:1px solid #be123c;border-radius:6px;background:#be123c;color:#fff">Send Stripe refund</button>
+                  </form>
+                </details>
+              <?php elseif (!$canCorrect && !$canRecordRefund): ?>
                 <span style="color:var(--muted);font-size:13px">-</span>
               <?php endif; ?>
               </div>
