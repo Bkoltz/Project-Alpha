@@ -4,6 +4,8 @@
 // Secrets (Stripe keys, SMTP password, encryption key) are loaded from environment variables
 // or .env file first; non-sensitive settings come from settings.json.
 
+require_once __DIR__ . '/../utils/invoice_numbers.php';
+
 $settingsPrimary = '/var/www/config/settings.json';
 $settingsProject = __DIR__ . '/../../config/settings.json';
 $settingsPublic  = __DIR__ . '/../../public/assets/settings.json';

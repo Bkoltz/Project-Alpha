@@ -49,6 +49,7 @@ try {
         $invoiceId = generate_recurring_invoice($pdo, $contract, $appConfig);
         if ($invoiceId !== null) {
             $invoicesGenerated++;
+            recurring_invoice_send_on_generate_if_enabled($pdo, $invoiceId, $appConfig);
         } elseif ($invoiceId === null) {
             // A null can also mean idempotency guard tripped or no invoice needed.
             // Track actual errors through helper logging rather than here.
@@ -114,7 +115,7 @@ try {
         // 1) 7-day due reminders
         if (!empty($appConfig['invoice_auto_send_due_7days'])) {
             $due7 = date('Y-m-d', strtotime('+7 days'));
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date = ? AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct'");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.invoice_type,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date = ? AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct'");
             $stmt->execute([$due7]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {
@@ -134,9 +135,10 @@ try {
 
                 $to = (string)$inv['email'];
                 if ($to === '') continue;
-                $subject = sprintf('Invoice I-%s due %s', $inv['doc_number'] ?? $iid, date('M j, Y', strtotime($inv['due_date'])));
+                $invoiceLabel = pa_invoice_label_from_row($inv + ['id' => $iid]);
+                $subject = sprintf('Invoice %s due %s', $invoiceLabel, date('M j, Y', strtotime($inv['due_date'])));
                 $body = '<p>Dear ' . htmlspecialchars($inv['name'] ?? '') . ',</p>';
-                $body .= '<p>This is a reminder that invoice <strong>I-' . htmlspecialchars($inv['doc_number'] ?? $iid) . '</strong> for <strong>$' . number_format((float)$inv['total'],2) . '</strong> is due on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
+                $body .= '<p>This is a reminder that invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> for <strong>$' . number_format((float)$inv['total'],2) . '</strong> is due on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
                 $body .= '<p>You can view this invoice here: <a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';
                 $body .= '<p>If you have already paid, please disregard this message.</p>';
 
@@ -157,7 +159,7 @@ try {
         // 2) Weekly overdue reminders (at most once per 7 days for each invoice)
         if (!empty($appConfig['invoice_auto_send_overdue_weekly'])) {
             $todayDate = date('Y-m-d');
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date < ? AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct'");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.invoice_type,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.due_date < ? AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct'");
             $stmt->execute([$todayDate]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {
@@ -184,9 +186,10 @@ try {
 
                 $to = (string)$inv['email'];
                 if ($to === '') continue;
-                $subject = sprintf('Overdue invoice I-%s', $inv['doc_number'] ?? $iid);
+                $invoiceLabel = pa_invoice_label_from_row($inv + ['id' => $iid]);
+                $subject = sprintf('Overdue invoice %s', $invoiceLabel);
                 $body = '<p>Dear ' . htmlspecialchars($inv['name'] ?? '') . ',</p>';
-                $body .= '<p>This is a reminder that invoice <strong>I-' . htmlspecialchars($inv['doc_number'] ?? $iid) . '</strong> for <strong>$' . number_format((float)$inv['total'],2) . '</strong> became overdue on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
+                $body .= '<p>This is a reminder that invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> for <strong>$' . number_format((float)$inv['total'],2) . '</strong> became overdue on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
                 $body .= '<p>Please view and pay the invoice here: <a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';
                 $body .= '<p>If you have already paid, please disregard this message.</p>';
 
@@ -206,7 +209,7 @@ try {
 
         // 3) Auto-email newly-generated long-term and on-demand invoices (on generation)
         if (!empty($appConfig['invoice_auto_email_on_generate'])) {
-            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type = 'long_term' AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct' AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
+            $stmt = $pdo->prepare("SELECT i.id,i.doc_number,i.invoice_type,i.total,i.due_date,c.email,c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.invoice_type = 'long_term' AND i.status IN ('unpaid','partial') AND i.finalized_at IS NOT NULL AND i.collection_mode='direct' AND NOT EXISTS (SELECT 1 FROM invoice_notifications n WHERE n.invoice_id=i.id AND n.notification_type='on_generate')");
             $stmt->execute();
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $inv) {
@@ -219,9 +222,10 @@ try {
                 $host = rtrim(($appConfig['app_host'] ?? ''), '/');
                 if ($host !== '') { $link = $host . $link; }
 
-                $subject = sprintf('Invoice I-%s has been generated', $inv['doc_number'] ?? $iid);
+                $invoiceLabel = pa_invoice_label_from_row($inv + ['id' => $iid]);
+                $subject = sprintf('Invoice %s has been generated', $invoiceLabel);
                 $body = '<p>Dear ' . htmlspecialchars($inv['name'] ?? '') . ',</p>';
-                $body .= '<p>A new invoice <strong>I-' . htmlspecialchars($inv['doc_number'] ?? $iid) . '</strong> for <strong>$' . number_format((float)$inv['total'],2) . '</strong> has been generated';
+                $body .= '<p>A new invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> for <strong>$' . number_format((float)$inv['total'],2) . '</strong> has been generated';
                 if (!empty($inv['due_date'])) {
                     $body .= ', due on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>';
                 }

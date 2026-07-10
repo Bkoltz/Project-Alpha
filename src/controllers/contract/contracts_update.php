@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
+require_once __DIR__ . '/../../utils/recurring_services.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
 $client_id = (int)($_POST['client_id'] ?? 0);
@@ -29,6 +30,12 @@ $contractTypeStmt->execute([$id]);
 $existingContract = $contractTypeStmt->fetch(PDO::FETCH_ASSOC);
 $contractType = (string)($existingContract['contract_type'] ?? '');
 $isLongTermContract = $contractType === 'long_term';
+$existingBaseService = null;
+if ($isLongTermContract) {
+  $baseServiceStmt = $pdo->prepare('SELECT * FROM contract_recurring_services WHERE contract_id=? AND is_base=1 ORDER BY id LIMIT 1');
+  $baseServiceStmt->execute([$id]);
+  $existingBaseService = $baseServiceStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
 $detailPage = $contractType === 'long_term' ? 'contract/long-term-contract-details' : 'contract/contract-details';
 if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
   header('Location: /?page=contract/contracts-edit&id=' . $id . '&error=' . urlencode('Select an active or not-started project for this client or organization.'));
@@ -117,6 +124,36 @@ try{
       $longTerm['price_per_invoice'],$longTerm['billing_start_mode'],$longTerm['invoice_count'],$longTerm['next_invoice_date'],
       $id
     ]);
+    if ($longTerm['pricing_type'] === 'per_invoice') {
+      $baseServiceId = pa_recurring_service_ensure_base($pdo, $id);
+      pa_recurring_service_sync_base($pdo, $id);
+      pa_recurring_service_sync_contract_next_date($pdo, $id);
+      $oldBilling = [
+        'amount' => (float)($existingBaseService['amount'] ?? $existingContract['price_per_invoice'] ?? 0),
+        'billing_interval_count' => (int)($existingBaseService['billing_interval_count'] ?? $existingContract['billing_interval_count'] ?? 1),
+        'billing_interval_unit' => (string)($existingBaseService['billing_interval_unit'] ?? $existingContract['billing_interval_unit'] ?? 'month'),
+        'effective_from' => $existingBaseService['effective_from'] ?? $existingContract['start_date'] ?? null,
+        'effective_until' => $existingBaseService['effective_until'] ?? $existingContract['end_date'] ?? null,
+        'next_invoice_date' => $existingBaseService['next_invoice_date'] ?? $existingContract['next_invoice_date'] ?? null,
+      ];
+      $newBilling = [
+        'amount' => (float)$longTerm['price_per_invoice'],
+        'billing_interval_count' => (int)$longTerm['billing_interval_count'],
+        'billing_interval_unit' => (string)$longTerm['billing_interval_unit'],
+        'effective_from' => $longTerm['start_date'],
+        'effective_until' => $longTerm['end_date'],
+        'next_invoice_date' => $longTerm['next_invoice_date'],
+      ];
+      if ($oldBilling !== $newBilling) {
+        pa_recurring_service_record_amendment(
+          $pdo, $id, $baseServiceId, 'service_updated', 'approved', date('Y-m-d'),
+          'Base recurring service billing terms updated', $oldBilling, $newBilling, null,
+          (int)($_SESSION['user']['id'] ?? 0) ?: null
+        );
+      }
+    } else {
+      $pdo->prepare('UPDATE contract_recurring_services SET status="ended",next_invoice_date=NULL WHERE contract_id=? AND is_base=1 AND status<>"ended"')->execute([$id]);
+    }
   } else {
     $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
   }

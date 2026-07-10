@@ -62,8 +62,13 @@ function audit_sensitive_map(): array
             'stripe-webhook-legacy'          => ['payment.stripe_webhook', 'payment'],
             'payments-create'                => ['payment.create', 'payment'],
             'payments/payment-refund'        => ['payment.refund', 'payment'],
+            'payments/payment-reverse'       => ['payment.manual_entry_reversed', 'payment'],
+            'payments/payment-correct'       => ['payment.allocation_corrected', 'payment'],
+            'financial/recurring-expense-handler' => ['recurring_expense.change', 'recurring_expense'],
             'invoice/invoices-mark-paid'     => ['invoice.mark_paid', 'invoice'],
             'invoices-mark-paid'             => ['invoice.mark_paid', 'invoice'],
+            'invoice/invoice-void'            => ['invoice.void', 'invoice'],
+            'invoice/invoice-reenable'        => ['invoice.reenable', 'invoice'],
 
             // Security state
             'two-factor-setup'               => ['auth.2fa_setup', 'user'],
@@ -98,6 +103,8 @@ function audit_sensitive_map(): array
             'contract-sign'                  => ['contract.sign', 'contract'],
             'contract/contract-complete'     => ['contract.complete', 'contract'],
             'contract-complete'              => ['contract.complete', 'contract'],
+            'long-term-recurring-service-save' => ['contract.recurring_service_save', 'contract'],
+            'long-term-recurring-service-action' => ['contract.recurring_service_action', 'contract'],
 
             // Email
             'email-send'                     => ['email.send', 'email'],

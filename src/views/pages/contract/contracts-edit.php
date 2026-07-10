@@ -16,6 +16,16 @@ if (!$contract) {
   return;
 }
 $isLongTermContract = ($contract['contract_type'] ?? 'regular') === 'long_term';
+$baseRecurringService = null;
+if ($isLongTermContract) {
+  try {
+    $baseServiceStmt = $pdo->prepare('SELECT * FROM contract_recurring_services WHERE contract_id=? AND is_base=1 ORDER BY id LIMIT 1');
+    $baseServiceStmt->execute([$id]);
+    $baseRecurringService = $baseServiceStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+  } catch (Throwable $e) {
+    $baseRecurringService = null;
+  }
+}
 $items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
@@ -191,11 +201,11 @@ try {
 
     <?php if ($isLongTermContract): ?>
       <?php
-        $intervalCount = max(1, (int)($contract['billing_interval_count'] ?? 1));
+        $intervalCount = max(1, (int)($baseRecurringService['billing_interval_count'] ?? $contract['billing_interval_count'] ?? 1));
         $intervalCountOptions = array_values(array_unique(array_merge([1, 2, 3, 6, 12], [$intervalCount])));
         sort($intervalCountOptions);
-        $intervalUnit = in_array((string)($contract['billing_interval_unit'] ?? 'month'), ['day', 'week', 'month', 'year'], true)
-          ? (string)$contract['billing_interval_unit']
+        $intervalUnit = in_array((string)($baseRecurringService['billing_interval_unit'] ?? $contract['billing_interval_unit'] ?? 'month'), ['day', 'week', 'month', 'year'], true)
+          ? (string)($baseRecurringService['billing_interval_unit'] ?? $contract['billing_interval_unit'])
           : 'month';
         $pricingType = in_array((string)($contract['pricing_type'] ?? 'per_invoice'), ['per_invoice', 'fixed_total'], true)
           ? (string)$contract['pricing_type']
@@ -208,7 +218,7 @@ try {
       <div id="longTermEditFields" style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;background:#f9fafb">
         <h3 style="margin:0 0 8px;color:#374151;font-size:16px">Recurring Billing Settings</h3>
         <p style="margin:0 0 12px;color:#6b7280;font-size:13px;line-height:1.45">
-          Changes here apply to future recurring invoices. Existing invoices and payments are left as-is.
+          Changes here apply to the base recurring service and future invoices. Manage additional services and their independent schedules from the contract details page. Existing invoices and payments are left as-is.
         </p>
 
         <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">
@@ -229,7 +239,7 @@ try {
           </label>
           <label>
             <div>Next Invoice Date</div>
-            <input type="date" name="next_invoice_date" value="<?php echo htmlspecialchars((string)($contract['next_invoice_date'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <input type="date" name="next_invoice_date" value="<?php echo htmlspecialchars((string)($baseRecurringService['next_invoice_date'] ?? $contract['next_invoice_date'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           </label>
         </div>
 
@@ -291,7 +301,7 @@ try {
         <div id="perInvoiceEditFieldCo" style="<?php echo $pricingType === 'per_invoice' ? '' : 'display:none'; ?>;margin-top:12px">
           <label>
             <div>Amount Per Invoice</div>
-            <input id="pricePerInvoiceEditCo" type="number" step="0.01" min="0" name="price_per_invoice" value="<?php echo htmlspecialchars((string)($contract['price_per_invoice'] ?? $contract['subtotal'] ?? 0)); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+            <input id="pricePerInvoiceEditCo" type="number" step="0.01" min="0" name="price_per_invoice" value="<?php echo htmlspecialchars((string)($baseRecurringService['amount'] ?? $contract['price_per_invoice'] ?? $contract['subtotal'] ?? 0)); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           </label>
         </div>
 

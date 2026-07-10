@@ -14,7 +14,7 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
 
     $stmt = $pdo->prepare(
         'SELECT p.id,p.invoice_id,p.processor_transaction_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
-                i.doc_number,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
+                i.doc_number,i.invoice_type,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
          FROM payments p
          LEFT JOIN invoices i ON i.id=p.invoice_id
          LEFT JOIN clients c ON c.id=p.client_id
@@ -58,7 +58,7 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
 
     $base = invoice_public_base_url($appConfig);
     $url = $base . '/?page=payment-receipt&token=' . rawurlencode((string)$receipt['public_token']);
-    $invoiceLabel = !empty($payment['doc_number']) ? ' for invoice I-' . $payment['doc_number'] : '';
+    $invoiceLabel = !empty($payment['invoice_id']) ? ' for invoice ' . pa_invoice_label_from_row($payment) : '';
     $subject = 'Payment receipt ' . $receipt['receipt_number'];
     $body = '<p>Hello ' . htmlspecialchars((string)($payment['client_name'] ?: 'there')) . ',</p>'
         . '<p>We received your payment of <strong>$' . number_format((float)$payment['amount'], 2) . '</strong>'

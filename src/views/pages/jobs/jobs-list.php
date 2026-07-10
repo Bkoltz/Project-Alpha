@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/jobs-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 // TODo: Change the Details Button in the project list view to "Preview" and then add button called "Details" That will open up a new page with all the details of the project.
@@ -141,7 +142,7 @@ if ($selected !== '') {
               }
               $co->execute([$cid, $pc]);
               $contracts = $co->fetchAll();
-              $i = $pdo->prepare('SELECT id, doc_number, total, status, created_at FROM invoices WHERE client_id=? AND project_code=? ORDER BY created_at DESC LIMIT 5');
+              $i = $pdo->prepare('SELECT id, doc_number, invoice_type, total, status, created_at FROM invoices WHERE client_id=? AND project_code=? ORDER BY created_at DESC LIMIT 5');
               $i->execute([$cid, $pc]);
               $invoices = $i->fetchAll();
               ?>
@@ -184,7 +185,7 @@ if ($selected !== '') {
                 <?php if ($invoices): ?>
                   <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                     <?php foreach ($invoices as $row): ?>
-                      <li><a href="/?page=invoice/invoice-print&amp;id=<?php echo (int)$row['id']; ?>">I-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'], 2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                      <li><a href="/?page=invoice/invoice-print&amp;id=<?php echo (int)$row['id']; ?>"><?php echo htmlspecialchars(pa_invoice_label_from_row($row)); ?></a> · $<?php echo number_format((float)$row['total'], 2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
                     <?php endforeach; ?>
                   </ul>
                 <?php else: ?>

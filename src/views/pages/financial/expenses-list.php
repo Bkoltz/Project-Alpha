@@ -13,6 +13,7 @@ $csrfToken = csrf_sf_token('expense');
 $tabs = [
     'assets'     => ['label' => 'Assets',     'file' => '_assets_tab.php',     'hint' => 'Equipment and depreciation'],
     'expenses'   => ['label' => 'Expenses',   'file' => '_expenses_tab.php',   'hint' => 'Spending ledger'],
+    'recurring'  => ['label' => 'Recurring',  'file' => '_recurring_expenses_tab.php', 'hint' => 'Predictable costs'],
     'receipts'   => ['label' => 'Receipts',   'file' => 'receipts-list.php',   'hint' => 'Uploads and matches'],
     'mileage'    => ['label' => 'Mileage',    'file' => 'mileage-list.php',    'hint' => 'Business trips'],
     'vendors'    => ['label' => 'Vendors',    'file' => 'vendors-list.php',    'hint' => 'Suppliers'],
@@ -26,6 +27,7 @@ if (!isset($tabs[$active])) $active = 'expenses';
 $stats = [
     'assets' => 0,
     'expenses' => 0,
+    'recurring' => 0,
     'receipts' => 0,
     'mileage' => 0,
     'vendors' => 0,
@@ -43,6 +45,11 @@ try {
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses e WHERE {$expenseScopeWhere} AND e.status != 'void'");
     $countStmt->execute($expenseScopeParams);
     $stats['expenses'] = (int)$countStmt->fetchColumn();
+
+    [$recurringScopeWhere, $recurringScopeParams] = finance_scope_clause($pdo, 're', $userId, $orgId, 'created_by');
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM recurring_expenses re WHERE {$recurringScopeWhere} AND re.status='active'");
+    $countStmt->execute($recurringScopeParams);
+    $stats['recurring'] = (int)$countStmt->fetchColumn();
 
     [$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM receipts r WHERE {$receiptScopeWhere}");
@@ -82,6 +89,7 @@ try {
       <a href="/?page=financial/mileage-create" class="btn">Log Mileage</a>
       <a href="/?page=financial/expense-report" class="btn">Reports</a>
       <a href="/?page=financial/csv-import" class="btn">Import CSV</a>
+      <a href="/?page=financial/recurring-expense-form" class="btn">Add Recurring</a>
       <a href="/?page=financial/expense-create" class="btn btn-primary">Add Expense</a>
     </div>
   </div>

@@ -15,6 +15,9 @@ try {
   $st->execute([$id]);
   $co = $st->fetch(PDO::FETCH_ASSOC);
   if (!$co) throw new Exception('Contract not found');
+  if (($co['contract_type'] ?? 'regular') !== 'regular') {
+    throw new Exception('Recurring contracts must be ended with their dedicated Terminate action.');
+  }
 
   // Mark completed
   $pdo->prepare('UPDATE contracts SET status=?, completed_at=CURRENT_TIMESTAMP WHERE id=?')->execute(['completed', $id]);

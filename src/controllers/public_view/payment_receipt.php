@@ -18,8 +18,9 @@ if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
 }
 
 $stmt = $pdo->prepare(
-    'SELECT r.*,p.payment_date,p.payment_method,p.reference_number,
-            i.doc_number,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS client_email
+    'SELECT r.*,p.payment_date,p.payment_method,p.reference_number,p.status AS payment_status,
+            p.refunded_amount,p.disputed_amount,p.reversed_at,p.reversal_reason,
+            i.doc_number,i.invoice_type,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS client_email
      FROM payment_receipts r
      JOIN payments p ON p.id=r.payment_id
      LEFT JOIN clients c ON c.id=p.client_id
@@ -50,11 +51,23 @@ $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
 <body>
   <div class="actions"><button type="button" onclick="window.print()">Print or Save PDF</button></div>
   <main class="receipt">
+    <?php if (strtolower((string)$receipt['payment_status']) === 'reversed'): ?>
+      <div style="margin:0 0 20px;padding:12px 14px;border:1px solid #fca5a5;background:#fff1f2;color:#881337">
+        <strong>Accounting entry reversed.</strong> This payment record was corrected in Project Alpha and is no longer applied to the invoice. No client refund is implied.<?php if (!empty($receipt['reversal_reason'])): ?><div style="margin-top:5px"><?php echo htmlspecialchars((string)$receipt['reversal_reason']); ?></div><?php endif; ?>
+      </div>
+    <?php elseif ((float)$receipt['refunded_amount'] > 0.005): ?>
+      <div style="margin:0 0 20px;padding:12px 14px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e">
+        <strong><?php echo (float)$receipt['refunded_amount'] + 0.005 >= (float)$receipt['amount'] ? 'Payment refunded in full.' : 'Payment partially refunded.'; ?></strong>
+        A refund of $<?php echo number_format((float)$receipt['refunded_amount'], 2); ?> is recorded for this payment.
+      </div>
+    <?php elseif ((float)$receipt['disputed_amount'] > 0.005): ?>
+      <div style="margin:0 0 20px;padding:12px 14px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e"><strong>Payment disputed.</strong> $<?php echo number_format((float)$receipt['disputed_amount'], 2); ?> is currently excluded from the invoice payment total.</div>
+    <?php endif; ?>
     <div class="top"><div><div class="label">Receipt</div><h1><?php echo htmlspecialchars($receipt['receipt_number']); ?></h1><div><?php echo htmlspecialchars($brand); ?></div></div><div><div class="label">Amount received</div><div class="amount">$<?php echo number_format((float)$receipt['amount'], 2); ?></div></div></div>
     <div class="grid">
       <div><div class="label">Received from</div><div class="value"><?php echo htmlspecialchars($receipt['client_name'] ?: 'Processor payment'); ?></div><div><?php echo htmlspecialchars((string)$receipt['client_email']); ?></div></div>
       <div><div class="label">Payment date</div><div class="value"><?php echo htmlspecialchars(date('F j, Y', strtotime((string)$receipt['payment_date']))); ?></div></div>
-      <div><div class="label">Invoice</div><div class="value"><?php echo !empty($receipt['doc_number']) ? 'I-' . htmlspecialchars((string)$receipt['doc_number']) : 'Not linked'; ?></div></div>
+      <div><div class="label">Invoice</div><div class="value"><?php echo !empty($receipt['invoice_id']) ? htmlspecialchars(pa_invoice_label_from_row($receipt)) : 'Not linked'; ?></div></div>
       <div><div class="label">Payment method</div><div class="value"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string)$receipt['payment_method']))); ?></div></div>
       <?php if (!empty($receipt['reference_number'])): ?><div><div class="label">Reference</div><div class="value"><?php echo htmlspecialchars($receipt['reference_number']); ?></div></div><?php endif; ?>
     </div>

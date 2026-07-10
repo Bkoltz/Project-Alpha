@@ -920,6 +920,10 @@ CREATE TABLE IF NOT EXISTS invoices (
     weather_pending TINYINT(1) NOT NULL DEFAULT 0,
     estimated_completion VARCHAR(200) NULL,
     paid_at TIMESTAMP NULL,
+    voided_at TIMESTAMP NULL,
+    voided_by INT NULL,
+    void_reason VARCHAR(500) NULL,
+    void_previous_status VARCHAR(32) NULL,
     sent_at TIMESTAMP NULL,
     finalized_at TIMESTAMP NULL,
     finalized_by INT NULL,
@@ -948,6 +952,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     INDEX idx_invoices_doc_number (doc_number),
     INDEX idx_invoices_project_code (project_code),
     INDEX idx_invoices_due_date (due_date),
+    INDEX idx_invoices_voided_at (voided_at),
     INDEX idx_invoices_auto_pay_attempt (last_auto_pay_attempt),
     CONSTRAINT fk_invoices_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
     CONSTRAINT fk_invoices_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
@@ -1042,7 +1047,10 @@ CREATE TABLE IF NOT EXISTS payments (
     stripe_session_id VARCHAR(255) NULL,
     stripe_payment_intent_id VARCHAR(255) NULL,
     auto_pay_attempt TINYINT(1) NOT NULL DEFAULT 0,
-    status ENUM('succeeded', 'failed', 'pending') NOT NULL DEFAULT 'succeeded',
+    status ENUM('succeeded', 'failed', 'pending', 'reversed') NOT NULL DEFAULT 'succeeded',
+    reversed_at TIMESTAMP NULL,
+    reversed_by INT NULL,
+    reversal_reason VARCHAR(500) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_payments_client (client_id),
@@ -1056,6 +1064,32 @@ CREATE TABLE IF NOT EXISTS payments (
     CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_project_payment FOREIGN KEY (project_invoice_payment_id) REFERENCES project_invoice_payments(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PAYMENT ALLOCATION CORRECTIONS
+CREATE TABLE IF NOT EXISTS payment_corrections (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    moved_payment_id INT NULL,
+    reversed_payment_id INT NULL,
+    reversed_payment_ids JSON NULL,
+    source_invoice_id INT NULL,
+    target_invoice_id INT NULL,
+    corrected_by INT NULL,
+    source_voided TINYINT(1) NOT NULL DEFAULT 0,
+    cleared_local_refund_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    processor_refund_verified_amount DECIMAL(12,2) NULL,
+    reason VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_payment_corrections_moved (moved_payment_id),
+    INDEX idx_payment_corrections_reversed (reversed_payment_id),
+    INDEX idx_payment_corrections_source (source_invoice_id),
+    INDEX idx_payment_corrections_target (target_invoice_id),
+    INDEX idx_payment_corrections_created (created_at),
+    CONSTRAINT fk_payment_correction_moved FOREIGN KEY (moved_payment_id) REFERENCES payments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_reversed FOREIGN KEY (reversed_payment_id) REFERENCES payments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_source FOREIGN KEY (source_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_target FOREIGN KEY (target_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_user FOREIGN KEY (corrected_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PAYMENT INTENTS
@@ -1516,6 +1550,44 @@ CREATE TABLE IF NOT EXISTS receipts (
     CONSTRAINT fk_receipts_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- RECURRING EXPENSE TEMPLATES
+CREATE TABLE IF NOT EXISTS recurring_expenses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL DEFAULT NULL,
+    vendor_id INT NULL DEFAULT NULL,
+    category_id INT NULL DEFAULT NULL,
+    client_id INT NULL DEFAULT NULL,
+    project_id INT NULL DEFAULT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    description VARCHAR(500) NOT NULL,
+    interval_count INT NOT NULL DEFAULT 1,
+    interval_unit ENUM('week','month','year') NOT NULL DEFAULT 'month',
+    start_date DATE NOT NULL,
+    next_expense_date DATE NULL,
+    end_date DATE NULL,
+    last_generated_date DATE NULL,
+    generated_count INT NOT NULL DEFAULT 0,
+    is_billable TINYINT(1) NOT NULL DEFAULT 0,
+    is_tax_deductible TINYINT(1) NOT NULL DEFAULT 1,
+    status ENUM('active','paused','ended') NOT NULL DEFAULT 'active',
+    notes TEXT NULL,
+    created_by INT NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_rec_exp_org (organization_id),
+    INDEX idx_rec_exp_vendor (vendor_id),
+    INDEX idx_rec_exp_category (category_id),
+    INDEX idx_rec_exp_client (client_id),
+    INDEX idx_rec_exp_project (project_id),
+    INDEX idx_rec_exp_due (status, next_expense_date),
+    CONSTRAINT fk_rec_exp_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_vendor FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_category FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- EXPENSES
 CREATE TABLE IF NOT EXISTS expenses (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1525,6 +1597,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     client_id INT NULL DEFAULT NULL,
     project_id INT NULL DEFAULT NULL,
     receipt_id INT NULL DEFAULT NULL,
+    recurring_expense_id INT NULL DEFAULT NULL,
+    recurring_occurrence_date DATE NULL DEFAULT NULL,
     amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     tax_amount DECIMAL(12,2) NULL DEFAULT NULL,
     total_amount DECIMAL(12,2) NULL DEFAULT NULL,
@@ -1546,6 +1620,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     INDEX idx_exp_category (category_id),
     INDEX idx_exp_client (client_id),
     INDEX idx_exp_project (project_id),
+    INDEX idx_exp_recurring (recurring_expense_id),
+    UNIQUE INDEX uq_exp_recurring_occurrence (recurring_expense_id, recurring_occurrence_date),
     INDEX idx_exp_date (expense_date),
     INDEX idx_exp_status (status),
     INDEX idx_exp_billable (is_billable),
@@ -1555,6 +1631,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     CONSTRAINT fk_exp_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_receipt FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_recurring FOREIGN KEY (recurring_expense_id) REFERENCES recurring_expenses(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

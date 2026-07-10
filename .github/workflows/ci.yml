@@ -16,6 +16,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yml config >/tmp/compose.prod.yml
           docker compose -f docker-compose.yml -f docker-compose.override.yml config >/tmp/compose.local.yml
+          docker compose -f docker-compose.truenas.yml config >/tmp/compose.truenas.yml
 
       - name: Validate Compose configuration
         run: |

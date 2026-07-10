@@ -1,8 +1,10 @@
 <?php
 // src/views/pages/invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../config/app.php';
 $netDays = (int)($appConfig['net_terms_days'] ?? 30);
 if ($netDays < 0) $netDays = 0;
@@ -53,6 +55,8 @@ if ($statusFilter === 'paid') {
     (i.due_date IS NULL AND i.created_at < ?)
   )";
   $params[] = date('Y-m-d', strtotime('-'.$netDays.' days'));
+} elseif ($statusFilter === 'void') {
+  $where[] = "i.status='void'";
 }
 if ($project_code !== '') {
   $where[] = 'i.project_code LIKE ?';
@@ -78,7 +82,7 @@ $stc = $pdo->prepare($sqlCount);
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.collection_mode,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
+$sql = 'SELECT i.id,i.doc_number,i.invoice_type,i.project_code,i.total,i.status,i.collection_mode,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
 if ($where) {
   $sql .= ' WHERE ' . implode(' AND ', $where);
 }
@@ -91,11 +95,18 @@ $hasArchived = (bool)$pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE
 $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archived=0 ':'').'ORDER BY name')->fetchAll();
 ?>
 <section>
+  <style>.invoice-void-dialog::backdrop{background:rgba(15,23,42,.48)}</style>
   <h2>Invoices</h2>
   <?php if (!empty($_GET['emailed'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
   <?php elseif (!empty($_GET['email_err'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['voided'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">Invoice voided. It remains available under the Void filter for audit history.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['error'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
 
   <?php
@@ -116,7 +127,8 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                   ['value' => 'all', 'label' => 'All'],
                   ['value' => 'paid', 'label' => 'Paid'],
                   ['value' => 'unpaid', 'label' => 'Unpaid/Partial'],
-                  ['value' => 'overdue', 'label' => 'Overdue']
+                  ['value' => 'overdue', 'label' => 'Overdue'],
+                  ['value' => 'void', 'label' => 'Void']
               ]
           ],
           'start' => [
@@ -198,7 +210,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
           }
           ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px">I-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>
@@ -221,6 +233,21 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Paid</button>
                 </form>
+              <?php endif; ?>
+              <?php if (in_array(strtolower((string)$r['status']), ['draft','sent','unpaid','overdue'], true)): ?>
+                <?php $voidDialogId = 'voidInvoiceDialog' . (int)$r['id']; ?>
+                <button type="button" onclick="document.getElementById('<?php echo $voidDialogId; ?>').showModal()" style="padding:6px 10px;border:1px solid #fda4af;border-radius:8px;background:#fff1f2;color:#9f1239;font-size:small;cursor:pointer;margin-left:6px">Void</button>
+                <dialog id="<?php echo $voidDialogId; ?>" class="invoice-void-dialog" style="width:min(420px,calc(100vw - 32px));box-sizing:border-box;padding:0;border:1px solid #fecdd3;border-radius:12px;box-shadow:0 24px 60px rgba(15,23,42,.28)">
+                  <form method="post" action="/?page=invoice/invoice-void" style="display:grid;gap:12px;padding:18px;margin:0" onsubmit="return confirm('Void invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?>? It will remain in audit history and cannot be paid.');">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                    <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars((string)($_SERVER['REQUEST_URI'] ?? '/?page=invoice/invoices-list')); ?>">
+                    <div><div style="font-size:18px;font-weight:700;color:#111827">Void invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?></div><div style="margin-top:4px;font-size:13px;color:#6b7280">The invoice stays in audit history and all payment links are revoked.</div></div>
+                    <label style="font-size:13px;font-weight:600;color:#374151">Reason<textarea name="reason" maxlength="500" required rows="4" placeholder="Example: Accidental duplicate invoice" style="display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:9px;border:1px solid #d1d5db;border-radius:7px;resize:vertical"></textarea></label>
+                    <div style="font-size:12px;color:#6b7280">Pending or economically active payments must be resolved first. Fully refunded zero-balance history will not block voiding.</div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" onclick="document.getElementById('<?php echo $voidDialogId; ?>').close()" style="padding:8px 11px;border:1px solid #d1d5db;border-radius:7px;background:#fff">Cancel</button><button type="submit" style="padding:8px 11px;border:1px solid #be123c;border-radius:7px;background:#be123c;color:#fff">Confirm Void Invoice</button></div>
+                  </form>
+                </dialog>
               <?php endif; ?>
             </td>
             <td style="padding:10px">

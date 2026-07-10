@@ -103,7 +103,7 @@ try {
                 if ($accountingBasis === 'cash') {
                     $stmt = $pdo->prepare("
                     SELECT
-                        i.id, i.doc_number, c.name as client_name, i.project_code,
+                        i.id, i.doc_number, i.invoice_type, c.name as client_name, i.project_code,
                         i.subtotal, i.tax_percent, i.tax_amount as tax, i.tax_county,
                         i.discount_value, i.total, i.status, MIN(p.payment_date) AS created_at, i.due_date,
                         SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)) as amount_paid,
@@ -119,7 +119,7 @@ try {
                 } else {
                     $stmt = $pdo->prepare("
                     SELECT 
-                        i.id, i.doc_number, c.name as client_name, i.project_code,
+                        i.id, i.doc_number, i.invoice_type, c.name as client_name, i.project_code,
                         i.subtotal, i.tax_percent, i.tax_amount as tax, i.tax_county,
                         i.discount_value, i.total, i.status, COALESCE(i.finalized_at,i.created_at) AS created_at, i.due_date,
                         COALESCE(SUM(CASE WHEN p.status = 'succeeded' THEN p.amount ELSE 0 END), 0) as amount_paid,
@@ -194,7 +194,7 @@ try {
                 csv_write_row($fp, [
                     substr($inv['created_at'] ?? '', 0, 10),
                     $inv['client_name'] ?? '',
-                    $inv['doc_number'] ?? $inv['id'],
+                    pa_invoice_label_from_row($inv),
                     'Invoice',
                     ucfirst($inv['status'] ?? ''),
                     number_format((float)($inv['tax_percent'] ?? 0), 2) . '%',

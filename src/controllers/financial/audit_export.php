@@ -129,7 +129,7 @@ try {
         
         if ($accountingBasis === 'cash') {
             $invoiceQuery = "
-                SELECT i.id,i.doc_number,i.client_id,c.name AS client_name,i.project_code,
+                SELECT i.id,i.doc_number,i.invoice_type,i.client_id,c.name AS client_name,i.project_code,
                        i.subtotal,i.tax_percent,i.tax_amount AS tax,i.tax_county,i.discount_value,
                        i.total,i.status,MIN(p.payment_date) AS report_date,i.created_at,i.due_date,
                        SUM(GREATEST(p.amount-p.refunded_amount-p.disputed_amount,0)) AS amount_paid,
@@ -148,6 +148,7 @@ try {
             SELECT 
                 i.id,
                 i.doc_number,
+                i.invoice_type,
                 i.client_id,
                 c.name as client_name,
                 i.project_code,
@@ -280,7 +281,7 @@ try {
             csv_write_row($fp, [
                 substr($inv['report_date'] ?? $inv['created_at'] ?? '', 0, 10),
                 $inv['client_name'] ?? '',
-                $inv['doc_number'] ?? $inv['id'],
+                pa_invoice_label_from_row($inv),
                 'Invoice',
                 ucfirst($inv['status'] ?? ''),
                 number_format((float)($inv['tax_percent'] ?? 0), 2) . '%',

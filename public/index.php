@@ -747,6 +747,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'invoice/invoices-mark-paid',
         'invoice/invoice-finalize',
         'invoice/invoice-reopen',
+        'invoice/invoice-void',
+        'invoice/invoice-reenable',
         'invoice/email-send',
         'payments/payments-create',
 
@@ -784,6 +786,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'financial/asset-handler',
         'financial/expense-handler',
         'financial/expense_handler',
+        'financial/recurring-expense-handler',
         'financial/csv-import',
 
         // Time Tracking
@@ -1069,6 +1072,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract/long_term_contract_terminate.php';
         exit;
     }
+    if ($page === 'long-term-recurring-service-save') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_recurring_service_save.php';
+        exit;
+    }
+    if ($page === 'long-term-recurring-service-action') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_recurring_service_action.php';
+        exit;
+    }
     if ($page === 'document-reenable') {
         require_once __DIR__ . '/../src/controllers/document_reenable_handler.php';
         exit;
@@ -1093,12 +1104,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/invoice/invoice_reopen.php';
         exit;
     }
+    if ($page === 'invoice/invoice-void') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_void.php';
+        exit;
+    }
+    if ($page === 'invoice/invoice-reenable') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_reenable.php';
+        exit;
+    }
     if ($page === 'payments/payments-create') {
         require_once __DIR__ . '/../src/controllers/payments_create.php';
         exit;
     }
     if ($page === 'payments/payment-refund') {
         require_once __DIR__ . '/../src/controllers/payments_refund.php';
+        exit;
+    }
+    if ($page === 'payments/payment-reverse') {
+        require_once __DIR__ . '/../src/controllers/payments_reverse.php';
+        exit;
+    }
+    if ($page === 'payments/payment-correct') {
+        require_once __DIR__ . '/../src/controllers/payments_correct.php';
         exit;
     }
     if ($page === 'quote/quotes-update' || $page === 'quotes-update') {
@@ -1283,6 +1310,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/expense-handler' || $page === 'financial/expense_handler') {
         require_once __DIR__ . '/../src/controllers/financial/expense_handler.php';
+        exit;
+    }
+    if ($page === 'financial/recurring-expense-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/recurring_expense_handler.php';
         exit;
     }
     if ($page === 'financial/csv-import') {

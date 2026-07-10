@@ -1,15 +1,16 @@
 <?php
 // src/views/pages/calendar.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/invoice_numbers.php';
 
 $start = $_GET['start'] ?? date('Y-m-01');
 $end = $_GET['end'] ?? date('Y-m-t');
 
 // Pull scheduled items from contracts and invoices within range
 $st = $pdo->prepare(
-  "SELECT 'contract' AS kind, id, client_id, project_code, doc_number, scheduled_date, status, created_at FROM contracts WHERE scheduled_date IS NOT NULL AND scheduled_date BETWEEN ? AND ?
+  "SELECT 'contract' AS kind, id, client_id, project_code, doc_number, NULL AS invoice_type, scheduled_date, status, created_at FROM contracts WHERE scheduled_date IS NOT NULL AND scheduled_date BETWEEN ? AND ?
    UNION ALL
-   SELECT 'invoice' AS kind, id, client_id, project_code, doc_number, due_date AS scheduled_date, status, created_at FROM invoices WHERE due_date IS NOT NULL AND due_date BETWEEN ? AND ?
+   SELECT 'invoice' AS kind, id, client_id, project_code, doc_number, invoice_type, due_date AS scheduled_date, status, created_at FROM invoices WHERE due_date IS NOT NULL AND due_date BETWEEN ? AND ?
    ORDER BY scheduled_date ASC, kind ASC, created_at DESC"
 );
 $st->execute([$start, $end, $start, $end]);
@@ -53,7 +54,7 @@ $clients = $pdo->query('SELECT id,name FROM clients')->fetchAll(PDO::FETCH_KEY_P
               <td style="padding:10px"><?php echo htmlspecialchars($r['scheduled_date']); ?></td>
               <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['kind']); ?></td>
               <td style="padding:10px">
-                <?php if ($r['kind'] === 'contract'): ?>C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?><?php else: ?>I-<?php echo (int)($r['doc_number'] ?? $r['id']); ?><?php endif; ?>
+                <?php if ($r['kind'] === 'contract'): ?>C-<?php echo (int)($r['doc_number'] ?? $r['id']); ?><?php else: ?><?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?><?php endif; ?>
               </td>
               <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
               <td style="padding:10px"><?php echo htmlspecialchars($clients[(int)$r['client_id']] ?? ''); ?></td>

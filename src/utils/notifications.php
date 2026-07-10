@@ -290,15 +290,15 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
         
         $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
         $clientName = (string)($invoice['client_name'] ?? 'Client');
-        $docnum = (string)($invoice['doc_number'] ?? $invoiceId);
+        $invoiceLabel = pa_invoice_label_from_row($invoice + ['id' => $invoiceId]);
         $project = (string)($invoice['project_code'] ?? '');
         $total = (float)($invoice['total'] ?? 0);
         
         $statusText = $status === 'paid' ? 'paid in full' : 'partially paid';
         if (admin_invoice_paid_notification_enabled($appConfig, $invoice)) {
-            $subject = sprintf('[%s] Invoice I-%s %s ($%.2f)', $brand, $docnum, $statusText, $amount);
-            $html = sprintf('<p>Invoice <strong>I-%s</strong> for client <strong>%s</strong>%s has been %s.</p><p>Payment amount: <strong>$%.2f</strong></p><p>Invoice total: <strong>$%.2f</strong></p><p>See details in the app.</p>',
-                htmlspecialchars($docnum), htmlspecialchars($clientName),
+            $subject = sprintf('[%s] Invoice %s %s ($%.2f)', $brand, $invoiceLabel, $statusText, $amount);
+            $html = sprintf('<p>Invoice <strong>%s</strong> for client <strong>%s</strong>%s has been %s.</p><p>Payment amount: <strong>$%.2f</strong></p><p>Invoice total: <strong>$%.2f</strong></p><p>See details in the app.</p>',
+                htmlspecialchars($invoiceLabel), htmlspecialchars($clientName),
                 $project !== '' ? (' on project <strong>'.htmlspecialchars($project).'</strong>') : '',
                 $statusText, $amount, $total
             );
@@ -308,7 +308,7 @@ function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, f
 
         // Log the activity
         log_activity($pdo, 'invoice_paid', 'invoice', $invoiceId, (int)($invoice['client_id'] ?? 0), 
-            "Invoice I-$docnum $statusText via public link (\$$amount)",
+            "Invoice $invoiceLabel $statusText via public link (\$$amount)",
             ['project_code' => $project, 'amount' => $amount, 'status' => $status, 'total' => $total]
         );
     } catch (Throwable $e) {

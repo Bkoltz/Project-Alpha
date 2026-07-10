@@ -87,6 +87,9 @@ if ($hasReceipt) {
       </div>
 
       <div class="field"><label class="label-muted">Reference Number</label><div><?php echo htmlspecialchars($e['reference_number'] ?? '—'); ?></div></div>
+      <?php if (!empty($e['recurring_expense_id'])): ?>
+      <div class="field"><label class="label-muted">Recurring Schedule</label><div><a href="/?page=financial/recurring-expense-form&id=<?php echo (int)$e['recurring_expense_id']; ?>">View recurring expense #<?php echo (int)$e['recurring_expense_id']; ?></a><?php if (!empty($e['recurring_occurrence_date'])): ?> &middot; Scheduled <?php echo htmlspecialchars(date('M j, Y', strtotime((string)$e['recurring_occurrence_date']))); ?><?php endif; ?></div></div>
+      <?php endif; ?>
 
       <div class="grid grid-2" style="margin:12px 0">
         <div><label class="label-muted">Status</label><span class="status-pill status-pill--<?php echo htmlspecialchars(strtolower($e['status'])); ?>"><?php echo htmlspecialchars($e['status']); ?></span></div>

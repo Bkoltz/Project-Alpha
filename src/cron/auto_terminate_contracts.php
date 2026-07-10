@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
+require_once __DIR__ . '/../utils/recurring_services.php';
 
 $logPrefix = '[auto_terminate_contracts]';
 $jobName = 'auto_terminate_contracts';
@@ -36,8 +37,9 @@ try {
     
     foreach ($ltContracts as $contract) {
         try {
-            $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL WHERE id=? AND contract_type="long_term"')
+            $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL, completed_at=COALESCE(completed_at,NOW()) WHERE id=? AND contract_type="long_term"')
                 ->execute(['completed', $contract['id']]);
+            pa_recurring_services_end($pdo, (int)$contract['id'], (string)$contract['end_date']);
             $terminatedCount++;
             @error_log("$logPrefix Auto-terminated long-term contract LTC-{$contract['doc_number']} (end date: {$contract['end_date']})");
         } catch (Throwable $e) {
@@ -58,7 +60,7 @@ try {
     
     foreach ($odContracts as $contract) {
         try {
-            $pdo->prepare('UPDATE contracts SET status=? WHERE id=? AND contract_type="on_demand"')
+            $pdo->prepare('UPDATE contracts SET status=?, completed_at=COALESCE(completed_at,NOW()) WHERE id=? AND contract_type="on_demand"')
                 ->execute(['completed', $contract['id']]);
             $terminatedCount++;
             @error_log("$logPrefix Auto-terminated on-demand contract ODC-{$contract['doc_number']} (end date: {$contract['end_date']})");

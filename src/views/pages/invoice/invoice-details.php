@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoice-print.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
@@ -63,6 +64,9 @@ if ($invoiceCollectionMode === '') {
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
 ?>
 <section>
+  <?php if (strtolower((string)($inv['status'] ?? '')) === 'void'): ?>
+    <div style="margin:0 0 12px;padding:10px 14px;border:3px solid #6b7280;color:#4b5563;text-align:center;font-size:28px;font-weight:800;letter-spacing:8px">VOID</div>
+  <?php endif; ?>
   <div class="doc-type" style="text-align:center;font-weight:700;font-size:22px;margin-bottom:6px">Invoice</div>
   <?php if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')): ?>
   <?php 
@@ -72,6 +76,9 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       'unpaid' => ['bg' => '#fffbeb', 'text' => '#92400e', 'border' => '#fbbf24'],
       'partial' => ['bg' => '#fef3c7', 'text' => '#92400e', 'border' => '#f59e0b'],
       'paid' => ['bg' => '#ecfdf5', 'text' => '#065f46', 'border' => '#10b981'],
+      'draft' => ['bg' => '#eff6ff', 'text' => '#1e40af', 'border' => '#60a5fa'],
+      'sent' => ['bg' => '#f5f3ff', 'text' => '#5b21b6', 'border' => '#8b5cf6'],
+      'overdue' => ['bg' => '#fff1f2', 'text' => '#9f1239', 'border' => '#fb7185'],
       'void' => ['bg' => '#f3f4f6', 'text' => '#6b7280', 'border' => '#9ca3af']
     ];
     $icolors = $istatusColors[$istatus] ?? ['bg' => '#f3f4f6', 'text' => '#374151', 'border' => '#9ca3af'];
@@ -82,7 +89,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
   <div class="no-print document-actions">
     <a href="javascript:history.back()" class="btn btn-sm">Back</a>
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
-    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?>.pdf" class="btn btn-sm">Download</a>
+    <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars(pa_invoice_label_from_row($inv)); ?>.pdf" class="btn btn-sm">Download</a>
     <?php
       $actionStatus = strtolower((string)$inv['status']);
       $canEditInvoice = $actionStatus === 'draft'
@@ -120,25 +127,59 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
       </form>
     <?php endif; ?>
     <?php if (!empty($inv['status']) && strtolower($inv['status']) === 'void'): ?>
-    <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? It will be set back to unpaid status.');">
+    <form method="post" action="/?page=invoice/invoice-reenable" style="display:inline" onsubmit="return confirm('Re-enable this invoice? Previous public and payment links will remain revoked.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-      <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
     </form>
     <?php endif; ?>
+    <?php if (in_array($actionStatus, ['draft','sent','unpaid','overdue'], true)): ?>
+      <details style="display:inline-block;position:relative;vertical-align:top">
+        <summary class="btn btn-sm" style="list-style:none;background:#fff1f2;color:#9f1239;border-color:#fda4af;cursor:pointer">Void Invoice</summary>
+        <form method="post" action="/?page=invoice/invoice-void" style="position:absolute;z-index:20;right:0;top:calc(100% + 6px);width:min(360px,80vw);padding:12px;background:#fff;border:1px solid #fecdd3;border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,.16)" onsubmit="return confirm('Void this invoice? This keeps the record for audit history and revokes all payment links.');">
+          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+          <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+          <label style="display:grid;gap:6px;font-size:13px;font-weight:600;color:#374151">
+            Reason for voiding
+            <textarea name="reason" maxlength="500" required rows="3" placeholder="Example: Created for the wrong client" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;resize:vertical"></textarea>
+          </label>
+          <div style="margin-top:7px;font-size:12px;color:#6b7280">Paid, partially paid, and project-aggregated invoices cannot be voided here.</div>
+          <button type="submit" class="btn btn-sm" style="margin-top:10px;background:#be123c;color:#fff;border-color:#be123c">Confirm Void</button>
+        </form>
+      </details>
+    <?php endif; ?>
+    <?php if ($actionStatus !== 'void'): ?>
     <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
+    <?php endif; ?>
     <?php if (!empty($inv['finalized_at']) && $invoiceCollectionMode === 'direct' && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true)): ?>
       <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php endif; ?>
   </div>
+  <?php if (!empty($_GET['error'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;border-radius:6px;margin-bottom:8px;font-size:14px"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['voided'])): ?>
+    <div class="no-print" style="padding:8px 12px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;margin-bottom:8px;font-size:14px">Invoice voided. It remains in invoice history and its public/payment links have been revoked.</div>
+  <?php endif; ?>
   <?php if (!empty($_GET['reenabled'])): ?>
-    <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Invoice re-enabled successfully</div>
+    <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">Invoice re-enabled successfully. Create a new public link before sending it again.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['payment_corrected'])): ?>
+    <div class="no-print" style="padding:10px 12px;background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:6px;margin-bottom:8px;font-size:14px">
+      Payment allocation corrected. The original processor transaction now applies to this invoice; no Stripe refund or new charge was created.<?php if (!empty($_GET['source_invoice_id'])): ?> The duplicate source invoice #<?php echo (int)$_GET['source_invoice_id']; ?> was retained in history as void.<?php endif; ?>
+    </div>
+  <?php endif; ?>
+  <?php if ($actionStatus === 'void'): ?>
+    <div class="no-print" style="padding:12px 14px;background:#f9fafb;border:1px solid #d1d5db;border-radius:8px;margin-bottom:12px">
+      <div style="font-weight:700;color:#374151">Void reason</div>
+      <div style="margin-top:4px;color:#4b5563"><?php echo htmlspecialchars(trim((string)($inv['void_reason'] ?? '')) ?: 'No reason was recorded for this legacy void.'); ?></div>
+      <?php if (!empty($inv['voided_at'])): ?><div style="margin-top:5px;font-size:12px;color:#6b7280">Voided <?php echo htmlspecialchars(date('M j, Y g:i A', strtotime((string)$inv['voided_at']))); ?></div><?php endif; ?>
+    </div>
   <?php endif; ?>
   <?php if (!empty($_GET['payment']) && $_GET['payment'] === 'success'): ?>
     <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">✓ Payment processed successfully! The invoice status will update shortly.</div>
@@ -261,7 +302,7 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <tr>
       <td style="vertical-align:middle;width:70%">
         <div style="font-weight:700;font-size:20px"><?php echo htmlspecialchars($brand); ?></div>
-        <div style="color:#374151;font-size:13px;margin-top:2px">Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?></div>
+        <div style="color:#374151;font-size:13px;margin-top:2px">Invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($inv)); ?></div>
         <?php if (!empty($inv['project_code'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Job <?php echo htmlspecialchars($inv['project_code']); ?></div><?php endif; ?>
         <?php if (!empty($inv['project_id'])): ?><div style="color:#374151;font-size:13px;margin-top:2px">Project <?php echo htmlspecialchars($inv['project_id']); ?></div><?php endif; ?>
       </td>

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/recurring_billing.php';
+require_once __DIR__ . '/../../utils/recurring_services.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -35,6 +36,7 @@ try {
     $startDate = date('Y-m-d');
     $update = $pdo->prepare('UPDATE contracts SET status="active", next_invoice_date=? WHERE id=? AND contract_type="long_term"');
     $update->execute([$startDate, $id]);
+    pa_recurring_services_activate($pdo, $id, $startDate);
 
     $pdo->commit();
 

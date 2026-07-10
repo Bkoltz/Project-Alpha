@@ -146,7 +146,9 @@ try {
     $baseUrl = $scheme . '://' . $host;
     
     $docNumber = $invoice['doc_number'] ?? $invoiceId;
-    $documentLabel = $documentType === 'project_invoice' ? 'Project invoice PI-' : 'Invoice I-';
+    $documentLabel = $documentType === 'project_invoice'
+        ? 'Project invoice PI-' . $docNumber
+        : 'Invoice ' . pa_invoice_label_from_row($invoice + ['id' => $invoiceId]);
     $successUrl = $baseUrl . '/?page=stripe-success&token=' . rawurlencode($token) . '&session_id={CHECKOUT_SESSION_ID}';
     $cancelUrl = $baseUrl . '/?page=public-doc&token=' . rawurlencode($token) . '&cancelled=1';
     
@@ -157,7 +159,7 @@ try {
     }
     
     $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
-    $description = "{$documentLabel}{$docNumber} from {$brandName}";
+    $description = "{$documentLabel} from {$brandName}";
 
     $expectedCents = (int)round($checkoutTotal * 100);
     $existingSessionId = trim((string)($invoice['stripe_session_id'] ?? ''));

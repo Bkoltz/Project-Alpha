@@ -26,6 +26,7 @@ if (!in_array($type, ['quote','contract','invoice'], true) || $id <= 0) {
 $ownershipTable = ['quote' => 'quotes', 'contract' => 'contracts', 'invoice' => 'invoices'][$type];
 require_record_ownership($pdo, $ownershipTable, $id);
 
+$invoiceLabel = '';
 try {
   if ($type === 'quote') {
     $st = $pdo->prepare('SELECT q.id, q.doc_number, q.project_code, q.status, c.email, c.name FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
@@ -44,12 +45,13 @@ try {
     $subject = 'Contract C-' . $docnum . ' for ' . $clientName;
     $baseView = '/?page=contract-print&id='.$id;
   } else { // invoice
-    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.project_code, i.status, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
+    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
     $clientName = (string)($row['name'] ?? 'client');
-    $subject = 'Invoice I-' . $docnum . ' for ' . $clientName;
+    $invoiceLabel = pa_invoice_label_from_row($row ?: ['id' => $id]);
+    $subject = 'Invoice ' . $invoiceLabel . ' for ' . $clientName;
     $baseView = '/?page=invoice-print&id='.$id;
   }
 
@@ -266,8 +268,11 @@ try {
             // ignore canvas failures and continue sending without header/footer
           }
           $pdfBinary = $dompdf->output();
-          $prefix = $type === 'quote' ? 'quote_Q-' : ($type === 'contract' ? 'contract_C-' : 'invoice_I-');
-          $filename = $prefix . ($docnum ?: $id) . '.pdf';
+          $filename = $type === 'quote'
+            ? 'quote_Q-' . ($docnum ?: $id) . '.pdf'
+            : ($type === 'contract'
+              ? 'contract_C-' . ($docnum ?: $id) . '.pdf'
+              : 'invoice_' . $invoiceLabel . '.pdf');
           $attachments[] = ['filename'=>$filename, 'content'=>$pdfBinary, 'mime'=>'application/pdf'];
         }
       } catch (Throwable $e) {
