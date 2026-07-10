@@ -38,7 +38,15 @@ $sql = 'SELECT p.id, p.amount, p.refunded_amount, p.disputed_amount, p.status, p
                p.processor_payment_id, p.stripe_payment_intent_id, p.stripe_session_id, p.project_invoice_payment_id,
                p.reversed_at, p.reversal_reason,
                p.processor_fee_policy, p.processor_fee_source, i.id AS invoice_id, i.doc_number, i.invoice_type, i.collection_mode,
-               c.name AS client, ppt.payer_name, ppt.payer_email
+               c.name AS client, ppt.payer_name, ppt.payer_email,
+               EXISTS (
+                   SELECT 1
+                   FROM invoices correction_target
+                   WHERE correction_target.client_id = i.client_id
+                     AND correction_target.id <> i.id
+                     AND COALESCE(correction_target.collection_mode, "direct") = "direct"
+                     AND correction_target.status NOT IN ("draft", "void", "cancelled")
+               ) AS has_correction_target
         ' . $fromSql;
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY p.payment_date DESC, p.created_at DESC LIMIT $per OFFSET $offset";
 $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FETCH_ASSOC);
@@ -137,6 +145,7 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
           $canCorrect = $isSucceeded
             && !empty($r['invoice_id'])
             && (string)($r['collection_mode'] ?? 'direct') === 'direct'
+            && !empty($r['has_correction_target'])
             && empty($r['project_invoice_payment_id'])
             && ($refunded <= 0.005 || $isProcessorBacked)
             && $disputed <= 0.005;
@@ -165,6 +174,8 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:190px">
               <?php if ($canCorrect): ?>
                 <a href="/?page=payments/payment-correction&payment_id=<?php echo (int)$r['id']; ?>" style="padding:6px 9px;border-radius:6px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;white-space:nowrap">Correct allocation</a>
+              <?php elseif ($isSucceeded && !empty($r['invoice_id']) && (string)($r['collection_mode'] ?? 'direct') === 'direct' && empty($r['project_invoice_payment_id']) && empty($r['has_correction_target'])): ?>
+                <span title="Allocation corrections can only move a payment to another invoice for the same client." style="color:var(--muted);font-size:12px">No other invoice for this client</span>
               <?php endif; ?>
               <?php if ($canRecordRefund): ?>
                 <form method="post" action="/?page=payments/payment-refund" style="display:flex;gap:6px;align-items:center" onsubmit="return confirm('Record this refund only after money has been returned to the client outside Project Alpha. Continue?');">

@@ -20,10 +20,13 @@ try {
     } else {
         $stmt = $pdo->prepare('
             SELECT p.*, i.doc_number, i.invoice_type, i.status AS invoice_status,
-                   i.collection_mode, c.name AS client_name
+                   i.collection_mode,
+                   i.client_id AS source_invoice_client_id,
+                   c.organization_id AS source_client_organization_id,
+                   c.name AS client_name
             FROM payments p
             JOIN invoices i ON i.id = p.invoice_id
-            JOIN clients c ON c.id = p.client_id
+            JOIN clients c ON c.id = i.client_id
             WHERE p.id = ?
         ');
         $stmt->execute([$paymentId]);
@@ -42,31 +45,27 @@ try {
         } else {
             $targetStmt = $pdo->prepare('
                 SELECT i.id, i.doc_number, i.invoice_type, i.status, i.total, i.amount_paid, i.balance_due,
-                       i.contract_id, i.document_date
+                       i.contract_id, i.document_date, i.finalized_at
                 FROM invoices i
                 WHERE i.client_id = ?
                   AND i.id <> ?
-                  AND i.organization_id <=> ?
-                  AND i.collection_mode = "direct"
+                  AND COALESCE(i.collection_mode, "direct") = "direct"
                   AND i.status NOT IN ("draft", "void", "cancelled")
-                  AND i.finalized_at IS NOT NULL
                 ORDER BY i.id DESC
                 LIMIT 250
             ');
             $targetStmt->execute([
-                (int)$payment['client_id'],
+                (int)$payment['source_invoice_client_id'],
                 (int)$payment['invoice_id'],
-                $payment['organization_id'] !== null ? (int)$payment['organization_id'] : null,
             ]);
             $targets = $targetStmt->fetchAll(PDO::FETCH_ASSOC);
 
             $manualStmt = $pdo->prepare('
-                SELECT p.id, p.invoice_id, p.amount, p.payment_method, p.payment_date,
+                SELECT p.id, p.invoice_id, p.amount, p.refunded_amount, p.payment_method, p.payment_date,
                        i.doc_number, i.invoice_type
                 FROM payments p
                 JOIN invoices i ON i.id = p.invoice_id
-                WHERE p.client_id = ?
-                  AND p.organization_id <=> ?
+                WHERE i.client_id = ?
                   AND p.status = "succeeded"
                   AND p.payment_method <> "stripe"
                   AND p.stripe_payment_intent_id IS NULL
@@ -74,16 +73,14 @@ try {
                   AND COALESCE(p.processor_provider, "") = ""
                   AND COALESCE(p.processor_payment_id, "") = ""
                   AND p.project_invoice_payment_id IS NULL
-                  AND p.refunded_amount <= 0.005
                   AND p.disputed_amount <= 0.005
-                  AND i.collection_mode = "direct"
+                  AND COALESCE(i.collection_mode, "direct") = "direct"
                   AND i.status NOT IN ("draft", "void", "cancelled")
                 ORDER BY p.payment_date DESC, p.id DESC
                 LIMIT 250
             ');
             $manualStmt->execute([
-                (int)$payment['client_id'],
-                $payment['organization_id'] !== null ? (int)$payment['organization_id'] : null,
+                (int)$payment['source_invoice_client_id'],
             ]);
             foreach ($manualStmt->fetchAll(PDO::FETCH_ASSOC) as $candidate) {
                 $candidate['invoice_label'] = pa_invoice_label_from_row($candidate);
@@ -121,15 +118,16 @@ $hasLocalRefund = $payment && (float)$payment['refunded_amount'] > 0.005;
       <strong>No money moves in this workflow.</strong> PA keeps the existing Stripe transaction and processor IDs. The invoice receives the gross client payment; Stripe fees remain separately reported as processing expense and net received.
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:18px">
       <div style="padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff"><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Payment</div><div style="font-size:20px;font-weight:700">#<?php echo (int)$payment['id']; ?> &middot; $<?php echo number_format((float)$payment['amount'], 2); ?></div></div>
       <div style="padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff"><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Currently applied to</div><div style="font-size:20px;font-weight:700"><?php echo htmlspecialchars(pa_invoice_label_from_row($payment)); ?></div></div>
+      <div style="padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff"><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Client</div><div style="font-size:18px;font-weight:700"><?php echo htmlspecialchars((string)$payment['client_name']); ?></div></div>
       <div style="padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff"><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Processor fee</div><div style="font-size:20px;font-weight:700">$<?php echo number_format($processorFee, 2); ?></div></div>
       <div style="padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff"><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Current net received</div><div style="font-size:20px;font-weight:700">$<?php echo number_format($netReceived, 2); ?></div></div>
     </div>
 
     <?php if (!$targets): ?>
-      <div style="padding:12px;border-radius:8px;background:#fffbeb;color:#92400e;border:1px solid #fde68a">No other finalized direct invoices are available for this client.</div>
+      <div style="padding:12px;border-radius:8px;background:#fffbeb;color:#92400e;border:1px solid #fde68a">No other eligible invoice is available for <?php echo htmlspecialchars((string)$payment['client_name']); ?>. Corrections cannot cross clients or organizations.</div>
     <?php else: ?>
       <form method="post" action="/?page=payments/payment-correct" style="display:grid;gap:16px;padding:18px;border:1px solid #e5e7eb;border-radius:10px;background:#fff" onsubmit="return confirm('Correct this payment allocation? No Stripe refund or new charge will be created.');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -148,7 +146,7 @@ $hasLocalRefund = $payment && (float)$payment['refunded_amount'] > 0.005;
             <option value="">Select the correct invoice</option>
             <?php foreach ($targets as $target): ?>
               <option value="<?php echo (int)$target['id']; ?>">
-                <?php echo htmlspecialchars(pa_invoice_label_from_row($target)); ?> &middot; <?php echo htmlspecialchars(ucfirst((string)$target['status'])); ?> &middot; $<?php echo number_format((float)$target['total'], 2); ?> total &middot; $<?php echo number_format((float)$target['balance_due'], 2); ?> due
+                <?php echo htmlspecialchars(pa_invoice_label_from_row($target)); ?> &middot; <?php echo htmlspecialchars(ucfirst((string)$target['status'])); ?> &middot; $<?php echo number_format((float)$target['total'], 2); ?> total &middot; $<?php echo number_format((float)$target['balance_due'], 2); ?> due<?php echo empty($target['finalized_at']) ? ' &middot; Legacy record' : ''; ?>
               </option>
             <?php endforeach; ?>
           </select>
@@ -157,7 +155,7 @@ $hasLocalRefund = $payment && (float)$payment['refunded_amount'] > 0.005;
         <div>
           <div style="font-weight:600;margin-bottom:6px">Duplicate manual payments to reverse</div>
           <div id="correctionDuplicatePayments" style="display:grid;gap:8px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb"></div>
-          <div style="font-size:13px;color:var(--muted);margin-top:5px">Select every duplicate cash/manual entry on both the accidental source invoice and the correct target invoice. They remain in the audit trail as reversed and are hidden from the normal payment list.</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:5px">Select every duplicate cash/manual entry on both invoices, including entries that were mistakenly recorded as refunded. They remain in the audit trail as reversed and are hidden from the normal payment list.</div>
         </div>
 
         <label>
@@ -209,7 +207,10 @@ $hasLocalRefund = $payment && (float)$payment['refunded_amount'] > 0.005;
       checkbox.style.marginTop = '3px';
       var text = document.createElement('span');
       var location = Number(item.invoice_id) === sourceInvoiceId ? 'Source' : 'Target';
-      text.textContent = location + ' ' + item.invoice_label + ' - Payment #' + item.id + ' - $' + Number(item.amount).toFixed(2) + ' - ' + String(item.payment_method).replaceAll('_', ' ') + ' - ' + item.payment_date;
+      var refundNote = Number(item.refunded_amount || 0) > 0
+        ? ' - $' + Number(item.refunded_amount).toFixed(2) + ' locally recorded as refunded'
+        : '';
+      text.textContent = location + ' ' + item.invoice_label + ' - Payment #' + item.id + ' - $' + Number(item.amount).toFixed(2) + refundNote + ' - ' + String(item.payment_method).replaceAll('_', ' ') + ' - ' + item.payment_date;
       label.appendChild(checkbox);
       label.appendChild(text);
       container.appendChild(label);

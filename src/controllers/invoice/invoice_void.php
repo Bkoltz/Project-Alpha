@@ -15,6 +15,18 @@ require_record_ownership($pdo, 'invoices', $id);
 
 $reason = trim((string)($_POST['reason'] ?? ''));
 $userId = (int)($_SESSION['user']['id'] ?? 0) ?: null;
+$redirectTo = trim((string)($_POST['redirect_to'] ?? ''));
+$redirectBase = '/?page=invoice/invoice-details&id=' . $id;
+if ($redirectTo !== ''
+    && str_starts_with($redirectTo, '/')
+    && !str_starts_with($redirectTo, '//')
+    && !str_contains($redirectTo, "\r")
+    && !str_contains($redirectTo, "\n")) {
+    $redirectBase = $redirectTo;
+}
+$appendResult = static function (string $url, string $key, string $value): string {
+    return $url . (str_contains($url, '?') ? '&' : '?') . rawurlencode($key) . '=' . rawurlencode($value);
+};
 
 try {
     $result = invoice_void($pdo, $id, $appConfig, $reason, $userId);
@@ -23,8 +35,8 @@ try {
         'previous_status' => $result['previous_status'],
         'user_id' => $userId,
     ]);
-    header('Location: /?page=invoice/invoice-details&id=' . $id . '&voided=1');
+    header('Location: ' . $appendResult($redirectBase, 'voided', '1'));
 } catch (Throwable $e) {
-    header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode($e->getMessage()));
+    header('Location: ' . $appendResult($redirectBase, 'error', $e->getMessage()));
 }
 exit;

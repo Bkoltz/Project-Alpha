@@ -117,9 +117,12 @@ function payment_reallocate_to_invoice(
 
     try {
         $paymentStmt = $pdo->prepare('
-            SELECT p.*, i.status AS source_invoice_status, i.collection_mode AS source_collection_mode
+            SELECT p.*, i.status AS source_invoice_status, i.collection_mode AS source_collection_mode,
+                   i.client_id AS source_invoice_client_id,
+                   c.organization_id AS source_client_organization_id
             FROM payments p
             JOIN invoices i ON i.id = p.invoice_id
+            JOIN clients c ON c.id = i.client_id
             WHERE p.id = ?
             FOR UPDATE
         ');
@@ -130,13 +133,18 @@ function payment_reallocate_to_invoice(
         }
 
         $sourceInvoiceId = (int)$payment['invoice_id'];
+        $sourceClientId = (int)$payment['source_invoice_client_id'];
+        $sourceOrganizationId = $payment['source_client_organization_id'] !== null
+            ? (int)$payment['source_client_organization_id']
+            : null;
         if ($sourceInvoiceId === $targetInvoiceId) {
             throw new RuntimeException('The payment is already assigned to that invoice.');
         }
         if (strtolower((string)$payment['status']) !== 'succeeded') {
             throw new RuntimeException('Only a successful payment can be reallocated.');
         }
-        if (!empty($payment['project_invoice_payment_id']) || (string)$payment['source_collection_mode'] !== 'direct') {
+        $sourceCollectionMode = trim((string)($payment['source_collection_mode'] ?? '')) ?: 'direct';
+        if (!empty($payment['project_invoice_payment_id']) || $sourceCollectionMode !== 'direct') {
             throw new RuntimeException('Project invoice payments must be corrected from the project invoice workflow.');
         }
         if ((float)$payment['disputed_amount'] > 0.005) {
@@ -180,9 +188,12 @@ function payment_reallocate_to_invoice(
         }
 
         $targetStmt = $pdo->prepare('
-            SELECT id, client_id, contract_id, organization_id, status, total, collection_mode
-            FROM invoices
-            WHERE id = ?
+            SELECT i.id, i.client_id, i.contract_id, i.organization_id, i.status, i.total, i.collection_mode,
+                   COALESCE(i.organization_id, c.organization_id) AS effective_organization_id,
+                   c.organization_id AS target_client_organization_id
+            FROM invoices i
+            JOIN clients c ON c.id = i.client_id
+            WHERE i.id = ?
             FOR UPDATE
         ');
         $targetStmt->execute([$targetInvoiceId]);
@@ -193,19 +204,28 @@ function payment_reallocate_to_invoice(
         if (in_array(strtolower((string)$target['status']), ['draft', 'void', 'cancelled'], true)) {
             throw new RuntimeException('The target invoice must be finalized and active.');
         }
-        if ((string)$target['collection_mode'] !== 'direct') {
+        $targetCollectionMode = trim((string)($target['collection_mode'] ?? '')) ?: 'direct';
+        if ($targetCollectionMode !== 'direct') {
             throw new RuntimeException('Select a directly collected invoice, not a project invoice item.');
         }
-        if ((int)$target['client_id'] !== (int)$payment['client_id']) {
+        if ((int)$target['client_id'] !== $sourceClientId) {
             throw new RuntimeException('Payments can only be moved between invoices for the same client.');
         }
-        if ((int)($target['organization_id'] ?? 0) !== (int)($payment['organization_id'] ?? 0)) {
+        if (($target['target_client_organization_id'] !== null ? (int)$target['target_client_organization_id'] : null) !== $sourceOrganizationId) {
             throw new RuntimeException('Payments can only be moved within the same organization.');
         }
 
         $replacements = [];
         $targetReplacementApplied = 0.0;
-        $replacementStmt = $pdo->prepare('SELECT * FROM payments WHERE id = ? FOR UPDATE');
+        $replacementStmt = $pdo->prepare('
+            SELECT p.*, i.client_id AS replacement_invoice_client_id,
+                   c.organization_id AS replacement_client_organization_id
+            FROM payments p
+            JOIN invoices i ON i.id = p.invoice_id
+            JOIN clients c ON c.id = i.client_id
+            WHERE p.id = ?
+            FOR UPDATE
+        ');
         foreach ($replacementPaymentIds as $replacementPaymentId) {
             if ($replacementPaymentId === $paymentId) {
                 throw new RuntimeException('The moved payment cannot also be a reversed payment.');
@@ -216,8 +236,11 @@ function payment_reallocate_to_invoice(
             if (!$replacement || !in_array($replacementInvoiceId, [$sourceInvoiceId, $targetInvoiceId], true)) {
                 throw new RuntimeException('Each duplicate manual payment must belong to the source or target invoice.');
             }
-            if ((int)$replacement['client_id'] !== (int)$payment['client_id']
-                || (int)($replacement['organization_id'] ?? 0) !== (int)($payment['organization_id'] ?? 0)) {
+            $replacementOrganizationId = $replacement['replacement_client_organization_id'] !== null
+                ? (int)$replacement['replacement_client_organization_id']
+                : null;
+            if ((int)$replacement['replacement_invoice_client_id'] !== $sourceClientId
+                || $replacementOrganizationId !== $sourceOrganizationId) {
                 throw new RuntimeException('Each duplicate manual payment must belong to the same client and organization.');
             }
             if (strtolower((string)$replacement['status']) !== 'succeeded') {
@@ -226,11 +249,19 @@ function payment_reallocate_to_invoice(
             if (payment_is_processor_backed($replacement) || !empty($replacement['project_invoice_payment_id'])) {
                 throw new RuntimeException('Only manual cash, check, card, bank transfer, or other entries can be reversed as duplicates.');
             }
-            if ((float)$replacement['refunded_amount'] > 0.005 || (float)$replacement['disputed_amount'] > 0.005) {
-                throw new RuntimeException('A refunded or disputed manual entry cannot be reversed as a duplicate.');
+            if ((float)$replacement['disputed_amount'] > 0.005) {
+                throw new RuntimeException('A disputed manual entry cannot be reversed as a duplicate.');
             }
 
-            $applied = max(0.0, (float)$replacement['amount']);
+            // A mistaken manual refund may have already reduced this entry's
+            // applied amount to zero. It can still be reversed for audit
+            // cleanup, but only its current net application frees target room.
+            $applied = max(
+                0.0,
+                (float)$replacement['amount']
+                    - (float)$replacement['refunded_amount']
+                    - (float)$replacement['disputed_amount']
+            );
             if ($replacementInvoiceId === $targetInvoiceId) {
                 $targetReplacementApplied += $applied;
             }
@@ -263,7 +294,7 @@ function payment_reallocate_to_invoice(
             $targetInvoiceId,
             !empty($target['contract_id']) ? (int)$target['contract_id'] : null,
             (int)$target['client_id'],
-            !empty($target['organization_id']) ? (int)$target['organization_id'] : null,
+            $target['effective_organization_id'] !== null ? (int)$target['effective_organization_id'] : null,
             $clearedLocalRefund > 0.005 ? 0 : (float)$payment['refunded_amount'],
             $paymentId,
         ]);
