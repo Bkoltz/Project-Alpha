@@ -42,7 +42,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.invoices_generated, ltc.signed_pdf_path, c.name client, c.id AS client_id, (SELECT i.id FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_id, (SELECT i.sent_at FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_sent_at FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
+$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.invoices_generated, ltc.signed_pdf_path, c.name client, c.id AS client_id, (SELECT i.id FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_id, (SELECT i.sent_at FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_sent_at, (SELECT COUNT(*) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status<>\"ended\") AS recurring_service_count, (SELECT COALESCE(SUM(rs.amount),0) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status IN (\"active\",\"paused\") AND rs.approval_status=\"approved\" AND rs.next_invoice_date=ltc.next_invoice_date) AS next_service_amount FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY ltc.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -157,10 +157,14 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   
   $billingText = $r['billing_interval_count'] . ' ' . ucfirst($r['billing_interval_unit']);
   if ($r['billing_interval_count'] > 1) $billingText .= 's';
+  if ((int)($r['recurring_service_count'] ?? 0) > 1) {
+    $billingText = (int)$r['recurring_service_count'] . ' service schedules';
+  }
   
   $amountText = '';
   if ($r['pricing_type'] === 'per_invoice') {
-    $amountText = '$' . number_format((float)$r['price_per_invoice'], 2) . '/inv';
+    $nextAmount = (float)($r['next_service_amount'] ?? 0);
+    $amountText = '$' . number_format($nextAmount > 0 ? $nextAmount : (float)$r['price_per_invoice'], 2) . ' next';
   } else {
     $amountText = '$' . number_format((float)$r['total'], 2) . ' total';
   }
@@ -179,6 +183,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px"><?php echo $r['next_invoice_date'] ? date('M j, Y', strtotime($r['next_invoice_date'])) : ($r['status'] === 'active' ? 'Manual start' : '—'); ?></td>
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
+              <a href="/?page=invoice/recurring-invoices-list&status=all&contract_id=<?php echo (int)$r['id']; ?>#invoice-history" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;">Invoices</a>
               <?php if (in_array($r['status'], ['pending', 'active', 'paused'], true)): ?>
                 <a href="/?page=contract/contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1d4ed8;text-decoration:none;font-size:small">Edit Billing</a>
               <?php endif; ?>

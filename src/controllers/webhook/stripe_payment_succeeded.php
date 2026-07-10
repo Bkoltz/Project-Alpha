@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/stripe_financial_events.php';
 require_once __DIR__ . '/../../utils/stripe_payment_accounting.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 
 function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
     $metadata = $paymentIntent['metadata'] ?? [];
@@ -154,16 +155,10 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         $pdo->prepare('UPDATE invoices SET status=?,amount_paid=?,balance_due=GREATEST(total-?,0),stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE id=?')
             ->execute([$status, $paid, $paid, $invoiceId]);
         
-        // If paid, revoke public links and complete contract
+        // If paid, revoke public links and complete only a one-time contract.
         if ($status === 'paid') {
             pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
-            
-            $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
-            $co->execute([$invoiceId]);
-            $contractId = (int)$co->fetchColumn();
-            if ($contractId > 0) {
-                $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')->execute(['completed', $contractId]);
-            }
+            invoice_complete_linked_contract_if_eligible($pdo, $invoiceId);
         }
         
         $pdo->commit();

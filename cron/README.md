@@ -2,7 +2,7 @@
 
 The cron image runs Project Alpha's scheduled PHP jobs independently from Apache. The current schedule is installed from `cron/crontab` and uses the PA system timezone loaded from `app_config.timezone` when the cron container starts.
 
-On container startup, the entrypoint also runs `stripe_reconciliation.php --startup` once before starting cron. This catches recent Stripe payments after downtime, while the normal six-hour schedule continues to reconcile missed webhooks.
+On container startup, the entrypoint runs a scheduled backup catch-up check and `stripe_reconciliation.php --startup` before starting cron. The backup check creates today's missing backup when the configured backup time has already passed. Stripe reconciliation catches recent payments after downtime, while the normal six-hour schedule continues to reconcile missed webhooks.
 
 ## Installed Schedule
 
@@ -56,6 +56,8 @@ The container schedule always starts with the service. Individual scripts also h
 - invoice email-on-generation toggle
 - Stripe and SMTP configuration
 
+Database backups are infrastructure protection and do not depend on the automatic-invoice `cron_enabled` setting.
+
 ## Troubleshooting
 
 1. Confirm the cron service is running and connected to MySQL.
@@ -64,5 +66,6 @@ The container schedule always starts with the service. Individual scripts also h
 4. Run the affected PHP script manually in the cron container.
 5. Confirm the configuration and encryption-key volumes are mounted.
 6. Confirm the deployed cron tag matches the intended branch.
+7. Confirm `/etc/cron.d/project-alpha` includes `/usr/local/bin` in `PATH`; otherwise the official PHP image's executable is not available to cron jobs.
 
 Do not paste production logs into a public issue without removing credentials and customer information.

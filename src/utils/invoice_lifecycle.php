@@ -194,6 +194,38 @@ function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePa
     ];
 }
 
+/**
+ * Complete the linked contract only when the paid invoice belongs to a
+ * one-time contract. Long-term and on-demand contracts represent an ongoing
+ * service relationship; paying one invoice must never end that relationship.
+ */
+function invoice_complete_linked_contract_if_eligible(PDO $pdo, int $invoiceId): bool
+{
+    $stmt = $pdo->prepare('
+        SELECT c.id, c.contract_type, c.status
+        FROM invoices i
+        JOIN contracts c ON c.id = i.contract_id
+        WHERE i.id = ?
+        LIMIT 1
+    ');
+    $stmt->execute([$invoiceId]);
+    $contract = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$contract || strtolower((string)$contract['contract_type']) !== 'regular') {
+        return false;
+    }
+
+    $update = $pdo->prepare('
+        UPDATE contracts
+        SET status = "completed", completed_at = COALESCE(completed_at, NOW())
+        WHERE id = ?
+          AND contract_type = "regular"
+          AND status NOT IN ("completed", "cancelled", "denied", "void")
+    ');
+    $update->execute([(int)$contract['id']]);
+    return $update->rowCount() === 1;
+}
+
 function invoice_record_locked_payment(
     PDO $pdo,
     int $invoiceId,
@@ -275,8 +307,7 @@ function invoice_record_locked_payment(
 
         $totals = invoice_refresh_payment_totals($pdo, $invoiceId);
         if ($completeContractWhenPaid && $totals['status'] === 'paid' && !empty($invoice['contract_id'])) {
-            $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')
-                ->execute(['completed', (int)$invoice['contract_id']]);
+            invoice_complete_linked_contract_if_eligible($pdo, $invoiceId);
         }
 
         if ($ownsTransaction) {
@@ -429,7 +460,13 @@ function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, stri
         $body .= $contentLinksHtml;
     }
 
-    [$ok, $error] = EmailService::sendEmail($to, $subject, $body);
+    $emailSender = $appConfig['_email_sender'] ?? null;
+    if (is_callable($emailSender)) {
+        $delivery = $emailSender($to, $subject, $body, ['invoice_id' => $invoiceId, 'notification_type' => $notificationType]);
+        [$ok, $error] = is_array($delivery) ? $delivery : [(bool)$delivery, ''];
+    } else {
+        [$ok, $error] = EmailService::sendEmail($to, $subject, $body);
+    }
     if (!$ok) {
         $pdo->prepare('DELETE FROM invoice_notifications WHERE invoice_id=? AND notification_type=? AND sent_at IS NULL')
             ->execute([$invoiceId, $notificationType]);

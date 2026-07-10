@@ -295,6 +295,16 @@ final class ProjectWorkflowUiTest extends TestCase
         $ltDetails = file_get_contents($this->root . '/src/views/pages/contract/long-term-contract-details.php');
         $ltList = file_get_contents($this->root . '/src/views/pages/contract/long-term-contracts-list.php');
         $recurringList = file_get_contents($this->root . '/src/views/pages/invoice/recurring-invoices-list.php');
+        $recurringBilling = file_get_contents($this->root . '/src/utils/recurring_billing.php');
+        $invoiceLifecycle = file_get_contents($this->root . '/src/utils/invoice_lifecycle.php');
+        $stripePayment = file_get_contents($this->root . '/src/controllers/webhook/stripe_payment_succeeded.php');
+        $stripeCheckout = file_get_contents($this->root . '/src/controllers/webhook/stripe_checkout_completed.php');
+        $stripeReconciliation = file_get_contents($this->root . '/src/utils/stripe_reconciliation_import.php');
+        $recurringServices = file_get_contents($this->root . '/src/utils/recurring_services.php');
+        $recurringServiceMigration = file_get_contents($this->root . '/database/migrations/0029_long_term_recurring_services.sql');
+        $recurringServiceSave = file_get_contents($this->root . '/src/controllers/contract/long_term_recurring_service_save.php');
+        $router = file_get_contents($this->root . '/public/index.php');
+        $recurringCron = file_get_contents($this->root . '/src/cron/generate_recurring_invoices.php');
 
         self::assertStringContainsString("billing_start_mode ENUM('on_upload','manual')", (string)$baseline);
         self::assertStringContainsString('ADD COLUMN billing_start_mode', (string)$migration);
@@ -322,6 +332,24 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('invoices_generated', (string)$ltList);
         self::assertStringContainsString('latest_invoice_id', (string)$ltList);
         self::assertStringContainsString('Edit billing', (string)$recurringList);
+        self::assertStringContainsString('Recurring Invoice History', (string)$recurringList);
+        self::assertStringContainsString('i.invoice_type="long_term"', (string)$recurringList);
+        self::assertStringContainsString('invoice_status', (string)$recurringList);
+        self::assertStringContainsString('balance_due, status, due_date', (string)$recurringBilling);
+        self::assertStringContainsString('invoice_complete_linked_contract_if_eligible', (string)$invoiceLifecycle);
+        self::assertStringContainsString("contract_type']) !== 'regular'", (string)$invoiceLifecycle);
+        foreach ([$stripePayment, $stripeCheckout, $stripeReconciliation] as $paymentPath) {
+            self::assertStringContainsString('invoice_complete_linked_contract_if_eligible($pdo, $invoiceId)', (string)$paymentPath);
+            self::assertStringNotContainsString("execute(['completed', \$contractId])", (string)$paymentPath);
+        }
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS contract_recurring_services', (string)$recurringServiceMigration);
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS contract_amendments', (string)$recurringServiceMigration);
+        self::assertStringContainsString('pa_recurring_services_due', (string)$recurringServices);
+        self::assertStringContainsString('generate_recurring_proration_invoice', (string)$recurringServiceSave);
+        self::assertStringContainsString('signed_addendum', (string)$recurringServiceSave);
+        self::assertStringContainsString('Recurring Services &amp; Amendments', (string)$ltDetails);
+        self::assertStringContainsString('long-term-recurring-service-save', (string)$router);
+        self::assertStringContainsString('recurring_invoice_send_on_generate_if_enabled($pdo, $invoiceId, $appConfig)', (string)$recurringCron);
     }
 
     public function testInvoiceAndContractNumbersArePerDocumentType(): void
@@ -461,6 +489,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('ensure_activity_log_table($pdo)', (string)$notifications);
         self::assertStringContainsString('PHP_VERSION_ID < 80500', (string)$dropbox);
         self::assertStringContainsString('validate_and_store_upload', (string)$publicSign);
+        self::assertStringContainsString("'image/jpeg' => ['jpg', 'jpeg']", (string)$publicSign);
         self::assertStringNotContainsString('finfo_close', (string)$publicSign);
     }
 
@@ -475,7 +504,7 @@ final class ProjectWorkflowUiTest extends TestCase
         $securityHeaders = file_get_contents($this->root . '/src/utils/security_headers.php');
 
         self::assertStringContainsString('invoice_ensure_payments_schema($pdo)', (string)$paymentController);
-        self::assertStringContainsString("'organization_id' => $organization_id", (string)$paymentController);
+        self::assertStringContainsString("'organization_id' => \$organization_id", (string)$paymentController);
         self::assertStringContainsString('function invoice_ensure_payments_schema', (string)$invoiceLifecycle);
         self::assertStringContainsString('ALTER TABLE payments ADD COLUMN {$column}', (string)$invoiceLifecycle);
         self::assertStringContainsString('$taxAmount = null;', (string)$expenseHandler);

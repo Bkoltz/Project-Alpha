@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/webhook_logger.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 
 // Get raw POST body for signature verification
 $endpointName = 'stripe-webhook-legacy';
@@ -264,12 +265,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
             pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
             
             // Mark linked contract as completed if exists
-            $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
-            $co->execute([$invoiceId]);
-            $contractId = (int)$co->fetchColumn();
-            if ($contractId > 0) {
-                $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')->execute(['completed', $contractId]);
-            }
+            invoice_complete_linked_contract_if_eligible($pdo, $invoiceId);
         }
         
         $pdo->commit();
@@ -352,16 +348,11 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
             $pdo->prepare('UPDATE invoices SET status = ? WHERE id = ?')->execute([$status, $invoiceId]);
         }
         
-        // If paid, revoke public links and complete contract
+        // If paid, revoke public links and complete only a one-time contract.
         if ($status === 'paid') {
             pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'paid');
             
-            $co = $pdo->prepare('SELECT contract_id FROM invoices WHERE id = ?');
-            $co->execute([$invoiceId]);
-            $contractId = (int)$co->fetchColumn();
-            if ($contractId > 0) {
-                $pdo->prepare('UPDATE contracts SET status = ? WHERE id = ?')->execute(['completed', $contractId]);
-            }
+            invoice_complete_linked_contract_if_eligible($pdo, $invoiceId);
         }
         
         $pdo->commit();

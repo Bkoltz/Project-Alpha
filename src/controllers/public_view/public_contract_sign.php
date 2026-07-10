@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/upload_validator.php';
 require_once __DIR__ . '/../../utils/contract_billing_start.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/recurring_services.php';
 
 // Verify CSRF
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
@@ -80,7 +81,7 @@ try {
     }
     
     // Build allowed MIME → extension map for signed contracts.
-    $allowedMap = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png',
+    $allowedMap = ['application/pdf' => 'pdf', 'image/jpeg' => ['jpg', 'jpeg'], 'image/png' => 'png',
                    'image/gif' => 'gif', 'image/webp' => 'webp'];
 
     // Centralized validation, malware scan, and secure storage.
@@ -138,6 +139,10 @@ try {
             @unlink($storedFile);
         }
         throw new Exception('This contract has already been signed or is no longer pending');
+    }
+
+    if (($contract['contract_type'] ?? '') === 'long_term' && pa_long_term_starts_billing_on_upload($contract)) {
+        pa_recurring_services_activate($pdo, $contractId, date('Y-m-d'));
     }
 
     pa_public_link_terminalize($pdo, 'contract', $contractId, 'signed');

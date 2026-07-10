@@ -81,11 +81,6 @@ function backup_database_run(array $argv = []): int
     $backupVerified = false;
 
     try {
-        if ($scheduledRun && empty($appConfig['cron_enabled'])) {
-            cron_state_mark_success($pdo, $jobName, 'Cron disabled');
-            return 0;
-        }
-
         backup_database_ensure_directories([$backupDir, $dailyDir, $weeklyDir, $monthlyDir]);
 
         if ($scheduledRun) {

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
+require_once __DIR__ . '/../../utils/recurring_services.php';
 
 @error_log('[long_term_contracts_create] POST received', 0);
 
@@ -178,6 +179,9 @@ try{
     ]);
     
     $contract_id = (int)$pdo->lastInsertId();
+    if ($pricing_type === 'per_invoice') {
+        pa_recurring_service_ensure_base($pdo, $contract_id);
+    }
 
     // Assign doc number
     $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "long_term"')->fetchColumn();

@@ -1069,6 +1069,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/contract/long_term_contract_terminate.php';
         exit;
     }
+    if ($page === 'long-term-recurring-service-save') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_recurring_service_save.php';
+        exit;
+    }
+    if ($page === 'long-term-recurring-service-action') {
+        require_once __DIR__ . '/../src/controllers/contract/long_term_recurring_service_action.php';
+        exit;
+    }
     if ($page === 'document-reenable') {
         require_once __DIR__ . '/../src/controllers/document_reenable_handler.php';
         exit;

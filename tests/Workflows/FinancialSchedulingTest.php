@@ -44,6 +44,8 @@ final class FinancialSchedulingTest extends TestCase
         $backup = file_get_contents($this->root . '/src/cron/backup_database.php');
         $backupPage = file_get_contents($this->root . '/src/views/pages/settings/backup.php');
         $entrypoint = file_get_contents($this->root . '/cron/entrypoint.sh');
+        $crontab = file_get_contents($this->root . '/cron/crontab');
+        $trueNasCompose = file_get_contents($this->root . '/docker-compose.truenas.yml');
 
         self::assertStringContainsString('ADD COLUMN updated_at', (string)$migration);
         self::assertStringContainsString('cron_state_ensure_schema', (string)$state);
@@ -53,12 +55,17 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString('backup_database_today_artifacts', (string)$backup);
         self::assertStringContainsString('$currentHour < $backupHour', (string)$backup);
         self::assertStringContainsString('Waiting for configured backup window', (string)$backup);
-        self::assertStringContainsString('cron_state_mark_success($pdo, $jobName, \'Cron disabled\')', (string)$backup);
+        self::assertStringNotContainsString("empty(\$appConfig['cron_enabled'])", (string)$backup);
         self::assertStringContainsString('The configured backup time has passed today; cron will catch up on the next hourly check', (string)$backupPage);
         self::assertStringContainsString("the next hourly check creates today's missing backup", (string)$backupPage);
+        self::assertStringContainsString('PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', (string)$crontab);
+        self::assertStringContainsString("printf 'export %s=%q\\n'", (string)$entrypoint);
         self::assertStringContainsString("config_key='timezone'", (string)$entrypoint);
         self::assertStringContainsString('/etc/localtime', (string)$entrypoint);
+        self::assertStringContainsString('backup_database.php --scheduled', (string)$entrypoint);
         self::assertStringContainsString('stripe_reconciliation.php --startup', (string)$entrypoint);
+        self::assertStringContainsString('project-alpha:cron-latest', (string)$trueNasCompose);
+        self::assertStringNotContainsString('cron-0.5.0-rc1', (string)$trueNasCompose);
     }
 
     public function testManualBackupUsesInlineRunnerWithVisibleFailurePath(): void
