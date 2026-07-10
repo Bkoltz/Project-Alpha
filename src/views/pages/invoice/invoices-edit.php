@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoices-edit.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
@@ -27,7 +28,7 @@ foreach ($clients as $c) {
 }
 ?>
 <section>
-  <h2>Edit Invoice I-<?php echo htmlspecialchars($inv['doc_number'] ?? $inv['id']); ?><?php if (!empty($inv['project_code'])) echo ' (Job ' . htmlspecialchars($inv['project_code']) . ')'; ?></h2>
+  <h2>Edit Invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($inv)); ?><?php if (!empty($inv['project_code'])) echo ' (Job ' . htmlspecialchars($inv['project_code']) . ')'; ?></h2>
   <form id="invEditForm" method="post" action="/?page=invoices-update" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">

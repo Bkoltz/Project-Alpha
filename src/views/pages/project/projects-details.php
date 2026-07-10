@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/project/projects-details.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/acl.php';
@@ -45,7 +46,7 @@ $stmt->execute([$projectId]);
 $contracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch associated invoices
-$stmt = $pdo->prepare('SELECT id, doc_number, status, total, amount_paid, balance_due, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC');
+$stmt = $pdo->prepare('SELECT id, doc_number, invoice_type, status, total, amount_paid, balance_due, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC');
 $stmt->execute([$projectId]);
 $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -279,7 +280,7 @@ $stmt = $pdo->prepare("SELECT id, doc_number, status, total, created_at FROM con
 $stmt->execute($docScopeParams);
 $availableContracts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$stmt = $pdo->prepare("SELECT id, doc_number, status, total, created_at FROM invoices WHERE {$docScopeSql} AND project_id IS NULL ORDER BY created_at DESC LIMIT 50");
+$stmt = $pdo->prepare("SELECT id, doc_number, invoice_type, status, total, created_at FROM invoices WHERE {$docScopeSql} AND project_id IS NULL ORDER BY created_at DESC LIMIT 50");
 $stmt->execute($docScopeParams);
 $availableInvoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -318,7 +319,7 @@ $renderDocumentAttachForm = static function (string $type, string $label, array 
                     <option value="">Select <?php echo htmlspecialchars(strtolower($label)); ?></option>
                     <?php foreach ($documents as $document): ?>
                         <option value="<?php echo (int)$document['id']; ?>">
-                            #<?php echo htmlspecialchars((string)($document['doc_number'] ?? $document['id'])); ?>
+                            <?php echo htmlspecialchars($type === 'invoice' ? pa_invoice_label_from_row($document) : '#' . (string)($document['doc_number'] ?? $document['id'])); ?>
                             - <?php echo htmlspecialchars(ucfirst((string)$document['status'])); ?>
                             - $<?php echo number_format((float)$document['total'], 2); ?>
                         </option>
@@ -710,7 +711,7 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                         <?php foreach ($invoices as $invoice): ?>
                         <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb">
                             <div>
-                                <div class="font-600">Invoice #<?php echo e($invoice['doc_number'] ?? $invoice['id']); ?></div>
+                                <div class="font-600">Invoice <?php echo e(pa_invoice_label_from_row($invoice)); ?></div>
                                 <div style="font-size:13px;color:var(--muted)">
                                     <?php echo e(ucfirst($invoice['status'])); ?> · 
                                     <?php echo date('M j, Y', strtotime($invoice['created_at'])); ?>

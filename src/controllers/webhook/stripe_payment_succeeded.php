@@ -34,7 +34,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
             // Also check description for invoice reference
             if (!$invoiceId) {
                 $description = $charge['description'] ?? '';
-                if (preg_match('/Invoice\s+I-(\d+)/i', $description, $matches)) {
+                if (preg_match('/Invoice\s+(?:I|LTI|ODI)-(\d+)/i', $description, $matches)) {
                     $invoiceId = $matches[1];
                 }
             }

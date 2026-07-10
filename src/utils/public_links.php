@@ -91,7 +91,13 @@ function pa_public_link_terminal_reason(PDO $pdo, string $type, int $id): ?strin
     return null;
 }
 
-function pa_public_link_terminalize(PDO $pdo, string $type, int $id, ?string $reason = null): ?string
+function pa_public_link_terminalize(
+    PDO $pdo,
+    string $type,
+    int $id,
+    ?string $reason = null,
+    bool $refreshPreviouslyTerminalLinks = false
+): ?string
 {
     if (!in_array($type, ['quote', 'contract', 'invoice', 'project_invoice'], true) || $id <= 0) {
         return null;
@@ -107,6 +113,7 @@ function pa_public_link_terminalize(PDO $pdo, string $type, int $id, ?string $re
     }
     $redirect = pa_public_link_redirect_path($type, $reason);
     try {
+        $revokedClause = $refreshPreviouslyTerminalLinks ? '' : ' AND revoked = 0';
         $stmt = $pdo->prepare(
             'UPDATE public_links
              SET revoked = 1,
@@ -114,8 +121,7 @@ function pa_public_link_terminalize(PDO $pdo, string $type, int $id, ?string $re
                  expires_at = DATE_ADD(NOW(), INTERVAL ' . PA_PUBLIC_LINK_TERMINAL_STATUS_DAYS . ' DAY),
                  expire_when_paid = 0
              WHERE document_type = ?
-               AND document_id = ?
-               AND revoked = 0'
+               AND document_id = ?' . $revokedClause
         );
         $stmt->execute([$redirect, $type, $id]);
     } catch (Throwable $e) {

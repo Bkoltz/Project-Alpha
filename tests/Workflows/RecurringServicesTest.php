@@ -114,7 +114,7 @@ final class RecurringServicesTest extends TestCase
         self::assertCount(1, $deliveries);
         self::assertSame('recurring@example.invalid', $deliveries[0]['to']);
         self::assertSame((int)$invoiceId, (int)$deliveries[0]['context']['invoice_id']);
-        self::assertStringContainsString('Invoice I-', $deliveries[0]['subject']);
+        self::assertStringContainsString('Invoice LTI-', $deliveries[0]['subject']);
 
         $notificationStmt = $this->pdo->prepare('SELECT id,sent_at FROM invoice_notifications WHERE invoice_id=? AND notification_type="on_generate"');
         $notificationStmt->execute([$invoiceId]);

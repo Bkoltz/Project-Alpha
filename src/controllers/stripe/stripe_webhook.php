@@ -162,10 +162,10 @@ function handlePaymentFailed($pdo, $appConfig, $paymentIntent) {
             // Get client/invoice details
             $details = '';
             if ($invoiceId) {
-                $dStmt = $pdo->prepare('SELECT i.doc_number, c.name FROM invoices i LEFT JOIN clients c ON c.id = i.client_id WHERE i.id = ?');
+                $dStmt = $pdo->prepare('SELECT i.id,i.doc_number,i.invoice_type,c.name FROM invoices i LEFT JOIN clients c ON c.id = i.client_id WHERE i.id = ?');
                 $dStmt->execute([(int)$invoiceId]);
                 $d = $dStmt->fetch(PDO::FETCH_ASSOC);
-                if ($d) $details = 'Invoice I-' . ($d['doc_number'] ?? $invoiceId) . ' for ' . ($d['name'] ?? 'Unknown');
+                if ($d) $details = 'Invoice ' . pa_invoice_label_from_row($d) . ' for ' . ($d['name'] ?? 'Unknown');
             }
             
             $subject = 'Payment Failed' . ($details ? " — $details" : '');

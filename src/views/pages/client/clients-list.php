@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/clients-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
@@ -149,7 +150,7 @@ function client_list_email_html(?string $email): string
                   $q->execute([$selected, $pc]); $quotes = $q->fetchAll();
                   $co = $pdo->prepare('SELECT id, doc_number, status, created_at FROM contracts WHERE client_id=? AND project_code=? ORDER BY created_at DESC');
                   $co->execute([$selected, $pc]); $contracts = $co->fetchAll();
-                  $i = $pdo->prepare('SELECT id, doc_number, total, status, created_at FROM invoices WHERE client_id=? AND project_code=? ORDER BY created_at DESC');
+                  $i = $pdo->prepare('SELECT id, doc_number, invoice_type, total, status, created_at FROM invoices WHERE client_id=? AND project_code=? ORDER BY created_at DESC');
                   $i->execute([$selected, $pc]); $invoices = $i->fetchAll();
                 ?>
                 <div>
@@ -181,7 +182,7 @@ function client_list_email_html(?string $email): string
                   <?php if ($invoices): ?>
                     <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
                       <?php foreach ($invoices as $row): ?>
-                        <li><a href="/?page=invoice-print&id=<?php echo (int)$row['id']; ?>">I-<?php echo (int)($row['doc_number'] ?? $row['id']); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
+                        <li><a href="/?page=invoice-print&id=<?php echo (int)$row['id']; ?>"><?php echo htmlspecialchars(pa_invoice_label_from_row($row)); ?></a> · $<?php echo number_format((float)$row['total'],2); ?> · <?php echo htmlspecialchars($row['status']); ?></li>
                       <?php endforeach; ?>
                     </ul>
                   <?php else: ?>

@@ -43,7 +43,22 @@ The contract lifecycle and each invoice lifecycle are independent:
 
 The **Recurring Billing** page shows both the active schedules and a filterable history of every generated recurring invoice, including paid invoices.
 
+Selecting **View history** on a billing schedule filters that history to the selected long-term contract and scrolls directly to the matching invoices. An unpaid recurring invoice created by mistake can be opened from **View / Actions** and voided without pausing, completing, or advancing the underlying contract schedule.
+
+Invoice display numbers are type-specific while preserving the existing numeric sequence: regular invoices use `I-#`, long-term recurring invoices use `LTI-#`, and on-demand invoices use `ODI-#`. Existing records are not renumbered; the prefix is derived from `invoice_type` everywhere the invoice is displayed, emailed, downloaded, or sent to Stripe.
+
 ## Manual Recovery
 
 If a long-term contract is active but an invoice was not generated when expected, use the long-term contract details page to review the schedule and generate or send the needed invoice.
+
+If a temporary one-off invoice was paid before the delayed recurring invoice appeared, do not record a refund unless money is actually being returned to the client. Open **Payments**, choose **Correct allocation** on the real payment, select the recurring invoice, and select any duplicate manual cash/check entry to reverse. PA will:
+
+- keep the original Stripe transaction and processor identifiers;
+- move that payment to the selected recurring invoice;
+- mark the duplicate manual entry as reversed rather than refunded or deleted;
+- refresh the balances and paid dates on both invoices;
+- optionally retain the accidental source invoice as void; and
+- leave the long-term contract active.
+
+Processor-backed refunds must be initiated in Stripe and are synchronized into PA by Stripe webhook events. The local **Record refund** action is limited to payments whose money was returned outside a connected processor.
 

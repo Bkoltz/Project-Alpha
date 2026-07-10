@@ -3,6 +3,7 @@
 // Re-enable (un-void) voided/cancelled documents and restore related documents
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/invoice_lifecycle.php';
 
 // CSRF is already verified by the router (index.php)
 // No need to verify again here
@@ -70,27 +71,8 @@ try {
             break;
 
         case 'invoice':
-            // Re-enable invoice (change from void back to unpaid)
-            $st = $pdo->prepare('SELECT * FROM invoices WHERE id=? FOR UPDATE');
-            $st->execute([$id]);
-            $doc = $st->fetch(PDO::FETCH_ASSOC);
-            if (!$doc) throw new Exception('Invoice not found');
-            
-            // Only allow re-enabling void invoices
-            if ($doc['status'] !== 'void') {
-                throw new Exception('Only void invoices can be re-enabled');
-            }
-            
-            // Update status to unpaid and refresh document_date
-            $pdo->prepare("UPDATE invoices SET status='unpaid', document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
-                ->execute([$id]);
-            
-            // Un-revoke public links
-            try {
-                $pdo->prepare('UPDATE public_links SET revoked=0, redirect=NULL WHERE document_type="invoice" AND document_id=? AND revoked=1')
-                    ->execute([$id]);
-            } catch (Throwable $_e) { /* ignore */ }
-            
+            // Backward-compatible route; invoice pages use invoice/invoice-reenable.
+            invoice_reenable_void($pdo, $id);
             $redirectPage = 'invoice/invoice-details';
             break;
 

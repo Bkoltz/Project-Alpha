@@ -24,7 +24,9 @@ $pdo->beginTransaction();
 try {
     invoice_ensure_payments_schema($pdo);
     $stmt = $pdo->prepare('
-        SELECT id, invoice_id, amount, refunded_amount, disputed_amount, status
+        SELECT id, invoice_id, amount, refunded_amount, disputed_amount, status,
+               payment_method, processor_provider, processor_payment_id,
+               stripe_payment_intent_id, stripe_session_id
         FROM payments
         WHERE id=?
         FOR UPDATE
@@ -33,6 +35,18 @@ try {
     $payment = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$payment || strtolower((string)$payment['status']) !== 'succeeded') {
         throw new RuntimeException('Only successful payments can be refunded.');
+    }
+
+    $isProcessorBacked = strtolower((string)$payment['payment_method']) === 'stripe'
+        || trim((string)($payment['processor_provider'] ?? '')) !== ''
+        || trim((string)($payment['processor_payment_id'] ?? '')) !== ''
+        || trim((string)($payment['stripe_payment_intent_id'] ?? '')) !== ''
+        || trim((string)($payment['stripe_session_id'] ?? '')) !== '';
+    if ($isProcessorBacked) {
+        throw new RuntimeException(
+            'Processor-backed payments must be refunded in Stripe. Project Alpha will sync the refund automatically. '
+            . 'If no money should move, use Correct allocation instead.'
+        );
     }
 
     $paidAmount = (float)$payment['amount'];

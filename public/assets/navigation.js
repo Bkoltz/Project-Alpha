@@ -124,7 +124,9 @@ function buildUrlFromPageString(page) {
         return u.href;
     }
 
-    const [pagePart, rest] = page.split('&', 2);
+    const separatorIndex = page.indexOf('&');
+    const pagePart = separatorIndex >= 0 ? page.slice(0, separatorIndex) : page;
+    const rest = separatorIndex >= 0 ? page.slice(separatorIndex + 1) : '';
     u.searchParams.set('page', pagePart);
 
     if (rest) {
@@ -270,8 +272,28 @@ async function executePageScripts(scripts) {
     }
 }
 
-async function navigateToPage(page, updateHistory = true) {
+function scrollToPageHash(targetHash) {
+    if (!targetHash || targetHash === '#') return;
+    let targetId = targetHash.slice(1);
+    try {
+        targetId = decodeURIComponent(targetId);
+    } catch (error) {
+        return;
+    }
+    requestAnimationFrame(() => {
+        const target = document.getElementById(targetId);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+}
+
+async function navigateToPage(page, updateHistory = true, targetHash = '') {
     if (page === currentPage && !page.includes('selected_client_id')) {
+        if (targetHash) {
+            const samePageUrl = new URL(window.location.href);
+            samePageUrl.hash = targetHash;
+            if (updateHistory) history.pushState({ page }, '', samePageUrl.href);
+            scrollToPageHash(targetHash);
+        }
         return; // Already on this page
     }
 
@@ -294,7 +316,9 @@ async function navigateToPage(page, updateHistory = true) {
 
         if (content === null) {
             // Fallback to full page reload using canonical builder
-            window.location.href = buildUrlFromPageString(page);
+            const fallbackUrl = new URL(buildUrlFromPageString(page));
+            fallbackUrl.hash = targetHash;
+            window.location.href = fallbackUrl.href;
             return;
         }
 
@@ -311,8 +335,9 @@ async function navigateToPage(page, updateHistory = true) {
             // Update browser history before page scripts run so initializers see the new URL.
             if (updateHistory) {
                 // Use same URL builder so history uses the canonical query string
-                const absolute = buildUrlFromPageString(page);
-                const rel = absolute.replace(window.location.origin, '');
+                const historyUrl = new URL(buildUrlFromPageString(page));
+                historyUrl.hash = targetHash;
+                const rel = historyUrl.href.replace(window.location.origin, '');
                 history.pushState({ page }, '', rel);
             }
 
@@ -328,12 +353,15 @@ async function navigateToPage(page, updateHistory = true) {
 
             // Keep the legacy event for older scripts while new page scripts use ProjectAlpha.registerPage.
             dispatchPageLoaded(page);
+            scrollToPageHash(targetHash);
         }
 
     } catch (error) {
         console.error('Navigation error:', error);
         // Fallback to full page reload
-        window.location.href = buildUrlFromPageString(page);
+        const fallbackUrl = new URL(buildUrlFromPageString(page));
+        fallbackUrl.hash = targetHash;
+        window.location.href = fallbackUrl.href;
     }
 }
 
@@ -419,13 +447,13 @@ function handleNavigation(event) {
 
     const fullPage = additionalParams ? `${pageName}&${additionalParams}` : pageName;
 
-    navigateToPage(fullPage);
+    navigateToPage(fullPage, true, linkUrl.hash);
 }
 
 // Handle browser back/forward buttons
 function handlePopState(event) {
     const page = event.state?.page || getCurrentPage();
-    navigateToPage(page, false); // Don't update history since this is from history
+    navigateToPage(page, false, window.location.hash); // Don't update history since this is from history
 }
 
 function getDocumentFilterStorageKey(buttonOrPanel) {

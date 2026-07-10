@@ -62,8 +62,11 @@ function audit_sensitive_map(): array
             'stripe-webhook-legacy'          => ['payment.stripe_webhook', 'payment'],
             'payments-create'                => ['payment.create', 'payment'],
             'payments/payment-refund'        => ['payment.refund', 'payment'],
+            'payments/payment-correct'       => ['payment.allocation_corrected', 'payment'],
             'invoice/invoices-mark-paid'     => ['invoice.mark_paid', 'invoice'],
             'invoices-mark-paid'             => ['invoice.mark_paid', 'invoice'],
+            'invoice/invoice-void'            => ['invoice.void', 'invoice'],
+            'invoice/invoice-reenable'        => ['invoice.reenable', 'invoice'],
 
             // Security state
             'two-factor-setup'               => ['auth.2fa_setup', 'user'],

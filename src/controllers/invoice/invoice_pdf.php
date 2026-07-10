@@ -43,7 +43,7 @@ if (!defined('PUBLIC_VIEW')) {
 if ($id <= 0) { http_response_code(400); echo 'Invalid id'; exit; }
 
 // Fetch document_date from the database
-$stmt = $pdo->prepare('SELECT document_date FROM invoices WHERE id=?');
+$stmt = $pdo->prepare('SELECT document_date,doc_number,invoice_type FROM invoices WHERE id=?');
 $stmt->execute([$id]);
 $doc = $stmt->fetch(PDO::FETCH_ASSOC);
 $documentDate = $doc && !empty($doc['document_date']) ? date('m/d/Y', strtotime($doc['document_date'])) : date('m/d/Y');
@@ -87,7 +87,7 @@ $canvas->page_text($w - 140, 22, $pageText, $font, 10, [0,0,0]);
 $h = $canvas->get_height();
 $canvas->page_text(54, $h - 30, 'Powered by Project-Alpha', $font, 10, [0,0,0]);
 
-$filename = 'invoice_I-' . ($id) . '.pdf';
+$filename = 'invoice_' . pa_invoice_label($doc['doc_number'] ?? null, $doc['invoice_type'] ?? 'regular', $id) . '.pdf';
 header('Content-Type: application/pdf');
 header('Content-Disposition: inline; filename="' . $filename . '"');
 $dompdf->stream($filename, ['Attachment' => false]);

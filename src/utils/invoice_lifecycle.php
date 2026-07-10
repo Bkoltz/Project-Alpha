@@ -4,6 +4,7 @@ require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/../services/StripeService.php';
 require_once __DIR__ . '/public_links.php';
 require_once __DIR__ . '/invoice_content_links.php';
+require_once __DIR__ . '/invoice_numbers.php';
 
 function invoice_is_collectible_status(string $status): bool
 {
@@ -274,7 +275,11 @@ function invoice_record_locked_payment(
             throw new RuntimeException('Invoice not found.');
         }
 
-        if (!$allowUnfinalized && (empty($invoice['finalized_at']) || strtolower((string)$invoice['status']) === 'draft')) {
+        $invoiceStatus = strtolower((string)$invoice['status']);
+        if (in_array($invoiceStatus, ['void', 'cancelled'], true)) {
+            throw new RuntimeException('Payments cannot be recorded against a void or cancelled invoice.');
+        }
+        if (!$allowUnfinalized && (empty($invoice['finalized_at']) || $invoiceStatus === 'draft')) {
             throw new RuntimeException('Finalize the invoice before recording payment.');
         }
         if (($invoice['collection_mode'] ?? 'direct') !== 'direct') {
@@ -386,7 +391,7 @@ function invoice_finalize(PDO $pdo, int $invoiceId, array $appConfig, string $so
 function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, string $notificationType = 'on_finalize'): bool
 {
     $stmt = $pdo->prepare(
-        'SELECT i.id,i.doc_number,i.total,i.due_date,i.status,i.finalized_at,i.collection_mode,c.email,c.name
+        'SELECT i.id,i.doc_number,i.invoice_type,i.total,i.due_date,i.status,i.finalized_at,i.collection_mode,c.email,c.name
          FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?'
     );
     $stmt->execute([$invoiceId]);
@@ -446,12 +451,12 @@ function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, stri
 
     $base = invoice_public_base_url($appConfig);
     $url = $base . '/?page=public-doc&token=' . rawurlencode($token);
-    $docNumber = $invoice['doc_number'] ?: $invoiceId;
+    $invoiceLabel = pa_invoice_label_from_row($invoice);
     $name = trim((string)($invoice['name'] ?? ''));
     $firstName = $name !== '' ? preg_split('/\s+/', $name)[0] : 'there';
-    $subject = 'Invoice I-' . $docNumber . ' is ready';
+    $subject = 'Invoice ' . $invoiceLabel . ' is ready';
     $body = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
-        . '<p>Invoice <strong>I-' . htmlspecialchars((string)$docNumber) . '</strong> is ready for <strong>$'
+        . '<p>Invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> is ready for <strong>$'
         . number_format((float)$invoice['total'], 2) . '</strong>.</p>'
         . (!empty($invoice['due_date']) ? '<p>Due date: ' . htmlspecialchars((string)$invoice['due_date']) . '</p>' : '')
         . '<p><a href="' . htmlspecialchars($url) . '">View and pay this invoice</a></p>';
@@ -521,6 +526,143 @@ function invoice_reopen_draft(PDO $pdo, int $invoiceId): void
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
+ * Void an unpaid invoice without deleting its accounting history.
+ *
+ * @return array{previous_status:string,reason:string}
+ */
+function invoice_void(PDO $pdo, int $invoiceId, array $appConfig, string $reason, ?int $userId = null): array
+{
+    $reason = trim(preg_replace('/\s+/', ' ', $reason) ?? '');
+    if ($reason === '') {
+        throw new RuntimeException('A reason is required to void an invoice.');
+    }
+    if (mb_strlen($reason) > 500) {
+        throw new RuntimeException('The void reason must be 500 characters or fewer.');
+    }
+
+    invoice_ensure_payments_schema($pdo);
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT id,status,collection_mode,stripe_session_id,stripe_checkout_expires_at FROM invoices WHERE id=? FOR UPDATE');
+        $stmt->execute([$invoiceId]);
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        if (!$invoice) {
+            throw new RuntimeException('Invoice not found.');
+        }
+
+        $previousStatus = strtolower((string)$invoice['status']);
+        if (!in_array($previousStatus, ['draft', 'sent', 'unpaid', 'overdue'], true)) {
+            if (in_array($previousStatus, ['paid', 'partial'], true)) {
+                throw new RuntimeException('Paid or partially paid invoices cannot be voided. Refund or credit the payment instead.');
+            }
+            throw new RuntimeException('This invoice status cannot be voided.');
+        }
+
+        $projectParent = $pdo->prepare('SELECT pi.id,pi.doc_number,pi.status FROM project_invoice_items pii JOIN project_invoices pi ON pi.id=pii.project_invoice_id WHERE pii.invoice_id=? LIMIT 1');
+        $projectParent->execute([$invoiceId]);
+        $parent = $projectParent->fetch(PDO::FETCH_ASSOC) ?: [];
+        if ($parent) {
+            $parentNumber = (int)($parent['doc_number'] ?? $parent['id']);
+            throw new RuntimeException('This invoice is already included in project invoice PI-' . $parentNumber . ' and cannot be voided individually.');
+        }
+
+        $payment = $pdo->prepare('SELECT COUNT(*) FROM payments WHERE invoice_id=? AND status IN ("succeeded","pending")');
+        $payment->execute([$invoiceId]);
+        if ((int)$payment->fetchColumn() > 0) {
+            throw new RuntimeException('This invoice has payment activity and cannot be voided. Refund or resolve the payment first.');
+        }
+
+        $intent = $pdo->prepare('SELECT COUNT(*) FROM payment_intents WHERE invoice_id=? AND status IN ("pending","processing","requires_action")');
+        $intent->execute([$invoiceId]);
+        if ((int)$intent->fetchColumn() > 0) {
+            throw new RuntimeException('This invoice has an active payment attempt and cannot be voided yet.');
+        }
+
+        invoice_expire_active_checkout($pdo, 'invoices', $invoiceId, $appConfig);
+
+        $pdo->prepare(
+            'UPDATE invoices
+             SET status="void", balance_due=0, voided_at=NOW(), voided_by=?, void_reason=?, void_previous_status=?
+             WHERE id=?'
+        )->execute([$userId, $reason, $previousStatus, $invoiceId]);
+
+        $pdo->prepare('UPDATE time_entries SET billed=0,invoice_item_id=NULL,invoice_id=NULL WHERE invoice_id=?')
+            ->execute([$invoiceId]);
+        // A corrected invoice may already have links terminalized as paid.
+        // Refresh those terminal redirects so the retained history is
+        // consistently identified as void without re-enabling any link.
+        pa_public_link_terminalize($pdo, 'invoice', $invoiceId, 'void', true);
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+        return ['previous_status' => $previousStatus, 'reason' => $reason];
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
+ * Restore a void invoice while leaving every old public/payment link revoked.
+ *
+ * @return array{restored_status:string,reason:string}
+ */
+function invoice_reenable_void(PDO $pdo, int $invoiceId): array
+{
+    invoice_ensure_payments_schema($pdo);
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT status,total,void_reason,void_previous_status FROM invoices WHERE id=? FOR UPDATE');
+        $stmt->execute([$invoiceId]);
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        if (!$invoice) {
+            throw new RuntimeException('Invoice not found.');
+        }
+        if (strtolower((string)$invoice['status']) !== 'void') {
+            throw new RuntimeException('Only void invoices can be re-enabled.');
+        }
+
+        $payment = $pdo->prepare('SELECT COUNT(*) FROM payments WHERE invoice_id=? AND status IN ("succeeded","pending")');
+        $payment->execute([$invoiceId]);
+        if ((int)$payment->fetchColumn() > 0) {
+            throw new RuntimeException('This void invoice has payment activity and cannot be re-enabled automatically.');
+        }
+
+        $previousStatus = strtolower((string)($invoice['void_previous_status'] ?? ''));
+        $restoredStatus = $previousStatus === 'draft' ? 'draft' : 'unpaid';
+        $balanceDue = $restoredStatus === 'draft' ? 0.0 : max(0.0, (float)$invoice['total']);
+        $reason = trim((string)($invoice['void_reason'] ?? ''));
+
+        $pdo->prepare(
+            'UPDATE invoices
+             SET status=?, amount_paid=0, balance_due=?, paid_at=NULL,
+                 voided_at=NULL, voided_by=NULL, void_reason=NULL, void_previous_status=NULL,
+                 stripe_session_id=NULL, stripe_checkout_expires_at=NULL
+             WHERE id=?'
+        )->execute([$restoredStatus, $balanceDue, $invoiceId]);
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+        return ['restored_status' => $restoredStatus, 'reason' => $reason];
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
             $pdo->rollBack();
         }
         throw $e;

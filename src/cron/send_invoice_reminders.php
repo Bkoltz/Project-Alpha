@@ -84,7 +84,7 @@ try {
     // 1) 7-day due reminders (sent once per invoice)
     if ($due7Enabled) {
         $stmt = $pdo->prepare("
-            SELECT i.id, i.doc_number, i.total, i.due_date, c.email, c.name 
+            SELECT i.id, i.doc_number, i.invoice_type, i.total, i.due_date, c.email, c.name
             FROM invoices i 
             JOIN clients c ON c.id = i.client_id 
             WHERE i.due_date BETWEEN ? AND ? AND i.status IN ('unpaid', 'partial')
@@ -118,9 +118,10 @@ try {
                 $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
 
                 // Build email
-                $subject = sprintf('Invoice I-%s due %s', $inv['doc_number'] ?? $iid, date('M j, Y', strtotime($inv['due_date'])));
+                $invoiceLabel = pa_invoice_label_from_row($inv + ['id' => $iid]);
+                $subject = sprintf('Invoice %s due %s', $invoiceLabel, date('M j, Y', strtotime($inv['due_date'])));
                 $body = '<p>Dear ' . htmlspecialchars($inv['name'] ?? 'Valued Client') . ',</p>';
-                $body .= '<p>This is a friendly reminder that invoice <strong>I-' . htmlspecialchars($inv['doc_number'] ?? $iid) . '</strong> ';
+                $body .= '<p>This is a friendly reminder that invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> ';
                 $body .= 'for <strong>$' . number_format((float)$inv['total'], 2) . '</strong> is due on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
                 $body .= '<p><a href="' . htmlspecialchars($link) . '">View and pay invoice</a></p>';
                 $body .= '<p>If you have already paid, please disregard this message. Thank you!</p>';
@@ -132,7 +133,7 @@ try {
                     $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'due_7']);
                     $remindersSent++;
-                    @error_log("$logPrefix Sent due-7 reminder for invoice I-{$inv['doc_number']} to {$to}");
+                    @error_log("$logPrefix Sent due-7 reminder for invoice {$invoiceLabel} to {$to}");
                 } else {
                     $errors++;
                     @error_log("$logPrefix Failed to send due-7 reminder for invoice {$iid}: {$err}");
@@ -148,7 +149,7 @@ try {
     if ($overdueEnabled) {
         $todayDate = date('Y-m-d');
         $stmt = $pdo->prepare("
-            SELECT i.id, i.doc_number, i.total, i.due_date, c.email, c.name 
+            SELECT i.id, i.doc_number, i.invoice_type, i.total, i.due_date, c.email, c.name
             FROM invoices i 
             JOIN clients c ON c.id = i.client_id 
             WHERE i.due_date < ? AND i.status IN ('unpaid', 'partial')
@@ -194,9 +195,10 @@ try {
                 $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
 
                 // Build email
-                $subject = sprintf('Action Required: Overdue invoice I-%s', $inv['doc_number'] ?? $iid);
+                $invoiceLabel = pa_invoice_label_from_row($inv + ['id' => $iid]);
+                $subject = sprintf('Action Required: Overdue invoice %s', $invoiceLabel);
                 $body = '<p>Dear ' . htmlspecialchars($inv['name'] ?? 'Valued Client') . ',</p>';
-                $body .= '<p>We noticed that invoice <strong>I-' . htmlspecialchars($inv['doc_number'] ?? $iid) . '</strong> ';
+                $body .= '<p>We noticed that invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> ';
                 $body .= 'for <strong>$' . number_format((float)$inv['total'], 2) . '</strong> became overdue on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
                 $body .= '<p>Please review and pay the invoice at your earliest convenience: <a href="' . htmlspecialchars($link) . '">View invoice</a></p>';
                 $body .= '<p>If payment has already been sent, thank you and please disregard this message.</p>';
@@ -208,7 +210,7 @@ try {
                     $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
                     $insn->execute([$iid, 'overdue_weekly']);
                     $remindersSent++;
-                    @error_log("$logPrefix Sent overdue-weekly reminder for invoice I-{$inv['doc_number']} to {$to}");
+                    @error_log("$logPrefix Sent overdue-weekly reminder for invoice {$invoiceLabel} to {$to}");
                 } else {
                     $errors++;
                     @error_log("$logPrefix Failed to send overdue-weekly reminder for invoice {$iid}: {$err}");

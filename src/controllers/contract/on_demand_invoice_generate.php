@@ -203,9 +203,10 @@ try {
                     $host = rtrim(($appConfig['app_host'] ?? ''), '/');
                     if ($host !== '') { $link = $host . $link; }
 
-                    $subject = sprintf('Invoice I-%s has been generated', $docNumber);
+                    $invoiceLabel = pa_invoice_label($docNumber, 'on_demand');
+                    $subject = sprintf('Invoice %s has been generated', $invoiceLabel);
                     $body = '<p>Dear ' . htmlspecialchars($client['name'] ?? '') . ',</p>';
-                    $body .= '<p>A new invoice <strong>I-' . htmlspecialchars((string)$docNumber) . '</strong> for <strong>$' . number_format($total, 2) . '</strong> has been generated';
+                    $body .= '<p>A new invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> for <strong>$' . number_format($total, 2) . '</strong> has been generated';
                     if (!empty($dueDate)) {
                         $body .= ', due on <strong>' . htmlspecialchars($dueDate) . '</strong>';
                     }
@@ -217,9 +218,9 @@ try {
                     if ($ok) {
                         $insNotif = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insNotif->execute([$invoiceId, 'on_generate']);
-                        @error_log("[on_demand_invoice_generate] Sent on-generate email for invoice I-" . $docNumber);
+                        @error_log("[on_demand_invoice_generate] Sent on-generate email for invoice " . $invoiceLabel);
                     } else {
-                        @error_log("[on_demand_invoice_generate] Failed to send on-generate email for invoice I-" . $docNumber . ": $err");
+                        @error_log("[on_demand_invoice_generate] Failed to send on-generate email for invoice " . $invoiceLabel . ": $err");
                     }
                 }
             }

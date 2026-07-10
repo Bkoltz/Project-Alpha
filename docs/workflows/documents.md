@@ -45,3 +45,9 @@ Clients can use public document links to approve or deny quotes, upload signed c
 
 Document detail pages show the current public-link state so PA users can tell whether a client link is accessible, redirected, or unavailable.
 
+## Voiding an Invoice
+
+Use **Void Invoice** on an invoice detail page when an unpaid invoice was created by mistake. A reason is required. Voiding preserves the invoice and its totals for audit history, sets its collectible balance to zero, revokes client and payment links, and releases any attached time entries so they can be billed correctly later.
+
+Paid and partially paid invoices cannot be voided; use the refund or credit process instead. Invoices already included in a project aggregate invoice also cannot be voided individually. Re-enabling a void invoice restores it to draft or unpaid, but old public links remain revoked so a new link must be created before resending.
+

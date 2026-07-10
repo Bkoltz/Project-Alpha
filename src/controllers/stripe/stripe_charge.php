@@ -77,13 +77,14 @@ try {
     }
     
     $docNumber = $invoice['doc_number'] ?? $invoiceId;
+    $invoiceLabel = pa_invoice_label_from_row($invoice + ['id' => $invoiceId]);
 
     // Calculate surcharge if applicable
     $surchargeInfo = InvoiceSurcharge::getInfo($amountDue, $appConfig);
     $surchargeAmount = $surchargeInfo['has_surcharge'] ? ($surchargeInfo['client_pays'] ?? 0) : 0;
     $chargeDescription = $surchargeInfo['has_surcharge'] 
-        ? "Invoice I-{$docNumber} - {$invoice['client_name']} (includes $" . number_format($surchargeAmount, 2) . " processing fee)"
-        : "Invoice I-{$docNumber} - {$invoice['client_name']}";
+        ? "Invoice {$invoiceLabel} - {$invoice['client_name']} (includes $" . number_format($surchargeAmount, 2) . " processing fee)"
+        : "Invoice {$invoiceLabel} - {$invoice['client_name']}";
     
     // Build URLs
     $host = $_SERVER['HTTP_HOST'] ?? '';
@@ -106,7 +107,7 @@ try {
     }
     
     $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
-    $description = "Invoice I-{$docNumber} - {$invoice['client_name']}";
+    $description = "Invoice {$invoiceLabel} - {$invoice['client_name']}";
     
     $session = $stripe->createCheckoutSessionWithSurcharge(
         $amountDue,

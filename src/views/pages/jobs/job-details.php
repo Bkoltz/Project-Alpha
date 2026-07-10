@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 ?>
 
 <section>
@@ -191,7 +192,7 @@ require_once __DIR__ . '/../../../config/db.php';
         <div style="border:1px solid #eee;border-radius:8px;padding:12px;background:#fff">
             <h4>Invoices</h4>
             <?php
-            $istmt = $pdo->prepare('SELECT id, doc_number, client_id, total, status, created_at FROM invoices WHERE project_code = ? ORDER BY created_at DESC');
+            $istmt = $pdo->prepare('SELECT id, doc_number, invoice_type, client_id, total, status, created_at FROM invoices WHERE project_code = ? ORDER BY created_at DESC');
             $istmt->execute([$project_code]);
             $invoices = $istmt->fetchAll();
             if (!$invoices):
@@ -203,7 +204,7 @@ require_once __DIR__ . '/../../../config/db.php';
                         <?php $ivId = (int)$inv['id']; ?>
                         <li style="display:block;border-bottom:1px solid #f3f4f6;padding:10px">
                             <div style="display:flex;gap:8px;align-items:center">
-                                <div class="doc-toggle" data-type="invoice" data-id="<?php echo $ivId; ?>" style="flex:1;cursor:pointer">I-<?php echo (int)($inv['doc_number'] ?? $inv['id']); ?> · $<?php echo number_format((float)($inv['total'] ?? 0), 2); ?> · <?php echo htmlspecialchars($inv['status']); ?> · <?php echo htmlspecialchars($inv['created_at']); ?></div>
+                                <div class="doc-toggle" data-type="invoice" data-id="<?php echo $ivId; ?>" style="flex:1;cursor:pointer"><?php echo htmlspecialchars(pa_invoice_label_from_row($inv)); ?> · $<?php echo number_format((float)($inv['total'] ?? 0), 2); ?> · <?php echo htmlspecialchars($inv['status']); ?> · <?php echo htmlspecialchars($inv['created_at']); ?></div>
                                 <div style="display:flex;gap:6px;align-items:center">
                                     <button type="button" class="doc-toggle" data-type="invoice" data-id="<?php echo $ivId; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">Details</button>
                                     <a href="/?page=invoice/invoices-edit&id=<?php echo $ivId; ?>" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff">View Document</a>
