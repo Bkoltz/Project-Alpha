@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/invoice_numbers.php';
 // src/utils/recurring_billing.php
 // Idempotent helper for generating a single long-term recurring invoice.
 require_once __DIR__ . '/recurring_services.php';
@@ -160,8 +161,8 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         }
 
         // Assign doc number
-        $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "long_term"')->fetchColumn();
-        $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $invoiceId]);
+        $docNumber = pa_next_invoice_doc_number($pdo, 'long_term');
+        $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNumber, $invoiceId]);
 
         // Add invoice items
         if ($contract['pricing_type'] === 'per_invoice') {
@@ -238,7 +239,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
                 ->execute([$today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
 
             $pdo->commit();
-            @error_log("$logPrefix Generated recurring-service invoice {$invoiceId} for contract LTC-{$contract['doc_number']} (\${$total})");
+            @error_log("$logPrefix Generated recurring-service invoice " . pa_invoice_label($docNumber, 'long_term') . " for contract LTC-{$contract['doc_number']} (\${$total})");
             return $invoiceId;
         }
 
@@ -268,7 +269,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
 
         $pdo->commit();
 
-        @error_log("$logPrefix Generated invoice INV-$maxDoc for contract LTC-{$contract['doc_number']} (\${$total})");
+        @error_log("$logPrefix Generated invoice " . pa_invoice_label($docNumber, 'long_term') . " for contract LTC-{$contract['doc_number']} (\${$total})");
 
         return $invoiceId;
     } catch (Throwable $e) {
@@ -343,8 +344,8 @@ function generate_recurring_proration_invoice(
             $dueDate,
         ]);
         $invoiceId = (int)$pdo->lastInsertId();
-        $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type="long_term"')->fetchColumn();
-        $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$maxDoc + 1, $invoiceId]);
+        $docNumber = pa_next_invoice_doc_number($pdo, 'long_term');
+        $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNumber, $invoiceId]);
 
         $lineDescription = trim($description) !== '' ? trim($description) : 'Prorated recurring service charge';
         $pdo->prepare('INSERT INTO invoice_items (invoice_id,item,description,quantity,unit_price,line_total) VALUES (?,?,?,?,?,?)')

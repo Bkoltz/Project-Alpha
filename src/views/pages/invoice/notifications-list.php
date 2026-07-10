@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoice/notifications-list.php
 // Admin UI for viewing sent invoice reminders
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 ?>
 
 <div class="container content-wrapper">
@@ -88,7 +89,7 @@
                         <tr>
                             <td>
                                 <a href="?page=invoice/view&id=<?php echo $n['invoice_id']; ?>">
-                                    <?php echo htmlspecialchars($n['doc_number']); ?>
+                                    <?php echo htmlspecialchars(pa_invoice_label_from_row($n)); ?>
                                 </a>
                             </td>
                             <td><?php echo htmlspecialchars($n['client_name']); ?></td>

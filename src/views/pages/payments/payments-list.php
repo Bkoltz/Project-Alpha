@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/payments-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/payment_accounting.php';
@@ -32,7 +33,9 @@ if($where){$sqlCount.=' WHERE '.implode(' AND ',$where);} $stc=$pdo->prepare($sq
 $sql = 'SELECT p.id, p.amount, p.refunded_amount, p.disputed_amount, p.status, p.payment_date, p.created_at,
                p.payment_method, p.reference_number, p.surcharge_paid, p.surcharge_refunded, p.surcharge_refund_amount,
                p.processor_provider, p.processor_gross_amount, p.processor_fee_amount, p.processor_net_amount,
-               p.processor_fee_policy, p.processor_fee_source, i.id AS invoice_id, i.doc_number,
+               p.processor_payment_id, p.stripe_payment_intent_id, p.stripe_session_id, p.project_invoice_payment_id,
+               p.reversed_at, p.reversal_reason,
+               p.processor_fee_policy, p.processor_fee_source, i.id AS invoice_id, i.doc_number, i.invoice_type, i.collection_mode,
                c.name AS client, ppt.payer_name, ppt.payer_email
         ' . $fromSql;
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY p.payment_date DESC, p.created_at DESC LIMIT $per OFFSET $offset";
@@ -107,15 +110,27 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
           $disputed = (float)$r['disputed_amount'];
           $appliedNet = max(0, $amount - $refunded - $disputed);
           $processorFee = $r['processor_fee_amount'] !== null ? (float)$r['processor_fee_amount'] : 0.0;
-          $net = payment_accounting_net_income($r);
+          $isSucceeded = strtolower((string)$r['status']) === 'succeeded';
+          $net = $isSucceeded ? payment_accounting_net_income($r) : 0.0;
           $feeSource = (string)($r['processor_fee_source'] ?? 'unknown');
-          $canRefund = strtolower((string)$r['status']) === 'succeeded' && $appliedNet > 0.005;
+          $isProcessorBacked = strtolower((string)$r['payment_method']) === 'stripe'
+            || trim((string)($r['processor_provider'] ?? '')) !== ''
+            || trim((string)($r['processor_payment_id'] ?? '')) !== ''
+            || trim((string)($r['stripe_payment_intent_id'] ?? '')) !== ''
+            || trim((string)($r['stripe_session_id'] ?? '')) !== '';
+          $canRecordRefund = $isSucceeded && !$isProcessorBacked && $appliedNet > 0.005;
+          $canCorrect = $isSucceeded
+            && !empty($r['invoice_id'])
+            && (string)($r['collection_mode'] ?? 'direct') === 'direct'
+            && empty($r['project_invoice_payment_id'])
+            && $refunded <= 0.005
+            && $disputed <= 0.005;
         ?>
           <tr style="border-top:1px solid #f3f4f6">
             <td style="padding:10px">#<?php echo (int)$r['id']; ?></td>
             <td style="padding:10px">
               <?php if (!empty($r['invoice_id'])): ?>
-                Invoice #<?php echo htmlspecialchars((string)($r['doc_number'] ?: $r['invoice_id'])); ?>
+                Invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?>
               <?php elseif (!empty($r['processor_provider'])): ?>
                 Processor income
               <?php else: ?>
@@ -132,16 +147,23 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo $r['payment_date'] ? date('m/d/Y', strtotime($r['payment_date'])) : ''; ?></td>
             <td style="padding:10px">
-              <?php if ($canRefund): ?>
-                <form method="post" action="/?page=payments/payment-refund" style="display:flex;gap:6px;align-items:center" onsubmit="return confirm('Record this refund? This changes income and invoice balance.');">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:190px">
+              <?php if ($canCorrect): ?>
+                <a href="/?page=payments/payment-correction&payment_id=<?php echo (int)$r['id']; ?>" style="padding:6px 9px;border-radius:6px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;white-space:nowrap">Correct allocation</a>
+              <?php endif; ?>
+              <?php if ($canRecordRefund): ?>
+                <form method="post" action="/?page=payments/payment-refund" style="display:flex;gap:6px;align-items:center" onsubmit="return confirm('Record this refund only after money has been returned to the client outside Project Alpha. Continue?');">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="payment_id" value="<?php echo (int)$r['id']; ?>">
                   <input type="number" name="amount" step="0.01" min="0.01" max="<?php echo htmlspecialchars(number_format($appliedNet, 2, '.', '')); ?>" placeholder="0.00" style="width:92px;padding:6px;border-radius:6px;border:1px solid #ddd">
-                  <button type="submit" style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b">Refund</button>
+                  <button type="submit" style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;white-space:nowrap">Record refund</button>
                 </form>
-              <?php else: ?>
+              <?php elseif ($isProcessorBacked && $isSucceeded): ?>
+                <span title="Refund the payment in Stripe. Project Alpha will sync the Stripe refund webhook." style="color:var(--muted);font-size:12px">Refund via Stripe</span>
+              <?php elseif (!$canCorrect): ?>
                 <span style="color:var(--muted);font-size:13px">-</span>
               <?php endif; ?>
+              </div>
             </td>
           </tr>
         <?php endforeach; ?>

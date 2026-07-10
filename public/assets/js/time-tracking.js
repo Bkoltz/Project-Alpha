@@ -284,7 +284,8 @@
             (data.invoices || []).forEach(function (invoice) {
                 const option = document.createElement('option');
                 option.value = String(invoice.id || '');
-                option.textContent = 'I-' + (invoice.doc_number || invoice.id) + (invoice.project_code ? ' / Job ' + invoice.project_code : '');
+                const invoicePrefix = invoice.invoice_type === 'long_term' ? 'LTI-' : (invoice.invoice_type === 'on_demand' ? 'ODI-' : 'I-');
+                option.textContent = invoicePrefix + (invoice.doc_number || invoice.id) + (invoice.project_code ? ' / Job ' + invoice.project_code : '');
                 option.setAttribute('data-project-code', invoice.project_code || '');
                 option.setAttribute('data-project-id', invoice.project_id || '');
                 option.setAttribute('data-contract-id', invoice.contract_id || '');

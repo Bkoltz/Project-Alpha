@@ -920,6 +920,10 @@ CREATE TABLE IF NOT EXISTS invoices (
     weather_pending TINYINT(1) NOT NULL DEFAULT 0,
     estimated_completion VARCHAR(200) NULL,
     paid_at TIMESTAMP NULL,
+    voided_at TIMESTAMP NULL,
+    voided_by INT NULL,
+    void_reason VARCHAR(500) NULL,
+    void_previous_status VARCHAR(32) NULL,
     sent_at TIMESTAMP NULL,
     finalized_at TIMESTAMP NULL,
     finalized_by INT NULL,
@@ -948,6 +952,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     INDEX idx_invoices_doc_number (doc_number),
     INDEX idx_invoices_project_code (project_code),
     INDEX idx_invoices_due_date (due_date),
+    INDEX idx_invoices_voided_at (voided_at),
     INDEX idx_invoices_auto_pay_attempt (last_auto_pay_attempt),
     CONSTRAINT fk_invoices_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
     CONSTRAINT fk_invoices_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL,
@@ -1042,7 +1047,10 @@ CREATE TABLE IF NOT EXISTS payments (
     stripe_session_id VARCHAR(255) NULL,
     stripe_payment_intent_id VARCHAR(255) NULL,
     auto_pay_attempt TINYINT(1) NOT NULL DEFAULT 0,
-    status ENUM('succeeded', 'failed', 'pending') NOT NULL DEFAULT 'succeeded',
+    status ENUM('succeeded', 'failed', 'pending', 'reversed') NOT NULL DEFAULT 'succeeded',
+    reversed_at TIMESTAMP NULL,
+    reversed_by INT NULL,
+    reversal_reason VARCHAR(500) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_payments_client (client_id),
@@ -1056,6 +1064,29 @@ CREATE TABLE IF NOT EXISTS payments (
     CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_project_payment FOREIGN KEY (project_invoice_payment_id) REFERENCES project_invoice_payments(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PAYMENT ALLOCATION CORRECTIONS
+CREATE TABLE IF NOT EXISTS payment_corrections (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    moved_payment_id INT NULL,
+    reversed_payment_id INT NULL,
+    source_invoice_id INT NULL,
+    target_invoice_id INT NULL,
+    corrected_by INT NULL,
+    source_voided TINYINT(1) NOT NULL DEFAULT 0,
+    reason VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_payment_corrections_moved (moved_payment_id),
+    INDEX idx_payment_corrections_reversed (reversed_payment_id),
+    INDEX idx_payment_corrections_source (source_invoice_id),
+    INDEX idx_payment_corrections_target (target_invoice_id),
+    INDEX idx_payment_corrections_created (created_at),
+    CONSTRAINT fk_payment_correction_moved FOREIGN KEY (moved_payment_id) REFERENCES payments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_reversed FOREIGN KEY (reversed_payment_id) REFERENCES payments(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_source FOREIGN KEY (source_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_target FOREIGN KEY (target_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_correction_user FOREIGN KEY (corrected_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- PAYMENT INTENTS

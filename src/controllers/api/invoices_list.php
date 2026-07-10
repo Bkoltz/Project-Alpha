@@ -21,7 +21,7 @@ if ($scopeWhere !== '') {
 }
 $whereSQL = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$sql = "SELECT i.id, i.doc_number, i.client_id, i.total, i.status, i.balance, i.created_at, i.updated_at FROM invoices i {$whereSQL} ORDER BY i.updated_at DESC LIMIT ?";
+$sql = "SELECT i.id, i.doc_number, i.invoice_type, i.client_id, i.total, i.status, i.balance, i.created_at, i.updated_at FROM invoices i {$whereSQL} ORDER BY i.updated_at DESC LIMIT ?";
 $params[] = $limit;
 
 $stmt = $pdo->prepare($sql);

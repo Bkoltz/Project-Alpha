@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoice/recurring-invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
@@ -243,8 +244,8 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
               </td>
               <td style="padding:10px"><?php echo htmlspecialchars($progressText); ?></td>
               <td style="padding:10px;white-space:nowrap">
-                <a href="/?page=invoice/recurring-invoices-list&status=all&contract_id=<?php echo (int)$ltc['id']; ?>#invoice-history" style="font-size:13px;color:#2563eb;text-decoration:none">
-                  View invoices (<?php echo (int)$ltc['invoice_history_count']; ?>)
+                <a href="/?page=invoice/recurring-invoices-list&status=all&contract_id=<?php echo (int)$ltc['id']; ?>&history_page=1#invoice-history" style="display:inline-block;padding:6px 9px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;font-size:13px;color:#1d4ed8;text-decoration:none;font-weight:600">
+                  View history (<?php echo (int)$ltc['invoice_history_count']; ?>)
                 </a>
               </td>
             </tr>
@@ -262,6 +263,11 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
           <?php echo number_format($historyTotal); ?> invoice<?php echo $historyTotal === 1 ? '' : 's'; ?>, including paid and completed billing periods.
           <?php if ($history_contract_id > 0): ?> Filtered to LTC-<?php echo (int)($contracts[0]['doc_number'] ?? $history_contract_id); ?>.<?php endif; ?>
         </div>
+        <?php if ($history_contract_id > 0 && !empty($contracts[0])): ?>
+          <div style="margin-top:8px;padding:8px 10px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;color:#1e3a8a;font-size:13px">
+            Showing invoices for <strong>LTC-<?php echo (int)($contracts[0]['doc_number'] ?? $contracts[0]['id']); ?></strong> — <?php echo htmlspecialchars((string)$contracts[0]['client_name']); ?>.
+          </div>
+        <?php endif; ?>
       </div>
       <form method="get" action="/" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
         <input type="hidden" name="page" value="invoice/recurring-invoices-list">
@@ -297,11 +303,12 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
             <th style="padding:10px;text-align:right">Total</th>
             <th style="padding:10px;text-align:right">Paid</th>
             <th style="padding:10px;text-align:right">Balance</th>
+            <th style="padding:10px">Actions</th>
           </tr>
         </thead>
         <tbody>
           <?php if (!$invoiceHistory): ?>
-            <tr><td colspan="9" style="padding:20px;text-align:center;color:#6b7280">No recurring invoices match these filters.</td></tr>
+            <tr><td colspan="10" style="padding:20px;text-align:center;color:#6b7280">No recurring invoices match these filters.</td></tr>
           <?php else: ?>
             <?php foreach ($invoiceHistory as $historyInvoice): ?>
               <?php
@@ -313,7 +320,7 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
                 $historyRowStyle = $historyStatus === 'paid' ? 'background:#f0fdf4;' : (in_array($historyStatus, ['unpaid', 'partial', 'overdue', 'sent'], true) ? 'background:#fffbeb;' : '');
               ?>
               <tr style="border-top:1px solid #f3f4f6;<?php echo $historyRowStyle; ?>">
-                <td style="padding:10px;font-weight:600"><a href="/?page=invoice/invoice-details&id=<?php echo (int)$historyInvoice['id']; ?>" style="color:#2563eb;text-decoration:none">I-<?php echo (int)($historyInvoice['doc_number'] ?? $historyInvoice['id']); ?></a></td>
+                <td style="padding:10px;font-weight:600"><a href="/?page=invoice/invoice-details&id=<?php echo (int)$historyInvoice['id']; ?>" style="color:#2563eb;text-decoration:none"><?php echo htmlspecialchars(pa_invoice_label($historyInvoice['doc_number'] ?? null, 'long_term', $historyInvoice['id'])); ?></a></td>
                 <td style="padding:10px"><a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$historyInvoice['contract_id']; ?>" style="color:inherit;text-decoration:none">LTC-<?php echo (int)($historyInvoice['contract_doc_number'] ?? $historyInvoice['contract_id']); ?></a></td>
                 <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$historyInvoice['client_id']; ?>"><?php echo htmlspecialchars((string)$historyInvoice['client_name']); ?></a></td>
                 <td style="padding:10px;white-space:nowrap"><?php echo !empty($historyInvoice['created_at']) ? date('M j, Y', strtotime((string)$historyInvoice['created_at'])) : '—'; ?></td>
@@ -322,6 +329,7 @@ $invoiceHistory = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
                 <td style="padding:10px;text-align:right">$<?php echo number_format((float)$historyInvoice['total'], 2); ?></td>
                 <td style="padding:10px;text-align:right">$<?php echo number_format($historyPaid, 2); ?></td>
                 <td style="padding:10px;text-align:right;font-weight:600">$<?php echo number_format($historyBalance, 2); ?></td>
+                <td style="padding:10px"><a href="/?page=invoice/invoice-details&id=<?php echo (int)$historyInvoice['id']; ?>" style="display:inline-block;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;background:#fff;color:#374151;text-decoration:none;font-size:13px">View / Actions</a></td>
               </tr>
             <?php endforeach; ?>
           <?php endif; ?>

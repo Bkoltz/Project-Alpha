@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/project/project-invoice-details.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
@@ -38,7 +39,7 @@ if (!defined('PUBLIC_VIEW')) {
 }
 
 $itemsStmt = $pdo->prepare('
-    SELECT pii.*, i.project_code, i.status AS current_status, i.total AS current_total, i.amount_paid AS current_paid,
+    SELECT pii.*, i.project_code, i.invoice_type, i.status AS current_status, i.total AS current_total, i.amount_paid AS current_paid,
            c.name AS client_name
     FROM project_invoice_items pii
     JOIN invoices i ON i.id = pii.invoice_id
@@ -214,7 +215,7 @@ $showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_war
     <tbody>
       <?php foreach ($items as $item): ?>
         <tr>
-          <td style="padding:9px;border:1px solid #e5e7eb">I-<?php echo htmlspecialchars((string)($item['invoice_doc_number'] ?: $item['invoice_id'])); ?></td>
+          <td style="padding:9px;border:1px solid #e5e7eb"><?php echo htmlspecialchars(pa_invoice_label($item['invoice_doc_number'] ?? null, $item['invoice_type'] ?? 'regular', $item['invoice_id'])); ?></td>
           <td style="padding:9px;border:1px solid #e5e7eb"><?php echo htmlspecialchars($item['client_name']); ?></td>
           <td style="padding:9px;border:1px solid #e5e7eb"><?php echo $item['invoice_date'] ? htmlspecialchars(date('M j, Y', strtotime($item['invoice_date']))) : ''; ?></td>
           <td style="padding:9px;border:1px solid #e5e7eb;text-align:right">$<?php echo number_format((float)$item['amount_due_at_generation'], 2); ?></td>
@@ -250,7 +251,7 @@ $showEmailPanel = !empty($_GET['email_panel']) || !empty($_GET['content_link_war
     <div style="break-inside:avoid;margin-bottom:18px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fff">
       <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:10px">
         <div>
-          <div style="font-weight:800">Invoice I-<?php echo htmlspecialchars((string)($item['invoice_doc_number'] ?: $item['invoice_id'])); ?></div>
+          <div style="font-weight:800">Invoice <?php echo htmlspecialchars(pa_invoice_label($item['invoice_doc_number'] ?? null, $item['invoice_type'] ?? 'regular', $item['invoice_id'])); ?></div>
           <div style="font-size:13px;color:#6b7280"><?php echo htmlspecialchars($item['client_name']); ?></div>
         </div>
         <div style="font-weight:800">$<?php echo number_format((float)$item['amount_due_at_generation'], 2); ?></div>

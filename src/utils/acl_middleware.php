@@ -140,6 +140,8 @@ function page_permission_map(): array
         'invoice/invoices-mark-paid' => 'invoices.mark_paid',
         'invoice/invoice-finalize'  => 'invoices.send',
         'invoice/invoice-reopen'    => 'invoices.edit',
+        'invoice/invoice-void'      => 'invoices.void',
+        'invoice/invoice-reenable'  => 'invoices.void',
         'invoice/email-send'        => 'invoices.send',
         'invoices-create'           => 'invoices.create',
         'invoices-edit'             => 'invoices.edit',
@@ -154,6 +156,8 @@ function page_permission_map(): array
         'payments-list'             => 'payments.view',
         'payments/payments-create'  => 'invoices.mark_paid',
         'payments/payment-refund'   => 'invoices.mark_paid',
+        'payments/payment-correction' => 'invoices.mark_paid',
+        'payments/payment-correct'  => 'invoices.mark_paid',
 
         // Clients module
         'client/clients-list'    => 'clients.view',

@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/contract/on-demand-invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
 $contract_id = isset($_GET['contract_id']) ? (int)$_GET['contract_id'] : 0;
@@ -117,7 +118,7 @@ $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
   $rowStyle = ($r['status']==='paid') ? 'background:#ecfdf5;' : (($r['status']==='unpaid' || $r['status']==='partial') ? 'background:#fffbeb;' : 'background:#fef2f2;');
 ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px"><a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">I-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=invoice/invoice-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit"><?php echo htmlspecialchars(pa_invoice_label($r['doc_number'] ?? null, 'on_demand', $r['id'])); ?></a></td>
             <td style="padding:10px">ODC-<?php echo (int)$r['contract_doc_number']; ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>

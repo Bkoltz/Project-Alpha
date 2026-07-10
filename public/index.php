@@ -747,6 +747,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'invoice/invoices-mark-paid',
         'invoice/invoice-finalize',
         'invoice/invoice-reopen',
+        'invoice/invoice-void',
+        'invoice/invoice-reenable',
         'invoice/email-send',
         'payments/payments-create',
 
@@ -1101,12 +1103,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/invoice/invoice_reopen.php';
         exit;
     }
+    if ($page === 'invoice/invoice-void') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_void.php';
+        exit;
+    }
+    if ($page === 'invoice/invoice-reenable') {
+        require_once __DIR__ . '/../src/controllers/invoice/invoice_reenable.php';
+        exit;
+    }
     if ($page === 'payments/payments-create') {
         require_once __DIR__ . '/../src/controllers/payments_create.php';
         exit;
     }
     if ($page === 'payments/payment-refund') {
         require_once __DIR__ . '/../src/controllers/payments_refund.php';
+        exit;
+    }
+    if ($page === 'payments/payment-correct') {
+        require_once __DIR__ . '/../src/controllers/payments_correct.php';
         exit;
     }
     if ($page === 'quote/quotes-update' || $page === 'quotes-update') {

@@ -52,13 +52,13 @@ try {
         }
     }
     
-    $docNumber = $invoice['doc_number'] ?? $invoiceId;
-    $documentPrefix = $isProjectInvoice ? 'PI-' : 'I-';
+    $documentLabel = $isProjectInvoice
+        ? 'PI-' . ($invoice['doc_number'] ?? $invoiceId)
+        : pa_invoice_label_from_row($invoice + ['id' => $invoiceId]);
     
 } catch (Throwable $e) {
     @error_log('[StripeSuccess] Error: ' . $e->getMessage());
-    $docNumber = 'Unknown';
-    $documentPrefix = '';
+    $documentLabel = 'Unknown';
 }
 ?>
 <!DOCTYPE html>
@@ -161,7 +161,7 @@ try {
         <p class="subtitle">Thank you for your payment.</p>
         
         <div class="invoice-ref">
-            <strong>Invoice <?php echo htmlspecialchars($documentPrefix . $docNumber); ?></strong>
+            <strong>Invoice <?php echo htmlspecialchars($documentLabel); ?></strong>
         </div>
         
         <p>Your payment has been submitted successfully. The invoice will update as soon as Stripe confirms it.</p>

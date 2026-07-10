@@ -1,25 +1,19 @@
 <?php
 
+require_once __DIR__ . '/invoice_lifecycle.php';
+
 function stripe_refresh_invoice_from_payments(PDO $pdo, int $invoiceId): void
 {
     if ($invoiceId <= 0) {
         return;
     }
-    $paidStmt = $pdo->prepare(
-        'SELECT COALESCE(SUM(GREATEST(amount-refunded_amount,0)),0)
-         FROM payments WHERE invoice_id=? AND status="succeeded"'
-    );
-    $paidStmt->execute([$invoiceId]);
-    $paid = (float)$paidStmt->fetchColumn();
-    $invoice = $pdo->prepare('SELECT total,status FROM invoices WHERE id=?');
+    $invoice = $pdo->prepare('SELECT status FROM invoices WHERE id=?');
     $invoice->execute([$invoiceId]);
     $row = $invoice->fetch(PDO::FETCH_ASSOC) ?: [];
     if (!$row || in_array((string)($row['status'] ?? ''), ['void','cancelled','draft'], true)) {
         return;
     }
-    $status = $paid <= 0 ? 'unpaid' : ($paid + 0.005 >= (float)$row['total'] ? 'paid' : 'partial');
-    $pdo->prepare('UPDATE invoices SET amount_paid=?,balance_due=GREATEST(total-?,0),status=? WHERE id=?')
-        ->execute([$paid, $paid, $status, $invoiceId]);
+    invoice_refresh_payment_totals($pdo, $invoiceId);
 }
 
 function stripe_refresh_payment_totals(PDO $pdo, ?int $paymentId): void

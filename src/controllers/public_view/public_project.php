@@ -120,7 +120,7 @@ if (!empty($project['public_project_can_view_documents'])) {
 }
 
 if (!empty($project['public_project_can_view_invoices'])) {
-    $invoiceStmt = $pdo->prepare('SELECT id, doc_number, status, total, amount_paid, balance_due, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC LIMIT 50');
+    $invoiceStmt = $pdo->prepare('SELECT id, doc_number, invoice_type, status, total, amount_paid, balance_due, created_at FROM invoices WHERE project_id = ? ORDER BY created_at DESC LIMIT 50');
     $invoiceStmt->execute([$projectId]);
     $invoices = $invoiceStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -141,10 +141,15 @@ $error = (string)($_GET['error'] ?? '');
 $renderDocRow = static function (PDO $pdo, array $appConfig, string $type, array $row, string $label): void {
     $id = (int)$row['id'];
     $url = pa_project_public_document_url($pdo, $type, $id, $appConfig);
+    $documentNumber = $type === 'invoice'
+        ? pa_invoice_label_from_row($row)
+        : ($type === 'project_invoice'
+            ? (string)($row['doc_number'] ?? $id)
+            : '#' . (string)($row['doc_number'] ?? $id));
     ?>
     <div class="pp-row">
       <div>
-        <div class="pp-row-title"><?php echo htmlspecialchars($label . ' #' . (string)($row['doc_number'] ?? $id), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></div>
+        <div class="pp-row-title"><?php echo htmlspecialchars($label . ' ' . $documentNumber, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></div>
         <div class="pp-muted"><?php echo htmlspecialchars(ucfirst((string)($row['status'] ?? '')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?> · <?php echo htmlspecialchars(date('M j, Y', strtotime((string)($row['created_at'] ?? $row['generated_at'] ?? 'now'))), ENT_QUOTES, 'UTF-8'); ?></div>
       </div>
       <div class="pp-row-actions">

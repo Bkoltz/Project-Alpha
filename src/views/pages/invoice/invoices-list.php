@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/invoices-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../config/app.php';
@@ -53,6 +54,8 @@ if ($statusFilter === 'paid') {
     (i.due_date IS NULL AND i.created_at < ?)
   )";
   $params[] = date('Y-m-d', strtotime('-'.$netDays.' days'));
+} elseif ($statusFilter === 'void') {
+  $where[] = "i.status='void'";
 }
 if ($project_code !== '') {
   $where[] = 'i.project_code LIKE ?';
@@ -78,7 +81,7 @@ $stc = $pdo->prepare($sqlCount);
 $stc->execute($params);
 $total = (int)$stc->fetchColumn();
 
-$sql = 'SELECT i.id,i.doc_number,i.project_code,i.total,i.status,i.collection_mode,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
+$sql = 'SELECT i.id,i.doc_number,i.invoice_type,i.project_code,i.total,i.status,i.collection_mode,i.created_at,i.due_date,c.name client,c.id AS client_id FROM invoices i JOIN clients c ON c.id=i.client_id';
 if ($where) {
   $sql .= ' WHERE ' . implode(' AND ', $where);
 }
@@ -116,7 +119,8 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                   ['value' => 'all', 'label' => 'All'],
                   ['value' => 'paid', 'label' => 'Paid'],
                   ['value' => 'unpaid', 'label' => 'Unpaid/Partial'],
-                  ['value' => 'overdue', 'label' => 'Overdue']
+                  ['value' => 'overdue', 'label' => 'Overdue'],
+                  ['value' => 'void', 'label' => 'Void']
               ]
           ],
           'start' => [
@@ -198,7 +202,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
           }
           ?>
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
-            <td style="padding:10px">I-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></td>
+            <td style="padding:10px"><?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
             <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
             <td style="padding:10px">$<?php echo number_format((float)$r['total'], 2); ?></td>

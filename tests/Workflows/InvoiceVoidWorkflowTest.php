@@ -1,0 +1,70 @@
+<?php
+
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+final class InvoiceVoidWorkflowTest extends TestCase
+{
+    private string $root;
+
+    protected function setUp(): void
+    {
+        $this->root = dirname(__DIR__, 2);
+    }
+
+    public function testInvoiceVoidLifecycleIsRoutedAndPermissioned(): void
+    {
+        $router = (string)file_get_contents($this->root . '/public/index.php');
+        $acl = (string)file_get_contents($this->root . '/src/utils/acl_middleware.php');
+        $audit = (string)file_get_contents($this->root . '/src/utils/audit_middleware.php');
+        $controller = (string)file_get_contents($this->root . '/src/controllers/invoice/invoice_void.php');
+        $reenable = (string)file_get_contents($this->root . '/src/controllers/invoice/invoice_reenable.php');
+
+        self::assertStringContainsString("'invoice/invoice-void'", $router);
+        self::assertStringContainsString("'invoice/invoice-reenable'", $router);
+        self::assertStringContainsString("'invoice/invoice-void'      => 'invoices.void'", $acl);
+        self::assertStringContainsString("'invoice/invoice-reenable'  => 'invoices.void'", $acl);
+        self::assertStringContainsString("'invoice/invoice-void'", $audit);
+        self::assertStringContainsString("require_record_ownership(\$pdo, 'invoices', \$id)", $controller);
+        self::assertStringContainsString('invoice_void($pdo, $id, $appConfig, $reason, $userId)', $controller);
+        self::assertStringContainsString('invoice_reenable_void($pdo, $id)', $reenable);
+    }
+
+    public function testVoidMetadataAndActionsAreVisibleButAccountingHistoryIsPreserved(): void
+    {
+        $baseline = (string)file_get_contents($this->root . '/database/baseline.sql');
+        $migration = (string)file_get_contents($this->root . '/database/migrations/0030_invoice_void_workflow.sql');
+        $lifecycle = (string)file_get_contents($this->root . '/src/utils/invoice_lifecycle.php');
+        $details = (string)file_get_contents($this->root . '/src/views/pages/invoice/invoice-details.php');
+
+        foreach (['voided_at', 'voided_by', 'void_reason', 'void_previous_status'] as $column) {
+            self::assertStringContainsString($column, $baseline);
+            self::assertStringContainsString($column, $migration);
+        }
+        self::assertStringContainsString('function invoice_void(', $lifecycle);
+        self::assertStringContainsString('Paid or partially paid invoices cannot be voided', $lifecycle);
+        self::assertStringContainsString('project invoice PI-', $lifecycle);
+        self::assertStringContainsString('pa_public_link_terminalize($pdo, \'invoice\', $invoiceId, \'void\', true)', $lifecycle);
+        self::assertStringContainsString('UPDATE time_entries SET billed=0', $lifecycle);
+        self::assertStringContainsString('function invoice_reenable_void(', $lifecycle);
+        self::assertStringContainsString('/?page=invoice/invoice-void', $details);
+        self::assertStringContainsString('Reason for voiding', $details);
+        self::assertStringContainsString('View PDF', $details);
+        self::assertStringContainsString('Void reason', $details);
+    }
+
+    public function testRecurringHistoryActionPreservesEveryFilterAndScrollsToResults(): void
+    {
+        $history = (string)file_get_contents($this->root . '/src/views/pages/invoice/recurring-invoices-list.php');
+        $navigation = (string)file_get_contents($this->root . '/public/assets/navigation.js');
+
+        self::assertStringContainsString('&contract_id=<?php echo (int)$ltc[\'id\']; ?>&history_page=1#invoice-history', $history);
+        self::assertStringContainsString('View history (', $history);
+        self::assertStringContainsString('Showing invoices for', $history);
+        self::assertStringContainsString('View / Actions', $history);
+        self::assertStringContainsString("const rest = separatorIndex >= 0 ? page.slice(separatorIndex + 1) : '';", $navigation);
+        self::assertStringContainsString('navigateToPage(fullPage, true, linkUrl.hash)', $navigation);
+        self::assertStringContainsString('scrollToPageHash(targetHash)', $navigation);
+    }
+}

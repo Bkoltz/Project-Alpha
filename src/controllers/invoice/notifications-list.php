@@ -57,7 +57,7 @@ $totalPages = (int)ceil($totalCount / $perPage);
 // Fetch notifications with invoice details
 $sql = "
     SELECT n.id, n.invoice_id, n.notification_type, n.sent_at, 
-           i.doc_number, i.total, i.status, i.due_date,
+           i.doc_number, i.invoice_type, i.total, i.status, i.due_date,
            c.name AS client_name, c.email AS client_email
     FROM invoice_notifications n
     JOIN invoices i ON i.id = n.invoice_id
