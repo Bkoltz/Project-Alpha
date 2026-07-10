@@ -542,12 +542,21 @@ class StripeService {
      * @param int $amountCents Amount to refund in the smallest currency unit (cents).
      * @return array Stripe refund object.
      */
-    public function refundCharge($chargeId, $amountCents) {
+    public function refundCharge(
+        $chargeId,
+        $amountCents,
+        ?string $idempotencyKey = null,
+        ?string $reason = null
+    ) {
         try {
-            return $this->apiRequest('POST', 'refunds', [
+            $payload = [
                 'charge' => $chargeId,
                 'amount' => (int)$amountCents
-            ]);
+            ];
+            if (in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer'], true)) {
+                $payload['reason'] = $reason;
+            }
+            return $this->apiRequest('POST', 'refunds', $payload, $idempotencyKey);
         } catch (\Throwable $e) {
             @error_log('[StripeService] Error creating refund: ' . $e->getMessage());
             throw $e;
