@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../config/app.php';
 $netDays = (int)($appConfig['net_terms_days'] ?? 30);
 if ($netDays < 0) $netDays = 0;
@@ -99,6 +100,12 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Email sent.</div>
   <?php elseif (!empty($_GET['email_err'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['voided'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">Invoice voided. It remains available under the Void filter for audit history.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['error'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
 
   <?php
@@ -225,6 +232,19 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#d1fae5;color:#065f46; font-size: small;">Paid</button>
                 </form>
+              <?php endif; ?>
+              <?php if (in_array(strtolower((string)$r['status']), ['draft','sent','unpaid','overdue'], true)): ?>
+                <details style="display:inline-block;position:relative;vertical-align:top;margin-left:6px">
+                  <summary style="padding:6px 10px;border:1px solid #fda4af;border-radius:8px;background:#fff1f2;color:#9f1239;font-size:small;cursor:pointer;list-style:none">Void</summary>
+                  <form method="post" action="/?page=invoice/invoice-void" style="position:absolute;z-index:30;right:0;top:calc(100% + 6px);width:300px;display:grid;gap:8px;padding:12px;background:#fff;border:1px solid #fecdd3;border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,.16)" onsubmit="return confirm('Void invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?>? It will remain in audit history and cannot be paid.');">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                    <input type="hidden" name="redirect_to" value="<?php echo htmlspecialchars((string)($_SERVER['REQUEST_URI'] ?? '/?page=invoice/invoices-list')); ?>">
+                    <label style="font-size:12px;font-weight:600;color:#374151">Reason<textarea name="reason" maxlength="500" required rows="3" placeholder="Example: Accidental duplicate invoice" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:7px;border:1px solid #d1d5db;border-radius:6px;resize:vertical"></textarea></label>
+                    <div style="font-size:12px;color:#6b7280">If PA reports payment activity, correct or reverse those payment entries first.</div>
+                    <button type="submit" style="padding:7px 10px;border:1px solid #be123c;border-radius:6px;background:#be123c;color:#fff">Confirm Void Invoice</button>
+                  </form>
+                </details>
               <?php endif; ?>
             </td>
             <td style="padding:10px">

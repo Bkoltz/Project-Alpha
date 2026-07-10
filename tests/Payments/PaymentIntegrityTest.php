@@ -265,6 +265,18 @@ final class PaymentIntegrityTest extends TestCase
         ]);
         $targetCashId = $this->remember('payments', (int)$targetCash['payment_id']);
 
+        // Match the reported legacy state: the imported Stripe row and source
+        // invoice lost denormalized organization values, both cash duplicates
+        // were mistakenly recorded as fully refunded, and the recurring
+        // invoice predates the finalized_at metadata convention.
+        $this->pdo->prepare('UPDATE payments SET organization_id=NULL WHERE id=?')->execute([$stripePaymentId]);
+        $this->pdo->prepare('UPDATE invoices SET organization_id=NULL WHERE id=?')->execute([$sourceInvoiceId]);
+        $this->pdo->prepare('UPDATE payments SET refunded_amount=amount WHERE id IN (?,?)')
+            ->execute([$sourceCashId, $targetCashId]);
+        invoice_refresh_payment_totals($this->pdo, $sourceInvoiceId);
+        invoice_refresh_payment_totals($this->pdo, $targetInvoiceId);
+        $this->pdo->prepare('UPDATE invoices SET finalized_at=NULL WHERE id=?')->execute([$targetInvoiceId]);
+
         $result = payment_reallocate_to_invoice(
             $this->pdo,
             $stripePaymentId,
@@ -288,17 +300,23 @@ final class PaymentIntegrityTest extends TestCase
         $moved = $moved->fetch(PDO::FETCH_ASSOC) ?: [];
         self::assertSame($targetInvoiceId, (int)$moved['invoice_id']);
         self::assertSame($contractId, (int)$moved['contract_id']);
+        self::assertSame($orgId, (int)$moved['organization_id']);
         self::assertSame('stripe', $moved['payment_method']);
         self::assertEqualsWithDelta(300.0, (float)$moved['amount'], 0.005, 'The invoice receives the gross client payment.');
         self::assertEqualsWithDelta(0.0, (float)$moved['refunded_amount'], 0.005);
         self::assertEqualsWithDelta(9.0, (float)$moved['processor_fee_amount'], 0.005);
         self::assertEqualsWithDelta(291.0, payment_accounting_net_income($moved), 0.005, 'Stripe net income remains gross less the processor fee.');
 
-        $manualRows = $this->pdo->prepare('SELECT id,status,refunded_amount FROM payments WHERE id IN (?,?) ORDER BY id');
+        $manualRows = $this->pdo->prepare('SELECT id,status,amount,refunded_amount FROM payments WHERE id IN (?,?) ORDER BY id');
         $manualRows->execute([$sourceCashId, $targetCashId]);
         foreach ($manualRows->fetchAll(PDO::FETCH_ASSOC) as $manual) {
             self::assertSame('reversed', $manual['status']);
-            self::assertEqualsWithDelta(0.0, (float)$manual['refunded_amount'], 0.005, 'Duplicate entries are reversed, not refunded.');
+            self::assertEqualsWithDelta(
+                (float)$manual['amount'],
+                (float)$manual['refunded_amount'],
+                0.005,
+                'The mistaken local refund remains visible only in the reversed audit row.'
+            );
         }
 
         $source = $this->pdo->prepare('SELECT status,amount_paid,balance_due FROM invoices WHERE id=?');
@@ -379,6 +397,15 @@ final class PaymentIntegrityTest extends TestCase
         self::assertStringContainsString('No accounting data was changed', $view);
         self::assertStringContainsString('replacement_payment_ids[]', $view);
         self::assertStringContainsString('clear_local_refund', $view);
+        self::assertStringContainsString('c.organization_id AS source_client_organization_id', $view);
+        self::assertStringNotContainsString('i.organization_id <=> ?', $view);
+        self::assertStringNotContainsString('AND i.finalized_at IS NOT NULL', $view);
+        self::assertStringNotContainsString('AND p.refunded_amount <= 0.005', $view);
+        self::assertStringContainsString('locally recorded as refunded', $view);
+
+        $paymentsList = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/payments/payments-list.php');
+        self::assertStringContainsString('AS has_correction_target', $paymentsList);
+        self::assertStringContainsString('No other invoice for this client', $paymentsList);
     }
 
     public function testLongTermSequenceDoesNotAdvanceRegularInvoiceSequence(): void

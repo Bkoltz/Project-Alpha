@@ -37,6 +37,8 @@ final class InvoiceVoidWorkflowTest extends TestCase
         $migration = (string)file_get_contents($this->root . '/database/migrations/0030_invoice_void_workflow.sql');
         $lifecycle = (string)file_get_contents($this->root . '/src/utils/invoice_lifecycle.php');
         $details = (string)file_get_contents($this->root . '/src/views/pages/invoice/invoice-details.php');
+        $list = (string)file_get_contents($this->root . '/src/views/pages/invoice/invoices-list.php');
+        $controller = (string)file_get_contents($this->root . '/src/controllers/invoice/invoice_void.php');
 
         foreach (['voided_at', 'voided_by', 'void_reason', 'void_previous_status'] as $column) {
             self::assertStringContainsString($column, $baseline);
@@ -52,6 +54,10 @@ final class InvoiceVoidWorkflowTest extends TestCase
         self::assertStringContainsString('Reason for voiding', $details);
         self::assertStringContainsString('View PDF', $details);
         self::assertStringContainsString('Void reason', $details);
+        self::assertStringContainsString('Confirm Void Invoice', $list);
+        self::assertStringContainsString('name="redirect_to"', $list);
+        self::assertStringContainsString("!str_starts_with(\$redirectTo, '//')", $controller);
+        self::assertStringContainsString("\$appendResult(\$redirectBase, 'voided', '1')", $controller);
     }
 
     public function testRecurringHistoryActionPreservesEveryFilterAndScrollsToResults(): void
