@@ -171,10 +171,26 @@ function invoice_status_for_balance(float $total, float $paid): array
 
 function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePaidPublicLinks = true): array
 {
-    $totalStmt = $pdo->prepare('SELECT total FROM invoices WHERE id = ?');
+    $totalStmt = $pdo->prepare('SELECT total,status FROM invoices WHERE id = ?');
     $totalStmt->execute([$invoiceId]);
-    $total = (float)$totalStmt->fetchColumn();
+    $invoice = $totalStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $total = (float)($invoice['total'] ?? 0);
     $paid = invoice_effective_paid_total($pdo, $invoiceId);
+
+    // Payment audit cleanup must never resurrect a void invoice. Void records
+    // intentionally have no collectible balance, even when their historical
+    // payment rows are later reversed or reconciled.
+    if (strtolower((string)($invoice['status'] ?? '')) === 'void') {
+        $pdo->prepare('UPDATE invoices SET amount_paid=?,balance_due=0,paid_at=NULL WHERE id=?')
+            ->execute([max(0.0, $paid), $invoiceId]);
+        return [
+            'status' => 'void',
+            'amount_paid' => max(0.0, $paid),
+            'balance_due' => 0.0,
+            'total' => $total,
+        ];
+    }
+
     [$status, $storedPaid, $balanceDue] = invoice_status_for_balance($total, $paid);
 
     $paidAtSql = $status === 'paid'
@@ -576,10 +592,24 @@ function invoice_void(PDO $pdo, int $invoiceId, array $appConfig, string $reason
             throw new RuntimeException('This invoice is already included in project invoice PI-' . $parentNumber . ' and cannot be voided individually.');
         }
 
-        $payment = $pdo->prepare('SELECT COUNT(*) FROM payments WHERE invoice_id=? AND status IN ("succeeded","pending")');
+        $payment = $pdo->prepare('
+            SELECT COUNT(*)
+            FROM payments
+            WHERE invoice_id=?
+              AND (
+                  status="pending"
+                  OR (
+                      status="succeeded"
+                      AND GREATEST(
+                          COALESCE(amount,0)-COALESCE(refunded_amount,0)-COALESCE(disputed_amount,0),
+                          0
+                      ) > 0.005
+                  )
+              )
+        ');
         $payment->execute([$invoiceId]);
         if ((int)$payment->fetchColumn() > 0) {
-            throw new RuntimeException('This invoice has payment activity and cannot be voided. Refund or resolve the payment first.');
+            throw new RuntimeException('This invoice still has a pending or active payment balance. Refund, reverse, or reallocate it before voiding.');
         }
 
         $intent = $pdo->prepare('SELECT COUNT(*) FROM payment_intents WHERE invoice_id=? AND status IN ("pending","processing","requires_action")');

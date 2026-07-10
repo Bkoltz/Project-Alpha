@@ -156,6 +156,7 @@ function page_permission_map(): array
         'payments-list'             => 'payments.view',
         'payments/payments-create'  => 'invoices.mark_paid',
         'payments/payment-refund'   => 'invoices.mark_paid',
+        'payments/payment-reverse'  => 'invoices.mark_paid',
         'payments/payment-correction' => 'invoices.mark_paid',
         'payments/payment-correct'  => 'invoices.mark_paid',
 

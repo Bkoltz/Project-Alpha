@@ -56,6 +56,9 @@ final class InvoiceVoidWorkflowTest extends TestCase
         self::assertStringContainsString('Void reason', $details);
         self::assertStringContainsString('Confirm Void Invoice', $list);
         self::assertStringContainsString('name="redirect_to"', $list);
+        self::assertStringContainsString('class="invoice-void-dialog"', $list);
+        self::assertStringContainsString('.showModal()', $list);
+        self::assertStringContainsString('Fully refunded zero-balance history will not block voiding.', $list);
         self::assertStringContainsString("!str_starts_with(\$redirectTo, '//')", $controller);
         self::assertStringContainsString("\$appendResult(\$redirectBase, 'voided', '1')", $controller);
     }

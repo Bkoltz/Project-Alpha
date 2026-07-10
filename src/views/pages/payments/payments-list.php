@@ -52,6 +52,7 @@ if($where){$sql.=' WHERE '.implode(' AND ',$where);} $sql.=" ORDER BY p.payment_
 $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <section>
+  <style>.payment-reverse-dialog::backdrop{background:rgba(15,23,42,.48)}</style>
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
     <h2 style="margin:0">Payments</h2>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -67,6 +68,9 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
   <?php endif; ?>
   <?php if (!empty($_GET['stripe_refunded'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Stripe accepted the refund. PA has recorded the Stripe refund and will continue reconciling webhook updates.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['manual_reversed'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Manual payment entry reversed. It no longer affects invoice totals and is hidden from the normal payment list.</div>
   <?php endif; ?>
   <?php if ($showReversed): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db">Showing reversed accounting corrections. These entries remain for audit history but do not count as income or invoice payments.</div>
@@ -138,6 +142,11 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
             || trim((string)($r['stripe_payment_intent_id'] ?? '')) !== ''
             || trim((string)($r['stripe_session_id'] ?? '')) !== '';
           $canRecordRefund = $isSucceeded && !$isProcessorBacked && $appliedNet > 0.005;
+          $canReverseManual = $isSucceeded
+            && !$isProcessorBacked
+            && !empty($r['invoice_id'])
+            && empty($r['project_invoice_payment_id'])
+            && $disputed <= 0.005;
           $processorGross = $r['processor_gross_amount'] !== null
             ? (float)$r['processor_gross_amount']
             : $amount + max(0.0, (float)$r['surcharge_paid']);
@@ -185,6 +194,21 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
                   <button type="submit" style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;white-space:nowrap">Record refund</button>
                 </form>
               <?php endif; ?>
+              <?php if ($canReverseManual): ?>
+                <?php $reverseDialogId = 'reversePaymentDialog' . (int)$r['id']; ?>
+                <button type="button" onclick="document.getElementById('<?php echo $reverseDialogId; ?>').showModal()" style="padding:6px 9px;border-radius:6px;border:1px solid #fbbf24;background:#fffbeb;color:#92400e;white-space:nowrap">Reverse entry</button>
+                <dialog id="<?php echo $reverseDialogId; ?>" class="payment-reverse-dialog" style="width:min(440px,calc(100vw - 32px));box-sizing:border-box;padding:0;border:1px solid #fcd34d;border-radius:12px;box-shadow:0 24px 60px rgba(15,23,42,.28)">
+                  <form method="post" action="/?page=payments/payment-reverse" style="display:grid;gap:12px;padding:18px;margin:0" onsubmit="return confirm('Reverse this manual accounting entry? No money will move.');">
+                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+                    <input type="hidden" name="payment_id" value="<?php echo (int)$r['id']; ?>">
+                    <div><div style="font-size:18px;font-weight:700;color:#111827">Reverse manual payment #<?php echo (int)$r['id']; ?></div><div style="margin-top:4px;font-size:13px;color:#6b7280">Invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($r)); ?> &middot; $<?php echo number_format($amount, 2); ?> &middot; <?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string)$r['payment_method']))); ?></div></div>
+                    <?php if ($refunded > 0.005): ?><div style="padding:9px;border:1px solid #fde68a;border-radius:7px;background:#fffbeb;color:#92400e;font-size:13px">This row has $<?php echo number_format($refunded, 2); ?> recorded as refunded. Reversing it preserves that history but removes the mistaken entry from active payment reporting.</div><?php endif; ?>
+                    <label style="font-size:13px;font-weight:600;color:#374151">Reason<textarea name="reason" maxlength="500" required rows="4" placeholder="Example: Duplicate manual entry created during payment correction" style="display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:9px;border:1px solid #d1d5db;border-radius:7px;resize:vertical"></textarea></label>
+                    <div style="font-size:12px;color:#6b7280"><strong>No money moves.</strong> Use a refund instead if an actual client payment still needs to be returned.</div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" onclick="document.getElementById('<?php echo $reverseDialogId; ?>').close()" style="padding:8px 11px;border:1px solid #d1d5db;border-radius:7px;background:#fff">Cancel</button><button type="submit" style="padding:8px 11px;border:1px solid #b45309;border-radius:7px;background:#b45309;color:#fff">Confirm Reverse Entry</button></div>
+                  </form>
+                </dialog>
+              <?php endif; ?>
               <?php if ($isProcessorBacked && $isSucceeded && $processorRefundRemaining > 0.005): ?>
                 <details style="position:relative">
                   <summary style="padding:6px 9px;border-radius:6px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;cursor:pointer;white-space:nowrap;list-style:none">Refund via Stripe</summary>
@@ -199,7 +223,7 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
                     <button type="submit" style="padding:7px 9px;border:1px solid #be123c;border-radius:6px;background:#be123c;color:#fff">Send Stripe refund</button>
                   </form>
                 </details>
-              <?php elseif (!$canCorrect && !$canRecordRefund): ?>
+              <?php elseif (!$canCorrect && !$canRecordRefund && !$canReverseManual): ?>
                 <span style="color:var(--muted);font-size:13px">-</span>
               <?php endif; ?>
               </div>
