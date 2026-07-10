@@ -231,6 +231,8 @@ function page_permission_map(): array
         'financial/expenses-list'          => 'financial.view',
         'financial/expense-create'         => 'financial.manage',
         'financial/expense-detail'         => 'financial.view',
+        'financial/recurring-expense-form' => 'financial.manage',
+        'financial/recurring-expense-handler' => 'financial.manage',
         'financial/asset-detail'           => 'financial.view',
         'financial/asset-form'             => 'financial.manage',
         'financial/asset-handler'          => 'financial.manage',

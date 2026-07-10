@@ -9,6 +9,7 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 | Local schedule | Script | Purpose |
 |---|---|---|
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
+| Daily 02:15 | `generate_recurring_expenses.php` | Generate due recurring expenses once per scheduled occurrence |
 | Hourly at :30 | `backup_database.php --scheduled` | Creates rotating backups when the configured local backup hour matches |
 | Daily 03:00 | `auto_terminate_contracts.php` | Complete contracts whose configured end date has passed |
 | Daily 04:00 | `link_expiration_checker.php` | Expire public document links |
@@ -45,6 +46,7 @@ docker compose exec cron tail -f /var/www/config/logs/cron/cron.log
 
 # Run a job manually
 docker compose exec cron php /var/www/src/cron/generate_recurring_invoices.php
+docker compose exec cron php /var/www/src/cron/generate_recurring_expenses.php
 ```
 
 ## Application Settings

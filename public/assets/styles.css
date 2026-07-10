@@ -626,7 +626,7 @@ body.nav-open{overflow:hidden}
 /* Expenses hub and ledger */
 .expenses-hub__tabs{
   display:grid;
-  grid-template-columns:repeat(7,minmax(0,1fr));
+  grid-template-columns:repeat(8,minmax(0,1fr));
   gap:10px;
   margin-bottom:18px;
 }

@@ -786,6 +786,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'financial/asset-handler',
         'financial/expense-handler',
         'financial/expense_handler',
+        'financial/recurring-expense-handler',
         'financial/csv-import',
 
         // Time Tracking
@@ -1309,6 +1310,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/expense-handler' || $page === 'financial/expense_handler') {
         require_once __DIR__ . '/../src/controllers/financial/expense_handler.php';
+        exit;
+    }
+    if ($page === 'financial/recurring-expense-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/recurring_expense_handler.php';
         exit;
     }
     if ($page === 'financial/csv-import') {
