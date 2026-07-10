@@ -530,6 +530,100 @@ final class PaymentIntegrityTest extends TestCase
         self::assertStringContainsString('sends real money back', $paymentsList);
     }
 
+    public function testFullyRefundedZeroBalancePaymentHistoryDoesNotBlockInvoiceVoid(): void
+    {
+        $orgId = $this->insertOrganization();
+        $clientId = $this->insertClient($orgId);
+        $invoiceId = $this->insertInvoice($orgId, $clientId, 291.00);
+        $payment = invoice_record_locked_payment($this->pdo, $invoiceId, 291.00, 'cash', null, null, [
+            'organization_id' => $orgId,
+        ]);
+        $paymentId = $this->remember('payments', (int)$payment['payment_id']);
+        $this->pdo->prepare('UPDATE payments SET refunded_amount=amount WHERE id=?')->execute([$paymentId]);
+        invoice_refresh_payment_totals($this->pdo, $invoiceId);
+
+        $result = invoice_void($this->pdo, $invoiceId, [], 'Duplicate one-off invoice with fully refunded history.');
+        self::assertSame('unpaid', $result['previous_status']);
+
+        $invoice = $this->pdo->prepare('SELECT status,amount_paid,balance_due FROM invoices WHERE id=?');
+        $invoice->execute([$invoiceId]);
+        $invoice = $invoice->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame('void', (string)$invoice['status']);
+        self::assertEqualsWithDelta(0.0, (float)$invoice['amount_paid'], 0.005);
+        self::assertEqualsWithDelta(0.0, (float)$invoice['balance_due'], 0.005);
+
+        $history = $this->pdo->prepare('SELECT status,amount,refunded_amount FROM payments WHERE id=?');
+        $history->execute([$paymentId]);
+        $history = $history->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame('succeeded', (string)$history['status']);
+        self::assertEqualsWithDelta(291.0, (float)$history['amount'], 0.005);
+        self::assertEqualsWithDelta(291.0, (float)$history['refunded_amount'], 0.005);
+
+        $reversed = payment_reverse_manual_entry(
+            $this->pdo,
+            $paymentId,
+            'Hide the duplicate zero-balance entry after voiding.',
+            42
+        );
+        self::assertSame('void', $reversed['invoice_status']);
+        $status = $this->pdo->prepare('SELECT status,balance_due FROM invoices WHERE id=?');
+        $status->execute([$invoiceId]);
+        $status = $status->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame('void', (string)$status['status']);
+        self::assertEqualsWithDelta(0.0, (float)$status['balance_due'], 0.005);
+    }
+
+    public function testMistakenRefundedManualEntryCanBeReversedWithoutMovingMoney(): void
+    {
+        $orgId = $this->insertOrganization();
+        $clientId = $this->insertClient($orgId);
+        $invoiceId = $this->insertInvoice($orgId, $clientId, 300.00);
+        $payment = invoice_record_locked_payment($this->pdo, $invoiceId, 300.00, 'cash', null, null, [
+            'organization_id' => $orgId,
+        ]);
+        $paymentId = $this->remember('payments', (int)$payment['payment_id']);
+        $this->pdo->prepare('UPDATE payments SET refunded_amount=amount WHERE id=?')->execute([$paymentId]);
+        invoice_refresh_payment_totals($this->pdo, $invoiceId);
+
+        $result = payment_reverse_manual_entry(
+            $this->pdo,
+            $paymentId,
+            ' Duplicate manual entry created while correcting allocation. ',
+            42
+        );
+        self::assertSame($invoiceId, $result['invoice_id']);
+        self::assertSame('unpaid', $result['invoice_status']);
+        self::assertEqualsWithDelta(300.0, $result['refunded_amount'], 0.005);
+
+        $reversed = $this->pdo->prepare('SELECT status,reversed_at,reversed_by,reversal_reason,refunded_amount FROM payments WHERE id=?');
+        $reversed->execute([$paymentId]);
+        $reversed = $reversed->fetch(PDO::FETCH_ASSOC) ?: [];
+        self::assertSame('reversed', (string)$reversed['status']);
+        self::assertNotEmpty($reversed['reversed_at']);
+        self::assertSame(42, (int)$reversed['reversed_by']);
+        self::assertSame('Duplicate manual entry created while correcting allocation.', (string)$reversed['reversal_reason']);
+        self::assertEqualsWithDelta(300.0, (float)$reversed['refunded_amount'], 0.005);
+    }
+
+    public function testManualEntryReversalIsRoutedPermissionedAndVisible(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $router = (string)file_get_contents($root . '/public/index.php');
+        $acl = (string)file_get_contents($root . '/src/utils/acl_middleware.php');
+        $audit = (string)file_get_contents($root . '/src/utils/audit_middleware.php');
+        $controller = (string)file_get_contents($root . '/src/controllers/payments_reverse.php');
+        $paymentsList = (string)file_get_contents($root . '/src/views/pages/payments/payments-list.php');
+
+        self::assertStringContainsString("'payments/payment-reverse'", $router);
+        self::assertStringContainsString("'payments/payment-reverse'  => 'invoices.mark_paid'", $acl);
+        self::assertStringContainsString("'payments/payment-reverse'", $audit);
+        self::assertStringContainsString('payment_reverse_manual_entry($pdo, $paymentId, $reason, $userId)', $controller);
+        self::assertStringContainsString('payment.manual_entry_reversed', $controller);
+        self::assertStringContainsString('Reverse entry', $paymentsList);
+        self::assertStringContainsString('class="payment-reverse-dialog"', $paymentsList);
+        self::assertStringContainsString('.showModal()', $paymentsList);
+    }
+
     public function testUnpaidInvoiceCanBeVoidedAndSafelyReenabled(): void
     {
         $orgId = $this->insertOrganization();

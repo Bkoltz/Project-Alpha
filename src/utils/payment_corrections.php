@@ -59,6 +59,83 @@ function payment_verify_stripe_refunded_amount(array $payment, array $appConfig)
 }
 
 /**
+ * Reverse a duplicate or mistaken manual payment entry without moving money.
+ * Processor-backed payments must use allocation correction or a real refund.
+ *
+ * @return array{payment_id:int,invoice_id:int,invoice_status:string,refunded_amount:float}
+ */
+function payment_reverse_manual_entry(
+    PDO $pdo,
+    int $paymentId,
+    string $reason,
+    ?int $userId = null
+): array {
+    if ($paymentId <= 0) {
+        throw new RuntimeException('Select a manual payment entry to reverse.');
+    }
+
+    $reason = trim(preg_replace('/\s+/', ' ', $reason) ?? '');
+    if ($reason === '') {
+        throw new RuntimeException('A reversal reason is required.');
+    }
+    if (mb_strlen($reason) > 500) {
+        throw new RuntimeException('The reversal reason must be 500 characters or fewer.');
+    }
+
+    invoice_ensure_payments_schema($pdo);
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT * FROM payments WHERE id=? FOR UPDATE');
+        $stmt->execute([$paymentId]);
+        $payment = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        if (!$payment) {
+            throw new RuntimeException('Payment entry not found.');
+        }
+        if (strtolower((string)$payment['status']) !== 'succeeded') {
+            throw new RuntimeException('Only an active successful manual entry can be reversed.');
+        }
+        if (payment_is_processor_backed($payment) || !empty($payment['project_invoice_payment_id'])) {
+            throw new RuntimeException('Processor and project payments cannot be reversed as manual entries.');
+        }
+        if ((float)$payment['disputed_amount'] > 0.005) {
+            throw new RuntimeException('A disputed payment entry cannot be manually reversed.');
+        }
+
+        $invoiceId = (int)($payment['invoice_id'] ?? 0);
+        if ($invoiceId <= 0) {
+            throw new RuntimeException('This manual payment is not linked to an invoice.');
+        }
+
+        $pdo->prepare('
+            UPDATE payments
+            SET status="reversed", reversed_at=NOW(), reversed_by=?, reversal_reason=?
+            WHERE id=?
+        ')->execute([$userId, $reason, $paymentId]);
+        $invoiceTotals = invoice_refresh_payment_totals($pdo, $invoiceId);
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+
+        return [
+            'payment_id' => $paymentId,
+            'invoice_id' => $invoiceId,
+            'invoice_status' => (string)$invoiceTotals['status'],
+            'refunded_amount' => (float)$payment['refunded_amount'],
+        ];
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
  * Move a real payment to the invoice it should have paid, reverse selected
  * duplicate manual entries, and optionally void the accidental source invoice.
  *

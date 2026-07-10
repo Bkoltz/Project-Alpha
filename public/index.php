@@ -1119,6 +1119,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/payments_refund.php';
         exit;
     }
+    if ($page === 'payments/payment-reverse') {
+        require_once __DIR__ . '/../src/controllers/payments_reverse.php';
+        exit;
+    }
     if ($page === 'payments/payment-correct') {
         require_once __DIR__ . '/../src/controllers/payments_correct.php';
         exit;
