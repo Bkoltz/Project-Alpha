@@ -12,11 +12,11 @@ public/error_log.txt
 
 # Config files containing secrets - NEVER commit these!
 config/settings.json
-config/.env
+config/.env*
+!config/.env.example
 config/.encryption_key
-.env
-.env.local
-.env.*.local
+.env*
+!.env.example
 
 # Upload directories
 src/uploads/

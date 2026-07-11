@@ -26,10 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         zlib1g-dev \
         libzip-dev \
+        libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions required by the cron scripts
-RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli
+RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli curl
 
 WORKDIR /var/www
 

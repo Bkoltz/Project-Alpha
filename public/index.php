@@ -150,7 +150,7 @@ if ($isApiEndpoint) {
         header('Access-Control-Allow-Origin: ' . $origin);
         header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-CSRF-Token');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-CSRF-Token, Idempotency-Key, X-AL-Timestamp, X-AL-Signature');
     }
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
         http_response_code(204);
@@ -171,6 +171,11 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
         exit;
     }
     $apiKey = api_require_key([$requiredApiScope]);
+
+    if ($page === 'api-v1-alphaledger') {
+        require_once __DIR__ . '/../src/controllers/api/alphaledger_integration.php';
+        exit;
+    }
 
     // Map API endpoints
     $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients'];
@@ -700,6 +705,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'project/project-invoice-payment',
         'project/projects-update-status',
         'project-notes-update',
+        'financial/employee-pay-status',
 
         // Quotes
         'quote/quotes-create',
@@ -838,6 +844,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
+        exit;
+    }
+    if ($page === 'settings/alphaledger-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/alphaledger_handler.php';
+        exit;
+    }
+    if ($page === 'financial/employee-pay-status') {
+        require_once __DIR__ . '/../src/controllers/financial/employee_pay_status.php';
         exit;
     }
     if ($page === 'settings-backup') {

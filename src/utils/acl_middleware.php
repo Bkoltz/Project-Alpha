@@ -48,6 +48,7 @@ function page_permission_map(): array
         'settings/tax-import-handler'        => 'settings.manage',
         'settings/tax-import-chunk'          => 'settings.manage',
         'settings/tax-rates-handler'         => 'settings.manage',
+        'settings/alphaledger-handler'        => 'settings.manage',
 
         // Accounts / users
         'accounts'               => 'users.manage',
@@ -228,6 +229,7 @@ function page_permission_map(): array
 
         // Financial module
         'financial/financial-dashboard'    => 'financial.view',
+        'financial/ledger'                 => 'settings.manage',
         'financial/expenses-list'          => 'financial.view',
         'financial/expense-create'         => 'financial.manage',
         'financial/expense-detail'         => 'financial.view',

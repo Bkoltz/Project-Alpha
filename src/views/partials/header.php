@@ -23,6 +23,40 @@ function nav_can(string $permission): bool {
   if (!$pdo) return true;
   return user_can($pdo, (int)($_SESSION['user']['id'] ?? 0), $permission, 0);
 }
+$alphaLedgerNotice = null;
+$alphaLedgerNav = null;
+if (($_SESSION['user']['role'] ?? '') === 'admin') {
+  try {
+    $policy = $pdo->query('SELECT enabled,approved_api_key_id FROM alphaledger_policy WHERE singleton=1')->fetch(PDO::FETCH_ASSOC);
+    $alInstallation = null;
+    if (!empty($policy['enabled'])) {
+      $keyStmt = $pdo->prepare("SELECT 1 FROM api_keys WHERE id=? AND revoked_at IS NULL AND scopes='alphaledger.sync'");
+      $keyStmt->execute([(int)$policy['approved_api_key_id']]);
+      $approvedKeyValid = (bool)$keyStmt->fetchColumn();
+      $installationStmt = $pdo->prepare('SELECT status,consecutive_failures FROM alphaledger_installations WHERE api_key_id=? ORDER BY id DESC LIMIT 1');
+      $installationStmt->execute([(int)$policy['approved_api_key_id']]);
+      $alInstallation = $installationStmt->fetch(PDO::FETCH_ASSOC);
+      $attentionCount = (int)$pdo->query("SELECT COUNT(*) FROM alphaledger_events WHERE delivery_state='attention'")->fetchColumn();
+      $conflictCount = (int)$pdo->query("SELECT COUNT(*) FROM alphaledger_sync_conflicts WHERE status='open'")->fetchColumn();
+      if (!$approvedKeyValid) {
+        $alphaLedgerNotice = 'Synchronization is blocked because the approved API key is revoked or no longer dedicated to AlphaLedger.';
+      } elseif (!$alInstallation || $alInstallation['status'] === 'disabled') {
+        $alphaLedgerNotice = 'AlphaLedger is authorized but has not completed its connection handshake.';
+      } elseif ($alInstallation['status'] !== 'active' || $attentionCount > 0 || $conflictCount > 0) {
+        $alphaLedgerNotice = sprintf('AlphaLedger needs attention: state %s, %d delivery issue(s), %d ownership conflict(s).', $alInstallation['status'], $attentionCount, $conflictCount);
+      }
+    }
+    $hasLedgerHistory = false;
+    foreach (['alphaledger_ledger_time_entries', 'alphaledger_ledger_people', 'employee_pay_records'] as $ledgerTable) {
+      if ($pdo->query("SELECT 1 FROM {$ledgerTable} LIMIT 1")->fetchColumn()) { $hasLedgerHistory = true; break; }
+    }
+    if (!empty($policy['enabled']) || $hasLedgerHistory) {
+      $alphaLedgerNav = $alInstallation && in_array($alInstallation['status'], ['active','degraded'], true)
+        ? (string)$alInstallation['status'] : 'disconnected';
+    }
+  } catch (Throwable $ignored) {
+  }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -232,6 +266,7 @@ function nav_can(string $permission): bool {
               <ul>
                 <?php if (nav_can('financial.view')): ?>
                 <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Dashboard</a></li>
+                <?php if ($alphaLedgerNav !== null): ?><li><a href="/?page=financial/ledger" data-page="financial/ledger">Ledger <span style="margin-left:5px;font-size:10px;padding:2px 5px;border-radius:999px;background:<?php echo $alphaLedgerNav==='active'?'#dcfce7':($alphaLedgerNav==='degraded'?'#fef3c7':'#e2e8f0'); ?>;color:<?php echo $alphaLedgerNav==='active'?'#166534':($alphaLedgerNav==='degraded'?'#92400e':'#475569'); ?>"><?php echo htmlspecialchars($alphaLedgerNav); ?></span></a></li><?php endif; ?>
                 <li><a href="/?page=financial/audit" data-page="financial/audit">Audit &amp; Reports</a></li>
                 <li><a href="/?page=financial/expenses-list&tab=expenses" data-page="financial/expenses-list">Assets &amp; Expenses</a></li>
                 <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
@@ -261,6 +296,13 @@ function nav_can(string $permission): bool {
       <?php if (!empty($_SESSION['user']['auth_bypass'])): ?>
         <div style="margin:0 0 14px;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px">
           Development auth bypass is active for this session. Do not expose this environment publicly.
+        </div>
+      <?php endif; ?>
+
+      <?php if ($alphaLedgerNotice !== null): ?>
+        <div style="margin:0 0 14px;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1px solid #f59e0b;color:#9a3412;font-size:13px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+          <span><strong>AlphaLedger:</strong> <?php echo htmlspecialchars($alphaLedgerNotice); ?></span>
+          <a class="btn btn-sm" href="/?page=settings&amp;tab=alphaledger">Review integration</a>
         </div>
       <?php endif; ?>
 

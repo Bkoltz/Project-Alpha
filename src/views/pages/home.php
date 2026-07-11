@@ -134,6 +134,26 @@ try {
   $php_version = PHP_VERSION;
 }
 
+$al_dashboard = null;
+if (($_SESSION['user']['role'] ?? '') === 'admin') {
+  try {
+    $alPolicy = $pdo->query('SELECT enabled FROM alphaledger_policy WHERE singleton=1')->fetch(PDO::FETCH_ASSOC);
+    $alInstall = $pdo->query('SELECT status,last_ledger_sync_at,last_success_at FROM alphaledger_installations ORDER BY id DESC LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: null;
+    $alHasHistory = (bool)$pdo->query('SELECT 1 FROM alphaledger_ledger_time_entries LIMIT 1')->fetchColumn()
+      || (bool)$pdo->query('SELECT 1 FROM employee_pay_records LIMIT 1')->fetchColumn();
+    if (!empty($alPolicy['enabled']) || $alHasHistory) {
+      $alPay = $pdo->query("SELECT currency,COALESCE(SUM(amount),0) total FROM employee_pay_records WHERE deleted_at IS NULL AND status='pending' GROUP BY currency ORDER BY currency")->fetchAll(PDO::FETCH_ASSOC);
+      $al_dashboard = [
+        'state' => !empty($alPolicy['enabled']) && $alInstall ? (string)$alInstall['status'] : 'disconnected',
+        'last_sync' => $alInstall['last_ledger_sync_at'] ?? $alInstall['last_success_at'] ?? null,
+        'active' => (int)$pdo->query("SELECT COUNT(*) FROM alphaledger_ledger_time_entries WHERE deleted_at IS NULL AND status='running'")->fetchColumn(),
+        'review' => (int)$pdo->query("SELECT COUNT(*) FROM alphaledger_ledger_time_entries WHERE deleted_at IS NULL AND status='review'")->fetchColumn(),
+        'pay' => $alPay,
+      ];
+    }
+  } catch (Throwable $ignored) {}
+}
+
 // Build chart-ready arrays
 $months = [];
 $month_income = [];
@@ -396,6 +416,13 @@ if ($disk_total !== false && $disk_total > 0) {
       </div>
     </div>
   </div>
+
+  <?php if ($al_dashboard !== null): ?>
+  <div class="dash-panel">
+    <div class="dash-panel__head"><div><h3 class="dash-panel__title">AlphaLedger</h3><p class="dash-finance-snapshot__sub"><?php echo htmlspecialchars(ucfirst($al_dashboard['state'])); ?> · Last sync <?php echo htmlspecialchars((string)($al_dashboard['last_sync'] ?: 'never')); ?></p></div><a class="dash-panel__link" href="/?page=financial/ledger">Open Ledger</a></div>
+    <div class="dash-finance-snapshot__metrics"><div class="dash-finance-snapshot__metric"><span>Active timers</span><strong><?php echo number_format($al_dashboard['active']); ?></strong></div><div class="dash-finance-snapshot__metric"><span>Awaiting review</span><strong><?php echo number_format($al_dashboard['review']); ?></strong></div><div class="dash-finance-snapshot__metric"><span>Outstanding employee pay</span><strong><?php if(!$al_dashboard['pay']): ?>—<?php else: ?><?php foreach($al_dashboard['pay'] as $i=>$pay): ?><?php echo $i?'<br>':''; ?><?php echo htmlspecialchars($pay['currency'].' '.number_format((float)$pay['total'],2)); ?><?php endforeach; ?><?php endif; ?></strong><small>Separate from income and expenses</small></div></div>
+  </div>
+  <?php endif; ?>
 
   <!-- Two-column main layout -->
   <div class="dash-cols">

@@ -62,12 +62,13 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get inst
     zlib1g-dev \
     libonig-dev \
     libxml2-dev \
+    libcurl4-openssl-dev \
   --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions. DOM is already enabled in the official php:* images;
 # PHP 8.5's bundled DOM depends on bundled Lexbor and should not be rebuilt here.
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" gd mbstring zip pdo_mysql mysqli \
+    && docker-php-ext-install -j"$(nproc)" gd mbstring zip pdo_mysql mysqli curl \
     && a2enmod rewrite
 
 # Create php ini file for error logging and future php customization
@@ -135,10 +136,10 @@ ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
-        default-mysql-client cron curl tzdata zlib1g-dev libzip-dev \
+        default-mysql-client cron curl tzdata zlib1g-dev libzip-dev libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli
+RUN docker-php-ext-install -j"$(nproc)" zip pdo_mysql mysqli curl
 
 WORKDIR /var/www
 

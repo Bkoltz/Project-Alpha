@@ -112,7 +112,7 @@ try {
         $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'], $primaryTimeEntryId, $it['billing_unit'] === 'hour' ? ($it['quantity'] ?? null) : null]);
         if (!empty($it['time_entry_ids'])) {
             $itemId = (int)$pdo->lastInsertId();
-            $check = $pdo->prepare('SELECT id FROM time_entries WHERE id = ? AND billed = 0 AND (client_id = ? OR client_id IS NULL OR client_id = 0)');
+            $check = $pdo->prepare('SELECT id FROM time_entries WHERE id = ? AND billed = 0 AND COALESCE(external_status,"approved") <> "voided" AND (client_id = ? OR client_id IS NULL OR client_id = 0)');
             $mark = $pdo->prepare('UPDATE time_entries SET client_id = CASE WHEN client_id IS NULL OR client_id = 0 THEN ? ELSE client_id END, billed = 1, invoice_item_id = ?, invoice_id = ? WHERE id = ?');
             foreach ($it['time_entry_ids'] as $teId) {
                 $check->execute([(int)$teId, $client_id]);

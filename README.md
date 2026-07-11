@@ -20,6 +20,7 @@ It is developed by [Ledge Top Technologies LLC](https://ledgetoptechnologies.com
 - Item library, discounts, deposits, taxes, and custom document fields
 - Expenses, receipts, vendors, mileage, forms, and financial reporting
 - Role-based permissions, per-user overrides, optional TOTP 2FA, and audit logs
+- Optional AlphaLedger synchronization for project assignments, approved time, and employee pay accruals
 - Docker Compose deployment with separate web, cron, and MySQL services
 - Prebuilt images published through GitHub Container Registry
 
@@ -183,6 +184,7 @@ Key guides:
 - [Document Workflow](docs/DOCUMENT_WORKFLOW.md)
 - [TrueNAS Scale Deployment](docs/truenas-scale-deployment.md)
 - [Stripe Webhook Setup](docs/stripe-webhook-setup.md)
+- [AlphaLedger Integration](docs/admin/alphaledger-integration.md)
 - [Migration Safety](docs/MIGRATION_SAFETY.md)
 - [Cron Service](cron/README.md)
 - [Database Migrations](database/migrations/README.md)

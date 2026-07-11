@@ -4,8 +4,10 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/format.php';
 require_once __DIR__ . '/../../utils/time_tracking_schema.php';
+require_once __DIR__ . '/../../utils/alphaledger_integration.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
+$alphaLedgerOwnsTime = pa_al_policy_enabled($pdo);
 try {
     pa_time_tracking_ensure_schema($pdo);
 } catch (Throwable $e) {
@@ -108,8 +110,8 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
   <div class="finance-page-head">
     <div>
       <p class="finance-eyebrow">Time Tracking</p>
-      <h2>Track Time</h2>
-      <p class="finance-subtitle">Clock in/out, add manual entries, and manage billable hours.</p>
+      <h2><?php echo $alphaLedgerOwnsTime ? 'Approved Time' : 'Track Time'; ?></h2>
+      <p class="finance-subtitle"><?php echo $alphaLedgerOwnsTime ? 'AlphaLedger is authoritative. PA receives approved time for invoicing as a read-only record.' : 'Clock in/out, add manual entries, and manage billable hours.'; ?></p>
     </div>
   </div>
 
@@ -122,7 +124,9 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
   <?php if (!empty($_GET['deleted'])): ?>
     <div class="alert alert-success">Time entry deleted.</div>
   <?php endif; ?>
+  <?php if ($alphaLedgerOwnsTime): ?><div class="alert alert-info">Time-entry creation, timers, edits, and deletion are disabled in PA while AlphaLedger synchronization is enabled. Corrections must be approved in AlphaLedger.</div><?php endif; ?>
 
+  <?php if (!$alphaLedgerOwnsTime): ?>
   <div class="finance-grid finance-grid--main">
     <div class="finance-panel">
       <div class="finance-panel__head">
@@ -167,7 +171,11 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
       </div>
     </div>
   </div>
+  <?php else: ?>
+  <div class="finance-panel"><div class="expense-summary" style="grid-template-columns:1fr 1fr 1fr"><div class="expense-stat"><span>Total Hours</span><strong><?php echo number_format($totalHours, 2); ?></strong></div><div class="expense-stat"><span>Total Billable</span><strong><?php echo '$' . number_format($totalBillableAmount, 2); ?></strong></div><div class="expense-stat"><span>Total Unbilled</span><strong><?php echo '$' . number_format($totalUnbilledAmount, 2); ?></strong></div></div></div>
+  <?php endif; ?>
 
+  <?php if (!$alphaLedgerOwnsTime): ?>
   <div class="finance-panel mt-24">
     <div class="finance-panel__head">
       <h3 class="finance-panel__title">Manual Entry</h3>
@@ -260,6 +268,7 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
       </div>
     </form>
   </div>
+  <?php endif; ?>
 
   <div class="finance-panel mt-24">
     <div class="finance-panel__head">
@@ -304,15 +313,16 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
                   <?php endif; ?>
                 </td>
                 <td style="text-align:right">
-                  <a href="/?page=time-tracking&amp;edit=<?php echo (int)$e['id']; ?>" class="btn btn-sm">Edit</a>
+                  <?php $isAlphaLedgerEntry = ($e['source_system'] ?? '') === 'alphaledger'; ?>
+                  <?php if (!$alphaLedgerOwnsTime && !$isAlphaLedgerEntry): ?><a href="/?page=time-tracking&amp;edit=<?php echo (int)$e['id']; ?>" class="btn btn-sm">Edit</a><?php endif; ?>
                   <?php if ($e['billable'] && !$e['billed']): ?>
                     <a href="/?page=invoice/invoices-create&amp;time_entry_id=<?php echo (int)$e['id']; ?>" class="btn btn-sm btn-primary">Add to Invoice</a>
                   <?php endif; ?>
-                  <form method="post" action="/?page=time-tracking/delete" style="display:inline" class="delete-entry-form">
+                  <?php if (!$alphaLedgerOwnsTime && !$isAlphaLedgerEntry): ?><form method="post" action="/?page=time-tracking/delete" style="display:inline" class="delete-entry-form">
                     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
                     <input type="hidden" name="id" value="<?php echo (int)$e['id']; ?>">
                     <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                  </form>
+                  </form><?php endif; ?>
                 </td>
               </tr>
             <?php endforeach; ?>
@@ -327,7 +337,7 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
 
 <?php
 // Inline edit form for ?edit=ID
-$editId = (int)($_GET['edit'] ?? 0);
+$editId = $alphaLedgerOwnsTime ? 0 : (int)($_GET['edit'] ?? 0);
 if ($editId > 0) {
     $entry = null;
     foreach ($entries as $e) {
@@ -345,7 +355,7 @@ if ($editId > 0) {
             $entry = null;
         }
     }
-    if ($entry) {
+    if ($entry && ($entry['source_system'] ?? '') !== 'alphaledger') {
         $editStartValue = '';
         $editEndValue = '';
         $editHoursValue = (string)$entry['hours'];
