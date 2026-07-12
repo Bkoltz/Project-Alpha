@@ -12,6 +12,8 @@ Do not commit `.env`, `config/.env`, encryption keys, database passwords, Stripe
 
 Rotate credentials immediately if a secret is committed, pasted into an issue, exposed in logs, or included in a shared backup.
 
+Project Alpha has no permanent default administrator. Clean installations create the first administrator in the web setup. Docker operator recovery generates a one-time password for an existing active administrator, revokes sessions and reset tokens, and requires an immediate password change. TOTP is reset only with the explicit `--reset-totp` option and must then be enrolled again.
+
 ## Reporting
 
 Report suspected vulnerabilities privately to the repository owner or deployment operator. Include the affected route or file, required privileges, impact, and reproduction details when safe to share.

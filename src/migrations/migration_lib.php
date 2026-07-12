@@ -242,6 +242,9 @@ function migration_schema_health(PDO $pdo): void
         'clients', 'organization_departments', 'organization_department_contacts',
         'projects', 'quotes', 'contracts', 'invoices', 'payments',
         'api_keys', 'client_onboarding_invitations', 'client_onboarding_submissions',
+        'pa_integration_identity', 'alphaledger_policy', 'alphaledger_installations', 'alphaledger_events',
+        'alphaledger_idempotency', 'alphaledger_project_assignments', 'employee_pay_records',
+        'alphaledger_received_events',
         'rate_limits', 'schema_migrations',
     ];
     $deadTables = [
@@ -268,7 +271,7 @@ function migration_schema_health(PDO $pdo): void
     }
 
     $requiredColumns = [
-        'users' => ['email', 'password_hash', 'role'],
+        'users' => ['email', 'password_hash', 'role', 'force_password_reset', 'auth_version', 'totp_reenroll_required'],
         'clients' => ['organization_id', 'created_by'],
         'projects' => ['organization_id', 'department_id', 'created_by'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
@@ -280,6 +283,12 @@ function migration_schema_health(PDO $pdo): void
         'api_usage' => ['api_key_id', 'used_at'],
         'client_onboarding_invitations' => ['organization_id', 'invited_email', 'token_hash', 'status'],
         'client_onboarding_submissions' => ['invitation_id', 'proposed_data', 'status'],
+        'time_entries' => ['source_system', 'external_id', 'external_revision', 'external_status'],
+        'alphaledger_policy' => ['enabled', 'approved_api_key_id', 'approved_callback_url', 'approved_callback_hash', 'allow_unrestricted_key'],
+        'alphaledger_installations' => ['installation_id', 'api_key_id', 'callback_url', 'webhook_secret_enc', 'status'],
+        'alphaledger_events' => ['installation_id', 'event_id', 'event_type', 'envelope', 'delivery_state'],
+        'alphaledger_received_events' => ['installation_id', 'event_id', 'event_type', 'aggregate_id', 'result'],
+        'employee_pay_records' => ['installation_id', 'external_id', 'external_revision', 'user_id', 'amount', 'status'],
     ];
     $columnQuery = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.columns

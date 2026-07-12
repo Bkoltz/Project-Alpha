@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 
 $csrf = csrf_sf_token('reset_verify');
+$resendCsrf = csrf_sf_token('reset_request');
 $email = isset($_GET['email']) ? (string)$_GET['email'] : '';
 $prefillToken = isset($_GET['token']) ? (string)$_GET['token'] : '';
 $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
@@ -32,6 +33,11 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       <div>
         <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">Verify Code</button>
       </div>
+    </form>
+    <form method="post" action="/?page=reset-request" style="margin-top:12px;text-align:center">
+      <input type="hidden" name="_token" value="<?php echo htmlspecialchars($resendCsrf); ?>">
+      <input type="hidden" name="email" value="<?php echo htmlspecialchars($email); ?>">
+      <button type="submit" style="border:0;background:transparent;color:#0369a1;text-decoration:underline;cursor:pointer">Resend code</button>
     </form>
   </div>
 </main>

@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
 require_once __DIR__ . '/../../utils/client_ip.php';
+require_once __DIR__ . '/../../utils/password_reset_tokens.php';
 
 use App\Utils\TwoFactorAuth;
 
@@ -149,6 +150,7 @@ try {
             session_regenerate_id(true);
             $_SESSION['user'] = $_SESSION['2fa_pending']['user_data'];
             unset($_SESSION['2fa_pending']);
+            password_reset_revoke_for_user($pdo, $userId);
             
             // If user checked "Remember this device", create a trusted device token
             if ($rememberDevice) {

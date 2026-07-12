@@ -28,7 +28,7 @@ PA is a PHP 8.3 / MySQL 8 / Docker SaaS for quote/contract/invoice management wi
 - Stripe PCI-compliant payment flow (Stripe Checkout, no card data stored)
 - Encrypted DB backups (optional GPG)
 - ClamAV file upload scanning (optional)
-- Docker Compose deployment (no .env required, 3 passwords)
+- Docker Compose deployment (no .env required, 2 database passwords)
 - CI pipeline (GitHub Actions: tests, gitleaks, Docker build)
 - 4 PHPUnit security tests (CSRF, password policy, rate limit, webhook signature)
 - Configurable backup retention + schedule from UI

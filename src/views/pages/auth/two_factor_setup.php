@@ -32,6 +32,7 @@ $isRequired = two_factor_required_for_user($pdo, $userId);
 $step = $_GET['step'] ?? 'main';
 $error = $_GET['error'] ?? '';
 $success = $_GET['success'] ?? '';
+$isRecoveryEnrollment = !empty($_GET['recovery']);
 
 // Check if we're showing backup codes
 $showBackupCodes = isset($_SESSION['2fa_backup_codes']);
@@ -63,6 +64,9 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
 
 <section class="settings-container">
   <h1>Two-Factor Authentication</h1>
+  <?php if ($isRecoveryEnrollment): ?>
+    <div class="alert alert-warning">TOTP was explicitly reset by the Docker recovery command. Enroll a new authenticator now to finish account recovery.</div>
+  <?php endif; ?>
   
   <?php if ($error): ?>
     <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
@@ -147,20 +151,13 @@ $backupCodes = $_SESSION['2fa_backup_codes'] ?? [];
       <strong>Important:</strong> Save your backup codes before completing setup!
     </div>
     
-    <h2>Step 1: Scan QR Code</h2>
-    <p style="color: #6b7280;">Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.).</p>
+    <h2>Step 1: Add PA to Your Authenticator</h2>
+    <p style="color: #6b7280;">Choose the manual setup option in your authenticator app and enter the key below. PA keeps the secret on this server and does not send it to an external QR service.</p>
     
     <?php if ($twofa): ?>
       <div class="qr-container">
-        <?php
-        $otpUri = TwoFactorAuth::getOtpAuthUri($twofa['secret'], $userEmail);
-        // Generate QR code using a data URI with Google Charts API
-        $qrUrl = 'https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=' . urlencode($otpUri);
-        ?>
-        <img src="<?php echo htmlspecialchars($qrUrl); ?>" alt="2FA QR Code" style="max-width: 200px;">
-        
-        <div class="secret-display" style="margin-top: 20px;">
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280;">Or enter this code manually:</p>
+        <div class="secret-display">
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280;">Manual setup key:</p>
           <div class="secret-code"><?php echo htmlspecialchars($twofa['secret']); ?></div>
         </div>
       </div>

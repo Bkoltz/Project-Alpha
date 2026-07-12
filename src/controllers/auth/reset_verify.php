@@ -25,6 +25,10 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $token === '') {
 try {
   $uid = password_reset_verify_and_consume($pdo, $email, $token);
   $_SESSION['reset_user_id'] = $uid;
+  $version = $pdo->prepare('SELECT auth_version FROM users WHERE id = ? AND is_disabled = 0 AND deleted_at IS NULL');
+  $version->execute([$uid]);
+  $_SESSION['reset_auth_version'] = (int)$version->fetchColumn();
+  $_SESSION['reset_verified_at'] = time();
   header('Location: /?page=reset-new&email=' . urlencode($email));
   exit;
 } catch (Throwable $e) {

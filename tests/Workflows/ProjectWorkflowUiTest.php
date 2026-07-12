@@ -572,7 +572,7 @@ final class ProjectWorkflowUiTest extends TestCase
             self::assertStringContainsString($key, (string)$baseline);
         }
 
-        self::assertStringContainsString("LOWER(email) <> 'admin@project-alpha.local'", (string)$notifications);
+        self::assertStringNotContainsString('admin@project-alpha.local', (string)$notifications);
         self::assertStringContainsString("role IN ('admin','owner')", (string)$notifications);
         self::assertStringContainsString('foreach ($adminEmails as $adminEmail)', (string)$notifications);
         self::assertStringContainsString("notification_setting_enabled(\$appConfig, 'notify_signed_contract_uploaded', true)", (string)$notifications);

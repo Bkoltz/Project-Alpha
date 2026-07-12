@@ -199,7 +199,7 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
     <div class="pa-create-layout">
       <h3 style="margin-top:0">Create New User</h3>
 
-      <form method="post" action="/?page=accounts-create">
+      <form method="post" action="/?page=accounts-create" id="create-account">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrf); ?>">
 
         <div class="pa-create-card" style="margin-bottom:16px;">
@@ -444,9 +444,7 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
             </td>
             <td style="padding:12px;color:#6b7280"><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
             <td style="padding:12px;text-align:right">
-              <?php if ((int)$user['id'] !== 1): ?>
-                <a href="/?page=account-edit&id=<?php echo $user['id']; ?>" data-skip-nav style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151;font-size:14px">Edit</a>
-              <?php endif; ?>
+              <a href="/?page=account-edit&id=<?php echo $user['id']; ?>" data-skip-nav style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151;font-size:14px">Edit</a>
             </td>
           </tr>
           <?php endforeach; ?>

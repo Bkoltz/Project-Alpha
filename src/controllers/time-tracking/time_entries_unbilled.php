@@ -32,7 +32,8 @@ $sql = 'SELECT te.id, te.started_at, te.ended_at, te.project_code, te.contract_i
         FROM time_entries te
         LEFT JOIN clients c ON te.client_id = c.id
         LEFT JOIN item_library il ON il.id = te.service_item_id
-        WHERE te.user_id = ? AND te.billable = ? AND te.billed = ?';
+        WHERE (te.user_id = ? OR te.source_system = "alphaledger") AND te.billable = ? AND te.billed = ?
+          AND COALESCE(te.external_status, "approved") <> "voided"';
 if ($clientId > 0) {
     $sql .= ' AND (te.client_id = ? OR te.client_id IS NULL OR te.client_id = 0)';
     $params[] = $clientId;

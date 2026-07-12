@@ -150,7 +150,7 @@ if ($isApiEndpoint) {
         header('Access-Control-Allow-Origin: ' . $origin);
         header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-CSRF-Token');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-CSRF-Token, Idempotency-Key, X-AL-Timestamp, X-AL-Signature');
     }
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
         http_response_code(204);
@@ -171,6 +171,11 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
         exit;
     }
     $apiKey = api_require_key([$requiredApiScope]);
+
+    if ($page === 'api-v1-alphaledger') {
+        require_once __DIR__ . '/../src/controllers/api/alphaledger_integration.php';
+        exit;
+    }
 
     // Map API endpoints
     $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients'];
@@ -244,7 +249,7 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', '2fa-verify', '2fa-verify-action', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -296,7 +301,7 @@ if ($authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, 
     try {
         require_once __DIR__ . '/../src/config/db.php';
         $stmt = $pdo->query('
-            SELECT id, email, role
+            SELECT id, email, role, auth_version
             FROM users
             WHERE COALESCE(is_disabled, 0) = 0
             ORDER BY (role = "admin") DESC, id ASC
@@ -324,6 +329,7 @@ if ($authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, 
                 'id' => (int)$bypassUser['id'],
                 'email' => (string)$bypassUser['email'],
                 'role' => (string)$bypassUser['role'],
+                'auth_version' => (int)$bypassUser['auth_version'],
                 'active_org_id' => $activeOrgId,
                 'auth_bypass' => true,
             ];
@@ -346,6 +352,36 @@ if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages,
 
 // Session timeout: expire sessions after 8 hours of inactivity
 if (!empty($_SESSION['user'])) {
+    try {
+        $sessionUser = $pdo->prepare('SELECT role, is_disabled, deleted_at, auth_version FROM users WHERE id = ? LIMIT 1');
+        $sessionUser->execute([(int)$_SESSION['user']['id']]);
+        $currentUser = $sessionUser->fetch(PDO::FETCH_ASSOC);
+        $sessionVersion = (int)($_SESSION['user']['auth_version'] ?? 0);
+        if (!$currentUser || (int)$currentUser['is_disabled'] !== 0 || !empty($currentUser['deleted_at'])
+            || $sessionVersion < 1 || $sessionVersion !== (int)$currentUser['auth_version']) {
+            $_SESSION = [];
+            session_destroy();
+            if ($page === 'session-status') {
+                require_once __DIR__ . '/../src/controllers/auth/session_status.php';
+                exit;
+            }
+            header('Location: /?page=login&error=' . urlencode('Your session was revoked. Please sign in again.'));
+            exit;
+        }
+        $_SESSION['user']['role'] = (string)$currentUser['role'];
+        $_SESSION['user']['app_role'] = (string)$currentUser['role'];
+    } catch (Throwable $e) {
+        error_log('[security] session revocation check failed: ' . $e->getMessage());
+        $_SESSION = [];
+        session_destroy();
+        if ($page === 'session-status') {
+            require_once __DIR__ . '/../src/controllers/auth/session_status.php';
+            exit;
+        }
+        header('Location: /?page=login&error=' . urlencode('Unable to validate your session. Please sign in again.'));
+        exit;
+    }
+
     $sessionTimeout = 8 * 60 * 60; // 8 hours
     if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $sessionTimeout) {
         $_SESSION = [];
@@ -360,6 +396,26 @@ if (!empty($_SESSION['user'])) {
     // Passive status polling must not keep an otherwise inactive session alive.
     if ($page !== 'session-status') {
         $_SESSION['last_activity'] = time();
+    }
+}
+
+// A recovery that explicitly reset TOTP must finish enrollment after the
+// temporary password has been replaced and before any other application use.
+if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
+    $allowedForTotpReenroll = ['2fa-setup', '2fa-setup-action', 'logout', 'logout-confirm', 'session-status'];
+    if (!in_array($page, $allowedForTotpReenroll, true)) {
+        try {
+            $totpStmt = $pdo->prepare('SELECT force_password_reset, totp_reenroll_required FROM users WHERE id = ?');
+            $totpStmt->execute([(int)$_SESSION['user']['id']]);
+            $recoveryState = $totpStmt->fetch(PDO::FETCH_ASSOC);
+            if ((int)($recoveryState['force_password_reset'] ?? 0) === 0
+                && (int)($recoveryState['totp_reenroll_required'] ?? 0) === 1) {
+                header('Location: /?page=2fa-setup&required=1&recovery=1');
+                exit;
+            }
+        } catch (Throwable $e) {
+            error_log('[security] TOTP reenrollment gate failed: ' . $e->getMessage());
+        }
     }
 }
 
@@ -700,6 +756,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'project/project-invoice-payment',
         'project/projects-update-status',
         'project-notes-update',
+        'financial/employee-pay-status',
 
         // Quotes
         'quote/quotes-create',
@@ -786,6 +843,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'financial/asset-handler',
         'financial/expense-handler',
         'financial/expense_handler',
+        'financial/recurring-expense-handler',
         'financial/csv-import',
 
         // Time Tracking
@@ -830,13 +888,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   settings/link-resolver-run    - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
+        exit;
+    }
+    if ($page === 'settings/alphaledger-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/alphaledger_handler.php';
+        exit;
+    }
+    if ($page === 'financial/employee-pay-status') {
+        require_once __DIR__ . '/../src/controllers/financial/employee_pay_status.php';
         exit;
     }
     if ($page === 'settings-backup') {
@@ -1309,6 +1375,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/expense-handler' || $page === 'financial/expense_handler') {
         require_once __DIR__ . '/../src/controllers/financial/expense_handler.php';
+        exit;
+    }
+    if ($page === 'financial/recurring-expense-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/recurring_expense_handler.php';
         exit;
     }
     if ($page === 'financial/csv-import') {

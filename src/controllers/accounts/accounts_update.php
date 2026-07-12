@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/permission_catalog.php';
+require_once __DIR__ . '/../../utils/admin_account_policy.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -36,12 +37,6 @@ $documentSenderEmail = trim((string)($_POST['document_sender_email'] ?? ''));
 // Validation
 if ($userId <= 0) {
     header('Location: /?page=accounts&error=' . urlencode('Invalid user ID'));
-    exit;
-}
-
-// Protect the seeded admin account (id=1)
-if ($userId === 1) {
-    header('Location: /?page=accounts&error=' . urlencode('The default admin account cannot be modified'));
     exit;
 }
 
@@ -91,10 +86,19 @@ if ($stmt->fetch()) {
     header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Email already exists'));
     exit;
 }
+if ($username !== '') {
+    $stmt = $pdo->prepare('SELECT id FROM users WHERE username = ? AND id != ? AND deleted_at IS NULL');
+    $stmt->execute([$username, $userId]);
+    if ($stmt->fetch()) {
+        header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Username already exists'));
+        exit;
+    }
+}
 
 // Update user
 try {
     $pdo->beginTransaction();
+    assert_not_removing_final_active_admin($pdo, $userId, $role === 'admin' && !$isDisabled);
 
     $stmt = $pdo->prepare('UPDATE users SET
         email = ?,
@@ -112,7 +116,8 @@ try {
         document_sender_postal = ?,
         document_sender_country = ?,
         document_sender_phone = ?,
-        document_sender_email = ?
+        document_sender_email = ?,
+        auth_version = auth_version + 1
         WHERE id = ?');
     $stmt->execute([
         $email,
@@ -159,11 +164,12 @@ try {
 
     audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $isDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0]);
     header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
-} catch (PDOException $e) {
+} catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
     error_log('Failed to update user: ' . $e->getMessage());
-    header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Failed to update user'));
+    $message = $e instanceof DomainException ? $e->getMessage() : 'Failed to update user';
+    header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode($message));
 }
 exit;

@@ -67,6 +67,7 @@ function cron_state_ensure_schema(PDO $pdo): void {
         $jobs = [
             'rotate_logs',
             'generate_recurring_invoices',
+            'generate_recurring_expenses',
             'backup_database',
             'auto_terminate_contracts',
             'link_expiration_checker',

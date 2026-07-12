@@ -155,6 +155,19 @@ foreach ($projectClients as $client) {
 $autoEmailEnabled = !array_key_exists('project_invoice_auto_email', $project) || !empty($project['project_invoice_auto_email']);
 $publicProjectUrl = pa_project_public_url($appConfig ?? [], (string)($project['public_project_token'] ?? ''));
 $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?? '')) !== '';
+$alphaLedgerUsers = [];
+$alphaLedgerAssignedUserIds = [];
+try {
+    $policyEnabled = (bool)$pdo->query('SELECT enabled FROM alphaledger_policy WHERE singleton=1')->fetchColumn();
+    if ($policyEnabled && ($_SESSION['user']['role'] ?? '') === 'admin') {
+        $alphaLedgerUsers = $pdo->query("SELECT id,email,COALESCE(NULLIF(username,''),email) AS display_name FROM users WHERE is_disabled=0 AND deleted_at IS NULL ORDER BY display_name")->fetchAll(PDO::FETCH_ASSOC);
+        $assignmentStmt = $pdo->prepare('SELECT user_id FROM alphaledger_project_assignments WHERE project_id=?');
+        $assignmentStmt->execute([$projectId]);
+        $alphaLedgerAssignedUserIds = array_map('intval', $assignmentStmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+} catch (Throwable $ignored) {
+    // The integration migration may not be installed yet.
+}
 ?>
 
 <style>
@@ -178,6 +191,7 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
     <nav class="project-edit-nav" aria-label="Project edit sections">
       <a href="#project-basics">Basics</a>
       <a href="#project-contacts">Contacts</a>
+      <?php if ($alphaLedgerUsers): ?><a href="#project-alphaledger">AlphaLedger</a><?php endif; ?>
       <a href="#project-billing">Invoice Defaults</a>
       <a href="#project-schedule">Schedule &amp; Notes</a>
       <a href="#project-public-link">Public Link</a>
@@ -215,6 +229,22 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
           <small>Department selection controls department link inheritance for project invoices.</small>
         </label>
       </section>
+
+      <?php if ($alphaLedgerUsers): ?>
+      <section id="project-alphaledger" class="project-edit-section">
+        <input type="hidden" name="alphaledger_assignments_present" value="1">
+        <h2>AlphaLedger Assignments</h2>
+        <p>Assigned PA users receive this project in AlphaLedger. Identity links are confirmed by an AlphaLedger administrator before employees can use the assignment.</p>
+        <div class="project-edit-grid">
+          <?php foreach ($alphaLedgerUsers as $alUser): $alUserId = (int)$alUser['id']; ?>
+            <label class="project-check">
+              <input type="checkbox" name="alphaledger_user_ids[]" value="<?php echo $alUserId; ?>" <?php echo in_array($alUserId, $alphaLedgerAssignedUserIds, true) ? 'checked' : ''; ?>>
+              <span><strong><?php echo htmlspecialchars((string)$alUser['display_name']); ?></strong><br><small><?php echo htmlspecialchars((string)$alUser['email']); ?></small></span>
+            </label>
+          <?php endforeach; ?>
+        </div>
+      </section>
+      <?php endif; ?>
 
       <section id="project-contacts" class="project-edit-section" data-project-settings-contact-manager>
         <h2>Contacts</h2>
