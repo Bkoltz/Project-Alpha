@@ -34,12 +34,17 @@ $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
 
 // Update password
 try {
-    $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, force_password_reset = ? WHERE id = ?');
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, force_password_reset = ?, auth_version = auth_version + 1 WHERE id = ?');
     $stmt->execute([$passwordHash, $forceReset ? 1 : 0, $userId]);
+    $pdo->prepare('UPDATE password_resets SET used = 1 WHERE user_id = ? AND used = 0')->execute([$userId]);
+    $pdo->prepare('DELETE FROM trusted_devices WHERE user_id = ?')->execute([$userId]);
     
     audit_log($pdo, 'user.password_reset_by_admin', 'user', $userId);
+    $pdo->commit();
     header('Location: /?page=account-edit&id=' . $userId . '&success=pwd_reset');
-} catch (PDOException $e) {
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) { $pdo->rollBack(); }
     error_log('Failed to reset password: ' . $e->getMessage());
     header('Location: /?page=accounts&action=edit&id=' . $userId . '&error=' . urlencode('Failed to reset password'));
 }

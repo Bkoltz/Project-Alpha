@@ -18,7 +18,7 @@ $uid = isset($_SESSION['reset_user_id']) ? (int)$_SESSION['reset_user_id'] : 0;
 $email = isset($_POST['email']) ? (string)$_POST['email'] : '';
 $new = (string)($_POST['new_password'] ?? '');
 $confirm = (string)($_POST['confirm_password'] ?? '');
-$token = isset($_POST['token']) ? password_reset_normalize_token((string)$_POST['token']) : '';
+$expectedAuthVersion = 0;
 
 // Validate passwords before consuming any token. A typo in the new password
 // fields should not burn an otherwise valid reset code.
@@ -32,36 +32,33 @@ if ($pwdErr !== null) {
   exit;
 }
 
-// If no session-bound uid, allow token-based verification in this step (single-step reset)
 if ($uid <= 0) {
-  // Validate basics first
-  if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    header('Location: /?page=reset-new&email=' . urlencode($email) . '&error=' . urlencode('Enter your email and code'));
-    exit;
-  }
-  if ($token === '') {
-    header('Location: /?page=reset-new&email=' . urlencode($email) . '&error=' . urlencode('Enter your email and code'));
-    exit;
-  }
-  try {
-    $uid = password_reset_verify_and_consume($pdo, $email, $token);
-  } catch (Throwable $e) {
-    header('Location: /?page=reset-new&email=' . urlencode($email) . '&error=' . urlencode('Invalid or expired code'));
-    exit;
-  }
+  header('Location: /?page=reset-password&error=' . urlencode('Verify a new reset code before choosing a password.'));
+  exit;
 }
 
-if ($uid <= 0) {
-  header('Location: /?page=reset-new&email=' . urlencode($email) . '&error=' . urlencode('Invalid input'));
-  exit;
+if ($uid > 0) {
+  $verifiedAt = (int)($_SESSION['reset_verified_at'] ?? 0);
+  $expectedAuthVersion = (int)($_SESSION['reset_auth_version'] ?? 0);
+  $version = $pdo->prepare('SELECT auth_version FROM users WHERE id = ? AND is_disabled = 0 AND deleted_at IS NULL');
+  $version->execute([$uid]);
+  $currentAuthVersion = (int)$version->fetchColumn();
+  if ($verifiedAt <= 0 || time() - $verifiedAt > 300 || $expectedAuthVersion < 1 || $currentAuthVersion !== $expectedAuthVersion) {
+    unset($_SESSION['reset_user_id'], $_SESSION['reset_auth_version'], $_SESSION['reset_verified_at']);
+    header('Location: /?page=reset-password&error=' . urlencode('That reset authorization expired. Request a new code.'));
+    exit;
+  }
 }
 
 try {
   $hash = password_hash($new, PASSWORD_DEFAULT);
-  $st = $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?');
-  $st->execute([$hash, $uid]);
+  $st = $pdo->prepare('UPDATE users SET password_hash=?, force_password_reset=0, auth_version=auth_version+1 WHERE id=? AND auth_version=? AND is_disabled=0 AND deleted_at IS NULL');
+  $st->execute([$hash, $uid, $expectedAuthVersion]);
+  if ($st->rowCount() !== 1) {
+    throw new RuntimeException('Reset authorization was revoked.');
+  }
   audit_log($pdo, 'user.password_reset_via_token', 'user', $uid, [], $uid);
-  unset($_SESSION['reset_user_id']);
+  unset($_SESSION['reset_user_id'], $_SESSION['reset_auth_version'], $_SESSION['reset_verified_at']);
   header('Location: /?page=login&pwd_reset=1');
   exit;
 } catch (Throwable $e) {

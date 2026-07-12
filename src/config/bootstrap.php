@@ -50,6 +50,8 @@ try {
     try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_phone VARCHAR(80) NULL AFTER document_sender_country"); } catch (Throwable $e) {}
     try { $pdo->exec("ALTER TABLE users ADD COLUMN document_sender_email VARCHAR(255) NULL AFTER document_sender_phone"); } catch (Throwable $e) {}
     try { $pdo->exec("ALTER TABLE users ADD COLUMN is_disabled TINYINT(1) NOT NULL DEFAULT 0 AFTER force_password_reset"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN auth_version INT UNSIGNED NOT NULL DEFAULT 1 AFTER force_password_reset"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN totp_reenroll_required TINYINT(1) NOT NULL DEFAULT 0 AFTER auth_version"); } catch (Throwable $e) {}
 
     // Login attempts for throttling
     $pdo->exec(

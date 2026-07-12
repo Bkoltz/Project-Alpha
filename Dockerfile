@@ -77,6 +77,7 @@ COPY php.ini /usr/local/etc/php/conf.d/php.ini
 # Copy application code
 COPY ./public/ /var/www/html/
 COPY ./src/ /var/www/src/
+COPY ./bin/ /var/www/bin/
 
 # Copy the destructive 0.5.0 baseline and immutable forward migrations.
 COPY ./database/baseline.sql /usr/local/share/app-migrations/baseline.sql
@@ -86,8 +87,8 @@ COPY ./database/migrations/ /var/www/database/migrations/
 COPY --from=vendor /app/vendor /var/www/vendor
 
 # Set recommended permissions (adjust as needed)
-RUN chown -R www-data:www-data /var/www/html /var/www/src /var/www/vendor \
-    && chmod -R 755 /var/www/html /var/www/src /var/www/vendor
+RUN chown -R www-data:www-data /var/www/html /var/www/src /var/www/bin /var/www/vendor \
+    && chmod -R 755 /var/www/html /var/www/src /var/www/bin /var/www/vendor
 
 # RUN chown -R www-data:www-data /var/www/config && chmod -R 755 /var/www/config
 

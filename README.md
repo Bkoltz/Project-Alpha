@@ -71,9 +71,8 @@ Current boundaries include:
    cd Project-Alpha
    ```
 
-2. In `docker-compose.yml`, replace all three `changeme` passwords:
+2. In `docker-compose.yml`, replace both database `changeme` passwords:
 
-   - `ADMIN_PASSWORD`
    - `MYSQL_PASSWORD`
    - `MYSQL_ROOT_PASSWORD`
 
@@ -84,10 +83,7 @@ Current boundaries include:
    docker compose up -d
    ```
 
-4. Open <http://localhost:1627> and sign in with:
-
-   - Email: `admin@project-alpha.local`
-   - Password: the `ADMIN_PASSWORD` value from your Compose configuration
+4. Open <http://localhost:1627>. On a clean database, PA displays its first-time setup screen. Create the initial administrator with your own email, username, and password; PA has no default administrator credential.
 
 5. Complete the application settings:
 
@@ -98,6 +94,24 @@ Current boundaries include:
    - **Notifications**: cron and invoice-email options
 
 The one-shot `migrate` service initializes and validates the database before web or cron can start. Project Alpha 0.5.0 is a destructive database reset and cannot upgrade a 0.4.x database in place; follow the [0.5.0 reset runbook](docs/0.5.0-database-reset.md).
+
+### Administrator recovery
+
+If an active administrator loses their password and email reset is unavailable, run this from the Compose project directory:
+
+```bash
+docker compose exec web php bin/admin-recovery.php admin@example.com
+```
+
+The identifier may be the administrator username or email. PA prints one temporary password, revokes existing sessions and reset codes, and forces a password change at the next login. It refuses non-admin, inactive, ambiguous, or unknown accounts.
+
+Reset TOTP only when it is also lost:
+
+```bash
+docker compose exec web php bin/admin-recovery.php admin@example.com --reset-totp
+```
+
+That explicit option removes the existing TOTP enrollment and requires a new enrollment immediately after the temporary password is changed. Both recovery operations are audited.
 
 ### Staging
 

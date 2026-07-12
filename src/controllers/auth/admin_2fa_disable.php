@@ -25,16 +25,14 @@ if ($userId <= 0) {
     exit;
 }
 
-// Protect the built-in admin
-if ($userId === 1) {
-    header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Cannot modify the default admin account'));
-    exit;
-}
-
 try {
+    $pdo->beginTransaction();
     $pdo->prepare('DELETE FROM user_2fa WHERE user_id = ?')->execute([$userId]);
+    $pdo->prepare('UPDATE users SET auth_version = auth_version + 1 WHERE id = ?')->execute([$userId]);
+    $pdo->commit();
     header('Location: /?page=account-edit&id=' . $userId . '&success=2fa_disabled');
 } catch (Throwable $e) {
+    if ($pdo->inTransaction()) { $pdo->rollBack(); }
     header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Failed to disable 2FA'));
 }
 exit;

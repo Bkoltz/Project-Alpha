@@ -271,7 +271,7 @@ function migration_schema_health(PDO $pdo): void
     }
 
     $requiredColumns = [
-        'users' => ['email', 'password_hash', 'role'],
+        'users' => ['email', 'password_hash', 'role', 'force_password_reset', 'auth_version', 'totp_reenroll_required'],
         'clients' => ['organization_id', 'created_by'],
         'projects' => ['organization_id', 'department_id', 'created_by'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],

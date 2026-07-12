@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/src/migrations/migration_lib.php';
-require_once dirname(__DIR__, 2) . '/src/migrations/admin_sync.php';
 
 use PHPUnit\Framework\TestCase;
 
@@ -43,31 +42,14 @@ final class SchemaBaselineTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
-    public function testComposeAdministratorPasswordIsReconciledOnlyWhenDifferent(): void
+    public function testCleanInstallationDoesNotRequireComposeAdministratorCredentials(): void
     {
-        $environment = [
-            'ADMIN_EMAIL' => $this->email,
-            'ADMIN_USERNAME' => 'phase1-admin',
-            'ADMIN_PASSWORD' => 'First-Password-123!',
-        ];
-
-        $this->assertSame('created', sync_compose_admin($this->pdo, $environment));
-        $firstHash = $this->passwordHash();
-        $this->assertTrue(password_verify($environment['ADMIN_PASSWORD'], $firstHash));
-
-        $this->assertSame('unchanged', sync_compose_admin($this->pdo, $environment));
-        $this->assertSame($firstHash, $this->passwordHash(), 'Unchanged password must not rewrite its salted hash.');
-
-        $environment['ADMIN_PASSWORD'] = 'Second-Password-456!';
-        $this->assertSame('updated', sync_compose_admin($this->pdo, $environment));
-        $this->assertTrue(password_verify($environment['ADMIN_PASSWORD'], $this->passwordHash()));
-        $this->assertFalse(password_verify('First-Password-123!', $this->passwordHash()));
-    }
-
-    private function passwordHash(): string
-    {
-        $statement = $this->pdo->prepare('SELECT password_hash FROM users WHERE email = ?');
-        $statement->execute([$this->email]);
-        return (string) $statement->fetchColumn();
+        $root = dirname(__DIR__, 2);
+        $migrator = (string)file_get_contents($root . '/docker/migrate.sh');
+        $compose = (string)file_get_contents($root . '/docker-compose.truenas.yml');
+        self::assertStringNotContainsString('admin_sync.php', $migrator);
+        self::assertStringNotContainsString('ADMIN_PASSWORD', $compose);
+        self::assertStringNotContainsString('ADMIN_EMAIL', $compose);
+        self::assertStringContainsString('Create the first administrator in the web setup', $migrator);
     }
 }

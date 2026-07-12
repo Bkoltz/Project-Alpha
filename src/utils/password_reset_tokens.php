@@ -14,6 +14,9 @@ function password_reset_normalize_token(string $token): string
 
 function password_reset_token_matches(string $submitted, string $stored): bool
 {
+    if (strlen($stored) === 64 && ctype_xdigit($stored)) {
+        return hash_equals(strtolower($stored), hash('sha256', $submitted));
+    }
     if (hash_equals($submitted, $stored)) {
         return true;
     }
@@ -23,6 +26,24 @@ function password_reset_token_matches(string $submitted, string $stored): bool
     }
     $storedCompact = preg_replace('/\s+|-/', '', $stored);
     return is_string($storedCompact) && $storedCompact !== '' && hash_equals($submitted, $storedCompact);
+}
+
+function password_reset_revoke_for_user(PDO $pdo, int $userId): void
+{
+    if ($userId <= 0) {
+        return;
+    }
+    try {
+        $statement = $pdo->prepare('UPDATE password_resets SET used = 1 WHERE user_id = ? AND used = 0');
+        $statement->execute([$userId]);
+    } catch (Throwable $error) {
+        // Authentication must not fail merely because reset cleanup is unavailable.
+    }
+}
+
+function password_reset_email_is_configured(array $appConfig): bool
+{
+    return trim((string)($appConfig['smtp_host'] ?? '')) !== '';
 }
 
 function password_reset_mask_token(string $token): string
@@ -107,14 +128,15 @@ function password_reset_verify_and_consume(PDO $pdo, string $email, string $toke
     $row = null;
     $hasAttempts = password_reset_has_attempts($pdo);
     try {
+        $lookupToken = hash('sha256', $token);
         $exact = $pdo->prepare(
             'SELECT id, token, expires_at, used, ' . ($hasAttempts ? 'attempts' : '0 AS attempts') . '
              FROM password_resets
-             WHERE user_id = ? AND used = 0 AND token = ?
+             WHERE user_id = ? AND used = 0 AND token IN (?, ?)
              ORDER BY id DESC
              LIMIT 1'
         );
-        $exact->execute([$userId, $token]);
+        $exact->execute([$userId, $lookupToken, $token]);
         $row = $exact->fetch(PDO::FETCH_ASSOC) ?: null;
 
         if (!$row && ctype_digit($token)) {

@@ -1,10 +1,10 @@
 # Project Alpha — Docker Compose (pull prebuilt GHCR images)
 #
 # SETUP:
-#   1. Change the three passwords below (search for "changeme")
+#   1. Change the two database passwords below (search for "changeme")
 #   2. Run: docker compose pull && docker compose up -d
 #   3. Open http://localhost:1627
-#   4. Log in with admin@project-alpha.local / <your ADMIN_PASSWORD>
+#   4. Follow the first-time setup screen to create the initial administrator
 #   5. Go to Settings > Billing to enter Stripe keys (stored encrypted in DB)
 #
 # No .env file needed. No build step — images are pulled from GHCR.
@@ -23,7 +23,6 @@ services:
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
-      ADMIN_PASSWORD: changeme_admin_pass
     depends_on:
       db:
         condition: service_healthy

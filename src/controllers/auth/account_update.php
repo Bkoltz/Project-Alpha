@@ -33,20 +33,33 @@ if ($pwdErr !== null) {
 }
 
 try {
-  $st = $pdo->prepare('SELECT password_hash FROM users WHERE id=?');
+  $pdo->beginTransaction();
+  $st = $pdo->prepare('SELECT password_hash, auth_version FROM users WHERE id=? FOR UPDATE');
   $st->execute([$uid]);
-  $hash = (string)$st->fetchColumn();
+  $lockedUser = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+  $hash = (string)($lockedUser['password_hash'] ?? '');
   if ($hash === '' || !password_verify($current, $hash)) {
+    $pdo->rollBack();
     header('Location: /?page=account&pwd_error=' . urlencode('Current password is incorrect'));
     exit;
   }
   $newHash = password_hash($new, PASSWORD_DEFAULT);
-  $up = $pdo->prepare('UPDATE users SET password_hash=?, force_password_reset=0 WHERE id=?');
+  $up = $pdo->prepare('UPDATE users SET password_hash=?, force_password_reset=0, auth_version=auth_version+1 WHERE id=?');
   $up->execute([$newHash, $uid]);
+  $version = $pdo->prepare('SELECT auth_version, totp_reenroll_required FROM users WHERE id=?');
+  $version->execute([$uid]);
+  $recoveryState = $version->fetch(PDO::FETCH_ASSOC) ?: [];
   audit_log($pdo, 'user.password_changed', 'user', $uid);
+  $pdo->commit();
+  $_SESSION['user']['auth_version'] = (int)($recoveryState['auth_version'] ?? 0);
+  if ((int)($recoveryState['totp_reenroll_required'] ?? 0) === 1) {
+    header('Location: /?page=2fa-setup&required=1&recovery=1');
+    exit;
+  }
   header('Location: /?page=account&pwd=1');
   exit;
 } catch (Throwable $e) {
+  if ($pdo->inTransaction()) { $pdo->rollBack(); }
   header('Location: /?page=account&pwd_error=' . urlencode('Failed to update password'));
   exit;
 }

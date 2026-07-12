@@ -10,6 +10,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/admin_account_policy.php';
 
 $userId = !empty($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : 0;
 
@@ -61,6 +62,7 @@ audit_log($pdo, 'user.account_deleted', 'user', $userId);
 // 5. Delete all user data inside a transaction
 try {
     $pdo->beginTransaction();
+    assert_not_removing_final_active_admin($pdo, $userId, false);
 
     // User-specific data. Business/customer records remain intact.
     $pdo->prepare('DELETE FROM system_audit WHERE user_id = ?')->execute([$userId]);
@@ -78,7 +80,8 @@ try {
         $pdo->rollBack();
     }
     error_log('[account_delete] deletion failed for user ' . $userId . ': ' . $e->getMessage());
-    header('Location: /?page=account/delete&error=' . rawurlencode('Account deletion failed. Please contact support.'));
+    $message = $e instanceof DomainException ? $e->getMessage() : 'Account deletion failed. Please contact support.';
+    header('Location: /?page=account/delete&error=' . rawurlencode($message));
     exit;
 }
 

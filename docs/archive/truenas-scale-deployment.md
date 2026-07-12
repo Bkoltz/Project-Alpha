@@ -29,7 +29,7 @@ Do not reuse these volumes between staging and production.
 2. Replace every `changeme` password with a unique value.
 3. Confirm the web, cron, and database services use the same database credentials.
 4. Pull the images and start the application.
-5. Open the environment's host port and sign in as `admin@project-alpha.local`.
+5. Open the environment's host port; on a clean database, create the initial administrator in first-time setup.
 6. Configure the public application URL, timezone, organization, email, and billing settings.
 7. Put the service behind an HTTPS reverse proxy or tunnel before public use.
 
