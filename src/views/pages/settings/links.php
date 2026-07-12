@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/link_provider_config.php';
+require_once __DIR__ . '/../../../utils/cron_state.php';
 
 // Fetch global app config
 $appConfig = [];
@@ -39,6 +40,16 @@ try {
     $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM entity_links WHERE link_type IN ('auto_dropbox','auto_gdrive','auto_s3')")->fetchColumn();
 } catch (Throwable $e) {
     @error_log('[links] Error fetching link stats: ' . $e->getMessage());
+}
+
+$dailyScanRun = null;
+try {
+    cron_state_ensure_schema($pdo);
+    $dailyScanStmt = $pdo->prepare('SELECT last_run, status, result, error_message FROM cron_job_runs WHERE job_name = ? LIMIT 1');
+    $dailyScanStmt->execute(['daily_link_resolver']);
+    $dailyScanRun = $dailyScanStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $e) {
+    @error_log('[links] Error fetching daily resolver status: ' . $e->getMessage());
 }
 
 // Make CSRF token available to JavaScript
@@ -115,6 +126,24 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
             <div style="font-size:24px;font-weight:700;color:#374151"><?php echo $linkStats['ignored_clients']; ?></div>
             <div style="font-size:13px;color:#6b7280">Ignored</div>
         </div>
+    </div>
+
+    <?php
+    $dailyScanStatus = (string)($dailyScanRun['status'] ?? '');
+    $dailyScanLastRun = (string)($dailyScanRun['last_run'] ?? '');
+    $dailyScanFailed = $dailyScanStatus === 'failed';
+    $dailyScanMessage = $dailyScanFailed
+        ? (string)($dailyScanRun['error_message'] ?? 'The last scan failed. Check the cron log for details.')
+        : (string)($dailyScanRun['result'] ?? 'The nightly scan has not run yet.');
+    ?>
+    <div style="padding:12px 14px;margin-bottom:20px;border:1px solid <?php echo $dailyScanFailed ? '#fecaca' : '#dbeafe'; ?>;background:<?php echo $dailyScanFailed ? '#fef2f2' : '#eff6ff'; ?>;border-radius:8px;font-size:13px">
+        <strong>Nightly folder scan:</strong>
+        <?php if ($dailyScanLastRun !== ''): ?>
+            <?php echo e(ucfirst($dailyScanStatus ?: 'unknown')); ?> on <?php echo e(date('M j, Y g:i A', strtotime($dailyScanLastRun))); ?>.
+        <?php else: ?>
+            Not run yet.
+        <?php endif; ?>
+        <span style="display:block;margin-top:4px;color:<?php echo $dailyScanFailed ? '#991b1b' : 'var(--muted)'; ?>"><?php echo e($dailyScanMessage); ?></span>
     </div>
 
     <form method="POST" action="/?page=settings/links-handler">
@@ -225,7 +254,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                 <span class="font-600">Enable <?php echo e($providerName); ?> auto-generation</span>
             </label>
             <div class="pa-provider-note">
-                Manual links do not require auto-generation. Enable this provider only when PA should scan for exact organization or department folders and create share links automatically.
+                Manual links do not require auto-generation. Enable this provider only when PA should scan for exact organization, department, or standalone-client folders and create share links automatically.
             </div>
 
             <div id="fields_<?php echo e($provider); ?>" style="<?php echo !$isEnabled ? 'display:none' : ''; ?>">

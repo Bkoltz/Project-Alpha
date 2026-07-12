@@ -280,7 +280,7 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
             <?php foreach ($clients as $client): ?>
               <div style="display:grid;gap:4px;border:1px solid #eef2f7;border-radius:8px;padding:10px">
                 <div style="display:flex;justify-content:space-between;gap:8px;align-items:start">
-                  <a href="/?page=client/clients-edit&id=<?php echo (int)$client['id']; ?>" style="font-weight:700;text-decoration:none;color:inherit">
+                  <a href="/?page=client/client-details&id=<?php echo (int)$client['id']; ?>" style="font-weight:700;text-decoration:none;color:inherit">
                     <?php echo htmlspecialchars($client['name']); ?>
                   </a>
                   <form method="post" action="/?page=organization/organization-remove-client" style="margin:0" onsubmit="return confirm('Remove <?php echo e(substr(json_encode((string)$client['name'], JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS), 1, -1)); ?> from this organization?')">
