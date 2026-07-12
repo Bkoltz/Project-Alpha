@@ -11,6 +11,7 @@ These PHP scripts run unattended from `cron/crontab`. They use the same database
 - `backup_database.php`
 - `auto_terminate_contracts.php`
 - `link_expiration_checker.php`
+- `daily_link_resolver.php`
 - `process_audit_schedules.php`
 - `send_invoice_reminders.php`
 - `stripe_reconciliation.php`

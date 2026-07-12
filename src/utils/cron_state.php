@@ -71,6 +71,7 @@ function cron_state_ensure_schema(PDO $pdo): void {
             'backup_database',
             'auto_terminate_contracts',
             'link_expiration_checker',
+            'daily_link_resolver',
             'process_audit_schedules',
             'send_invoice_reminders',
             'stripe_reconciliation',

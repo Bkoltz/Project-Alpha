@@ -28,6 +28,9 @@ CRON_LOG=/var/www/config/logs/cron/cron.log
 # Check and expire links - daily at 4:00 AM
 0 4 * * * root . /etc/environment && php /var/www/src/cron/link_expiration_checker.php >> $CRON_LOG 2>&1
 
+# Scan enabled link providers for organization, department, and standalone client folders - daily at 4:15 AM
+15 4 * * * root . /etc/environment && php /var/www/src/cron/daily_link_resolver.php >> $CRON_LOG 2>&1
+
 # Process audit schedules - daily at 6:00 AM
 0 6 * * * root . /etc/environment && php /var/www/src/cron/process_audit_schedules.php >> $CRON_LOG 2>&1
 
