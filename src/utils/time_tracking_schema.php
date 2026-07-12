@@ -26,7 +26,8 @@ function pa_time_tracking_ensure_schema(PDO $pdo): void
         "CREATE TABLE IF NOT EXISTS time_entries (
             id INT AUTO_INCREMENT PRIMARY KEY,
             organization_id INT NULL,
-            user_id INT NOT NULL,
+            user_id INT NULL,
+            team_member_id BIGINT UNSIGNED NULL,
             client_id INT NULL,
             project_id INT NULL,
             project_code VARCHAR(64) NULL,
@@ -56,8 +57,9 @@ function pa_time_tracking_ensure_schema(PDO $pdo): void
 
     $columns = [
         'organization_id' => 'INT NULL AFTER id',
-        'user_id' => 'INT NOT NULL DEFAULT 0 AFTER organization_id',
-        'client_id' => 'INT NULL AFTER user_id',
+        'user_id' => 'INT NULL AFTER organization_id',
+        'team_member_id' => 'BIGINT UNSIGNED NULL AFTER user_id',
+        'client_id' => 'INT NULL AFTER team_member_id',
         'project_id' => 'INT NULL AFTER client_id',
         'project_code' => 'VARCHAR(64) NULL AFTER project_id',
         'contract_id' => 'INT NULL AFTER project_code',
@@ -70,6 +72,10 @@ function pa_time_tracking_ensure_schema(PDO $pdo): void
         'billable' => 'TINYINT(1) DEFAULT 1 AFTER hours',
         'billed' => 'TINYINT(1) DEFAULT 0 AFTER billable',
         'rate' => 'DECIMAL(10,2) DEFAULT 0 AFTER billed',
+        'cost_rate_snapshot' => 'DECIMAL(12,4) NULL AFTER rate',
+        'billing_rate_snapshot' => 'DECIMAL(12,4) NULL AFTER cost_rate_snapshot',
+        'currency' => 'CHAR(3) NOT NULL DEFAULT "USD" AFTER billing_rate_snapshot',
+        'rate_snapshot_source' => 'VARCHAR(50) NULL AFTER currency',
         'invoice_item_id' => 'INT DEFAULT NULL AFTER rate',
         'created_at' => 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER invoice_item_id',
         'updated_at' => 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at',
@@ -114,4 +120,14 @@ function pa_time_tracking_ensure_schema(PDO $pdo): void
     }
 
     $done = true;
+}
+
+function pa_time_tracking_team_member_id(PDO $pdo,int $userId): ?int
+{
+    try{
+        $stmt=$pdo->prepare('SELECT id FROM team_members WHERE user_id=? LIMIT 1');$stmt->execute([$userId]);$id=$stmt->fetchColumn();
+        if($id!==false)return (int)$id;
+        $user=$pdo->prepare('SELECT COALESCE(NULLIF(username,""),email) display_name,email,is_disabled,deleted_at FROM users WHERE id=?');$user->execute([$userId]);$row=$user->fetch(PDO::FETCH_ASSOC);if(!$row)return null;
+        $pdo->prepare('INSERT INTO team_members (user_id,display_name,email,is_active) VALUES (?,?,?,?)')->execute([$userId,$row['display_name'],$row['email'],empty($row['is_disabled'])&&empty($row['deleted_at'])?1:0]);return (int)$pdo->lastInsertId();
+    }catch(Throwable $e){return null;}
 }

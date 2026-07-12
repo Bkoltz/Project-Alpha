@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/crypto.php';
+require_once __DIR__ . '/alphaledger_time_bridge.php';
 
 const PA_AL_SCHEMA_VERSION = '1.0';
 
@@ -200,11 +201,11 @@ function pa_al_capture_owned_state(PDO $pdo, array $installation): void
     $pdo->beginTransaction();
     try {
         $seenPeople = [];
-        $users = $pdo->query("SELECT id,email,COALESCE(NULLIF(username,''),email) AS name,is_disabled,deleted_at FROM users")->fetchAll(PDO::FETCH_ASSOC);
+        $users = $pdo->query("SELECT id,email,display_name AS name,is_active FROM team_members")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($users as $user) {
             $id = (string) $user['id'];
-            $present = empty($user['is_disabled']) && empty($user['deleted_at']);
-            $data = ['person_id' => $id, 'name' => (string) $user['name'], 'email' => (string) $user['email']];
+            $present = !empty($user['is_active']);
+            $data = ['person_id' => $id, 'team_member_id'=>$id, 'name' => (string) $user['name'], 'email' => (string)($user['email']??'')];
             pa_al_sync_object($pdo, $installation, 'person', $id, $present, 'person.upserted', 'person.deactivated', $data);
             $seenPeople[$id] = true;
         }
@@ -230,7 +231,7 @@ function pa_al_capture_owned_state(PDO $pdo, array $installation): void
         }
 
         $seenAssignments = [];
-        $assignments = $pdo->query("SELECT a.project_id,a.user_id FROM alphaledger_project_assignments a JOIN projects p ON p.id=a.project_id JOIN users u ON u.id=a.user_id WHERE p.status NOT IN ('completed','cancelled') AND u.is_disabled=0 AND u.deleted_at IS NULL")->fetchAll(PDO::FETCH_ASSOC);
+        $assignments = $pdo->query("SELECT a.project_id,tm.id user_id FROM alphaledger_project_assignments a JOIN projects p ON p.id=a.project_id JOIN users u ON u.id=a.user_id JOIN team_members tm ON tm.user_id=u.id WHERE p.status NOT IN ('completed','cancelled') AND u.is_disabled=0 AND u.deleted_at IS NULL AND tm.is_active=1")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($assignments as $assignment) {
             $id = (string) $assignment['project_id'] . ':' . (string) $assignment['user_id'];
             $data = ['project_id' => (string) $assignment['project_id'], 'person_id' => (string) $assignment['user_id']];
@@ -302,25 +303,25 @@ function pa_al_ingest_time_event(PDO $pdo, array $installation, array $event): a
     if ($externalId === '' || $externalId !== (string) $event['aggregate_id'] || (isset($data['revision']) && (int) $data['revision'] !== $revision)) {
         throw new DomainException('Time entry aggregate identity or revision does not match its envelope.');
     }
-    $personId = (int) ($data['pa_person_id'] ?? 0);
-    $projectId = !empty($data['pa_project_id']) ? (int) $data['pa_project_id'] : null;
-    $userStmt = $pdo->prepare('SELECT 1 FROM users WHERE id=? AND is_disabled=0 AND deleted_at IS NULL');
-    $userStmt->execute([$personId]);
-    if (!$userStmt->fetchColumn()) {
-        throw new DomainException('Unknown or inactive pa_person_id.');
+    $alBusinessId=(string)($installation['al_business_id']??'');
+    $alEmployeeId=(string)($data['employee_id']??'');
+    $alProjectId=(string)($data['project_id']??'');
+    if($alBusinessId===''||$alEmployeeId==='') throw new DomainException('AlphaLedger business and employee identities are required.');
+    $member=pa_al_time_resolve_employee($pdo,$installation,$alEmployeeId);
+    if(!$member){
+        pa_al_time_record_exception($pdo,$installation,'unmapped_employee','time_entry',$externalId,'Time entry references an unmapped AlphaLedger employee.',['al_employee_id'=>$alEmployeeId,'event'=>$event]);
+        return ['event_id'=>$event['event_id'],'status'=>'accepted','exception'=>'unmapped_employee'];
     }
-    if ($projectId !== null) {
-        $projectStmt = $pdo->prepare('SELECT client_id,organization_id FROM projects WHERE id=?');
-        $projectStmt->execute([$projectId]);
-        $project = $projectStmt->fetch(PDO::FETCH_ASSOC);
-        if (!$project) {
-            throw new DomainException('Unknown pa_project_id.');
+    $project=null;
+    if($alProjectId!==''){
+        $project=pa_al_time_resolve_project($pdo,$installation,$alProjectId);
+        if(!$project){
+            pa_al_time_record_exception($pdo,$installation,'unmapped_project','time_entry',$externalId,'Time entry references an unmapped AlphaLedger project.',['al_project_id'=>$alProjectId,'event'=>$event]);
+            return ['event_id'=>$event['event_id'],'status'=>'accepted','exception'=>'unmapped_project'];
         }
-    } else {
-        $project = ['client_id' => null, 'organization_id' => $installation['organization_id']];
     }
-    $existingStmt = $pdo->prepare("SELECT * FROM time_entries WHERE source_system='alphaledger' AND external_id=? FOR UPDATE");
-    $existingStmt->execute([$externalId]);
+    $existingStmt = $pdo->prepare("SELECT * FROM time_entries WHERE source_system='alphaledger' AND al_business_id=? AND source_entry_id=? FOR UPDATE");
+    $existingStmt->execute([$alBusinessId,$externalId]);
     $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
     if ($existing && (int) $existing['external_revision'] >= $revision) {
         return ['event_id' => $event['event_id'], 'status' => 'duplicate', 'remote_id' => (string) $existing['id']];
@@ -335,42 +336,40 @@ function pa_al_ingest_time_event(PDO $pdo, array $installation, array $event): a
     if (!empty($data['end_time']) && strtotime((string) $data['end_time']) === false) {
         throw new DomainException('end_time must be an ISO-8601 timestamp.');
     }
-    if (($data['billing_rate'] ?? null) !== null && (!is_numeric($data['billing_rate']) || (float) $data['billing_rate'] < 0)) {
-        throw new DomainException('billing_rate must be null or non-negative.');
-    }
     $hours = number_format($duration / 3600, 2, '.', '');
     $status = str_ends_with((string) $event['event_type'], '.voided') ? 'voided' : 'approved';
     if ($existing && !empty($existing['billed'])) {
         pa_al_record_conflict($pdo, $installation, 'time_entry', $externalId, (string) $existing['external_revision'], (string) $revision, 'AL changed a time entry already attached to an invoice.', $event);
-        $pdo->prepare('UPDATE time_entries SET external_revision=?,external_status=?,updated_at=NOW() WHERE id=?')->execute([$revision, $status, (int) $existing['id']]);
+        $pdo->prepare('UPDATE time_entries SET external_revision=?,external_status=?,source_updated_at=?,updated_at=NOW() WHERE id=?')->execute([$revision,$status,gmdate('Y-m-d H:i:s',strtotime((string)$event['occurred_at'])),(int)$existing['id']]);
         return ['event_id' => $event['event_id'], 'status' => 'accepted', 'remote_id' => (string) $existing['id'], 'conflict' => true];
     }
     $started = !empty($data['start_time']) ? gmdate('Y-m-d H:i:s', strtotime((string) $data['start_time'])) : null;
     $ended = !empty($data['end_time']) ? gmdate('Y-m-d H:i:s', strtotime((string) $data['end_time'])) : null;
     $billable = $status !== 'voided' && !empty($data['billable']);
+    $alCost=(isset($data['cost_rate_snapshot'])&&is_numeric($data['cost_rate_snapshot']))?(float)$data['cost_rate_snapshot']:((isset($data['pay_rate_snapshot'])&&is_numeric($data['pay_rate_snapshot']))?(float)$data['pay_rate_snapshot']:null);
+    $workDate=substr((string)($started?:gmdate('Y-m-d')),0,10);
+    $rates=pa_al_time_resolve_rates($pdo,(int)$member['id'],$project,$workDate,$alCost,!empty($data['service_item_id'])?(int)$data['service_item_id']:null);
+    if($billable&&$rates['billing_rate']===null){
+        pa_al_time_record_exception($pdo,$installation,'missing_rate','time_entry',$externalId,'Approved billable time has no effective PA billing rate.',['team_member_id'=>(int)$member['id'],'project_id'=>$project['id']??null,'work_date'=>$workDate]);
+    }
+    $userId=!empty($member['user_id'])?(int)$member['user_id']:null;
+    $sourceUpdated=gmdate('Y-m-d H:i:s',strtotime((string)$event['occurred_at']));
     $params = [
-        (int) ($project['organization_id'] ?? $installation['organization_id'] ?? 0) ?: null,
-        $personId,
-        $project['client_id'] ?? null,
-        $projectId,
+        (int) ($project['organization_id'] ?? $member['organization_id'] ?? $installation['organization_id'] ?? 0) ?: null,
+        $userId,(int)$member['id'],$project['client_id']??null,$project['id']??null,
         (string) ($data['description'] ?? ''),
-        $started,
-        $ended,
-        $hours,
-        $billable ? 1 : 0,
-        $status === 'voided' ? 1 : 0,
-        (string) ($data['billing_rate'] ?? '0'),
-        $revision,
-        $status,
+        $started,$ended,$hours,$billable?1:0,$status==='voided'?1:0,
+        (string)($rates['billing_rate']??'0'),$rates['cost_rate'],$rates['billing_rate'],(string)$rates['currency'],(string)$rates['source'],
+        $revision,$status,$alBusinessId,$externalId,$sourceUpdated,
     ];
     if ($existing) {
-        $pdo->prepare('UPDATE time_entries SET organization_id=?,user_id=?,client_id=?,project_id=?,description=?,started_at=?,ended_at=?,hours=?,billable=?,billed=?,rate=?,external_revision=?,external_status=?,updated_at=NOW() WHERE id=?')->execute(array_merge($params, [(int) $existing['id']]));
+        $pdo->prepare('UPDATE time_entries SET organization_id=?,user_id=?,team_member_id=?,client_id=?,project_id=?,description=?,started_at=?,ended_at=?,hours=?,billable=?,billed=?,rate=?,cost_rate_snapshot=?,billing_rate_snapshot=?,currency=?,rate_snapshot_source=?,external_revision=?,external_status=?,al_business_id=?,source_entry_id=?,source_updated_at=?,imported_at=COALESCE(imported_at,UTC_TIMESTAMP()),updated_at=NOW() WHERE id=?')->execute(array_merge($params,[(int)$existing['id']]));
         $remoteId = (string) $existing['id'];
     } else {
-        $pdo->prepare("INSERT INTO time_entries (source_system,external_id,organization_id,user_id,client_id,project_id,description,started_at,ended_at,hours,billable,billed,rate,external_revision,external_status) VALUES ('alphaledger',?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute(array_merge([$externalId], $params));
+        $pdo->prepare("INSERT INTO time_entries (source_system,external_id,organization_id,user_id,team_member_id,client_id,project_id,description,started_at,ended_at,hours,billable,billed,rate,cost_rate_snapshot,billing_rate_snapshot,currency,rate_snapshot_source,external_revision,external_status,al_business_id,source_entry_id,source_updated_at,imported_at) VALUES ('alphaledger',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP())")->execute(array_merge([$externalId],$params));
         $remoteId = (string) $pdo->lastInsertId();
     }
-    return ['event_id' => $event['event_id'], 'status' => 'accepted', 'remote_id' => $remoteId];
+    return ['event_id'=>$event['event_id'],'status'=>'accepted','remote_id'=>$remoteId,'billing_ready'=>$billable&&$rates['billing_rate']!==null];
 }
 
 function pa_al_ingest_pay_event(PDO $pdo, array $installation, array $event): array
@@ -391,12 +390,13 @@ function pa_al_ingest_pay_event(PDO $pdo, array $installation, array $event): ar
     if (!preg_match('/^[A-Z]{3}$/', $currency)) {
         throw new DomainException('currency must be an uppercase ISO 4217 code.');
     }
-    $personId = (int) ($data['pa_person_id'] ?? 0);
-    $userStmt = $pdo->prepare('SELECT 1 FROM users WHERE id=? AND is_disabled=0 AND deleted_at IS NULL');
-    $userStmt->execute([$personId]);
-    if (!$userStmt->fetchColumn()) {
-        throw new DomainException('Unknown or inactive pa_person_id.');
+    $alEmployeeId=(string)($data['employee_id']??'');
+    $member=pa_al_time_resolve_employee($pdo,$installation,$alEmployeeId);
+    if(!$member){
+        pa_al_time_record_exception($pdo,$installation,'unmapped_employee','pay_accrual',$externalId,'Pay accrual references an unmapped AlphaLedger employee.',['al_employee_id'=>$alEmployeeId,'event'=>$event]);
+        return ['event_id'=>$event['event_id'],'status'=>'accepted','exception'=>'unmapped_employee'];
     }
+    $personId=!empty($member['user_id'])?(int)$member['user_id']:null;
     $stmt = $pdo->prepare('SELECT * FROM employee_pay_records WHERE installation_id=? AND external_id=? FOR UPDATE');
     $stmt->execute([(int) $installation['id'], $externalId]);
     $existing = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -414,6 +414,7 @@ function pa_al_ingest_pay_event(PDO $pdo, array $installation, array $event): ar
         (string) ($data['entry_id'] ?? ''),
         $revision,
         $personId,
+        (int)$member['id'],
         (string) ($data['hours'] ?? '0'),
         (string) ($data['rate'] ?? '0'),
         (string) ($data['amount'] ?? '0'),
@@ -421,10 +422,10 @@ function pa_al_ingest_pay_event(PDO $pdo, array $installation, array $event): ar
         $newStatus,
     ];
     if ($existing) {
-        $pdo->prepare('UPDATE employee_pay_records SET organization_id=?,external_time_entry_id=?,external_revision=?,user_id=?,hours=?,rate=?,amount=?,currency=?,status=?,updated_at=NOW() WHERE id=?')->execute(array_merge($values, [(int) $existing['id']]));
+        $pdo->prepare('UPDATE employee_pay_records SET organization_id=?,external_time_entry_id=?,external_revision=?,user_id=?,team_member_id=?,hours=?,rate=?,amount=?,currency=?,status=?,updated_at=NOW() WHERE id=?')->execute(array_merge($values, [(int) $existing['id']]));
         $remoteId = (string) $existing['id'];
     } else {
-        $pdo->prepare('INSERT INTO employee_pay_records (organization_id,installation_id,external_id,external_time_entry_id,external_revision,user_id,hours,rate,amount,currency,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)')->execute(array_merge([array_shift($values), (int) $installation['id'], $externalId], $values));
+        $pdo->prepare('INSERT INTO employee_pay_records (organization_id,installation_id,external_id,external_time_entry_id,external_revision,user_id,team_member_id,hours,rate,amount,currency,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array_merge([array_shift($values), (int) $installation['id'], $externalId], $values));
         $remoteId = (string) $pdo->lastInsertId();
     }
     return ['event_id' => $event['event_id'], 'status' => 'accepted', 'remote_id' => $remoteId];

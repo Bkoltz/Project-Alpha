@@ -5,9 +5,14 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/format.php';
 require_once __DIR__ . '/../../utils/time_tracking_schema.php';
 require_once __DIR__ . '/../../utils/alphaledger_integration.php';
+require_once __DIR__ . '/../../utils/alphaledger_time_bridge.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $alphaLedgerOwnsTime = pa_al_policy_enabled($pdo);
+$alTimeContext = $alphaLedgerOwnsTime ? pa_al_time_admin_context($pdo,$userId) : null;
+$alPendingCommands=[];
+$alDraftEntries=[];
+$alMappedProjects=[];
 try {
     pa_time_tracking_ensure_schema($pdo);
 } catch (Throwable $e) {
@@ -56,6 +61,18 @@ try {
     $activeTimer = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 } catch (Throwable $e) {
     $activeTimer = null;
+}
+if($alTimeContext){
+    $pendingStmt=$pdo->prepare("SELECT id,operation_type,started_at,ended_at,state,last_error,created_at FROM alphaledger_command_outbox WHERE actor_user_id=? AND state IN ('pending','attention') ORDER BY id DESC LIMIT 25");
+    $pendingStmt->execute([$userId]); $alPendingCommands=$pendingStmt->fetchAll(PDO::FETCH_ASSOC);
+    $pendingStart=pa_al_time_pending_start($pdo,$userId);
+    $runningStmt=$pdo->prepare("SELECT external_id id,start_time started_at,description,NULL client_id,NULL project_id FROM alphaledger_ledger_time_entries WHERE installation_id=? AND employee_external_id=? AND status='running' AND deleted_at IS NULL ORDER BY start_time DESC LIMIT 1");
+    $runningStmt->execute([(int)$alTimeContext['installation']['id'],(string)$alTimeContext['al_employee_id']]);
+    $activeTimer=$runningStmt->fetch(PDO::FETCH_ASSOC)?:($pendingStart?['id'=>$pendingStart['operation_id'],'started_at'=>$pendingStart['started_at'],'description'=>$pendingStart['state']==='delivered'?'AlphaLedger timer':'Pending AlphaLedger sync','client_id'=>null,'project_id'=>null]:null);
+    $draftStmt=$pdo->prepare("SELECT * FROM alphaledger_ledger_time_entries WHERE installation_id=? AND employee_external_id=? AND status IN ('review','rejected') AND deleted_at IS NULL ORDER BY start_time DESC LIMIT 50");
+    $draftStmt->execute([(int)$alTimeContext['installation']['id'],(string)$alTimeContext['al_employee_id']]); $alDraftEntries=$draftStmt->fetchAll(PDO::FETCH_ASSOC);
+    $mappedStmt=$pdo->prepare("SELECT p.id,p.name,m.al_project_id FROM alphaledger_project_mappings m JOIN projects p ON p.id=m.project_id WHERE m.al_business_id=? AND p.status NOT IN ('completed','cancelled') ORDER BY p.name");
+    $mappedStmt->execute([(string)$alTimeContext['installation']['al_business_id']]);$alMappedProjects=$mappedStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Time entries list
@@ -110,8 +127,8 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
   <div class="finance-page-head">
     <div>
       <p class="finance-eyebrow">Time Tracking</p>
-      <h2><?php echo $alphaLedgerOwnsTime ? 'Approved Time' : 'Track Time'; ?></h2>
-      <p class="finance-subtitle"><?php echo $alphaLedgerOwnsTime ? 'AlphaLedger is authoritative. PA receives approved time for invoicing as a read-only record.' : 'Clock in/out, add manual entries, and manage billable hours.'; ?></p>
+      <h2><?php echo $alphaLedgerOwnsTime ? ($alTimeContext?'Track Time with AlphaLedger':'Approved Time') : 'Track Time'; ?></h2>
+      <p class="finance-subtitle"><?php echo $alphaLedgerOwnsTime ? ($alTimeContext?'Use the familiar PA form; AlphaLedger remains authoritative for this time.':'AlphaLedger is authoritative. PA receives approved time for invoicing as a read-only record.') : 'Clock in/out, add manual entries, and manage billable hours.'; ?></p>
     </div>
   </div>
 
@@ -124,9 +141,14 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
   <?php if (!empty($_GET['deleted'])): ?>
     <div class="alert alert-success">Time entry deleted.</div>
   <?php endif; ?>
-  <?php if ($alphaLedgerOwnsTime): ?><div class="alert alert-info">Time-entry creation, timers, edits, and deletion are disabled in PA while AlphaLedger synchronization is enabled. Corrections must be approved in AlphaLedger.</div><?php endif; ?>
+  <?php if (!empty($_GET['pending'])): ?><div class="alert alert-warning">AlphaLedger is unavailable. Your time action is cached securely in PA and will retry automatically; it cannot be billed until AL confirms it.</div><?php endif; ?>
+  <?php if ($alphaLedgerOwnsTime && !$alTimeContext): ?><div class="alert alert-info">Native PA time entry is disabled while AlphaLedger is connected. A system administrator needs a confirmed team-member mapping and the AL time-command capability to enter time here.</div><?php elseif($alTimeContext): ?><div class="alert alert-info">Powered by AlphaLedger. Draft and timer actions are sent to AL; approval and corrections remain in AlphaLedger.</div><?php endif; ?>
 
-  <?php if (!$alphaLedgerOwnsTime): ?>
+  <?php if($alPendingCommands): ?><div class="finance-panel"><h3>Pending AlphaLedger sync</h3><p>These actions are not approved, billable, or included in totals until AlphaLedger confirms them.</p><table class="pa-table"><thead><tr><th>Action</th><th>Started</th><th>State</th><th>Last error</th><th>Actions</th></tr></thead><tbody><?php foreach($alPendingCommands as $command): ?><tr><td><?php echo htmlspecialchars((string)$command['operation_type']); ?></td><td><?php echo htmlspecialchars((string)($command['started_at']?:$command['created_at'])); ?></td><td><?php echo htmlspecialchars((string)$command['state']); ?></td><td><?php echo htmlspecialchars((string)($command['last_error']??'')); ?></td><td><form method="post" action="/?page=time-tracking/alphaledger-command" style="display:inline"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="command_id" value="<?php echo (int)$command['id']; ?>"><?php if($command['state']==='attention'): ?><button class="btn btn-sm" name="action" value="retry">Retry</button><?php endif; ?><button class="btn btn-sm btn-danger" name="action" value="cancel-pending">Cancel</button></form></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+
+  <?php if($alDraftEntries): ?><div class="finance-panel"><h3>Your AlphaLedger drafts</h3><p>Assign a mapped PA project and submit when ready. AlphaLedger performs approval.</p><table class="pa-table"><thead><tr><th>Date</th><th>Entry details</th><th>Status</th><th>Actions</th></tr></thead><tbody><?php foreach($alDraftEntries as $draft): ?><tr><td><?php echo htmlspecialchars(substr((string)$draft['start_time'],0,10)); ?></td><td><form method="post" action="/?page=time-tracking/alphaledger-command"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="entry_id" value="<?php echo htmlspecialchars((string)$draft['external_id']); ?>"><input class="input" name="description" value="<?php echo htmlspecialchars((string)$draft['description']); ?>" aria-label="Description"><select class="input" name="project_id" aria-label="PA project"><option value="">Unassigned</option><?php foreach($alMappedProjects as $mappedProject): ?><option value="<?php echo (int)$mappedProject['id']; ?>" <?php echo $draft['project_external_id']===$mappedProject['al_project_id']?'selected':''; ?>><?php echo htmlspecialchars((string)$mappedProject['name']); ?></option><?php endforeach; ?></select><button class="btn btn-sm" name="action" value="update">Save draft</button></form></td><td><?php echo htmlspecialchars((string)$draft['status']); ?></td><td><form method="post" action="/?page=time-tracking/alphaledger-command"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="entry_id" value="<?php echo htmlspecialchars((string)$draft['external_id']); ?>"><button class="btn btn-sm btn-primary" name="action" value="submit">Submit</button><button class="btn btn-sm btn-danger" name="action" value="cancel">Cancel draft</button></form></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+
+  <?php if (!$alphaLedgerOwnsTime || $alTimeContext): ?>
   <div class="finance-grid finance-grid--main">
     <div class="finance-panel">
       <div class="finance-panel__head">
@@ -175,7 +197,7 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
   <div class="finance-panel"><div class="expense-summary" style="grid-template-columns:1fr 1fr 1fr"><div class="expense-stat"><span>Total Hours</span><strong><?php echo number_format($totalHours, 2); ?></strong></div><div class="expense-stat"><span>Total Billable</span><strong><?php echo '$' . number_format($totalBillableAmount, 2); ?></strong></div><div class="expense-stat"><span>Total Unbilled</span><strong><?php echo '$' . number_format($totalUnbilledAmount, 2); ?></strong></div></div></div>
   <?php endif; ?>
 
-  <?php if (!$alphaLedgerOwnsTime): ?>
+  <?php if (!$alphaLedgerOwnsTime || $alTimeContext): ?>
   <div class="finance-panel mt-24">
     <div class="finance-panel__head">
       <h3 class="finance-panel__title">Manual Entry</h3>
@@ -223,13 +245,13 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
             <div id="timeProjectHelp" style="display:none;margin-top:4px;font-size:12px;color:var(--muted)"></div>
           </label>
           <label>
-            <span class="label">Hourly Contract</span>
+            <span class="label"><?php echo $alTimeContext?'Contract (applied after approval)':'Hourly Contract'; ?></span>
             <select name="contract_id" id="timeContractId" class="input" disabled>
               <option value="">Select a client first</option>
             </select>
           </label>
           <label>
-            <span class="label">Hourly Invoice</span>
+            <span class="label"><?php echo $alTimeContext?'Invoice (applied after approval)':'Hourly Invoice'; ?></span>
             <select name="invoice_id" id="timeInvoiceId" class="input" disabled>
               <option value="">Select a client first</option>
             </select>
@@ -315,8 +337,10 @@ $timerStartedAttr = $activeTimer ? ' data-timer-started="' . htmlspecialchars($a
                 <td style="text-align:right">
                   <?php $isAlphaLedgerEntry = ($e['source_system'] ?? '') === 'alphaledger'; ?>
                   <?php if (!$alphaLedgerOwnsTime && !$isAlphaLedgerEntry): ?><a href="/?page=time-tracking&amp;edit=<?php echo (int)$e['id']; ?>" class="btn btn-sm">Edit</a><?php endif; ?>
-                  <?php if ($e['billable'] && !$e['billed']): ?>
+                  <?php $billingReady = !$isAlphaLedgerEntry || (!empty($e['project_id']) && !empty($e['team_member_id']) && $e['billing_rate_snapshot'] !== null && ($e['external_status'] ?? 'approved') === 'approved'); ?>
+                  <?php if ($e['billable'] && !$e['billed'] && $billingReady): ?>
                     <a href="/?page=invoice/invoices-create&amp;time_entry_id=<?php echo (int)$e['id']; ?>" class="btn btn-sm btn-primary">Add to Invoice</a>
+                  <?php elseif($e['billable'] && !$e['billed'] && !$billingReady): ?><span class="status-badge status-pending">Mapping/rate required</span>
                   <?php endif; ?>
                   <?php if (!$alphaLedgerOwnsTime && !$isAlphaLedgerEntry): ?><form method="post" action="/?page=time-tracking/delete" style="display:inline" class="delete-entry-form">
                     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">

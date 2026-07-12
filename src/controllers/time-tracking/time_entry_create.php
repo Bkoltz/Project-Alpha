@@ -13,7 +13,6 @@ function time_tracking_create_error(string $message): void
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('time-tracking');
-pa_al_block_local_time_mutation_when_enabled($pdo);
 try {
     pa_time_tracking_ensure_schema($pdo);
 } catch (Throwable $e) {
@@ -37,6 +36,21 @@ $rate        = (float)($_POST['rate'] ?? 0);
 $billable    = !empty($_POST['billable']) ? 1 : 0;
 $startTime = trim((string)($_POST['start_time'] ?? ''));
 $endTime = trim((string)($_POST['end_time'] ?? ''));
+
+if (pa_al_policy_enabled($pdo)) {
+    require_once __DIR__ . '/../../utils/alphaledger_time_bridge.php';
+    $context=pa_al_time_admin_context($pdo,$userId);
+    if(!$context) time_tracking_create_error('Your PA administrator account is not mapped to an AlphaLedger employee or time commands are unavailable.');
+    if($description===''||$entryDate==='') time_tracking_create_error('Description and date are required.');
+    $hasStart=$startTime!==''; $hasEnd=$endTime!==''; $hasStartEnd=$hasStart&&$hasEnd; $hasManualHours=$hours>0;
+    if($hasStart!==$hasEnd||($hasStartEnd&&$hasManualHours)||(!$hasStartEnd&&!$hasManualHours)) time_tracking_create_error('Use either both start/end times or manual hours.');
+    if($hasStartEnd){ $start=strtotime($entryDate.' '.$startTime); $end=strtotime($entryDate.' '.$endTime); if(!$start||!$end||$end<=$start)time_tracking_create_error('End time must be after start time.'); }
+    else { $start=strtotime($entryDate.' 00:00:00'); $end=$start+(int)round($hours*3600); }
+    try {
+        pa_al_time_queue_command($pdo,$context,'create',['description'=>$description,'project_id'=>pa_al_time_al_project_id($pdo,$context['installation'],$projectId),'start_time'=>gmdate('c',$start),'end_time'=>gmdate('c',$end),'duration_seconds'=>$end-$start,'billable'=>(bool)$billable],gmdate('Y-m-d H:i:s',$start),gmdate('Y-m-d H:i:s',$end));
+        $delivery=pa_al_time_deliver_commands($pdo,1); header('Location: /?page=time-tracking&'.($delivery['delivered']?'created=1':'pending=1')); exit;
+    } catch(Throwable $e){ time_tracking_create_error($e->getMessage()); }
+}
 
 if ($description === '' || !$entryDate) {
     time_tracking_create_error('Invalid time entry');
@@ -113,8 +127,8 @@ if ($hours <= 0) {
 }
 
 try {
-    $stmt = $pdo->prepare('INSERT INTO time_entries (user_id, client_id, project_id, project_code, contract_id, invoice_id, service_item_id, description, started_at, ended_at, hours, billable, rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$userId, $clientId, $projectId, $projectCode, $contractId, $invoiceId, $serviceItemId, $description, $startedAt, $endedAt, $hours, $billable, $rate]);
+    $stmt = $pdo->prepare('INSERT INTO time_entries (user_id, team_member_id, client_id, project_id, project_code, contract_id, invoice_id, service_item_id, description, started_at, ended_at, hours, billable, rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$userId,pa_time_tracking_team_member_id($pdo,$userId),$clientId,$projectId,$projectCode,$contractId,$invoiceId,$serviceItemId,$description,$startedAt,$endedAt,$hours,$billable,$rate]);
 } catch (Throwable $e) {
     @error_log('[TimeTrackingCreate] Failed to save time entry: ' . $e->getMessage());
     time_tracking_create_error('Failed to save time entry.');

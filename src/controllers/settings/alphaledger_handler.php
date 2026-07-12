@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/api_scopes.php';
 require_once __DIR__ . '/../../utils/alphaledger_integration.php';
+require_once __DIR__ . '/../../utils/alphaledger_time_bridge.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/rate_limiter.php';
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
@@ -44,9 +45,11 @@ if ($action === 'sync-now') {
         }
         pa_al_capture_owned_state($pdo, $installation);
         pa_al_refresh_assignments($pdo, $installation);
+        pa_al_time_refresh_mapping_exceptions($pdo,$installation);
         $result = pa_al_deliver_pending($pdo, 100);
+        $commands=pa_al_time_deliver_commands($pdo,100);
         audit_log($pdo, 'alphaledger.sync_requested', 'alphaledger_installation', (int) $installation['id'], $result);
-        pa_al_settings_redirect('success', sprintf('Sync completed: %d delivered, %d failed.', $result['delivered'], $result['failed']));
+        pa_al_settings_redirect('success', sprintf('Sync completed: events %d delivered/%d failed; commands %d delivered/%d failed.', $result['delivered'], $result['failed'],$commands['delivered'],$commands['failed']));
     } catch (Throwable $e) {
         pa_al_settings_redirect('error', $e->getMessage());
     }
@@ -117,6 +120,8 @@ if ($action === 'rotate-secret') {
 }
 
 if ($action === 'disable') {
+    $pendingCommands=(int)$pdo->query("SELECT COUNT(*) FROM alphaledger_command_outbox WHERE state IN ('pending','attention')")->fetchColumn();
+    if($pendingCommands>0) pa_al_settings_redirect('error','Resolve or explicitly cancel every pending AlphaLedger time command before disconnecting.');
     $pdo->beginTransaction();
     try {
         $pdo->prepare('UPDATE alphaledger_policy SET enabled=0,disabled_by=?,disabled_at=UTC_TIMESTAMP() WHERE singleton=1')->execute([$userId]);

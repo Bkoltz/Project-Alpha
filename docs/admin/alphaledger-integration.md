@@ -5,7 +5,7 @@ description: Connect AlphaLedger to Project Alpha with scoped APIs, signed webho
 
 # AlphaLedger Integration
 
-Project Alpha owns PA users, clients, projects, AlphaLedger project assignments, invoices, customer payments, and employee-pay payment status. AlphaLedger owns time entries, breaks, approvals, corrections, and pay-accrual calculations. The applications keep separate authentication and databases.
+Project Alpha owns no-login team members, clients, billing projects, durable AL mappings, effective-dated billing rules, invoices, customer payments, and employee-pay payment status. AlphaLedger owns timers, draft and approved time entries, breaks, corrections, and pay-accrual calculations. The applications keep separate authentication and databases.
 
 ## Connect
 
@@ -20,7 +20,13 @@ PA exposes the versioned endpoints under `/api/v1/integrations/alphaledger/`. Al
 
 When AL negotiates `operational_ledger_v1`, PA also receives a read-only operational mirror at **Financial → Ledger**. Administrators can inspect employees and identity links, observed projects and assignments, every time-entry state, breaks, corrections, and pay accruals. The Ledger remains visible but stale/read-only after disconnect until an administrator purges it with password and TOTP. Employee Pay is shown separately and never changes PA Income, Expenses, or Net Profit.
 
-While synchronization is enabled, PA’s legacy timer, manual time creation, editing, and deletion are disabled. The PA time page becomes a read-only approved-time view, while adding unbilled approved time to an invoice remains available. PA refuses enablement while any PA timer is still running. AL-originated entries remain immutable in PA even after synchronization is later disabled; corrections must always come from their owning system.
+While synchronization is enabled, PA’s native timer and native time mutations are disabled. A system administrator with a confirmed PA login → team member → AL employee mapping can still use the familiar PA Time Tracking page; those controls send signed, idempotent commands to AL. Other accounts receive the read-only approved-time view. AL-originated entries remain immutable in PA even after synchronization is later disabled; corrections must always come from their owning system.
+
+If AL is temporarily unavailable, PA encrypts the administrator’s action in a durable command outbox and marks it **Pending AlphaLedger sync**. Pending commands are excluded from totals and invoices. A start and stop recorded during the same outage are combined into one completed AL draft with the original timestamps. PA blocks deliberate disconnect until pending commands are delivered or explicitly cancelled.
+
+New AL employees and projects enter the integration exceptions queue. An administrator must link them to an existing PA team member/billing project or deliberately create a new no-login team member/project; PA never fuzzy-links them. Approved billable time becomes invoice-ready only after both mappings and an effective PA billing rate are present. Project rates take precedence over client rates, then team-member billing defaults, then an hourly service fallback. Invoicing freezes the imported rate snapshots.
+
+The AlphaLedger settings page also supports an administrator-selected approved-time backfill range. Backfills and live delivery use the same immutable AL business/entry identity and source revision, so retries and reconnects do not duplicate hours.
 
 ## Security
 

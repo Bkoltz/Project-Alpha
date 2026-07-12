@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/alphaledger_integration.php';
 require_once __DIR__ . '/../../utils/alphaledger_ledger.php';
+require_once __DIR__ . '/../../utils/alphaledger_time_bridge.php';
 
 $apiKey = $GLOBALS['pa_api_key'] ?? null;
 if (!is_array($apiKey) || empty($apiKey['id'])) {
@@ -37,6 +38,9 @@ try {
                 'reconciliation' => true,
                 'signed_webhooks' => true,
                 'operational_ledger_v1' => true,
+                'team_member_mappings_v1' => true,
+                'rate_snapshots_v1' => true,
+                'installation_metadata' => ['al_business_id','command_api_url','al_app_url','capabilities'],
                 'events' => ['person', 'project', 'assignment', 'pay_accrual.status_changed', 'financial_summary.updated'],
             ],
         ]);
@@ -49,8 +53,18 @@ try {
         }
         try {
             $callback = pa_al_validate_callback_url((string) ($body['callback_url'] ?? ''));
+            $alBusinessId=trim((string)($body['al_business_id']??''));
+            if($alBusinessId!==''&&!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',$alBusinessId)) throw new DomainException('al_business_id must be a UUID.');
+            $commandApiUrl=!empty($body['command_api_url'])?pa_al_time_validate_remote_url((string)$body['command_api_url'],'command_api_url'):null;
+            $alAppUrl=!empty($body['al_app_url'])?pa_al_time_validate_remote_url((string)$body['al_app_url'],'al_app_url'):null;
+            $capabilities=[];
+            if(isset($body['capabilities'])&&is_array($body['capabilities'])){
+                foreach($body['capabilities'] as $key=>$value){$candidate=is_string($key)&&!is_int($key)?($value?$key:''):(is_string($value)?$value:'');if($candidate!==''&&preg_match('/^[a-z0-9_]{1,80}$/',$candidate))$capabilities[]=$candidate;}
+                $capabilities=array_values(array_unique($capabilities));
+            }
+            if(in_array('time_commands_v1',$capabilities,true)&&($alBusinessId===''||$commandApiUrl===null)) throw new DomainException('time_commands_v1 requires al_business_id and command_api_url.');
         } catch (DomainException $e) {
-            pa_al_json_response(['error' => 'invalid_callback_url', 'message' => $e->getMessage()], 422);
+            pa_al_json_response(['error' => 'invalid_installation_metadata', 'message' => $e->getMessage()], 422);
         }
         $hash = hash('sha256', $callback);
         if (empty($policy['approved_callback_hash']) || !hash_equals((string) $policy['approved_callback_hash'], $hash) || !hash_equals((string) $policy['approved_callback_url'], $callback)) {
@@ -60,6 +74,7 @@ try {
         $stmt->execute([(int) $apiKey['id'], $hash]);
         $existing = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($existing) {
+            if(!empty($existing['al_business_id'])&&$alBusinessId!==''&&!hash_equals((string)$existing['al_business_id'],$alBusinessId)) pa_al_json_response(['error'=>'al_business_id_mismatch'],409);
             $pdo->prepare("UPDATE alphaledger_installations SET status='disabled' WHERE api_key_id=? AND id<>?")->execute([(int) $apiKey['id'], (int) $existing['id']]);
             $secret = crypto_decrypt((string) $existing['webhook_secret_enc']);
             if (!$secret) {
@@ -68,9 +83,9 @@ try {
                 if (!$encrypted) {
                     throw new RuntimeException('APP_ENCRYPTION_KEY is required for AlphaLedger integration.');
                 }
-                $pdo->prepare("UPDATE alphaledger_installations SET webhook_secret_enc=?,status='active',consecutive_failures=0 WHERE id=?")->execute([$encrypted, (int) $existing['id']]);
+                $pdo->prepare("UPDATE alphaledger_installations SET webhook_secret_enc=?,al_business_id=COALESCE(NULLIF(?,''),al_business_id),command_api_url=?,al_app_url=?,capabilities=?,status='active',consecutive_failures=0 WHERE id=?")->execute([$encrypted,$alBusinessId,$commandApiUrl,$alAppUrl,json_encode($capabilities), (int) $existing['id']]);
             } else {
-                $pdo->prepare("UPDATE alphaledger_installations SET status='active',consecutive_failures=0 WHERE id=?")->execute([(int) $existing['id']]);
+                $pdo->prepare("UPDATE alphaledger_installations SET al_business_id=COALESCE(NULLIF(?,''),al_business_id),command_api_url=?,al_app_url=?,capabilities=?,status='active',consecutive_failures=0 WHERE id=?")->execute([$alBusinessId,$commandApiUrl,$alAppUrl,json_encode($capabilities),(int) $existing['id']]);
             }
             pa_al_json_response(['installation_id' => $existing['installation_id'], 'webhook_secret' => $secret], 201);
         }
@@ -80,8 +95,8 @@ try {
             throw new RuntimeException('APP_ENCRYPTION_KEY is required for AlphaLedger integration.');
         }
         $installationId = pa_al_uuid();
-        $stmt = $pdo->prepare("INSERT INTO alphaledger_installations (installation_id,api_key_id,organization_id,callback_url,callback_hash,webhook_secret_enc,schema_version,status) VALUES (?,?,?,?,?,?,?,'active')");
-        $stmt->execute([$installationId, (int) $apiKey['id'], $apiKey['organization_id'] ?? null, $callback, $hash, $encrypted, PA_AL_SCHEMA_VERSION]);
+        $stmt = $pdo->prepare("INSERT INTO alphaledger_installations (installation_id,al_business_id,api_key_id,organization_id,callback_url,command_api_url,al_app_url,callback_hash,webhook_secret_enc,schema_version,capabilities,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,'active')");
+        $stmt->execute([$installationId,$alBusinessId?:null,(int)$apiKey['id'],$apiKey['organization_id']??null,$callback,$commandApiUrl,$alAppUrl,$hash,$encrypted,PA_AL_SCHEMA_VERSION,json_encode($capabilities)]);
         $newInstallationDbId = (int) $pdo->lastInsertId();
         $pdo->prepare("UPDATE alphaledger_installations SET status='disabled' WHERE api_key_id=? AND id<>?")->execute([(int) $apiKey['id'], $newInstallationDbId]);
         $installation = pa_al_installation_for_api_key($pdo, (int) $apiKey['id']);
@@ -212,6 +227,13 @@ try {
                 $pdo->prepare('DELETE FROM alphaledger_idempotency WHERE api_key_id=? AND idempotency_key=? AND response_body IS NULL')->execute([(int) $apiKey['id'], $idempotencyKey]);
                 throw $e;
             }
+        }
+        if($isTimeBatch&&!empty($body['backfill_run_id'])){
+            $runId=(int)$body['backfill_run_id'];$accepted=0;$failed=0;
+            foreach($results as $item){if(in_array($item['status']??'',['accepted','duplicate'],true))$accepted++;else$failed++;}
+            $final=!empty($body['is_final']);
+            $stmt=$pdo->prepare("UPDATE alphaledger_backfill_runs SET state=?,imported_count=imported_count+?,failed_count=failed_count+?,completed_at=CASE WHEN ?=1 THEN UTC_TIMESTAMP() ELSE completed_at END WHERE id=? AND installation_id=?");
+            $stmt->execute([$final?'completed':'running',$accepted,$failed,$final?1:0,$runId,(int)$installation['id']]);
         }
         $response = ['results' => $results];
         $pdo->prepare('UPDATE alphaledger_idempotency SET response_code=200,response_body=? WHERE api_key_id=? AND idempotency_key=?')->execute([json_encode($response, JSON_THROW_ON_ERROR), (int) $apiKey['id'], $idempotencyKey]);

@@ -7,7 +7,6 @@ require_once __DIR__ . '/../../utils/alphaledger_integration.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('time-tracking');
-pa_al_block_local_time_mutation_when_enabled($pdo);
 try {
     pa_time_tracking_ensure_schema($pdo);
 } catch (Throwable $e) {
@@ -18,6 +17,24 @@ try {
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 if ($userId === 0) { http_response_code(401); exit; }
+
+if (pa_al_policy_enabled($pdo)) {
+    require_once __DIR__ . '/../../utils/alphaledger_time_bridge.php';
+    $context=pa_al_time_admin_context($pdo,$userId);
+    if(!$context){ header('Location: /?page=time-tracking&error='.rawurlencode('Your PA administrator account is not mapped to an AlphaLedger employee or time commands are unavailable.')); exit; }
+    try {
+        $endedAt=gmdate('Y-m-d H:i:s'); $pending=pa_al_time_pending_start($pdo,$userId);
+        if($pending&&pa_al_time_coalesce_stop($pdo,$pending,$endedAt)){
+            $delivery=pa_al_time_deliver_commands($pdo,1); header('Location: /?page=time-tracking&'.($delivery['delivered']?'created=1':'pending=1')); exit;
+        }
+        $running=$pdo->prepare("SELECT external_id,start_time FROM alphaledger_ledger_time_entries WHERE installation_id=? AND employee_external_id=? AND status='running' AND deleted_at IS NULL ORDER BY start_time DESC LIMIT 1");
+        $running->execute([(int)$context['installation']['id'],(string)$context['al_employee_id']]); $entry=$running->fetch(PDO::FETCH_ASSOC);
+        if(!$entry&&$pending&&!empty($pending['al_entry_id']))$entry=['external_id'=>(string)$pending['al_entry_id'],'start_time'=>$pending['started_at']];
+        if(!$entry) throw new DomainException('No active AlphaLedger timer was found.');
+        pa_al_time_queue_command($pdo,$context,'stop',['entry_id'=>(string)$entry['external_id'],'end_time'=>gmdate('c',strtotime($endedAt))],null,$endedAt,(string)$entry['external_id']);
+        $delivery=pa_al_time_deliver_commands($pdo,1); header('Location: /?page=time-tracking&'.($delivery['delivered']?'created=1':'pending=1')); exit;
+    } catch(Throwable $e){ header('Location: /?page=time-tracking&error='.rawurlencode($e->getMessage())); exit; }
+}
 
 $stmt = $pdo->prepare('SELECT id, started_at FROM time_entries WHERE user_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1');
 $stmt->execute([$userId]);
