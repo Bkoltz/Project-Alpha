@@ -39,5 +39,5 @@ $st->execute([
   $id
 ]);
 
-header('Location: /?page=client/clients-list&updated=1');
+header('Location: /?page=client/client-details&id=' . $id . '&updated=1');
 exit;

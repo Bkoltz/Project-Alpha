@@ -369,6 +369,7 @@ function updatePageTitle(page) {
     const pageTitles = {
         'home': 'Dashboard',
         'client/clients-list': 'List Clients',
+        'client/client-details': 'Client Details',
         'client/clients-create': 'Create Client',
         'client/clients-edit': 'Edit Client',
         'client/archived-clients': 'Archived Clients',

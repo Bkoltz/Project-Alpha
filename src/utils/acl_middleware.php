@@ -163,6 +163,7 @@ function page_permission_map(): array
 
         // Clients module
         'client/clients-list'    => 'clients.view',
+        'client/client-details'  => 'clients.view',
         'client/clients-create'  => 'clients.create',
         'client/clients-edit'    => 'clients.edit',
         'client/clients-update'  => 'clients.edit',

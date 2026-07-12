@@ -140,6 +140,23 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('function removeResolverOrganizationLinks', (string)$resolver);
     }
 
+    public function testStandaloneClientsHaveAFirstClassDetailsPageForLinks(): void
+    {
+        $list = file_get_contents($this->root . '/src/views/pages/client/clients-list.php');
+        $details = file_get_contents($this->root . '/src/views/pages/client/client-details.php');
+        $organization = file_get_contents($this->root . '/src/views/pages/organization/organization-view.php');
+        $permissions = file_get_contents($this->root . '/src/utils/acl_middleware.php');
+        $update = file_get_contents($this->root . '/src/controllers/client/clients_update.php');
+
+        self::assertStringContainsString('/?page=client/client-details&id=', (string)$list);
+        self::assertStringContainsString("\$entityType = 'client'", (string)$details);
+        self::assertStringContainsString("include __DIR__ . '/../../components/links_section.php'", (string)$details);
+        self::assertStringContainsString('Standalone client', (string)$details);
+        self::assertStringContainsString('/?page=client/client-details&id=', (string)$organization);
+        self::assertStringContainsString("'client/client-details'  => 'clients.view'", (string)$permissions);
+        self::assertStringContainsString("page=client/client-details&id=' . \$id", (string)$update);
+    }
+
     public function testClientAndOrganizationSuiteAddressesFlowToDocuments(): void
     {
         $baseline = file_get_contents($this->root . '/database/baseline.sql');

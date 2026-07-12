@@ -105,7 +105,7 @@ function client_list_email_html(?string $email): string
       <tbody>
         <?php foreach ($clients as $c): ?>
           <tr style="border-top:1px solid #f3f4f6">
-            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$c['id']; ?>" style="text-decoration:none;color:inherit;"><?php echo htmlspecialchars($c['name']); ?></a></td>
+            <td style="padding:10px"><a href="/?page=client/client-details&id=<?php echo (int)$c['id']; ?>" style="text-decoration:none;color:inherit;font-weight:600"><?php echo htmlspecialchars($c['name']); ?></a></td>
             <td style="padding:10px"><?php echo client_list_email_html($c['email'] ?? null); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars(format_phone($c['phone'] ?? '')); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($c['organization_name'] ?? ''); ?></td>

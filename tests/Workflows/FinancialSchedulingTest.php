@@ -78,6 +78,26 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString('set_time_limit', (string)$handler);
     }
 
+    public function testDailyLinkResolverIsScheduledAndHonorsItsFeatureFlags(): void
+    {
+        $cron = file_get_contents($this->root . '/src/cron/daily_link_resolver.php');
+        $crontab = file_get_contents($this->root . '/cron/crontab');
+        $state = file_get_contents($this->root . '/src/utils/cron_state.php');
+        $settings = file_get_contents($this->root . '/src/views/pages/settings/links.php');
+
+        self::assertStringContainsString("empty(\$appConfig['link_resolver_enabled'])", (string)$cron);
+        self::assertStringContainsString("empty(\$appConfig['link_resolver_daily_scan_enabled'])", (string)$cron);
+        self::assertStringContainsString('pa_link_provider_best_rows($pdo)', (string)$cron);
+        self::assertStringContainsString('$service->runProviderScan($provider)', (string)$cron);
+        self::assertStringContainsString('cron_state_mark_success($pdo, $jobName, $summary)', (string)$cron);
+        self::assertStringContainsString('cron_state_mark_failure($pdo, $jobName, $e)', (string)$cron);
+        self::assertStringContainsString('15 4 * * * root', (string)$crontab);
+        self::assertStringContainsString('daily_link_resolver.php', (string)$crontab);
+        self::assertStringContainsString("'daily_link_resolver'", (string)$state);
+        self::assertStringContainsString("['daily_link_resolver']", (string)$settings);
+        self::assertStringContainsString('Nightly folder scan:', (string)$settings);
+    }
+
     public function testAuditAndOrganizationScriptsInitializeAfterAjaxNavigation(): void
     {
         $audit = file_get_contents($this->root . '/public/assets/js/audit-logic.js');

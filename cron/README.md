@@ -13,6 +13,7 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 | Hourly at :30 | `backup_database.php --scheduled` | Creates rotating backups when the configured local backup hour matches |
 | Daily 03:00 | `auto_terminate_contracts.php` | Complete contracts whose configured end date has passed |
 | Daily 04:00 | `link_expiration_checker.php` | Expire public document links |
+| Daily 04:15 | `daily_link_resolver.php` | Scan enabled providers for organization, department, and standalone-client folders when Daily folder scan is enabled |
 | Every 6 hours | `stripe_reconciliation.php` | Recover Stripe payments missed by webhooks or downtime |
 | Every minute | `sync_alphaledger.php` | Capture PA-owned changes and retry signed AlphaLedger webhooks |
 | Daily 05:00 | `sync_merchant_rate.php` | Calculate the observed Stripe processing rate |
@@ -49,6 +50,7 @@ docker compose exec cron tail -f /var/www/config/logs/cron/cron.log
 docker compose exec cron php /var/www/src/cron/generate_recurring_invoices.php
 docker compose exec cron php /var/www/src/cron/generate_recurring_expenses.php
 docker compose exec cron php /var/www/src/cron/sync_alphaledger.php
+docker compose exec cron php /var/www/src/cron/daily_link_resolver.php
 ```
 
 ## Application Settings
@@ -56,6 +58,7 @@ docker compose exec cron php /var/www/src/cron/sync_alphaledger.php
 The container schedule always starts with the service. Individual scripts also honor application settings where applicable, including:
 
 - `cron_enabled`
+- link resolver, daily folder scan, and provider enablement toggles
 - invoice due and overdue reminder toggles
 - invoice email-on-generation toggle
 - Stripe and SMTP configuration
