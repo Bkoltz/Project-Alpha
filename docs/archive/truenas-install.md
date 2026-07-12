@@ -38,7 +38,7 @@ and run its render/deployment tests before opening the catalog pull request.
 
 6. **Deploy** — PA will be available at `http://your-truenas-ip:1627`
 
-7. **First login:** Use `admin@project-alpha.local` with your `ADMIN_PASSWORD`
+7. **First login:** Open PA and use the first-time setup form to create the initial administrator. No default login exists.
 
 8. **Configure Stripe:** Go to Settings > Billing to enter your Stripe API keys
 

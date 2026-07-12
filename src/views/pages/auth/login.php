@@ -3,6 +3,7 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
+require_once __DIR__ . '/../../../utils/password_reset_tokens.php';
 
 // CSRF token (Symfony-backed)
 $csrf = csrf_sf_token('auth');
@@ -14,6 +15,7 @@ try {
 } catch (Throwable $e) { $noUsers = true; }
 
 $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
+$resetAvailable = password_reset_email_is_configured($appConfig);
 ?>
 
 <style>
@@ -37,9 +39,15 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
       <input type="hidden" name="_token" value="<?php echo htmlspecialchars($csrf); ?>">
       <input type="hidden" name="action" value="<?php echo $noUsers ? 'register_first' : 'login'; ?>">
       <label>
-        <div>Email or Username</div>
-        <input required type="text" name="email" autocomplete="username" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div><?php echo $noUsers ? 'Administrator Email' : 'Email or Username'; ?></div>
+        <input required type="<?php echo $noUsers ? 'email' : 'text'; ?>" name="email" autocomplete="username" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
       </label>
+      <?php if ($noUsers): ?>
+        <label>
+          <div>Administrator Username</div>
+          <input required minlength="3" maxlength="50" pattern="[A-Za-z0-9._-]+" type="text" name="username" autocomplete="username" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        </label>
+      <?php endif; ?>
       <label>
         <div>Password</div>
         <input required minlength="8" type="password" name="password" autocomplete="<?php echo $noUsers ? 'new-password' : 'current-password'; ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -49,18 +57,13 @@ $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
           <div>Confirm Password</div>
           <input required minlength="8" type="password" name="password2" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         </label>
-        <div style="color:var(--muted);font-size:12px">The first account will be created as an admin.</div>
-      <?php else: ?>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" name="remember_device" id="remember_device" value="1" style="width:18px;height:18px;cursor:pointer">
-          <label for="remember_device" style="margin:0;font-size:14px;cursor:pointer;color:var(--muted)">Remember this device for 30 days</label>
-        </div>
+        <div style="color:var(--muted);font-size:12px">This creates PA's first normal administrator. No default or Compose-managed login exists.</div>
       <?php endif; ?>
       <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
         <button type="submit" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600">
           <?php echo $noUsers ? 'Create Admin' : 'Sign In'; ?>
         </button>
-        <?php if (!$noUsers): ?>
+        <?php if (!$noUsers && $resetAvailable): ?>
           <a href="/?page=reset-password" style="font-size:13px;color:#0369a1;text-decoration:underline">Forgot your password?</a>
         <?php endif; ?>
       </div>

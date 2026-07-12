@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../../utils/public_project_links.php';
+require_once __DIR__ . '/../../utils/audit.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/projects-update');
@@ -21,6 +22,9 @@ $projectInvoiceRecipientIds = $_POST['project_invoice_email_client_ids'] ?? [];
 if (!is_array($projectInvoiceRecipientIds)) { $projectInvoiceRecipientIds = []; }
 $projectInvoiceLinkClientIds = $_POST['project_invoice_link_client_ids'] ?? [];
 if (!is_array($projectInvoiceLinkClientIds)) { $projectInvoiceLinkClientIds = []; }
+$alphaLedgerUserIds = $_POST['alphaledger_user_ids'] ?? [];
+if (!is_array($alphaLedgerUserIds)) { $alphaLedgerUserIds = []; }
+$alphaLedgerAssignmentsSubmitted = !empty($_POST['alphaledger_assignments_present']);
 $parent_id = null; // Parent projects not supported any more
 $organization_id = (int)($_POST['organization_id'] ?? 0);
 $department_id = (int)($_POST['department_id'] ?? 0);
@@ -62,6 +66,7 @@ if ($department_id > 0) {
 $projectClientIds = array_values(array_unique(array_filter(array_map('intval', $projectClientIds), static fn($clientId) => $clientId > 0)));
 $projectInvoiceRecipientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceRecipientIds), static fn($clientId) => $clientId > 0)));
 $projectInvoiceLinkClientIds = array_values(array_unique(array_filter(array_map('intval', $projectInvoiceLinkClientIds), static fn($clientId) => $clientId > 0)));
+$alphaLedgerUserIds = array_values(array_unique(array_filter(array_map('intval', $alphaLedgerUserIds), static fn($userId) => $userId > 0)));
 if ($client_id > 0 && !in_array($client_id, $projectClientIds, true)) {
 	header('Location: '.$editRedirect.'&error=' . urlencode('Primary invoice receiver must remain attached to the project.'));
 	exit;
@@ -145,6 +150,54 @@ if ($hasAutoEmailColumn) {
 	$stmt->execute($params);
 }
 project_invoice_sync_clients($pdo, $id, $client_id > 0 ? $client_id : null, $projectClientIds, $projectInvoiceRecipientIds, $projectInvoiceLinkClientIds);
+
+if ($alphaLedgerAssignmentsSubmitted) {
+try {
+	$pdo->beginTransaction();
+	if (($_SESSION['user']['role'] ?? '') !== 'admin') {
+		throw new DomainException('Only a PA administrator can change AlphaLedger project assignments.');
+	}
+	if (!(bool)$pdo->query('SELECT enabled FROM alphaledger_policy WHERE singleton=1')->fetchColumn()) {
+		throw new DomainException('Enable AlphaLedger synchronization before changing project assignments.');
+	}
+	if ($alphaLedgerUserIds) {
+		$placeholders = implode(',', array_fill(0, count($alphaLedgerUserIds), '?'));
+		$validStmt = $pdo->prepare("SELECT id FROM users WHERE is_disabled=0 AND deleted_at IS NULL AND id IN ({$placeholders})");
+		$validStmt->execute($alphaLedgerUserIds);
+		$validIds = array_map('intval', $validStmt->fetchAll(PDO::FETCH_COLUMN));
+		sort($validIds);
+		$expectedIds = $alphaLedgerUserIds;
+		sort($expectedIds);
+		if ($validIds !== $expectedIds) {
+			throw new DomainException('AlphaLedger assignments must reference active PA users.');
+		}
+	}
+	$previousAssignmentStmt = $pdo->prepare('SELECT user_id FROM alphaledger_project_assignments WHERE project_id=? ORDER BY user_id');
+	$previousAssignmentStmt->execute([$id]);
+	$previousAssignmentIds = array_map('intval', $previousAssignmentStmt->fetchAll(PDO::FETCH_COLUMN));
+	$pdo->prepare('DELETE FROM alphaledger_project_assignments WHERE project_id=?')->execute([$id]);
+	$assignmentInsert = $pdo->prepare('INSERT INTO alphaledger_project_assignments (project_id,user_id,created_by) VALUES (?,?,?)');
+	foreach ($alphaLedgerUserIds as $assignedUserId) {
+		$assignmentInsert->execute([$id, $assignedUserId, (int)($_SESSION['user']['id'] ?? 0) ?: null]);
+	}
+	sort($alphaLedgerUserIds);
+	if ($previousAssignmentIds !== $alphaLedgerUserIds) {
+		audit_log($pdo, 'alphaledger.project_assignments_changed', 'project', $id, ['before_user_ids' => $previousAssignmentIds, 'after_user_ids' => $alphaLedgerUserIds]);
+	}
+	$pdo->commit();
+} catch (DomainException $e) {
+	if ($pdo->inTransaction()) { $pdo->rollBack(); }
+	header('Location: '.$editRedirect.'&error=' . urlencode($e->getMessage()));
+	exit;
+} catch (PDOException $e) {
+	if ($pdo->inTransaction()) { $pdo->rollBack(); }
+	if ($e->getCode() !== '42S02') {
+		header('Location: '.$editRedirect.'&error=' . urlencode('Could not save AlphaLedger assignments.'));
+		exit;
+	}
+	// Preserve project editing only when migration 0034 has not been applied yet.
+}
+}
 
 $publicProjectToken = trim((string)($storedProject['public_project_token'] ?? ''));
 if ($publicProjectEnabled && $publicProjectToken === '') {

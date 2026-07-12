@@ -7,6 +7,8 @@ description: A first-time path through Project Alpha.
 
 Project Alpha brings the back-office pieces of a service business into one self-hosted web app. The best way to learn it is to understand the records PA manages, then walk through one complete client workflow.
 
+On a clean installation, the first browser visit displays the administrator setup form. Create your own administrator email, username, and password. There is no default login and no administrator password in Docker Compose.
+
 ## The Short Version
 
 1. Add or import clients.

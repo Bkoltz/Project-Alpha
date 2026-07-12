@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/crypto.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/password_policy.php';
+require_once __DIR__ . '/../../utils/password_reset_tokens.php';
 
 // Verbose error toggle: set APP_VERBOSE_ERRORS=true or AUTH_VERBOSE_ERRORS=true (or APP_DEBUG=true)
 $VERBOSE_AUTH = filter_var(getenv('APP_VERBOSE_ERRORS') ?: getenv('AUTH_VERBOSE_ERRORS') ?: getenv('APP_DEBUG') ?: 'false', FILTER_VALIDATE_BOOLEAN);
@@ -24,6 +25,7 @@ if (!csrf_sf_is_valid('auth', is_string($submitted) ? $submitted : '')) {
 
 $action = $_POST['action'] ?? '';
 $emailOrUsername = trim((string)($_POST['email'] ?? ''));
+$registrationUsername = trim((string)($_POST['username'] ?? ''));
 $password = (string)($_POST['password'] ?? '');
 require_once __DIR__ . '/../../utils/client_ip.php';
 $ip = get_client_ip();
@@ -72,6 +74,10 @@ if ($action === 'register_first') {
         header('Location: /?page=login&error=' . urlencode('Enter a valid email'));
         exit;
     }
+    if ($registrationUsername === '' || !preg_match('/^[A-Za-z0-9._-]{3,50}$/', $registrationUsername)) {
+        header('Location: /?page=login&error=' . urlencode('Choose a username using 3-50 letters, numbers, dots, dashes, or underscores'));
+        exit;
+    }
     $pwdErr = password_policy_error($password);
     if ($pwdErr !== null) {
         header('Location: /?page=login&error=' . urlencode($pwdErr));
@@ -82,23 +88,56 @@ if ($action === 'register_first') {
         header('Location: /?page=login&error=' . urlencode('Passwords do not match'));
         exit;
     }
+    $setupLockAcquired = false;
+    $setupAlreadyCompleted = false;
+    $setupError = null;
     try {
-        $hash = password_hash($password, PASSWORD_DEFAULT);
-        $st = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?,?,?)');
-        $st->execute([$emailOrUsername, $hash, 'admin']);
-        audit_log($pdo, 'user.first_admin_created', 'user', (int)$pdo->lastInsertId(), ['email' => $emailOrUsername]);
-        // Do not auto-login the new admin; require explicit sign-in
-        // This ensures session/cookies are established via the normal login flow.
-        header('Location: /?page=login&created=1');
-        exit;
+        $lock = $pdo->query("SELECT GET_LOCK('project_alpha_first_admin_setup', 10)");
+        $setupLockAcquired = (int)$lock->fetchColumn() === 1;
+        if (!$setupLockAcquired) {
+            throw new RuntimeException('Could not acquire the first-time setup lock.');
+        }
+
+        $pdo->beginTransaction();
+        $existing = $pdo->query('SELECT id FROM users ORDER BY id LIMIT 1')->fetchColumn();
+        if ($existing !== false) {
+            $setupAlreadyCompleted = true;
+            $pdo->rollBack();
+        } else {
+            $hash = password_hash($password, PASSWORD_DEFAULT);
+            if (!is_string($hash) || $hash === '') {
+                throw new RuntimeException('Could not hash the administrator password.');
+            }
+            $st = $pdo->prepare('INSERT INTO users (email, username, password_hash, role) VALUES (?,?,?,?)');
+            $st->execute([$emailOrUsername, $registrationUsername, $hash, 'admin']);
+            $newAdminId = (int)$pdo->lastInsertId();
+            audit_log($pdo, 'user.first_admin_created', 'user', $newAdminId, ['email' => $emailOrUsername], $newAdminId);
+            $pdo->commit();
+        }
     } catch (Throwable $e) {
-        // Log exception for debugging (do not reveal to user)
-        try { app_log('auth', 'register_first failed', ['ex' => $e->getMessage()]); } catch (Throwable $_e) { /* ignore logging failure */ }
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        $setupError = $e;
+    } finally {
+        if ($setupLockAcquired) {
+            try { $pdo->query("SELECT RELEASE_LOCK('project_alpha_first_admin_setup')"); } catch (Throwable $ignored) {}
+        }
+    }
+
+    if ($setupAlreadyCompleted) {
+        header('Location: /?page=login&error=' . urlencode('Setup already completed'));
+        exit;
+    }
+    if ($setupError instanceof Throwable) {
+        try { app_log('auth', 'register_first failed', ['ex' => $setupError->getMessage()]); } catch (Throwable $_e) { /* ignore logging failure */ }
         $msg = 'Failed to create admin';
-        if ($VERBOSE_AUTH) { $msg .= ': ' . $e->getMessage(); }
+        if ($VERBOSE_AUTH) { $msg .= ': ' . $setupError->getMessage(); }
         header('Location: /?page=login&error=' . urlencode($msg));
         exit;
     }
+
+    // Do not auto-login the new admin; require explicit sign-in.
+    header('Location: /?page=login&created=1');
+    exit;
 }
 
 if ($action === 'login') {
@@ -111,11 +150,11 @@ if ($action === 'login') {
     try {
         $isEmail = valid_email($emailOrUsername);
         if ($isEmail) {
-            $st = $pdo->prepare('SELECT id, email, password_hash, role FROM users WHERE email=?');
+            $st = $pdo->prepare('SELECT id, email, password_hash, role, is_disabled, auth_version FROM users WHERE email=? AND deleted_at IS NULL');
             $st->execute([$emailOrUsername]);
         } else {
             // Accept either username or email when the input isn't a valid email
-            $st = $pdo->prepare('SELECT id, email, password_hash, role FROM users WHERE username=? OR email=?');
+            $st = $pdo->prepare('SELECT id, email, password_hash, role, is_disabled, auth_version FROM users WHERE (username=? OR email=?) AND deleted_at IS NULL');
             $st->execute([$emailOrUsername, $emailOrUsername]);
         }
         $u = $st->fetch(PDO::FETCH_ASSOC);
@@ -146,6 +185,7 @@ if ($action === 'login') {
             'email'            => $u['email'],
             'role'             => $u['role'],
             'app_role'         => $u['role'],
+            'auth_version'     => (int)$u['auth_version'],
             'permissions_hash' => compute_permissions_hash($pdo, (int)$u['id'], 0),
         ];
 
@@ -164,6 +204,7 @@ if ($action === 'login') {
         // on success (no 2FA), regenerate session and optionally clear attempts
         session_regenerate_id(true);
         $_SESSION['user'] = $userSession;
+        password_reset_revoke_for_user($pdo, (int)$u['id']);
         // Clear old login attempts on success
         try {
             $pdo->prepare('DELETE FROM login_attempts WHERE ip=? AND attempted_at < NOW() - INTERVAL 1 DAY')->execute([$ip]);

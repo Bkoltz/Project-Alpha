@@ -92,6 +92,29 @@ final class SecurityHardeningTest extends TestCase
         self::assertSame(1, (int)$state['used'], 'Third failed attempt should lock/consume the reset token.');
     }
 
+    public function testHashedPasswordResetCodeIsSingleUseAndRevocable(): void
+    {
+        $pdo = $this->mysql();
+        $suffix = bin2hex(random_bytes(5));
+        $email = "security-reset-hash-{$suffix}@example.invalid";
+        $userId = $this->insertUser($email);
+        $code = '654321';
+
+        $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at, attempts, used) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE), 0, 0)')
+            ->execute([$userId, hash('sha256', $code)]);
+
+        self::assertSame($userId, password_reset_verify_and_consume($pdo, $email, $code));
+        $this->expectException(RuntimeException::class);
+        password_reset_verify_and_consume($pdo, $email, $code);
+    }
+
+    public function testPasswordResetEmailRequiresConfiguredSmtp(): void
+    {
+        self::assertFalse(password_reset_email_is_configured([]));
+        self::assertFalse(password_reset_email_is_configured(['smtp_host' => '  ']));
+        self::assertTrue(password_reset_email_is_configured(['smtp_host' => 'smtp.example.test']));
+    }
+
     public function testConfirmedFindingFixesRemainInPlace(): void
     {
         $acl = $this->read('src/utils/acl.php');
@@ -123,7 +146,8 @@ final class SecurityHardeningTest extends TestCase
         $resetVerify = $this->read('src/controllers/auth/reset_verify.php');
         $resetUpdate = $this->read('src/controllers/auth/reset_update.php');
         self::assertStringContainsString('password_reset_verify_and_consume', $resetVerify);
-        self::assertStringContainsString('password_reset_verify_and_consume', $resetUpdate);
+        self::assertStringContainsString('reset_auth_version', $resetUpdate);
+        self::assertStringContainsString('auth_version=?', $resetUpdate);
 
         $forms = $this->read('src/controllers/forms_handler.php');
         self::assertStringContainsString('INNER JOIN form_categories c ON c.id = d.category_id', $forms);
@@ -142,6 +166,8 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringNotContainsString("'payments/payments-create'", $this->csrfSkipList($front));
         self::assertStringContainsString("'public-contract-sign'", $this->csrfSkipList($front));
         self::assertStringContainsString("'stripe-webhook'", $this->csrfSkipList($front));
+        self::assertStringContainsString("'2fa-verify-action'", $this->csrfSkipList($front));
+        self::assertStringContainsString("'2fa-setup-action'", $this->csrfSkipList($front));
 
         $aclMiddleware = $this->read('src/utils/acl_middleware.php');
         foreach (['payments/payments-create', 'public-link-revoke', 'forms-handler', 'financial/csv-import'] as $route) {
@@ -164,6 +190,13 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('BACKUP_ENCRYPTION_KEY=', $envExample);
         self::assertStringNotContainsString('rootpass', $envExample);
         self::assertStringNotContainsString('sk_live_', $envExample);
+
+        $migrator = $this->read('docker/migrate.sh');
+        $compose = $this->read('docker-compose.truenas.yml');
+        $recovery = $this->read('bin/admin-recovery.php');
+        self::assertStringNotContainsString('admin_sync.php', $migrator);
+        self::assertStringNotContainsString('ADMIN_PASSWORD', $compose);
+        self::assertStringContainsString('recover_admin_account', $recovery);
 
         $front = $this->read('public/index.php');
         self::assertStringContainsString('AUTH_DISABLED ignored because APP_ENV is production or not explicitly development/test', $front);

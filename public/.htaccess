@@ -9,6 +9,10 @@
     # to the existing front-controller routes.
     RewriteRule ^stripe-webhook/?$ index.php?page=stripe-webhook [QSA,L]
     RewriteRule ^stripe-webhook-legacy/?$ index.php?page=stripe-webhook-legacy [QSA,L]
+
+    # Versioned AlphaLedger integration API. Keep this ahead of generic routing.
+    RewriteRule ^api/v1/integrations/alphaledger/(manifest|installations|changes|reconciliation)/?$ index.php?page=api-v1-alphaledger&resource=$1 [QSA,L]
+    RewriteRule ^api/v1/integrations/alphaledger/(time-records/batch|pay-accruals/batch|ledger-records/batch)/?$ index.php?page=api-v1-alphaledger&resource=$1 [QSA,L]
 </IfModule>
 <IfModule mod_setenvif.c>
     SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1

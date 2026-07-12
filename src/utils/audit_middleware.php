@@ -64,6 +64,7 @@ function audit_sensitive_map(): array
             'payments/payment-refund'        => ['payment.refund', 'payment'],
             'payments/payment-reverse'       => ['payment.manual_entry_reversed', 'payment'],
             'payments/payment-correct'       => ['payment.allocation_corrected', 'payment'],
+            'financial/recurring-expense-handler' => ['recurring_expense.change', 'recurring_expense'],
             'invoice/invoices-mark-paid'     => ['invoice.mark_paid', 'invoice'],
             'invoices-mark-paid'             => ['invoice.mark_paid', 'invoice'],
             'invoice/invoice-void'            => ['invoice.void', 'invoice'],

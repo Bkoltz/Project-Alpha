@@ -9,7 +9,7 @@ Use this checklist after PA is installed and reachable in a browser.
 
 ## Day 1: Identity and Access
 
-- Change the default admin password.
+- Complete first-time setup to create the initial named administrator.
 - Add named user accounts.
 - Enable 2FA for owner or admin accounts.
 - Configure business identity in **Settings > System**.

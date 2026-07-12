@@ -45,9 +45,6 @@ if [ "$APP_ENV_NORMALIZED" = "production" ] || [ "$APP_ENV_NORMALIZED" = "prod" 
   if [ "${MYSQL_ROOT_PASSWORD:-}" = "changeme_root_pass" ] || [ "${MYSQL_ROOT_PASSWORD:-}" = "rootpass" ]; then
     echo "WARNING: MYSQL_ROOT_PASSWORD appears to use a default/example value."
   fi
-  if [ "${ADMIN_PASSWORD:-}" = "changeme_admin_pass" ] || [ -z "${ADMIN_PASSWORD:-}" ]; then
-    echo "WARNING: ADMIN_PASSWORD is missing or appears to use a default/example value."
-  fi
   if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
     echo "WARNING: BACKUP_ENCRYPTION_KEY is not set; backup archives will not be encrypted."
   fi

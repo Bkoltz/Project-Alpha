@@ -1550,6 +1550,44 @@ CREATE TABLE IF NOT EXISTS receipts (
     CONSTRAINT fk_receipts_uploaded_by FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- RECURRING EXPENSE TEMPLATES
+CREATE TABLE IF NOT EXISTS recurring_expenses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL DEFAULT NULL,
+    vendor_id INT NULL DEFAULT NULL,
+    category_id INT NULL DEFAULT NULL,
+    client_id INT NULL DEFAULT NULL,
+    project_id INT NULL DEFAULT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    description VARCHAR(500) NOT NULL,
+    interval_count INT NOT NULL DEFAULT 1,
+    interval_unit ENUM('week','month','year') NOT NULL DEFAULT 'month',
+    start_date DATE NOT NULL,
+    next_expense_date DATE NULL,
+    end_date DATE NULL,
+    last_generated_date DATE NULL,
+    generated_count INT NOT NULL DEFAULT 0,
+    is_billable TINYINT(1) NOT NULL DEFAULT 0,
+    is_tax_deductible TINYINT(1) NOT NULL DEFAULT 1,
+    status ENUM('active','paused','ended') NOT NULL DEFAULT 'active',
+    notes TEXT NULL,
+    created_by INT NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_rec_exp_org (organization_id),
+    INDEX idx_rec_exp_vendor (vendor_id),
+    INDEX idx_rec_exp_category (category_id),
+    INDEX idx_rec_exp_client (client_id),
+    INDEX idx_rec_exp_project (project_id),
+    INDEX idx_rec_exp_due (status, next_expense_date),
+    CONSTRAINT fk_rec_exp_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_vendor FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_category FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_rec_exp_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- EXPENSES
 CREATE TABLE IF NOT EXISTS expenses (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1559,6 +1597,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     client_id INT NULL DEFAULT NULL,
     project_id INT NULL DEFAULT NULL,
     receipt_id INT NULL DEFAULT NULL,
+    recurring_expense_id INT NULL DEFAULT NULL,
+    recurring_occurrence_date DATE NULL DEFAULT NULL,
     amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     tax_amount DECIMAL(12,2) NULL DEFAULT NULL,
     total_amount DECIMAL(12,2) NULL DEFAULT NULL,
@@ -1580,6 +1620,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     INDEX idx_exp_category (category_id),
     INDEX idx_exp_client (client_id),
     INDEX idx_exp_project (project_id),
+    INDEX idx_exp_recurring (recurring_expense_id),
+    UNIQUE INDEX uq_exp_recurring_occurrence (recurring_expense_id, recurring_occurrence_date),
     INDEX idx_exp_date (expense_date),
     INDEX idx_exp_status (status),
     INDEX idx_exp_billable (is_billable),
@@ -1589,6 +1631,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     CONSTRAINT fk_exp_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_receipt FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_exp_recurring FOREIGN KEY (recurring_expense_id) REFERENCES recurring_expenses(id) ON DELETE SET NULL,
     CONSTRAINT fk_exp_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

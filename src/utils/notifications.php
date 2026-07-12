@@ -109,7 +109,6 @@ function admin_notification_recipients(PDO $pdo, array $appConfig): array {
               AND is_disabled = 0
               AND email IS NOT NULL
               AND email <> ''
-              AND LOWER(email) <> 'admin@project-alpha.local'
             ORDER BY id ASC
         ";
     try {
@@ -128,7 +127,6 @@ function admin_notification_recipients(PDO $pdo, array $appConfig): array {
                 WHERE role IN ('admin','owner')
                   AND email IS NOT NULL
                   AND email <> ''
-                  AND LOWER(email) <> 'admin@project-alpha.local'
                 ORDER BY id ASC
             ");
             foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {

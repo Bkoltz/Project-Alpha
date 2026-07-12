@@ -27,6 +27,15 @@ if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
+if ($username !== '') {
+    $usernameCheck = $pdo->prepare('SELECT id FROM users WHERE username = ? AND deleted_at IS NULL LIMIT 1');
+    $usernameCheck->execute([$username]);
+    if ($usernameCheck->fetchColumn()) {
+        header('Location: /?page=accounts&action=create&error=' . urlencode('Username already exists'));
+        exit;
+    }
+}
+
 $pwdErr = password_policy_error((string)$password);
 if ($pwdErr !== null) {
     header('Location: /?page=accounts&error=' . urlencode($pwdErr));

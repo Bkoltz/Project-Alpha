@@ -18,12 +18,6 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
 $csrf = csrf_token();
 $userId = (int)($_GET['id'] ?? 0);
 
-// Protect the built-in admin account
-if ($userId === 1) {
-    header('Location: /?page=accounts&error=' . urlencode('The default admin account cannot be edited here.'));
-    exit;
-}
-
 $stmt = $pdo->prepare('SELECT id, email, username, role, is_disabled, force_password_reset, created_at,
     document_sender_enabled, document_sender_name, document_sender_company,
     document_sender_address_line1, document_sender_address_line2,

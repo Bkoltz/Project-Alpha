@@ -15,6 +15,7 @@ $vendorId = (int)($_GET['vendor_id'] ?? 0);
 $clientId = (int)($_GET['client_id'] ?? 0);
 $billable = $_GET['billable'] ?? '';
 $status = $_GET['status'] ?? '';
+$recurringExpenseId = (int)($_GET['recurring_expense_id'] ?? 0);
 
 [$scopeWhere, $scopeParams] = finance_scope_clause($pdo, 'e', $userId, $orgId, 'created_by');
 
@@ -35,6 +36,7 @@ if ($status === 'all') {
 } else {
     $where[] = "e.status != 'void'";
 }
+if ($recurringExpenseId > 0) { $where[] = 'e.recurring_expense_id = ?'; $params[] = $recurringExpenseId; }
 $whereSQL = implode(' AND ', $where);
 
 $per = (int)($_GET['per_page'] ?? 50);
@@ -83,7 +85,7 @@ $clientsQ->execute();
 $clients = $clientsQ->fetchAll(PDO::FETCH_ASSOC);
 
 $totalPages = max(1, (int)ceil($total / $per));
-$activeFilterCount = count(array_filter([$start, $end, $categoryId, $vendorId, $clientId, $billable, $status], function ($value) {
+$activeFilterCount = count(array_filter([$start, $end, $categoryId, $vendorId, $clientId, $billable, $status, $recurringExpenseId], function ($value) {
     return $value !== '' && $value !== 0 && $value !== '0';
 }));
 
@@ -118,6 +120,7 @@ $paginationFilters = [
     'client_id' => $clientId,
     'billable' => $billable,
     'status' => $status,
+    'recurring_expense_id' => $recurringExpenseId,
     'per_page' => $per,
 ];
 ?>
@@ -143,6 +146,9 @@ $paginationFilters = [
   <?php endif; ?>
   <?php if (!empty($_GET['deleted'])): ?>
     <div class="alert alert-success">Expense deleted.</div>
+  <?php endif; ?>
+  <?php if ($recurringExpenseId > 0): ?>
+    <div class="alert" style="background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a">Showing generated history for recurring expense #<?php echo $recurringExpenseId; ?>. <a href="/?page=financial/expenses-list&tab=recurring">Back to recurring schedules</a></div>
   <?php endif; ?>
 
   <div class="expense-summary">
@@ -176,6 +182,7 @@ $paginationFilters = [
     <form method="get" action="/" class="expense-filter-grid">
       <input type="hidden" name="page" value="financial/expenses-list">
       <input type="hidden" name="tab" value="expenses">
+      <?php if ($recurringExpenseId > 0): ?><input type="hidden" name="recurring_expense_id" value="<?php echo $recurringExpenseId; ?>"><?php endif; ?>
       <label><span class="label-muted">Start</span><input type="date" name="start" value="<?php echo htmlspecialchars($start); ?>" class="input"></label>
       <label><span class="label-muted">End</span><input type="date" name="end" value="<?php echo htmlspecialchars($end); ?>" class="input"></label>
       <label>
@@ -276,6 +283,7 @@ $paginationFilters = [
                 <?php if ((int)$e['is_tax_deductible'] === 1): ?><span class="status-pill status-pill--paid">Deductible</span><?php endif; ?>
                 <?php if ((int)$e['is_reconciled'] === 1): ?><span class="status-pill status-pill--completed">Reconciled</span><?php endif; ?>
                 <?php if ((int)$e['is_reimbursed'] === 1): ?><span class="status-pill status-pill--reimbursed">Reimbursed</span><?php endif; ?>
+                <?php if (!empty($e['recurring_expense_id'])): ?><span class="status-pill status-pill--active">Recurring</span><?php endif; ?>
                 <?php if ((int)$e['is_billable'] !== 1 && (int)$e['is_tax_deductible'] !== 1 && (int)$e['is_reconciled'] !== 1 && (int)$e['is_reimbursed'] !== 1): ?><span class="muted text-sm">None</span><?php endif; ?>
               </div>
             </td>

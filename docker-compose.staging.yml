@@ -24,7 +24,6 @@ services:
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_staging_pass
       MYSQL_ROOT_PASSWORD: changeme_staging_root
-      ADMIN_PASSWORD: changeme_staging_admin
     depends_on:
       db:
         condition: service_healthy

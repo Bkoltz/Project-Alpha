@@ -22,7 +22,7 @@ The one-shot Compose `migrate` service:
 3. Validates the migration sequence and applied checksums. An empty post-baseline migration directory is valid.
 4. Requires a successful compressed backup before applying pending post-baseline migrations.
 5. Applies pending migrations, if any, and validates critical schema invariants.
-6. Reconciles the Compose administrator password without logging it or its hash.
+6. Leaves administrator creation to the web first-time setup when the users table is empty.
 
 Web and cron depend on successful completion of this service.
 

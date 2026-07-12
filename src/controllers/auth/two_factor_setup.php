@@ -64,15 +64,29 @@ try {
         // Verify the code before enabling
         $code = trim($_POST['code'] ?? '');
         
-        if (!$twofa) {
+        $pdo->beginTransaction();
+        // Match recovery's lock order: user first, then the TOTP row. This
+        // prevents an in-flight setup from clearing a newer recovery flag.
+        $userLock = $pdo->prepare('SELECT id FROM users WHERE id = ? FOR UPDATE');
+        $userLock->execute([$userId]);
+        $totpLock = $pdo->prepare('SELECT * FROM user_2fa WHERE user_id = ? FOR UPDATE');
+        $totpLock->execute([$userId]);
+        $lockedTwofa = $totpLock->fetch(PDO::FETCH_ASSOC);
+
+        if (!$lockedTwofa) {
+            $pdo->rollBack();
             header('Location: /?page=2fa-setup&error=' . urlencode('2FA setup not initialized'));
             exit;
         }
         
-        if (TwoFactorAuth::verifyCode($code, $twofa['secret'])) {
-            // Enable 2FA
+        if (TwoFactorAuth::verifyCode($code, $lockedTwofa['secret'])) {
             $st = $pdo->prepare('UPDATE user_2fa SET enabled = 1, enabled_at = NOW() WHERE user_id = ?');
             $st->execute([$userId]);
+            if ($st->rowCount() !== 1) {
+                throw new RuntimeException('TOTP enrollment changed during verification.');
+            }
+            $pdo->prepare('UPDATE users SET totp_reenroll_required = 0 WHERE id = ?')->execute([$userId]);
+            $pdo->commit();
             
             app_log('2fa', '2FA enabled', ['user_id' => $userId]);
             
@@ -83,6 +97,7 @@ try {
             header('Location: /?page=2fa-setup&success=enabled');
             exit;
         } else {
+            $pdo->rollBack();
             header('Location: /?page=2fa-setup&step=verify&error=' . urlencode('Invalid code. Please try again.'));
             exit;
         }
@@ -217,6 +232,9 @@ try {
     }
     
 } catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     app_log('2fa', 'Setup error', ['error' => $e->getMessage(), 'user_id' => $userId]);
     header('Location: /?page=2fa-setup&error=' . urlencode('An error occurred'));
     exit;

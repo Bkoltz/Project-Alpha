@@ -4,6 +4,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/EmailService.php';
+require_once __DIR__ . '/../../utils/password_reset_tokens.php';
 
 // CSRF check (Symfony-backed)
 require_once __DIR__ . '/../../utils/csrf_sf.php';
@@ -19,16 +20,28 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
   exit;
 }
 
+if (!password_reset_email_is_configured($appConfig)) {
+  header('Location: /?page=reset-password&error=' . urlencode('Password reset email is not configured. Contact an administrator or use the Docker recovery command.'));
+  exit;
+}
+
 // Always respond with generic message, but only generate token if user exists
 $uid = 0;
 try {
-  $st = $pdo->prepare('SELECT id FROM users WHERE email=?');
+  $st = $pdo->prepare('SELECT id FROM users WHERE email=? AND deleted_at IS NULL AND is_disabled=0');
   $st->execute([$email]);
   $uid = (int)($st->fetchColumn() ?: 0);
 } catch (Throwable $e) { $uid = 0; }
 
 if ($uid > 0) {
   try {
+    $recent = $pdo->prepare('SELECT COUNT(*) FROM password_resets WHERE user_id = ? AND created_at >= NOW() - INTERVAL 15 MINUTE');
+    $recent->execute([$uid]);
+    if ((int)$recent->fetchColumn() >= 3) {
+      header('Location: /?page=reset-verify&email=' . urlencode($email) . '&sent=1');
+      exit;
+    }
+
     // Create table if missing (best-effort, idempotent)
     $pdo->exec("CREATE TABLE IF NOT EXISTS password_resets (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -52,8 +65,8 @@ if ($uid > 0) {
 
     // Generate 6-digit numeric code
     $token = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-    $exp = date('Y-m-d H:i:s', time() + 10*60); // 10 minutes
-    $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?,?)')->execute([$uid, $token, $exp]);
+    $exp = date('Y-m-d H:i:s', time() + 5*60);
+    $pdo->prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?,?)')->execute([$uid, hash('sha256', $token), $exp]);
     // Log masked token creation for debugging (do not log full token in production)
     $masked = substr($token, 0, 2) . '****' . substr($token, -2);
     if (function_exists('app_log')) {
@@ -82,10 +95,10 @@ if ($uid > 0) {
       $host = $configuredHost !== '' ? $configuredHost : ($_SERVER['HTTP_HOST'] ?? 'localhost');
       $baseUrl = $scheme . '://' . rtrim((string)$host, '/');
     }
-    $link = $baseUrl . '/?page=reset-verify&email=' . rawurlencode($email) . '&token=' . rawurlencode($token);
+    $link = $baseUrl . '/?page=reset-verify&email=' . rawurlencode($email);
 
     $subject = $brand . ' password reset';
-    $html = '<p>Here is your one-time reset code (valid for 10 minutes):</p>'
+    $html = '<p>Here is your one-time reset code (valid for 5 minutes):</p>'
           . '<p style="font-size:22px;font-weight:800;letter-spacing:3px">' . htmlspecialchars($token) . '</p>'
           . '<p>Go to the code entry page below and enter the 6-digit code:</p>'
           . '<p><a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';

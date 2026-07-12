@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/time_tracking_schema.php';
+require_once __DIR__ . '/../../utils/alphaledger_integration.php';
 
 function time_tracking_update_error(string $message): void
 {
@@ -12,6 +13,7 @@ function time_tracking_update_error(string $message): void
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('time-tracking');
+pa_al_block_local_time_mutation_when_enabled($pdo);
 try {
     pa_time_tracking_ensure_schema($pdo);
 } catch (Throwable $e) {
@@ -60,11 +62,14 @@ if (!$hasStartEnd && !$hasManualHours) {
 }
 
 // Ensure user owns the entry and it is not already billed
-$owner = $pdo->prepare('SELECT user_id, billed FROM time_entries WHERE id = ?');
+$owner = $pdo->prepare('SELECT user_id, billed, source_system FROM time_entries WHERE id = ?');
 $owner->execute([$id]);
 $row = $owner->fetch(PDO::FETCH_ASSOC);
 if (!$row || (int)$row['user_id'] !== $userId || (int)$row['billed'] === 1) {
     time_tracking_update_error('Not allowed');
+}
+if (($row['source_system'] ?? '') === 'alphaledger') {
+    time_tracking_update_error('AlphaLedger-owned time entries can only be corrected in AlphaLedger');
 }
 
 if ($invoiceId) {
@@ -125,7 +130,7 @@ if ($hours <= 0) {
 }
 
 try {
-    $stmt = $pdo->prepare('UPDATE time_entries SET client_id=?, project_id=?, project_code=?, contract_id=?, invoice_id=?, invoice_item_id=NULL, service_item_id=?, description=?, started_at=?, ended_at=?, hours=?, billable=?, rate=? WHERE id=? AND user_id=? AND billed=0');
+    $stmt = $pdo->prepare('UPDATE time_entries SET client_id=?, project_id=?, project_code=?, contract_id=?, invoice_id=?, invoice_item_id=NULL, service_item_id=?, description=?, started_at=?, ended_at=?, hours=?, billable=?, rate=? WHERE id=? AND user_id=? AND billed=0 AND COALESCE(source_system,"")<>"alphaledger"');
     $stmt->execute([$clientId, $projectId, $projectCode, $contractId, $invoiceId, $serviceItemId, $description, $startedAt, $endedAt, $hours, $billable, $rate, $id, $userId]);
 } catch (Throwable $e) {
     @error_log('[TimeTrackingUpdate] Failed to save time entry: ' . $e->getMessage());
