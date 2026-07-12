@@ -218,7 +218,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
             </label>
             
             <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
-                <strong>ℹ️ Link Expiration:</strong> Set expiration dates per-client or per-organization in their respective storage sections, not globally.
+                <strong>ℹ️ Link Expiration:</strong> Resolver-managed folders do not expire by date. Optional expiration dates apply only to manually managed links.
             </div>
             <div class="pa-provider-note">
                 Folder matching is intentionally strict: organization folders match by organization name, department folders match by department folder name or alias under the parent organization folder, and project-specific links stay disabled unless explicitly enabled.
@@ -420,10 +420,10 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
     <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-top:20px">
         <legend style="padding:0 8px;font-weight:600">Link Expiration Management</legend>
         <div style="padding:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:13px">
-            ℹ️ <strong>Link expiration automation and warnings</strong> are managed on the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab under "System Automation" and "Link Expiration Warnings".
+            ℹ️ <strong>Manual-link expiration automation and warnings</strong> are managed on the <a href="/?page=settings&tab=notifications" style="color:var(--nav-accent);font-weight:600">Notifications</a> tab under "System Automation" and "Link Expiration Warnings". Resolver-managed folders stay active until a full provider scan confirms the folder is unavailable.
         </div>
         <div style="margin-top:12px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px">
-            <strong>ℹ️ Note:</strong> Expired links will be marked automatically but not deleted. You can manually refresh or regenerate them as needed.
+            <strong>ℹ️ Note:</strong> Expired manual links and unavailable resolver links are marked but not deleted. Refreshing a resolver link restores it when its exact folder is available again.
         </div>
     </fieldset>
     

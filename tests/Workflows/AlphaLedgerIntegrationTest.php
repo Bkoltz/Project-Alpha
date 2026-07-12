@@ -161,7 +161,7 @@ final class AlphaLedgerIntegrationTest extends TestCase
         self::assertStringContainsString('pa_al_time_coalesce_stop',$bridge);
         self::assertStringContainsString('employee_external_id=?',$command);
         self::assertStringContainsString('Pending AlphaLedger sync',$view);
-        self::assertStringContainsString('Powered by AlphaLedger',$view);
+        self::assertStringContainsString('Linked to AlphaLedger',$view);
     }
 
     public function testTimeCommandSignatureIsDirectionAndBodyBound(): void
@@ -193,5 +193,26 @@ final class AlphaLedgerIntegrationTest extends TestCase
         self::assertStringContainsString("state IN ('pending','attention')",$handler);
         self::assertStringContainsString('before disconnecting',$handler);
         foreach(['Historical approved-time backfill','Effective-dated rates','Integration exceptions','Pending commands'] as $copy)self::assertStringContainsString($copy,$settings);
+    }
+
+    public function testWorkforceIdentityKeepsCredentialsSeparateAndUsesAlEmployeeMappings(): void
+    {
+        $migration=(string)file_get_contents($this->root.'/database/migrations/0038_alphaledger_workforce_identity.sql');
+        $integration=(string)file_get_contents($this->root.'/src/utils/alphaledger_integration.php');
+        $accounts=(string)file_get_contents($this->root.'/src/views/pages/auth/accounts.php');
+        $ledger=(string)file_get_contents($this->root.'/src/views/pages/financial/ledger.php');
+        $project=(string)file_get_contents($this->root.'/src/views/pages/project/projects-edit.php');
+        $create=(string)file_get_contents($this->root.'/src/controllers/accounts/accounts_create.php');
+        foreach(['profile_source','last_synced_at','alphaledger_team_assignments'] as $schema)self::assertStringContainsString($schema,$migration);
+        self::assertStringContainsString("event_type IN ('person.upserted','person.deactivated')",$migration);
+        self::assertStringNotContainsString("pa_al_sync_object(\$pdo, \$installation, 'person'",$integration);
+        self::assertStringContainsString("'employee_id'",$integration);
+        self::assertStringContainsString('alphaledger_team_assignments',$integration);
+        self::assertStringContainsString('Linked to AlphaLedger',$accounts);
+        self::assertStringContainsString('PA credentials remain separate',$accounts);
+        self::assertStringContainsString('Managed by AlphaLedger',$ledger);
+        self::assertStringContainsString('Linked to PA account',$ledger);
+        self::assertStringContainsString('PA login accounts are not synchronized',$project);
+        self::assertStringContainsString('INSERT INTO team_members',$create);
     }
 }

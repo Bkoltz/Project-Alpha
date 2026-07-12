@@ -13,12 +13,22 @@ Project Alpha owns no-login team members, clients, billing projects, durable AL 
 2. In PA, create a dedicated API key whose **only** scope is **AlphaLedger integration**. Restrict its source IP when the deployment has a stable address; PA will reject full-access keys. If no stable source IP is possible, the enabling administrator must explicitly acknowledge that exception, and PA records it in the authorization policy and audit log.
 3. Open **Settings → AlphaLedger**. Choose that key, enter the exact AL callback URL, acknowledge the ownership boundary, then reauthenticate with the current administrator password and a live TOTP code. Synchronization is disabled by default and no handshake or event exchange is allowed before this step.
 4. Copy the immutable PA business ID shown there. In AlphaLedger, enter the PA base URL, that expected business ID, the same API key, and the exact callback URL authorized in PA.
-5. After AL completes its handshake, assign employees from each PA project’s Edit page.
-6. Confirm the suggested PA-person links in AlphaLedger. Links are never accepted solely from a fuzzy match; PA replays active assignments during reconciliation after links are confirmed.
+5. After AL completes its handshake, review **Financial → Ledger → People & Assignments**. Every AL employee is visible without receiving a PA login.
+6. In **Settings → AlphaLedger**, map an AL employee to an existing PA team member or deliberately create a no-login team member. Links are never accepted solely from an email or fuzzy-name match.
+7. Assign mapped team members from each PA project’s Edit page. PA sends the immutable AL employee UUID with the assignment; it does not provision a PA user into AL.
 
 PA exposes the versioned endpoints under `/api/v1/integrations/alphaledger/`. AlphaLedger imports approved billable time into PA’s tracked-time queue, where it can be added to a draft invoice. Approved pay accruals appear under **Assets & Expenses → Employee Pay**; marking one paid, reopened, or void sends a signed status event to AL.
 
 When AL negotiates `operational_ledger_v1`, PA also receives a read-only operational mirror at **Financial → Ledger**. Administrators can inspect employees and identity links, observed projects and assignments, every time-entry state, breaks, corrections, and pay accruals. The Ledger remains visible but stale/read-only after disconnect until an administrator purges it with password and TOTP. Employee Pay is shown separately and never changes PA Income, Expenses, or Net Profit.
+
+## Workforce Identity and Login Boundary
+
+- AlphaLedger is authoritative for employee display name, work email, and active state. PA labels these profiles **Managed by AlphaLedger**.
+- PA stores an explicit `AL employee UUID → PA team member` mapping. Email may help an administrator recognize someone but never creates the link automatically.
+- A team member may have no PA login. When a PA login is linked, PA shows **Linked to AlphaLedger** while keeping the PA password, MFA, sessions, role, and recovery controls independent.
+- PA users are not provisioned into AL. A PA administrator who wants connected time entry must already have an AL employee identity and explicitly map it to the team member linked to the PA login.
+- Disabling a PA login does not deactivate the AL employee. Deactivating the AL employee prevents new AL time activity but preserves the PA login decision and all financial history.
+- A signed time command carries the authenticated PA actor and mapped AL employee UUID. AL revalidates the installation, employee, ownership, and assignment; PA never handles an AL password.
 
 While synchronization is enabled, PA’s native timer and native time mutations are disabled. A system administrator with a confirmed PA login → team member → AL employee mapping can still use the familiar PA Time Tracking page; those controls send signed, idempotent commands to AL. Other accounts receive the read-only approved-time view. AL-originated entries remain immutable in PA even after synchronization is later disabled; corrections must always come from their owning system.
 

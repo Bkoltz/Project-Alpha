@@ -157,6 +157,21 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("page=client/client-details&id=' . \$id", (string)$update);
     }
 
+    public function testResolverFoldersUseProviderAvailabilityInsteadOfCalendarExpiration(): void
+    {
+        $resolver = file_get_contents($this->root . '/src/services/LinkResolverService.php');
+        $links = file_get_contents($this->root . '/src/views/components/links_section.php');
+        $expirationCron = file_get_contents($this->root . '/src/cron/link_expiration_checker.php');
+        $settings = file_get_contents($this->root . '/src/views/pages/settings/links.php');
+
+        self::assertStringNotContainsString('$expirationDate = date(', (string)$resolver);
+        self::assertStringContainsString('SET title = ?, url = ?, expiration_date = NULL', (string)$resolver);
+        self::assertStringContainsString('markResolverLinkUnavailable($context, $linkType)', (string)$resolver);
+        self::assertStringContainsString("\$statusText = \$isResolverLink ? 'Unavailable' : 'Expired';", (string)$links);
+        self::assertStringContainsString("link_source <> 'resolver'", (string)$expirationCron);
+        self::assertStringContainsString('Resolver-managed folders do not expire by date.', (string)$settings);
+    }
+
     public function testClientAndOrganizationSuiteAddressesFlowToDocuments(): void
     {
         $baseline = file_get_contents($this->root . '/database/baseline.sql');

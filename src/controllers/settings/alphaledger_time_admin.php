@@ -20,6 +20,8 @@ try{
             $pdo->prepare('INSERT INTO team_members (organization_id,display_name,email) VALUES (?,?,?)')->execute([$installation['organization_id']??null,$name,$email]);$teamId=(int)$pdo->lastInsertId();
         }
         $pdo->prepare('INSERT INTO alphaledger_employee_mappings (installation_id,al_business_id,al_employee_id,team_member_id,confirmed_by) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE team_member_id=VALUES(team_member_id),confirmed_by=VALUES(confirmed_by),confirmed_at=UTC_TIMESTAMP()')->execute([(int)$installation['id'],(string)$installation['al_business_id'],$alId,$teamId,$userId]);
+        $source=$pdo->prepare('SELECT display_name,email,is_active FROM alphaledger_ledger_people WHERE installation_id=? AND external_id=? AND deleted_at IS NULL LIMIT 1');$source->execute([(int)$installation['id'],$alId]);$person=$source->fetch(PDO::FETCH_ASSOC);
+        if($person)$pdo->prepare("UPDATE team_members SET display_name=?,email=NULLIF(?,''),is_active=?,profile_source='alphaledger',last_synced_at=UTC_TIMESTAMP() WHERE id=?")->execute([(string)$person['display_name'],(string)$person['email'],(int)$person['is_active'],$teamId]);
         $pdo->prepare("UPDATE alphaledger_integration_exceptions SET status='resolved',resolved_by=?,resolved_at=UTC_TIMESTAMP() WHERE installation_id=? AND exception_type='unmapped_employee' AND (source_object_id=? OR JSON_UNQUOTE(JSON_EXTRACT(details,'$.external_id'))=?) AND status='open'")->execute([$userId,(int)$installation['id'],$alId,$alId]);
         audit_log($pdo,'alphaledger.employee_mapped','team_member',$teamId,['al_employee_id'=>$alId]);
     }elseif($action==='map-project'){

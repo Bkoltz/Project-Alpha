@@ -200,16 +200,6 @@ function pa_al_capture_owned_state(PDO $pdo, array $installation): void
     }
     $pdo->beginTransaction();
     try {
-        $seenPeople = [];
-        $users = $pdo->query("SELECT id,email,display_name AS name,is_active FROM team_members")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($users as $user) {
-            $id = (string) $user['id'];
-            $present = !empty($user['is_active']);
-            $data = ['person_id' => $id, 'team_member_id'=>$id, 'name' => (string) $user['name'], 'email' => (string)($user['email']??'')];
-            pa_al_sync_object($pdo, $installation, 'person', $id, $present, 'person.upserted', 'person.deactivated', $data);
-            $seenPeople[$id] = true;
-        }
-
         $currency = 'USD';
         $seenProjects = [];
         $projects = $pdo->query("SELECT p.id,p.name,p.description,p.status,p.client_id,c.name AS client_name FROM projects p LEFT JOIN clients c ON c.id=p.client_id")->fetchAll(PDO::FETCH_ASSOC);
@@ -231,28 +221,28 @@ function pa_al_capture_owned_state(PDO $pdo, array $installation): void
         }
 
         $seenAssignments = [];
-        $assignments = $pdo->query("SELECT a.project_id,tm.id user_id FROM alphaledger_project_assignments a JOIN projects p ON p.id=a.project_id JOIN users u ON u.id=a.user_id JOIN team_members tm ON tm.user_id=u.id WHERE p.status NOT IN ('completed','cancelled') AND u.is_disabled=0 AND u.deleted_at IS NULL AND tm.is_active=1")->fetchAll(PDO::FETCH_ASSOC);
+        $assignmentStmt=$pdo->prepare("SELECT a.project_id,m.al_employee_id FROM alphaledger_team_assignments a JOIN projects p ON p.id=a.project_id JOIN team_members tm ON tm.id=a.team_member_id JOIN alphaledger_employee_mappings m ON m.team_member_id=tm.id AND m.installation_id=? JOIN alphaledger_ledger_people lp ON lp.installation_id=m.installation_id AND lp.external_id=m.al_employee_id AND lp.deleted_at IS NULL AND lp.is_active=1 WHERE p.status NOT IN ('completed','cancelled') AND tm.is_active=1");
+        $assignmentStmt->execute([(int)$installation['id']]);
+        $assignments=$assignmentStmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($assignments as $assignment) {
-            $id = (string) $assignment['project_id'] . ':' . (string) $assignment['user_id'];
-            $data = ['project_id' => (string) $assignment['project_id'], 'person_id' => (string) $assignment['user_id']];
+            $id = (string) $assignment['project_id'] . ':' . (string) $assignment['al_employee_id'];
+            $data = ['project_id' => (string) $assignment['project_id'], 'employee_id' => (string) $assignment['al_employee_id']];
             pa_al_sync_object($pdo, $installation, 'assignment', $id, true, 'assignment.upserted', 'assignment.revoked', $data);
             $seenAssignments[$id] = true;
         }
 
-        $stateStmt = $pdo->prepare("SELECT object_type,object_id FROM alphaledger_object_state WHERE installation_id=? AND is_present=1 AND object_type IN ('person','project','assignment')");
+        $stateStmt = $pdo->prepare("SELECT object_type,object_id FROM alphaledger_object_state WHERE installation_id=? AND is_present=1 AND object_type IN ('project','assignment')");
         $stateStmt->execute([(int) $installation['id']]);
         foreach ($stateStmt->fetchAll(PDO::FETCH_ASSOC) as $state) {
             $type = (string) $state['object_type'];
             $id = (string) $state['object_id'];
-            $seen = $type === 'person' ? $seenPeople : ($type === 'project' ? $seenProjects : $seenAssignments);
+            $seen = $type === 'project' ? $seenProjects : $seenAssignments;
             if (isset($seen[$id])) {
                 continue;
             }
             if ($type === 'assignment') {
-                [$projectId, $personId] = array_pad(explode(':', $id, 2), 2, '');
-                pa_al_sync_object($pdo, $installation, $type, $id, false, 'assignment.upserted', 'assignment.revoked', ['project_id' => $projectId, 'person_id' => $personId]);
-            } elseif ($type === 'person') {
-                pa_al_sync_object($pdo, $installation, $type, $id, false, 'person.upserted', 'person.deactivated', ['person_id' => $id, 'name' => '', 'email' => '']);
+                [$projectId, $employeeId] = array_pad(explode(':', $id, 2), 2, '');
+                pa_al_sync_object($pdo, $installation, $type, $id, false, 'assignment.upserted', 'assignment.revoked', ['project_id' => $projectId, 'employee_id' => $employeeId]);
             } elseif ($type === 'project') {
                 pa_al_sync_object($pdo, $installation, $type, $id, false, 'project.upserted', 'project.archived', ['project_id' => $id, 'client_id' => null, 'name' => 'Archived PA project', 'description' => '', 'client_name' => '', 'billable_default' => true, 'billing_rate' => null, 'currency' => $currency], $currency);
             }
@@ -289,8 +279,8 @@ function pa_al_refresh_assignments(PDO $pdo, array $installation): void
     $stmt = $pdo->prepare("SELECT object_id,revision FROM alphaledger_object_state WHERE installation_id=? AND object_type='assignment' AND is_present=1 ORDER BY object_id");
     $stmt->execute([(int) $installation['id']]);
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $state) {
-        [$projectId, $personId] = array_pad(explode(':', (string) $state['object_id'], 2), 2, '');
-        pa_al_emit_event($pdo, $installation, 'assignment.upserted', (string) $state['object_id'], (int) $state['revision'], ['project_id' => $projectId, 'person_id' => $personId]);
+        [$projectId, $employeeId] = array_pad(explode(':', (string) $state['object_id'], 2), 2, '');
+        pa_al_emit_event($pdo, $installation, 'assignment.upserted', (string) $state['object_id'], (int) $state['revision'], ['project_id' => $projectId, 'employee_id' => $employeeId]);
     }
 }
 

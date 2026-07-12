@@ -219,7 +219,7 @@ function pa_al_time_deliver_commands(PDO $pdo, int $limit=50): array
 function pa_al_time_refresh_mapping_exceptions(PDO $pdo, array $installation): void
 {
     if(empty($installation['al_business_id'])) return;
-    $pdo->prepare('UPDATE team_members tm JOIN alphaledger_employee_mappings m ON m.team_member_id=tm.id AND m.al_business_id=? JOIN alphaledger_ledger_people p ON p.installation_id=? AND p.external_id=m.al_employee_id SET tm.display_name=p.display_name,tm.email=NULLIF(p.email,\'\'),tm.is_active=IF(p.deleted_at IS NULL AND p.is_active=1,1,0)')->execute([(string)$installation['al_business_id'],(int)$installation['id']]);
+    $pdo->prepare('UPDATE team_members tm JOIN alphaledger_employee_mappings m ON m.team_member_id=tm.id AND m.al_business_id=? JOIN alphaledger_ledger_people p ON p.installation_id=? AND p.external_id=m.al_employee_id SET tm.display_name=p.display_name,tm.email=NULLIF(p.email,\'\'),tm.is_active=IF(p.deleted_at IS NULL AND p.is_active=1,1,0),tm.profile_source=\'alphaledger\',tm.last_synced_at=UTC_TIMESTAMP()')->execute([(string)$installation['al_business_id'],(int)$installation['id']]);
     $people=$pdo->prepare('SELECT external_id,display_name,email FROM alphaledger_ledger_people p WHERE p.installation_id=? AND p.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM alphaledger_employee_mappings m WHERE m.al_business_id=? AND m.al_employee_id=p.external_id)');
     $people->execute([(int)$installation['id'],(string)$installation['al_business_id']]);
     foreach($people->fetchAll(PDO::FETCH_ASSOC) as $row) pa_al_time_record_exception($pdo,$installation,'unmapped_employee','employee',(string)$row['external_id'],'AlphaLedger employee requires a PA team-member mapping.',$row);

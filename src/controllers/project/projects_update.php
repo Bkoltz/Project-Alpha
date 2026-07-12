@@ -162,27 +162,27 @@ try {
 	}
 	if ($alphaLedgerUserIds) {
 		$placeholders = implode(',', array_fill(0, count($alphaLedgerUserIds), '?'));
-		$validStmt = $pdo->prepare("SELECT id FROM users WHERE is_disabled=0 AND deleted_at IS NULL AND id IN ({$placeholders})");
+		$validStmt = $pdo->prepare("SELECT DISTINCT tm.id FROM team_members tm JOIN alphaledger_employee_mappings m ON m.team_member_id=tm.id JOIN alphaledger_ledger_people p ON p.installation_id=m.installation_id AND p.external_id=m.al_employee_id AND p.deleted_at IS NULL AND p.is_active=1 WHERE tm.is_active=1 AND tm.id IN ({$placeholders})");
 		$validStmt->execute($alphaLedgerUserIds);
 		$validIds = array_map('intval', $validStmt->fetchAll(PDO::FETCH_COLUMN));
 		sort($validIds);
 		$expectedIds = $alphaLedgerUserIds;
 		sort($expectedIds);
 		if ($validIds !== $expectedIds) {
-			throw new DomainException('AlphaLedger assignments must reference active PA users.');
+			throw new DomainException('AlphaLedger assignments must reference active, mapped team members.');
 		}
 	}
-	$previousAssignmentStmt = $pdo->prepare('SELECT user_id FROM alphaledger_project_assignments WHERE project_id=? ORDER BY user_id');
+	$previousAssignmentStmt = $pdo->prepare('SELECT team_member_id FROM alphaledger_team_assignments WHERE project_id=? ORDER BY team_member_id');
 	$previousAssignmentStmt->execute([$id]);
 	$previousAssignmentIds = array_map('intval', $previousAssignmentStmt->fetchAll(PDO::FETCH_COLUMN));
-	$pdo->prepare('DELETE FROM alphaledger_project_assignments WHERE project_id=?')->execute([$id]);
-	$assignmentInsert = $pdo->prepare('INSERT INTO alphaledger_project_assignments (project_id,user_id,created_by) VALUES (?,?,?)');
+	$pdo->prepare('DELETE FROM alphaledger_team_assignments WHERE project_id=?')->execute([$id]);
+	$assignmentInsert = $pdo->prepare('INSERT INTO alphaledger_team_assignments (project_id,team_member_id,created_by) VALUES (?,?,?)');
 	foreach ($alphaLedgerUserIds as $assignedUserId) {
 		$assignmentInsert->execute([$id, $assignedUserId, (int)($_SESSION['user']['id'] ?? 0) ?: null]);
 	}
 	sort($alphaLedgerUserIds);
 	if ($previousAssignmentIds !== $alphaLedgerUserIds) {
-		audit_log($pdo, 'alphaledger.project_assignments_changed', 'project', $id, ['before_user_ids' => $previousAssignmentIds, 'after_user_ids' => $alphaLedgerUserIds]);
+		audit_log($pdo, 'alphaledger.project_assignments_changed', 'project', $id, ['before_team_member_ids' => $previousAssignmentIds, 'after_team_member_ids' => $alphaLedgerUserIds]);
 	}
 	$pdo->commit();
 } catch (DomainException $e) {

@@ -152,8 +152,8 @@ foreach ($linkDepartmentOptions as $department) {
                 }
                 if (!empty($link['is_expired'])) {
                     $statusStyle = 'background:#fee2e2;color:#991b1b;border-color:#fca5a5';
-                    $statusText = 'Expired';
-                } elseif (!empty($link['expiration_date']) && strtotime((string)$link['expiration_date']) < strtotime('+7 days')) {
+                    $statusText = $isResolverLink ? 'Unavailable' : 'Expired';
+                } elseif (!$isResolverLink && !empty($link['expiration_date']) && strtotime((string)$link['expiration_date']) < strtotime('+7 days')) {
                     $statusStyle = 'background:#fef3c7;color:#92400e;border-color:#fde68a';
                     $statusText = 'Expires soon';
                 } else {
@@ -181,7 +181,7 @@ foreach ($linkDepartmentOptions as $department) {
                         </div>
                     </div>
                     <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px">
-                        <?php if (!empty($link['expiration_date'])): ?>
+                        <?php if (!$isResolverLink && !empty($link['expiration_date'])): ?>
                             <span>Expires: <?php echo e(date('M j, Y', strtotime((string)$link['expiration_date']))); ?></span>
                         <?php endif; ?>
                         <?php if (!empty($link['last_verified'])): ?>

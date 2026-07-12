@@ -283,7 +283,7 @@ function migration_schema_health(PDO $pdo): void
         'api_usage' => ['api_key_id', 'used_at'],
         'client_onboarding_invitations' => ['organization_id', 'invited_email', 'token_hash', 'status'],
         'client_onboarding_submissions' => ['invitation_id', 'proposed_data', 'status'],
-        'team_members' => ['user_id','display_name','email','is_active'],
+        'team_members' => ['user_id','display_name','email','is_active','profile_source','last_synced_at'],
         'time_entries' => ['source_system', 'external_id', 'external_revision', 'external_status','team_member_id','al_business_id','source_entry_id','source_updated_at','cost_rate_snapshot','billing_rate_snapshot'],
         'alphaledger_policy' => ['enabled', 'approved_api_key_id', 'approved_callback_url', 'approved_callback_hash', 'allow_unrestricted_key'],
         'alphaledger_installations' => ['installation_id','al_business_id','api_key_id','callback_url','command_api_url','capabilities','webhook_secret_enc','status'],
@@ -292,6 +292,7 @@ function migration_schema_health(PDO $pdo): void
         'employee_pay_records' => ['installation_id','external_id','external_revision','user_id','team_member_id','amount','status'],
         'alphaledger_employee_mappings' => ['al_business_id','al_employee_id','team_member_id'],
         'alphaledger_project_mappings' => ['al_business_id','al_project_id','project_id'],
+        'alphaledger_team_assignments' => ['project_id','team_member_id','created_by'],
         'alphaledger_command_outbox' => ['operation_id','idempotency_key','operation_type','payload_enc','state'],
         'alphaledger_integration_exceptions' => ['exception_type','source_object_id','reason','status'],
     ];

@@ -41,6 +41,10 @@ try {
     
     // Get today's date
     $today = date('Y-m-d');
+
+    // Resolver-managed folder links are availability-checked by provider scans,
+    // not expired on a calendar. Clear dates left by older resolver versions.
+    $pdo->exec("UPDATE entity_links SET expiration_date = NULL WHERE link_source = 'resolver' AND expiration_date IS NOT NULL");
     
     // Find all links that should be expired but aren't marked as such
     $stmt = $pdo->prepare("
@@ -50,6 +54,7 @@ try {
           AND expiration_date < ?
           AND is_expired = 0
           AND ignore_auto_generation = 0
+          AND (link_source IS NULL OR link_source <> 'resolver')
     ");
     $stmt->execute([$today]);
     $expiredLinks = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -134,6 +139,7 @@ try {
           AND expiration_date BETWEEN ? AND DATE_ADD(?, INTERVAL 7 DAY)
           AND is_expired = 0
           AND ignore_auto_generation = 0
+          AND (link_source IS NULL OR link_source <> 'resolver')
     ");
     $stmt->execute([$today, $today]);
     $expiringSoon = $stmt->fetchColumn();

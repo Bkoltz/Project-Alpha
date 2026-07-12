@@ -84,9 +84,12 @@ $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
 // Insert user
 try {
+    $pdo->beginTransaction();
     $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role, force_password_reset) VALUES (?, ?, ?, ?, ?)');
     $stmt->execute([$email, $username ?: null, $passwordHash, $role, $forceReset ? 1 : 0]);
     $newUserId = (int)$pdo->lastInsertId();
+    $pdo->prepare("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES (?,?,?,?, 'pa')")
+        ->execute([$newUserId,$username!==''?$username:$email,$email,1]);
 
     require_once __DIR__ . '/../../utils/permission_catalog.php';
     if ($role !== 'admin') {
@@ -105,9 +108,11 @@ try {
         } catch (Throwable $e) { /* non-fatal — ACL tables may not exist */ }
     }
 
-    audit_log($pdo, 'user.create', 'user', $newUserId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId]);
+    $pdo->commit();
+    audit_log($pdo, 'user.create', 'user', $newUserId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'team_member_created'=>true]);
     header('Location: /?page=accounts&created=1');
-} catch (PDOException $e) {
+} catch (Throwable $e) {
+    if($pdo->inTransaction())$pdo->rollBack();
     error_log('Failed to create user: ' . $e->getMessage());
     header('Location: /?page=accounts&error=' . urlencode('Failed to create user'));
 }

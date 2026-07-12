@@ -41,7 +41,7 @@ try {
                 'team_member_mappings_v1' => true,
                 'rate_snapshots_v1' => true,
                 'installation_metadata' => ['al_business_id','command_api_url','al_app_url','capabilities'],
-                'events' => ['person', 'project', 'assignment', 'pay_accrual.status_changed', 'financial_summary.updated'],
+                'events' => ['project', 'assignment', 'pay_accrual.status_changed', 'financial_summary.updated'],
             ],
         ]);
     }

@@ -139,6 +139,13 @@ try {
         $userId
     ]);
 
+    $member=$pdo->prepare('SELECT tm.id,tm.profile_source FROM team_members tm WHERE tm.user_id=? LIMIT 1');$member->execute([$userId]);$teamMember=$member->fetch(PDO::FETCH_ASSOC);
+    if(!$teamMember){
+        $pdo->prepare("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES (?,?,?,?, 'pa')")->execute([$userId,$username!==''?$username:$email,$email,$isDisabled?0:1]);
+    }elseif(($teamMember['profile_source']??'pa')==='pa'){
+        $pdo->prepare('UPDATE team_members SET display_name=?,email=?,is_active=? WHERE id=?')->execute([$username!==''?$username:$email,$email,$isDisabled?0:1,(int)$teamMember['id']]);
+    }
+
     if (!empty($_POST['save_account_permissions'])) {
         $allPermissions = permission_catalog_flat();
         $wipeStmt = $pdo->prepare('DELETE FROM user_permissions_overrides WHERE user_id = ? AND organization_id IS NULL AND permission = ?');

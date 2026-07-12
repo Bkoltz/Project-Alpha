@@ -160,8 +160,8 @@ $alphaLedgerAssignedUserIds = [];
 try {
     $policyEnabled = (bool)$pdo->query('SELECT enabled FROM alphaledger_policy WHERE singleton=1')->fetchColumn();
     if ($policyEnabled && ($_SESSION['user']['role'] ?? '') === 'admin') {
-        $alphaLedgerUsers = $pdo->query("SELECT id,email,COALESCE(NULLIF(username,''),email) AS display_name FROM users WHERE is_disabled=0 AND deleted_at IS NULL ORDER BY display_name")->fetchAll(PDO::FETCH_ASSOC);
-        $assignmentStmt = $pdo->prepare('SELECT user_id FROM alphaledger_project_assignments WHERE project_id=?');
+        $alphaLedgerUsers = $pdo->query("SELECT tm.id,tm.email,tm.display_name,m.al_employee_id FROM team_members tm JOIN alphaledger_employee_mappings m ON m.team_member_id=tm.id JOIN alphaledger_ledger_people p ON p.installation_id=m.installation_id AND p.external_id=m.al_employee_id AND p.deleted_at IS NULL AND p.is_active=1 WHERE tm.is_active=1 ORDER BY tm.display_name")->fetchAll(PDO::FETCH_ASSOC);
+        $assignmentStmt = $pdo->prepare('SELECT team_member_id FROM alphaledger_team_assignments WHERE project_id=?');
         $assignmentStmt->execute([$projectId]);
         $alphaLedgerAssignedUserIds = array_map('intval', $assignmentStmt->fetchAll(PDO::FETCH_COLUMN));
     }
@@ -234,12 +234,12 @@ try {
       <section id="project-alphaledger" class="project-edit-section">
         <input type="hidden" name="alphaledger_assignments_present" value="1">
         <h2>AlphaLedger Assignments</h2>
-        <p>Assigned PA users receive this project in AlphaLedger. Identity links are confirmed by an AlphaLedger administrator before employees can use the assignment.</p>
+        <p>Assignments target confirmed AlphaLedger employees through PA team-member mappings. PA login accounts are not synchronized to AlphaLedger.</p>
         <div class="project-edit-grid">
           <?php foreach ($alphaLedgerUsers as $alUser): $alUserId = (int)$alUser['id']; ?>
             <label class="project-check">
               <input type="checkbox" name="alphaledger_user_ids[]" value="<?php echo $alUserId; ?>" <?php echo in_array($alUserId, $alphaLedgerAssignedUserIds, true) ? 'checked' : ''; ?>>
-              <span><strong><?php echo htmlspecialchars((string)$alUser['display_name']); ?></strong><br><small><?php echo htmlspecialchars((string)$alUser['email']); ?></small></span>
+              <span><strong><?php echo htmlspecialchars((string)$alUser['display_name']); ?></strong><br><small><?php echo htmlspecialchars((string)$alUser['email']); ?> · Managed by AlphaLedger</small></span>
             </label>
           <?php endforeach; ?>
         </div>

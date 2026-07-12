@@ -22,7 +22,7 @@ final class LinkResolverServiceTest extends TestCase
             $this->markTestSkipped('MySQL backend unavailable: ' . $error->getMessage());
         }
 
-        foreach (['link_resolver_enabled', 'default_link_expiration_days', 'org_level_links_only'] as $key) {
+        foreach (['link_resolver_enabled', 'default_link_expiration_days', 'link_resolver_scan_mode', 'org_level_links_only'] as $key) {
             $stmt = $this->pdo->prepare('SELECT config_value FROM app_config WHERE organization_id = 0 AND config_key = ? LIMIT 1');
             $stmt->execute([$key]);
             $value = $stmt->fetchColumn();
@@ -35,6 +35,7 @@ final class LinkResolverServiceTest extends TestCase
 
         $this->setConfig('link_resolver_enabled', '1');
         $this->setConfig('default_link_expiration_days', '30');
+        $this->setConfig('link_resolver_scan_mode', 'quick');
         $this->setConfig('org_level_links_only', '0');
         $this->pdo->prepare('
             INSERT INTO link_resolver_config (provider, is_enabled, credentials, default_expiration_days)
@@ -247,6 +248,24 @@ final class LinkResolverServiceTest extends TestCase
         self::assertSame('resolver', $link['link_source']);
         self::assertSame(1, (int)$link['include_on_invoices']);
         self::assertSame('https://example.invalid/' . $clientName, $link['url']);
+        self::assertNull($link['expiration_date']);
+    }
+
+    public function testFullScanMarksResolverLinkUnavailableWhenFolderWasRemoved(): void
+    {
+        $clientName = 'Removed Folder ' . bin2hex(random_bytes(3));
+        $clientId = $this->insertClient(null, $clientName);
+        $linkId = $this->insertResolverLink('client', $clientId, 'https://example.invalid/removed');
+        $this->pdo->prepare('UPDATE entity_links SET expiration_date = DATE_ADD(CURDATE(), INTERVAL 365 DAY) WHERE id = ?')->execute([$linkId]);
+        $this->setConfig('link_resolver_scan_mode', 'full');
+
+        $result = $this->service(new FakeResolverProvider([]))->autoGenerateForClient($clientId);
+
+        self::assertFalse($result['success']);
+        self::assertStringContainsString('marked unavailable', $result['message']);
+        $link = $this->fetchOneLink('client', $clientId);
+        self::assertSame(1, (int)$link['is_expired']);
+        self::assertNull($link['expiration_date']);
     }
 
     private function service(FakeResolverProvider $provider): LinkResolverService
