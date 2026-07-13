@@ -45,21 +45,6 @@ try {
       exit;
     }
   }
-  $shouldDisableAlphaLedger = $scopes !== ['alphaledger.sync'];
-  if (!$shouldDisableAlphaLedger && $allowedIps === null) {
-    $policyStmt = $pdo->prepare('SELECT allow_unrestricted_key FROM alphaledger_policy WHERE singleton=1 AND approved_api_key_id=? AND enabled=1');
-    $policyStmt->execute([$id]);
-    $policyAllowance = $policyStmt->fetchColumn();
-    $shouldDisableAlphaLedger = $policyAllowance !== false && !(bool)$policyAllowance;
-  }
-  if ($shouldDisableAlphaLedger) {
-    $disabled = $pdo->prepare('UPDATE alphaledger_policy SET enabled=0,disabled_by=?,disabled_at=UTC_TIMESTAMP() WHERE singleton=1 AND approved_api_key_id=? AND enabled=1');
-    $disabled->execute([(int)$_SESSION['user']['id'], $id]);
-    if ($disabled->rowCount() > 0) {
-      $pdo->prepare("UPDATE alphaledger_installations SET status='disabled' WHERE api_key_id=?")->execute([$id]);
-      audit_log($pdo, 'alphaledger.policy_disabled', 'api_key', $id, ['reason' => 'approved_key_scope_changed']);
-    }
-  }
   $pdo->commit();
   header('Location: ' . $redirectBase . '&updated=1');
   exit;

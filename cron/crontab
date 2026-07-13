@@ -40,9 +40,6 @@ CRON_LOG=/var/www/config/logs/cron/cron.log
 # Stripe payment reconciliation - every 6 hours
 0 */6 * * * root . /etc/environment && php /var/www/src/cron/stripe_reconciliation.php >> $CRON_LOG 2>&1
 
-# Capture PA-owned changes and deliver signed AlphaLedger webhooks every minute.
-* * * * * root . /etc/environment && php /var/www/src/cron/sync_alphaledger.php >> $CRON_LOG 2>&1
-
 # Sync actual Stripe merchant rate (non-changeable) - daily at 5:00 AM
 0 5 * * * root . /etc/environment && php /var/www/src/cron/sync_merchant_rate.php >> $CRON_LOG 2>&1
 

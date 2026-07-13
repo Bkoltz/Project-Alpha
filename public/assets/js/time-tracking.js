@@ -1,3 +1,4 @@
+// Retired: workforce timekeeping is implemented by the built-in /time module.
 (function () {
     'use strict';
 

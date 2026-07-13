@@ -1,0 +1,13 @@
+<?php
+$userId = (int) ($_SESSION['user']['id'] ?? 0);
+$manage = user_can($pdo,$userId,'employee_pay.manage',0);
+$viewAll = $manage || user_can($pdo,$userId,'employee_pay.view',0);
+if ($viewAll) { $stmt=$pdo->query('SELECT * FROM work_pay_accruals ORDER BY created_at DESC LIMIT 500'); }
+else { $stmt=$pdo->prepare('SELECT a.* FROM work_pay_accruals a JOIN employee_profiles ep ON ep.user_id=a.employee_user_id WHERE a.employee_user_id=? AND ep.employee_can_view_pay=1 ORDER BY a.created_at DESC LIMIT 500'); $stmt->execute([$userId]); }
+$rows=$stmt->fetchAll(PDO::FETCH_ASSOC); $totals=[]; foreach($rows as $row){if($row['status']!=='voided')$totals[$row['currency']]=($totals[$row['currency']]??0)+(float)$row['amount'];}
+$h = static fn($value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+?>
+<div class="page-header"><div><p class="eyebrow">Workforce</p><h1>Employee Pay</h1><p>Immutable pay accruals created from approved time snapshots. This is not payroll processing.</p></div></div>
+<?php if (!empty($_GET['success'])): ?><div class="al-alert"><?= $h($_GET['success']) ?></div><?php endif; ?><?php if (!empty($_GET['error'])): ?><div class="al-alert error"><?= $h($_GET['error']) ?></div><?php endif; ?>
+<section class="al-card"><div class="al-actions"><?php foreach($totals as $currency=>$amount): ?><div><strong><?= $h($currency) ?> <?= number_format($amount,2) ?></strong><div class="al-muted">Non-voided accruals</div></div><?php endforeach; ?></div></section>
+<section class="al-card"><table class="al-table"><thead><tr><th>Employee</th><th>Hours</th><th>Rate</th><th>Amount</th><th>Status</th><?php if($manage): ?><th>Action</th><?php endif; ?></tr></thead><tbody><?php foreach($rows as $row): ?><tr><td><?= $h($row['employee_name']) ?><small class="al-muted" style="display:block"><?= $h($row['created_at']) ?></small></td><td><?= $h($row['hours']) ?></td><td><?= $h($row['currency'].' '.$row['rate']) ?></td><td><?= $h($row['currency'].' '.$row['amount']) ?></td><td><?= $h(ucfirst($row['status'])) ?></td><?php if($manage): ?><td><?php if($row['status']!=='voided'): ?><form method="post" action="/pay/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="pay-status"><input type="hidden" name="accrual_id" value="<?= $h($row['id']) ?>"><input type="hidden" name="status" value="<?= $row['status']==='paid'?'pending':'paid' ?>"><button class="btn"><?= $row['status']==='paid'?'Reopen':'Mark paid' ?></button></form><?php endif; ?></td><?php endif; ?></tr><?php endforeach; ?><?php if(!$rows): ?><tr><td colspan="6">No pay accruals are visible.</td></tr><?php endif; ?></tbody></table></section>

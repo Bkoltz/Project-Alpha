@@ -15,7 +15,6 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 | Daily 04:00 | `link_expiration_checker.php` | Expire public document links |
 | Daily 04:15 | `daily_link_resolver.php` | Scan enabled providers for organization, department, and standalone-client folders when Daily folder scan is enabled |
 | Every 6 hours | `stripe_reconciliation.php` | Recover Stripe payments missed by webhooks or downtime |
-| Every minute | `sync_alphaledger.php` | Capture PA-owned changes and retry signed AlphaLedger webhooks |
 | Daily 05:00 | `sync_merchant_rate.php` | Calculate the observed Stripe processing rate |
 | Daily 06:00 | `process_audit_schedules.php` | Generate and deliver scheduled audit exports |
 | Daily 08:00 | `send_invoice_reminders.php` | Send enabled due and overdue reminders |
@@ -49,7 +48,6 @@ docker compose exec cron tail -f /var/www/config/logs/cron/cron.log
 # Run a job manually
 docker compose exec cron php /var/www/src/cron/generate_recurring_invoices.php
 docker compose exec cron php /var/www/src/cron/generate_recurring_expenses.php
-docker compose exec cron php /var/www/src/cron/sync_alphaledger.php
 docker compose exec cron php /var/www/src/cron/daily_link_resolver.php
 ```
 

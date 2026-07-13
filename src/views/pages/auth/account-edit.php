@@ -60,7 +60,7 @@ if (empty($availableRoles)) {
 }
 
 if ($userAclRoleId === null) {
-    $currentRoleName = in_array($user['role'], ['admin', 'owner', 'staff', 'member'], true) ? $user['role'] : 'member';
+    $currentRoleName = in_array($user['role'], ['admin', 'owner', 'staff', 'member', 'employee'], true) ? $user['role'] : 'member';
     foreach ($availableRoles as $roleRow) {
         if ($roleRow['name'] === $currentRoleName) {
             $userAclRoleId = (int)$roleRow['id'];

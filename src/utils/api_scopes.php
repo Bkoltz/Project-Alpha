@@ -33,11 +33,6 @@ function api_scope_catalog(): array
             'description' => 'Read invoice lists.',
             'endpoints' => ['api-invoices'],
         ],
-        'alphaledger.sync' => [
-            'label' => 'AlphaLedger integration',
-            'description' => 'Connect AlphaLedger, exchange approved time/pay records, and synchronize PA-owned people, projects, and assignments.',
-            'endpoints' => ['api-v1-alphaledger'],
-        ],
     ];
 }
 

@@ -56,7 +56,9 @@ for ($i=0; $i<count($item); $i++) {
     $d = trim((string)($desc[$i] ?? ''));
     $q = (float)($qty[$i] ?? 0);
     $p = (float)($price[$i] ?? 0);
-    if ($itm === '' || $q <= 0 || $p < 0) continue;
+    $rowTimeEntryIds = array_values(array_unique(array_filter(array_map('intval', $timeEntryIdsByRow[$i] ?? [($legacyTimeEntryIds[$i] ?? 0)]))));
+    // Linked adjustment groups may legitimately net to zero or negative.
+    if ($itm === '' || ($q == 0.0 && !$rowTimeEntryIds) || $p < 0) continue;
     $line = $q * $p;
     $subtotal += $line;
     $items[] = [
@@ -66,7 +68,7 @@ for ($i=0; $i<count($item); $i++) {
         'unit_price' => $p,
         'line_total' => $line,
         'billing_unit' => (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each',
-        'time_entry_ids' => array_values(array_filter(array_map('intval', $timeEntryIdsByRow[$i] ?? [($legacyTimeEntryIds[$i] ?? 0)])))
+        'time_entry_ids' => $rowTimeEntryIds
     ];
 }
 if (!$items) {
@@ -89,6 +91,46 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
+    $selectedTimeEntryIds = array_values(array_unique(array_merge(...array_map(
+        static fn(array $row): array => $row['time_entry_ids'],
+        $items
+    ))));
+    foreach ($items as $row) {
+        if (!$row['time_entry_ids']) continue;
+        $placeholders = implode(',', array_fill(0, count($row['time_entry_ids']), '?'));
+        $checkTotals = $pdo->prepare(
+            "SELECT COUNT(*) row_count,COALESCE(SUM(hours),0) expected_hours,MIN(rate) min_rate,MAX(rate) max_rate
+             FROM time_entries WHERE id IN ($placeholders) AND billed=0 FOR UPDATE"
+        );
+        $checkTotals->execute($row['time_entry_ids']);
+        $expected = $checkTotals->fetch(PDO::FETCH_ASSOC) ?: [];
+        if ((int)($expected['row_count'] ?? 0) !== count($row['time_entry_ids'])
+            || abs((float)($expected['expected_hours'] ?? 0) - (float)$row['quantity']) > 0.005
+            || (string)($expected['min_rate'] ?? '') !== (string)($expected['max_rate'] ?? '')
+            || abs((float)($expected['min_rate'] ?? 0) - (float)$row['unit_price']) > 0.005) {
+            throw new RuntimeException('Tracked-time quantity or rate does not match the selected entries.');
+        }
+    }
+    if ($selectedTimeEntryIds) {
+        $placeholders = implode(',', array_fill(0, count($selectedTimeEntryIds), '?'));
+        $groups = $pdo->prepare(
+            "SELECT DISTINCT approval_snapshot_id FROM work_billing_consumptions
+             WHERE billing_time_entry_id IN ($placeholders)"
+        );
+        $groups->execute($selectedTimeEntryIds);
+        $required = $pdo->prepare(
+            'SELECT c.billing_time_entry_id FROM work_billing_consumptions c
+             JOIN time_entries t ON t.id=c.billing_time_entry_id
+             WHERE c.approval_snapshot_id=? AND t.billed=0 FOR UPDATE'
+        );
+        foreach ($groups->fetchAll(PDO::FETCH_COLUMN) as $snapshotId) {
+            $required->execute([$snapshotId]);
+            $missing = array_diff(array_map('intval', $required->fetchAll(PDO::FETCH_COLUMN)), $selectedTimeEntryIds);
+            if ($missing) {
+                throw new RuntimeException('Select every unbilled row in an approval adjustment group.');
+            }
+        }
+    }
     $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $stmt->execute([$client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'draft', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
     $invoice_id = (int)$pdo->lastInsertId();
@@ -112,7 +154,7 @@ try {
         $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'], $primaryTimeEntryId, $it['billing_unit'] === 'hour' ? ($it['quantity'] ?? null) : null]);
         if (!empty($it['time_entry_ids'])) {
             $itemId = (int)$pdo->lastInsertId();
-            $check = $pdo->prepare('SELECT id FROM time_entries WHERE id = ? AND billed = 0 AND COALESCE(external_status,"approved") = "approved" AND (COALESCE(source_system,"") <> "alphaledger" OR (project_id IS NOT NULL AND team_member_id IS NOT NULL AND billing_rate_snapshot IS NOT NULL)) AND (client_id = ? OR client_id IS NULL OR client_id = 0)');
+            $check = $pdo->prepare('SELECT id FROM time_entries WHERE id = ? AND billed = 0 AND COALESCE(external_status,"approved") = "approved" AND (client_id = ? OR client_id IS NULL OR client_id = 0) FOR UPDATE');
             $mark = $pdo->prepare('UPDATE time_entries SET client_id = CASE WHEN client_id IS NULL OR client_id = 0 THEN ? ELSE client_id END, billed = 1, invoice_item_id = ?, invoice_id = ? WHERE id = ?');
             foreach ($it['time_entry_ids'] as $teId) {
                 $check->execute([(int)$teId, $client_id]);

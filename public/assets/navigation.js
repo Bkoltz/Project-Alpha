@@ -394,7 +394,6 @@ function updatePageTitle(page) {
         'api-keys-edit': 'Edit API Key',
         'settings': 'Settings',
         'financial/financial-dashboard': 'Financial Dashboard',
-        'financial/ledger': 'AlphaLedger Ledger',
         'financial/expenses-list': 'Assets & Expenses',
         'financial/asset-form': 'Asset',
         'financial/asset-detail': 'Asset Details',

@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/time_tracking_schema.php';
+require_once __DIR__ . '/../../utils/acl.php';
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $clientId = (int)($_GET['client_id'] ?? 0);
@@ -27,14 +28,15 @@ if ($userId === 0) {
     exit;
 }
 
-$params = [$userId, 1, 0];
-$sql = 'SELECT te.id, te.started_at, te.ended_at, te.project_code, te.contract_id, te.invoice_id, te.description, te.hours, te.rate, (te.hours * te.rate) AS amount, c.name AS client_name, COALESCE(il.item_name, "Tracked Time") AS service_name
+$canViewAll = ($_SESSION['user']['role'] ?? '') === 'admin' || user_can($pdo, $userId, 'billing.view', 0);
+$params = $canViewAll ? [1, 0] : [$userId, 1, 0];
+$sql = 'SELECT te.id, te.started_at, te.ended_at, te.project_code, te.contract_id, te.invoice_id, te.description, te.hours, te.rate, (te.hours * te.rate) AS amount, c.name AS client_name, COALESCE(il.item_name, "Tracked Time") AS service_name, wbc.approval_snapshot_id AS adjustment_group_id
         FROM time_entries te
         LEFT JOIN clients c ON te.client_id = c.id
         LEFT JOIN item_library il ON il.id = te.service_item_id
-        WHERE (te.user_id = ? OR te.source_system = "alphaledger") AND te.billable = ? AND te.billed = ?
-          AND COALESCE(te.external_status, "approved") = "approved"
-          AND (COALESCE(te.source_system,"") <> "alphaledger" OR (te.project_id IS NOT NULL AND te.team_member_id IS NOT NULL AND te.billing_rate_snapshot IS NOT NULL))';
+        LEFT JOIN work_billing_consumptions wbc ON wbc.billing_time_entry_id=te.id
+        WHERE ' . ($canViewAll ? '' : 'te.user_id = ? AND ') . 'te.billable = ? AND te.billed = ?
+          AND COALESCE(te.external_status, "approved") = "approved"';
 if ($clientId > 0) {
     $sql .= ' AND (te.client_id = ? OR te.client_id IS NULL OR te.client_id = 0)';
     $params[] = $clientId;

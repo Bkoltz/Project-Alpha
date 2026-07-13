@@ -26,14 +26,16 @@ docker compose up -d
 Build the current checkout:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+docker build --target test -t ghcr.io/ledgetoptechnologies/project-alpha:latest .
+docker build --target cron -t ghcr.io/ledgetoptechnologies/project-alpha:cron-latest .
+docker compose up -d
 ```
 
 Tests and migration validation:
 
 ```bash
 composer test
-docker compose -f docker-compose.yml -f docker-compose.override.yml run --rm migrate \
+docker compose run --rm migrate \
   php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 

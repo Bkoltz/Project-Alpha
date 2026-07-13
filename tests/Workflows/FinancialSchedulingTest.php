@@ -45,7 +45,7 @@ final class FinancialSchedulingTest extends TestCase
         $backupPage = file_get_contents($this->root . '/src/views/pages/settings/backup.php');
         $entrypoint = file_get_contents($this->root . '/cron/entrypoint.sh');
         $crontab = file_get_contents($this->root . '/cron/crontab');
-        $trueNasCompose = file_get_contents($this->root . '/docker-compose.truenas.yml');
+        $compose = file_get_contents($this->root . '/docker-compose.yml');
 
         self::assertStringContainsString('ADD COLUMN updated_at', (string)$migration);
         self::assertStringContainsString('cron_state_ensure_schema', (string)$state);
@@ -64,8 +64,8 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString('/etc/localtime', (string)$entrypoint);
         self::assertStringContainsString('backup_database.php --scheduled', (string)$entrypoint);
         self::assertStringContainsString('stripe_reconciliation.php --startup', (string)$entrypoint);
-        self::assertStringContainsString('project-alpha:cron-latest', (string)$trueNasCompose);
-        self::assertStringNotContainsString('cron-0.5.0-rc1', (string)$trueNasCompose);
+        self::assertStringContainsString('project-alpha:cron-latest', (string)$compose);
+        self::assertStringNotContainsString('cron-0.5.0-rc1', (string)$compose);
     }
 
     public function testManualBackupUsesInlineRunnerWithVisibleFailurePath(): void

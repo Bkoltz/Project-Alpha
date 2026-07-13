@@ -69,7 +69,7 @@ if (!$selectedRole) {
 
 $roleName = (string)($selectedRole['name'] ?? 'member');
 $roleId = isset($selectedRole['id']) ? (int)$selectedRole['id'] : null;
-$role = in_array($roleName, ['admin', 'owner', 'staff', 'member'], true) ? $roleName : 'member';
+$role = in_array($roleName, ['admin', 'owner', 'staff', 'member', 'employee'], true) ? $roleName : 'member';
 
 // Check if email already exists
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ?');
@@ -90,6 +90,11 @@ try {
     $newUserId = (int)$pdo->lastInsertId();
     $pdo->prepare("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES (?,?,?,?, 'pa')")
         ->execute([$newUserId,$username!==''?$username:$email,$email,1]);
+    if ($role === 'employee') {
+        $currency = (string)($pdo->query('SELECT currency FROM business_settings WHERE singleton=1')->fetchColumn() ?: 'USD');
+        $pdo->prepare('INSERT INTO employee_profiles (user_id,first_name,last_name,currency) VALUES (?,?,?,?)')
+            ->execute([$newUserId,$username!==''?$username:substr($email,0,strpos($email,'@')),'',$currency]);
+    }
 
     require_once __DIR__ . '/../../utils/permission_catalog.php';
     if ($role !== 'admin') {

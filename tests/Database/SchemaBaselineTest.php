@@ -46,7 +46,7 @@ final class SchemaBaselineTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
         $migrator = (string)file_get_contents($root . '/docker/migrate.sh');
-        $compose = (string)file_get_contents($root . '/docker-compose.truenas.yml');
+        $compose = (string)file_get_contents($root . '/docker-compose.yml');
         self::assertStringNotContainsString('admin_sync.php', $migrator);
         self::assertStringNotContainsString('ADMIN_PASSWORD', $compose);
         self::assertStringNotContainsString('ADMIN_EMAIL', $compose);

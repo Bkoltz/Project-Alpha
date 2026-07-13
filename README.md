@@ -19,9 +19,9 @@ It is developed by [Ledge Top Technologies LLC](https://ledgetoptechnologies.com
 - Clients, organizations, projects, and automatically generated job codes
 - Item library, discounts, deposits, taxes, and custom document fields
 - Expenses, receipts, vendors, mileage, forms, and financial reporting
-- Role-based permissions, per-user overrides, optional TOTP 2FA, and audit logs
-- Optional AlphaLedger synchronization for project assignments, approved time, and employee pay accruals
-- Docker Compose deployment with separate web, cron, and MySQL services
+- Role-based permissions, per-user overrides, optional TOTP with dismissible reminders, and audit logs
+- Built-in workforce, server-authoritative timekeeping, approvals, and employee-pay modules
+- Docker Compose deployment with migrate, web, worker, cron, and MySQL services
 - Prebuilt images published through GitHub Container Registry
 
 ## Document Workflow
@@ -115,27 +115,31 @@ That explicit option removes the existing TOTP enrollment and requires a new enr
 
 ### Staging
 
-`docker-compose.staging.yml` runs the `dev` images on port `1628` with separate named volumes. Use different passwords from production.
-
-```bash
-docker compose -f docker-compose.staging.yml pull
-docker compose -f docker-compose.staging.yml up -d
-```
+Staging definitions are intentionally host-owned rather than tracked. When a
+staging stack is needed, copy `docker-compose.yml` to the staging host and edit
+that copy to use the `:dev` and `:cron` images, port `1628`, `APP_ENV: staging`,
+and staging-only passwords. Deploy it from a separate directory so its named
+volumes cannot collide with production.
 
 ## Local Development
 
-The default Compose file pulls published images. Add the override to build the current checkout:
+Build the current checkout using the same tags referenced by the canonical
+Compose file, then start it normally:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+docker build --target test -t ghcr.io/ledgetoptechnologies/project-alpha:latest .
+docker build --target cron -t ghcr.io/ledgetoptechnologies/project-alpha:cron-latest .
+docker compose up -d
 ```
+
+Running `docker compose pull` restores the published images afterward.
 
 Useful checks:
 
 ```bash
 composer install
 composer test
-docker compose -f docker-compose.yml -f docker-compose.override.yml run --rm migrate \
+docker compose run --rm migrate \
   php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 
@@ -152,7 +156,7 @@ The production images use PHP 8.5. Composer currently targets PHP 8.3.31 for dep
 | Frontend | Server-rendered HTML, CSS, and vanilla JavaScript |
 | PDFs | Dompdf |
 | Payments | Stripe Checkout, Payment Intents, webhooks, and reconciliation |
-| Scheduling | Dedicated cron container |
+| Background work | Dedicated worker and cron containers |
 | Deployment | Multi-stage Docker image and Docker Compose |
 
 All HTTP requests enter through `public/index.php`. Application source is under `src/`, the immutable fresh-install schema is `database/baseline.sql`, and sequential forward migrations live under `database/migrations/`.
@@ -165,7 +169,7 @@ See [Cron Service](cron/README.md) for the installed schedule and [Recurring Inv
 
 ## Security and Operations
 
-Project Alpha includes application-level controls such as CSRF validation, prepared database access, rate limiting, optional TOTP 2FA, role-based authorization, encrypted storage for configured secrets, audit logging, security headers, and webhook signature validation when a Stripe webhook secret is configured.
+Project Alpha includes application-level controls such as CSRF validation, prepared database access, rate limiting, optional TOTP with stronger recommendations for privileged users, role-based authorization, encrypted storage for configured secrets, audit logging, security headers, and webhook signature validation when a Stripe webhook secret is configured.
 
 Operators remain responsible for:
 
@@ -196,9 +200,9 @@ Start with the [Documentation Index](docs/README.md).
 Key guides:
 
 - [Document Workflow](docs/DOCUMENT_WORKFLOW.md)
-- [TrueNAS Scale Deployment](docs/truenas-scale-deployment.md)
+- [Deployment](docs/admin/deployment.md)
 - [Stripe Webhook Setup](docs/stripe-webhook-setup.md)
-- [AlphaLedger Integration](docs/admin/alphaledger-integration.md)
+- [Workforce Modules](docs/admin/workforce-modules.md)
 - [Migration Safety](docs/MIGRATION_SAFETY.md)
 - [Cron Service](cron/README.md)
 - [Database Migrations](database/migrations/README.md)

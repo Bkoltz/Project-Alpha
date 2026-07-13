@@ -1,4 +1,6 @@
 <?php
+http_response_code(410);
+exit('Retired integration code. Use the built-in Workforce modules.');
 
 require_once __DIR__ . '/alphaledger_integration.php';
 require_once __DIR__ . '/crypto.php';

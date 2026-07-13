@@ -77,7 +77,7 @@ if (!$selectedRole) {
 
 $roleName = (string)($selectedRole['name'] ?? 'member');
 $roleId = isset($selectedRole['id']) ? (int)$selectedRole['id'] : null;
-$role = in_array($roleName, ['admin', 'owner', 'staff', 'member'], true) ? $roleName : 'member';
+$role = in_array($roleName, ['admin', 'owner', 'staff', 'member', 'employee'], true) ? $roleName : 'member';
 
 // Check if email is taken by another user
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? AND id != ?');
@@ -144,6 +144,13 @@ try {
         $pdo->prepare("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES (?,?,?,?, 'pa')")->execute([$userId,$username!==''?$username:$email,$email,$isDisabled?0:1]);
     }elseif(($teamMember['profile_source']??'pa')==='pa'){
         $pdo->prepare('UPDATE team_members SET display_name=?,email=?,is_active=? WHERE id=?')->execute([$username!==''?$username:$email,$email,$isDisabled?0:1,(int)$teamMember['id']]);
+    }
+    if ($role === 'employee') {
+        $currency = (string)($pdo->query('SELECT currency FROM business_settings WHERE singleton=1')->fetchColumn() ?: 'USD');
+        $pdo->prepare(
+            "INSERT INTO employee_profiles (user_id,first_name,last_name,employment_status,currency)
+             VALUES (?,?,?,? ,?) ON DUPLICATE KEY UPDATE employment_status=VALUES(employment_status),currency=VALUES(currency)"
+        )->execute([$userId,$username!==''?$username:substr($email,0,(int)strpos($email,'@')),'',$isDisabled?'inactive':'active',$currency]);
     }
 
     if (!empty($_POST['save_account_permissions'])) {

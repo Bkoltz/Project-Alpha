@@ -12,25 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate Compose configuration
-        run: |
-          docker compose -f docker-compose.yml config >/tmp/compose.prod.yml
-          docker compose -f docker-compose.yml -f docker-compose.override.yml config >/tmp/compose.local.yml
-          docker compose -f docker-compose.truenas.yml config >/tmp/compose.truenas.yml
+      - name: Validate canonical Compose configuration
+        run: docker compose config >/tmp/compose.yml
 
-      - name: Validate Compose configuration
+      - name: Build CI images
         run: |
-          docker compose -f docker-compose.yml config >/tmp/compose.prod.yml
-          docker compose -f docker-compose.yml -f docker-compose.override.yml config >/tmp/compose.local.yml
-
-      - name: Validate Compose configuration
-        run: |
-          docker compose -f docker-compose.yml config >/tmp/compose.prod.yml
-          docker compose -f docker-compose.yml -f docker-compose.override.yml config >/tmp/compose.local.yml
+          docker build --target test -t ghcr.io/ledgetoptechnologies/project-alpha:latest .
+          docker build --target cron -t ghcr.io/ledgetoptechnologies/project-alpha:cron-latest .
 
       - name: Build and start real compose path
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+          docker compose up -d
           for i in $(seq 1 20); do
             if curl -sf http://localhost:1627/ >/dev/null 2>&1; then break; fi
             sleep 5
@@ -38,7 +30,7 @@ jobs:
 
       - name: ASSERT web image identity
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web sh -c \
+          docker compose exec -T web sh -c \
             'test -f /usr/local/bin/start.sh && command -v apache2ctl >/dev/null && test -f /var/www/html/index.php' \
             || { echo "WEB IMAGE NOT OK: missing web-stage artifacts"; exit 1; }
           echo "WEB IMAGE OK"
@@ -61,7 +53,7 @@ jobs:
 
       - name: ASSERT cron connected to DB over TCP
         run: |
-          logs=$(docker compose -f docker-compose.yml -f docker-compose.override.yml logs cron)
+          logs=$(docker compose logs cron)
           if ! echo "$logs" | grep -qE 'DB is ready'; then
             echo "Cron did not report DB ready"; echo "$logs"; exit 1
           fi
@@ -72,18 +64,40 @@ jobs:
 
       - name: PHP syntax check
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web sh -c \
+          docker compose exec -T web sh -c \
             "find /var/www/src -name '*.php' -exec php -l {} \\; 2>&1 | grep -v 'No syntax errors' && exit 1 || exit 0"
 
+      - name: ASSERT Workforce clean routes reach PA
+        run: |
+          for path in time workforce approvals pay; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:1627/$path")
+            if [ "$code" = "404" ] || [ "$code" = "500" ]; then
+              echo "/$path returned $code"
+              exit 1
+            fi
+          done
+          for path in time/action workforce/action approvals/action pay/action; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://localhost:1627/$path")
+            if [ "$code" = "404" ] || [ "$code" = "500" ]; then
+              echo "/$path returned $code"
+              exit 1
+            fi
+          done
+          echo "Workforce routes reach the PA front controller"
+
       - name: Composer validate
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web composer validate --strict --no-check-publish
+        run: docker compose exec -T web composer validate --strict --no-check-publish
 
       - name: Composer audit
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web composer audit --locked
+        run: docker compose exec -T web composer audit --locked
 
       - name: PHPUnit
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml exec -T web vendor/bin/phpunit --colors=always
+        run: docker compose exec -T web vendor/bin/phpunit --colors=always
 
       - name: Dump logs on failure
         if: failure()
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml logs
+        run: docker compose logs
+
+      - name: Stop Compose stack
+        if: always()
+        run: docker compose down -v --remove-orphans

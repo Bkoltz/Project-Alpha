@@ -192,7 +192,7 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringNotContainsString('sk_live_', $envExample);
 
         $migrator = $this->read('docker/migrate.sh');
-        $compose = $this->read('docker-compose.truenas.yml');
+        $compose = $this->read('docker-compose.yml');
         $recovery = $this->read('bin/admin-recovery.php');
         self::assertStringNotContainsString('admin_sync.php', $migrator);
         self::assertStringNotContainsString('ADMIN_PASSWORD', $compose);
@@ -201,13 +201,16 @@ final class SecurityHardeningTest extends TestCase
         $front = $this->read('public/index.php');
         self::assertStringContainsString('AUTH_DISABLED ignored because APP_ENV is production or not explicitly development/test', $front);
         self::assertStringContainsString('two_factor_warning_needed', $front);
+        self::assertStringNotContainsString('two_factor_enforce_required($pdo, $page)', $front);
         self::assertStringContainsString('Development auth bypass', $this->read('src/views/partials/header.php'));
         self::assertStringContainsString('2fa-warning-dismiss', $front);
 
         $setup = $this->read('src/controllers/auth/two_factor_setup.php');
         $policy = $this->read('src/utils/two_factor_policy.php');
-        self::assertStringContainsString('two_factor_required_for_user', $policy);
+        self::assertStringContainsString('two_factor_recommended_for_user', $policy);
         self::assertStringContainsString('two_factor_warning_needed', $policy);
+        self::assertStringNotContainsString('function two_factor_enforce_required', $policy);
+        self::assertStringContainsString("'employee_pay.view'", $policy);
         self::assertStringNotContainsString('Two-factor authentication is required for your account', $setup);
         self::assertStringContainsString('Disable 2FA', $this->read('src/views/pages/auth/two_factor_setup.php'));
 
@@ -216,6 +219,21 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('BACKUP_ENCRYPTION_KEY is not set', $docker);
         self::assertStringContainsString('Stripe webhook secret is not configured in app settings', $docker);
         self::assertStringContainsString('AUTH_DISABLED/APP_AUTH_DISABLED is set but ignored in production', $docker);
+    }
+
+    public function testComposeHasOneExplicitProductionDefinition(): void
+    {
+        $composeFiles = glob($this->root . '/docker-compose*.yml') ?: [];
+        sort($composeFiles);
+        self::assertSame([$this->root . '/docker-compose.yml'], $composeFiles);
+
+        $compose = $this->read('docker-compose.yml');
+        self::assertDoesNotMatchRegularExpression('/\$\{[A-Z0-9_]+:-/', $compose);
+        self::assertStringContainsString('image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"', $compose);
+        self::assertStringContainsString('image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"', $compose);
+        self::assertStringContainsString('image: "mysql:8.4"', $compose);
+        self::assertStringContainsString('APP_ENV: production', $compose);
+        self::assertStringContainsString('- "1627:80"', $compose);
     }
 
     public function testBackupRestoreAvoidsShellCommandComposition(): void
@@ -372,7 +390,7 @@ final class SecurityHardeningTest extends TestCase
         $ci = $this->read('.github/workflows/ci.yml');
         self::assertStringContainsString('composer validate --strict', $ci);
         self::assertStringContainsString('composer audit --locked', $ci);
-        self::assertStringContainsString('docker compose -f docker-compose.yml config', $ci);
+        self::assertStringContainsString('docker compose config', $ci);
 
         $docker = $this->read('.github/workflows/docker-publish.yml');
         self::assertStringContainsString('exit-code: \'1\'', $docker);

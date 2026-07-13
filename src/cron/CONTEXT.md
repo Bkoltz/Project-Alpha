@@ -16,7 +16,6 @@ These PHP scripts run unattended from `cron/crontab`. They use the same database
 - `send_invoice_reminders.php`
 - `stripe_reconciliation.php`
 - `sync_merchant_rate.php`
-- `sync_alphaledger.php`
 
 ## Rules
 

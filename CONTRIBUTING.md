@@ -39,7 +39,9 @@ Testing should match the risk of the change:
 ## Development Commands
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+docker build --target test -t ghcr.io/ledgetoptechnologies/project-alpha:latest .
+docker build --target cron -t ghcr.io/ledgetoptechnologies/project-alpha:cron-latest .
+docker compose up -d
 composer install
 composer test
 ```

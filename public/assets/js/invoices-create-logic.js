@@ -13,7 +13,7 @@ function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null
     <input type="hidden" name="item_billing_unit[]" value="${billingUnit === 'hour' ? 'hour' : 'each'}">
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalcInv()">${desc}</textarea>
-    <input required type="number" step="0.01" min="0" name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcInv()">
+    <input required type="number" step="0.01" ${teIds.length === 0 ? 'min="0"' : ''} name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcInv()">
     <input id="${priceId}" required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalcInv()">
     <button type="button" onclick="this.parentElement.remove();recalcInv()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
@@ -205,7 +205,7 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
             const serviceName = entry.service_name || 'Tracked Time';
             const detail = entry.detail || [entry.started_at || '', entry.ended_at || '', entry.description || ''].filter(Boolean).join(' ');
             tr.innerHTML = `
-                <td><input type="checkbox" class="tt-checkbox" data-id="${entry.id}" data-service="${escapeAttr(serviceName)}" data-desc="${escapeAttr(entry.description || '')}" data-detail="${escapeAttr(detail)}" data-hours="${entry.hours}" data-rate="${entry.rate}"></td>
+                <td><input type="checkbox" class="tt-checkbox" data-id="${entry.id}" data-group="${escapeAttr(entry.adjustment_group_id || '')}" data-service="${escapeAttr(serviceName)}" data-desc="${escapeAttr(entry.description || '')}" data-detail="${escapeAttr(detail)}" data-hours="${entry.hours}" data-rate="${entry.rate}"></td>
                 <td>${(entry.started_at || '').substr(0, 10)}</td>
                 <td>${escapeHtml(serviceName)}${entry.description ? '<div style="font-size:12px;color:var(--muted)">' + escapeHtml(entry.description) + '</div>' : ''}</td>
                 <td>${Number(entry.hours).toFixed(2)}</td>
@@ -213,6 +213,14 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
                 <td>$${(Number(entry.hours) * Number(entry.rate)).toFixed(2)}</td>
             `;
             tbody.appendChild(tr);
+        });
+        document.querySelectorAll('.tt-checkbox').forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                if (!this.dataset.group) return;
+                document.querySelectorAll('.tt-checkbox').forEach(function (candidate) {
+                    if (candidate.dataset.group === checkbox.dataset.group) candidate.checked = checkbox.checked;
+                });
+            });
         });
         loading.style.display = 'none';
         empty.style.display = 'none';

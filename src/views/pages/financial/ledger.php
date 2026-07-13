@@ -1,4 +1,6 @@
 <?php
+http_response_code(410);
+exit('Retired integration page. Use /approvals or /pay.');
 
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/alphaledger_ledger.php';

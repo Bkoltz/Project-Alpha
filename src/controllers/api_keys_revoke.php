@@ -17,12 +17,6 @@ try {
   pa_ensure_api_keys_schema($pdo);
   $pdo->beginTransaction();
   $pdo->prepare('UPDATE api_keys SET revoked_at=NOW() WHERE id=?')->execute([$id]);
-  $disabled = $pdo->prepare('UPDATE alphaledger_policy SET enabled=0,disabled_by=?,disabled_at=UTC_TIMESTAMP() WHERE singleton=1 AND approved_api_key_id=? AND enabled=1');
-  $disabled->execute([(int)$_SESSION['user']['id'], $id]);
-  if ($disabled->rowCount() > 0) {
-    $pdo->prepare("UPDATE alphaledger_installations SET status='disabled' WHERE api_key_id=?")->execute([$id]);
-    audit_log($pdo, 'alphaledger.policy_disabled', 'api_key', $id, ['reason' => 'approved_key_revoked']);
-  }
   $pdo->commit();
   header('Location: /?page=api-keys&revoked=1');
   exit;

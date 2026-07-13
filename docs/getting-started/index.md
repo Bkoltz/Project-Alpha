@@ -29,6 +29,9 @@ On a clean installation, the first browser visit displays the administrator setu
 | Contracts | Signed agreement and billing rules |
 | Invoices | Amounts due, payment links, status, and receipts |
 | Projects | A work container for documents, files, clients, and project billing |
+| Workforce | Employee accounts, employment status, pay rates, and project assignments |
+| Time and Approvals | Timers, breaks, manual time, review, corrections, and voids |
+| Employee Pay | Pay accrual snapshots created from approved payable time |
 | Financial | Expenses, receipts, mileage, vendors, forms, and reports |
 | Settings | Identity, domain, email, billing, documents, links, taxes, backups, security, and notifications |
 

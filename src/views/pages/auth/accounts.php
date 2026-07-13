@@ -20,15 +20,16 @@ $csrf = csrf_token();
 // Fetch all users
 try {
     $stmt = $pdo->query("SELECT u.id,u.email,u.username,u.role,u.is_disabled,u.force_password_reset,u.created_at,
-        tm.id team_member_id,tm.profile_source,tm.last_synced_at,
-        (SELECT m.al_employee_id FROM alphaledger_employee_mappings m WHERE m.team_member_id=tm.id ORDER BY m.id DESC LIMIT 1) al_employee_id,
-        (SELECT p.is_active FROM alphaledger_employee_mappings m JOIN alphaledger_ledger_people p ON p.installation_id=m.installation_id AND p.external_id=m.al_employee_id WHERE m.team_member_id=tm.id ORDER BY m.id DESC LIMIT 1) al_is_active
-        FROM users u LEFT JOIN team_members tm ON tm.user_id=u.id ORDER BY u.created_at DESC");
+        tm.id team_member_id,tm.profile_source,tm.last_synced_at,ep.employment_status
+        FROM users u
+        LEFT JOIN team_members tm ON tm.user_id=u.id
+        LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+        ORDER BY u.created_at DESC");
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach($users as &$fallbackUser){$fallbackUser['team_member_id']=null;$fallbackUser['profile_source']='pa';$fallbackUser['last_synced_at']=null;$fallbackUser['al_employee_id']=null;$fallbackUser['al_is_active']=null;}unset($fallbackUser);
+    foreach($users as &$fallbackUser){$fallbackUser['team_member_id']=null;$fallbackUser['profile_source']='pa';$fallbackUser['last_synced_at']=null;$fallbackUser['employment_status']=null;}unset($fallbackUser);
 }
 
 // Canonical permission catalog for the create-page grid
@@ -449,12 +450,11 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
               <?php endif; ?>
             </td>
             <td style="padding:12px">
-              <?php if(!empty($user['al_employee_id'])): ?>
-                <span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:12px;font-weight:700">Linked to AlphaLedger</span>
-                <small style="display:block;margin-top:4px;color:#64748b">AL employee <?php echo !empty($user['al_is_active'])?'active':'inactive'; ?> · PA credentials remain separate</small>
+              <?php if(($user['role'] ?? '') === 'employee' && !empty($user['employment_status'])): ?>
+                <span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:12px;font-weight:700">Workforce employee</span>
+                <small style="display:block;margin-top:4px;color:#64748b"><?php echo htmlspecialchars(ucfirst((string)$user['employment_status'])); ?> · uses this PA account for timekeeping</small>
               <?php elseif(!empty($user['team_member_id'])): ?>
-                <span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:12px;font-weight:700">PA account only</span>
-                <?php if($user['role']==='admin'): ?><small style="display:block;margin-top:4px"><a href="/?page=settings/alphaledger">Link to an AL employee for connected time entry</a></small><?php endif; ?>
+                <span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:12px;font-weight:700">PA account</span>
               <?php else: ?>
                 <span style="color:#92400e">Team-member record required</span>
               <?php endif; ?>

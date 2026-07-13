@@ -1,4 +1,6 @@
 <?php
+http_response_code(410);
+exit('Retired time page. Use /time.');
 // src/views/pages/time-tracking.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
