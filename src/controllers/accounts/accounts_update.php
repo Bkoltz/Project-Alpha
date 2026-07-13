@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/permission_catalog.php';
 require_once __DIR__ . '/../../utils/admin_account_policy.php';
+require_once __DIR__ . '/../../Modules/Timekeeping/WorkforceSettings.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -79,6 +80,45 @@ $roleName = (string)($selectedRole['name'] ?? 'member');
 $roleId = isset($selectedRole['id']) ? (int)$selectedRole['id'] : null;
 $role = in_array($roleName, ['admin', 'owner', 'staff', 'member', 'employee'], true) ? $roleName : 'member';
 
+$employeeFirstName = trim((string)($_POST['employee_first_name'] ?? ''));
+$employeeLastName = trim((string)($_POST['employee_last_name'] ?? ''));
+$employeeStatus = trim((string)($_POST['employee_status'] ?? 'active'));
+$employeeHiredAt = trim((string)($_POST['employee_hired_at'] ?? ''));
+$employeeHourlyRate = trim((string)($_POST['employee_hourly_rate'] ?? ''));
+$employeeCanViewPay = !empty($_POST['employee_can_view_pay']);
+$employeeProjectIds = array_values(array_unique(array_filter(
+    array_map('intval', (array)($_POST['employee_project_ids'] ?? [])),
+    static fn(int $id): bool => $id > 0
+)));
+$employeeProjectRates = (array)($_POST['employee_project_rates'] ?? []);
+
+if ($role === 'employee') {
+    if ($employeeFirstName === '') {
+        header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Employee first name is required'));
+        exit;
+    }
+    if (!in_array($employeeStatus, ['active', 'inactive', 'terminated'], true)) {
+        header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Invalid employment status'));
+        exit;
+    }
+    if ($employeeHiredAt !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $employeeHiredAt)) {
+        header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Invalid hire date'));
+        exit;
+    }
+    if ($employeeHourlyRate !== '' && (!is_numeric($employeeHourlyRate) || (float)$employeeHourlyRate < 0)) {
+        header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Employee hourly rate must be zero or greater'));
+        exit;
+    }
+    foreach ($employeeProjectIds as $projectId) {
+        $rate = trim((string)($employeeProjectRates[$projectId] ?? ''));
+        if ($rate !== '' && (!is_numeric($rate) || (float)$rate < 0)) {
+            header('Location: /?page=account-edit&id=' . $userId . '&error=' . urlencode('Project pay rates must be zero or greater'));
+            exit;
+        }
+    }
+}
+$accountDisabled = $isDisabled || ($role === 'employee' && $employeeStatus !== 'active');
+
 // Check if email is taken by another user
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? AND id != ?');
 $stmt->execute([$email, $userId]);
@@ -98,7 +138,16 @@ if ($username !== '') {
 // Update user
 try {
     $pdo->beginTransaction();
-    assert_not_removing_final_active_admin($pdo, $userId, $role === 'admin' && !$isDisabled);
+    assert_not_removing_final_active_admin($pdo, $userId, $role === 'admin' && !$accountDisabled);
+
+    $effectiveEmployeeStatus = $accountDisabled && $employeeStatus !== 'terminated' ? 'inactive' : $employeeStatus;
+    if ($role !== 'employee' || $effectiveEmployeeStatus !== 'active') {
+        $timerStmt = $pdo->prepare("SELECT 1 FROM work_time_entries WHERE user_id=? AND status='running' LIMIT 1");
+        $timerStmt->execute([$userId]);
+        if ($timerStmt->fetchColumn()) {
+            throw new DomainException('Stop this user\'s running timer before disabling Workforce access');
+        }
+    }
 
     $stmt = $pdo->prepare('UPDATE users SET
         email = ?,
@@ -123,7 +172,7 @@ try {
         $email,
         $username ?: null,
         $role,
-        $isDisabled ? 1 : 0,
+        $accountDisabled ? 1 : 0,
         $forceReset ? 1 : 0,
         $documentSenderEnabled ? 1 : 0,
         $documentSenderName !== '' ? $documentSenderName : null,
@@ -139,18 +188,63 @@ try {
         $userId
     ]);
 
+    $displayName = $role === 'employee'
+        ? trim($employeeFirstName . ' ' . $employeeLastName)
+        : ($username !== '' ? $username : $email);
     $member=$pdo->prepare('SELECT tm.id,tm.profile_source FROM team_members tm WHERE tm.user_id=? LIMIT 1');$member->execute([$userId]);$teamMember=$member->fetch(PDO::FETCH_ASSOC);
     if(!$teamMember){
-        $pdo->prepare("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES (?,?,?,?, 'pa')")->execute([$userId,$username!==''?$username:$email,$email,$isDisabled?0:1]);
+        $pdo->prepare("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES (?,?,?,?, 'pa')")->execute([$userId,$displayName,$email,$accountDisabled?0:1]);
     }elseif(($teamMember['profile_source']??'pa')==='pa'){
-        $pdo->prepare('UPDATE team_members SET display_name=?,email=?,is_active=? WHERE id=?')->execute([$username!==''?$username:$email,$email,$isDisabled?0:1,(int)$teamMember['id']]);
+        $pdo->prepare('UPDATE team_members SET display_name=?,email=?,is_active=? WHERE id=?')->execute([$displayName,$email,$accountDisabled?0:1,(int)$teamMember['id']]);
     }
     if ($role === 'employee') {
-        $currency = (string)($pdo->query('SELECT currency FROM business_settings WHERE singleton=1')->fetchColumn() ?: 'USD');
+        $settings = \App\Modules\Timekeeping\WorkforceSettings::load($pdo);
+        $currency = (string)$settings['currency'];
+        $terminatedAt = $effectiveEmployeeStatus === 'terminated' ? date('Y-m-d') : null;
         $pdo->prepare(
-            "INSERT INTO employee_profiles (user_id,first_name,last_name,employment_status,currency)
-             VALUES (?,?,?,? ,?) ON DUPLICATE KEY UPDATE employment_status=VALUES(employment_status),currency=VALUES(currency)"
-        )->execute([$userId,$username!==''?$username:substr($email,0,(int)strpos($email,'@')),'',$isDisabled?'inactive':'active',$currency]);
+            "INSERT INTO employee_profiles (user_id,first_name,last_name,employment_status,hourly_rate,currency,employee_can_view_pay,hired_at,terminated_at)
+             VALUES (?,?,?,?,?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE first_name=VALUES(first_name),last_name=VALUES(last_name),employment_status=VALUES(employment_status),
+                hourly_rate=VALUES(hourly_rate),currency=VALUES(currency),employee_can_view_pay=VALUES(employee_can_view_pay),
+                hired_at=VALUES(hired_at),terminated_at=VALUES(terminated_at)"
+        )->execute([
+            $userId,
+            $employeeFirstName,
+            $employeeLastName,
+            $effectiveEmployeeStatus,
+            $employeeHourlyRate !== '' ? $employeeHourlyRate : null,
+            $currency,
+            $employeeCanViewPay ? 1 : 0,
+            $employeeHiredAt !== '' ? $employeeHiredAt : null,
+            $terminatedAt,
+        ]);
+
+        if ($employeeProjectIds) {
+            $placeholders = implode(',', array_fill(0, count($employeeProjectIds), '?'));
+            $projectStmt = $pdo->prepare(
+                "SELECT id FROM projects WHERE id IN ($placeholders) AND status NOT IN ('completed','cancelled')"
+            );
+            $projectStmt->execute($employeeProjectIds);
+            $validProjects = array_map('intval', $projectStmt->fetchAll(PDO::FETCH_COLUMN));
+            if (count($validProjects) !== count($employeeProjectIds)) {
+                throw new DomainException('One or more selected projects are unavailable');
+            }
+        }
+
+        $pdo->prepare('UPDATE project_assignments SET ends_at=UTC_TIMESTAMP(6) WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))')->execute([$userId]);
+        $assignmentStmt = $pdo->prepare(
+            'INSERT INTO project_assignments (project_id,user_id,pay_rate_override,created_by) VALUES (?,?,?,?)
+             ON DUPLICATE KEY UPDATE pay_rate_override=VALUES(pay_rate_override),ends_at=NULL,created_by=VALUES(created_by)'
+        );
+        if ($effectiveEmployeeStatus === 'active') {
+            foreach ($employeeProjectIds as $projectId) {
+                $rate = trim((string)($employeeProjectRates[$projectId] ?? ''));
+                $assignmentStmt->execute([$projectId, $userId, $rate !== '' ? $rate : null, (int)$_SESSION['user']['id']]);
+            }
+        }
+    } else {
+        $pdo->prepare("UPDATE employee_profiles SET employment_status='inactive' WHERE user_id=?")->execute([$userId]);
+        $pdo->prepare('UPDATE project_assignments SET ends_at=UTC_TIMESTAMP(6) WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))')->execute([$userId]);
     }
 
     if (!empty($_POST['save_account_permissions'])) {
@@ -176,7 +270,7 @@ try {
 
     $pdo->commit();
 
-    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $isDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0]);
+    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds)]);
     header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

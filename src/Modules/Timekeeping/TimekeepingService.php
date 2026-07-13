@@ -17,7 +17,11 @@ final class TimekeepingService
     public function projectsFor(int $userId, bool $manageAll = false): array
     {
         if ($manageAll) {
-            return $this->pdo->query("SELECT id,name FROM projects WHERE status NOT IN ('completed','cancelled') ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+            return $this->pdo->query(
+                "SELECT p.id,p.name,p.client_id,c.name client_name
+                 FROM projects p LEFT JOIN clients c ON c.id=p.client_id
+                 WHERE p.status NOT IN ('completed','cancelled') ORDER BY c.name,p.name"
+            )->fetchAll(PDO::FETCH_ASSOC);
         }
         $stmt = $this->pdo->prepare(
             "SELECT p.id,p.name FROM projects p
@@ -28,12 +32,41 @@ final class TimekeepingService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function usersForManager(): array
+    {
+        return $this->pdo->query(
+            "SELECT u.id,u.email,u.username,u.role,
+                    COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),NULLIF(u.username,''),u.email) display_name
+             FROM users u LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+             WHERE u.deleted_at IS NULL AND u.is_disabled=0
+             ORDER BY CASE WHEN u.role='employee' THEN 0 ELSE 1 END,display_name"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function clientsForManager(): array
+    {
+        return $this->pdo->query(
+            'SELECT id,name FROM clients WHERE archived=0 AND deleted_at IS NULL ORDER BY name'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function invoicesForManager(): array
+    {
+        return $this->pdo->query(
+            "SELECT i.id,i.client_id,i.project_id,i.doc_number,i.invoice_type,i.status,c.name client_name,p.name project_name
+             FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN projects p ON p.id=i.project_id
+             WHERE i.billing_mode='hourly' AND i.status NOT IN ('paid','cancelled','void')
+             ORDER BY c.name,i.created_at DESC"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function running(int $userId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT t.*,p.name project_name,
+            'SELECT t.*,p.name project_name,c.name client_name,i.doc_number invoice_number,i.invoice_type,
              (SELECT id FROM work_time_breaks b WHERE b.time_entry_id=t.id AND b.end_time IS NULL LIMIT 1) open_break_id
              FROM work_time_entries t LEFT JOIN projects p ON p.id=t.project_id
+             LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN invoices i ON i.id=t.invoice_id
              WHERE t.user_id=? AND t.end_time IS NULL AND t.status=\'running\' LIMIT 1'
         );
         $stmt->execute([$userId]);
@@ -42,9 +75,11 @@ final class TimekeepingService
 
     public function entries(int $userId, bool $manageAll = false, int $limit = 250): array
     {
-        $sql = 'SELECT t.*,p.name project_name,COALESCE(NULLIF(ep.first_name,\'\'),NULLIF(u.username,\'\'),u.email) employee_name
+        $sql = 'SELECT t.*,p.name project_name,c.name client_name,i.doc_number invoice_number,i.invoice_type,
+                COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,\' \',ep.last_name)),\'\'),NULLIF(u.username,\'\'),u.email) employee_name
                 FROM work_time_entries t JOIN users u ON u.id=t.user_id
-                LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id LEFT JOIN projects p ON p.id=t.project_id';
+                LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id LEFT JOIN projects p ON p.id=t.project_id
+                LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN invoices i ON i.id=t.invoice_id';
         $params = [];
         if (!$manageAll) {
             $sql .= ' WHERE t.user_id=?';
@@ -56,25 +91,32 @@ final class TimekeepingService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function clockIn(int $userId, ?int $projectId, string $description, array $tags = [], bool $manageAll = false): string
+    public function clockIn(int $userId, array $input, bool $manageAll = false): string
     {
         $settings = $this->settings();
-        if ((int) $settings['require_project'] === 1 && !$projectId) {
+        $description = trim((string)($input['description'] ?? ''));
+        $context = $this->resolveBillingContext($userId, $input, $manageAll);
+        $projectId = $context['project_id'];
+        if (!$manageAll && (int) $settings['require_project'] === 1 && !$projectId) {
             throw new DomainException('A project is required.');
         }
-        if ((int) $settings['require_description'] === 1 && trim($description) === '') {
+        if (!$manageAll && (int) $settings['require_description'] === 1 && $description === '') {
             throw new DomainException('A description is required.');
         }
-        $this->assertProjectAssigned($userId, $projectId, $manageAll);
+        $billable = $manageAll ? (!empty($input['billable']) ? 1 : 0) : ($projectId ? 1 : 0);
+        $isPayable = $manageAll ? (!empty($input['is_payable']) ? 1 : 0) : 1;
         $id = Uuid::v4();
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare(
                 "INSERT INTO work_time_entries
-                 (id,user_id,project_id,start_time,description,tags,billable,is_payable,status)
-                 VALUES (?,?,?,UTC_TIMESTAMP(6),?,?,?,1,'running')"
+                 (id,user_id,client_id,project_id,invoice_id,start_time,description,tags,billable,is_payable,status)
+                 VALUES (?,?,?,?,?,UTC_TIMESTAMP(6),?,?,?,?,'running')"
             );
-            $stmt->execute([$id, $userId, $projectId, trim($description), json_encode(array_values($tags), JSON_THROW_ON_ERROR), $projectId ? 1 : 0]);
+            $stmt->execute([
+                $id, $userId, $context['client_id'], $projectId, $context['invoice_id'], $description,
+                json_encode([], JSON_THROW_ON_ERROR), $billable, $isPayable,
+            ]);
             $this->pdo->prepare('INSERT INTO work_timer_locks (user_id,time_entry_id) VALUES (?,?)')->execute([$userId, $id]);
             $this->audit->record('timer.started', 'work_time_entry', $id, $userId, [], ['project_id' => $projectId]);
             $this->pdo->commit();
@@ -177,15 +219,17 @@ final class TimekeepingService
         if ($end <= $start) {
             throw new DomainException('End time must follow start time.');
         }
-        $projectId = !empty($input['project_id']) ? (int) $input['project_id'] : null;
+        $context = $this->resolveBillingContext($userId, $input, $manageAll);
+        $projectId = $context['project_id'];
         $description = trim((string) ($input['description'] ?? ''));
-        if ((int) $settings['require_project'] === 1 && !$projectId) {
+        if (!$manageAll && (int) $settings['require_project'] === 1 && !$projectId) {
             throw new DomainException('A project is required.');
         }
-        if ((int) $settings['require_description'] === 1 && $description === '') {
+        if (!$manageAll && (int) $settings['require_description'] === 1 && $description === '') {
             throw new DomainException('A description is required.');
         }
-        $this->assertProjectAssigned($userId, $projectId, $manageAll);
+        $billable = $manageAll ? (!empty($input['billable']) ? 1 : 0) : ($projectId ? 1 : 0);
+        $isPayable = $manageAll ? (!empty($input['is_payable']) ? 1 : 0) : 1;
         $id = Uuid::v4();
         $startUtc = $start->setTimezone(new DateTimeZone('UTC'));
         $endUtc = $end->setTimezone(new DateTimeZone('UTC'));
@@ -193,14 +237,14 @@ final class TimekeepingService
         try {
             $stmt = $this->pdo->prepare(
                 "INSERT INTO work_time_entries
-                 (id,user_id,project_id,start_time,end_time,duration_seconds,description,tags,billable,is_payable,status)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,'review')"
+                 (id,user_id,client_id,project_id,invoice_id,start_time,end_time,duration_seconds,description,tags,billable,is_payable,status)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'review')"
             );
             $stmt->execute([
-                $id, $userId, $projectId,
+                $id, $userId, $context['client_id'], $projectId, $context['invoice_id'],
                 $startUtc->format('Y-m-d H:i:s.u'), $endUtc->format('Y-m-d H:i:s.u'),
                 $end->getTimestamp() - $start->getTimestamp(), $description,
-                json_encode([], JSON_THROW_ON_ERROR), $projectId ? 1 : 0, !empty($input['is_payable']) ? 1 : 0,
+                json_encode([], JSON_THROW_ON_ERROR), $billable, $isPayable,
             ]);
             $this->audit->record('time_entry.created', 'work_time_entry', $id, $userId, [], ['project_id' => $projectId]);
             $this->pdo->commit();
@@ -220,15 +264,17 @@ final class TimekeepingService
         if ($end <= $start) {
             throw new DomainException('End time must follow start time.');
         }
-        $projectId = !empty($input['project_id']) ? (int) $input['project_id'] : null;
+        $context = $this->resolveBillingContext($userId, $input, $manageAll);
+        $projectId = $context['project_id'];
         $description = trim((string) ($input['description'] ?? ''));
-        if ((int) $settings['require_project'] === 1 && !$projectId) {
+        if (!$manageAll && (int) $settings['require_project'] === 1 && !$projectId) {
             throw new DomainException('A project is required.');
         }
-        if ((int) $settings['require_description'] === 1 && $description === '') {
+        if (!$manageAll && (int) $settings['require_description'] === 1 && $description === '') {
             throw new DomainException('A description is required.');
         }
-        $this->assertProjectAssigned($userId, $projectId, $manageAll);
+        $billable = $manageAll ? (!empty($input['billable']) ? 1 : 0) : ($projectId ? 1 : 0);
+        $isPayable = $manageAll ? (!empty($input['is_payable']) ? 1 : 0) : 1;
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare("SELECT * FROM work_time_entries WHERE id=? AND user_id=? AND status='rejected' FOR UPDATE");
@@ -243,11 +289,12 @@ final class TimekeepingService
             $startUtc = $start->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
             $endUtc = $end->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
             $this->pdo->prepare(
-                "UPDATE work_time_entries SET project_id=?,start_time=?,end_time=?,duration_seconds=?,description=?,billable=?,is_payable=?,
+                "UPDATE work_time_entries SET client_id=?,project_id=?,invoice_id=?,start_time=?,end_time=?,duration_seconds=?,description=?,billable=?,is_payable=?,
                  revision=revision+1,status='review',rejection_reason='',reviewed_by=NULL,reviewed_at=NULL WHERE id=?"
             )->execute([
-                $projectId, $startUtc, $endUtc, $end->getTimestamp() - $start->getTimestamp(), $description,
-                $projectId ? 1 : 0, !empty($input['is_payable']) ? 1 : 0, $entryId,
+                $context['client_id'], $projectId, $context['invoice_id'], $startUtc, $endUtc,
+                $end->getTimestamp() - $start->getTimestamp(), $description,
+                $billable, $isPayable, $entryId,
             ]);
             $this->audit->record('time_entry.resubmitted', 'work_time_entry', $entryId, $userId, $entry, ['revision' => (int) $entry['revision'] + 1]);
             $this->pdo->commit();
@@ -295,11 +342,67 @@ final class TimekeepingService
 
     private function settings(): array
     {
-        $settings = $this->pdo->query('SELECT * FROM business_settings WHERE singleton=1')->fetch(PDO::FETCH_ASSOC);
-        if (!$settings) {
-            throw new DomainException('Business settings are not configured.');
+        return WorkforceSettings::load($this->pdo);
+    }
+
+    private function resolveBillingContext(int $userId, array $input, bool $manageAll): array
+    {
+        $clientId = !empty($input['client_id']) ? (int)$input['client_id'] : null;
+        $projectId = !empty($input['project_id']) ? (int)$input['project_id'] : null;
+        $invoiceId = !empty($input['invoice_id']) ? (int)$input['invoice_id'] : null;
+
+        if (!$manageAll && ($clientId || $invoiceId)) {
+            throw new DomainException('Client and invoice details are available only to timekeeping managers.');
         }
-        return $settings;
+
+        if ($invoiceId) {
+            $stmt = $this->pdo->prepare(
+                "SELECT client_id,project_id FROM invoices
+                 WHERE id=? AND billing_mode='hourly' AND status NOT IN ('paid','cancelled','void')"
+            );
+            $stmt->execute([$invoiceId]);
+            $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$invoice) {
+                throw new DomainException('Choose an open hourly invoice.');
+            }
+            $invoiceClientId = (int)$invoice['client_id'];
+            $invoiceProjectId = !empty($invoice['project_id']) ? (int)$invoice['project_id'] : null;
+            if ($clientId && $clientId !== $invoiceClientId) {
+                throw new DomainException('The selected invoice does not belong to that client.');
+            }
+            if ($projectId && $invoiceProjectId && $projectId !== $invoiceProjectId) {
+                throw new DomainException('The selected invoice does not belong to that project.');
+            }
+            $clientId = $invoiceClientId;
+            $projectId ??= $invoiceProjectId;
+        }
+
+        if ($projectId) {
+            $stmt = $this->pdo->prepare(
+                "SELECT client_id FROM projects WHERE id=? AND status NOT IN ('completed','cancelled')"
+            );
+            $stmt->execute([$projectId]);
+            $projectClient = $stmt->fetchColumn();
+            if ($projectClient === false) {
+                throw new DomainException('Choose an active project.');
+            }
+            $projectClientId = (int)$projectClient ?: null;
+            if ($clientId && $projectClientId && $clientId !== $projectClientId) {
+                throw new DomainException('The selected project does not belong to that client.');
+            }
+            $clientId ??= $projectClientId;
+            $this->assertProjectAssigned($userId, $projectId, $manageAll);
+        }
+
+        if ($clientId) {
+            $stmt = $this->pdo->prepare('SELECT 1 FROM clients WHERE id=? AND archived=0 AND deleted_at IS NULL');
+            $stmt->execute([$clientId]);
+            if (!$stmt->fetchColumn()) {
+                throw new DomainException('Choose an active client.');
+            }
+        }
+
+        return ['client_id' => $clientId, 'project_id' => $projectId, 'invoice_id' => $invoiceId];
     }
 
     private function parseLocalDateTime(string $value, DateTimeZone $timezone): DateTimeImmutable

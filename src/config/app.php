@@ -33,6 +33,11 @@ $appConfig = [
     // App preferences
     'cron_enabled' => 1,
     'timezone' => 'UTC',
+    'workforce_currency' => 'USD',
+    'workforce_default_hourly_rate' => null,
+    'workforce_default_billing_rate' => null,
+    'workforce_require_project' => 0,
+    'workforce_require_description' => 0,
     'primary_state' => null,
     'documents_valid_days' => 14,
     // Automatic invoice email settings
@@ -187,6 +192,8 @@ try {
             'brand_name', 'logo_path', 'from_company', 'from_name', 'from_address_line1', 'from_address_line2',
             'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
             'app_host', 'public_links_in_email', 'primary_state', 'timezone',
+            'workforce_currency', 'workforce_default_hourly_rate', 'workforce_default_billing_rate',
+            'workforce_require_project', 'workforce_require_description',
             'terms', 'long_term_terms', 'on_demand_terms',
             'net_terms_days', 'documents_valid_days', 'payment_methods',
             'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',

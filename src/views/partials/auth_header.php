@@ -2,6 +2,9 @@
 // src/views/partials/auth_header.php
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/app_version.php';
+$brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
+$logo = trim((string)($appConfig['logo_path'] ?? ''));
+$favicon = $logo !== '' ? $logo : '/assets/favicon-32.png';
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -11,14 +14,13 @@ require_once __DIR__ . '/../../utils/app_version.php';
   <?php if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); } ?>
   <?php if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); } ?>
   <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf']); ?>">
-  <link rel="icon" type="image/png" href="/assets/favicon-32.png" />
+  <link rel="icon" href="<?php echo htmlspecialchars($favicon); ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   
   <?php 
   // Preload logo for better caching and performance
-  $brand = $appConfig['brand_name'] ?? 'Project Alpha'; $logo = $appConfig['logo_path'] ?? null;
   if ($logo): ?>
   <link rel="preload" href="<?php echo htmlspecialchars($logo); ?>" as="image">
   <?php endif; ?>

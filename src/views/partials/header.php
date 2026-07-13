@@ -227,10 +227,10 @@ function nav_can(string $permission): bool {
             <li class="nav-section">
               <div class="section-label">Workforce</div>
               <ul>
-                <?php if (nav_can('timekeeping.self') || nav_can('timekeeping.manage')): ?><li><a href="/time" data-page="workforce/time">Time</a></li><?php endif; ?>
-                <?php if (nav_can('workforce.manage')): ?><li><a href="/workforce" data-page="workforce/admin">Workforce</a></li><?php endif; ?>
-                <?php if (nav_can('approvals.review')): ?><li><a href="/approvals" data-page="workforce/approvals">Approvals</a></li><?php endif; ?>
-                <?php if (nav_can('employee_pay.self') || nav_can('employee_pay.view') || nav_can('employee_pay.manage')): ?><li><a href="/pay" data-page="workforce/pay">Employee Pay</a></li><?php endif; ?>
+                <li><a href="/?page=workforce/overview" data-page="workforce/overview">Overview</a></li>
+                <?php if (nav_can('timekeeping.self') || nav_can('timekeeping.manage')): ?><li><a href="/?page=workforce/time" data-page="workforce/time">Time</a></li><?php endif; ?>
+                <?php if (nav_can('approvals.review')): ?><li><a href="/?page=workforce/approvals" data-page="workforce/approvals">Approvals</a></li><?php endif; ?>
+                <?php if (nav_can('employee_pay.self') || nav_can('employee_pay.view') || nav_can('employee_pay.manage')): ?><li><a href="/?page=workforce/pay" data-page="workforce/pay">Employee Pay</a></li><?php endif; ?>
               </ul>
             </li>
             <?php endif; ?>

@@ -42,6 +42,17 @@ final class UnifiedAlphaLedgerModuleTest extends TestCase
         self::assertStringContainsString('approvals.review', $sql);
     }
 
+    public function testPaAlignmentMigrationAddsBillingContextAndCanonicalSettings(): void
+    {
+        $sql = (string) file_get_contents($this->root . '/database/migrations/0040_workforce_pa_alignment.sql');
+        foreach (['client_id', 'invoice_id', 'workforce_currency', 'workforce_default_hourly_rate', 'workforce_require_project'] as $value) {
+            self::assertStringContainsString($value, $sql);
+        }
+        $settings = (string) file_get_contents($this->root . '/src/Modules/Timekeeping/WorkforceSettings.php');
+        self::assertStringContainsString('app_config', $settings);
+        self::assertStringContainsString("'timezone'", $settings);
+    }
+
     public function testBillingConsumesSnapshotsWithoutRewritingWorkEntries(): void
     {
         $consumer = (string) file_get_contents($this->root . '/src/Modules/Timekeeping/BillingTimeConsumer.php');

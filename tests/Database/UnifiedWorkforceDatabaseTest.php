@@ -42,7 +42,20 @@ final class UnifiedWorkforceDatabaseTest extends TestCase
             $projectId = (int) $pdo->lastInsertId();
             $pdo->prepare("INSERT INTO project_assignments (project_id,user_id,pay_rate_override,created_by) VALUES (?,?,'30.0000',?)")
                 ->execute([$projectId, $employeeId, $adminId]);
-            $pdo->exec("UPDATE business_settings SET timezone='UTC',currency='USD',default_hourly_rate='20.0000',default_billing_rate='100.0000',require_project=1,require_description=1 WHERE singleton=1");
+            $settingsStmt = $pdo->prepare(
+                'INSERT INTO app_config (organization_id,config_key,config_value) VALUES (0,?,?)
+                 ON DUPLICATE KEY UPDATE config_value=VALUES(config_value)'
+            );
+            foreach ([
+                'timezone' => 'UTC',
+                'workforce_currency' => 'USD',
+                'workforce_default_hourly_rate' => '20.0000',
+                'workforce_default_billing_rate' => '100.0000',
+                'workforce_require_project' => '1',
+                'workforce_require_description' => '1',
+            ] as $key => $value) {
+                $settingsStmt->execute([$key, $value]);
+            }
 
             require_once dirname(__DIR__, 2) . '/src/utils/acl.php';
             self::assertTrue(user_can($pdo, $employeeId, 'timekeeping.self', 0));
@@ -63,7 +76,10 @@ final class UnifiedWorkforceDatabaseTest extends TestCase
             $time = new TimekeepingService($pdo, new AuditRecorder($pdo));
             $approval = new ApprovalService($pdo, new AuditRecorder($pdo), new BillingTimeConsumer($pdo));
 
-            $timerId = $time->clockIn($employeeId, $projectId, 'Server-authoritative timer');
+            $timerId = $time->clockIn($employeeId, [
+                'project_id' => $projectId,
+                'description' => 'Server-authoritative timer',
+            ]);
             self::assertSame($timerId, $time->running($employeeId)['id']);
             $pdo->prepare('UPDATE work_time_entries SET start_time=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 2 HOUR) WHERE id=?')->execute([$timerId]);
             $breakId = $time->startBreak($employeeId, $timerId);

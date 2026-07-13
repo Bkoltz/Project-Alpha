@@ -51,7 +51,7 @@ function page_permission_map(): array
 
         // Unified Workforce modules
         'workforce/time'        => ['timekeeping.self', 'timekeeping.manage'],
-        'workforce/admin'       => 'workforce.manage',
+        'workforce/overview'    => ['timekeeping.self', 'timekeeping.manage', 'workforce.manage', 'approvals.review', 'employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
         'workforce/approvals'   => 'approvals.review',
         'workforce/pay'         => ['employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
         // The action controller performs an action-specific permission check.
