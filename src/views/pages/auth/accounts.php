@@ -17,6 +17,14 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
 
 $csrf = csrf_token();
 
+$activeProjects = [];
+try {
+    $projectStmt = $pdo->query("SELECT id,name FROM projects WHERE status NOT IN ('completed','cancelled') ORDER BY name");
+    $activeProjects = $projectStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    @error_log('[accounts] project load failed: ' . $e->getMessage());
+}
+
 // Fetch all users
 try {
     $stmt = $pdo->query("SELECT u.id,u.email,u.username,u.role,u.is_disabled,u.force_password_reset,u.created_at,
@@ -74,6 +82,7 @@ foreach ($availableRoles as $roleRow) {
     $roleMeta[(string)$roleId] = [
         'name' => $roleName,
         'isAdmin' => $roleName === 'admin',
+        'isEmployee' => $roleName === 'employee',
     ];
     $roleDefaults[(string)$roleId] = [];
     foreach ($flatCreatePerms as $perm => $_) {
@@ -175,6 +184,10 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
       .pa-create-grid label { display: flex; flex-direction: column; gap: 4px; }
       .pa-create-grid input,
       .pa-create-grid select { width: 100%; box-sizing: border-box; }
+      .pa-employee-projects { display: grid; gap: 10px; margin-top: 14px; }
+      .pa-employee-project { display: grid; grid-template-columns: minmax(220px, 1fr) 180px; gap: 16px; align-items: center; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
+      .pa-employee-project > label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+      #employee-profile-panel[hidden] { display: none; }
       .pa-create-actionbar { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
       #permissions-panel {
         transition: opacity 180ms ease, max-height 220ms ease, padding 180ms ease, margin 180ms ease, border-width 180ms ease;
@@ -248,6 +261,40 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
             <input type="checkbox" name="force_reset" value="1">
             <span>Force password change on first login</span>
           </label>
+        </div>
+
+        <div id="employee-profile-panel" class="pa-create-card" style="margin-bottom:16px;" hidden>
+          <h3>Employee Profile</h3>
+          <p style="margin:0 0 16px;color:#6b7280;font-size:14px;">The Employee role applies the self-service Workforce ACL. Direct client and invoice information stays hidden; employees only see projects assigned here.</p>
+          <div class="pa-create-grid">
+            <label>
+              <span style="font-weight:600">First name *</span>
+              <input type="text" name="employee_first_name" class="input" data-employee-required autocomplete="given-name">
+            </label>
+            <label>
+              <span style="font-weight:600">Last name</span>
+              <input type="text" name="employee_last_name" class="input" autocomplete="family-name">
+            </label>
+            <label>
+              <span style="font-weight:600">Hourly pay rate</span>
+              <input type="number" name="employee_hourly_rate" class="input" min="0" step="0.0001" placeholder="Use System Settings default">
+            </label>
+            <label style="display:flex;flex-direction:row;align-items:center;gap:8px;align-self:end;padding-bottom:10px;">
+              <input type="checkbox" name="employee_can_view_pay" value="1" checked style="width:auto">
+              <span>Employee can view their pay accruals</span>
+            </label>
+          </div>
+          <h4 style="margin:20px 0 6px">Project assignments</h4>
+          <p style="margin:0;color:#6b7280;font-size:13px;">Only assigned projects appear in the employee's time tracker. A project-specific pay rate is optional.</p>
+          <div class="pa-employee-projects">
+            <?php foreach ($activeProjects as $project): ?>
+              <div class="pa-employee-project">
+                <label><input type="checkbox" name="employee_project_ids[]" value="<?php echo (int)$project['id']; ?>" style="width:auto"><span><?php echo htmlspecialchars((string)$project['name']); ?></span></label>
+                <input type="number" name="employee_project_rates[<?php echo (int)$project['id']; ?>]" class="input" min="0" step="0.0001" placeholder="Optional pay rate">
+              </div>
+            <?php endforeach; ?>
+            <?php if (!$activeProjects): ?><p style="margin:0;color:#6b7280">No active projects are available.</p><?php endif; ?>
+          </div>
         </div>
 
         <div id="permissions-panel" class="pa-create-card" style="margin-bottom:16px;">
@@ -325,6 +372,7 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
       var panel = document.getElementById('permissions-panel');
       var grid = document.getElementById('permissions-grid');
       var adminNote = document.getElementById('admin-permissions-note');
+      var employeePanel = document.getElementById('employee-profile-panel');
       if (!roleSelect || roleSelect.dataset.accountCreateReady === '1') return;
       roleSelect.dataset.accountCreateReady = '1';
 
@@ -357,6 +405,12 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
       function updateForRole() {
         if (!roleSelect || !panel) return;
         var meta = selectedRoleMeta();
+        if (employeePanel) {
+          employeePanel.hidden = !meta.isEmployee;
+          employeePanel.querySelectorAll('[data-employee-required]').forEach(function(input) {
+            input.required = !!meta.isEmployee;
+          });
+        }
         if (meta.isAdmin) {
           panel.classList.add('pa-hidden');
         } else {

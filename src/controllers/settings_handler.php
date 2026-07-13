@@ -85,6 +85,11 @@ $settings = [
     'net_terms_days' => 30,
     'payment_methods' => ['cash','check','bank_transfer'],
     'timezone' => 'UTC',
+    'workforce_currency' => 'USD',
+    'workforce_default_hourly_rate' => null,
+    'workforce_default_billing_rate' => null,
+    'workforce_require_project' => 0,
+    'workforce_require_description' => 0,
     // App extras
     'primary_state' => null,
     'documents_valid_days' => 14,
@@ -318,6 +323,27 @@ if (isset($_POST['timezone'])) {
     }
 }
 
+// Workforce defaults live in PA System Settings so business identity and time
+// rules have one source of truth.
+if ($isSystemTab) {
+    $currency = strtoupper(trim((string)($_POST['workforce_currency'] ?? 'USD')));
+    if (!preg_match('/^[A-Z]{3}$/', $currency)) {
+        header('Location: /?page=settings&tab=system&error=' . urlencode('Workforce currency must be a three-letter ISO code.'));
+        exit;
+    }
+    $settings['workforce_currency'] = $currency;
+    foreach (['workforce_default_hourly_rate', 'workforce_default_billing_rate'] as $rateKey) {
+        $rate = trim((string)($_POST[$rateKey] ?? ''));
+        if ($rate !== '' && !preg_match('/^\d+(?:\.\d{1,4})?$/', $rate)) {
+            header('Location: /?page=settings&tab=system&error=' . urlencode('Workforce rates must be non-negative decimals with at most four places.'));
+            exit;
+        }
+        $settings[$rateKey] = $rate !== '' ? $rate : null;
+    }
+    $settings['workforce_require_project'] = !empty($_POST['workforce_require_project']) ? 1 : 0;
+    $settings['workforce_require_description'] = !empty($_POST['workforce_require_description']) ? 1 : 0;
+}
+
 // SMTP settings
 if (isset($_POST['smtp_host'])) {
     $settings['smtp_host'] = trim((string)$_POST['smtp_host']) ?: null;
@@ -379,6 +405,8 @@ $generalConfigKeys = [
     'brand_name', 'logo_path', 'from_company', 'from_name', 'from_address_line1', 'from_address_line2',
     'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
     'app_host', 'public_links_in_email', 'primary_state', 'timezone',
+    'workforce_currency', 'workforce_default_hourly_rate', 'workforce_default_billing_rate',
+    'workforce_require_project', 'workforce_require_description',
     'terms', 'long_term_terms', 'on_demand_terms',
     'net_terms_days', 'documents_valid_days', 'payment_methods',
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',

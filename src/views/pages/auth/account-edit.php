@@ -32,6 +32,39 @@ if (!$user) {
     exit;
 }
 
+$employeeProfile = [
+    'first_name' => '',
+    'last_name' => '',
+    'employment_status' => 'active',
+    'hourly_rate' => '',
+    'employee_can_view_pay' => 1,
+    'hired_at' => '',
+];
+$employeeAssignments = [];
+$activeProjects = [];
+try {
+    $profileStmt = $pdo->prepare('SELECT first_name,last_name,employment_status,hourly_rate,employee_can_view_pay,hired_at FROM employee_profiles WHERE user_id=? LIMIT 1');
+    $profileStmt->execute([$userId]);
+    $loadedProfile = $profileStmt->fetch(PDO::FETCH_ASSOC);
+    if ($loadedProfile) {
+        $employeeProfile = array_merge($employeeProfile, $loadedProfile);
+    }
+    $projectStmt = $pdo->prepare(
+        "SELECT p.id,p.name,a.id assignment_id,a.pay_rate_override,a.ends_at
+         FROM projects p LEFT JOIN project_assignments a ON a.project_id=p.id AND a.user_id=?
+         WHERE p.status NOT IN ('completed','cancelled') ORDER BY p.name"
+    );
+    $projectStmt->execute([$userId]);
+    $activeProjects = $projectStmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($activeProjects as $project) {
+        if (!empty($project['assignment_id']) && ($project['ends_at'] === null || strtotime((string)$project['ends_at']) > time())) {
+            $employeeAssignments[(int)$project['id']] = $project['pay_rate_override'];
+        }
+    }
+} catch (Throwable $e) {
+    @error_log('[account-edit] employee profile load failed: ' . $e->getMessage());
+}
+
 // Get 2FA status
 $twofaEnabled = false;
 try {
@@ -94,6 +127,7 @@ foreach ($availableRoles as $roleRow) {
     $roleMeta[(string)$roleId] = [
         'name' => $roleName,
         'isAdmin' => $roleName === 'admin',
+        'isEmployee' => $roleName === 'employee',
     ];
     $roleDefaults[(string)$roleId] = [];
     foreach ($flatEditPerms as $perm => $_) {
@@ -158,6 +192,11 @@ try {
     .pa-edit-grid select,
     .pa-edit-sender-grid input { width: 100%; box-sizing: border-box; }
     .pa-edit-actionbar { margin-top: 4px; }
+    .pa-edit-employee-panel { margin-top: 20px; padding-top: 18px; border-top: 1px solid #e5e7eb; }
+    .pa-edit-employee-panel[hidden] { display: none; }
+    .pa-edit-projects { display: grid; gap: 10px; margin-top: 14px; }
+    .pa-edit-project { display: grid; grid-template-columns: minmax(220px, 1fr) 180px; gap: 16px; align-items: center; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
+    .pa-edit-project > label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
     .pa-edit-secondary { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
     #permissions-panel-edit.pa-hidden {
       opacity: 0;
@@ -279,6 +318,53 @@ try {
           </div>
         </div>
 
+        <div id="employee-profile-panel" class="pa-edit-employee-panel" <?php echo $targetRole === 'employee' ? '' : 'hidden'; ?>>
+          <h3 style="margin:0 0 8px;font-size:16px;">Employee Profile &amp; Workforce Access</h3>
+          <p style="margin:0 0 16px;color:#6b7280;font-size:14px;">The Employee role supplies the default self-service ACL. Employees see only their assigned projects and never direct client or invoice details.</p>
+          <div class="pa-edit-grid">
+            <label>
+              <span style="font-weight:600">First name *</span>
+              <input class="input" type="text" name="employee_first_name" value="<?php echo e($employeeProfile['first_name']); ?>" data-employee-required autocomplete="given-name">
+            </label>
+            <label>
+              <span style="font-weight:600">Last name</span>
+              <input class="input" type="text" name="employee_last_name" value="<?php echo e($employeeProfile['last_name']); ?>" autocomplete="family-name">
+            </label>
+            <label>
+              <span style="font-weight:600">Employment status</span>
+              <select class="input" name="employee_status">
+                <?php foreach (['active' => 'Active', 'inactive' => 'Inactive', 'terminated' => 'Terminated'] as $statusValue => $statusLabel): ?>
+                  <option value="<?php echo $statusValue; ?>" <?php echo $employeeProfile['employment_status'] === $statusValue ? 'selected' : ''; ?>><?php echo $statusLabel; ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <label>
+              <span style="font-weight:600">Hire date</span>
+              <input class="input" type="date" name="employee_hired_at" value="<?php echo e($employeeProfile['hired_at']); ?>">
+            </label>
+            <label>
+              <span style="font-weight:600">Hourly pay rate</span>
+              <input class="input" type="number" name="employee_hourly_rate" min="0" step="0.0001" value="<?php echo e($employeeProfile['hourly_rate']); ?>" placeholder="Use System Settings default">
+            </label>
+            <label style="display:flex;flex-direction:row;align-items:center;gap:8px;align-self:end;padding-bottom:10px;">
+              <input type="checkbox" name="employee_can_view_pay" value="1" <?php echo !empty($employeeProfile['employee_can_view_pay']) ? 'checked' : ''; ?> style="width:auto">
+              <span>Employee can view their pay accruals</span>
+            </label>
+          </div>
+          <h4 style="margin:20px 0 6px">Project assignments</h4>
+          <p style="margin:0;color:#6b7280;font-size:13px;">Selected projects appear in the employee time tracker. A project-specific pay rate is optional.</p>
+          <div class="pa-edit-projects">
+            <?php foreach ($activeProjects as $project): ?>
+              <?php $projectId = (int)$project['id']; $assigned = array_key_exists($projectId, $employeeAssignments); ?>
+              <div class="pa-edit-project">
+                <label><input type="checkbox" name="employee_project_ids[]" value="<?php echo $projectId; ?>" <?php echo $assigned ? 'checked' : ''; ?> style="width:auto"><span><?php echo e($project['name']); ?></span></label>
+                <input class="input" type="number" name="employee_project_rates[<?php echo $projectId; ?>]" min="0" step="0.0001" value="<?php echo $assigned ? e($employeeAssignments[$projectId]) : ''; ?>" placeholder="Optional pay rate">
+              </div>
+            <?php endforeach; ?>
+            <?php if (!$activeProjects): ?><p style="margin:0;color:#6b7280">No active projects are available.</p><?php endif; ?>
+          </div>
+        </div>
+
         <div class="pa-edit-actionbar">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save Changes</button>
         </div>
@@ -302,6 +388,7 @@ try {
         var adminNote = document.getElementById('admin-permissions-note-edit');
         var senderToggle = document.getElementById('document-sender-enabled');
         var senderFields = document.getElementById('document-sender-fields');
+        var employeePanel = document.getElementById('employee-profile-panel');
 
         function selectedRoleMeta() {
           if (!roleSelect || !window.PA_EDIT_ROLE_META) return {};
@@ -332,6 +419,12 @@ try {
         function updatePermissionsForRole(applyDefaultsForRole) {
           if (!roleSelect || !panel) return;
           var meta = selectedRoleMeta();
+          if (employeePanel) {
+            employeePanel.hidden = !meta.isEmployee;
+            employeePanel.querySelectorAll('[data-employee-required]').forEach(function(input) {
+              input.required = !!meta.isEmployee;
+            });
+          }
           if (meta.isAdmin) {
             panel.classList.add('pa-hidden');
             if (adminNote) adminNote.style.display = 'block';

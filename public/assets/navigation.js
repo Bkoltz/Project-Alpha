@@ -17,7 +17,13 @@ let pageCleanupCallbacks = [];
 
 function getCurrentPage() {
     const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('page') || 'home';
+    const pathPages = {
+        '/time': 'workforce/time',
+        '/workforce': 'workforce/overview',
+        '/approvals': 'workforce/approvals',
+        '/pay': 'workforce/pay'
+    };
+    return urlParams.get('page') || pathPages[window.location.pathname] || 'home';
 }
 
 function normalizePageName(page) {
@@ -399,7 +405,11 @@ function updatePageTitle(page) {
         'financial/asset-detail': 'Asset Details',
         'financial/audit': 'Audit & Reports',
         'account': 'My Account',
-        'account-edit': 'Edit Account'
+        'account-edit': 'Edit Account',
+        'workforce/overview': 'Workforce Overview',
+        'workforce/time': 'Time',
+        'workforce/approvals': 'Time Approvals',
+        'workforce/pay': 'Employee Pay'
     };
 
     const pageTitle = pageTitles[page] || 'Project Alpha';

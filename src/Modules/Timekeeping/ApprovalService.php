@@ -20,16 +20,19 @@ final class ApprovalService
 
     public function approve(int $approverId, string $entryId): string
     {
+        $settings = WorkforceSettings::load($this->pdo);
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare(
                 "SELECT t.*,u.email,u.username,ep.first_name,ep.last_name,ep.hourly_rate employee_rate,
-                        pa.pay_rate_override,p.name project_name,b.default_hourly_rate,b.default_billing_rate,b.currency
+                        pa.pay_rate_override,p.name project_name,c.name client_name,
+                        i.doc_number invoice_number,i.invoice_type
                  FROM work_time_entries t JOIN users u ON u.id=t.user_id
-                 JOIN employee_profiles ep ON ep.user_id=t.user_id
+                 LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id
                  LEFT JOIN projects p ON p.id=t.project_id
+                 LEFT JOIN clients c ON c.id=t.client_id
+                 LEFT JOIN invoices i ON i.id=t.invoice_id
                  LEFT JOIN project_assignments pa ON pa.project_id=t.project_id AND pa.user_id=t.user_id
-                 JOIN business_settings b ON b.singleton=1
                  WHERE t.id=? FOR UPDATE"
             );
             $stmt->execute([$entryId]);
@@ -37,6 +40,9 @@ final class ApprovalService
             if (!$entry || $entry['status'] !== 'review' || empty($entry['end_time'])) {
                 throw new DomainException('Entry is not ready for approval.');
             }
+            $entry['default_hourly_rate'] = $settings['default_hourly_rate'];
+            $entry['default_billing_rate'] = $settings['default_billing_rate'];
+            $entry['currency'] = $settings['currency'];
             if ((int) $entry['revision'] > 1 && $this->hasPaidAccrual($entryId)) {
                 throw new DomainException('Paid time cannot be replaced by a correction. Return the pay accrual to pending first.');
             }
@@ -62,8 +68,12 @@ final class ApprovalService
                 'entry_revision' => (int) $entry['revision'],
                 'employee_user_id' => (int) $entry['user_id'],
                 'employee_name' => $employeeName,
+                'client_id' => $entry['client_id'] !== null ? (int)$entry['client_id'] : null,
+                'client_name' => (string)($entry['client_name'] ?? ''),
                 'project_id' => $entry['project_id'] !== null ? (int) $entry['project_id'] : null,
                 'project_name' => (string) ($entry['project_name'] ?? ''),
+                'invoice_id' => $entry['invoice_id'] !== null ? (int)$entry['invoice_id'] : null,
+                'invoice_number' => $this->invoiceLabel($entry),
                 'start_time' => (string) $entry['start_time'],
                 'end_time' => (string) $entry['end_time'],
                 'duration_seconds' => (int) $entry['duration_seconds'],
@@ -78,9 +88,9 @@ final class ApprovalService
             ];
             $insert = $this->pdo->prepare(
                 'INSERT INTO work_approval_snapshots
-                 (id,time_entry_id,entry_revision,employee_user_id,employee_name,project_id,project_name,start_time,end_time,duration_seconds,
-                  description,billable,is_payable,pay_rate,billing_rate,pay_amount,currency,approved_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                 (id,time_entry_id,entry_revision,employee_user_id,employee_name,client_id,client_name,project_id,project_name,invoice_id,invoice_number,
+                  start_time,end_time,duration_seconds,description,billable,is_payable,pay_rate,billing_rate,pay_amount,currency,approved_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
             );
             $insert->execute(array_values($snapshot));
             $this->pdo->prepare(
@@ -141,7 +151,7 @@ final class ApprovalService
         if ($reason === '') {
             throw new DomainException('A correction reason is required.');
         }
-        $timezone = (string) $this->pdo->query('SELECT timezone FROM business_settings WHERE singleton=1')->fetchColumn();
+        $timezone = (string)WorkforceSettings::load($this->pdo)['timezone'];
         $tz = new DateTimeZone($timezone ?: 'UTC');
         $start = $this->parseLocalDateTime((string) ($input['start_time'] ?? ''), $tz);
         $end = $this->parseLocalDateTime((string) ($input['end_time'] ?? ''), $tz);
@@ -245,19 +255,32 @@ final class ApprovalService
 
     private function billingRate(array $entry): ?string
     {
-        if ((int) $entry['billable'] !== 1 || empty($entry['project_id'])) {
+        if ((int) $entry['billable'] !== 1) {
             return null;
         }
-        $stmt = $this->pdo->prepare(
-            "SELECT amount FROM billing_rate_rules WHERE scope_type='project' AND project_id=?
-             AND effective_from<=DATE(?) AND (effective_until IS NULL OR effective_until>=DATE(?))
-             ORDER BY effective_from DESC,id DESC LIMIT 1"
-        );
-        $stmt->execute([$entry['project_id'], $entry['start_time'], $entry['start_time']]);
-        $rate = $stmt->fetchColumn();
-        return $rate === false
-            ? ($entry['default_billing_rate'] !== null ? (string) $entry['default_billing_rate'] : null)
-            : (string) $rate;
+        if (!empty($entry['project_id'])) {
+            $stmt = $this->pdo->prepare(
+                "SELECT amount FROM billing_rate_rules WHERE scope_type='project' AND project_id=?
+                 AND effective_from<=DATE(?) AND (effective_until IS NULL OR effective_until>=DATE(?))
+                 ORDER BY effective_from DESC,id DESC LIMIT 1"
+            );
+            $stmt->execute([$entry['project_id'], $entry['start_time'], $entry['start_time']]);
+            if (($rate = $stmt->fetchColumn()) !== false) {
+                return (string)$rate;
+            }
+        }
+        if (!empty($entry['client_id'])) {
+            $stmt = $this->pdo->prepare(
+                "SELECT amount FROM billing_rate_rules WHERE scope_type='client' AND client_id=?
+                 AND effective_from<=DATE(?) AND (effective_until IS NULL OR effective_until>=DATE(?))
+                 ORDER BY effective_from DESC,id DESC LIMIT 1"
+            );
+            $stmt->execute([$entry['client_id'], $entry['start_time'], $entry['start_time']]);
+            if (($rate = $stmt->fetchColumn()) !== false) {
+                return (string)$rate;
+            }
+        }
+        return $entry['default_billing_rate'] !== null ? (string)$entry['default_billing_rate'] : null;
     }
 
     private function hasPaidAccrual(string $entryId): bool
@@ -279,11 +302,24 @@ final class ApprovalService
                 AND c.consumption_type IN ('approved','correction')
              JOIN time_entries t ON t.id=c.billing_time_entry_id
              WHERE s.time_entry_id=? AND s.entry_revision=?
-               AND (t.billed=1 OR t.invoice_id IS NOT NULL OR t.invoice_item_id IS NOT NULL)
+               AND (t.billed=1 OR t.invoice_item_id IS NOT NULL)
              LIMIT 1 FOR UPDATE"
         );
         $stmt->execute([$entryId, $revision]);
         return (bool) $stmt->fetchColumn();
+    }
+
+    private function invoiceLabel(array $entry): string
+    {
+        if (empty($entry['invoice_number']) && empty($entry['invoice_id'])) {
+            return '';
+        }
+        $prefix = match ((string)($entry['invoice_type'] ?? 'regular')) {
+            'long_term' => 'LTI-',
+            'on_demand' => 'ODI-',
+            default => 'I-',
+        };
+        return $prefix . (string)($entry['invoice_number'] ?: $entry['invoice_id']);
     }
 
     private function parseLocalDateTime(string $value, DateTimeZone $timezone): DateTimeImmutable

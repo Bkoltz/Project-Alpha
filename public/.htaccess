@@ -8,7 +8,7 @@
     # paths still receive Apache's normal 404 instead of entering PA's router.
     RewriteRule ^time/?$ index.php?page=workforce/time [QSA,L]
     RewriteRule ^time/action/?$ index.php?page=workforce/action [QSA,L]
-    RewriteRule ^workforce/?$ index.php?page=workforce/admin [QSA,L]
+    RewriteRule ^workforce/?$ index.php?page=workforce/overview [QSA,L]
     RewriteRule ^workforce/action/?$ index.php?page=workforce/action [QSA,L]
     RewriteRule ^approvals/?$ index.php?page=workforce/approvals [QSA,L]
     RewriteRule ^approvals/action/?$ index.php?page=workforce/action [QSA,L]

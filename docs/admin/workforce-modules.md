@@ -23,12 +23,19 @@ compatibility API.
 ## Initial setup
 
 1. Sign in as an administrator. PA recommends TOTP, but the reminder may be dismissed.
-2. Open **Workforce**.
-3. Set the timezone, ISO currency, default pay rate, and default billing rate.
-4. Create each employee. Employees receive PA logins and must replace their
-   temporary password on first sign-in.
-5. Assign projects and optional employee/project pay-rate overrides.
-6. Employees use `/time`; approvers use `/approvals`; authorized users use `/pay`.
+2. Open **Settings > System**. The main PA business name and timezone are used
+   by Workforce; set the Workforce currency, default pay/billing rates, and
+   employee time requirements in the **Time & Workforce** section.
+3. Open **Accounts**, create or edit a PA user, and choose the **Employee** role.
+   The Employee role loads the strict self-service ACL defaults automatically.
+4. Complete the employee profile, pay visibility, and assigned projects on the
+   same Account form. Optional project pay-rate overrides take precedence.
+5. Employees use **Workforce > Time**; approvers use **Approvals**; authorized
+   users use **Employee Pay**. The Workforce Overview summarizes time and pay.
+
+Timekeeping managers can enter time for any active PA account. Client, project,
+and open hourly-invoice context is optional for managers. Employees never see
+direct client or invoice details and can select only assigned projects.
 
 Pay-rate precedence is assignment override, employee rate, then business
 default. Missing pay rates block payable approvals; missing billing rates block

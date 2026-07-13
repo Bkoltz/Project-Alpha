@@ -226,15 +226,19 @@ final class ProjectWorkflowUiTest extends TestCase
         $service = (string) file_get_contents($this->root . '/src/Modules/Timekeeping/TimekeepingService.php');
         $migration = (string) file_get_contents($this->root . '/database/migrations/0039_unified_workforce_timekeeping.sql');
 
-        self::assertStringContainsString('Server-authoritative timekeeping', $view);
-        self::assertStringContainsString('Manual time', $view);
+        self::assertStringContainsString('Entries are stored in UTC', $view);
+        self::assertStringContainsString('Manual entry', $view);
         self::assertStringContainsString('Clock in', $view);
         self::assertStringContainsString('Submit for review', $view);
+        self::assertStringContainsString('name="client_id"', $view);
+        self::assertStringContainsString('name="invoice_id"', $view);
+        self::assertStringContainsString('Assigned project', $view);
         self::assertStringContainsString("['clock-in','clock-out','break-start','break-end','manual-create','resubmit','cancel']", $controller);
         self::assertStringContainsString('public function clockIn', $service);
         self::assertStringContainsString('public function startBreak', $service);
         self::assertStringContainsString('public function saveManual', $service);
         self::assertStringContainsString('FOR UPDATE', $service);
+        self::assertStringContainsString('Client and invoice details are available only to timekeeping managers.', $service);
         self::assertStringContainsString('work_timer_locks', $migration);
         self::assertStringContainsString('work_time_breaks', $migration);
     }
@@ -246,7 +250,7 @@ final class ProjectWorkflowUiTest extends TestCase
         foreach ([
             '^time/?$ index.php?page=workforce/time',
             '^time/action/?$ index.php?page=workforce/action',
-            '^workforce/?$ index.php?page=workforce/admin',
+            '^workforce/?$ index.php?page=workforce/overview',
             '^workforce/action/?$ index.php?page=workforce/action',
             '^approvals/?$ index.php?page=workforce/approvals',
             '^approvals/action/?$ index.php?page=workforce/action',
@@ -257,6 +261,37 @@ final class ProjectWorkflowUiTest extends TestCase
         }
 
         self::assertStringNotContainsString('api/v1/integrations/alphaledger', $htaccess);
+    }
+
+    public function testWorkforceUsesPaAccountsSettingsAndLoginDesign(): void
+    {
+        $accounts = (string) file_get_contents($this->root . '/src/views/pages/auth/accounts.php');
+        $accountEdit = (string) file_get_contents($this->root . '/src/views/pages/auth/account-edit.php');
+        $accountCreate = (string) file_get_contents($this->root . '/src/controllers/accounts/accounts_create.php');
+        $accountUpdate = (string) file_get_contents($this->root . '/src/controllers/accounts/accounts_update.php');
+        $settings = (string) file_get_contents($this->root . '/src/views/pages/settings/system.php');
+        $login = (string) file_get_contents($this->root . '/src/views/pages/auth/login.php');
+        $authHeader = (string) file_get_contents($this->root . '/src/views/partials/auth_header.php');
+        $navigation = (string) file_get_contents($this->root . '/public/assets/navigation.js');
+
+        foreach ([$accounts, $accountEdit] as $view) {
+            self::assertStringContainsString('employee_first_name', $view);
+            self::assertStringContainsString('employee_project_ids[]', $view);
+            self::assertStringContainsString('Employee role', $view);
+        }
+        foreach ([$accountCreate, $accountUpdate] as $controller) {
+            self::assertStringContainsString('employee_profiles', $controller);
+            self::assertStringContainsString('project_assignments', $controller);
+            self::assertStringContainsString('WorkforceSettings::load', $controller);
+        }
+        self::assertStringContainsString('workforce_default_hourly_rate', $settings);
+        self::assertStringContainsString('workforce_require_project', $settings);
+        self::assertStringContainsString('login-shell', $login);
+        self::assertStringContainsString('$brandLogo', $login);
+        self::assertStringNotContainsString('IMG_0342.JPG', $login);
+        self::assertStringContainsString("\$favicon = \$logo !== '' ? \$logo : '/assets/favicon-32.png';", $authHeader);
+        self::assertStringContainsString('<link rel="icon" href="<?php echo htmlspecialchars($favicon); ?>">', $authHeader);
+        self::assertStringContainsString("'/workforce': 'workforce/overview'", $navigation);
     }
 
     public function testPdfFacingDocumentCopyUsesWorkAndJobWording(): void

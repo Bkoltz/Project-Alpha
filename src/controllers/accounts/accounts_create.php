@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/password_policy.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../Modules/Timekeeping/WorkforceSettings.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -71,6 +72,34 @@ $roleName = (string)($selectedRole['name'] ?? 'member');
 $roleId = isset($selectedRole['id']) ? (int)$selectedRole['id'] : null;
 $role = in_array($roleName, ['admin', 'owner', 'staff', 'member', 'employee'], true) ? $roleName : 'member';
 
+$employeeFirstName = trim((string)($_POST['employee_first_name'] ?? ''));
+$employeeLastName = trim((string)($_POST['employee_last_name'] ?? ''));
+$employeeHourlyRate = trim((string)($_POST['employee_hourly_rate'] ?? ''));
+$employeeCanViewPay = !empty($_POST['employee_can_view_pay']);
+$employeeProjectIds = array_values(array_unique(array_filter(
+    array_map('intval', (array)($_POST['employee_project_ids'] ?? [])),
+    static fn(int $id): bool => $id > 0
+)));
+$employeeProjectRates = (array)($_POST['employee_project_rates'] ?? []);
+
+if ($role === 'employee') {
+    if ($employeeFirstName === '') {
+        header('Location: /?page=accounts&action=create&error=' . urlencode('Employee first name is required'));
+        exit;
+    }
+    if ($employeeHourlyRate !== '' && (!is_numeric($employeeHourlyRate) || (float)$employeeHourlyRate < 0)) {
+        header('Location: /?page=accounts&action=create&error=' . urlencode('Employee hourly rate must be zero or greater'));
+        exit;
+    }
+    foreach ($employeeProjectIds as $projectId) {
+        $rate = trim((string)($employeeProjectRates[$projectId] ?? ''));
+        if ($rate !== '' && (!is_numeric($rate) || (float)$rate < 0)) {
+            header('Location: /?page=accounts&action=create&error=' . urlencode('Project pay rates must be zero or greater'));
+            exit;
+        }
+    }
+}
+
 // Check if email already exists
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ?');
 $stmt->execute([$email]);
@@ -88,12 +117,44 @@ try {
     $stmt = $pdo->prepare('INSERT INTO users (email, username, password_hash, role, force_password_reset) VALUES (?, ?, ?, ?, ?)');
     $stmt->execute([$email, $username ?: null, $passwordHash, $role, $forceReset ? 1 : 0]);
     $newUserId = (int)$pdo->lastInsertId();
+    $displayName = $role === 'employee'
+        ? trim($employeeFirstName . ' ' . $employeeLastName)
+        : ($username !== '' ? $username : $email);
     $pdo->prepare("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES (?,?,?,?, 'pa')")
-        ->execute([$newUserId,$username!==''?$username:$email,$email,1]);
+        ->execute([$newUserId,$displayName,$email,1]);
     if ($role === 'employee') {
-        $currency = (string)($pdo->query('SELECT currency FROM business_settings WHERE singleton=1')->fetchColumn() ?: 'USD');
-        $pdo->prepare('INSERT INTO employee_profiles (user_id,first_name,last_name,currency) VALUES (?,?,?,?)')
-            ->execute([$newUserId,$username!==''?$username:substr($email,0,strpos($email,'@')),'',$currency]);
+        $settings = \App\Modules\Timekeeping\WorkforceSettings::load($pdo);
+        $currency = (string)$settings['currency'];
+        $pdo->prepare(
+            'INSERT INTO employee_profiles (user_id,first_name,last_name,hourly_rate,currency,employee_can_view_pay,hired_at)
+             VALUES (?,?,?,?,?,?,CURRENT_DATE)'
+        )->execute([
+            $newUserId,
+            $employeeFirstName,
+            $employeeLastName,
+            $employeeHourlyRate !== '' ? $employeeHourlyRate : null,
+            $currency,
+            $employeeCanViewPay ? 1 : 0,
+        ]);
+
+        if ($employeeProjectIds) {
+            $placeholders = implode(',', array_fill(0, count($employeeProjectIds), '?'));
+            $projectStmt = $pdo->prepare(
+                "SELECT id FROM projects WHERE id IN ($placeholders) AND status NOT IN ('completed','cancelled')"
+            );
+            $projectStmt->execute($employeeProjectIds);
+            $validProjects = array_map('intval', $projectStmt->fetchAll(PDO::FETCH_COLUMN));
+            if (count($validProjects) !== count($employeeProjectIds)) {
+                throw new DomainException('One or more selected projects are unavailable');
+            }
+            $assignmentStmt = $pdo->prepare(
+                'INSERT INTO project_assignments (project_id,user_id,pay_rate_override,created_by) VALUES (?,?,?,?)'
+            );
+            foreach ($employeeProjectIds as $projectId) {
+                $rate = trim((string)($employeeProjectRates[$projectId] ?? ''));
+                $assignmentStmt->execute([$projectId, $newUserId, $rate !== '' ? $rate : null, (int)$_SESSION['user']['id']]);
+            }
+        }
     }
 
     require_once __DIR__ . '/../../utils/permission_catalog.php';
@@ -114,11 +175,12 @@ try {
     }
 
     $pdo->commit();
-    audit_log($pdo, 'user.create', 'user', $newUserId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'team_member_created'=>true]);
+    audit_log($pdo, 'user.create', 'user', $newUserId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'team_member_created'=>true, 'project_assignments' => count($employeeProjectIds)]);
     header('Location: /?page=accounts&created=1');
 } catch (Throwable $e) {
     if($pdo->inTransaction())$pdo->rollBack();
     error_log('Failed to create user: ' . $e->getMessage());
-    header('Location: /?page=accounts&error=' . urlencode('Failed to create user'));
+    $message = $e instanceof DomainException ? $e->getMessage() : 'Failed to create user';
+    header('Location: /?page=accounts&action=create&error=' . urlencode($message));
 }
 exit;

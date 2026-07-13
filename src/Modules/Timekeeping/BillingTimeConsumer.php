@@ -95,14 +95,15 @@ final class BillingTimeConsumer implements ApprovedTimeConsumer
         );
         $stmt = $this->pdo->prepare(
             'INSERT INTO time_entries
-             (user_id,team_member_id,client_id,project_id,description,started_at,ended_at,hours,billable,billed,rate,currency,rate_snapshot_source)
-             VALUES (?,?,?,?,?,?,?,?,1,0,?,?,?)'
+             (user_id,team_member_id,client_id,project_id,invoice_id,description,started_at,ended_at,hours,billable,billed,rate,currency,rate_snapshot_source)
+             VALUES (?,?,?,?,?,?,?,?,?,1,0,?,?,?)'
         );
         $stmt->execute([
             (int) $snapshot['employee_user_id'],
             $teamMemberId === false ? null : (int) $teamMemberId,
-            $project['client_id'] ?? null,
+            $snapshot['client_id'] ?? $project['client_id'] ?? null,
             $project['id'] ?? null,
+            $snapshot['invoice_id'] ?? null,
             $description,
             $snapshot['start_time'],
             $snapshot['end_time'],
