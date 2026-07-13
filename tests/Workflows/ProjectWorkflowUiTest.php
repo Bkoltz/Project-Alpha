@@ -157,6 +157,21 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("page=client/client-details&id=' . \$id", (string)$update);
     }
 
+    public function testResolverFoldersUseProviderAvailabilityInsteadOfCalendarExpiration(): void
+    {
+        $resolver = file_get_contents($this->root . '/src/services/LinkResolverService.php');
+        $links = file_get_contents($this->root . '/src/views/components/links_section.php');
+        $expirationCron = file_get_contents($this->root . '/src/cron/link_expiration_checker.php');
+        $settings = file_get_contents($this->root . '/src/views/pages/settings/links.php');
+
+        self::assertStringNotContainsString('$expirationDate = date(', (string)$resolver);
+        self::assertStringContainsString('SET title = ?, url = ?, expiration_date = NULL', (string)$resolver);
+        self::assertStringContainsString('markResolverLinkUnavailable($context, $linkType)', (string)$resolver);
+        self::assertStringContainsString("\$statusText = \$isResolverLink ? 'Unavailable' : 'Expired';", (string)$links);
+        self::assertStringContainsString("link_source <> 'resolver'", (string)$expirationCron);
+        self::assertStringContainsString('Resolver-managed folders do not expire by date.', (string)$settings);
+    }
+
     public function testClientAndOrganizationSuiteAddressesFlowToDocuments(): void
     {
         $baseline = file_get_contents($this->root . '/database/baseline.sql');
@@ -204,38 +219,44 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('$orgLines[] = (string)$pi[\'organization_address_line2\'];', (string)$projectInvoiceDetail);
     }
 
-    public function testTimeTrackingFormIsSplitIntoExpectedSections(): void
+    public function testWorkforceTimekeepingUsesTheUnifiedDomainService(): void
     {
-        $view = file_get_contents($this->root . '/src/views/pages/time-tracking.php');
-        $script = file_get_contents($this->root . '/public/assets/js/time-tracking.js');
-        $createController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_create.php');
-        $updateController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_update.php');
-        $startController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_start_timer.php');
-        $deleteController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_delete.php');
-        $optionsController = file_get_contents($this->root . '/src/controllers/time-tracking/time_entry_options.php');
-        $schema = file_get_contents($this->root . '/src/utils/time_tracking_schema.php');
-        $migration = file_get_contents($this->root . '/database/migrations/0019_repair_time_entries_schema.sql');
+        $view = (string) file_get_contents($this->root . '/src/views/pages/workforce/time.php');
+        $controller = (string) file_get_contents($this->root . '/src/controllers/workforce/action.php');
+        $service = (string) file_get_contents($this->root . '/src/Modules/Timekeeping/TimekeepingService.php');
+        $migration = (string) file_get_contents($this->root . '/database/migrations/0039_unified_workforce_timekeeping.sql');
 
-        self::assertStringContainsString('Date / Time', (string)$view);
-        self::assertStringContainsString('Bill To', (string)$view);
-        self::assertStringContainsString('Details', (string)$view);
-        self::assertStringContainsString('Use start and end time, or enter manual hours. Do not use both.', (string)$view);
-        self::assertStringContainsString('pa_time_tracking_ensure_schema($pdo)', (string)$view);
-        self::assertStringContainsString('function syncFromJob(formConfig)', (string)$script);
-        self::assertStringContainsString('function syncFromContract(formConfig)', (string)$script);
-        self::assertStringContainsString('selectInvoiceForContract(formConfig.invoiceSelect', (string)$script);
-        foreach ([$createController, $updateController, $startController, $deleteController, $optionsController] as $controller) {
-            self::assertStringContainsString("__DIR__ . '/../../config/db.php'", (string)$controller);
+        self::assertStringContainsString('Server-authoritative timekeeping', $view);
+        self::assertStringContainsString('Manual time', $view);
+        self::assertStringContainsString('Clock in', $view);
+        self::assertStringContainsString('Submit for review', $view);
+        self::assertStringContainsString("['clock-in','clock-out','break-start','break-end','manual-create','resubmit','cancel']", $controller);
+        self::assertStringContainsString('public function clockIn', $service);
+        self::assertStringContainsString('public function startBreak', $service);
+        self::assertStringContainsString('public function saveManual', $service);
+        self::assertStringContainsString('FOR UPDATE', $service);
+        self::assertStringContainsString('work_timer_locks', $migration);
+        self::assertStringContainsString('work_time_breaks', $migration);
+    }
+
+    public function testWorkforceCleanPathsReachTheFrontController(): void
+    {
+        $htaccess = (string) file_get_contents($this->root . '/public/.htaccess');
+
+        foreach ([
+            '^time/?$ index.php?page=workforce/time',
+            '^time/action/?$ index.php?page=workforce/action',
+            '^workforce/?$ index.php?page=workforce/admin',
+            '^workforce/action/?$ index.php?page=workforce/action',
+            '^approvals/?$ index.php?page=workforce/approvals',
+            '^approvals/action/?$ index.php?page=workforce/action',
+            '^pay/?$ index.php?page=workforce/pay',
+            '^pay/action/?$ index.php?page=workforce/action',
+        ] as $route) {
+            self::assertStringContainsString('RewriteRule ' . $route . ' [QSA,L]', $htaccess);
         }
-        foreach ([$createController, $updateController] as $controller) {
-            self::assertStringContainsString('pa_time_tracking_ensure_schema($pdo)', (string)$controller);
-            self::assertStringContainsString('Failed to save time entry', (string)$controller);
-        }
-        self::assertStringContainsString('invoice_item_id=NULL', (string)$updateController);
-        self::assertStringContainsString('function pa_time_tracking_ensure_schema', (string)$schema);
-        self::assertStringContainsString('service_item_id', (string)$migration);
-        self::assertStringContainsString('project_code', (string)$migration);
-        self::assertStringContainsString('updated_at', (string)$migration);
+
+        self::assertStringNotContainsString('api/v1/integrations/alphaledger', $htaccess);
     }
 
     public function testPdfFacingDocumentCopyUsesWorkAndJobWording(): void

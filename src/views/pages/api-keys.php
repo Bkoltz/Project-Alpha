@@ -11,15 +11,11 @@ if (!api_keys_require_admin()) {
 $keys = [];
 $schemaError = null;
 $existingColumns = [];
-$alphaLedgerBusinessId = null;
-$alphaLedgerEnabled = false;
 try {
     pa_ensure_api_keys_schema($pdo);
     $existingColumns = pa_api_keys_existing_columns($pdo);
     $stmt = $pdo->query('SELECT id, name, key_prefix, scopes, allowed_ips, created_at, last_used_at, revoked_at FROM api_keys ORDER BY created_at DESC, id DESC');
     $keys = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    $alphaLedgerBusinessId = $pdo->query('SELECT business_id FROM pa_integration_identity WHERE singleton=1')->fetchColumn() ?: null;
-    $alphaLedgerEnabled = (bool)$pdo->query('SELECT enabled FROM alphaledger_policy WHERE singleton=1')->fetchColumn();
 } catch (Throwable $e) {
     $schemaError = $e->getMessage();
 }
@@ -55,15 +51,6 @@ api_keys_render_styles();
     <div class="alert alert-success">
       <strong>Copy this key now. It will not be shown again.</strong>
       <div class="api-key-secret"><?php echo api_keys_e($newKey); ?></div>
-    </div>
-  <?php endif; ?>
-
-  <?php if ($alphaLedgerBusinessId): ?>
-    <div class="api-key-card">
-      <h2>AlphaLedger Connection</h2>
-      <p class="api-key-muted">Use this immutable PA business ID in AlphaLedger, with an API key scoped to <strong>AlphaLedger integration</strong>.</p>
-      <div class="api-key-secret"><?php echo api_keys_e($alphaLedgerBusinessId); ?></div>
-      <div class="api-key-form-actions" style="margin-top:12px"><span class="api-key-badge <?php echo $alphaLedgerEnabled ? '' : 'revoked'; ?>"><?php echo $alphaLedgerEnabled ? 'Synchronization authorized' : 'Synchronization disabled'; ?></span><a class="btn btn-sm" href="/?page=settings&amp;tab=alphaledger">Manage AlphaLedger</a></div>
     </div>
   <?php endif; ?>
 

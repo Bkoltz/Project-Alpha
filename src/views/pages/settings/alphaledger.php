@@ -1,8 +1,11 @@
 <?php
+http_response_code(410);
+exit('Retired integration page. Use /workforce.');
 
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/api_scopes.php';
 require_once __DIR__ . '/../../../utils/alphaledger_integration.php';
+require_once __DIR__ . '/../../../utils/alphaledger_time_bridge.php';
 
 if (($_SESSION['user']['role'] ?? '') !== 'admin') {
     echo '<div class="alert alert-danger">Only a PA administrator can configure AlphaLedger synchronization.</div>';
@@ -24,7 +27,8 @@ if (!empty($policy['approved_api_key_id'])) {
     $stmt->execute([(int) $policy['approved_api_key_id']]);
     $installation = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
-$counts = ['pending' => 0, 'attention' => 0, 'conflicts' => 0, 'time' => 0, 'pay' => 0, 'ledger' => 0];
+$counts = ['pending' => 0, 'attention' => 0, 'conflicts' => 0, 'time' => 0, 'pay' => 0, 'ledger' => 0, 'commands'=>0, 'command_attention'=>0, 'exceptions'=>0];
+$exceptions=[];$teamMembers=[];$projects=[];$clients=[];$backfills=[];
 try {
     $counts['pending'] = (int) $pdo->query("SELECT COUNT(*) FROM alphaledger_events WHERE delivery_state='pending'")->fetchColumn();
     $counts['attention'] = (int) $pdo->query("SELECT COUNT(*) FROM alphaledger_events WHERE delivery_state='attention'")->fetchColumn();
@@ -32,6 +36,14 @@ try {
     $counts['time'] = (int) $pdo->query("SELECT COUNT(*) FROM time_entries WHERE source_system='alphaledger'")->fetchColumn();
     $counts['pay'] = (int) $pdo->query('SELECT COUNT(*) FROM employee_pay_records')->fetchColumn();
     $counts['ledger'] = (int) $pdo->query('SELECT COUNT(*) FROM alphaledger_ledger_time_entries')->fetchColumn();
+    $counts['commands']=(int)$pdo->query("SELECT COUNT(*) FROM alphaledger_command_outbox WHERE state='pending'")->fetchColumn();
+    $counts['command_attention']=(int)$pdo->query("SELECT COUNT(*) FROM alphaledger_command_outbox WHERE state='attention'")->fetchColumn();
+    $counts['exceptions']=(int)$pdo->query("SELECT COUNT(*) FROM alphaledger_integration_exceptions WHERE status='open'")->fetchColumn();
+    $exceptions=$pdo->query("SELECT * FROM alphaledger_integration_exceptions WHERE status='open' ORDER BY last_seen_at DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
+    $teamMembers=$pdo->query('SELECT id,display_name,email,user_id FROM team_members WHERE is_active=1 ORDER BY display_name')->fetchAll(PDO::FETCH_ASSOC);
+    $projects=$pdo->query("SELECT id,name,status FROM projects WHERE status NOT IN ('completed','cancelled') ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+    $clients=$pdo->query('SELECT id,name FROM clients WHERE archived=0 AND deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+    $backfills=$pdo->query('SELECT * FROM alphaledger_backfill_runs ORDER BY id DESC LIMIT 20')->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $ignored) {
 }
 $recentEvents = $pdo->query('SELECT event_type,aggregate_id,revision,delivery_state,delivery_attempts,last_error,created_at,delivered_at FROM alphaledger_events ORDER BY sequence_id DESC LIMIT 20')->fetchAll(PDO::FETCH_ASSOC);
@@ -65,6 +77,9 @@ $state = !$enabled
     <div class="al-stat"><span>Imported time</span><strong><?php echo $counts['time']; ?></strong></div>
     <div class="al-stat"><span>Pay records</span><strong><?php echo $counts['pay']; ?></strong></div>
     <div class="al-stat"><span>Ledger entries</span><strong><?php echo $counts['ledger']; ?></strong></div>
+    <div class="al-stat"><span>Pending commands</span><strong><?php echo $counts['commands']; ?></strong></div>
+    <div class="al-stat"><span>Command failures</span><strong><?php echo $counts['command_attention']; ?></strong></div>
+    <div class="al-stat"><span>Mapping exceptions</span><strong><?php echo $counts['exceptions']; ?></strong></div>
   </div>
 
   <div class="al-card">
@@ -73,6 +88,8 @@ $state = !$enabled
     <?php if ($installation): ?>
       <p>Installation ID</p><div class="al-code"><?php echo htmlspecialchars((string)$installation['installation_id']); ?></div>
       <p style="color:var(--muted)">Last success: <?php echo htmlspecialchars((string)($installation['last_success_at'] ?: 'Never')); ?> &middot; Consecutive failures: <?php echo (int)$installation['consecutive_failures']; ?></p>
+      <p style="color:var(--muted)">AL business: <?php echo htmlspecialchars((string)($installation['al_business_id']?:'Not negotiated')); ?> &middot; Last command sync: <?php echo htmlspecialchars((string)($installation['last_command_sync_at']?:'Never')); ?></p>
+      <p style="color:var(--muted)">Time commands: <?php echo pa_al_time_commands_available($installation)?'Available':'Unavailable until AL advertises time_commands_v1'; ?></p>
     <?php endif; ?>
   </div>
 
@@ -105,6 +122,14 @@ $state = !$enabled
       <h3>Purge retained Ledger</h3><p>Deletes AL operational people, assignments, time, breaks, revisions, and pay mirrors. PA invoice-linked approved time remains as a financial record.</p><label class="al-field"><span>Current administrator password</span><input type="password" name="admin_password" required autocomplete="current-password"></label><label class="al-field"><span>Current TOTP code</span><input name="totp_code" required inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code"></label><button class="btn btn-danger" type="submit">Purge AlphaLedger Ledger</button>
     </form>
   <?php endif; ?>
+
+  <?php if($enabled&&$installation): ?>
+    <div class="al-card"><h3>Historical approved-time backfill</h3><p>Preview and request an explicit date range. Reruns are idempotent by AL source identity and revision.</p><form method="post" action="/?page=settings/alphaledger-time-admin" class="al-grid"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><label class="al-field"><span>From</span><input type="date" name="date_from" required></label><label class="al-field"><span>To</span><input type="date" name="date_to" required></label><div><button class="btn" name="action" value="backfill-preview">Preview</button> <button class="btn btn-primary" name="action" value="backfill-request">Request approved time</button></div></form><?php if($backfills): ?><table class="al-table"><thead><tr><th>Range</th><th>State</th><th>Preview</th><th>Imported / failed</th></tr></thead><tbody><?php foreach($backfills as $run): ?><tr><td><?php echo htmlspecialchars($run['date_from'].' to '.$run['date_to']); ?></td><td><?php echo htmlspecialchars((string)$run['state']); ?></td><td><?php echo (int)$run['preview_count']; ?></td><td><?php echo (int)$run['imported_count']; ?> / <?php echo (int)$run['failed_count']; ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?></div>
+
+    <div class="al-card"><h3>Effective-dated rates</h3><div class="al-grid"><form method="post" action="/?page=settings/alphaledger-time-admin"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="action" value="add-member-rate"><label class="al-field"><span>Team member</span><select name="team_member_id" required><option value="">Select</option><?php foreach($teamMembers as $tm): ?><option value="<?php echo (int)$tm['id']; ?>"><?php echo htmlspecialchars((string)$tm['display_name']); ?></option><?php endforeach; ?></select></label><label class="al-field"><span>Rate type</span><select name="rate_type"><option value="cost">Cost</option><option value="billing">Billing default</option></select></label><label class="al-field"><span>USD/hour</span><input type="number" min="0" step="0.0001" name="amount" required></label><label class="al-field"><span>Effective from</span><input type="date" name="effective_from" required></label><label class="al-field"><span>Effective until</span><input type="date" name="effective_until"></label><button class="btn">Add member rate</button></form><form method="post" action="/?page=settings/alphaledger-time-admin"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="action" value="add-billing-rate"><label class="al-field"><span>Scope</span><select name="scope_type" id="alRateScope"><option value="project">Project</option><option value="client">Client</option></select></label><label class="al-field"><span>Project/client ID</span><input type="number" min="1" name="scope_id" required><small>Use the PA numeric ID; project rules take precedence over client rules.</small></label><label class="al-field"><span>USD/hour</span><input type="number" min="0" step="0.0001" name="amount" required></label><label class="al-field"><span>Effective from</span><input type="date" name="effective_from" required></label><label class="al-field"><span>Effective until</span><input type="date" name="effective_until"></label><button class="btn">Add billing rule</button></form></div></div>
+  <?php endif; ?>
+
+  <?php if($exceptions): ?><div class="al-card"><h3>Integration exceptions</h3><p>PA never fuzzy-links new AL people or projects. Choose an existing record or deliberately create one.</p><?php foreach($exceptions as $exception): $details=json_decode((string)$exception['details'],true)?:[]; ?><div style="border-top:1px solid #e2e8f0;padding:12px 0"><strong><?php echo htmlspecialchars((string)$exception['exception_type']); ?></strong> &mdash; <?php echo htmlspecialchars((string)$exception['reason']); ?><small style="display:block;color:var(--muted)"><?php echo htmlspecialchars((string)$exception['source_object_id']); ?> &middot; seen <?php echo (int)$exception['occurrences']; ?> time(s)</small><?php if($exception['exception_type']==='unmapped_employee'): ?><form method="post" action="/?page=settings/alphaledger-time-admin" class="al-grid"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="action" value="map-employee"><input type="hidden" name="al_employee_id" value="<?php echo htmlspecialchars((string)($details['external_id']??'')); ?>"><label class="al-field"><span>Existing team member</span><select name="team_member_id"><option value="">Create new below</option><?php foreach($teamMembers as $tm): ?><option value="<?php echo (int)$tm['id']; ?>"><?php echo htmlspecialchars((string)$tm['display_name']); ?></option><?php endforeach; ?></select></label><label class="al-field"><span>New member name</span><input name="display_name" value="<?php echo htmlspecialchars((string)($details['display_name']??'')); ?>"></label><label class="al-field"><span>Email</span><input type="email" name="email" value="<?php echo htmlspecialchars((string)($details['email']??'')); ?>"></label><button class="btn">Confirm employee mapping</button></form><?php elseif($exception['exception_type']==='unmapped_project'): ?><form method="post" action="/?page=settings/alphaledger-time-admin" class="al-grid"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="action" value="map-project"><input type="hidden" name="al_project_id" value="<?php echo htmlspecialchars((string)($details['external_id']??'')); ?>"><label class="al-field"><span>Existing PA project</span><select name="project_id"><option value="">Create new below</option><?php foreach($projects as $project): ?><option value="<?php echo (int)$project['id']; ?>"><?php echo htmlspecialchars((string)$project['name']); ?></option><?php endforeach; ?></select></label><label class="al-field"><span>New project name</span><input name="project_name" value="<?php echo htmlspecialchars((string)($details['name']??'')); ?>"></label><button class="btn">Confirm project mapping</button></form><?php else: ?><form method="post" action="/?page=settings/alphaledger-time-admin"><input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>"><input type="hidden" name="action" value="resolve-exception"><input type="hidden" name="exception_id" value="<?php echo (int)$exception['id']; ?>"><button class="btn btn-sm">Dismiss with audit trail</button></form><?php endif; ?></div><?php endforeach; ?></div><?php endif; ?>
 
   <?php if ($conflicts): ?><div class="al-card al-danger"><h3>Open ownership conflicts</h3><table class="al-table"><thead><tr><th>Object</th><th>Reason</th><th>Detected</th></tr></thead><tbody><?php foreach($conflicts as $row): ?><tr><td><?php echo htmlspecialchars($row['object_type'].' '.$row['object_id']); ?></td><td><?php echo htmlspecialchars((string)$row['reason']); ?></td><td><?php echo htmlspecialchars((string)$row['created_at']); ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
   <div class="al-card"><h3>Recent delivery activity</h3><?php if(!$recentEvents): ?><p>No integration events yet.</p><?php else: ?><div style="overflow:auto"><table class="al-table"><thead><tr><th>Event</th><th>Revision</th><th>State</th><th>Attempts</th><th>Created</th><th>Error</th></tr></thead><tbody><?php foreach($recentEvents as $row): ?><tr><td><?php echo htmlspecialchars((string)$row['event_type']); ?><small style="display:block;color:var(--muted)"><?php echo htmlspecialchars((string)$row['aggregate_id']); ?></small></td><td><?php echo (int)$row['revision']; ?></td><td><?php echo htmlspecialchars((string)$row['delivery_state']); ?></td><td><?php echo (int)$row['delivery_attempts']; ?></td><td><?php echo htmlspecialchars((string)$row['created_at']); ?></td><td><?php echo htmlspecialchars((string)($row['last_error'] ?? '')); ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?></div>

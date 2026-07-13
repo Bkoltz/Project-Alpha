@@ -28,7 +28,7 @@ function acl_user_role(PDO $pdo, int $userId): string
         $role = 'member';
     }
 
-    $cache[$userId] = in_array($role, ['admin', 'owner', 'staff', 'member'], true) ? $role : 'member';
+    $cache[$userId] = in_array($role, ['admin', 'owner', 'staff', 'member', 'employee'], true) ? $role : 'member';
     return $cache[$userId];
 }
 

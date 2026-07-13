@@ -13,7 +13,7 @@ function two_factor_enabled_for_user(PDO $pdo, int $userId): bool
     }
 }
 
-function two_factor_required_for_user(PDO $pdo, int $userId, ?int $organizationId = null): bool
+function two_factor_recommended_for_user(PDO $pdo, int $userId, ?int $organizationId = null): bool
 {
     if ($userId <= 0) {
         return false;
@@ -30,6 +30,10 @@ function two_factor_required_for_user(PDO $pdo, int $userId, ?int $organizationI
         '2fa.manage',
         'invoices.mark_paid',
         'financial.manage',
+        'approvals.review',
+        'workforce.manage',
+        'employee_pay.view',
+        'employee_pay.manage',
     ];
     foreach ($privilegedPermissions as $permission) {
         if (user_can($pdo, $userId, $permission, 0)) {
@@ -37,34 +41,6 @@ function two_factor_required_for_user(PDO $pdo, int $userId, ?int $organizationI
         }
     }
     return false;
-}
-
-function two_factor_enforce_required(PDO $pdo, string $page): void
-{
-    if (empty($_SESSION['user']['id'])) {
-        return;
-    }
-
-    $allowed = [
-        '2fa-setup',
-        '2fa-setup-action',
-        '2fa-verify',
-        '2fa-verify-action',
-        'account',
-        'account-update',
-        'logout',
-        'logout-confirm',
-        'session-status',
-    ];
-    if (in_array($page, $allowed, true)) {
-        return;
-    }
-
-    $userId = (int)$_SESSION['user']['id'];
-    if (two_factor_required_for_user($pdo, $userId) && !two_factor_enabled_for_user($pdo, $userId)) {
-        header('Location: /?page=2fa-setup&required=1');
-        exit;
-    }
 }
 
 function two_factor_warning_needed(PDO $pdo, string $page): bool
@@ -88,5 +64,5 @@ function two_factor_warning_needed(PDO $pdo, string $page): bool
     }
 
     $userId = (int)$_SESSION['user']['id'];
-    return two_factor_required_for_user($pdo, $userId) && !two_factor_enabled_for_user($pdo, $userId);
+    return two_factor_recommended_for_user($pdo, $userId) && !two_factor_enabled_for_user($pdo, $userId);
 }

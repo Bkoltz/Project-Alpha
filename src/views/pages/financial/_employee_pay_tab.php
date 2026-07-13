@@ -1,4 +1,6 @@
 <?php
+http_response_code(410);
+exit('Retired integration page. Use /pay.');
 $payRows = [];
 try {
     $payStmt = $pdo->prepare("SELECT epr.*,COALESCE(NULLIF(epr.employee_name_snapshot,''),NULLIF(u.username,''),u.email,epr.external_employee_id,'Unlinked employee') AS employee_name,u.email FROM employee_pay_records epr LEFT JOIN users u ON u.id=epr.user_id WHERE epr.deleted_at IS NULL AND (?=0 OR epr.organization_id=?) ORDER BY COALESCE(epr.accrued_at,epr.created_at) DESC LIMIT 250");

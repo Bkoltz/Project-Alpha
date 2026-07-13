@@ -1,16 +1,9 @@
-# Project Alpha — Docker Compose (pull prebuilt GHCR images)
+# Project Alpha — canonical Docker Compose definition
 #
-# SETUP:
-#   1. Change the two database passwords below (search for "changeme")
-#   2. Run: docker compose pull && docker compose up -d
-#   3. Open http://localhost:1627
-#   4. Follow the first-time setup screen to create the initial administrator
-#   5. Go to Settings > Billing to enter Stripe keys (stored encrypted in DB)
-#
-# No .env file needed. No build step — images are pulled from GHCR.
-# Registry: ghcr.io/ledgetoptechnologies/project-alpha
-#   web : ghcr.io/ledgetoptechnologies/project-alpha:latest
-#   cron: ghcr.io/ledgetoptechnologies/project-alpha:cron-latest
+# This is the only tracked Compose file. It pulls the production images from
+# GHCR and uses project-scoped named volumes, which also work in TrueNAS.
+# Change the database passwords before deployment. Backup archive encryption is
+# optional; if enabled, use the same durable key in both web and cron.
 
 services:
   migrate:
@@ -33,7 +26,7 @@ services:
   web:
     image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
     ports:
-      - "${PROJECT_ALPHA_PORT:-1627}:80"
+      - "1627:80"
     environment:
       DB_HOST: db
       DB_PORT: 3306
@@ -41,8 +34,10 @@ services:
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_secure_pass
       APP_ENV: production
+      APP_AUTH_DISABLED: "false"
       AUTOPAY_BETA_ENABLED: "false"
-      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
+      # Optional. Match the cron value exactly and retain it for restores.
+      BACKUP_ENCRYPTION_KEY: ""
       TRUSTED_PROXIES: "172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8"
     depends_on:
       migrate:
@@ -59,6 +54,29 @@ services:
       - pa_config:/var/www/config
       - pa_backups:/var/www/backups
 
+  worker:
+    image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
+    command: ["php", "/var/www/bin/worker.php"]
+    user: "33:33"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      MYSQL_DATABASE: project_alpha
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: changeme_secure_pass
+      APP_ENV: production
+      WORKER_SLEEP_SECONDS: "5"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - pa_uploads:/var/www/src/uploads
+      - pa_config:/var/www/config
+      - pa_backups:/var/www/backups
+
   cron:
     image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"
     environment:
@@ -67,10 +85,11 @@ services:
       MYSQL_DATABASE: project_alpha
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_secure_pass
-      BACKUP_RETENTION_DAYS: "10"
       APP_ENV: production
       AUTOPAY_BETA_ENABLED: "false"
-      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
+      # Optional. Match the web value exactly and retain it for restores.
+      BACKUP_ENCRYPTION_KEY: ""
+      BACKUP_RETENTION_DAYS: "10"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -83,7 +102,7 @@ services:
       - pa_backups:/var/www/backups
 
   db:
-    image: "mysql:8"
+    image: "mysql:8.4"
     restart: unless-stopped
     command: --log-error-verbosity=1
     environment:
@@ -94,11 +113,11 @@ services:
     volumes:
       - pa_db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      test: ["CMD-SHELL", 'MYSQL_PWD="$${MYSQL_ROOT_PASSWORD}" mysqladmin ping -h 127.0.0.1 -uroot --silent']
       interval: 10s
       timeout: 5s
-      start_period: 40s
-      retries: 10
+      start_period: 60s
+      retries: 12
 
 volumes:
   pa_uploads: {}

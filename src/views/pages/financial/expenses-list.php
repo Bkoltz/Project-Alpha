@@ -9,27 +9,17 @@ require_once __DIR__ . '/../../../utils/acl.php';
 $orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $csrfToken = csrf_sf_token('expense');
-$showEmployeePay = false;
-try {
-    $showEmployeePay = (bool)$pdo->query('SELECT enabled FROM alphaledger_policy WHERE singleton=1')->fetchColumn()
-        || (bool)$pdo->query('SELECT 1 FROM employee_pay_records LIMIT 1')->fetchColumn();
-} catch (Throwable $ignored) {
-}
 
 $tabs = [
     'assets'     => ['label' => 'Assets',     'file' => '_assets_tab.php',     'hint' => 'Equipment and depreciation'],
     'expenses'   => ['label' => 'Expenses',   'file' => '_expenses_tab.php',   'hint' => 'Spending ledger'],
     'recurring'  => ['label' => 'Recurring',  'file' => '_recurring_expenses_tab.php', 'hint' => 'Predictable costs'],
-    'employee-pay' => ['label' => 'Employee Pay', 'file' => '_employee_pay_tab.php', 'hint' => 'AlphaLedger accruals'],
     'receipts'   => ['label' => 'Receipts',   'file' => 'receipts-list.php',   'hint' => 'Uploads and matches'],
     'mileage'    => ['label' => 'Mileage',    'file' => 'mileage-list.php',    'hint' => 'Business trips'],
     'vendors'    => ['label' => 'Vendors',    'file' => 'vendors-list.php',    'hint' => 'Suppliers'],
     'categories' => ['label' => 'Categories', 'file' => 'categories-list.php', 'hint' => 'Tax buckets'],
     'audit'      => ['label' => 'Audit',      'file' => 'audit.php',           'hint' => 'Export reviews'],
 ];
-if (!$showEmployeePay) {
-    unset($tabs['employee-pay']);
-}
 
 $active = $_GET['tab'] ?? 'expenses';
 if (!isset($tabs[$active])) $active = 'expenses';
@@ -38,7 +28,6 @@ $stats = [
     'assets' => 0,
     'expenses' => 0,
     'recurring' => 0,
-    'employee-pay' => 0,
     'receipts' => 0,
     'mileage' => 0,
     'vendors' => 0,
@@ -61,10 +50,6 @@ try {
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM recurring_expenses re WHERE {$recurringScopeWhere} AND re.status='active'");
     $countStmt->execute($recurringScopeParams);
     $stats['recurring'] = (int)$countStmt->fetchColumn();
-
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM employee_pay_records WHERE (?=0 OR organization_id=?) AND status='pending'");
-    $countStmt->execute([$orgId, $orgId]);
-    $stats['employee-pay'] = (int)$countStmt->fetchColumn();
 
     [$receiptScopeWhere, $receiptScopeParams] = finance_scope_clause($pdo, 'r', $userId, $orgId, 'uploaded_by');
     $countStmt = $pdo->prepare("SELECT COUNT(*) FROM receipts r WHERE {$receiptScopeWhere}");

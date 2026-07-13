@@ -15,6 +15,7 @@ class LinkResolverService
         $this->pdo = $pdo;
         $this->providerFactory = $providerFactory;
         $this->loadConfig();
+        $this->clearResolverExpirationDates();
     }
 
     private function loadConfig(): void
@@ -395,7 +396,14 @@ class LinkResolverService
                         'tip' => $diagnostics[0]['tip'] ?? null,
                     ];
                 }
-                return ['success' => false, 'message' => 'No exact folder match found'];
+                $markedUnavailable = ($this->config['scan_mode'] ?? 'quick') === 'full'
+                    && $this->markResolverLinkUnavailable($context, $linkType);
+                return [
+                    'success' => false,
+                    'message' => $markedUnavailable
+                        ? 'No exact folder match found; the existing resolver link was marked unavailable.'
+                        : 'No exact folder match found',
+                ];
             }
             if ($mode === 'review') {
                 return ['success' => false, 'review_required' => true, 'message' => 'Resolver mode is review; found ' . count($matches) . ' candidate(s).'];
@@ -419,9 +427,7 @@ class LinkResolverService
                 return ['success' => false, 'message' => 'Could not generate public link'];
             }
 
-            $expirationDays = (int)($providerConfig['default_expiration_days'] ?? $this->config['default_expiration_days']);
-            $expirationDate = date('Y-m-d', strtotime('+' . max(1, $expirationDays) . ' days'));
-            $this->upsertResolverLink($context, $linkType, $publicLink, $expirationDate);
+            $this->upsertResolverLink($context, $linkType, $publicLink);
 
             return ['success' => true, 'url' => $publicLink];
         } catch (Throwable $e) {
@@ -550,7 +556,7 @@ class LinkResolverService
         return $safe;
     }
 
-    private function upsertResolverLink(array $context, string $linkType, string $url, string $expirationDate): void
+    private function upsertResolverLink(array $context, string $linkType, string $url): void
     {
         $entityType = (string)$context['entity_type'];
         $entityId = (int)$context['entity_id'];
@@ -562,14 +568,13 @@ class LinkResolverService
         if ($existingId > 0) {
             $stmt = $this->pdo->prepare('
                 UPDATE entity_links
-                SET title = ?, url = ?, expiration_date = ?, is_expired = 0, include_on_invoices = 1,
+                SET title = ?, url = ?, expiration_date = NULL, is_expired = 0, include_on_invoices = 1,
                     visibility_scope = ?, selected_department_ids = ?, resolver_mode = ?, last_verified = NOW(), updated_at = NOW()
                 WHERE id = ?
             ');
             $stmt->execute([
                 (string)($context['title'] ?? 'Content Folder'),
                 $url,
-                $expirationDate,
                 (string)($context['visibility_scope'] ?? 'entity_only'),
                 !empty($context['selected_department_ids']) ? json_encode(array_values(array_map('intval', $context['selected_department_ids']))) : null,
                 (string)($context['resolver_mode'] ?? 'auto_attach'),
@@ -581,7 +586,7 @@ class LinkResolverService
         $stmt = $this->pdo->prepare('
             INSERT INTO entity_links
                 (entity_type, entity_id, title, url, link_type, link_source, include_on_invoices, visibility_scope, selected_department_ids, resolver_mode, expiration_date, is_expired, last_verified)
-            VALUES (?, ?, ?, ?, ?, "resolver", 1, ?, ?, ?, ?, 0, NOW())
+            VALUES (?, ?, ?, ?, ?, "resolver", 1, ?, ?, ?, NULL, 0, NOW())
         ');
         $stmt->execute([
             $entityType,
@@ -592,8 +597,45 @@ class LinkResolverService
             (string)($context['visibility_scope'] ?? 'entity_only'),
             !empty($context['selected_department_ids']) ? json_encode(array_values(array_map('intval', $context['selected_department_ids']))) : null,
             (string)($context['resolver_mode'] ?? 'auto_attach'),
-            $expirationDate,
         ]);
+    }
+
+    private function clearResolverExpirationDates(): void
+    {
+        try {
+            $this->pdo->exec('
+                UPDATE entity_links
+                SET expiration_date = NULL
+                WHERE link_source = "resolver" AND expiration_date IS NOT NULL
+            ');
+        } catch (Throwable $e) {
+            @error_log('[LinkResolverService] Error clearing resolver expiration dates: ' . $e->getMessage());
+        }
+    }
+
+    private function markResolverLinkUnavailable(array $context, string $linkType): bool
+    {
+        try {
+            $stmt = $this->pdo->prepare('
+                UPDATE entity_links
+                SET expiration_date = NULL, is_expired = 1, last_verified = NOW(), updated_at = NOW()
+                WHERE entity_type = ?
+                  AND entity_id = ?
+                  AND link_type = ?
+                  AND link_source = "resolver"
+                  AND COALESCE(ignore_auto_generation, 0) = 0
+                  AND COALESCE(is_expired, 0) = 0
+            ');
+            $stmt->execute([
+                (string)$context['entity_type'],
+                (int)$context['entity_id'],
+                $linkType,
+            ]);
+            return $stmt->rowCount() > 0;
+        } catch (Throwable $e) {
+            @error_log('[LinkResolverService] Error marking missing resolver link unavailable: ' . $e->getMessage());
+            return false;
+        }
     }
 
     private function existingResolverLinkUrl(array $context, string $linkType): ?string

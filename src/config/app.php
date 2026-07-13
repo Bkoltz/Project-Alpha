@@ -170,7 +170,9 @@ if ($tz !== '') {
 
 // Load Stripe keys and SMTP config from app_config DB table (UI-entered keys, encrypted)
 // This takes precedence over env-vars and settings.json so that keys entered
-// via the Settings UI are used. Env-vars still work as a fallback.
+// via the Settings UI are used. Env-vars still work as a fallback. Unit tests
+// explicitly skip this eager runtime lookup so collection never requires MySQL.
+if (!filter_var(getenv('APP_SKIP_DB_CONFIG') ?: 'false', FILTER_VALIDATE_BOOLEAN)) {
 try {
     if (!isset($pdo)) {
         require_once __DIR__ . '/db.php';
@@ -246,4 +248,5 @@ try {
     }
 } catch (Throwable $e) {
     // DB not available yet or table doesn't exist — fall through to env vars
+}
 }

@@ -20,7 +20,7 @@ foreach ($permissionGroups as $group => $keys) {
 
 // Role context: defaults to member if not supplied by including page.
 $targetRole = $targetRole ?? ($user['role'] ?? 'member');
-$targetRole = in_array($targetRole, ['admin', 'owner', 'staff', 'member'], true) ? $targetRole : 'member';
+$targetRole = in_array($targetRole, ['admin', 'owner', 'staff', 'member', 'employee'], true) ? $targetRole : 'member';
 
 // Load existing app-level overrides for this user
 $overrides = [];

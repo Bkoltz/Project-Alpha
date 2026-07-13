@@ -48,7 +48,14 @@ function page_permission_map(): array
         'settings/tax-import-handler'        => 'settings.manage',
         'settings/tax-import-chunk'          => 'settings.manage',
         'settings/tax-rates-handler'         => 'settings.manage',
-        'settings/alphaledger-handler'        => 'settings.manage',
+
+        // Unified Workforce modules
+        'workforce/time'        => ['timekeeping.self', 'timekeeping.manage'],
+        'workforce/admin'       => 'workforce.manage',
+        'workforce/approvals'   => 'approvals.review',
+        'workforce/pay'         => ['employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
+        // The action controller performs an action-specific permission check.
+        'workforce/action'      => null,
 
         // Accounts / users
         'accounts'               => 'users.manage',
@@ -230,7 +237,6 @@ function page_permission_map(): array
 
         // Financial module
         'financial/financial-dashboard'    => 'financial.view',
-        'financial/ledger'                 => 'settings.manage',
         'financial/expenses-list'          => 'financial.view',
         'financial/expense-create'         => 'financial.manage',
         'financial/expense-detail'         => 'financial.view',
@@ -251,16 +257,10 @@ function page_permission_map(): array
         'financial/financial-api'          => 'financial.view',
         'financial/forms-list'     => 'financial.view',
         'financial/expense-report' => 'financial.view',
-        'time-tracking'            => 'time_tracking.view',
 
         // Time tracking
-        'time-tracking/create'   => 'time_tracking.manage',
-        'time-tracking/delete'   => 'time_tracking.manage',
-        'time-tracking/start-timer' => 'time_tracking.manage',
-        'time-tracking/stop-timer' => 'time_tracking.manage',
-        'time-tracking/unbilled'   => 'time_tracking.view',
-        'time-tracking/options'    => 'time_tracking.view',
-        'time-tracking/update'     => 'time_tracking.manage',
+        'time-tracking/unbilled'   => 'billing.view',
+        'time-tracking/options'    => 'billing.view',
 
         // Public links
         'public-link-create'  => 'public_links.create',
@@ -327,9 +327,12 @@ function acl_middleware(PDO $pdo, string $page): void
         deny_response($page);
     }
 
-    if (user_can($pdo, $userId, $perm, 0)) return;
+    $permissions = is_array($perm) ? $perm : [$perm];
+    foreach ($permissions as $candidate) {
+        if (user_can($pdo, $userId, $candidate, 0)) return;
+    }
 
-    audit_log($pdo, 'acl.denied', 'permission', null, ['page' => $page, 'required' => $perm, 'user_id' => $userId]);
+    audit_log($pdo, 'acl.denied', 'permission', null, ['page' => $page, 'required' => implode('|', $permissions), 'user_id' => $userId]);
     deny_response($page);
 }
 

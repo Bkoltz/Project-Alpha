@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../src/config/db.php';
 // Secure session cookies and start session
 $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
     || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
@@ -11,9 +12,10 @@ session_set_cookie_params([
     'domain' => '',
     'secure' => $isSecure,
     'httponly' => true,
-    'samesite' => 'Lax',
+    'samesite' => 'Strict',
 ]);
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_set_save_handler(new App\Security\DatabaseSessionHandler($pdo, 900, 7 * 24 * 60 * 60), true);
     session_start();
 }
 ob_start();
@@ -21,6 +23,26 @@ ob_start();
 // Security headers
 require_once __DIR__ . '/../src/utils/security_headers.php';
 send_security_headers();
+
+// Resolve clean module routes before falling back to PA's legacy ?page router.
+$requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/');
+$moduleRoutes = [
+    '/time' => 'workforce/time',
+    '/time/action' => 'workforce/action',
+    '/workforce' => 'workforce/admin',
+    '/workforce/action' => 'workforce/action',
+    '/approvals' => 'workforce/approvals',
+    '/approvals/action' => 'workforce/action',
+    '/pay' => 'workforce/pay',
+    '/pay/action' => 'workforce/action',
+];
+if (!isset($_GET['page']) && isset($moduleRoutes[$requestPath])) {
+    $_GET['page'] = $moduleRoutes[$requestPath];
+}
+if (!isset($_GET['page']) && $requestPath === '/time-tracking') {
+    header('Location: /time', true, 302);
+    exit;
+}
 
 // Resolve requested page (allow letters, numbers, dashes, and slashes)
 // Be defensive: some clients may accidentally URL-encode the entire query
@@ -49,6 +71,25 @@ $pageAliases = [
     'public_redirect' => 'public-redirect',
 ];
 $page = $pageAliases[$page] ?? $page;
+
+// The former PA time tracker and every PA<->AL connection endpoint are retired,
+// not compatibility-shimmed. Existing billing rows remain readable elsewhere.
+if ($page === 'time-tracking' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    header('Location: /time', true, 302);
+    exit;
+}
+$retiredAlphaLedgerPages = [
+    'settings/alphaledger-handler', 'settings/alphaledger-time-admin',
+    'time-tracking/create', 'time-tracking/update', 'time-tracking/delete',
+    'time-tracking/start-timer', 'time-tracking/stop-timer', 'time-tracking/alphaledger-command',
+    'financial/ledger',
+];
+if (in_array($page, $retiredAlphaLedgerPages, true)) {
+    http_response_code(410);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'This standalone AlphaLedger integration endpoint has been retired. Use /time, /workforce, /approvals, or /pay.';
+    exit;
+}
 
 // Helper: Resolve view path with case-insensitive subfolder checks
 function resolve_view_path(string $page): string
@@ -150,7 +191,7 @@ if ($isApiEndpoint) {
         header('Access-Control-Allow-Origin: ' . $origin);
         header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-CSRF-Token, Idempotency-Key, X-AL-Timestamp, X-AL-Signature');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key, X-CSRF-Token, Idempotency-Key');
     }
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
         http_response_code(204);
@@ -171,11 +212,6 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
         exit;
     }
     $apiKey = api_require_key([$requiredApiScope]);
-
-    if ($page === 'api-v1-alphaledger') {
-        require_once __DIR__ . '/../src/controllers/api/alphaledger_integration.php';
-        exit;
-    }
 
     // Map API endpoints
     $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients'];
@@ -350,7 +386,8 @@ if (!$authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages,
     exit;
 }
 
-// Session timeout: expire sessions after 8 hours of inactivity
+// Privileged and workforce sessions use a 15-minute idle timeout. The
+// database session handler separately enforces a seven-day absolute maximum.
 if (!empty($_SESSION['user'])) {
     try {
         $sessionUser = $pdo->prepare('SELECT role, is_disabled, deleted_at, auth_version FROM users WHERE id = ? LIMIT 1');
@@ -382,7 +419,7 @@ if (!empty($_SESSION['user'])) {
         exit;
     }
 
-    $sessionTimeout = 8 * 60 * 60; // 8 hours
+    $sessionTimeout = 15 * 60;
     if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $sessionTimeout) {
         $_SESSION = [];
         session_destroy();
@@ -435,9 +472,9 @@ if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     }
 }
 
-// Evaluate 2FA policy for administrators and privileged operators. Enforcement is
-// intentionally non-blocking: the layout renders a dismissible warning instead
-// of redirecting users away from their work.
+// Encourage administrators and privileged operators to enroll TOTP. This is
+// intentionally non-blocking: the layout offers setup or dismissal instead of
+// redirecting users away from their work.
 if (!empty($_SESSION['user']) && !in_array($page, $publicPages, true)) {
     try {
         require_once __DIR__ . '/../src/config/db.php';
@@ -756,7 +793,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'project/project-invoice-payment',
         'project/projects-update-status',
         'project-notes-update',
-        'financial/employee-pay-status',
 
         // Quotes
         'quote/quotes-create',
@@ -846,13 +882,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'financial/recurring-expense-handler',
         'financial/csv-import',
 
-        // Time Tracking
-        'time-tracking/create',
-        'time-tracking/update',
-        'time-tracking/delete',
-        'time-tracking/start-timer',
-        'time-tracking/stop-timer',
-
         // Email / legal / other
         'email-send',
         'email-test',
@@ -888,7 +917,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //   settings/link-test-connection - controller validates CSRF (csrf_validate)
     //   settings/link-resolver-run    - controller validates CSRF (csrf_validate)
     //   legal/tos-accept             - controller validates CSRF (csrf_sf_verify_or_redirect 'auth')
-    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'time-tracking/create', 'time-tracking/update', 'time-tracking/delete', 'time-tracking/start-timer', 'time-tracking/stop-timer', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
+    $skipCsrfFor = ['auth', 'reset-request', 'reset-verify', 'reset-update', '2fa-setup-action', '2fa-verify-action', 'public-quote-action', 'public-contract-sign', 'public-contract-action', 'public-project-upload', 'organization/org-create', 'organization/organization-update-notes', 'stripe-webhook', 'stripe-webhook-legacy', 'settings/link-test-connection', 'settings/link-resolver-run', 'legal/tos-accept'];
     if (!in_array($page, $skipCsrfFor, true)) {
         csrf_verify_post_or_redirect($page);
     }
@@ -897,12 +926,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
         exit;
     }
-    if ($page === 'settings/alphaledger-handler') {
-        require_once __DIR__ . '/../src/controllers/settings/alphaledger_handler.php';
-        exit;
-    }
-    if ($page === 'financial/employee-pay-status') {
-        require_once __DIR__ . '/../src/controllers/financial/employee_pay_status.php';
+    if ($page === 'workforce/action') {
+        require_once __DIR__ . '/../src/controllers/workforce/action.php';
         exit;
     }
     if ($page === 'settings-backup') {
@@ -1383,26 +1408,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/csv-import') {
         require_once __DIR__ . '/../src/controllers/financial/csv_import.php';
-        exit;
-    }
-    if ($page === 'time-tracking/create') {
-        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_create.php';
-        exit;
-    }
-    if ($page === 'time-tracking/update') {
-        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_update.php';
-        exit;
-    }
-    if ($page === 'time-tracking/delete') {
-        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_delete.php';
-        exit;
-    }
-    if ($page === 'time-tracking/start-timer') {
-        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_start_timer.php';
-        exit;
-    }
-    if ($page === 'time-tracking/stop-timer') {
-        require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_stop_timer.php';
         exit;
     }
     if ($page === 'public-link-create') {

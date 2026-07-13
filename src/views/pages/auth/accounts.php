@@ -19,11 +19,17 @@ $csrf = csrf_token();
 
 // Fetch all users
 try {
-    $stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
+    $stmt = $pdo->query("SELECT u.id,u.email,u.username,u.role,u.is_disabled,u.force_password_reset,u.created_at,
+        tm.id team_member_id,tm.profile_source,tm.last_synced_at,ep.employment_status
+        FROM users u
+        LEFT JOIN team_members tm ON tm.user_id=u.id
+        LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+        ORDER BY u.created_at DESC");
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $stmt = $pdo->query('SELECT id, email, username, role, is_disabled, force_password_reset, created_at FROM users ORDER BY created_at DESC');
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach($users as &$fallbackUser){$fallbackUser['team_member_id']=null;$fallbackUser['profile_source']='pa';$fallbackUser['last_synced_at']=null;$fallbackUser['employment_status']=null;}unset($fallbackUser);
 }
 
 // Canonical permission catalog for the create-page grid
@@ -416,6 +422,7 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
             <th style="padding:12px;text-align:left;font-weight:600">Username</th>
             <th style="padding:12px;text-align:left;font-weight:600">Role</th>
             <th style="padding:12px;text-align:left;font-weight:600">Status</th>
+            <th style="padding:12px;text-align:left;font-weight:600">Workforce identity</th>
             <th style="padding:12px;text-align:left;font-weight:600">Created</th>
             <th style="padding:12px;text-align:right;font-weight:600">Actions</th>
           </tr>
@@ -442,6 +449,16 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
                 <span style="padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;background:#d1fae5;color:#065f46">Active</span>
               <?php endif; ?>
             </td>
+            <td style="padding:12px">
+              <?php if(($user['role'] ?? '') === 'employee' && !empty($user['employment_status'])): ?>
+                <span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:12px;font-weight:700">Workforce employee</span>
+                <small style="display:block;margin-top:4px;color:#64748b"><?php echo htmlspecialchars(ucfirst((string)$user['employment_status'])); ?> · uses this PA account for timekeeping</small>
+              <?php elseif(!empty($user['team_member_id'])): ?>
+                <span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:12px;font-weight:700">PA account</span>
+              <?php else: ?>
+                <span style="color:#92400e">Team-member record required</span>
+              <?php endif; ?>
+            </td>
             <td style="padding:12px;color:#6b7280"><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
             <td style="padding:12px;text-align:right">
               <a href="/?page=account-edit&id=<?php echo $user['id']; ?>" data-skip-nav style="padding:6px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;text-decoration:none;color:#374151;font-size:14px">Edit</a>
@@ -451,7 +468,7 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
 
           <?php if (empty($users)): ?>
           <tr>
-            <td colspan="6" style="padding:40px;text-align:center;color:#6b7280">No users found.</td>
+            <td colspan="7" style="padding:40px;text-align:center;color:#6b7280">No users found.</td>
           </tr>
           <?php endif; ?>
         </tbody>

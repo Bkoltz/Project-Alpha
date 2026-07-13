@@ -4,10 +4,18 @@ description: Learn what Project Alpha does and how its business workflows fit to
 ---
 
 <section class="hero">
-
-# Project Alpha
-
-Project Alpha is a self-hosted business operations app for managing clients, projects, quotes, contracts, invoices, payments, expenses, receipts, mileage, forms, and supporting documents.
+  <p class="eyebrow">Project-Alpha Documentation</p>
+  <h1>Run your business,<br><span>not your paperwork.</span></h1>
+  <p class="lead">Learn how to manage clients, projects, quotes, contracts, invoices, payments, expenses, and operations with Project-Alpha.</p>
+  <div class="hero-actions">
+    <a class="button button-primary" href="getting-started/">Get started</a>
+    <a class="button button-secondary" href="workflows/">Explore workflows</a>
+  </div>
+  <div class="hero-points" aria-label="Project Alpha benefits">
+    <span>Open source</span>
+    <span>Self-hostable</span>
+    <span>Built for small business</span>
+  </div>
 
 </section>
 

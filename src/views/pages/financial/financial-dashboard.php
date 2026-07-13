@@ -31,16 +31,6 @@ $totalExpenses = (float)$expenseSummary['total'];
 $expenseCount = (int)$expenseSummary['count'];
 $netProfit = $totalIncome - $totalExpenses;
 
-$employeePayByCurrency = [];
-$showAlphaLedgerFinancials = ($_SESSION['user']['role'] ?? '') === 'admin';
-if ($showAlphaLedgerFinancials) {
-    try {
-        $payStmt = $pdo->prepare("SELECT currency,COALESCE(SUM(CASE WHEN status<>'voided' THEN amount ELSE 0 END),0) total,COALESCE(SUM(CASE WHEN status='pending' THEN amount ELSE 0 END),0) pending,COALESCE(SUM(CASE WHEN status='paid' THEN amount ELSE 0 END),0) paid FROM employee_pay_records WHERE deleted_at IS NULL AND (?=0 OR COALESCE(organization_id,0)=?) AND DATE(COALESCE(accrued_at,created_at)) BETWEEN ? AND ? GROUP BY currency ORDER BY currency");
-        $payStmt->execute([$orgId,$orgId,$start,$end]);
-        $employeePayByCurrency = $payStmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $ignored) {}
-}
-
 $mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(m.miles * m.mileage_rate),0) as total, COALESCE(SUM(m.miles),0) as miles, COUNT(*) as trips FROM mileage_logs m WHERE {$mileageScopeWhere} AND m.purpose='business' AND m.trip_date BETWEEN ? AND ?");
 $mileageStmt->execute(array_merge($mileageScopeParams, [$start, $end]));
 $mileageSummary = $mileageStmt->fetch(PDO::FETCH_ASSOC);
@@ -169,7 +159,6 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
       <a href="/?page=financial/asset-form" class="btn">Add Asset</a>
       <a href="/?page=financial/expense-create" class="btn">Add Expense</a>
       <a href="/?page=financial/expense-report" class="btn">Reports</a>
-      <?php if ($showAlphaLedgerFinancials && $employeePayByCurrency): ?><a href="/?page=financial/ledger" class="btn">Ledger</a><?php endif; ?>
     </div>
   </div>
 
@@ -194,12 +183,6 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
         <div class="finance-kpi__meta">Collected payments</div>
       </div>
     </article>
-    <?php if ($showAlphaLedgerFinancials && $employeePayByCurrency): ?>
-    <article class="finance-kpi">
-      <div class="finance-kpi__icon info">ep</div>
-      <div><div class="finance-kpi__label">Employee Pay</div><div class="finance-kpi__value"><?php foreach($employeePayByCurrency as $i=>$pay): ?><?php echo $i?'<br>':''; ?><?php echo htmlspecialchars($pay['currency'].' '.number_format((float)$pay['total'],2)); ?><?php endforeach; ?></div><div class="finance-kpi__meta"><?php foreach($employeePayByCurrency as $i=>$pay): ?><?php echo $i?' · ':''; ?><?php echo htmlspecialchars($pay['currency'].' pending '.number_format((float)$pay['pending'],2).' / paid '.number_format((float)$pay['paid'],2)); ?><?php endforeach; ?><br><strong>Not included in Income, Expenses, or Net Profit.</strong></div></div>
-    </article>
-    <?php endif; ?>
     <article class="finance-kpi">
       <div class="finance-kpi__icon danger">-</div>
       <div>
