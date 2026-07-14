@@ -22,6 +22,7 @@ try {
 
   // Void related invoices (invoices.status ENUM does include 'void')
   $pdo->prepare('UPDATE time_entries SET billed=0, invoice_item_id=NULL, invoice_id=NULL WHERE invoice_id IN (SELECT id FROM invoices WHERE contract_id=?)')->execute([$id]);
+  $pdo->prepare('UPDATE mileage_logs SET billed=0, invoice_item_id=NULL, invoice_id=NULL WHERE invoice_id IN (SELECT id FROM invoices WHERE contract_id=?)')->execute([$id]);
   $pdo->prepare("UPDATE invoices SET status='void' WHERE contract_id=?")->execute([$id]);
   // Revoke public links for those invoices
   try {

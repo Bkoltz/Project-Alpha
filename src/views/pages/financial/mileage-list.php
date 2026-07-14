@@ -63,16 +63,16 @@ $personalMiles = 0.0;
 foreach ($logs as $log) {
     $miles = (float)$log['miles'];
     $rate = (float)$log['mileage_rate'];
-    $deductibleMiles = !empty($log['round_trip']) ? $miles * 2 : $miles;
-    $deductibleAmount = $deductibleMiles * $rate;
+    $loggedMiles = !empty($log['round_trip']) ? $miles * 2 : $miles;
+    $deductibleAmount = $loggedMiles * $rate;
 
-    $totalMiles += $miles;
+    $totalMiles += $loggedMiles;
     $totalDeductible += $deductibleAmount;
 
     if ($log['purpose'] === 'business') {
-        $businessMiles += $deductibleMiles;
+        $businessMiles += $loggedMiles;
     } else {
-        $personalMiles += $deductibleMiles;
+        $personalMiles += $loggedMiles;
     }
 }
 
@@ -83,9 +83,9 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <section>
-  <div class="page-head">
-    <h2>Mileage Log</h2>
-    <a href="/?page=financial/mileage-create" class="btn btn-primary">Log Mileage</a>
+  <div class="expense-ledger__head">
+    <div><h2>Mileage</h2><p class="muted">Track business travel, reimbursement value, and client-billable miles.</p></div>
+    <div class="finance-actions"><a href="/?page=financial/mileage-create" class="btn btn-primary">Log Mileage</a></div>
   </div>
 
   <?php if (!empty($_GET['created'])): ?>
@@ -174,8 +174,8 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
         <tr>
           <th>Date</th>
           <th>Start → End</th>
-          <th>Miles</th>
-          <th>Round Trip</th>
+          <th>Logged Miles</th>
+          <th>Return Trip</th>
           <th>Rate</th>
           <th>Deductible Amount</th>
           <th>Purpose</th>
@@ -193,8 +193,8 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
           <?php foreach ($logs as $log):
             $miles = (float)$log['miles'];
             $rate = (float)$log['mileage_rate'];
-            $deductibleMiles = !empty($log['round_trip']) ? $miles * 2 : $miles;
-            $deductibleAmount = $deductibleMiles * $rate;
+            $loggedMiles = !empty($log['round_trip']) ? $miles * 2 : $miles;
+            $deductibleAmount = $loggedMiles * $rate;
           ?>
             <tr>
               <td><?php echo htmlspecialchars($log['trip_date']); ?></td>
@@ -205,10 +205,10 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
                 echo $startText . ' → ' . $endText;
                 ?>
               </td>
-              <td><?php echo number_format($miles, 2); ?></td>
+              <td><?php echo number_format($loggedMiles, 2); ?></td>
               <td style="text-align:center">
                 <?php if (!empty($log['round_trip'])): ?>
-                  <span title="Round trip: deduction uses double miles">↔️</span>
+                  <span title="Both outbound and return miles are included in the log">Yes</span>
                 <?php else: ?>
                   <span class="muted">—</span>
                 <?php endif; ?>
@@ -219,6 +219,9 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
               <td>
                 <?php if (!empty($log['is_billable'])): ?>
                   <span class="status-pill status-pill--paid">Yes</span>
+                  <?php if (!empty($log['round_trip'])): ?>
+                    <div class="muted text-sm"><?php echo !empty($log['bill_return_trip']) ? 'Both directions' : 'Outbound only'; ?></div>
+                  <?php endif; ?>
                 <?php else: ?>
                   <span class="status-pill status-pill--unpaid">No</span>
                 <?php endif; ?>

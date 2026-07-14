@@ -2,18 +2,23 @@ var itemCounterCo = 0;
 
 function money(n) { return '$' + (Number(n) || 0).toFixed(2) }
 
-function addItemCo(item = '', desc = '', qty = 1, price = 0) {
+function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each') {
     var wrap = document.createElement('div');
     var itemId = 'itemCo_' + (itemCounterCo++);
     var descId = 'descCo_' + itemCounterCo;
     var priceId = 'priceCo_' + itemCounterCo;
-    wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
+    wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr 1fr auto'; wrap.style.gap = '8px';
+    var selectedUnit = ['each', 'hour', 'mile'].includes(billingUnit) ? billingUnit : 'each';
     wrap.innerHTML = `
-    <input type="hidden" name="item_billing_unit[]" value="each">
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalcCo()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalcCo()">${desc}</textarea>
     <input required type="number" step="0.01" min="0" name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcCo()">
     <input id="${priceId}" required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalcCo()">
+    <select name="item_billing_unit[]" aria-label="Billing unit" style="padding:10px;border-radius:8px;border:1px solid #ddd">
+      <option value="each" ${selectedUnit === 'each' ? 'selected' : ''}>Each</option>
+      <option value="hour" ${selectedUnit === 'hour' ? 'selected' : ''}>Hours</option>
+      <option value="mile" ${selectedUnit === 'mile' ? 'selected' : ''}>Miles</option>
+    </select>
     <button type="button" onclick="this.parentElement.remove();recalcCo()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
     document.getElementById('itemsCo').appendChild(wrap);
@@ -176,8 +181,9 @@ function updateHourlyModeUICo() {
     var hourly = !!document.getElementById('billingModeHourlyCo')?.checked;
     var hint = document.getElementById('hourlyBillingHintCo');
     if (hint) hint.style.display = hourly ? 'block' : 'none';
-    document.querySelectorAll('#itemsCo input[name="item_billing_unit[]"]').forEach(function (el) {
-        el.value = hourly ? 'hour' : 'each';
+    document.querySelectorAll('#itemsCo select[name="item_billing_unit[]"]').forEach(function (el) {
+        if (hourly) el.value = 'hour';
+        else if (el.value === 'hour') el.value = 'each';
     });
     document.querySelectorAll('#itemsCo input[name="item_qty[]"]').forEach(function (el) {
         el.placeholder = hourly ? 'Est. hours' : 'Qty';

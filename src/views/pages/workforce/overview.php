@@ -3,11 +3,9 @@
 use App\Modules\Timekeeping\WorkforceSettings;
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-$isAdmin = ($_SESSION['user']['role'] ?? '') === 'admin';
-$manageWorkforce = $isAdmin
-    || user_can($pdo, $userId, 'workforce.manage', 0)
-    || user_can($pdo, $userId, 'timekeeping.manage', 0)
-    || user_can($pdo, $userId, 'approvals.review', 0);
+$isAdmin = in_array(acl_user_role($pdo, $userId), ['admin', 'owner'], true);
+$manageWorkforce = WorkforceSettings::canManageAllTime($pdo, $userId)
+    || WorkforceSettings::canReviewTime($pdo, $userId);
 $canViewPay = $isAdmin
     || user_can($pdo, $userId, 'employee_pay.self', 0)
     || user_can($pdo, $userId, 'employee_pay.view', 0)

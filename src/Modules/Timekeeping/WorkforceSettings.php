@@ -19,6 +19,8 @@ final class WorkforceSettings
             'default_billing_rate' => null,
             'require_project' => 0,
             'require_description' => 0,
+            'allow_non_admin_time_management' => 0,
+            'allow_non_admin_time_approval' => 0,
         ];
 
         try {
@@ -40,6 +42,8 @@ final class WorkforceSettings
             'workforce_default_billing_rate',
             'workforce_require_project',
             'workforce_require_description',
+            'workforce_allow_non_admin_time_management',
+            'workforce_allow_non_admin_time_approval',
         ];
         $placeholders = implode(',', array_fill(0, count($keys), '?'));
         $stmt = $pdo->prepare(
@@ -76,8 +80,36 @@ final class WorkforceSettings
         $settings['require_description'] = self::boolValue(
             $config['workforce_require_description'] ?? $settings['require_description']
         );
+        $settings['allow_non_admin_time_management'] = self::boolValue(
+            $config['workforce_allow_non_admin_time_management'] ?? 0
+        );
+        $settings['allow_non_admin_time_approval'] = self::boolValue(
+            $config['workforce_allow_non_admin_time_approval'] ?? 0
+        );
 
         return $settings;
+    }
+
+    public static function canManageAllTime(PDO $pdo, int $userId): bool
+    {
+        $role = function_exists('acl_user_role') ? \acl_user_role($pdo, $userId) : (string)($_SESSION['user']['role'] ?? '');
+        if (in_array($role, ['admin', 'owner'], true)) {
+            return true;
+        }
+        return self::load($pdo)['allow_non_admin_time_management'] === 1
+            && function_exists('user_can')
+            && \user_can($pdo, $userId, 'timekeeping.manage', 0);
+    }
+
+    public static function canReviewTime(PDO $pdo, int $userId): bool
+    {
+        $role = function_exists('acl_user_role') ? \acl_user_role($pdo, $userId) : (string)($_SESSION['user']['role'] ?? '');
+        if (in_array($role, ['admin', 'owner'], true)) {
+            return true;
+        }
+        return self::load($pdo)['allow_non_admin_time_approval'] === 1
+            && function_exists('user_can')
+            && \user_can($pdo, $userId, 'approvals.review', 0);
     }
 
     private static function boolValue(mixed $value): int

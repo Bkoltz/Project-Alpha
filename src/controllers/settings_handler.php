@@ -90,6 +90,11 @@ $settings = [
     'workforce_default_billing_rate' => null,
     'workforce_require_project' => 0,
     'workforce_require_description' => 0,
+    'workforce_allow_non_admin_time_management' => 0,
+    'workforce_allow_non_admin_time_approval' => 0,
+    'default_mileage_rate' => 0.670,
+    'default_mileage_include_return_trip' => 1,
+    'default_mileage_bill_return_trip' => 0,
     // App extras
     'primary_state' => null,
     'documents_valid_days' => 14,
@@ -344,6 +349,19 @@ if ($isSystemTab) {
     $settings['workforce_require_description'] = !empty($_POST['workforce_require_description']) ? 1 : 0;
 }
 
+if ($isWorkflowTab) {
+    $mileageRate = trim((string)($_POST['default_mileage_rate'] ?? ''));
+    if ($mileageRate === '' || !preg_match('/^\d+(?:\.\d{1,3})?$/', $mileageRate)) {
+        header('Location: /?page=settings&tab=workflow&error=' . urlencode('Default mileage rate must be a non-negative number with at most three decimal places.'));
+        exit;
+    }
+    $settings['default_mileage_rate'] = number_format((float)$mileageRate, 3, '.', '');
+    $settings['default_mileage_include_return_trip'] = !empty($_POST['default_mileage_include_return_trip']) ? 1 : 0;
+    $settings['default_mileage_bill_return_trip'] = !empty($_POST['default_mileage_bill_return_trip']) ? 1 : 0;
+    $settings['workforce_allow_non_admin_time_management'] = !empty($_POST['workforce_allow_non_admin_time_management']) ? 1 : 0;
+    $settings['workforce_allow_non_admin_time_approval'] = !empty($_POST['workforce_allow_non_admin_time_approval']) ? 1 : 0;
+}
+
 // SMTP settings
 if (isset($_POST['smtp_host'])) {
     $settings['smtp_host'] = trim((string)$_POST['smtp_host']) ?: null;
@@ -407,6 +425,8 @@ $generalConfigKeys = [
     'app_host', 'public_links_in_email', 'primary_state', 'timezone',
     'workforce_currency', 'workforce_default_hourly_rate', 'workforce_default_billing_rate',
     'workforce_require_project', 'workforce_require_description',
+    'workforce_allow_non_admin_time_management', 'workforce_allow_non_admin_time_approval',
+    'default_mileage_rate', 'default_mileage_include_return_trip', 'default_mileage_bill_return_trip',
     'terms', 'long_term_terms', 'on_demand_terms',
     'net_terms_days', 'documents_valid_days', 'payment_methods',
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',

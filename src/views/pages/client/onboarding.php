@@ -277,7 +277,11 @@ $notifyOnSubmitDefault = !array_key_exists('notify_client_onboarding_submit', $a
                     <div class="onboarding-review-box">
                       <strong>Organization decision</strong>
                       <div style="display:grid;gap:8px;margin-top:8px;font-size:13px">
-                        <label><input type="radio" name="organization_resolution" value="" checked> Leave organization as invited<?php echo !empty($invitation['target_organization_name']) ? ': ' . htmlspecialchars((string)$invitation['target_organization_name']) : ''; ?></label>
+                        <?php if (!empty($invitation['target_organization_name'])): ?>
+                          <label><input type="radio" name="organization_resolution" value="" checked> Keep invited organization "<?php echo htmlspecialchars((string)$invitation['target_organization_name']); ?>"</label>
+                        <?php else: ?>
+                          <label><input type="radio" name="organization_resolution" value="" checked> Leave organization blank (do not assign one)</label>
+                        <?php endif; ?>
                         <?php if ($orgMatches): ?>
                           <label>Match typed organization to
                             <select class="input" name="match_organization_id" style="margin-top:4px">

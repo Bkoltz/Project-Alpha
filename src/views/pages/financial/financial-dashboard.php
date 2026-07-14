@@ -31,7 +31,7 @@ $totalExpenses = (float)$expenseSummary['total'];
 $expenseCount = (int)$expenseSummary['count'];
 $netProfit = $totalIncome - $totalExpenses;
 
-$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(m.miles * m.mileage_rate),0) as total, COALESCE(SUM(m.miles),0) as miles, COUNT(*) as trips FROM mileage_logs m WHERE {$mileageScopeWhere} AND m.purpose='business' AND m.trip_date BETWEEN ? AND ?");
+$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END * m.mileage_rate),0) as total, COALESCE(SUM(m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END),0) as miles, COUNT(*) as trips FROM mileage_logs m WHERE {$mileageScopeWhere} AND m.purpose='business' AND m.trip_date BETWEEN ? AND ?");
 $mileageStmt->execute(array_merge($mileageScopeParams, [$start, $end]));
 $mileageSummary = $mileageStmt->fetch(PDO::FETCH_ASSOC);
 $totalMileageDeduction = (float)($mileageSummary['total'] ?? 0);
@@ -155,7 +155,7 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
       <p class="finance-subtitle"><?php echo finance_dashboard_date($start); ?> to <?php echo finance_dashboard_date($end); ?></p>
     </div>
     <div class="finance-actions">
-      <a href="/?page=financial/expenses-list&tab=expenses" class="btn btn-primary">Assets &amp; Expenses</a>
+      <a href="/?page=financial/expenses-list" class="btn btn-primary">Assets &amp; Expenses</a>
       <a href="/?page=financial/asset-form" class="btn">Add Asset</a>
       <a href="/?page=financial/expense-create" class="btn">Add Expense</a>
       <a href="/?page=financial/expense-report" class="btn">Reports</a>

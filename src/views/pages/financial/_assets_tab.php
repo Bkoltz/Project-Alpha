@@ -166,7 +166,6 @@ $statusOptions = ['planned' => 'Planned', 'active' => 'Active', 'maintenance' =>
     <div class="finance-empty">
       <strong>No assets found</strong>
       <p class="muted">Add equipment, vehicles, tools, computers, furniture, or other tracked assets.</p>
-      <a href="/?page=financial/asset-form" class="btn btn-primary">Add Asset</a>
     </div>
   <?php else: ?>
     <div class="pa-table-wrap expense-table-wrap">

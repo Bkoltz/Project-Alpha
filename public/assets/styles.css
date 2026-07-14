@@ -695,7 +695,7 @@ body.nav-open{overflow:hidden}
 /* Expenses hub and ledger */
 .expenses-hub__tabs{
   display:grid;
-  grid-template-columns:repeat(8,minmax(0,1fr));
+  grid-template-columns:repeat(9,minmax(0,1fr));
   gap:10px;
   margin-bottom:18px;
 }
@@ -741,8 +741,6 @@ body.nav-open{overflow:hidden}
 }
 .expenses-hub__panel{display:none}
 .expenses-hub__panel.active{display:block}
-.expenses-hub__panel > section > .page-head:first-child,
-.expenses-hub__panel > div > .page-head:first-child{display:none}
 .expense-ledger{
   display:grid;
   gap:18px;
@@ -755,6 +753,42 @@ body.nav-open{overflow:hidden}
   flex-wrap:wrap;
 }
 .expense-ledger__head p{margin:6px 0 0}
+.expenses-hub__panel .page-head{
+  align-items:flex-start;
+  margin-bottom:18px;
+}
+.finance-overview-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+}
+.finance-overview-card{
+  display:grid;
+  align-content:start;
+  gap:14px;
+  padding:18px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  box-shadow:0 1px 3px rgba(11,18,32,0.04);
+}
+.finance-overview-card__head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.finance-overview-card__head > div{display:grid;gap:4px}
+.finance-overview-card__head span{color:var(--muted);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.finance-overview-card__head strong{font-size:26px;line-height:1.15}
+.finance-overview-card__head a{font-size:13px;font-weight:700}
+.finance-overview-card dl{display:grid;gap:9px;margin:0}
+.finance-overview-card dl div{display:flex;justify-content:space-between;gap:12px;padding-top:9px;border-top:1px solid var(--border)}
+.finance-overview-card dt{color:var(--muted)}
+.finance-overview-card dd{margin:0;font-weight:700;text-align:right}
+.finance-overview-card__note{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.finance-overview-link{color:inherit;text-decoration:none}
+.finance-overview-link:hover{border-color:rgba(46,163,214,.55);background:#fbfcfd}
 .expense-summary{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
@@ -948,6 +982,7 @@ body.nav-open{overflow:hidden}
 @media (max-width:1050px){
   .finance-grid--main,
   .finance-grid--details{grid-template-columns:1fr}
+  .finance-overview-grid{grid-template-columns:1fr}
   .expense-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
   .expense-filter-grid{grid-template-columns:repeat(2,minmax(150px,1fr))}
 }

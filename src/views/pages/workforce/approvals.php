@@ -2,6 +2,13 @@
 
 use App\Modules\Timekeeping\WorkforceSettings;
 
+$userId = (int)($_SESSION['user']['id'] ?? 0);
+if (!WorkforceSettings::canReviewTime($pdo, $userId)) {
+    http_response_code(403);
+    echo '<p style="padding:24px">Time approval is limited to administrators unless non-admin reviewers are enabled in Workflow settings and granted the Approvals Review permission.</p>';
+    return;
+}
+
 $queue = $pdo->query(
     "SELECT t.*,p.name project_name,c.name client_name,i.doc_number invoice_number,i.invoice_type,
             COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),u.username,u.email) employee_name

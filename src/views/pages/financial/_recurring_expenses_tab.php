@@ -56,7 +56,7 @@ foreach ($schedules as $schedule) {
   </div>
 
   <?php if (!$schedules): ?>
-    <div class="finance-empty"><strong>No recurring expenses yet</strong><p class="muted">Add a domain renewal, hosting fee, software subscription, or other predictable cost.</p><a href="/?page=financial/recurring-expense-form" class="btn btn-primary">Add Recurring Expense</a></div>
+    <div class="finance-empty"><strong>No recurring expenses yet</strong><p class="muted">Add a domain renewal, hosting fee, software subscription, or other predictable cost.</p></div>
   <?php else: ?>
     <div class="pa-table-wrap expense-table-wrap">
       <table class="pa-table expense-table">

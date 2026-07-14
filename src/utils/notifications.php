@@ -100,6 +100,17 @@ function notification_setting_enabled(array $appConfig, string $key, bool $defau
     return in_array(strtolower(trim((string)$value)), ['1', 'true', 'yes', 'on'], true);
 }
 
+function admin_notification_email_is_deliverable(mixed $value): bool {
+    $email = strtolower(trim((string)$value));
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+    $domain = substr(strrchr($email, '@') ?: '', 1);
+    return $domain !== 'localhost'
+        && !str_ends_with($domain, '.localhost')
+        && !str_ends_with($domain, '.local');
+}
+
 function admin_notification_recipients(PDO $pdo, array $appConfig): array {
     $emails = [];
     $sql = "
@@ -115,7 +126,7 @@ function admin_notification_recipients(PDO $pdo, array $appConfig): array {
         $stmt = $pdo->query($sql);
         foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {
             $email = trim((string)$email);
-            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if (admin_notification_email_is_deliverable($email)) {
                 $emails[strtolower($email)] = $email;
             }
         }
@@ -131,7 +142,7 @@ function admin_notification_recipients(PDO $pdo, array $appConfig): array {
             ");
             foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {
                 $email = trim((string)$email);
-                if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                if (admin_notification_email_is_deliverable($email)) {
                     $emails[strtolower($email)] = $email;
                 }
             }

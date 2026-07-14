@@ -28,13 +28,13 @@ $csrf = csrf_token();
 ?>
 
 <section>
-  <div class="page-head">
+  <div class="expense-ledger__head">
     <div>
       <h2 style="margin:0">Vendors</h2>
       <p class="muted" style="margin:4px 0 0">Manage expense vendors and suppliers</p>
     </div>
     <div class="flex">
-      <a href="/?page=financial/vendor-form" class="btn btn-primary">+ Add Vendor</a>
+      <a href="/?page=financial/vendor-form" class="btn btn-primary">Add Vendor</a>
     </div>
   </div>
 

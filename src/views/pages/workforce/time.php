@@ -6,7 +6,12 @@ use App\Modules\Timekeeping\WorkforceSettings;
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
 $service = new TimekeepingService($pdo, new AuditRecorder($pdo));
-$manageAll = ($_SESSION['user']['role'] ?? '') === 'admin' || user_can($pdo, $userId, 'timekeeping.manage', 0);
+$manageAll = WorkforceSettings::canManageAllTime($pdo, $userId);
+if (!$manageAll && !user_can($pdo, $userId, 'timekeeping.self', 0)) {
+    http_response_code(403);
+    echo '<p style="padding:24px">You do not have permission to access timekeeping.</p>';
+    return;
+}
 $timeUsers = $manageAll ? $service->usersForManager() : [];
 $selectedUserId = $manageAll ? (int)($_GET['user'] ?? $userId) : $userId;
 $selectedUser = null;

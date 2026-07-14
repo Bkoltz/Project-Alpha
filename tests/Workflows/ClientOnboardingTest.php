@@ -53,6 +53,9 @@ final class ClientOnboardingTest extends TestCase
         self::assertStringContainsString('data-open-onboarding-review', (string)$view);
         self::assertStringContainsString('Approve as New Client', (string)$view);
         self::assertStringContainsString('Merge Selected Fields', (string)$view);
+        self::assertStringContainsString('Keep invited organization', (string)$view);
+        self::assertStringContainsString('Leave organization blank (do not assign one)', (string)$view);
+        self::assertStringNotContainsString('Leave organization as invited', (string)$view);
         self::assertStringContainsString('onboarding-link-row', (string)$view);
         self::assertStringContainsString('client_onboarding_link_for_invitation($appConfig, $invitation)', (string)$view);
         self::assertStringContainsString('<option value="336" selected>14 days</option>', (string)$view);

@@ -11,18 +11,19 @@ $userId = (int)($_SESSION['user']['id'] ?? 0);
 $csrfToken = csrf_sf_token('expense');
 
 $tabs = [
+    'overview'   => ['label' => 'Overview',   'file' => '_overview_tab.php',   'hint' => 'Assets and expense snapshot'],
     'assets'     => ['label' => 'Assets',     'file' => '_assets_tab.php',     'hint' => 'Equipment and depreciation'],
     'expenses'   => ['label' => 'Expenses',   'file' => '_expenses_tab.php',   'hint' => 'Spending ledger'],
-    'recurring'  => ['label' => 'Recurring',  'file' => '_recurring_expenses_tab.php', 'hint' => 'Predictable costs'],
-    'receipts'   => ['label' => 'Receipts',   'file' => 'receipts-list.php',   'hint' => 'Uploads and matches'],
     'mileage'    => ['label' => 'Mileage',    'file' => 'mileage-list.php',    'hint' => 'Business trips'],
+    'recurring'  => ['label' => 'Recurring',  'file' => '_recurring_expenses_tab.php', 'hint' => 'Expense schedules'],
+    'receipts'   => ['label' => 'Receipts',   'file' => 'receipts-list.php',   'hint' => 'Expense documents'],
     'vendors'    => ['label' => 'Vendors',    'file' => 'vendors-list.php',    'hint' => 'Suppliers'],
     'categories' => ['label' => 'Categories', 'file' => 'categories-list.php', 'hint' => 'Tax buckets'],
     'audit'      => ['label' => 'Audit',      'file' => 'audit.php',           'hint' => 'Export reviews'],
 ];
 
-$active = $_GET['tab'] ?? 'expenses';
-if (!isset($tabs[$active])) $active = 'expenses';
+$active = $_GET['tab'] ?? 'overview';
+if (!isset($tabs[$active])) $active = 'overview';
 
 $stats = [
     'assets' => 0,
@@ -84,14 +85,6 @@ try {
       <h2>Assets &amp; Expenses</h2>
       <p class="finance-subtitle">Track owned assets, depreciation, spending, receipts, mileage, vendors, categories, and audit exports from one place.</p>
     </div>
-    <div class="finance-actions">
-      <a href="/?page=financial/asset-form" class="btn">Add Asset</a>
-      <a href="/?page=financial/mileage-create" class="btn">Log Mileage</a>
-      <a href="/?page=financial/expense-report" class="btn">Reports</a>
-      <a href="/?page=financial/csv-import" class="btn">Import CSV</a>
-      <a href="/?page=financial/recurring-expense-form" class="btn">Add Recurring</a>
-      <a href="/?page=financial/expense-create" class="btn btn-primary">Add Expense</a>
-    </div>
   </div>
 
   <div class="expenses-hub__tabs" role="tablist" aria-label="Expenses sections">
@@ -103,7 +96,7 @@ try {
          aria-selected="<?php echo $active === $id ? 'true' : 'false'; ?>">
         <span><?php echo htmlspecialchars($t['label']); ?></span>
         <small><?php echo htmlspecialchars($t['hint']); ?></small>
-        <b><?php echo number_format($stats[$id] ?? 0); ?></b>
+        <?php if ($id !== 'overview'): ?><b><?php echo number_format($stats[$id] ?? 0); ?></b><?php endif; ?>
       </a>
     <?php endforeach; ?>
   </div>

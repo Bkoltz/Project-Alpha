@@ -10,6 +10,7 @@ error_reporting(E_ERROR | E_PARSE);
 ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/acl.php';
@@ -69,6 +70,7 @@ if (empty($_SESSION['user']['id'])) {
 try {
     $userId = (int)$_SESSION['user']['id'];
     $orgId = request_client_org_id();
+    $defaultMileageRate = max(0.0, (float)($appConfig['default_mileage_rate'] ?? 0.670));
     if (!user_can($pdo, $userId, 'financial.manage', 0)) {
         $response['message'] = 'Permission denied';
         mileage_handler_finish($response, 403, '/?page=financial/mileage-list');
@@ -88,8 +90,12 @@ try {
         purpose ENUM('business','medical','moving','charitable','personal') NOT NULL DEFAULT 'business',
         description TEXT,
         round_trip TINYINT(1) NOT NULL DEFAULT 0,
+        bill_return_trip TINYINT(1) NOT NULL DEFAULT 0,
         mileage_rate DECIMAL(5,3) NOT NULL DEFAULT 0.670,
         is_billable TINYINT(1) NOT NULL DEFAULT 0,
+        billed TINYINT(1) NOT NULL DEFAULT 0,
+        invoice_id INT DEFAULT NULL,
+        invoice_item_id INT DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_org_trip_date (organization_id, trip_date)
@@ -106,6 +112,7 @@ try {
             $roundTrip = !empty($_POST['round_trip']) ? 1 : 0;
             $mileageRateRaw = $_POST['mileage_rate'] ?? '';
             $isBillable = !empty($_POST['is_billable']) ? 1 : 0;
+            $billReturnTrip = $roundTrip && $isBillable && !empty($_POST['bill_return_trip']) ? 1 : 0;
             $clientId = isset($_POST['client_id']) && $_POST['client_id'] !== '' ? (int)$_POST['client_id'] : null;
             $projectId = isset($_POST['project_id']) && $_POST['project_id'] !== '' ? (int)$_POST['project_id'] : null;
 
@@ -128,15 +135,15 @@ try {
                 throw new Exception('Invalid purpose');
             }
 
-            $mileageRate = $mileageRateRaw !== '' ? (float)$mileageRateRaw : 0.670;
+            $mileageRate = $mileageRateRaw !== '' ? (float)$mileageRateRaw : $defaultMileageRate;
             if ($mileageRate < 0) {
                 throw new Exception('Mileage rate cannot be negative');
             }
 
             $stmt = $pdo->prepare('
                 INSERT INTO mileage_logs
-                    (organization_id, user_id, client_id, project_id, trip_date, start_location, end_location, miles, purpose, description, round_trip, mileage_rate, is_billable)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (organization_id, user_id, client_id, project_id, trip_date, start_location, end_location, miles, purpose, description, round_trip, bill_return_trip, mileage_rate, is_billable)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([
                 $orgId > 0 ? $orgId : null,
@@ -150,6 +157,7 @@ try {
                 $purpose,
                 $description === '' ? null : $description,
                 $roundTrip,
+                $billReturnTrip,
                 $mileageRate,
                 $isBillable,
             ]);
@@ -161,7 +169,9 @@ try {
                 'trip_date' => $tripDate,
                 'miles' => $miles,
                 'round_trip' => $roundTrip,
-                'deductible_miles' => $roundTrip ? $miles * 2 : $miles,
+                'logged_miles' => $roundTrip ? $miles * 2 : $miles,
+                'bill_return_trip' => $billReturnTrip,
+                'billable_miles' => $roundTrip && $billReturnTrip ? $miles * 2 : $miles,
             ]);
 
             $response['success'] = true;
@@ -182,6 +192,7 @@ try {
             $roundTrip = !empty($_POST['round_trip']) ? 1 : 0;
             $mileageRateRaw = $_POST['mileage_rate'] ?? '';
             $isBillable = !empty($_POST['is_billable']) ? 1 : 0;
+            $billReturnTrip = $roundTrip && $isBillable && !empty($_POST['bill_return_trip']) ? 1 : 0;
             $clientId = isset($_POST['client_id']) && $_POST['client_id'] !== '' ? (int)$_POST['client_id'] : null;
             $projectId = isset($_POST['project_id']) && $_POST['project_id'] !== '' ? (int)$_POST['project_id'] : null;
 
@@ -207,16 +218,16 @@ try {
                 throw new Exception('Invalid purpose');
             }
 
-            $mileageRate = $mileageRateRaw !== '' ? (float)$mileageRateRaw : 0.670;
+            $mileageRate = $mileageRateRaw !== '' ? (float)$mileageRateRaw : $defaultMileageRate;
             if ($mileageRate < 0) {
                 throw new Exception('Mileage rate cannot be negative');
             }
 
             [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
-            $stmt = $pdo->prepare('SELECT m.id FROM mileage_logs m WHERE m.id = ? AND ' . $mileageScopeWhere);
+            $stmt = $pdo->prepare('SELECT m.id FROM mileage_logs m WHERE m.id = ? AND m.billed=0 AND ' . $mileageScopeWhere);
             $stmt->execute(array_merge([$id], $mileageScopeParams));
             if (!$stmt->fetch()) {
-                throw new Exception('Mileage entry not found');
+                throw new Exception('Mileage entry not found or it is already billed');
             }
 
             $stmt = $pdo->prepare('
@@ -228,6 +239,7 @@ try {
                     purpose = ?,
                     description = ?,
                     round_trip = ?,
+                    bill_return_trip = ?,
                     mileage_rate = ?,
                     is_billable = ?,
                     client_id = ?,
@@ -242,6 +254,7 @@ try {
                 $purpose,
                 $description === '' ? null : $description,
                 $roundTrip,
+                $billReturnTrip,
                 $mileageRate,
                 $isBillable,
                 $clientId,
@@ -254,7 +267,9 @@ try {
                 'trip_date' => $tripDate,
                 'miles' => $miles,
                 'round_trip' => $roundTrip,
-                'deductible_miles' => $roundTrip ? $miles * 2 : $miles,
+                'logged_miles' => $roundTrip ? $miles * 2 : $miles,
+                'bill_return_trip' => $billReturnTrip,
+                'billable_miles' => $roundTrip && $billReturnTrip ? $miles * 2 : $miles,
             ]);
 
             $response['success'] = true;
@@ -272,10 +287,10 @@ try {
             }
 
             [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
-            $stmt = $pdo->prepare('SELECT m.id FROM mileage_logs m WHERE m.id = ? AND ' . $mileageScopeWhere);
+            $stmt = $pdo->prepare('SELECT m.id FROM mileage_logs m WHERE m.id = ? AND m.billed=0 AND ' . $mileageScopeWhere);
             $stmt->execute(array_merge([$id], $mileageScopeParams));
             if (!$stmt->fetch()) {
-                throw new Exception('Mileage entry not found');
+                throw new Exception('Mileage entry not found or it is already billed');
             }
 
             $stmt = $pdo->prepare('DELETE m FROM mileage_logs m WHERE m.id = ? AND ' . $mileageScopeWhere);

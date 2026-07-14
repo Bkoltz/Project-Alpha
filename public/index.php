@@ -597,6 +597,10 @@ if ($page === 'time-tracking/unbilled') {
     require_once __DIR__ . '/../src/controllers/time-tracking/time_entries_unbilled.php';
     exit;
 }
+if ($page === 'financial/mileage-unbilled') {
+    require_once __DIR__ . '/../src/controllers/financial/mileage_unbilled.php';
+    exit;
+}
 if ($page === 'time-tracking/options') {
     require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_options.php';
     exit;

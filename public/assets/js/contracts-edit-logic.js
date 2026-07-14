@@ -147,7 +147,7 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each
     var itemId = 'itemCo_' + (itemCounterCo++);
     var descId = 'descCo_' + itemCounterCo;
     var priceId = 'priceCo_' + itemCounterCo;
-    wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
+    wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr 1fr auto'; wrap.style.gap = '8px';
 
     var itemInput = document.createElement('input');
     itemInput.id = itemId;
@@ -190,10 +190,17 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each
     priceInput.value = price;
     priceInput.oninput = recalcCo;
 
-    var unitInput = document.createElement('input');
-    unitInput.type = 'hidden';
+    var unitInput = document.createElement('select');
     unitInput.name = 'item_billing_unit[]';
-    unitInput.value = billingUnit === 'hour' ? 'hour' : 'each';
+    ['each', 'hour', 'mile'].forEach(function (value) {
+        var option = document.createElement('option');
+        option.value = value;
+        option.textContent = value === 'mile' ? 'Miles' : (value === 'hour' ? 'Hours' : 'Each');
+        unitInput.appendChild(option);
+    });
+    unitInput.value = ['each', 'hour', 'mile'].includes(billingUnit) ? billingUnit : 'each';
+    unitInput.setAttribute('aria-label', 'Billing unit');
+    unitInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
 
     var removeBtn = document.createElement('button');
     removeBtn.type = 'button';
