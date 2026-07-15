@@ -3,6 +3,7 @@
 <?php require_once __DIR__ . '/../../utils/format.php'; ?>
 <?php require_once __DIR__ . '/../../utils/acl.php'; ?>
 <?php require_once __DIR__ . '/../../utils/app_version.php'; ?>
+<?php require_once __DIR__ . '/../../Modules/Timekeeping/WorkforceSettings.php'; ?>
 <?php if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
@@ -223,13 +224,18 @@ function nav_can(string $permission): bool {
             </li>
             <?php endif; ?>
 
-            <?php if (nav_can('timekeeping.self') || nav_can('timekeeping.manage') || nav_can('workforce.manage') || nav_can('approvals.review') || nav_can('employee_pay.self') || nav_can('employee_pay.view') || nav_can('employee_pay.manage')): ?>
+            <?php
+              $navWorkforceUserId = (int)($_SESSION['user']['id'] ?? 0);
+              $navCanManageAllTime = \App\Modules\Timekeeping\WorkforceSettings::canManageAllTime($pdo, $navWorkforceUserId);
+              $navCanReviewTime = \App\Modules\Timekeeping\WorkforceSettings::canReviewTime($pdo, $navWorkforceUserId);
+            ?>
+            <?php if (nav_can('timekeeping.self') || $navCanManageAllTime || nav_can('workforce.manage') || $navCanReviewTime || nav_can('employee_pay.self') || nav_can('employee_pay.view') || nav_can('employee_pay.manage')): ?>
             <li class="nav-section">
               <div class="section-label">Workforce</div>
               <ul>
                 <li><a href="/?page=workforce/overview" data-page="workforce/overview">Overview</a></li>
-                <?php if (nav_can('timekeeping.self') || nav_can('timekeeping.manage')): ?><li><a href="/?page=workforce/time" data-page="workforce/time">Time</a></li><?php endif; ?>
-                <?php if (nav_can('approvals.review')): ?><li><a href="/?page=workforce/approvals" data-page="workforce/approvals">Approvals</a></li><?php endif; ?>
+                <?php if (nav_can('timekeeping.self') || $navCanManageAllTime): ?><li><a href="/?page=workforce/time" data-page="workforce/time">Time</a></li><?php endif; ?>
+                <?php if ($navCanReviewTime): ?><li><a href="/?page=workforce/approvals" data-page="workforce/approvals">Approvals</a></li><?php endif; ?>
                 <?php if (nav_can('employee_pay.self') || nav_can('employee_pay.view') || nav_can('employee_pay.manage')): ?><li><a href="/?page=workforce/pay" data-page="workforce/pay">Employee Pay</a></li><?php endif; ?>
               </ul>
             </li>
@@ -242,7 +248,7 @@ function nav_can(string $permission): bool {
                 <?php if (nav_can('financial.view')): ?>
                 <li><a href="/?page=financial/financial-dashboard" data-page="financial/financial-dashboard">Dashboard</a></li>
                 <li><a href="/?page=financial/audit" data-page="financial/audit">Audit &amp; Reports</a></li>
-                <li><a href="/?page=financial/expenses-list&tab=expenses" data-page="financial/expenses-list">Assets &amp; Expenses</a></li>
+                <li><a href="/?page=financial/expenses-list" data-page="financial/expenses-list">Assets &amp; Expenses</a></li>
                 <li><a href="/?page=financial/forms-list" data-page="financial/forms-list">Forms &amp; Docs</a></li>
                 <?php endif; ?>
               </ul>

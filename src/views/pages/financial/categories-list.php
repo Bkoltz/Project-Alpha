@@ -24,13 +24,13 @@ $csrf = csrf_token();
 ?>
 
 <section>
-  <div class="page-head">
+  <div class="expense-ledger__head">
     <div>
       <h2 style="margin:0">Expense Categories</h2>
       <p class="muted" style="margin:4px 0 0">Manage expense categories and IRS Schedule C defaults</p>
     </div>
     <div class="flex">
-      <button type="button" class="btn btn-primary" onclick="createCategory()">+ Add Category</button>
+      <button type="button" class="btn btn-primary" onclick="createCategory()">Add Category</button>
     </div>
   </div>
 

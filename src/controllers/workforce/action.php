@@ -6,6 +6,7 @@ use App\Modules\Timekeeping\ApprovalService;
 use App\Modules\Timekeeping\AuditRecorder;
 use App\Modules\Timekeeping\BillingTimeConsumer;
 use App\Modules\Timekeeping\TimekeepingService;
+use App\Modules\Timekeeping\WorkforceSettings;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
@@ -54,8 +55,11 @@ function workforce_require_any(PDO $pdo, int $userId, array $permissions): void
 
 try {
     if (in_array($action, ['clock-in','clock-out','break-start','break-end','manual-create','resubmit','cancel'], true)) {
-        workforce_require_any($pdo, $userId, ['timekeeping.self', 'timekeeping.manage']);
-        $manageAll = ($_SESSION['user']['role'] ?? '') === 'admin' || user_can($pdo, $userId, 'timekeeping.manage', 0);
+        $manageAll = WorkforceSettings::canManageAllTime($pdo, $userId);
+        if (!$manageAll && !user_can($pdo, $userId, 'timekeeping.self', 0)) {
+            http_response_code(403);
+            exit('Permission denied.');
+        }
         $entryUserId = $userId;
         if ($manageAll && (int)($_POST['entry_user_id'] ?? 0) > 0) {
             $entryUserId = (int)$_POST['entry_user_id'];
@@ -85,7 +89,10 @@ try {
     }
 
     if (in_array($action, ['approve','reject','correct','void'], true)) {
-        workforce_require($pdo, $userId, 'approvals.review');
+        if (!WorkforceSettings::canReviewTime($pdo, $userId)) {
+            http_response_code(403);
+            exit('Time approval is limited to administrators unless enabled in Workflow settings.');
+        }
         $entryId = (string) ($_POST['entry_id'] ?? '');
         if ($action === 'approve') {
             $approval->approve($userId, $entryId);

@@ -87,14 +87,20 @@ final class FinancialAssetsTest extends TestCase
         $script = $this->read('public/assets/js/expenses-hub.js');
         $dashboard = $this->read('src/views/pages/financial/financial-dashboard.php');
         $nav = $this->read('src/views/partials/header.php');
+        $overview = $this->read('src/views/pages/financial/_overview_tab.php');
 
+        self::assertStringContainsString("'overview'   => ['label' => 'Overview'", $hub);
         self::assertStringContainsString("'assets'     => ['label' => 'Assets'", $hub);
         self::assertStringContainsString('Assets &amp; Expenses', $hub);
         self::assertStringContainsString('financial_assets', $hub);
-        self::assertStringContainsString("\$active = \$_GET['tab'] ?? 'expenses';", $hub);
-        self::assertStringContainsString("params.get('tab') || 'expenses'", $script);
-        self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $dashboard);
-        self::assertStringContainsString('/?page=financial/expenses-list&tab=expenses', $nav);
+        self::assertStringContainsString("\$active = \$_GET['tab'] ?? 'overview';", $hub);
+        self::assertStringContainsString("params.get('tab') || 'overview'", $script);
+        self::assertStringContainsString('href="/?page=financial/expenses-list" class="btn btn-primary">Assets &amp; Expenses', $dashboard);
+        self::assertStringContainsString('href="/?page=financial/expenses-list" data-page="financial/expenses-list">Assets &amp; Expenses', $nav);
+        self::assertStringContainsString('asset_purchase_cost', $overview);
+        self::assertStringContainsString('expense_total', $overview);
+        self::assertStringContainsString('mileage_miles', $overview);
+        self::assertStringContainsString('Recurring schedules and receipts support the expense ledger', $overview);
 
         $tab = $this->read('src/views/pages/financial/_assets_tab.php');
         self::assertStringContainsString('financial_asset_depreciation', $tab);
@@ -174,12 +180,30 @@ final class FinancialAssetsTest extends TestCase
             'src/views/pages/financial/expenses-list.php',
             'src/views/pages/financial/_expenses_tab.php',
             'src/views/pages/financial/_assets_tab.php',
+            'src/views/pages/financial/_overview_tab.php',
             'src/views/pages/financial/financial-dashboard.php',
             'src/views/pages/financial/expense-report.php',
             'src/controllers/financial/expense_export.php',
         ] as $path) {
             self::assertStringContainsString('finance_scope_clause', $this->read($path), $path);
         }
+    }
+
+    public function testFinancialHubUsesOneConsistentActionHeaderPerTab(): void
+    {
+        $hub = $this->read('src/views/pages/financial/expenses-list.php');
+        self::assertStringNotContainsString('<div class="finance-actions">', $hub);
+
+        foreach ([
+            '_overview_tab.php', '_assets_tab.php', '_expenses_tab.php', '_recurring_expenses_tab.php',
+            'receipts-list.php', 'mileage-list.php', 'vendors-list.php', 'categories-list.php', 'audit.php',
+        ] as $file) {
+            self::assertStringContainsString('expense-ledger__head', $this->read('src/views/pages/financial/' . $file), $file);
+        }
+        self::assertSame(1, substr_count($this->read('src/views/pages/financial/_assets_tab.php'), '>Add Asset</a>'));
+        self::assertSame(1, substr_count($this->read('src/views/pages/financial/_expenses_tab.php'), '>Add Expense</a>'));
+        self::assertSame(1, substr_count($this->read('src/views/pages/financial/_recurring_expenses_tab.php'), '>Add Recurring Expense</a>'));
+        self::assertSame(1, substr_count($this->read('src/views/pages/financial/receipts-list.php'), '>Upload Receipt</a>'));
     }
 
     private function read(string $relativePath): string

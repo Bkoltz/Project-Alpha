@@ -243,7 +243,6 @@ $paginationFilters = [
     <div class="finance-empty">
       <strong>No expenses found</strong>
       <p class="muted">Adjust the filters or add a new expense to start the ledger.</p>
-      <a href="/?page=financial/expense-create" class="btn btn-primary">Add Expense</a>
     </div>
   <?php else: ?>
     <div class="pa-table-wrap expense-table-wrap">

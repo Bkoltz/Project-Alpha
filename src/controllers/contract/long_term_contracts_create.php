@@ -109,7 +109,8 @@ if ($pricing_type === 'fixed_total') {
         if($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p; 
         $subtotal += $line; 
-        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
+        $requestedUnit = (string)($billingUnits[$i] ?? 'each');
+        $unit = $billing_mode === 'hourly' ? 'hour' : (in_array($requestedUnit, ['each', 'hour', 'mile'], true) ? $requestedUnit : 'each');
         $items[] = ['i'=>$itm, 'd'=>$d, 'q'=>$q, 'p'=>$p, 't'=>$line, 'u'=>$unit];
     }
     if(!$items){

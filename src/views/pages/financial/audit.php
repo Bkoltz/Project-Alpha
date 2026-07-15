@@ -12,15 +12,16 @@ $startDate = $currentYear . '-01-01';
 $endDate = $currentYear . '-12-31';
 ?>
 
-<section style="padding: 24px;">
-  <div style="display:flex;gap:8px;margin-bottom:18px">
-    <a class="btn btn-primary" href="/?page=financial/audit">Audit Export</a>
-    <a class="btn" href="/?page=financial/expense-report">Expense Reports</a>
-  </div>
-  <div style="margin-bottom: 24px;">
-    <h2 style="margin: 0 0 8px 0;">Financial Audit Export</h2>
-    <p style="color: #6b7280; margin: 0;">Generate and download a complete financial audit report with invoices, contracts, and optional PDFs.</p>
-    <p style="margin: 12px 0 0 0;"><a class="btn" href="#auditSchedulePanel">Schedule audit emails</a></p>
+<section class="expense-ledger audit-ledger">
+  <div class="expense-ledger__head">
+    <div>
+      <h2>Audit &amp; Reports</h2>
+      <p class="muted">Generate complete financial exports and schedule recurring audit delivery.</p>
+    </div>
+    <div class="finance-actions">
+      <a class="btn" href="/?page=financial/expense-report">Expense Reports</a>
+      <a class="btn btn-primary" href="#auditSchedulePanel">Schedule Audit</a>
+    </div>
   </div>
 
   <form id="auditForm" method="POST" action="/?page=financial/audit-export" style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">

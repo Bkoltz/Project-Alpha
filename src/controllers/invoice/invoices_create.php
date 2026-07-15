@@ -38,6 +38,7 @@ $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
 $timeEntryIdsByRow = $_POST['time_entry_ids'] ?? [];
 $legacyTimeEntryIds = $_POST['time_entry_id'] ?? [];
+$mileageLogIdsByRow = $_POST['mileage_log_ids'] ?? [];
 
 if ($client_id <= 0 || empty($item)) {
     header('Location: /?page=invoice/invoices-create&error=Invalid%20input');
@@ -57,8 +58,9 @@ for ($i=0; $i<count($item); $i++) {
     $q = (float)($qty[$i] ?? 0);
     $p = (float)($price[$i] ?? 0);
     $rowTimeEntryIds = array_values(array_unique(array_filter(array_map('intval', $timeEntryIdsByRow[$i] ?? [($legacyTimeEntryIds[$i] ?? 0)]))));
+    $rowMileageLogIds = array_values(array_unique(array_filter(array_map('intval', $mileageLogIdsByRow[$i] ?? []))));
     // Linked adjustment groups may legitimately net to zero or negative.
-    if ($itm === '' || ($q == 0.0 && !$rowTimeEntryIds) || $p < 0) continue;
+    if ($itm === '' || ($q == 0.0 && !$rowTimeEntryIds && !$rowMileageLogIds) || $p < 0) continue;
     $line = $q * $p;
     $subtotal += $line;
     $items[] = [
@@ -67,8 +69,11 @@ for ($i=0; $i<count($item); $i++) {
         'quantity' => $q,
         'unit_price' => $p,
         'line_total' => $line,
-        'billing_unit' => (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each',
-        'time_entry_ids' => $rowTimeEntryIds
+        'billing_unit' => $billing_mode === 'hourly'
+            ? 'hour'
+            : (in_array(($billingUnits[$i] ?? 'each'), ['each', 'hour', 'mile'], true) ? (string)($billingUnits[$i] ?? 'each') : 'each'),
+        'time_entry_ids' => $rowTimeEntryIds,
+        'mileage_log_ids' => $rowMileageLogIds,
     ];
 }
 if (!$items) {
@@ -95,6 +100,14 @@ try {
         static fn(array $row): array => $row['time_entry_ids'],
         $items
     ))));
+    $allMileageLogIds = array_merge(...array_map(
+        static fn(array $row): array => $row['mileage_log_ids'],
+        $items
+    ));
+    $selectedMileageLogIds = array_values(array_unique($allMileageLogIds));
+    if (count($allMileageLogIds) !== count($selectedMileageLogIds)) {
+        throw new RuntimeException('A mileage entry cannot be added to more than one invoice row.');
+    }
     foreach ($items as $row) {
         if (!$row['time_entry_ids']) continue;
         $placeholders = implode(',', array_fill(0, count($row['time_entry_ids']), '?'));
@@ -131,6 +144,26 @@ try {
             }
         }
     }
+    foreach ($items as $row) {
+        if (!$row['mileage_log_ids']) continue;
+        $placeholders = implode(',', array_fill(0, count($row['mileage_log_ids']), '?'));
+        $checkMileage = $pdo->prepare(
+            "SELECT COUNT(*) row_count,
+                    COALESCE(SUM(miles * CASE WHEN round_trip=1 AND bill_return_trip=1 THEN 2 ELSE 1 END),0) expected_miles,
+                    MIN(mileage_rate) min_rate,MAX(mileage_rate) max_rate
+             FROM mileage_logs
+             WHERE id IN ($placeholders) AND client_id=? AND is_billable=1 AND billed=0 FOR UPDATE"
+        );
+        $checkMileage->execute(array_merge($row['mileage_log_ids'], [$client_id]));
+        $expected = $checkMileage->fetch(PDO::FETCH_ASSOC) ?: [];
+        if ((int)($expected['row_count'] ?? 0) !== count($row['mileage_log_ids'])
+            || abs((float)($expected['expected_miles'] ?? 0) - (float)$row['quantity']) > 0.005
+            || (string)($expected['min_rate'] ?? '') !== (string)($expected['max_rate'] ?? '')
+            || abs((float)($expected['min_rate'] ?? 0) - (float)$row['unit_price']) > 0.0005
+            || $row['billing_unit'] !== 'mile') {
+            throw new RuntimeException('Billable mileage quantity or rate no longer matches the selected entries.');
+        }
+    }
     $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $stmt->execute([$client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'draft', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
     $invoice_id = (int)$pdo->lastInsertId();
@@ -162,6 +195,19 @@ try {
                     throw new RuntimeException('Invalid or already billed time entry selected.');
                 }
                 $mark->execute([$client_id, $itemId, $invoice_id, (int)$teId]);
+            }
+        }
+        if (!empty($it['mileage_log_ids'])) {
+            $itemId = (int)$pdo->lastInsertId();
+            $markMileage = $pdo->prepare(
+                'UPDATE mileage_logs SET billed=1,invoice_item_id=?,invoice_id=?
+                 WHERE id=? AND client_id=? AND is_billable=1 AND billed=0'
+            );
+            foreach ($it['mileage_log_ids'] as $mileageId) {
+                $markMileage->execute([$itemId, $invoice_id, (int)$mileageId, $client_id]);
+                if ($markMileage->rowCount() !== 1) {
+                    throw new RuntimeException('Invalid or already billed mileage entry selected.');
+                }
             }
         }
     }

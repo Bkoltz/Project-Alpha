@@ -249,6 +249,7 @@ function page_permission_map(): array
         'financial/expense_handler'        => 'financial.manage',
         'financial/csv-import'             => 'financial.manage',
         'financial/mileage-handler'        => 'financial.manage',
+        'financial/mileage-unbilled'       => 'invoices.create',
         'financial/vendor-handler'         => 'financial.manage',
         'financial/category-handler'       => 'financial.manage',
         'financial/audit'                  => 'financial.audit',

@@ -53,6 +53,49 @@ final class UnifiedAlphaLedgerModuleTest extends TestCase
         self::assertStringContainsString("'timezone'", $settings);
     }
 
+    public function testWorkflowGatesTeamTimeAndSupportsMileageBilling(): void
+    {
+        $migration = (string) file_get_contents($this->root . '/database/migrations/0041_workforce_access_and_mileage_billing.sql');
+        $settings = (string) file_get_contents($this->root . '/src/Modules/Timekeeping/WorkforceSettings.php');
+        $workflow = (string) file_get_contents($this->root . '/src/views/pages/settings/workflow.php');
+        $time = (string) file_get_contents($this->root . '/src/views/pages/workforce/time.php');
+        $approvals = (string) file_get_contents($this->root . '/src/views/pages/workforce/approvals.php');
+        $mileageCreate = (string) file_get_contents($this->root . '/src/views/pages/financial/mileage-create.php');
+        $mileageEndpoint = (string) file_get_contents($this->root . '/src/controllers/financial/mileage_unbilled.php');
+        $invoiceCreate = (string) file_get_contents($this->root . '/src/controllers/invoice/invoices_create.php');
+        $invoiceScript = (string) file_get_contents($this->root . '/public/assets/js/invoices-create-logic.js');
+
+        foreach ([
+            'workforce_allow_non_admin_time_management',
+            'workforce_allow_non_admin_time_approval',
+            'default_mileage_rate',
+            'default_mileage_include_return_trip',
+            'default_mileage_bill_return_trip',
+        ] as $key) {
+            self::assertStringContainsString($key, $migration);
+            self::assertStringContainsString($key, $workflow);
+        }
+        self::assertStringContainsString("'workforce_allow_non_admin_time_management', '0'", $migration);
+        self::assertStringContainsString("'workforce_allow_non_admin_time_approval', '0'", $migration);
+        self::assertStringContainsString('canManageAllTime', $settings);
+        self::assertStringContainsString('canReviewTime', $settings);
+        self::assertStringContainsString('WorkforceSettings::canManageAllTime', $time);
+        self::assertStringContainsString('WorkforceSettings::canReviewTime', $approvals);
+
+        self::assertStringContainsString("ENUM('each','hour','mile')", $migration);
+        self::assertStringContainsString('bill_return_trip', $migration);
+        self::assertStringContainsString("\$appConfig['default_mileage_rate']", $mileageCreate);
+        self::assertStringContainsString('Include return trip in mileage log', $mileageCreate);
+        self::assertStringContainsString('Bill client for return-trip mileage', $mileageCreate);
+        self::assertStringContainsString('is_billable=1 AND m.billed=0', $mileageEndpoint);
+        self::assertStringContainsString('m.bill_return_trip=1', $mileageEndpoint);
+        self::assertStringContainsString('mileage_log_ids', $invoiceCreate);
+        self::assertStringContainsString("is_billable=1 AND billed=0", $invoiceCreate);
+        self::assertStringContainsString('financial/mileage-unbilled', $invoiceScript);
+        self::assertStringContainsString("['each', 'hour', 'mile'].includes(billingUnit)", $invoiceScript);
+        self::assertStringContainsString('mileage_log_ids[${index}][]', $invoiceScript);
+    }
+
     public function testBillingConsumesSnapshotsWithoutRewritingWorkEntries(): void
     {
         $consumer = (string) file_get_contents($this->root . '/src/Modules/Timekeeping/BillingTimeConsumer.php');

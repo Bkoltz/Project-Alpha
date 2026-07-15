@@ -75,15 +75,13 @@ if (!in_array($currentYear, $years)) {
 }
 ?>
 
-<div style="max-width:1400px;margin:0 auto;padding:24px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+<section class="expense-ledger receipt-ledger">
+    <div class="expense-ledger__head">
         <div>
-            <h1 style="margin:0 0 8px 0;font-size:28px">Receipts</h1>
-            <p style="margin:0;color:var(--muted)">Manage business expense receipts</p>
+            <h2>Receipts</h2>
+            <p class="muted">Upload and connect supporting documents to expense records.</p>
         </div>
-        <a href="/?page=financial/receipt-upload" style="padding:10px 16px;border-radius:8px;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600">
-            + Upload Receipt
-        </a>
+        <div class="finance-actions"><a href="/?page=financial/receipt-upload" class="btn btn-primary">Upload Receipt</a></div>
     </div>
 
     <?php if (!empty($_GET['created'])): ?>
@@ -172,10 +170,7 @@ if (!in_array($currentYear, $years)) {
         <div style="text-align:center;padding:64px 24px;border:2px dashed #e5e7eb;border-radius:12px">
             <div style="font-size:48px;margin-bottom:16px">📄</div>
             <h2 style="margin:0 0 8px 0;font-size:20px">No receipts yet</h2>
-            <p style="margin:0 0 24px 0;color:var(--muted)">Upload your first business expense receipt to get started</p>
-            <a href="/?page=financial/receipt-upload" style="display:inline-block;padding:12px 24px;border-radius:8px;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600">
-                Upload Receipt
-            </a>
+            <p style="margin:0;color:var(--muted)">Upload your first business expense receipt to get started.</p>
         </div>
     <?php else: ?>
         <!-- Receipts Grid -->
@@ -227,18 +222,12 @@ if (!in_array($currentYear, $years)) {
                             <?php 
                             $fileParam = str_replace('/src/uploads/', '', $receipt['file_path']);
                             ?>
-                            <a href="/?page=serve-upload&file=<?php echo urlencode($fileParam); ?>&download=1" download
-                               style="padding:8px;border-radius:6px;background:#f9fafb;border:1px solid #e5e7eb;text-align:center;text-decoration:none;color:inherit;font-size:13px;font-weight:600">
-                                📥 Download
-                            </a>
-                            <a href="/?page=financial/receipt-detail&id=<?php echo $receipt['id']; ?>"
-                               style="padding:8px;border-radius:6px;background:var(--nav-accent);color:#fff;text-align:center;text-decoration:none;font-size:13px;font-weight:600">
-                                👁️ View
-                            </a>
+                            <a href="/?page=serve-upload&file=<?php echo urlencode($fileParam); ?>&download=1" download class="btn btn-sm">Download</a>
+                            <a href="/?page=financial/receipt-detail&id=<?php echo $receipt['id']; ?>" class="btn btn-sm btn-primary">View</a>
                         </div>
                     </div>
                 </div>
             <?php endforeach; ?>
         </div>
     <?php endif; ?>
-</div>
+</section>

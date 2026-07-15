@@ -107,6 +107,7 @@ if ($selectedProjectId > 0) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:8px">
         <button type="button" onclick="addItemInv()" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">+ Add Item</button>
         <button type="button" id="btnAddFromTrackedTime" style="padding:8px 12px;border-radius:8px;border:1px solid #2ea3d6;background:#eff6ff;color:#0b4a6a;font-weight:600">+ Add from Tracked Time</button>
+        <button type="button" id="btnAddFromMileage" style="padding:8px 12px;border-radius:8px;border:1px solid #2ea3d6;background:#eff6ff;color:#0b4a6a;font-weight:600">+ Add Billable Mileage</button>
       </div>
     </div>
 
@@ -159,6 +160,29 @@ if ($selectedProjectId > 0) {
         <button type="button" id="btnAddSelectedTrackedTime" class="btn btn-primary">Add Selected to Invoice</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Billable Mileage Modal -->
+<div id="billableMileageModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="width:100%;max-width:850px;max-height:90vh;overflow:auto">
+    <div class="card-head">
+      <h3 class="card-title">Add Billable Mileage</h3>
+      <button type="button" id="closeBillableMileageModal" class="btn btn-sm">Close</button>
+    </div>
+    <div id="billableMileageLoading" style="padding:30px;text-align:center;color:var(--muted)">Loading unbilled mileage entries…</div>
+    <div id="billableMileageEmpty" style="display:none;padding:30px;text-align:center;color:var(--muted)">No unbilled mileage is marked billable for this client.</div>
+    <div id="billableMileageContent" style="display:none">
+      <div class="expense-table-wrap">
+        <table class="pa-table expense-table">
+          <thead><tr><th style="width:40px"><input type="checkbox" id="selectAllBillableMileage"></th><th>Date</th><th>Trip</th><th>Logged / Billable Miles</th><th>Rate</th><th>Amount</th></tr></thead>
+          <tbody id="billableMileageTbody"></tbody>
+        </table>
+      </div>
+      <div class="expense-filter-actions" style="margin-top:16px">
+        <button type="button" id="btnAddSelectedMileage" class="btn btn-primary">Add Selected to Invoice</button>
+      </div>
+    </div>
   </div>
 </div>
 

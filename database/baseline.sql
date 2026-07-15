@@ -859,7 +859,7 @@ CREATE TABLE IF NOT EXISTS contract_items (
     quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
-    billing_unit ENUM('each','hour') NOT NULL DEFAULT 'each',
+    billing_unit ENUM('each','hour','mile') NOT NULL DEFAULT 'each',
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -970,7 +970,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
-    billing_unit ENUM('each','hour') NOT NULL DEFAULT 'each',
+    billing_unit ENUM('each','hour','mile') NOT NULL DEFAULT 'each',
     hours DECIMAL(10,2) DEFAULT NULL,
     time_entry_id INT DEFAULT NULL,
     is_extra_charge TINYINT(1) NOT NULL DEFAULT 0,
@@ -1722,18 +1722,26 @@ CREATE TABLE IF NOT EXISTS mileage_logs (
     purpose ENUM('business','medical','moving','charitable','personal') NOT NULL DEFAULT 'business',
     description TEXT NULL,
     round_trip TINYINT(1) NOT NULL DEFAULT 0,
+    bill_return_trip TINYINT(1) NOT NULL DEFAULT 0,
     mileage_rate DECIMAL(5,3) NOT NULL DEFAULT 0.670,
     is_billable TINYINT(1) NOT NULL DEFAULT 0,
+    billed TINYINT(1) NOT NULL DEFAULT 0,
+    invoice_id INT NULL DEFAULT NULL,
+    invoice_item_id INT NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_mileage_org (organization_id),
     INDEX idx_mileage_date (trip_date),
     INDEX idx_mileage_client (client_id),
     INDEX idx_mileage_purpose (purpose),
+    INDEX idx_mileage_billable_billed (is_billable, billed),
+    INDEX idx_mileage_invoice (invoice_id),
     CONSTRAINT fk_mileage_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
-    CONSTRAINT fk_mileage_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+    CONSTRAINT fk_mileage_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_invoice_item FOREIGN KEY (invoice_item_id) REFERENCES invoice_items(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- FORM CATEGORIES
@@ -2077,6 +2085,11 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('notify_invoice_paid_long_term', '1'),
     ('notify_invoice_paid_project', '1'),
     ('notify_client_onboarding_submit', '1'),
+    ('workforce_allow_non_admin_time_management', '0'),
+    ('workforce_allow_non_admin_time_approval', '0'),
+    ('default_mileage_rate', '0.670'),
+    ('default_mileage_include_return_trip', '1'),
+    ('default_mileage_bill_return_trip', '0'),
     ('email_no_reply_notice_enabled', '0'),
     ('email_no_reply_notice_text', 'This is an automated message. Please do not reply to this email.')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);

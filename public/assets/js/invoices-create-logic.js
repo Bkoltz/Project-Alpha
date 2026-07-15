@@ -1,20 +1,27 @@
 function money(n) { return '$' + (Number(n) || 0).toFixed(2) }
 var itemCounterInv = 0;
-function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null, billingUnit = 'each') {
+function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null, billingUnit = 'each', mileageLogId = null) {
     var wrap = document.createElement('div');
     var rowIndex = document.querySelectorAll('#itemsInv > div').length;
     var itemId = 'itemInv_' + (itemCounterInv++);
     var descId = 'descInv_' + itemCounterInv;
     var priceId = 'priceInv_' + itemCounterInv;
-    wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto'; wrap.style.gap = '8px';
+    wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr 1fr auto'; wrap.style.gap = '8px';
     var teIds = Array.isArray(timeEntryId) ? timeEntryId : (timeEntryId ? [timeEntryId] : []);
+    var mileageIds = Array.isArray(mileageLogId) ? mileageLogId : (mileageLogId ? [mileageLogId] : []);
     var teInput = teIds.map(id => `<input type="hidden" name="time_entry_ids[${rowIndex}][]" value="${id}">`).join('');
-    wrap.innerHTML = teInput + `
-    <input type="hidden" name="item_billing_unit[]" value="${billingUnit === 'hour' ? 'hour' : 'each'}">
+    var mileageInput = mileageIds.map(id => `<input type="hidden" name="mileage_log_ids[${rowIndex}][]" value="${id}">`).join('');
+    var selectedUnit = ['each', 'hour', 'mile'].includes(billingUnit) ? billingUnit : 'each';
+    wrap.innerHTML = teInput + mileageInput + `
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" placeholder="Description (optional)" name="item_desc[]" style="padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;min-height:42px" oninput="recalcInv()">${desc}</textarea>
-    <input required type="number" step="0.01" ${teIds.length === 0 ? 'min="0"' : ''} name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcInv()">
+    <input required type="number" step="0.01" ${teIds.length === 0 && mileageIds.length === 0 ? 'min="0"' : ''} name="item_qty[]" class="qty-input" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${qty}" oninput="recalcInv()">
     <input id="${priceId}" required type="number" step="0.01" min="0" name="item_price[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${price}" oninput="recalcInv()">
+    <select name="item_billing_unit[]" aria-label="Billing unit" style="padding:10px;border-radius:8px;border:1px solid #ddd">
+      <option value="each" ${selectedUnit === 'each' ? 'selected' : ''}>Each</option>
+      <option value="hour" ${selectedUnit === 'hour' ? 'selected' : ''}>Hours</option>
+      <option value="mile" ${selectedUnit === 'mile' ? 'selected' : ''}>Miles</option>
+    </select>
     <button type="button" onclick="this.parentElement.remove();recalcInv()" style="border:0;background:#fee2e2;color:#991b1b;border-radius:8px;padding:8px 10px">Remove</button>
   `;
     document.getElementById('itemsInv').appendChild(wrap);
@@ -170,6 +177,14 @@ document.getElementById('createProjectBtnInv').addEventListener('click', functio
 });
 
 document.getElementById('invoiceForm').addEventListener('submit', function (e) {
+    document.querySelectorAll('#itemsInv > div').forEach(function (row, index) {
+        row.querySelectorAll('input[name^="time_entry_ids["]').forEach(function (input) {
+            input.name = `time_entry_ids[${index}][]`;
+        });
+        row.querySelectorAll('input[name^="mileage_log_ids["]').forEach(function (input) {
+            input.name = `mileage_log_ids[${index}][]`;
+        });
+    });
     const clientId = document.getElementById('clientIdInv');
     if (!clientId || !clientId.value) {
         e.preventDefault();
@@ -307,4 +322,101 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
             recalcInv();
         });
     }
+})();
+
+// Billable mileage integration
+(function () {
+    const modal = document.getElementById('billableMileageModal');
+    const openBtn = document.getElementById('btnAddFromMileage');
+    const closeBtn = document.getElementById('closeBillableMileageModal');
+    const loading = document.getElementById('billableMileageLoading');
+    const empty = document.getElementById('billableMileageEmpty');
+    const content = document.getElementById('billableMileageContent');
+    const tbody = document.getElementById('billableMileageTbody');
+    const selectAll = document.getElementById('selectAllBillableMileage');
+    const addSelected = document.getElementById('btnAddSelectedMileage');
+    const clientIdInput = document.getElementById('clientIdInv');
+    if (!modal || !openBtn) return;
+
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    }
+
+    function render(entries) {
+        tbody.innerHTML = '';
+        loading.style.display = 'none';
+        if (!Array.isArray(entries) || entries.length === 0) {
+            empty.style.display = 'block';
+            content.style.display = 'none';
+            return;
+        }
+        entries.forEach(function (entry) {
+            const route = [entry.start_location, entry.end_location].filter(Boolean).join(' → ');
+            const loggedMiles = Number(entry.logged_quantity);
+            const billableMiles = Number(entry.quantity);
+            const billingNote = loggedMiles !== billableMiles ? `${loggedMiles.toFixed(2)} miles logged; ${billableMiles.toFixed(2)} miles billed` : '';
+            const detail = [entry.trip_date, route, entry.project_name, entry.description, billingNote].filter(Boolean).join(' | ');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td><input type="checkbox" class="mileage-checkbox" data-id="${Number(entry.id)}" data-quantity="${Number(entry.quantity)}" data-rate="${Number(entry.mileage_rate)}" data-detail="${escapeHtml(detail).replace(/"/g, '&quot;')}"></td>
+              <td>${escapeHtml(entry.trip_date)}</td>
+              <td>${escapeHtml(route || entry.description || 'Mileage')}</td>
+              <td>${loggedMiles.toFixed(2)} / ${billableMiles.toFixed(2)}</td>
+              <td>$${Number(entry.mileage_rate).toFixed(3)}</td>
+              <td>$${Number(entry.amount).toFixed(2)}</td>`;
+            tbody.appendChild(tr);
+        });
+        empty.style.display = 'none';
+        content.style.display = 'block';
+    }
+
+    openBtn.addEventListener('click', function () {
+        const clientId = clientIdInput ? clientIdInput.value : '';
+        if (!clientId) {
+            alert('Please select a client first.');
+            return;
+        }
+        loading.style.display = 'block';
+        empty.style.display = 'none';
+        content.style.display = 'none';
+        modal.style.display = 'flex';
+        fetch('/?page=financial/mileage-unbilled&client_id=' + encodeURIComponent(clientId))
+            .then(function (response) { return response.json(); })
+            .then(function (result) { render(Array.isArray(result) ? result : []); })
+            .catch(function () { render([]); });
+    });
+
+    closeBtn.addEventListener('click', function () { modal.style.display = 'none'; });
+    selectAll.addEventListener('change', function () {
+        document.querySelectorAll('.mileage-checkbox').forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
+    });
+    addSelected.addEventListener('click', function () {
+        const checked = Array.from(document.querySelectorAll('.mileage-checkbox:checked'));
+        if (!checked.length) {
+            alert('Please select at least one mileage entry.');
+            return;
+        }
+        const itemWrap = document.getElementById('itemsInv');
+        if (itemWrap && itemWrap.children.length === 1) {
+            const firstItem = itemWrap.querySelector('[name="item[]"]');
+            if (firstItem && !firstItem.value.trim()) itemWrap.innerHTML = '';
+        }
+        const groups = new Map();
+        checked.forEach(function (checkbox) {
+            const rate = Number(checkbox.dataset.rate) || 0;
+            const key = rate.toFixed(3);
+            if (!groups.has(key)) groups.set(key, { rate, quantity: 0, ids: [], details: [] });
+            const group = groups.get(key);
+            group.quantity += Number(checkbox.dataset.quantity) || 0;
+            group.ids.push(Number(checkbox.dataset.id));
+            if (checkbox.dataset.detail) group.details.push(checkbox.dataset.detail);
+        });
+        groups.forEach(function (group) {
+            addItemInv('Mileage', group.details.join('\n'), group.quantity.toFixed(2), group.rate.toFixed(3), null, 'mile', group.ids);
+        });
+        modal.style.display = 'none';
+        recalcInv();
+    });
 })();

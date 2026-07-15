@@ -1,12 +1,17 @@
 <?php
 // src/views/pages/financial/mileage-create.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
 $orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
+$defaultMileageRate = max(0.0, (float)($appConfig['default_mileage_rate'] ?? 0.670));
+$defaultIncludeReturnTrip = !array_key_exists('default_mileage_include_return_trip', $appConfig)
+    || !empty($appConfig['default_mileage_include_return_trip']);
+$defaultBillReturnTrip = !empty($appConfig['default_mileage_bill_return_trip']);
 
 $editMode = false;
 $log = [
@@ -17,8 +22,9 @@ $log = [
     'miles' => '',
     'purpose' => 'business',
     'description' => '',
-    'round_trip' => 0,
-    'mileage_rate' => 0.670,
+    'round_trip' => $defaultIncludeReturnTrip ? 1 : 0,
+    'bill_return_trip' => $defaultBillReturnTrip ? 1 : 0,
+    'mileage_rate' => $defaultMileageRate,
     'is_billable' => 0,
     'client_id' => null,
     'project_id' => null,
@@ -74,7 +80,7 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
 
         <div class="field">
-          <label class="label" for="miles">Miles *</label>
+          <label class="label" for="miles">One-way Miles *</label>
           <input type="number" id="miles" name="miles" required step="0.01" min="0.01"
                  value="<?php echo $log['miles'] !== '' ? htmlspecialchars(number_format((float)$log['miles'], 2, '.', '')) : ''; ?>" class="input">
         </div>
@@ -98,10 +104,10 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
         <label class="label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="round_trip" name="round_trip" value="1"
                  <?php echo !empty($log['round_trip']) ? 'checked' : ''; ?> style="width:18px;height:18px">
-          Round Trip (doubles miles for deduction)
+          Include return trip in mileage log
         </label>
         <div id="roundTripNote" class="muted-note" style="display:<?php echo !empty($log['round_trip']) ? 'block' : 'none'; ?>">
-          Total miles for deduction: <span id="deductMilesBase">0</span> × 2 = <strong id="deductMilesTotal">0</strong>
+          Logged miles: <span id="deductMilesBase">0</span> × 2 directions = <strong id="deductMilesTotal">0</strong>
         </div>
       </div>
 
@@ -120,7 +126,7 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="field">
           <label class="label" for="mileage_rate">Mileage Rate</label>
           <input type="number" id="mileage_rate" name="mileage_rate" step="0.001" min="0"
-                 value="<?php echo htmlspecialchars(number_format((float)($log['mileage_rate'] ?? 0.670), 3, '.', '')); ?>" class="input">
+                 value="<?php echo htmlspecialchars(number_format((float)($log['mileage_rate'] ?? $defaultMileageRate), 3, '.', '')); ?>" class="input">
         </div>
       </div>
 
@@ -135,6 +141,15 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
                  <?php echo !empty($log['is_billable']) ? 'checked' : ''; ?> style="width:18px;height:18px">
           Billable to client
         </label>
+      </div>
+
+      <div class="field" id="billReturnField" style="display:<?php echo !empty($log['is_billable']) && !empty($log['round_trip']) ? 'block' : 'none'; ?>">
+        <label class="label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="bill_return_trip" name="bill_return_trip" value="1"
+                 <?php echo !empty($log['bill_return_trip']) ? 'checked' : ''; ?> style="width:18px;height:18px">
+          Bill client for return-trip mileage
+        </label>
+        <div class="muted-note">Leave this off to log both directions while billing only the outbound miles.</div>
       </div>
 
       <div class="field" id="clientField" style="display:<?php echo !empty($log['is_billable']) ? 'block' : 'none'; ?>">
@@ -157,9 +172,10 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
       </div>
 
       <div class="card card-tight" style="margin-bottom:16px">
-        <div class="label-muted">Estimated Deductible Amount</div>
+        <div class="label-muted">Estimated Mileage Amount</div>
         <div class="font-600" style="font-size:22px">$<span id="deductibleDisplay">0.00</span></div>
-        <div class="muted-note">Based on stored miles × mileage rate (×2 if round trip).</div>
+        <div class="muted-note">Based on all logged miles, including the return trip.</div>
+        <div id="billableSummary" class="muted-note" style="display:none;margin-top:6px">Client billing: <strong><span id="billableMilesDisplay">0.00</span> miles</strong> · $<strong id="billableAmountDisplay">0.00</strong></div>
       </div>
 
       <div class="field" style="display:flex;gap:12px">
@@ -176,12 +192,17 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
   var rateInput = document.getElementById('mileage_rate');
   var roundTripCheck = document.getElementById('round_trip');
   var billableCheck = document.getElementById('is_billable');
+  var billReturnCheck = document.getElementById('bill_return_trip');
+  var billReturnField = document.getElementById('billReturnField');
   var clientField = document.getElementById('clientField');
   var projectField = document.getElementById('projectField');
   var roundTripNote = document.getElementById('roundTripNote');
   var deductMilesBase = document.getElementById('deductMilesBase');
   var deductMilesTotal = document.getElementById('deductMilesTotal');
   var deductibleDisplay = document.getElementById('deductibleDisplay');
+  var billableSummary = document.getElementById('billableSummary');
+  var billableMilesDisplay = document.getElementById('billableMilesDisplay');
+  var billableAmountDisplay = document.getElementById('billableAmountDisplay');
   var form = document.getElementById('mileageForm');
 
   function getNum(el) {
@@ -199,6 +220,8 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
     var multiplier = roundTripCheck.checked ? 2 : 1;
     var deductibleMiles = miles * multiplier;
     var amount = deductibleMiles * rate;
+    var billableMultiplier = roundTripCheck.checked && billReturnCheck.checked ? 2 : 1;
+    var billableMiles = miles * billableMultiplier;
 
     deductibleDisplay.textContent = formatCurrency(amount);
 
@@ -209,17 +232,23 @@ $clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
       roundTripNote.style.display = 'none';
     }
+    billableMilesDisplay.textContent = billableMiles.toFixed(2);
+    billableAmountDisplay.textContent = formatCurrency(billableMiles * rate);
+    billableSummary.style.display = billableCheck.checked ? 'block' : 'none';
   }
 
   function updateBillableFields() {
     var show = billableCheck.checked;
     clientField.style.display = show ? 'block' : 'none';
     projectField.style.display = show ? 'block' : 'none';
+    billReturnField.style.display = show && roundTripCheck.checked ? 'block' : 'none';
+    updateCalculations();
   }
 
   milesInput.addEventListener('input', updateCalculations);
   rateInput.addEventListener('input', updateCalculations);
-  roundTripCheck.addEventListener('change', updateCalculations);
+  roundTripCheck.addEventListener('change', updateBillableFields);
+  billReturnCheck.addEventListener('change', updateCalculations);
   billableCheck.addEventListener('change', updateBillableFields);
 
   // Initial state
