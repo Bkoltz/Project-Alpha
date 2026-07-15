@@ -4,6 +4,10 @@
     RewriteCond %{HTTP:Authorization} ^(.+)$
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
 
+    # Container readiness must enter PA's front controller so schema health is
+    # checked before Apache reports the application as available.
+    RewriteRule ^health/ready/?$ index.php?page=health/ready [QSA,L]
+
     # Built-in Workforce module clean paths. Keep these explicit so unknown
     # paths still receive Apache's normal 404 instead of entering PA's router.
     RewriteRule ^time/?$ index.php?page=workforce/time [QSA,L]

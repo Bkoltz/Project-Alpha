@@ -93,9 +93,10 @@ if ($termsText === '') {
       <a href="javascript:history.back()" class="btn btn-sm">Back</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
       <a href="/?page=contract/contract-pdf&id=<?php echo (int)$id; ?>" download="contract-<?php echo htmlspecialchars($contract['doc_number'] ?? $contract['id']); ?>.pdf" class="btn btn-sm">Download</a>
-      <?php if ($contract['status'] === 'pending'): ?>
+      <?php if (in_array($contract['status'], ['draft','pending'], true) && empty($contract['signed_at']) && empty($contract['signed_pdf_path'])): ?>
         <a href="/?page=contract/contracts-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
       <?php endif; ?>
+      <?php if((int)($contract['last_sent_revision']??0)>0&&(int)($contract['revision_number']??1)>(int)$contract['last_sent_revision']): ?><span class="alert alert-warning" style="padding:6px 9px">Revised <?php echo htmlspecialchars((string)($contract['revision_updated_at']??'')); ?> · Resend required</span><?php endif; ?>
       <?php $st = strtolower((string)($contract['status'] ?? ''));
       if (!in_array($st, ['denied', 'cancelled', 'void'], true)): ?>
         <form method="post" action="/?page=contract/email-send" style="display:inline">
@@ -106,13 +107,12 @@ if ($termsText === '') {
           <button type="submit" class="btn btn-sm">Email</button>
         </form>
       <?php endif; ?>
-      <?php if ($contract['status'] !== 'cancelled'): ?>
+      <?php if (in_array($contract['status'], ['draft','pending'], true) && empty($contract['signed_at']) && empty($contract['signed_pdf_path'])): ?>
         <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
           <input id="upload-signed" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
-          <?php $uplLabel = empty($contract['signed_pdf_path']) ? 'Upload Signed PDF' : 'Replace Signed PDF'; ?>
-          <button type="button" onclick="document.getElementById('upload-signed').click()" class="btn btn-sm"><?php echo $uplLabel; ?></button>
+          <button type="button" onclick="document.getElementById('upload-signed').click()" class="btn btn-sm">Upload Signed PDF</button>
         </form>
       <?php endif; ?>
       <?php if (!empty($contract['signed_pdf_path'])): ?>

@@ -28,7 +28,7 @@ function addExtraCharge() {
 
     var wrap = document.createElement('div');
     wrap.style.display = 'grid';
-    wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr auto';
+    wrap.style.gridTemplateColumns = '1.2fr 2.5fr 2.5fr 1fr 1fr auto';
     wrap.style.gap = '8px';
     wrap.style.padding = '8px';
     wrap.style.background = '#fff';
@@ -36,6 +36,7 @@ function addExtraCharge() {
     wrap.style.border = '1px solid #fcd34d';
     wrap.innerHTML = `
     <input type="hidden" name="extra_billing_unit[]" value="each">
+    <select name="extra_adjustment_type[]" style="padding:8px;border-radius:4px;border:1px solid #ddd" onchange="recalcInv()"><option value="charge">Charge</option><option value="credit">Credit</option></select>
     <input id="${itemId}" type="text" name="extra_item[]" placeholder="Item name..." style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
     <textarea id="${descId}" name="extra_desc[]" placeholder="Description (optional)" style="padding:8px;border-radius:4px;border:1px solid #ddd;resize:vertical;min-height:34px" oninput="recalcInv()"></textarea>
     <input type="number" step="0.01" min="0" name="extra_qty[]" value="1" class="qty-input" style="padding:8px;border-radius:4px;border:1px solid #ddd" oninput="recalcInv()">
@@ -70,10 +71,11 @@ function recalcInv() {
   // Recalculate totals from extra charges if visible
   var extraQtys = Array.from(document.querySelectorAll('[name="extra_qty[]"]')).map(e => parseFloat(e.value) || 0);
   var extraPrices = Array.from(document.querySelectorAll('[name="extra_price[]"]')).map(e => parseFloat(e.value) || 0);
+  var extraTypes = Array.from(document.querySelectorAll('[name="extra_adjustment_type[]"]')).map(e => e.value);
   var extraSubtotal = 0;
 
   for (var i = 0; i < extraQtys.length; i++) {
-    extraSubtotal += extraQtys[i] * extraPrices[i];
+    extraSubtotal += extraQtys[i] * extraPrices[i] * (extraTypes[i] === 'credit' ? -1 : 1);
   }
 
   //Update totals

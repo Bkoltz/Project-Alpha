@@ -3,6 +3,9 @@
 // Update document_date to current timestamp
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/acl.php';
+require_once __DIR__ . '/../services/DocumentPolicy.php';
+require_once __DIR__ . '/../services/DocumentRevisionService.php';
 
 // CSRF is already verified by the router (index.php)
 // No need to verify again here
@@ -16,6 +19,9 @@ if ($id <= 0 || !in_array($type, ['quote', 'contract', 'invoice', 'long_term_con
 }
 
 try {
+    $policyType=$type==='quote'?'quote':(in_array($type,['contract','long_term_contract','on_demand_contract'],true)?'contract':'invoice');
+    require_record_ownership($pdo,['quote'=>'quotes','contract'=>'contracts','invoice'=>'invoices'][$policyType],$id);
+    DocumentPolicy::assertMutable($pdo,$policyType,$id,$policyType==='invoice'?'monetary_adjustment':'commercial');
     switch ($type) {
         case 'quote':
             $pdo->prepare("UPDATE quotes SET document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
@@ -57,9 +63,12 @@ try {
             throw new Exception('Invalid document type');
     }
 
+    DocumentRevisionService::snapshotAndSave($pdo,$policyType,$id,(int)($_SESSION['user']['id']??0));
     header("Location: /?page={$redirectPage}&id={$id}&date_updated=1");
     exit;
 
+} catch (DocumentLockedException $e) {
+    http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$e->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;
 } catch (Throwable $e) {
     $errorMsg = urlencode($e->getMessage());
     $redirectPage = $_POST['redirect'] ?? 'dashboard';

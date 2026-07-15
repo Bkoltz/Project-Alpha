@@ -86,6 +86,8 @@ if ($selectedProjectId > 0) {
       </div>
     </div>
 
+    <?php $documentServiceLocationId = 0; require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
+
     <div id="customFieldsContainerCo">
     <?php
     // Dynamically render custom fields for regular contracts by default

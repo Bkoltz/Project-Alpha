@@ -56,6 +56,16 @@ if (!empty($_POST['change_password']) && $uid > 0) {
         exit;
     }
 }
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../utils/acl.php';
+if ($tab !== 'account' && ($uid <= 0 || !user_can($pdo,$uid,'settings.manage',0))) {
+    http_response_code(403);
+    exit('You do not have permission to change installation settings.');
+}
+if ($isSystemTab && !in_array((string)($_SESSION['user']['role'] ?? ''), ['admin','owner'], true)) {
+    http_response_code(403);
+    exit('Only an installation administrator can change integration settings.');
+}
 require_once __DIR__ . '/../utils/upload_validator.php';
 
 $configMount = '/var/www/config';
@@ -98,6 +108,8 @@ $settings = [
     'default_mileage_include_return_trip' => 1,
     'default_mileage_bill_return_trip' => 0,
     'mileage_tracking_enabled' => 0,
+    'address_route_assistance_enabled' => 0,
+    'job_project_locations_enabled' => 0,
     // App extras
     'primary_state' => null,
     'documents_valid_days' => 14,
@@ -370,6 +382,8 @@ if ($isWorkflowTab) {
     $settings['default_mileage_include_return_trip'] = !empty($_POST['default_mileage_include_return_trip']) ? 1 : 0;
     $settings['default_mileage_bill_return_trip'] = !empty($_POST['default_mileage_bill_return_trip']) ? 1 : 0;
     $settings['mileage_tracking_enabled'] = !empty($_POST['mileage_tracking_enabled']) ? 1 : 0;
+    $settings['address_route_assistance_enabled'] = !empty($_POST['address_route_assistance_enabled']) ? 1 : 0;
+    $settings['job_project_locations_enabled'] = !empty($_POST['job_project_locations_enabled']) ? 1 : 0;
     $settings['workforce_allow_non_admin_time_management'] = !empty($_POST['workforce_allow_non_admin_time_management']) ? 1 : 0;
     $settings['workforce_allow_non_admin_time_approval'] = !empty($_POST['workforce_allow_non_admin_time_approval']) ? 1 : 0;
 }
@@ -400,11 +414,40 @@ if (isset($_POST['smtp_from_email'])) {
 if (isset($_POST['smtp_from_name'])) {
     $settings['smtp_from_name'] = trim((string)$_POST['smtp_from_name']) ?: null;
 }
+if ($isSystemTab && isset($_POST['google_oauth_client_id'])) {
+    $settings['google_oauth_client_id'] = trim((string)$_POST['google_oauth_client_id']) ?: null;
+}
+if ($isSystemTab && !empty($_POST['google_oauth_client_secret'])) {
+    require_once __DIR__ . '/../utils/crypto.php';
+    $encrypted = crypto_encrypt((string)$_POST['google_oauth_client_secret']);
+    if ($encrypted === null) {
+        header('Location: /?page=settings&tab=system&error=' . urlencode('APP_ENCRYPTION_KEY is required before saving Google credentials.'));
+        exit;
+    }
+    $settings['google_oauth_client_secret_enc'] = $encrypted;
+}
+if ($isSystemTab && isset($_POST['google_maps_browser_key'])) {
+    $settings['google_maps_browser_key'] = trim((string)$_POST['google_maps_browser_key']) ?: null;
+}
+if ($isSystemTab && !empty($_POST['google_routes_api_key'])) {
+    require_once __DIR__ . '/../utils/crypto.php';
+    $encrypted = crypto_encrypt((string)$_POST['google_routes_api_key']);
+    if ($encrypted === null) {
+        header('Location: /?page=settings&tab=system&error=' . urlencode('APP_ENCRYPTION_KEY is required before saving the Routes key.'));
+        exit;
+    }
+    $settings['google_routes_api_key_enc'] = $encrypted;
+}
 
 // Persist SMTP configuration to app_config table so it takes precedence over settings.json
 $smtpConfigKeys = [];
 foreach (['smtp_host','smtp_port','smtp_secure','smtp_username','smtp_from_email','smtp_from_name'] as $k) {
     if (isset($settings[$k])) {
+        $smtpConfigKeys[$k] = $settings[$k];
+    }
+}
+foreach (['google_oauth_client_id','google_oauth_client_secret_enc','google_maps_browser_key','google_routes_api_key_enc'] as $k) {
+    if (array_key_exists($k, $settings)) {
         $smtpConfigKeys[$k] = $settings[$k];
     }
 }
@@ -420,6 +463,27 @@ if (!empty($smtpConfigKeys)) {
     );
     foreach ($smtpConfigKeys as $key => $val) {
         $stmtConfig->execute([$key, $val]);
+    }
+
+    if (!empty($settings['smtp_host'])) {
+        require_once __DIR__ . '/../services/EmailService.php';
+        require_once __DIR__ . '/../services/EmailProviderManager.php';
+        try {
+            $smtpCredentials = EmailService::getSmtpConfig(array_merge($appConfig ?? [], $settings));
+            $manager = new EmailProviderManager($pdo, array_merge($appConfig ?? [], $settings));
+            $connectionId = $manager->upsertSmtp(
+                $smtpCredentials,
+                EmailService::getFromEmail(array_merge($appConfig ?? [], $settings), $smtpCredentials),
+                EmailService::getFromName(array_merge($appConfig ?? [], $settings)),
+                $uid ?: null
+            );
+            $active = $manager->activeConnection();
+            if ($active === null) {
+                $manager->activate($connectionId, $uid ?: null);
+            }
+        } catch (Throwable $emailProviderError) {
+            @error_log('[settings] SMTP provider sync failed: ' . $emailProviderError->getMessage());
+        }
     }
 
     // Also set in current request so they're available immediately
@@ -440,6 +504,7 @@ $generalConfigKeys = [
     'workforce_allow_non_admin_time_management', 'workforce_allow_non_admin_time_approval',
     'default_mileage_rate', 'default_mileage_included_miles', 'default_mileage_charge_method',
     'default_mileage_include_return_trip', 'default_mileage_bill_return_trip', 'mileage_tracking_enabled',
+    'address_route_assistance_enabled', 'job_project_locations_enabled',
     'terms', 'long_term_terms', 'on_demand_terms',
     'net_terms_days', 'documents_valid_days', 'payment_methods',
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',

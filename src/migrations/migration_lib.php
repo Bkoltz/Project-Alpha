@@ -247,6 +247,11 @@ function migration_schema_health(PDO $pdo): void
         'work_time_revisions', 'work_approval_snapshots', 'work_pay_accruals',
         'work_billing_consumptions', 'app_sessions', 'background_jobs',
         'rate_limits', 'schema_migrations',
+        'email_provider_connections', 'email_provider_state', 'email_delivery_log',
+        'addresses', 'address_assignments', 'service_locations', 'jobs',
+        'project_service_locations', 'document_revisions', 'document_deliveries',
+        'document_address_snapshots', 'invoice_adjustments', 'route_estimate_cache',
+        'schedule_entries', 'mileage_charge_allocations', 'mileage_tracking_sessions',
     ];
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',
@@ -277,9 +282,9 @@ function migration_schema_health(PDO $pdo): void
         'projects' => ['organization_id', 'department_id', 'created_by'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
         'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
-        'quotes' => ['organization_id', 'created_by'],
-        'contracts' => ['organization_id', 'created_by'],
-        'invoices' => ['organization_id', 'created_by', 'collection_mode'],
+        'quotes' => ['organization_id', 'created_by', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision'],
+        'contracts' => ['organization_id', 'created_by', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'signed_revision_number', 'signed_pdf_sha256'],
+        'invoices' => ['organization_id', 'created_by', 'collection_mode', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'credit_due'],
         'api_keys' => ['name', 'key_prefix', 'key_hash', 'scopes', 'allowed_ips', 'created_at', 'last_used_at', 'revoked_at'],
         'api_usage' => ['api_key_id', 'used_at'],
         'client_onboarding_invitations' => ['organization_id', 'invited_email', 'token_hash', 'status'],
@@ -295,6 +300,13 @@ function migration_schema_health(PDO $pdo): void
         'work_billing_consumptions' => ['approval_snapshot_id','billing_time_entry_id','consumption_type'],
         'app_sessions' => ['session_hash','user_id','payload','last_activity_at','absolute_expires_at'],
         'background_jobs' => ['queue_name','job_type','payload','state','available_at'],
+        'email_provider_connections' => ['provider','credentials_enc','status','token_expires_at'],
+        'addresses' => ['address_line1','city','postal_code','google_place_id','source'],
+        'service_locations' => ['address_id','client_id','project_id'],
+        'jobs' => ['client_id','project_id','job_code','default_service_location_id','archived'],
+        'document_revisions' => ['document_type','document_id','revision_number','snapshot','content_hash'],
+        'invoice_adjustments' => ['invoice_id','adjustment_type','amount','revision_number','superseded_at'],
+        'schedule_entries' => ['project_id','job_id','starts_at','timezone','source_type'],
     ];
     $columnQuery = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.columns

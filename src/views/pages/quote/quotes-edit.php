@@ -3,6 +3,7 @@
   require_once __DIR__ . '/../../../config/app.php';
   require_once __DIR__ . '/../../../utils/document_fields.php';
   require_once __DIR__ . '/../../../utils/acl.php';
+  require_once __DIR__ . '/../../../services/DocumentPolicy.php';
   require_once __DIR__ . '/../../components/tax_lookup_control.php';
   $id = (int)($_GET['id'] ?? 0);
   require_record_ownership($pdo, 'quotes', $id);
@@ -13,6 +14,7 @@
     echo '<p>Quote not found</p>';
     return;
   }
+  try{$quote=DocumentPolicy::assertMutable($pdo,'quote',$id);}catch(DocumentLockedException $locked){http_response_code(409);echo '<div class="alert alert-warning">'.htmlspecialchars($locked->getMessage()).' <a href="/?page=quote/quote-details&id='.$id.'">Return to quote</a></div>';return;}
   $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=? AND is_travel=0');
   $items->execute([$id]);
   $items = $items->fetchAll(PDO::FETCH_ASSOC);
@@ -130,6 +132,7 @@
       </label>
     </div>
 
+    <?php $documentServiceLocationId = (int)($quote['service_location_id'] ?? 0); require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
     <?php $travelRuleScope='quote'; $travelDocumentId=(int)$quote['id']; require __DIR__.'/../../components/travel_billing_fields.php'; ?>
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>

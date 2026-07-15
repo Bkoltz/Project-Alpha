@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../../utils/project_selection.php';
 require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $id = (int)($_GET['id'] ?? 0);
@@ -15,6 +16,7 @@ if (!$contract) {
   echo '<p>Contract not found</p>';
   return;
 }
+try{$contract=DocumentPolicy::assertMutable($pdo,'contract',$id,'commercial');}catch(DocumentLockedException $locked){http_response_code(409);echo '<div class="alert alert-warning">'.htmlspecialchars($locked->getMessage()).' <a href="/?page=contract/contract-details&id='.$id.'">Return to contract</a></div>';return;}
 $isLongTermContract = ($contract['contract_type'] ?? 'regular') === 'long_term';
 $baseRecurringService = null;
 if ($isLongTermContract) {
@@ -317,6 +319,7 @@ try {
       </div>
     <?php endif; ?>
 
+    <?php $documentServiceLocationId = (int)($contract['service_location_id'] ?? 0); require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
     <?php $travelRuleScope='contract'; $travelDocumentId=(int)$contract['id']; require __DIR__.'/../../components/travel_billing_fields.php'; ?>
     <div>
       <div style="font-weight:600;margin-bottom:8px"><?php echo $isLongTermContract ? 'Items / Fixed Total Rates' : 'Items / Rates'; ?></div>

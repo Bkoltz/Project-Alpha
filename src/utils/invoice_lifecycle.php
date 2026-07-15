@@ -160,8 +160,8 @@ function invoice_status_for_balance(float $total, float $paid): array
 {
     $paid = max(0.0, $paid);
     $balance = max(0.0, $total - $paid);
-    if ($total > 0 && $balance <= 0.005) {
-        return ['paid', min($paid, $total), 0.0];
+    if (($total > 0 || $paid > 0) && $balance <= 0.005) {
+        return ['paid', $paid, 0.0];
     }
     if ($paid > 0.005) {
         return ['partial', $paid, $balance];
@@ -196,8 +196,9 @@ function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePa
     $paidAtSql = $status === 'paid'
         ? ', paid_at = COALESCE(paid_at, NOW())'
         : ', paid_at = NULL';
-    $pdo->prepare("UPDATE invoices SET status = ?, amount_paid = ?, balance_due = ?{$paidAtSql} WHERE id = ?")
-        ->execute([$status, $storedPaid, $balanceDue, $invoiceId]);
+    $creditDue = max(0.0, $storedPaid - $total);
+    $pdo->prepare("UPDATE invoices SET status = ?, amount_paid = ?, balance_due = ?, credit_due = ?{$paidAtSql} WHERE id = ?")
+        ->execute([$status, $storedPaid, $balanceDue, $creditDue, $invoiceId]);
 
     if ($revokePaidPublicLinks && !in_array($status, ['unpaid', 'partial'], true)) {
         pa_public_link_terminalize($pdo, 'invoice', $invoiceId, $status);
@@ -208,6 +209,7 @@ function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePa
         'amount_paid' => $storedPaid,
         'balance_due' => $balanceDue,
         'total' => $total,
+        'credit_due' => $creditDue,
     ];
 }
 

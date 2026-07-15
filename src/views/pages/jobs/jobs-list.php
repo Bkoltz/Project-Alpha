@@ -8,45 +8,24 @@ require_once __DIR__ . '/../../../utils/acl.php';
 $client_id = isset($_GET['client_id']) ? (int)$_GET['client_id'] : 0;
 $prefix = trim($_GET['project_prefix'] ?? '');
 $selected = trim($_GET['selected_project_code'] ?? '');
-$where = [];
+$where = ['j.archived=0'];
 $params = [];
-if ($client_id > 0) {
-  $where[] = 'pc.client_id=?';
-  $params[] = $client_id;
-}
-if ($prefix !== '') {
-  $where[] = 'pc.project_code LIKE ?';
-  $params[] = $prefix . '%';
-}
-
-[$scopeWhere, $scopeParams] = scope_clause($pdo, 'pc', (int)$_SESSION['user']['id']);
-$quoteScopeWhere = $scopeWhere !== '' ? str_replace('pc.', 'q.', $scopeWhere) : '';
-$contractScopeWhere = $scopeWhere !== '' ? str_replace('pc.', 'co.', $scopeWhere) : '';
-$invoiceScopeWhere = $scopeWhere !== '' ? str_replace('pc.', 'i.', $scopeWhere) : '';
-
-// Collect distinct project codes with owning client (from any table)
-$jobScopeWhere = $scopeWhere !== '' ? " AND {$scopeWhere} " : '';
-
-$sql = "SELECT pc.project_code, pc.client_id, c.name AS client_name, p.id AS project_id, p.notes,
-  (SELECT COUNT(*) FROM quotes q WHERE q.project_code=pc.project_code" . ($quoteScopeWhere !== '' ? " AND {$quoteScopeWhere}" : "") . ") AS quotes_count,
-  (SELECT COUNT(*) FROM contracts co WHERE co.project_code=pc.project_code" . ($contractScopeWhere !== '' ? " AND {$contractScopeWhere}" : "") . ") AS contracts_count,
-  (SELECT COUNT(*) FROM invoices i WHERE i.project_code=pc.project_code" . ($invoiceScopeWhere !== '' ? " AND {$invoiceScopeWhere}" : "") . ") AS invoices_count
-FROM (
-  SELECT q.project_code, q.client_id, q.organization_id, q.created_by FROM quotes q WHERE q.project_code IS NOT NULL" . ($quoteScopeWhere !== '' ? " AND {$quoteScopeWhere}" : "") . "
-  UNION SELECT co.project_code, co.client_id, co.organization_id, co.created_by FROM contracts co WHERE co.project_code IS NOT NULL" . ($contractScopeWhere !== '' ? " AND {$contractScopeWhere}" : "") . "
-  UNION SELECT i.project_code, i.client_id, i.organization_id, i.created_by FROM invoices i WHERE i.project_code IS NOT NULL" . ($invoiceScopeWhere !== '' ? " AND {$invoiceScopeWhere}" : "") . "
-) pc JOIN clients c ON c.id=pc.client_id LEFT JOIN projects p ON p.client_id=pc.client_id AND p.name=pc.project_code";
-$whereParts = array_merge($where, [$jobScopeWhere]);
-$whereParts = array_filter($whereParts, function ($part) { return trim($part) !== ''; });
-if ($whereParts) {
-  $sql .= ' WHERE ' . implode(' AND ', array_map(function ($p) { return ltrim($p, ' AND'); }, $whereParts));
-}
-$sql .= ' ORDER BY pc.project_code DESC';
-$rows = $pdo->prepare($sql);
-// Scope placeholders appear in 3 subquery counts, 3 UNION sources, and the outer pc WHERE.
-$subAndUnionParams = $scopeWhere !== '' ? array_merge($scopeParams, $scopeParams, $scopeParams, $scopeParams, $scopeParams, $scopeParams) : [];
-$outerScopeParams = $scopeWhere !== '' ? $scopeParams : [];
-$rows->execute(array_merge($subAndUnionParams, $params, $outerScopeParams));
+if ($client_id > 0) { $where[]='j.client_id=?'; $params[]=$client_id; }
+if ($prefix !== '') { $where[]='j.job_code LIKE ?'; $params[]=$prefix.'%'; }
+[$scopeWhere,$scopeParams]=scope_clause($pdo,'j',(int)$_SESSION['user']['id']);
+if ($scopeWhere !== '') { $where[]=$scopeWhere; $params=array_merge($params,$scopeParams); }
+$sql='SELECT j.id job_id,j.job_code project_code,j.client_id,j.project_id,j.created_at,c.name client_name,
+             COALESCE(p.notes,pm.notes) notes,
+             (SELECT COUNT(*) FROM quotes q WHERE q.job_id=j.id) quotes_count,
+             (SELECT COUNT(*) FROM contracts co WHERE co.job_id=j.id) contracts_count,
+             (SELECT COUNT(*) FROM invoices i WHERE i.job_id=j.id) invoices_count
+      FROM jobs j JOIN clients c ON c.id=j.client_id
+      LEFT JOIN projects p ON p.id=j.project_id
+      LEFT JOIN project_meta pm ON pm.project_code=j.job_code
+      WHERE '.implode(' AND ',$where).'
+      ORDER BY j.created_at DESC,j.id DESC';
+$rows=$pdo->prepare($sql);
+$rows->execute($params);
 $projects = $rows->fetchAll();
 $clientName = '';
 if ($client_id > 0) {
@@ -82,7 +61,7 @@ if ($selected !== '') {
               'type' => 'text',
               'label' => 'Job ID Prefix',
               'value' => $prefix,
-              'placeholder' => 'PA-2025'
+              'placeholder' => 'PA-JD'
           ]
       ],
       'columns' => 4
@@ -100,6 +79,7 @@ if ($selected !== '') {
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #eee">
               <div>
                 <strong>Job ID <?php echo htmlspecialchars($p['project_code']); ?></strong>
+                <?php if (!empty($p['created_at'])): ?><span style="color:var(--muted);font-size:12px"> · Created <?php echo htmlspecialchars(date('M j, Y', strtotime((string)$p['created_at']))); ?></span><?php endif; ?>
                 <span style="color:var(--muted)"> · <?php echo htmlspecialchars($p['client_name']); ?></span>
               </div>
               <div style="display:flex;gap:12px;align-items:center">
@@ -212,6 +192,9 @@ if ($selected !== '') {
           ?>
           <div style="position:sticky;top:12px;border:1px solid #eee;border-radius:8px;background:#fff;padding:12px;display:grid;gap:12px">
             <div style="font-weight:700">Job ID <?php echo htmlspecialchars($selected); ?> · <?php echo htmlspecialchars($selectedRow['client_name']); ?></div>
+            <?php if(!empty($appConfig['job_project_locations_enabled'])): $jobLocations=$pdo->query('SELECT id,name,city,state FROM service_locations WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);$jobCurrent=$pdo->prepare('SELECT default_service_location_id,status,notes FROM jobs WHERE id=?');$jobCurrent->execute([(int)$selectedRow['job_id']]);$jobSettings=$jobCurrent->fetch(PDO::FETCH_ASSOC)?:[]; ?>
+            <form method="post" action="/?page=jobs/job-settings-handler" style="display:grid;gap:8px"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="job_id" value="<?php echo (int)$selectedRow['job_id']; ?>"><input type="hidden" name="job_code" value="<?php echo htmlspecialchars($selected); ?>"><label><div>Default service location</div><select name="default_service_location_id" class="input"><option value="">No default</option><?php foreach($jobLocations as $location): ?><option value="<?php echo (int)$location['id']; ?>" <?php echo (int)($jobSettings['default_service_location_id']??0)===(int)$location['id']?'selected':''; ?>><?php echo htmlspecialchars($location['name'].($location['city']?' — '.$location['city'].', '.$location['state']:'')); ?></option><?php endforeach; ?></select></label><label><div>Scheduling status</div><select name="status" class="input"><?php foreach(['not_started'=>'Not started','active'=>'Active','completed'=>'Completed','cancelled'=>'Cancelled'] as $value=>$label): ?><option value="<?php echo $value; ?>" <?php echo ($jobSettings['status']??'not_started')===$value?'selected':''; ?>><?php echo $label; ?></option><?php endforeach; ?></select></label><label><div>Internal Job notes</div><textarea name="notes" class="input" rows="3"><?php echo htmlspecialchars((string)($jobSettings['notes']??'')); ?></textarea></label><button class="btn">Save Job details</button></form>
+            <?php endif; ?>
             <form method="post" action="/?page=project-notes-update" style="display:grid;gap:8px">
               <input type="hidden" name="project_code" value="<?php echo htmlspecialchars($selected); ?>">
               <input type="hidden" name="client_id" value="<?php echo (int)$selectedRow['client_id']; ?>">

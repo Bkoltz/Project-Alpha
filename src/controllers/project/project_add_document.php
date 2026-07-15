@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../services/JobAssignmentService.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/project-add-document');
@@ -23,14 +24,26 @@ if (in_array($document_type, ['quote','contract','invoice','recurring_invoice','
   $map = ['quote'=>'quotes', 'contract'=>'contracts', 'invoice'=>'invoices', 'recurring_invoice'=>'invoices', 'long_term_contract'=>'contracts', 'on_demand_contract'=>'contracts'];
   $table = $map[$document_type] ?? null;
   if ($table) {
+    $pdo->beginTransaction();
+    try {
     require_record_ownership($pdo, $table, $document_id);
-    $exists = $pdo->prepare('SELECT id FROM project_documents WHERE project_id = ? AND document_type = ? AND document_id = ? LIMIT 1');
-    $exists->execute([$project_id, $stored_document_type, $document_id]);
-    if (!$exists->fetchColumn()) {
-      $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?,?,?)')->execute([$project_id, $stored_document_type, $document_id]);
+    $document = $pdo->prepare("SELECT client_id,project_code,job_id,created_by FROM {$table} WHERE id=?");
+    $document->execute([$document_id]);
+    $row = $document->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { throw new RuntimeException('Document not found.'); }
+    $jobId = (int)($row['job_id'] ?? 0);
+    if ($jobId <= 0) {
+      $jobId = JobAssignmentService::ensureForCode($pdo, (int)$row['client_id'], (string)$row['project_code'], null, (int)($row['created_by'] ?? 0));
+      $pdo->prepare("UPDATE {$table} SET job_id=? WHERE id=?")->execute([$jobId, $document_id]);
     }
-    $pdo->prepare("UPDATE {$table} SET project_id=? WHERE id=?")->execute([$project_id, $document_id]);
+    JobAssignmentService::assignProject($pdo, $jobId, $project_id);
+    $pdo->commit();
+    } catch (Throwable $error) {
+      if ($pdo->inTransaction()) $pdo->rollBack();
+      http_response_code($error->getCode() === 409 ? 409 : 422);
+      exit($error->getMessage());
+    }
   }
 }
-header('Location: /?page=project/projects-details&id=' . $project_id . '&added=1');
+header('Location: /?page=project/projects-details&id=' . $project_id . '&added_job=1');
 exit;

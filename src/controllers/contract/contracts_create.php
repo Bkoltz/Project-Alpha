@@ -11,9 +11,13 @@ require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../utils/mileage.php';
+require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../services/JobAssignmentService.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
+$requestedServiceLocationId = !empty($_POST['service_location_id']) ? (int)$_POST['service_location_id'] : null;
 
 // Route to appropriate handler based on document type
 $doc_type = $_POST['doc_type'] ?? 'regular';
@@ -112,13 +116,15 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 $pdo->beginTransaction();
 try{
   $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, deposit_paid, fulfillment_date, memo, custom_fields, organization_id, created_by) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      ->execute([$client_id, $project_id, 'pending', $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $__creator]);
+      ->execute([$client_id, $project_id, 'draft', $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_amount, 0, $fulfillment_date, $memo, $customFieldsJson, $__orgId, $__creator]);
   $co_id = (int)$pdo->lastInsertId();
 
   // Assign Project ID and doc number (fallback if unavailable)
   $projectCode = 'PA-'.date('Y').'-001';
   try { $projectCode = project_next_code($pdo, $client_id); } catch (Throwable $e) { @error_log('[contracts_create] project_next_code failed: '.$e->getMessage(), 0); }
-  $pdo->prepare('UPDATE contracts SET project_code=? WHERE id=?')->execute([$projectCode, $co_id]);
+  $jobId = JobAssignmentService::ensureForCode($pdo, $client_id, $projectCode, $project_id ?: null, $__creator);
+  $serviceLocationId = document_resolve_service_location($pdo,$client_id,$project_id,$jobId,$requestedServiceLocationId);
+  $pdo->prepare('UPDATE contracts SET project_code=?,job_id=?,service_location_id=? WHERE id=?')->execute([$projectCode, $jobId, $serviceLocationId, $co_id]);
 
   $notes = trim((string)($_POST['project_notes'] ?? ''));
   if ($notes !== '') {
@@ -142,8 +148,8 @@ try{
 
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
-  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $invoice_subtotal, $invoice_total, 'draft', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
+  $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, job_id, service_location_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      ->execute([$co_id, null, $client_id, $project_id, $jobId, $serviceLocationId, $billing_mode, $discount_type, $discount_value, $tax_percent, $invoice_subtotal, $invoice_total, 'draft', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
   $invoice_id = (int)$pdo->lastInsertId();
   if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
     $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
@@ -174,6 +180,8 @@ try{
 
   audit_log($pdo, 'contract.create', 'contract', $co_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'invoice_id' => $invoice_id]);
   audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['contract_id' => $co_id, 'client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'auto_generated' => true]);
+  DocumentRevisionService::snapshotAndSave($pdo,'contract',$co_id,$__creator,false);
+  DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoice_id,$__creator,false);
 
   $pdo->commit();
 }catch(Throwable $e){

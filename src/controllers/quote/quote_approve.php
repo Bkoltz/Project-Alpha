@@ -8,6 +8,8 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
 require_once __DIR__ . '/../../utils/mileage.php';
+require_once __DIR__ . '/../../services/JobAssignmentService.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 // Auto-create settings (default to true/on when not explicitly set)
 $autoCreateContract = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
@@ -46,14 +48,16 @@ try {
     $projectCode = project_next_code($pdo, (int)$quote['client_id']);
     $pdo->prepare('UPDATE quotes SET project_code=? WHERE id=?')->execute([$projectCode, $id]);
   }
+  $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
+  $serviceLocationId = !empty($quote['service_location_id']) ? (int)$quote['service_location_id'] : null;
+  $jobId = !empty($quote['job_id']) ? (int)$quote['job_id'] : JobAssignmentService::ensureForCode($pdo, (int)$quote['client_id'], $projectCode, $projectId, $quoteCreator);
+  $pdo->prepare('UPDATE quotes SET job_id=? WHERE id=?')->execute([$jobId, $id]);
 
   // Mark quote approved
   $pdo->prepare('UPDATE quotes SET status="approved" WHERE id=?')->execute([$id]);
   pa_public_link_terminalize($pdo, 'quote', $id, 'approved');
 
   // Get project_id from quote for inheritance
-  $projectId = !empty($quote['project_id']) ? (int)$quote['project_id'] : null;
-
   $quoteType = $quote['quote_type'] ?? 'regular';
   $billingMode = ($quote['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
   $depositType = $quote['deposit_type'] ?? 'none';
@@ -73,7 +77,7 @@ try {
             $id,
             (int)$quote['client_id'],
             $projectId,
-            'pending',
+            'draft',
             $quoteType,
             $billingMode,
             $quote['discount_type'],
@@ -97,6 +101,7 @@ try {
             $quoteCreator
           ]);
       $contract_id = (int)$pdo->lastInsertId();
+      $pdo->prepare('UPDATE contracts SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $contract_id]);
       if ($quoteType === 'long_term' && ($quote['pricing_type'] ?? '') === 'per_invoice') {
         pa_recurring_service_ensure_base($pdo, $contract_id);
       }
@@ -118,8 +123,9 @@ try {
     // Regular quote: create contract and/or invoice based on settings
     if ($autoCreateContract) {
       $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $depositType, $contractDepositAmount, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+          ->execute([$id, (int)$quote['client_id'], $projectId, 'draft', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $depositType, $contractDepositAmount, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $contract_id = (int)$pdo->lastInsertId();
+      $pdo->prepare('UPDATE contracts SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $contract_id]);
 
       $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
@@ -138,6 +144,7 @@ try {
       $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
           ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $invoice_id = (int)$pdo->lastInsertId();
+      $pdo->prepare('UPDATE invoices SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $invoice_id]);
       if ($projectId && project_uses_monthly_invoice_billing($pdo, $projectId)) {
         $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
       }
@@ -153,6 +160,8 @@ try {
     }
   }
 
+  if(isset($contract_id))DocumentRevisionService::snapshotAndSave($pdo,'contract',(int)$contract_id,$quoteCreator,false);
+  if(isset($invoice_id))DocumentRevisionService::snapshotAndSave($pdo,'invoice',(int)$invoice_id,$quoteCreator,false);
   $pdo->commit();
 
   // Notify client that their quote has been approved (best-effort; don't fail approval)

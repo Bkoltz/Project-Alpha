@@ -38,6 +38,7 @@ try {
   $c->execute([$contract_id]);
   $contract = $c->fetch(PDO::FETCH_ASSOC);
   if (!$contract) throw new Exception('Not found');
+  if (!empty($contract['signed_at']) || trim((string)($contract['signed_pdf_path']??''))!=='') throw new Exception('This contract is already signed. Use an amendment or void and reissue it.');
   
   // Note: Deposit and signed contract can be received in any order
   // We no longer require deposit to be received before signing
@@ -79,17 +80,20 @@ try {
   // For LONG-TERM and ON-DEMAND, keep the contract pending until the user explicitly activates it.
   // This preserves explicit user intent and prevents accidental activation.
   $ctType = $contract['contract_type'] ?? 'regular';
+  $signedHash = hash_file('sha256',$internalDest);
+  $signedRevision = max(1,(int)($contract['revision_number']??1));
   if ($ctType === 'regular') {
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, status=? WHERE id=?')
-        ->execute([$publicUrl, 'active', $contract_id]);
+    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?,status=?,signed_at=NOW(),signed_revision_number=?,signed_pdf_sha256=? WHERE id=? AND signed_at IS NULL AND (signed_pdf_path IS NULL OR signed_pdf_path="")')
+        ->execute([$publicUrl,'active',$signedRevision,$signedHash,$contract_id]);
   } elseif (pa_long_term_starts_billing_on_upload($contract)) {
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?, next_invoice_date=? WHERE id=?')
-        ->execute([$publicUrl, date('Y-m-d'), $contract_id]);
+    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?,next_invoice_date=?,signed_at=NOW(),signed_revision_number=?,signed_pdf_sha256=? WHERE id=? AND signed_at IS NULL AND (signed_pdf_path IS NULL OR signed_pdf_path="")')
+        ->execute([$publicUrl,date('Y-m-d'),$signedRevision,$signedHash,$contract_id]);
   } else {
     // LT/OD: just save the path and leave status unchanged; the user clicks Activate separately.
-    $pdo->prepare('UPDATE contracts SET signed_pdf_path=? WHERE id=?')
-        ->execute([$publicUrl, $contract_id]);
+    $pdo->prepare('UPDATE contracts SET signed_pdf_path=?,signed_at=NOW(),signed_revision_number=?,signed_pdf_sha256=? WHERE id=? AND signed_at IS NULL AND (signed_pdf_path IS NULL OR signed_pdf_path="")')
+        ->execute([$publicUrl,$signedRevision,$signedHash,$contract_id]);
   }
+  if($pdo->query('SELECT ROW_COUNT()')->fetchColumn()!=1)throw new Exception('This contract was signed by another request. The existing signed file was not replaced.');
 
   pa_public_link_terminalize($pdo, 'contract', $contract_id, 'signed');
 

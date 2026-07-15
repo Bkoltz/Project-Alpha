@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/address_book.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -44,6 +45,12 @@ $stmt->execute([
 ]);
 
 $client_id = (int)$pdo->lastInsertId();
+address_book_save($pdo, [
+  'label'=>'Billing address','address_line1'=>$address_line1,'address_line2'=>$address_line2,'city'=>$city,
+  'state'=>$state,'postal_code'=>$postal,'country'=>$country,
+  'google_place_id'=>trim((string)($_POST['google_place_id']??'')),
+  'source'=>trim((string)($_POST['google_place_id']??''))!==''?'google':'manual',
+], 'client', $client_id, 'billing', true, $__creator);
 audit_log($pdo, 'client.create', 'client', $client_id, ['organization_id' => $organization_id > 0 ? $organization_id : null, 'created_by' => $__creator]);
 
 header('Location: /?page=client/clients-list&created=1');

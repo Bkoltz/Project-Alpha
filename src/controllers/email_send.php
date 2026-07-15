@@ -10,6 +10,8 @@ require_once __DIR__ . '/../utils/email_identity.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/invoice_content_links.php';
 require_once __DIR__ . '/../utils/payment_methods.php';
+require_once __DIR__ . '/../services/EmailService.php';
+require_once __DIR__ . '/../services/DocumentRevisionService.php';
 
 // Determine if Dompdf is available
 $dompdfAvailable = is_file(__DIR__ . '/../../vendor/autoload.php');
@@ -29,7 +31,7 @@ require_record_ownership($pdo, $ownershipTable, $id);
 $invoiceLabel = '';
 try {
   if ($type === 'quote') {
-    $st = $pdo->prepare('SELECT q.id, q.doc_number, q.project_code, q.status, c.email, c.name FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
+    $st = $pdo->prepare('SELECT q.id, q.doc_number, q.project_code, q.status, q.revision_number, c.email, c.name FROM quotes q JOIN clients c ON c.id=q.client_id WHERE q.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
@@ -37,7 +39,7 @@ try {
     $subject = 'Quote Q-' . $docnum . ' for ' . $clientName;
     $baseView = '/?page=quote-print&id='.$id;
   } elseif ($type === 'contract') {
-    $st = $pdo->prepare('SELECT co.id, co.doc_number, co.project_code, co.status, c.email, c.name FROM contracts co JOIN clients c ON c.id=co.client_id WHERE co.id=?');
+    $st = $pdo->prepare('SELECT co.id, co.doc_number, co.project_code, co.status, co.revision_number, c.email, c.name FROM contracts co JOIN clients c ON c.id=co.client_id WHERE co.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
@@ -45,7 +47,7 @@ try {
     $subject = 'Contract C-' . $docnum . ' for ' . $clientName;
     $baseView = '/?page=contract-print&id='.$id;
   } else { // invoice
-    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
+    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, i.revision_number, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
@@ -129,19 +131,22 @@ try {
     $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
   } catch (Throwable $e) { /* ignore */ }
 
-  // Insert a fresh token for this share (do not reuse old links).
+  // Pending quotes/contracts keep one stable public link across revisions.
   // Invoice links stay valid until payment or manual revocation; other
   // document links keep the configured date-based expiration.
-  $token = bin2hex(random_bytes(16));
+  $token = '';
   $days = isset($appConfig['documents_valid_days']) ? (int)$appConfig['documents_valid_days'] : 14;
   if ($days <= 0) { $days = 14; }
   $expireWhenPaid = $type === 'invoice';
   $exp = $expireWhenPaid ? null : date('Y-m-d H:i:s', time() + ($days * 24 * 60 * 60));
-  try {
-  $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, redirect, expires_at, expire_when_paid) VALUES (?,?,?,?,?,?)');
-  // No redirect by default; callers may update this row later if desired
-  $ins->execute([$type, $id, $token, null, $exp, $expireWhenPaid ? 1 : 0]);
-  } catch (Throwable $e) { /* ignore */ }
+  if(in_array($type,['quote','contract'],true)){
+    $existingLink=$pdo->prepare('SELECT token FROM public_links WHERE document_type=? AND document_id=? AND revoked=0 AND (expires_at IS NULL OR expires_at>NOW()) ORDER BY id DESC LIMIT 1');$existingLink->execute([$type,$id]);$token=(string)($existingLink->fetchColumn()?:'');
+  }
+  if($token===''){
+    $token = bin2hex(random_bytes(16));
+    $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, redirect, expires_at, expire_when_paid) VALUES (?,?,?,?,?,?)');
+    $ins->execute([$type, $id, $token, null, $exp, $expireWhenPaid ? 1 : 0]);
+  }
 
   // Build absolute URL to public view
   // Use configured app_host first (user's domain), fall back to HTTP_HOST (internal IP)
@@ -282,57 +287,29 @@ try {
     }
   }
 
-  // Try PHPMailer first (supports attachments), else fallback to SMTP client, else mail()
-  $smtpHost = $appConfig['smtp_host'] ?? null;
-  $fromEmail = $appConfig['from_email'] ?? '';
-  $fromName = pa_email_sender_name($appConfig);
-  $sent = false; $err = '';
-  if ($smtpHost) {
-    $pass = '';
-    if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
-      $encVal = $appConfig['smtp_password_enc'];
-      if (strpos($encVal, 'plain::') === 0) {
-        $pass = substr($encVal, 7);
-      } else {
-        $pt = crypto_decrypt($encVal);
-        if (is_string($pt)) { $pass = $pt; }
-      }
-    }
-    $username = (string)($appConfig['smtp_username'] ?? '');
-    if ($fromEmail === '' && $username !== '') { $fromEmail = $username; }
-    if ($fromEmail === '') { $fromEmail = 'no-reply@localhost'; }
-    $cfg = [
-      'host' => $smtpHost,
-      'port' => (int)($appConfig['smtp_port'] ?? 587),
-      'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-      'username' => $username,
-      'password' => $pass,
-    ];
-
-    // Prefer PHPMailer if available
-    [$ok, $msg] = mailer_send($cfg, $to, $subject, $body, $fromEmail, $fromName, ($username ?: $fromEmail), $attachments);
-    if (!$ok) {
-      // Fallback minimal SMTP without attachments
-      [$ok2, $msg2] = smtp_send($cfg, $to, $subject, $body, $fromEmail, $fromName, ($username ?: $fromEmail));
-      $ok = $ok2; $msg = $ok2 ? '' : ($msg2 ?: $msg);
-    }
-    $sent = $ok; $err = $ok ? '' : ($msg ?: 'SMTP send failed');
-  }
-
-  if (!$sent) {
-    // Fallback: PHP mail() without attachment
-    $headers = "MIME-Version: 1.0\r\n" .
-               "Content-type: text/html; charset=UTF-8\r\n" .
-               "From: ".($fromName?($fromName.' <'.$fromEmail.'>'):$fromEmail)."\r\n";
-    $mailOk = @mail($to, $subject, $body, $headers);
-    $sent = $sent || $mailOk;
-    if (!$sent && $err === '') { $err = 'Email send failed'; }
-  }
+  $revision = max(1, (int)($row['revision_number'] ?? 1));
+  [$sent, $err, $deliveryLogId] = EmailService::sendEmail($to, $subject, $body, [
+    'attachments' => $attachments,
+    'document_type' => $type,
+    'document_id' => $id,
+    'document_revision' => $revision,
+    'message_key' => implode(':', ['document', $type, $id, $revision, strtolower((string)$to)]),
+  ]);
 
   $toUrl = $redirectTo ?: $baseView;
   $join = (strpos($toUrl,'?')!==false)?'&':'?';
   if ($sent) {
     app_log('email', 'email sent', ['type'=>$type, 'id'=>$id, 'to'=>$to]);
+    try {
+      if ($err === 'Already sent') {
+        throw new LogicException('This revision was already delivered to this recipient.');
+      }
+      DocumentRevisionService::markDelivered($pdo, $type, $id, (string)$to, $deliveryLogId ?? null);
+    } catch (LogicException $alreadyTracked) {
+      // Idempotent retry: the provider deliberately skipped the duplicate.
+    } catch (Throwable $deliveryError) {
+      app_log('email', 'document delivery tracking failed', ['type'=>$type, 'id'=>$id, 'ex'=>$deliveryError->getMessage()]);
+    }
     if ($type === 'invoice') {
       try {
         $pdo->prepare('UPDATE invoices SET sent_at=COALESCE(sent_at,NOW()) WHERE id=?')->execute([$id]);

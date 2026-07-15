@@ -47,7 +47,9 @@ function runPageCleanups() {
 
 function runPageInitializers(page, root = getMainContentRoot()) {
     const normalizedPage = normalizePageName(page);
-    const initializers = pageInitializers.get(normalizedPage) || [];
+    const pageSpecific = pageInitializers.get(normalizedPage) || [];
+    const globalInitializers = pageInitializers.get('*') || [];
+    const initializers = Array.from(new Set([...globalInitializers, ...pageSpecific]));
 
     initializers.forEach(initializer => {
         try {
@@ -94,7 +96,7 @@ function registerPageInitializer(pages, initializer) {
     });
 
     const activePage = normalizePageName(currentPage || getCurrentPage());
-    if (normalizedPages.includes(activePage)) {
+    if (normalizedPages.includes(activePage) || normalizedPages.includes('*')) {
         runPageInitializers(activePage, getMainContentRoot());
     }
 }

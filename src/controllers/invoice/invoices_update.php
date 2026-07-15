@@ -6,22 +6,22 @@ require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../services/DocumentPolicy.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'invoices', $id);
-$statusStmt = $pdo->prepare('SELECT status, finalized_at FROM invoices WHERE id=?');
+$statusStmt = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
 $statusStmt->execute([$id]);
 $invoiceState = $statusStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $invoiceStatus = strtolower((string)($invoiceState['status'] ?? ''));
 $isDraft = $invoiceStatus === 'draft';
-if (in_array($invoiceStatus, ['paid', 'partial', 'void', 'cancelled'], true)) {
-  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode('This invoice status cannot be edited.'));
-  exit;
-}
-if (!$isDraft && invoice_effective_paid_total($pdo, $id) > 0.005) {
-  header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode('Invoices with payment activity cannot be edited.'));
-  exit;
-}
+try { $invoiceState=DocumentPolicy::assertMutable($pdo,'invoice',$id,'monetary_adjustment'); } catch(DocumentLockedException $locked){http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$locked->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;}
 $client_id = (int)($_POST['client_id'] ?? 0);
+$requestedServiceLocationId = !empty($_POST['service_location_id']) ? (int)$_POST['service_location_id'] : null;
+if (!empty($invoiceState['job_id']) && $client_id !== (int)$invoiceState['client_id']) {
+  http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'job_client_conflict','message'=>'A document cannot be moved to another client while it belongs to a Job. Create it under a new Job instead.','request_id'=>bin2hex(random_bytes(8))]);exit;
+}
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -66,6 +66,7 @@ $extraQtys = $_POST['extra_qty'] ?? [];
 $ExtraPrices = $_POST['extra_price'] ?? [];
 $extraIds = $_POST['extra_id'] ?? [];
 $extraUnits = $_POST['extra_billing_unit'] ?? [];
+$extraTypes = $_POST['extra_adjustment_type'] ?? [];
 
 $extraItemsArr = [];
 $subtotal = 0.0;
@@ -75,14 +76,17 @@ for ($i = 0; $i < count($extraItems); $i++) {
   $d = trim((string)($extraDescs[$i] ?? ''));
   $q = (float)($extraQtys[$i] ?? 0);
   $p = (float)($ExtraPrices[$i] ?? 0);
+  $adjustmentType = ($extraTypes[$i] ?? 'charge') === 'credit' ? 'credit' : 'charge';
   $eid = (int)($extraIds[$i] ?? 0);
   
   if ($itm === '' || $q <= 0 || $p < 0) continue;
   
-  $line = $q * $p;
+  $p = abs($p);
+  $signedPrice = $adjustmentType === 'credit' ? -$p : $p;
+  $line = $q * $signedPrice;
   $subtotal += $line;
   $unit = (($extraUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
-  $extraItemsArr[] = ['id' => $eid, 'i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line, 'u' => $unit];
+  $extraItemsArr[] = ['id' => $eid, 'i' => $itm, 'd' => $d, 'q' => $q, 'p' => $signedPrice, 't' => $line, 'u' => $unit, 'type' => $adjustmentType];
 }
 
 // Fetch all existing items to calculate subtotal including contract items
@@ -118,8 +122,9 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 
 $pdo->beginTransaction();
 try {
-  $pdo->prepare('UPDATE invoices SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=?, custom_fields=? WHERE id=?')
-    ->execute([$client_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $customFieldsJson, $id]);
+  $serviceLocationId = document_resolve_service_location($pdo,$client_id,!empty($invoiceState['project_id'])?(int)$invoiceState['project_id']:null,!empty($invoiceState['job_id'])?(int)$invoiceState['job_id']:null,$requestedServiceLocationId);
+  $pdo->prepare('UPDATE invoices SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=?, custom_fields=?, service_location_id=? WHERE id=?')
+    ->execute([$client_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id]);
   
   $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');
   $row->execute([$id]);
@@ -153,6 +158,10 @@ try {
       $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
     }
   }
+  $nextInvoiceRevision=max(1,(int)($invoiceState['revision_number']??1))+1;
+  $pdo->prepare('UPDATE invoice_adjustments SET superseded_at=NOW() WHERE invoice_id=? AND superseded_at IS NULL')->execute([$id]);
+  $adjustmentInsert=$pdo->prepare('INSERT INTO invoice_adjustments (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,revision_number,created_by) VALUES (?,?,?,?,?,?,?,?,?)');
+  foreach($extraItemsArr as $it){$adjustmentInsert->execute([$id,$it['type'],$it['i'],$it['d']?:null,$it['q'],$it['p'],$it['t'],$nextInvoiceRevision,(int)($_SESSION['user']['id']??0)?:null]);}
 
   $syncTimeEntries = $pdo->prepare('
     UPDATE time_entries te
@@ -162,9 +171,11 @@ try {
   ');
   $syncTimeEntries->execute([$client_id, $id, $id, $id]);
 
-  if (!$isDraft && !empty($invoiceState['finalized_at'])) {
+  if (!empty($invoiceState['finalized_at']) || invoice_effective_paid_total($pdo,$id)>0.005) {
     invoice_refresh_payment_totals($pdo, $id, false);
   }
+  DocumentRevisionService::snapshotAndSave($pdo,'invoice',$id,(int)($_SESSION['user']['id']??0));
+  if(!$isDraft)$pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="invoice" AND document_id=?')->execute([$id]);
   
   $pdo->commit();
 } catch (Throwable $e) {

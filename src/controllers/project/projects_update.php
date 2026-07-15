@@ -6,6 +6,8 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../../utils/public_project_links.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../services/ScheduleService.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 csrf_verify_post_or_redirect('project/projects-update');
@@ -146,6 +148,14 @@ if ($hasAutoEmailColumn) {
 	$stmt->execute($params);
 }
 project_invoice_sync_clients($pdo, $id, $client_id > 0 ? $client_id : null, $projectClientIds, $projectInvoiceRecipientIds, $projectInvoiceLinkClientIds);
+$serviceLocationIds = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['service_location_ids'] ?? [])))));
+$defaultServiceLocationId = (int)($_POST['default_service_location_id'] ?? 0);
+if ($defaultServiceLocationId > 0 && !in_array($defaultServiceLocationId, $serviceLocationIds, true)) $serviceLocationIds[] = $defaultServiceLocationId;
+$pdo->prepare('DELETE FROM project_service_locations WHERE project_id=?')->execute([$id]);
+foreach ($serviceLocationIds as $locationId) {
+	$validLocation=$pdo->prepare('SELECT id FROM service_locations WHERE id=? AND archived=0');$validLocation->execute([$locationId]);
+	if ($validLocation->fetchColumn()) $pdo->prepare('INSERT INTO project_service_locations (project_id,service_location_id,is_default) VALUES (?,?,?)')->execute([$id,$locationId,$locationId===$defaultServiceLocationId?1:0]);
+}
 
 $publicProjectToken = trim((string)($storedProject['public_project_token'] ?? ''));
 if ($publicProjectEnabled && $publicProjectToken === '') {
@@ -178,5 +188,6 @@ $publicStmt->execute([
 	$publicProjectCanRequestChanges,
 	$id,
 ]);
+ScheduleService::syncProject($pdo, $id, (string)($appConfig['timezone'] ?? 'UTC'), (int)($_SESSION['user']['id']??0));
 header('Location: '.$detailsRedirect.'&updated=1');
 exit;

@@ -460,13 +460,15 @@ try {
                 $body .= "Please find attached: " . $form['title'] . "\n\n";
                 $body .= "Best regards,\n" . $brandName;
 
-                // Simple email (in production, use PHPMailer or similar for attachments)
-                $headers = "From: " . ($fromName ? ($fromName . ' <' . $fromEmail . '>') : $fromEmail) . "\r\n";
-                $headers .= "Reply-To: " . $fromEmail . "\r\n";
-
-                // Note: Basic mail() doesn't support attachments well
-                // This is a placeholder - integrate with proper email service
-                if (@mail($recipient['email'], $subject, $body, $headers)) {
+                require_once __DIR__ . '/../services/EmailService.php';
+                $attachments = [];
+                if (is_readable($filePath)) {
+                    $attachments[] = ['filename'=>(string)$form['file_name'],'content'=>(string)file_get_contents($filePath),'mime'=>'application/octet-stream'];
+                }
+                [$sent] = EmailService::sendEmail($recipient['email'], $subject, $body, [
+                    'attachments'=>$attachments,'is_html'=>false,'document_type'=>'other'
+                ]);
+                if ($sent) {
                     $successCount++;
                 }
             }
@@ -546,13 +548,18 @@ try {
 
                 $body .= "\nBest regards,\n" . $brandName;
 
-                // Simple email (in production, use PHPMailer or similar for attachments)
-                $headers = "From: " . ($fromName ? ($fromName . ' <' . $fromEmail . '>') : $fromEmail) . "\r\n";
-                $headers .= "Reply-To: " . $fromEmail . "\r\n";
-
-                // Note: Basic mail() doesn't support attachments well
-                // This is a placeholder - integrate with proper email service
-                if (@mail($recipient['email'], $subject, $body, $headers)) {
+                require_once __DIR__ . '/../services/EmailService.php';
+                $attachments = [];
+                foreach ($documents as $document) {
+                    $documentPath = __DIR__ . '/../../' . ltrim((string)$document['file_path'], '/');
+                    if (is_readable($documentPath)) {
+                        $attachments[] = ['filename'=>(string)$document['file_name'],'content'=>(string)file_get_contents($documentPath),'mime'=>'application/octet-stream'];
+                    }
+                }
+                [$sent] = EmailService::sendEmail($recipient['email'], $subject, $body, [
+                    'attachments'=>$attachments,'is_html'=>false,'document_type'=>'other'
+                ]);
+                if ($sent) {
                     $successCount++;
                 }
             }

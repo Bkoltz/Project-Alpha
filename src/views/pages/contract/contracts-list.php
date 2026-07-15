@@ -203,7 +203,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
               <?php endif; ?>
             </td>
             <td style="padding:10px">
-              <?php if ($r['status'] === 'pending'): ?>
+              <?php if (in_array($r['status'], ['draft','pending'], true) && empty($r['signed_pdf_path'])): ?>
                 <a href="/?page=contract/contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
               <?php else: ?>
                 <span style="color:#9ca3af;font-size:small">—</span>

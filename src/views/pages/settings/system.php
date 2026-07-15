@@ -1,5 +1,13 @@
 <?php
 // src/views/pages/settings/system.php
+$emailConnections = [];
+try {
+  require_once __DIR__ . '/../../../services/EmailService.php';
+  require_once __DIR__ . '/../../../services/EmailProviderManager.php';
+  $emailConnections = (new EmailProviderManager($pdo, $appConfig))->connections();
+} catch (Throwable $emailStatusError) {
+  @error_log('[settings/system] Unable to load email providers: ' . $emailStatusError->getMessage());
+}
 ?>
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
   <legend style="padding:0 6px;color:var(--muted)">Domain &amp; Public Access</legend>
@@ -106,6 +114,14 @@
     </select>
   </label>
 </fieldset>
+<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
+  <legend style="padding:0 6px;color:var(--muted)">Google Address &amp; Route Configuration</legend>
+  <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Installation administrators configure a browser key restricted by HTTP referrer and a server key restricted to the Routes API. Enable the workflow separately.</p>
+  <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+    <label><div>Places browser key</div><input type="password" name="google_maps_browser_key" value="<?php echo htmlspecialchars((string)($appConfig['google_maps_browser_key'] ?? '')); ?>" autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div>Routes server key</div><input type="password" name="google_routes_api_key" placeholder="Enter to update encrypted key" autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+  </div>
+</fieldset>
 
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
   <legend style="padding:0 6px;color:var(--muted)">Time &amp; Workforce</legend>
@@ -142,8 +158,42 @@
   <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Test email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
 <?php endif; ?>
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Outgoing Email (SMTP)</legend>
-  <p style="margin:0 0 8px;color:var(--muted)">Configure SMTP to send emails from your own account. For Gmail, enable 2-Step Verification and create an App Password.</p>
+  <legend style="padding:0 6px;color:var(--muted)">Outgoing Email</legend>
+  <p style="margin:0 0 12px;color:var(--muted)">Configure SMTP, Google, or both. Exactly one provider is active; Project Alpha never silently switches providers.</p>
+  <?php if (!empty($_GET['email_connected'])): ?>
+    <div style="margin-bottom:12px;padding:10px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:8px">Google Gmail connected and activated.</div>
+  <?php endif; ?>
+  <?php if ($emailConnections): ?>
+    <div style="display:grid;gap:8px;margin-bottom:16px">
+      <?php foreach ($emailConnections as $connection): ?>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #e5e7eb;border-radius:8px">
+          <div>
+            <strong><?php echo htmlspecialchars(strtoupper((string)$connection['provider'])); ?></strong>
+            <?php echo !empty($connection['is_active']) ? '<span style="color:#047857"> · Active</span>' : ''; ?>
+            <div style="font-size:12px;color:var(--muted)"><?php echo htmlspecialchars((string)($connection['sender_email'] ?: $connection['status'])); ?></div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <?php if (empty($connection['is_active']) && in_array($connection['status'], ['configured','connected'], true)): ?>
+              <button type="button" class="email-provider-action" data-action="activate" data-id="<?php echo (int)$connection['id']; ?>">Make active</button>
+            <?php endif; ?>
+            <button type="button" class="email-provider-action" data-action="disconnect" data-id="<?php echo (int)$connection['id']; ?>">Disconnect</button>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+  <div style="padding:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:14px">
+    <strong>Connect Google Gmail</strong>
+    <p style="margin:4px 0 10px;color:var(--muted);font-size:13px">Outbound email only. This does not enable Google sign-in.</p>
+    <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+      <label><div>OAuth client ID</div><input name="google_oauth_client_id" value="<?php echo htmlspecialchars((string)($appConfig['google_oauth_client_id'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      <label><div>OAuth client secret</div><input type="password" name="google_oauth_client_secret" placeholder="Enter to update" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    </div>
+    <p style="font-size:12px;color:var(--muted)">Save these installation credentials, then connect the business Gmail account.</p>
+    <a class="btn" href="/?page=settings/gmail-oauth&amp;action=connect&amp;csrf=<?php echo rawurlencode(csrf_token()); ?>">Connect Google</a>
+  </div>
+  <strong>SMTP configuration</strong>
+  <p style="margin:4px 0 8px;color:var(--muted)">Use any compatible mail server, including a Google App Password if preferred.</p>
   <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr">
     <label>
       <div>SMTP Host</div><input name="smtp_host" value="<?php echo htmlspecialchars($appConfig['smtp_host'] ?? ''); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="smtp.gmail.com">
@@ -179,7 +229,7 @@
   </div>
   <p style="margin:6px 0 0;color:var(--muted);font-size:12px">For Gmail: host smtp.gmail.com, port 587 (TLS) or 465 (SSL); use an App Password (not your normal password).</p>
   <div style="margin-top:12px">
-    <button type="button" id="btnEmailTest" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Send Test Email</button>
+    <button type="button" id="btnEmailTest" style="padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff">Test active provider</button>
     <div id="emailTestResult" style="margin-top:8px;font-size:13px"></div>
   </div>
 </fieldset>

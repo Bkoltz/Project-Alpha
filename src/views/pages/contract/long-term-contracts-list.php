@@ -184,7 +184,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
               <a href="/?page=invoice/recurring-invoices-list&status=all&contract_id=<?php echo (int)$r['id']; ?>#invoice-history" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:small;">Invoices</a>
-              <?php if (in_array($r['status'], ['pending', 'active', 'paused'], true)): ?>
+              <?php if (in_array($r['status'], ['draft','pending'], true) && empty($r['signed_pdf_path'])): ?>
                 <a href="/?page=contract/contracts-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1d4ed8;text-decoration:none;font-size:small">Edit Billing</a>
               <?php endif; ?>
               <?php $cst = strtolower((string)$r['status']); if (!in_array($cst, ['denied','cancelled','void'], true)): ?>

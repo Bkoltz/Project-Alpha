@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'invoices', $id);
@@ -15,6 +16,7 @@ if (!$inv) {
   echo '<p>Invoice not found</p>';
   return;
 }
+try{$inv=DocumentPolicy::assertMutable($pdo,'invoice',$id,'monetary_adjustment');}catch(DocumentLockedException $locked){http_response_code(409);echo '<div class="alert alert-warning">'.htmlspecialchars($locked->getMessage()).' <a href="/?page=invoice/invoice-details&id='.$id.'">Return to invoice</a></div>';return;}
 $items = $pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
@@ -115,6 +117,8 @@ foreach ($clients as $c) {
       </div>
     <?php endif; ?>
 
+    <?php $documentServiceLocationId = (int)($inv['service_location_id'] ?? 0); require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
+
     <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
       <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>
       <label style="display:flex;align-items:start;gap:8px;cursor:pointer">
@@ -172,19 +176,20 @@ foreach ($clients as $c) {
 
     <!-- Extra Charges Section -->
     <div>
-      <div style="font-weight:600;margin-bottom:8px">Extra Charges (editable)</div>
+      <div style="font-weight:600;margin-bottom:8px">Invoice Adjustments (editable)</div>
       <div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:12px;margin-bottom:8px">
         <?php if (empty($extraCharges)): ?>
           <p style="color:#92400e;margin:0">No extra charges added yet. Use the form below to add additional line items.</p>
         <?php else: ?>
           <div id="extraChargesContainer" style="display:grid;gap:8px">
             <?php foreach ($extraCharges as $idx => $it): ?>
-              <div style="display:grid;grid-template-columns:3fr 3fr 1fr 1fr auto;gap:8px;padding:8px;background:#fff;border-radius:4px;border:1px solid #fcd34d">
+              <div style="display:grid;grid-template-columns:1.2fr 2.5fr 2.5fr 1fr 1fr auto;gap:8px;padding:8px;background:#fff;border-radius:4px;border:1px solid #fcd34d">
                 <input type="hidden" name="extra_billing_unit[]" value="<?php echo htmlspecialchars($it['billing_unit'] ?? 'each'); ?>">
+                <select name="extra_adjustment_type[]" style="padding:8px;border-radius:4px;border:1px solid #ddd" onchange="recalcInv()"><option value="charge" <?php echo (float)$it['unit_price'] >= 0 ? 'selected' : ''; ?>>Charge</option><option value="credit" <?php echo (float)$it['unit_price'] < 0 ? 'selected' : ''; ?>>Credit</option></select>
                 <input id="item" type="text" name="extra_item[]" value="<?php echo htmlspecialchars($it['item'] ?? ''); ?>" placeholder="Item name..." style="padding:8px;border-radius:4px;border:1px solid #ddd" data-item-autocomplete data-description-field="extra_desc_<?php echo $idx; ?>" data-price-field="extra_price_<?php echo $idx; ?>">
                 <textarea id="description" name="extra_desc[]" placeholder="Description (optional)" style="padding:8px;border-radius:4px;border:1px solid #ddd;resize:vertical;min-height:34px"><?php echo htmlspecialchars($it['description'] ?? ''); ?></textarea>
                 <input id="quantity" type="number" step="0.01" min="0" name="extra_qty[]" value="<?php echo htmlspecialchars($it['quantity']); ?>" placeholder="Qty" style="padding:8px;border-radius:4px;border:1px solid #ddd">
-                <input id="price" type="number" step="0.01" min="0" name="extra_price[]" value="<?php echo htmlspecialchars($it['unit_price']); ?>" placeholder="Price" style="padding:8px;border-radius:4px;border:1px solid #ddd">
+                <input id="price" type="number" step="0.01" min="0" name="extra_price[]" value="<?php echo htmlspecialchars((string)abs((float)$it['unit_price'])); ?>" placeholder="Amount" style="padding:8px;border-radius:4px;border:1px solid #ddd">
                 <input type="hidden" name="extra_id[]" value="<?php echo htmlspecialchars($it['id']); ?>">
                 <button type="button" onclick="if(confirm('Remove this extra charge?')){this.parentElement.remove();recalcInv();}" style="border:0;background:#fee2e2;color:#991b1b;border-radius:4px;padding:8px 10px;cursor:pointer">Remove</button>
               </div>
@@ -192,7 +197,7 @@ foreach ($clients as $c) {
           </div>
         <?php endif; ?>
       </div>
-      <button id="addExtraChargeBtn" type="button" onclick="addExtraCharge()" style="margin-bottom:12px;padding:8px 12px;border-radius:8px;border:1px solid #fbbf24;background:#fffbeb;color:#92400e;cursor:pointer;font-weight:600">+ Add Extra Charge</button>
+      <button id="addExtraChargeBtn" type="button" onclick="addExtraCharge()" style="margin-bottom:12px;padding:8px 12px;border-radius:8px;border:1px solid #fbbf24;background:#fffbeb;color:#92400e;cursor:pointer;font-weight:600">+ Add Charge or Credit</button>
     </div>
 
     <?php $pn = null;

@@ -11,6 +11,13 @@
 </fieldset>
 
 <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">
+  <legend style="padding:0 8px;font-weight:600">Locations &amp; Route Assistance</legend>
+  <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Manual addresses and mileage always remain available. Google only suggests address details and one-way driving distance.</p>
+  <label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0"><input type="checkbox" name="address_route_assistance_enabled" value="1" <?php echo !empty($appConfig['address_route_assistance_enabled'])?'checked':''; ?>><span><strong>Enable address and route assistance</strong><br><small>Requires restricted Google keys in System settings. Default is off.</small></span></label>
+  <label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0"><input type="checkbox" name="job_project_locations_enabled" value="1" <?php echo !empty($appConfig['job_project_locations_enabled'])?'checked':''; ?>><span><strong>Enable Job and Project location controls</strong><br><small>Jobs may have one default service location; Projects may have several. Existing manual document addresses are preserved.</small></span></label>
+</fieldset>
+
+<fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">
   <legend style="padding:0 8px;font-weight:600">Time Access &amp; Approval</legend>
   <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Employees can always access their own permitted time. Team-wide time and approval access is limited to administrators and owners unless enabled here and granted through ACL permissions.</p>
   <label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0">

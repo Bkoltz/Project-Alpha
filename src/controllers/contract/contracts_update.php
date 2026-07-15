@@ -8,11 +8,17 @@ require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
 require_once __DIR__ . '/../../utils/mileage.php';
+require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../services/DocumentPolicy.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../../services/ScheduleService.php';
+require_once __DIR__ . '/../../services/JobAssignmentService.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$requestedServiceLocationId = !empty($_POST['service_location_id']) ? (int)$_POST['service_location_id'] : null;
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
@@ -31,6 +37,10 @@ if ($id<=0 || $client_id<=0) { header('Location: /?page=contract/contracts-list&
 $contractTypeStmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? LIMIT 1');
 $contractTypeStmt->execute([$id]);
 $existingContract = $contractTypeStmt->fetch(PDO::FETCH_ASSOC);
+try { $existingContract=DocumentPolicy::assertMutable($pdo,'contract',$id,'commercial'); } catch(DocumentLockedException $locked){http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$locked->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;}
+if (!empty($existingContract['job_id']) && $client_id !== (int)$existingContract['client_id']) {
+  http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'job_client_conflict','message'=>'A contract cannot be moved to another client while it belongs to a Job. Clone it into a new Job instead.','request_id'=>bin2hex(random_bytes(8))]);exit;
+}
 $contractType = (string)($existingContract['contract_type'] ?? '');
 $isLongTermContract = $contractType === 'long_term';
 $existingBaseService = null;
@@ -112,6 +122,10 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 
 $pdo->beginTransaction();
 try{
+  if (!empty($existingContract['job_id']) && (int)($existingContract['project_id'] ?? 0) !== (int)($project_id ?? 0)) {
+    JobAssignmentService::assignProject($pdo,(int)$existingContract['job_id'],$project_id);
+  }
+  $serviceLocationId = document_resolve_service_location($pdo,$client_id,$project_id,!empty($existingContract['job_id'])?(int)$existingContract['job_id']:null,$requestedServiceLocationId);
   if ($isLongTermContract && $longTerm) {
     $pdo->prepare('
       UPDATE contracts
@@ -119,14 +133,14 @@ try{
           subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?,
           deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=?,
           start_date=?, end_date=?, billing_interval_count=?, billing_interval_unit=?, pricing_type=?,
-          price_per_invoice=?, billing_start_mode=?, invoice_count=?, next_invoice_date=?
+          price_per_invoice=?, billing_start_mode=?, invoice_count=?, next_invoice_date=?, service_location_id=?
       WHERE id=?
     ')->execute([
       $client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,
       $subtotal,$total,$terms,$estimated,$weather,$deposit_type,
       $deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,
       $longTerm['start_date'],$longTerm['end_date'],$longTerm['billing_interval_count'],$longTerm['billing_interval_unit'],$longTerm['pricing_type'],
-      $longTerm['price_per_invoice'],$longTerm['billing_start_mode'],$longTerm['invoice_count'],$longTerm['next_invoice_date'],
+      $longTerm['price_per_invoice'],$longTerm['billing_start_mode'],$longTerm['invoice_count'],$longTerm['next_invoice_date'],$serviceLocationId,
       $id
     ]);
     if ($longTerm['pricing_type'] === 'per_invoice') {
@@ -160,13 +174,13 @@ try{
       $pdo->prepare('UPDATE contract_recurring_services SET status="ended",next_invoice_date=NULL WHERE contract_id=? AND is_base=1 AND status<>"ended"')->execute([$id]);
     }
   } else {
-    $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=? WHERE id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$id]);
+    $pdo->prepare('UPDATE contracts SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, terms=?, estimated_completion=?, weather_pending=?, deposit_type=?, deposit_amount=?, deposit_paid=?, fulfillment_date=?, scope=?, memo=?, custom_fields=?, service_location_id=? WHERE id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$terms,$estimated,$weather,$deposit_type,$deposit_amount,$deposit_paid,$fulfillment_date,$scope,$memo,$customFieldsJson,$serviceLocationId,$id]);
   }
   
   // Sync changes to regular linked invoices. Long-term recurring invoices are historical billing records and must not be rewritten.
   if (!$isLongTermContract) {
     $invoiceDiscount=$discount_type==='percent'?max(0,min(100,$discount_value))*$invoiceSubtotal/100:($discount_type==='fixed'?min($invoiceSubtotal,max(0,$discount_value)):0);$invoiceTotal=max(0,$invoiceSubtotal-$invoiceDiscount+max(0,$tax_percent)*max(0,$invoiceSubtotal-$invoiceDiscount)/100);
-    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$invoiceSubtotal,$invoiceTotal,$estimated,$fulfillment_date,$weather,$scope,$id]);
+    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=?, service_location_id=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$invoiceSubtotal,$invoiceTotal,$estimated,$fulfillment_date,$weather,$scope,$serviceLocationId,$id]);
   }
   $pdo->prepare('DELETE FROM project_documents WHERE document_type="contract" AND document_id=?')->execute([$id]);
   if ($project_id) {
@@ -221,6 +235,18 @@ try{
   } catch (Throwable $sigErr) {
       @error_log('contracts_update signature insert failed: ' . $sigErr->getMessage());
   }
+  if (!$isLongTermContract) {
+    $linkedRevisions = $pdo->prepare('SELECT id,last_sent_revision FROM invoices WHERE contract_id=?');
+    $linkedRevisions->execute([$id]);
+    foreach ($linkedRevisions->fetchAll(PDO::FETCH_ASSOC) as $linkedInvoice) {
+      DocumentRevisionService::snapshotAndSave($pdo,'invoice',(int)$linkedInvoice['id'],(int)($_SESSION['user']['id']??0));
+      if (!empty($linkedInvoice['last_sent_revision'])) {
+        $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="invoice" AND document_id=?')->execute([(int)$linkedInvoice['id']]);
+      }
+    }
+  }
+  DocumentRevisionService::snapshotAndSave($pdo,'contract',$id,(int)($_SESSION['user']['id']??0));
+  if(!empty($existingContract['job_id']))ScheduleService::syncJob($pdo,(int)$existingContract['job_id'],(string)($appConfig['timezone']??'UTC'),(int)($_SESSION['user']['id']??0));
   
   $pdo->commit();
 }catch(Throwable $e){ $pdo->rollBack(); header('Location: /?page=' . $detailPage . '&id=' . $id . '&error=Update%20failed'); exit; }

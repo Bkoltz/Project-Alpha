@@ -8,6 +8,7 @@ require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/recurring_billing.php';
 require_once __DIR__ . '/../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../utils/email_identity.php';
+require_once __DIR__ . '/../services/EmailService.php';
 
 $logPrefix = '[generate_recurring_invoices]';
 $jobName = 'generate_recurring_invoices';
@@ -143,7 +144,7 @@ try {
                 $body .= '<p>If you have already paid, please disregard this message.</p>';
 
                 try {
-                    [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
+                    [$ok, $err] = EmailService::sendEmail($to, $subject, $body, ['document_type'=>'invoice','document_id'=>$iid,'message_key'=>'invoice:'.$iid.':due_7']);
                     if ($ok) {
                         $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'due_7']);
@@ -194,7 +195,7 @@ try {
                 $body .= '<p>If you have already paid, please disregard this message.</p>';
 
                 try {
-                    [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
+                    [$ok, $err] = EmailService::sendEmail($to, $subject, $body, ['document_type'=>'invoice','document_id'=>$iid,'message_key'=>'invoice:'.$iid.':overdue_weekly:'.date('o-W')]);
                     if ($ok) {
                         $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'overdue_weekly']);
@@ -234,7 +235,7 @@ try {
                 $body .= '<p>Thank you for your business!</p>';
 
                 try {
-                    [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
+                    [$ok, $err] = EmailService::sendEmail($to, $subject, $body, ['document_type'=>'invoice','document_id'=>$iid,'message_key'=>'invoice:'.$iid.':on_generate']);
                     if ($ok) {
                         $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insn->execute([$iid, 'on_generate']);

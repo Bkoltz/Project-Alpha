@@ -127,11 +127,12 @@ try {
 
     $update = $pdo->prepare("
         UPDATE contracts
-        SET signed_pdf_path = ?, status = ?, signed_at = NOW(){$billingStartSql}
+        SET signed_pdf_path = ?, status = ?, signed_at = NOW(),signed_revision_number=revision_number,signed_pdf_sha256=?{$billingStartSql}
         WHERE id = ?
           AND status = 'pending'
           AND (signed_pdf_path IS NULL OR signed_pdf_path = '')
     ");
+    array_splice($updateParams,2,0,[hash_file('sha256',$storedFile)]);
     $update->execute($updateParams);
     if ($update->rowCount() !== 1) {
         $storedFile = $uploadDir . DIRECTORY_SEPARATOR . $filename;

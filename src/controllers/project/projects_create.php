@@ -5,6 +5,8 @@ require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/project_invoice_billing.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../services/ScheduleService.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -143,6 +145,13 @@ if ($hasAutoEmailColumn) {
 }
 
 $project_id = (int)$pdo->lastInsertId();
+$serviceLocationIds = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['service_location_ids'] ?? [])))));
+$defaultServiceLocationId = (int)($_POST['default_service_location_id'] ?? 0);
+if ($defaultServiceLocationId > 0 && !in_array($defaultServiceLocationId, $serviceLocationIds, true)) $serviceLocationIds[] = $defaultServiceLocationId;
+foreach ($serviceLocationIds as $locationId) {
+	$validLocation=$pdo->prepare('SELECT id FROM service_locations WHERE id=? AND archived=0');$validLocation->execute([$locationId]);
+	if ($validLocation->fetchColumn()) $pdo->prepare('INSERT INTO project_service_locations (project_id,service_location_id,is_default) VALUES (?,?,?)')->execute([$project_id,$locationId,$locationId===$defaultServiceLocationId?1:0]);
+}
 project_invoice_sync_clients(
 	$pdo,
 	$project_id,
@@ -152,5 +161,6 @@ project_invoice_sync_clients(
 	$projectInvoiceLinkClientIds
 );
 audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'department_id' => $department_id > 0 ? $department_id : null, 'created_by' => $__creator]);
+ScheduleService::syncProject($pdo, $project_id, (string)($appConfig['timezone'] ?? 'UTC'), $__creator);
 header('Location: /?page=project/projects-details&id=' . $project_id . '&created=1');
 exit;

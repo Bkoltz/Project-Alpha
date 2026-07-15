@@ -27,6 +27,7 @@ send_security_headers();
 // Resolve clean module routes before falling back to PA's legacy ?page router.
 $requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/');
 $moduleRoutes = [
+    '/health/ready' => 'health/ready',
     '/time' => 'workforce/time',
     '/time/action' => 'workforce/action',
     '/workforce' => 'workforce/overview',
@@ -88,6 +89,11 @@ if (in_array($page, $retiredAlphaLedgerPages, true)) {
     http_response_code(410);
     header('Content-Type: text/plain; charset=UTF-8');
     echo 'This standalone AlphaLedger integration endpoint has been retired. Use /time, /workforce, /approvals, or /pay.';
+    exit;
+}
+
+if ($page === 'health/ready') {
+    require_once __DIR__ . '/../src/controllers/health/ready.php';
     exit;
 }
 
@@ -566,6 +572,10 @@ if ($page === 'settings/dropbox-oauth') {
     require_once __DIR__ . '/../src/controllers/settings/dropbox_oauth.php';
     exit;
 }
+if ($page === 'settings/gmail-oauth' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    require_once __DIR__ . '/../src/controllers/settings/gmail_oauth.php';
+    exit;
+}
 
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
@@ -603,6 +613,10 @@ if ($page === 'financial/mileage-unbilled') {
 }
 if ($page === 'financial/mileage-tracking-api') {
     require_once __DIR__ . '/../src/controllers/financial/mileage_tracking_api.php';
+    exit;
+}
+if ($page === 'financial/route-estimate') {
+    require_once __DIR__ . '/../src/controllers/financial/route_estimate.php';
     exit;
 }
 if ($page === 'time-tracking/options') {
@@ -752,6 +766,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'settings/stripe-net-backfill',
         'settings/stripe-import-payments',
         'settings/dropbox-oauth',
+        'settings/email-provider-handler',
         'settings/link-resolver-run',
 
         // User accounts / auth management
@@ -932,6 +947,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($page === 'settings') {
         require_once __DIR__ . '/../src/controllers/settings_handler.php';
+        exit;
+    }
+    if ($page === 'jobs/job-settings-handler') {
+        require_once __DIR__ . '/../src/controllers/jobs/job_settings_handler.php';
+        exit;
+    }
+    if ($page === 'quote/quote-clone') {
+        require_once __DIR__ . '/../src/controllers/quote/quote_clone.php';
+        exit;
+    }
+    if ($page === 'settings/email-provider-handler') {
+        require_once __DIR__ . '/../src/controllers/settings/email_provider_handler.php';
         exit;
     }
     if ($page === 'workforce/action') {

@@ -78,9 +78,10 @@ $isPdf = defined('PDF_MODE');
     <a href="/?page=<?php echo htmlspecialchars($backPage); ?>" class="btn btn-sm">Back</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" target="_blank" rel="noopener" class="btn btn-sm">View PDF</a>
     <a href="/?page=quote/quote-pdf&id=<?php echo (int)$id; ?>" download="quote-<?php echo htmlspecialchars($quote['doc_number'] ?? $quote['id']); ?>.pdf" class="btn btn-sm">Download</a>
-    <?php if ($quote['status'] === 'pending'): ?>
+    <?php if (in_array($quote['status'], ['draft','pending'], true)): ?>
       <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
+    <?php if((int)($quote['last_sent_revision']??0)>0&&(int)($quote['revision_number']??1)>(int)$quote['last_sent_revision']): ?><span class="alert alert-warning" style="padding:6px 9px">Revised <?php echo htmlspecialchars((string)($quote['revision_updated_at']??'')); ?> · Resend required</span><?php endif; ?>
     <?php if (!empty($quote['status']) && strtolower($quote['status']) !== 'rejected'): ?>
     <form method="post" action="/?page=quote/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -102,20 +103,21 @@ $isPdf = defined('PDF_MODE');
         <button type="submit" class="btn btn-sm btn-danger">Deny</button>
       </form>
     <?php endif; ?>
-    <?php if (!empty($quote['status']) && strtolower($quote['status']) === 'rejected'): ?>
-    <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this quote? It will be set back to pending status.');">
+    <?php if (!in_array(strtolower((string)($quote['status']??'')), ['draft','pending'], true)): ?>
+    <form method="post" action="/?page=quote/quote-clone" style="display:inline" onsubmit="return confirm('Clone this quote into a new editable draft?');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-      <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-      <button type="submit" class="btn btn-sm btn-warning">Re-enable</button>
+      <button type="submit" class="btn btn-sm btn-warning">Clone to new draft</button>
     </form>
     <?php endif; ?>
+    <?php if (in_array(strtolower((string)($quote['status']??'')), ['draft','pending'], true)): ?>
     <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <button type="submit" class="btn btn-sm btn-info">Update Document Date</button>
     </form>
+    <?php endif; ?>
     <?php if (strtolower($quote['status'] ?? '') !== 'rejected'): ?>
     <button type="button" onclick="generatePublicLink()" class="btn btn-sm btn-info">Share Link</button>
     <?php endif; ?>

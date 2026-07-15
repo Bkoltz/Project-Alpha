@@ -84,13 +84,13 @@ try {
   $pdo->beginTransaction();
   try {
     $billingStartSql = '';
-    $updateParams = [$publicUrl, 'active'];
+    $updateParams = [$publicUrl, 'active', hash_file('sha256',$internal . DIRECTORY_SEPARATOR . $name)];
     if (pa_long_term_starts_billing_on_upload($contract)) {
       $billingStartSql = ', next_invoice_date=?';
       $updateParams[] = date('Y-m-d');
     }
     $updateParams[] = $cid;
-    $update = $pdo->prepare("UPDATE contracts SET signed_pdf_path=?, status=?, signed_at=NOW(){$billingStartSql} WHERE id=? AND status='pending' AND (signed_pdf_path IS NULL OR signed_pdf_path='')");
+    $update = $pdo->prepare("UPDATE contracts SET signed_pdf_path=?,status=?,signed_at=NOW(),signed_revision_number=revision_number,signed_pdf_sha256=?{$billingStartSql} WHERE id=? AND status='pending' AND (signed_pdf_path IS NULL OR signed_pdf_path='')");
     $update->execute($updateParams);
     if ($update->rowCount() !== 1) {
       $storedFile = $internal . DIRECTORY_SEPARATOR . $name;

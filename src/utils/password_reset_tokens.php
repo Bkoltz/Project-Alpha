@@ -43,7 +43,10 @@ function password_reset_revoke_for_user(PDO $pdo, int $userId): void
 
 function password_reset_email_is_configured(array $appConfig): bool
 {
-    return trim((string)($appConfig['smtp_host'] ?? '')) !== '';
+    if (trim((string)($appConfig['smtp_host'] ?? '')) !== '') return true;
+    $pdo=$GLOBALS['pdo']??null;
+    if(!$pdo instanceof PDO)return false;
+    try{return (bool)$pdo->query('SELECT c.id FROM email_provider_state s JOIN email_provider_connections c ON c.id=s.active_connection_id WHERE s.id=1 AND c.status IN ("configured","connected") LIMIT 1')->fetchColumn();}catch(Throwable $error){return false;}
 }
 
 function password_reset_mask_token(string $token): string

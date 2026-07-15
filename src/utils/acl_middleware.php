@@ -34,6 +34,8 @@ function page_permission_map(): array
         'settings/document-custom-fields-handler' => 'settings.manage',
         'settings/document-customization-save'    => 'settings.manage',
         'settings/dropbox-oauth'             => 'settings.manage',
+        'settings/gmail-oauth'               => 'settings.manage',
+        'settings/email-provider-handler'    => 'settings.manage',
         'settings/item-library-handler'      => 'settings.manage',
         'settings/item-library-search'       => 'settings.view',
         'settings/links-handler'             => 'settings.manage',
@@ -91,6 +93,7 @@ function page_permission_map(): array
         'quote/long-term-quote-pdf' => 'quotes.view',
         'quote/quote-approve' => 'quotes.approve',
         'quote/quote-reject'  => 'quotes.reject',
+        'quote/quote-clone'   => 'quotes.create',
         'quote/email-send'    => 'quotes.send',
         'quote-reject'        => 'quotes.reject',
         'quotes-create'       => 'quotes.create',
@@ -213,6 +216,7 @@ function page_permission_map(): array
         // Jobs module
         'jobs/jobs-list'   => 'jobs.view',
         'jobs/job-details' => 'jobs.view',
+        'jobs/job-settings-handler' => 'jobs.edit',
         'jobs-list'        => 'jobs.view',
 
         // Organizations module
@@ -250,6 +254,7 @@ function page_permission_map(): array
         'financial/csv-import'             => 'financial.manage',
         'financial/mileage-handler'        => 'financial.manage',
         'financial/mileage-profile-handler'=> 'financial.manage',
+        'financial/route-estimate'          => 'financial.manage',
         'financial/mileage-unbilled'       => 'invoices.create',
         'financial/mileage-tracking-api'   => 'financial.manage',
         'financial/vendor-handler'         => 'financial.manage',

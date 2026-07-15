@@ -12,6 +12,7 @@ require_once __DIR__ . '/../../utils/notifications.php';
 require_once __DIR__ . '/../../utils/webhook_logger.php';
 require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../../services/EmailService.php';
 
 // Get raw POST body for signature verification
 $endpointName = 'stripe-webhook-legacy';
@@ -174,7 +175,7 @@ function handlePaymentFailed($pdo, $appConfig, $paymentIntent) {
             $body .= '<p><strong>Error:</strong> ' . htmlspecialchars($errorMsg) . '</p>';
             $body .= '<p>Payment Intent: ' . htmlspecialchars($piId) . '</p>';
             
-            mailer_send($mailCfg, $fromEmail, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
+            EmailService::sendEmail($fromEmail, $subject, $body, ['document_type'=>'notification','message_key'=>'stripe-failure:'.$piId]);
         } catch (Throwable $e) {
             @error_log('[StripeWebhook] Failed to send payment failure alert: ' . $e->getMessage());
         }

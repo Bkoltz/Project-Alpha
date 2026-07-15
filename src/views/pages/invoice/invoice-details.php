@@ -92,12 +92,13 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     <a href="/?page=invoice/invoice-pdf&id=<?php echo (int)$id; ?>" download="invoice-<?php echo htmlspecialchars(pa_invoice_label_from_row($inv)); ?>.pdf" class="btn btn-sm">Download</a>
     <?php
       $actionStatus = strtolower((string)$inv['status']);
-      $canEditInvoice = $actionStatus === 'draft'
-        || (in_array($actionStatus, ['sent','unpaid','overdue'], true) && (float)($inv['amount_paid'] ?? 0) <= 0.005);
+      $canEditInvoice = !in_array($actionStatus, ['void','cancelled'], true);
     ?>
     <?php if ($canEditInvoice): ?>
       <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
     <?php endif; ?>
+    <?php if((int)($inv['last_sent_revision']??0)>0&&(int)($inv['revision_number']??1)>(int)$inv['last_sent_revision']): ?><span class="alert alert-warning" style="padding:6px 9px">Revised <?php echo htmlspecialchars((string)($inv['revision_updated_at']??'')); ?> · Resend required</span><?php endif; ?>
+    <?php if((float)($inv['credit_due']??0)>0.005): ?><span class="alert alert-warning" style="padding:6px 9px">Credit due: $<?php echo number_format((float)$inv['credit_due'],2); ?>. Collection is disabled; use the audited credit/refund workflow.</span><?php endif; ?>
     <?php if (strtolower((string)$inv['status']) === 'draft'): ?>
       <form method="post" action="/?page=invoice/invoice-finalize" style="display:inline" onsubmit="return confirm('Finalize this invoice and email it to the client?');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
