@@ -99,3 +99,59 @@ function mailer_send(
         return [false, 'Mailer error: ' . $e->getMessage()];
     }
 }
+
+/**
+ * Build an RFC 5322 MIME message for API transports such as Gmail.
+ *
+ * @return array{0:bool,1:string,2:string} [ok, mime, error]
+ */
+function mailer_build_mime(
+    string $to,
+    string $subject,
+    string $body,
+    string $fromEmail,
+    string $fromName = '',
+    array $attachments = [],
+    bool $isHtml = true,
+    ?string $messageId = null
+): array {
+    if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+        return [false, '', 'PHPMailer not installed'];
+    }
+
+    try {
+        $mail = new PHPMailer(true);
+        $mail->CharSet = 'UTF-8';
+        $mail->setFrom($fromEmail, $fromName);
+        $mail->addAddress($to);
+        $mail->Subject = $subject;
+        if ($isHtml) {
+            $mail->isHTML(true);
+            $mail->Body = $body;
+            $mail->AltBody = strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $body));
+        } else {
+            $mail->isHTML(false);
+            $mail->Body = $body;
+        }
+        if ($messageId !== null && preg_match('/^<[^<>\s]+@[^<>\s]+>$/', $messageId)) {
+            $mail->MessageID = $messageId;
+        }
+        foreach ($attachments as $attachment) {
+            if (!is_array($attachment) || (string)($attachment['content'] ?? '') === '') {
+                continue;
+            }
+            $mail->addStringAttachment(
+                (string)$attachment['content'],
+                (string)($attachment['filename'] ?? 'attachment'),
+                'base64',
+                (string)($attachment['mime'] ?? 'application/octet-stream')
+            );
+        }
+        if (!$mail->preSend()) {
+            return [false, '', 'Unable to build MIME message'];
+        }
+        return [true, $mail->getSentMIMEMessage(), ''];
+    } catch (Throwable $e) {
+        return [false, '', 'Unable to build MIME message: ' . $e->getMessage()];
+    }
+}

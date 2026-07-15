@@ -10,12 +10,16 @@ require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
+require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../services/JobAssignmentService.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$requestedServiceLocationId = !empty($_POST['service_location_id']) ? (int)$_POST['service_location_id'] : null;
 $return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
@@ -177,7 +181,9 @@ try {
     }
     // Assign a new Project ID and doc_number
     $projectCode = project_next_code($pdo, $client_id);
-    $pdo->prepare('UPDATE invoices SET project_code=? WHERE id=?')->execute([$projectCode, $invoice_id]);
+    $jobId = JobAssignmentService::ensureForCode($pdo, $client_id, $projectCode, $project_id ?: null, $__creator);
+    $serviceLocationId = document_resolve_service_location($pdo,$client_id,$project_id,$jobId,$requestedServiceLocationId);
+    $pdo->prepare('UPDATE invoices SET project_code=?,job_id=?,service_location_id=? WHERE id=?')->execute([$projectCode, $jobId, $serviceLocationId, $invoice_id]);
     $notes = trim((string)($_POST['project_notes'] ?? ''));
     if ($notes !== '') {
       $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
@@ -226,6 +232,7 @@ try {
     }
     
     audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator]);
+    DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoice_id,$__creator,false);
     
     $pdo->commit();
 } catch (Throwable $e) {

@@ -101,8 +101,9 @@ $isOngoing = empty($quote['end_date']);
       <button type="submit" class="btn btn-sm">Email</button>
     </form>
     <?php endif; ?>
-    <?php if (($quote['status'] ?? '') === 'pending'): ?>
+    <?php if (in_array(($quote['status'] ?? ''), ['draft','pending'], true)): ?>
       <a href="/?page=quote/quotes-edit&id=<?php echo (int)$id; ?>" class="btn btn-sm">Edit</a>
+    <?php if (($quote['status'] ?? '') === 'pending'): ?>
       <form method="post" action="/?page=quote/quote-approve" style="display:inline">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
@@ -114,20 +115,22 @@ $isOngoing = empty($quote['end_date']);
         <button type="submit" class="btn btn-sm">Deny</button>
       </form>
     <?php endif; ?>
-    <?php if (!empty($quote['status']) && strtolower($quote['status']) === 'rejected'): ?>
-      <form method="post" action="/?page=document-reenable" style="display:inline" onsubmit="return confirm('Re-enable this quote? It will be set back to pending status.');">
+    <?php endif; ?>
+    <?php if (!in_array(strtolower((string)($quote['status']??'')), ['draft','pending'], true)): ?>
+      <form method="post" action="/?page=quote/quote-clone" style="display:inline" onsubmit="return confirm('Clone this quote into a new editable draft?');">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="type" value="quote">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" class="btn btn-sm">Re-enable</button>
+        <button type="submit" class="btn btn-sm">Clone to new draft</button>
       </form>
     <?php endif; ?>
+    <?php if (in_array(strtolower((string)($quote['status']??'')), ['draft','pending'], true)): ?>
     <form method="post" action="/?page=document-date-update" style="display:inline" onsubmit="return confirm('Update document date to today? This will refresh the date shown on the PDF.');">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="quote">
       <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
       <button type="submit" class="btn btn-sm">Update Document Date</button>
     </form>
+    <?php endif; ?>
     <?php if (strtolower($quote['status'] ?? '') !== 'rejected'): ?>
       <button type="button" onclick="generatePublicLink()" class="btn btn-sm">Share Link</button>
     <?php endif; ?>

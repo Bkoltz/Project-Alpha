@@ -20,23 +20,7 @@ $pdo->beginTransaction();
 try {
     switch ($type) {
         case 'quote':
-            // Re-enable quote (change from rejected back to pending)
-            $st = $pdo->prepare('SELECT * FROM quotes WHERE id=? FOR UPDATE');
-            $st->execute([$id]);
-            $doc = $st->fetch(PDO::FETCH_ASSOC);
-            if (!$doc) throw new Exception('Quote not found');
-            
-            // Only allow re-enabling rejected quotes
-            if ($doc['status'] !== 'rejected') {
-                throw new Exception('Only rejected quotes can be re-enabled');
-            }
-            
-            // Update status to pending and refresh document_date
-            $pdo->prepare("UPDATE quotes SET status='pending', document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
-                ->execute([$id]);
-            
-            $redirectPage = ($doc['quote_type'] ?? '') === 'long_term' ? 'quote/long-term-quote-details' : 'quote/quote-details';
-            break;
+            throw new Exception('Terminal quotes cannot be reopened. Clone the quote into a new draft.');
 
         case 'contract':
             // Re-enable contract (change from cancelled/denied/void back to pending)

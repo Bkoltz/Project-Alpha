@@ -6,6 +6,7 @@ require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/smtp.php';
 require_once __DIR__ . '/email_identity.php';
+require_once __DIR__ . '/../services/EmailService.php';
 
 /**
  * Log an activity event to the activity_log table
@@ -169,29 +170,18 @@ function send_admin_notification(PDO $pdo, array $appConfig, string $subject, st
         $adminEmails = admin_notification_recipients($pdo, $appConfig);
         if (!$adminEmails) { return false; }
 
-        $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
-        $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-        $fromName = pa_email_sender_name($appConfig);
-        $cfg = get_smtp_config($appConfig);
         $sent = 0;
 
         foreach ($adminEmails as $adminEmail) {
-            if (!empty($cfg['host'])) {
-                [$ok, $err] = mailer_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, ($cfg['username'] ?: $fromEmail));
-                if (!$ok) {
-                    [$ok, $err] = smtp_send($cfg, $adminEmail, $subject, $html, $fromEmail, $fromName, ($cfg['username'] ?: $fromEmail));
-                }
-                if (!$ok) {
-                    @error_log('[send_admin_notification] Failed for ' . $adminEmail . ': ' . ($err ?? 'unknown error'));
-                    continue;
-                }
-                $sent++;
-            } else {
-                $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\nFrom: ".($fromName?($fromName.' <'.$fromEmail.'>'):$fromEmail)."\r\n";
-                if (@mail($adminEmail, $subject, $html, $headers)) {
-                    $sent++;
-                }
+            [$ok, $error] = EmailService::sendEmail($adminEmail, $subject, $html, [
+                'document_type' => 'notification',
+                'message_key' => 'admin-notification:' . hash('sha256', $subject . '|' . $html . '|' . strtolower($adminEmail)),
+            ]);
+            if (!$ok) {
+                @error_log('[send_admin_notification] Failed for ' . $adminEmail . ': ' . $error);
+                continue;
             }
+            $sent++;
         }
 
         return $sent > 0;

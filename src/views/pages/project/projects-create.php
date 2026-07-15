@@ -236,6 +236,14 @@ if ($activeOrgId > 0) {
       </label>
     </div>
 
+    <?php if (!empty($appConfig['job_project_locations_enabled'])): $projectServiceLocations=$pdo->query('SELECT id,name,city,state FROM service_locations WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC); ?>
+    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:12px"><legend>Service locations</legend>
+      <p class="muted">A Project may include several locations. Documents use the default unless their Job selects another allowed location.</p>
+      <label><div>Allowed locations</div><select name="service_location_ids[]" multiple size="5" style="width:100%;padding:8px"><?php foreach($projectServiceLocations as $location): ?><option value="<?php echo (int)$location['id']; ?>"><?php echo htmlspecialchars($location['name'].($location['city']?' — '.$location['city'].', '.$location['state']:'')); ?></option><?php endforeach; ?></select></label>
+      <label><div>Default location</div><select name="default_service_location_id" style="width:100%;padding:8px"><option value="">No default</option><?php foreach($projectServiceLocations as $location): ?><option value="<?php echo (int)$location['id']; ?>"><?php echo htmlspecialchars($location['name']); ?></option><?php endforeach; ?></select></label>
+    </fieldset>
+    <?php endif; ?>
+
     <div style="padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
       <div style="font-weight:600;margin-bottom:8px">Project Invoice Billing</div>
       <label style="display:block;margin-bottom:8px">

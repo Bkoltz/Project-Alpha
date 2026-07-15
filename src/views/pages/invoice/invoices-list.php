@@ -251,7 +251,7 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
               <?php endif; ?>
             </td>
             <td style="padding:10px">
-              <?php if (strtolower((string)$r['status']) === 'draft'): ?>
+              <?php if (!in_array(strtolower((string)$r['status']), ['void','cancelled'], true)): ?>
                 <a href="/?page=invoice/invoices-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
               <?php else: ?>
                 <span style="color:#9ca3af;font-size:small">—</span>

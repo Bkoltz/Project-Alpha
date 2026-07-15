@@ -2,6 +2,7 @@
 // src/controllers/organization/organizations_update.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/organization_schema.php';
+require_once __DIR__ . '/../../utils/address_book.php';
 
 $id = (int)($_POST['id'] ?? 0);
 $name = trim($_POST['name'] ?? '');
@@ -31,6 +32,11 @@ foreach ($addressValues as $column => $value) {
     }
 }
 $addressSql = $addressAssignments ? ', ' . implode(', ', $addressAssignments) : '';
+$saveReusableAddress = static function () use ($pdo, $addressValues, $id): void {
+    address_book_save($pdo, $addressValues + [
+        'label'=>'Billing address','google_place_id'=>trim((string)($_POST['google_place_id']??'')),
+    ], 'organization', $id, 'billing', true, (int)($_SESSION['user']['id']??0));
+};
 
 // Handle file upload if present
 if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_file']['tmp_name'])) {
@@ -114,6 +120,7 @@ if (!empty($_FILES['tax_exempt_file']) && is_uploaded_file($_FILES['tax_exempt_f
         $filename,
         $id
     ]));
+    $saveReusableAddress();
     
     error_log('ORG_UPDATE_UPLOAD: Database updated with filename: ' . $filename);
 
@@ -144,6 +151,7 @@ if ($remove_tax) {
     ], $addressParams, [
         $id
     ]));
+    $saveReusableAddress();
     header('Location: /?page=organization/organizations-edit&id=' . $id . '&updated=1');
     exit;
 }
@@ -156,6 +164,7 @@ $stmt->execute(array_merge([
 ], $addressParams, [
     $id
 ]));
+$saveReusableAddress();
 
 header('Location: /?page=organization/organizations-list&updated=1');
 exit;

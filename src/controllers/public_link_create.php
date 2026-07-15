@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/public_links.php';
+require_once __DIR__ . '/../services/DocumentRevisionService.php';
 
 header('Content-Type: application/json');
 
@@ -66,9 +67,11 @@ try {
         exit;
     }
     $table = $validTables[$type];
-    $extra = $type === 'invoice'
-        ? ', finalized_at, collection_mode'
-        : ($type === 'project_invoice' ? ', finalized_at, project_id' : '');
+    $extra = in_array($type, ['quote','contract'], true)
+        ? ', revision_number, last_sent_revision'
+        : ($type === 'invoice'
+        ? ', finalized_at, collection_mode, revision_number, last_sent_revision'
+        : ($type === 'project_invoice' ? ', finalized_at, project_id' : ''));
     $stmt = $pdo->prepare("SELECT id, status{$extra} FROM {$table} WHERE id = ?");
     $stmt->execute([$id]);
     $doc = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -107,7 +110,6 @@ try {
         echo json_encode(['success' => false, 'error' => 'Cannot create link for a ' . $status . ' ' . $type]);
         exit;
     }
-    
     // Ensure public_links table exists with proper columns
     try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS public_links (
@@ -169,6 +171,9 @@ try {
             $expiresInDays = max(0, (int)ceil((strtotime($existing['expires_at']) - time()) / 86400));
         }
         
+        if (in_array($type,['quote','contract','invoice'],true) && (int)($doc['last_sent_revision'] ?? 0) < max(1,(int)($doc['revision_number'] ?? 1))) {
+            DocumentRevisionService::markDelivered($pdo,$type,$id,null);
+        }
         echo json_encode([
             'success' => true,
             'url' => $publicUrl,
@@ -196,6 +201,9 @@ try {
     
     // Build absolute URL
     $publicUrl = public_link_absolute_url($appConfig, $token);
+    if (in_array($type,['quote','contract','invoice'],true) && (int)($doc['last_sent_revision'] ?? 0) < max(1,(int)($doc['revision_number'] ?? 1))) {
+        DocumentRevisionService::markDelivered($pdo,$type,$id,null);
+    }
     
     echo json_encode([
         'success' => true,

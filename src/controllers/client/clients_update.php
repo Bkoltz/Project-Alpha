@@ -2,6 +2,7 @@
 // src/controllers/clients_update.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/address_book.php';
 
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'clients', $id);
@@ -38,6 +39,12 @@ $st->execute([
   $country,
   $id
 ]);
+address_book_save($pdo, [
+  'label'=>'Billing address','address_line1'=>$address_line1,'address_line2'=>$address_line2,'city'=>$city,
+  'state'=>$state,'postal_code'=>$postal,'country'=>$country,
+  'google_place_id'=>trim((string)($_POST['google_place_id']??'')),
+  'source'=>trim((string)($_POST['google_place_id']??''))!==''?'google':'manual',
+], 'client', $id, 'billing', true, (int)($_SESSION['user']['id']??0));
 
 header('Location: /?page=client/client-details&id=' . $id . '&updated=1');
 exit;

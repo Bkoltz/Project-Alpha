@@ -29,6 +29,12 @@ if (!$project) {
     header('Location: /?page=project/projects-list');
     exit;
 }
+$projectServiceLocations=[];$projectSelectedLocationIds=[];$projectDefaultLocationId=0;
+if(!empty($appConfig['job_project_locations_enabled'])){
+  $projectServiceLocations=$pdo->query('SELECT id,name,city,state FROM service_locations WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+  $selectedLocations=$pdo->prepare('SELECT service_location_id,is_default FROM project_service_locations WHERE project_id=?');$selectedLocations->execute([$projectId]);
+  foreach($selectedLocations->fetchAll(PDO::FETCH_ASSOC) as $selectedLocation){$projectSelectedLocationIds[]=(int)$selectedLocation['service_location_id'];if(!empty($selectedLocation['is_default']))$projectDefaultLocationId=(int)$selectedLocation['service_location_id'];}
+}
 
 $projectOrganizationId = (int)($project['organization_id'] ?? 0);
 $projectDepartments = [];
@@ -201,6 +207,9 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
             <input value="<?php echo htmlspecialchars((string)($project['organization_name'] ?? 'No organization'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" disabled>
           </label>
         </div>
+        <?php if (!empty($appConfig['job_project_locations_enabled'])): ?>
+        <div class="project-edit-grid"><label class="project-field"><span>Allowed service locations</span><select name="service_location_ids[]" multiple size="5"><?php foreach($projectServiceLocations as $location): ?><option value="<?php echo (int)$location['id']; ?>" <?php echo in_array((int)$location['id'],$projectSelectedLocationIds,true)?'selected':''; ?>><?php echo htmlspecialchars($location['name'].($location['city']?' — '.$location['city'].', '.$location['state']:'')); ?></option><?php endforeach; ?></select></label><label class="project-field"><span>Default service location</span><select name="default_service_location_id"><option value="">No default</option><?php foreach($projectServiceLocations as $location): ?><option value="<?php echo (int)$location['id']; ?>" <?php echo $projectDefaultLocationId===(int)$location['id']?'selected':''; ?>><?php echo htmlspecialchars($location['name']); ?></option><?php endforeach; ?></select></label></div>
+        <?php endif; ?>
         <label class="project-field">
           <span>Department</span>
           <select name="department_id">

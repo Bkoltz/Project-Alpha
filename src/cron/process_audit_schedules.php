@@ -10,6 +10,7 @@ require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/cron_state.php';
 require_once __DIR__ . '/../utils/csv.php';
 require_once __DIR__ . '/../utils/email_identity.php';
+require_once __DIR__ . '/../services/EmailService.php';
 
 $logPrefix = '[process_audit_schedules]';
 $jobName = 'process_audit_schedules';
@@ -261,7 +262,7 @@ try {
                 $email = trim($email);
                 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) continue;
                 try {
-                    [$ok, $err] = mailer_send($mailCfg, $email, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail), $attachments);
+                    [$ok, $err] = EmailService::sendEmail($email, $subject, $body, ['attachments'=>$attachments,'document_type'=>'notification']);
                     if ($ok) { $sentCount++; }
                     else { @error_log("$logPrefix Failed to email {$email}: {$err}"); }
                 } catch (Throwable $e) {
@@ -413,7 +414,7 @@ function processExpenseSchedule(
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             continue;
         }
-        [$ok, $error] = mailer_send($mailCfg, $email, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail), $attachments);
+        [$ok, $error] = EmailService::sendEmail($email, $subject, $body, ['attachments'=>$attachments,'document_type'=>'notification']);
         if ($ok) {
             $sent++;
         } else {

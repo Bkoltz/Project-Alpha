@@ -384,7 +384,7 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
         modal.style.display = 'flex';
         fetch('/?page=financial/mileage-unbilled&client_id=' + encodeURIComponent(clientId))
             .then(function (response) { return response.json(); })
-            .then(function (result) { render(Array.isArray(result) ? result : []); })
+            .then(function (result) { render(Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : [])); })
             .catch(function () { render([]); });
     });
 

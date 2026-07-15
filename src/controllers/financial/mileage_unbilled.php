@@ -1,11 +1,12 @@
 <?php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../utils/api_response.php';
 header('Content-Type: application/json');
 $userId=(int)($_SESSION['user']['id']??0);$clientId=max(0,(int)($_GET['client_id']??0));
-if($userId<=0){http_response_code(401);echo json_encode(['error'=>'Unauthorized']);exit;}
-if($clientId<=0){http_response_code(400);echo json_encode(['error'=>'Choose a client first.']);exit;}
-if(!user_can($pdo,$userId,'invoices.create',0)){http_response_code(403);echo json_encode(['error'=>'Permission denied.']);exit;}
+if($userId<=0)api_json_failure(401,'authentication_required','Authentication is required.');
+if($clientId<=0)api_json_failure(422,'client_required','Choose a client first.');
+if(!user_can($pdo,$userId,'invoices.create',0))api_json_failure(403,'permission_denied','Permission denied.');
 try{
  $stmt=$pdo->prepare('SELECT a.id,a.mileage_log_id,a.charge_method,a.billable_miles,a.mileage_rate,a.fixed_amount,a.client_charge,
    m.trip_date,m.start_location,m.end_location,m.logged_miles,m.description,
@@ -16,6 +17,6 @@ try{
    FROM mileage_charge_allocations a JOIN mileage_logs m ON m.id=a.mileage_log_id
    LEFT JOIN projects p ON p.id=a.project_id
    WHERE a.client_id=? AND a.billed=0 ORDER BY m.trip_date,m.id,a.id');
- $stmt->execute([$clientId]);echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC),JSON_NUMERIC_CHECK);
-}catch(Throwable $e){error_log('[MileageUnbilled] '.$e->getMessage());http_response_code(500);echo json_encode(['error'=>'Client travel charges are not ready. Apply the latest migration.']);}
-exit;
+ $stmt->execute([$clientId]);api_json_success(['data'=>$stmt->fetchAll(PDO::FETCH_ASSOC)]);
+}catch(PDOException $e){error_log('[MileageUnbilled]['.api_request_id().'] '.$e->getMessage());api_json_failure(503,'schema_out_of_date','Client travel charges are unavailable until the latest database migration is applied.');
+}catch(Throwable $e){error_log('[MileageUnbilled]['.api_request_id().'] '.$e->getMessage());api_json_failure(500,'internal_error','Unable to load client travel charges.');}

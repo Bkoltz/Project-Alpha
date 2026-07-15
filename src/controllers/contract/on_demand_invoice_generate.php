@@ -9,6 +9,8 @@ require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/acl.php';
+require_once __DIR__ . '/../../services/EmailService.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 @error_log('[on_demand_invoice_generate] POST received', 0);
 
@@ -109,6 +111,8 @@ try {
     ]);
     
     $invoiceId = (int)$pdo->lastInsertId();
+    $pdo->prepare('UPDATE invoices SET job_id=?,service_location_id=? WHERE id=?')
+        ->execute([!empty($contract['job_id']) ? (int)$contract['job_id'] : null,!empty($contract['service_location_id']) ? (int)$contract['service_location_id'] : null,$invoiceId]);
     if ($projectMonthlyBilling) {
         $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoiceId]);
     }
@@ -151,6 +155,7 @@ try {
     
     $pdo->prepare('UPDATE contracts SET total_invoiced=?, invoice_count=?, last_invoice_date=? WHERE id=? AND contract_type = "on_demand"')
         ->execute([$newTotalInvoiced, $newInvoiceCount, date('Y-m-d'), $contract_id]);
+    DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoiceId,$contractCreator,false);
     
     $pdo->commit();
     
@@ -214,7 +219,7 @@ try {
                     $body .= '<p>You can view and pay the invoice here: <a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';
                     $body .= '<p>Thank you for your business!</p>';
 
-                    [$ok, $err] = mailer_send($mailCfg, $to, $subject, $body, $fromEmail, $fromName, ($mailCfg['username'] ?: $fromEmail));
+                    [$ok, $err] = EmailService::sendEmail($to, $subject, $body, ['document_type'=>'invoice','document_id'=>$invoiceId,'message_key'=>'invoice:'.$invoiceId.':on_generate']);
                     if ($ok) {
                         $insNotif = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
                         $insNotif->execute([$invoiceId, 'on_generate']);

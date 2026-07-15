@@ -81,6 +81,13 @@ $appConfig = [
     'smtp_password_enc' => null,
     'smtp_from_email' => null,
     'smtp_from_name' => null,
+    // Installation-level Google integration configuration. Secrets are encrypted.
+    'google_oauth_client_id' => null,
+    'google_oauth_client_secret_enc' => null,
+    'google_maps_browser_key' => null,
+    'google_routes_api_key_enc' => null,
+    'address_route_assistance_enabled' => 0,
+    'job_project_locations_enabled' => 0,
     // Stripe (loaded from environment/.env, not stored in settings.json)
     'stripe_publishable_key' => null,
     '_stripe_secret_key' => null,
@@ -196,6 +203,9 @@ try {
             'stripe_publishable_key', 'stripe_secret_key_enc', 'stripe_webhook_secret_enc',
             'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_username', 'smtp_password_enc',
             'smtp_from_email', 'smtp_from_name',
+            'google_oauth_client_id', 'google_oauth_client_secret_enc',
+            'google_maps_browser_key', 'google_routes_api_key_enc',
+            'address_route_assistance_enabled', 'job_project_locations_enabled',
             // General UI settings (now stored in app_config DB)
             'brand_name', 'logo_path', 'from_company', 'from_name', 'from_address_line1', 'from_address_line2',
             'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
@@ -245,7 +255,7 @@ try {
             while ($row = $cfgStmt->fetch(PDO::FETCH_ASSOC)) {
                 $key = $row['config_key'];
                 $val = $row['config_value'];
-                if (in_array($key, ['stripe_secret_key_enc', 'stripe_webhook_secret_enc', 'smtp_password_enc'], true)
+                if (in_array($key, ['stripe_secret_key_enc', 'stripe_webhook_secret_enc', 'smtp_password_enc', 'google_oauth_client_secret_enc', 'google_routes_api_key_enc'], true)
                     && trim((string)$val) === '') {
                     continue;
                 }

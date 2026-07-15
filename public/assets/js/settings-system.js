@@ -21,10 +21,11 @@
             result.textContent = 'Sending test email...';
 
             var form = btn.closest('form');
-            var formData = form ? new FormData(form) : new FormData();
-            formData.append('ajax', '1');
+            var formData = new FormData();
+            formData.append('csrf', form ? String(new FormData(form).get('csrf') || '') : '');
+            formData.append('action', 'test');
 
-            fetch('/?page=email-test', {
+            fetch('/?page=settings/email-provider-handler', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -38,7 +39,7 @@
                 return response.json();
             })
             .then(function (data) {
-                if (data.ok) {
+                if (data.success) {
                     result.style.background = '#ecfdf5';
                     result.style.color = '#065f46';
                     result.style.border = '1px solid #a7f3d0';
@@ -47,7 +48,7 @@
                     result.style.background = '#fff1f2';
                     result.style.color = '#881337';
                     result.style.border = '1px solid #fca5a5';
-                    result.textContent = 'Test email failed: ' + (data.error || 'Unknown error');
+                    result.textContent = 'Test email failed: ' + (data.message || 'Unknown error');
                 }
             })
             .catch(function (err) {
@@ -55,6 +56,30 @@
                 result.style.color = '#881337';
                 result.style.border = '1px solid #fca5a5';
                 result.textContent = 'Test email failed: ' + err.message;
+            });
+        });
+
+        document.querySelectorAll('.email-provider-action').forEach(function (actionButton) {
+            if (actionButton.dataset.ready === '1') return;
+            actionButton.dataset.ready = '1';
+            actionButton.addEventListener('click', function () {
+                var data = new FormData();
+                var parentForm = actionButton.closest('form');
+                data.append('csrf', parentForm ? String(new FormData(parentForm).get('csrf') || '') : '');
+                data.append('action', actionButton.dataset.action || '');
+                data.append('connection_id', actionButton.dataset.id || '0');
+                actionButton.disabled = true;
+                fetch('/?page=settings/email-provider-handler', { method: 'POST', body: data, headers: {'X-Requested-With':'XMLHttpRequest'} })
+                    .then(function (response) { return response.json(); })
+                    .then(function (payload) {
+                        if (!payload.success) throw new Error(payload.message || 'Provider action failed');
+                        window.location.reload();
+                    })
+                    .catch(function (error) {
+                        actionButton.disabled = false;
+                        result.textContent = error.message;
+                        result.style.display = 'block';
+                    });
             });
         });
     }

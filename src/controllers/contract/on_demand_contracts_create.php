@@ -6,11 +6,15 @@ require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/mileage.php';
+require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../services/JobAssignmentService.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 @error_log('[on_demand_contracts_create] POST received', 0);
 
 $client_id = (int)($_POST['client_id'] ?? 0);
 $project_id = !empty($_POST['project_id']) ? (int)$_POST['project_id'] : null;
+$requestedServiceLocationId = !empty($_POST['service_location_id']) ? (int)$_POST['service_location_id'] : null;
 $return_to_project = (int)($_POST['return_to_project'] ?? 0);
 $discount_type = in_array(($_POST['discount_type'] ?? 'none'), ['none','percent','fixed']) ? $_POST['discount_type'] : 'none';
 $discount_value = (float)($_POST['discount_value'] ?? 0);
@@ -147,7 +151,7 @@ try{
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
     $pdo->prepare($sql)->execute([
-        $client_id, $project_id, $projectCode, 'pending', 'on_demand', $billing_mode, $start_date, $end_date,
+        $client_id, $project_id, $projectCode, 'draft', 'on_demand', $billing_mode, $start_date, $end_date,
         $billing_interval_count, $billing_interval_unit, 'on_demand', $price_per_invoice,
         $discount_type, $discount_value, $tax_percent, $subtotal, $total,
         $deposit_type, $deposit_amount, 0,
@@ -155,6 +159,9 @@ try{
     ]);
     
     $contract_id = (int)$pdo->lastInsertId();
+    $jobId = JobAssignmentService::ensureForCode($pdo, $client_id, $projectCode, $project_id ?: null, $sessionUserId);
+    $serviceLocationId = document_resolve_service_location($pdo,$client_id,$project_id,$jobId,$requestedServiceLocationId);
+    $pdo->prepare('UPDATE contracts SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $contract_id]);
 
     // Assign doc number
     $maxDoc = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "on_demand"')->fetchColumn();
@@ -195,6 +202,7 @@ try{
         $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "contract", ?)')->execute([$project_id, $contract_id]);
     }
 
+    DocumentRevisionService::snapshotAndSave($pdo,'contract',$contract_id,$sessionUserId,false);
     $pdo->commit();
 } catch(Throwable $e){
     if ($pdo->inTransaction()) $pdo->rollBack();

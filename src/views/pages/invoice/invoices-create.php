@@ -59,6 +59,8 @@ if ($selectedProjectId > 0) {
       </label>
     </div>
 
+    <?php $documentServiceLocationId = 0; require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
+
     <div id="customFieldsContainerInv">
     <?php
     // Render custom fields for regular invoices

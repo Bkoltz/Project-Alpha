@@ -2160,6 +2160,279 @@ CREATE TABLE IF NOT EXISTS archived_entities (
     INDEX idx_arch_entities_type (entity_type, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ============================================================================
+-- MODULE 007.2: Business Integrations, Locations & Document Revisions
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS email_provider_connections (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    provider ENUM('smtp','gmail') NOT NULL,
+    display_name VARCHAR(150) NULL,
+    sender_email VARCHAR(255) NULL,
+    sender_name VARCHAR(255) NULL,
+    credentials_enc LONGTEXT NOT NULL,
+    status ENUM('configured','connected','reauth_required','disabled','error') NOT NULL DEFAULT 'configured',
+    token_expires_at DATETIME NULL,
+    last_verified_at DATETIME NULL,
+    last_error VARCHAR(1000) NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_email_provider (provider),
+    INDEX idx_email_provider_status (status),
+    CONSTRAINT fk_email_provider_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS email_provider_state (
+    id TINYINT NOT NULL PRIMARY KEY,
+    active_connection_id INT NULL,
+    updated_by INT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_email_state_connection FOREIGN KEY (active_connection_id) REFERENCES email_provider_connections(id) ON DELETE SET NULL,
+    CONSTRAINT fk_email_state_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO email_provider_state (id,active_connection_id) VALUES (1,NULL);
+
+CREATE TABLE IF NOT EXISTS email_delivery_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    message_key VARCHAR(190) NOT NULL,
+    provider_connection_id INT NULL,
+    document_type ENUM('quote','contract','invoice','project_invoice','onboarding','notification','other') NOT NULL DEFAULT 'other',
+    document_id INT NULL,
+    document_revision INT NULL,
+    recipient VARCHAR(255) NOT NULL,
+    subject VARCHAR(500) NOT NULL,
+    provider_message_id VARCHAR(255) NULL,
+    status ENUM('pending','sent','failed','unknown') NOT NULL DEFAULT 'pending',
+    error_message VARCHAR(1000) NULL,
+    sent_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_email_delivery_message_key (message_key),
+    INDEX idx_email_delivery_document (document_type,document_id,document_revision),
+    INDEX idx_email_delivery_status (status,created_at),
+    CONSTRAINT fk_email_delivery_provider FOREIGN KEY (provider_connection_id) REFERENCES email_provider_connections(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS addresses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    label VARCHAR(150) NULL,
+    address_line1 VARCHAR(255) NULL,
+    address_line2 VARCHAR(255) NULL,
+    city VARCHAR(100) NULL,
+    state VARCHAR(100) NULL,
+    postal_code VARCHAR(32) NULL,
+    country VARCHAR(100) NULL DEFAULT 'US',
+    google_place_id VARCHAR(255) NULL,
+    source ENUM('manual','google') NOT NULL DEFAULT 'manual',
+    legacy_key VARCHAR(190) NULL,
+    archived TINYINT(1) NOT NULL DEFAULT 0,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_address_legacy_key (legacy_key),
+    INDEX idx_address_place_id (google_place_id),
+    INDEX idx_address_archived (archived),
+    CONSTRAINT fk_address_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS address_assignments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    address_id INT NOT NULL,
+    entity_type ENUM('client','organization','project','job') NOT NULL,
+    entity_id INT NOT NULL,
+    purpose ENUM('billing','mailing','service','other') NOT NULL DEFAULT 'other',
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_address_assignment (entity_type,entity_id,purpose,address_id),
+    INDEX idx_address_assignment_default (entity_type,entity_id,purpose,is_default),
+    CONSTRAINT fk_address_assignment_address FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE service_locations ADD COLUMN address_id INT NULL AFTER project_id,
+    ADD INDEX idx_service_location_address (address_id),
+    ADD CONSTRAINT fk_service_location_address FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    organization_id INT NULL,
+    project_id INT NULL,
+    job_code VARCHAR(64) NOT NULL,
+    status ENUM('not_started','active','completed','cancelled') NOT NULL DEFAULT 'not_started',
+    default_service_location_id INT NULL,
+    notes TEXT NULL,
+    archived TINYINT(1) NOT NULL DEFAULT 0,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_job_client_code (client_id,job_code),
+    INDEX idx_job_project (project_id),
+    INDEX idx_job_created (created_at),
+    INDEX idx_job_archived (archived),
+    CONSTRAINT fk_job_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_job_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_job_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_job_location FOREIGN KEY (default_service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_job_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS project_service_locations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    service_location_id INT NOT NULL,
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_project_service_location (project_id,service_location_id),
+    INDEX idx_project_service_default (project_id,is_default),
+    CONSTRAINT fk_project_service_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_service_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS job_migration_issues (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    job_code VARCHAR(64) NOT NULL,
+    issue_code VARCHAR(80) NOT NULL,
+    details JSON NULL,
+    resolved_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_job_migration_issue (client_id,job_code,issue_code),
+    CONSTRAINT fk_job_migration_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE quotes ADD COLUMN job_id INT NULL AFTER project_id,
+    ADD COLUMN service_location_id INT NULL AFTER job_id,
+    ADD COLUMN revision_number INT NOT NULL DEFAULT 1,
+    ADD COLUMN last_sent_revision INT NULL,
+    ADD COLUMN revision_updated_at DATETIME NULL,
+    ADD INDEX idx_quotes_job (job_id), ADD INDEX idx_quotes_service_location (service_location_id),
+    ADD CONSTRAINT fk_quotes_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL,
+    ADD CONSTRAINT fk_quotes_service_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL;
+
+ALTER TABLE contracts ADD COLUMN job_id INT NULL AFTER project_id,
+    ADD COLUMN service_location_id INT NULL AFTER job_id,
+    ADD COLUMN revision_number INT NOT NULL DEFAULT 1,
+    ADD COLUMN last_sent_revision INT NULL,
+    ADD COLUMN revision_updated_at DATETIME NULL,
+    ADD COLUMN signed_revision_number INT NULL,
+    ADD COLUMN signed_pdf_sha256 CHAR(64) NULL,
+    ADD INDEX idx_contracts_job (job_id), ADD INDEX idx_contracts_service_location (service_location_id),
+    ADD CONSTRAINT fk_contracts_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL,
+    ADD CONSTRAINT fk_contracts_service_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL;
+
+ALTER TABLE invoices ADD COLUMN job_id INT NULL AFTER project_id,
+    ADD COLUMN service_location_id INT NULL AFTER job_id,
+    ADD COLUMN revision_number INT NOT NULL DEFAULT 1,
+    ADD COLUMN last_sent_revision INT NULL,
+    ADD COLUMN revision_updated_at DATETIME NULL,
+    ADD COLUMN credit_due DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ADD INDEX idx_invoices_job (job_id), ADD INDEX idx_invoices_service_location (service_location_id),
+    ADD CONSTRAINT fk_invoices_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL,
+    ADD CONSTRAINT fk_invoices_service_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS document_revisions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    document_type ENUM('quote','contract','invoice') NOT NULL,
+    document_id INT NOT NULL,
+    revision_number INT NOT NULL,
+    snapshot JSON NOT NULL,
+    content_hash CHAR(64) NOT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_document_revision (document_type,document_id,revision_number),
+    INDEX idx_document_revision_created (created_at),
+    CONSTRAINT fk_document_revision_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS document_deliveries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    document_type ENUM('quote','contract','invoice') NOT NULL,
+    document_id INT NOT NULL,
+    revision_number INT NOT NULL,
+    email_delivery_id BIGINT NULL,
+    recipient VARCHAR(255) NULL,
+    delivered_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_document_delivery (document_type,document_id,revision_number),
+    CONSTRAINT fk_document_delivery_email FOREIGN KEY (email_delivery_id) REFERENCES email_delivery_log(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS document_address_snapshots (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    document_type ENUM('quote','contract','invoice') NOT NULL,
+    document_id INT NOT NULL,
+    revision_number INT NOT NULL,
+    purpose ENUM('billing','service') NOT NULL,
+    address_id INT NULL,
+    snapshot JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_document_address_snapshot (document_type,document_id,revision_number,purpose),
+    CONSTRAINT fk_document_snapshot_address FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS invoice_adjustments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    invoice_id INT NOT NULL,
+    adjustment_type ENUM('charge','credit') NOT NULL,
+    label VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
+    unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    revision_number INT NOT NULL DEFAULT 1,
+    superseded_at DATETIME NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_invoice_adjustment_invoice (invoice_id),
+    INDEX idx_invoice_adjustment_current (invoice_id,superseded_at,revision_number),
+    CONSTRAINT fk_invoice_adjustment_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+    CONSTRAINT fk_invoice_adjustment_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS route_estimate_cache (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_mileage_origin_id INT NOT NULL,
+    service_location_id INT NOT NULL,
+    travel_mode ENUM('DRIVE') NOT NULL DEFAULT 'DRIVE',
+    distance_miles DECIMAL(10,3) NOT NULL,
+    duration_seconds INT NULL,
+    provider ENUM('google_routes') NOT NULL DEFAULT 'google_routes',
+    attribution VARCHAR(100) NOT NULL DEFAULT 'Google Maps',
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_route_estimate_pair (user_mileage_origin_id,service_location_id,travel_mode),
+    INDEX idx_route_estimate_expiry (expires_at),
+    CONSTRAINT fk_route_estimate_origin FOREIGN KEY (user_mileage_origin_id) REFERENCES user_mileage_origins(id) ON DELETE CASCADE,
+    CONSTRAINT fk_route_estimate_destination FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS schedule_entries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NULL,
+    job_id INT NULL,
+    service_location_id INT NULL,
+    title VARCHAR(255) NOT NULL,
+    starts_at DATETIME NULL,
+    ends_at DATETIME NULL,
+    all_day TINYINT(1) NOT NULL DEFAULT 1,
+    timezone VARCHAR(80) NOT NULL DEFAULT 'America/Chicago',
+    status ENUM('planned','confirmed','completed','cancelled') NOT NULL DEFAULT 'planned',
+    source_type ENUM('project','job','manual') NOT NULL,
+    source_id INT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_schedule_range (starts_at,ends_at), INDEX idx_schedule_project (project_id), INDEX idx_schedule_job (job_id),
+    UNIQUE KEY uq_schedule_source (source_type,source_id),
+    CONSTRAINT fk_schedule_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_schedule_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    CONSTRAINT fk_schedule_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_schedule_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE schema_migrations (
     version INT UNSIGNED NOT NULL PRIMARY KEY,
     filename VARCHAR(255) NOT NULL UNIQUE,
@@ -2207,6 +2480,8 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('default_mileage_included_miles', '0.000'),
     ('default_mileage_charge_method', 'actual_trip'),
     ('mileage_tracking_enabled', '0'),
+    ('address_route_assistance_enabled', '0'),
+    ('job_project_locations_enabled', '0'),
     ('email_no_reply_notice_enabled', '0'),
     ('email_no_reply_notice_text', 'This is an automated message. Please do not reply to this email.')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);

@@ -229,7 +229,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                   <button type="submit" style="padding:6px 10px;border:0;border-radius:8px;background:#10b981;color:#fff; font-size: small;">Resume</button>
                 </form>
               <?php endif; ?>
-              <?php if (in_array($r['status'], ['pending', 'active', 'paused'], true)): ?>
+              <?php if (in_array($r['status'], ['draft','pending'], true) && empty($r['signed_pdf_path'])): ?>
                 <form method="post" action="/?page=on-demand-contract-terminate" style="display:inline" onsubmit="return confirm('Terminate this on-demand contract?')">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">

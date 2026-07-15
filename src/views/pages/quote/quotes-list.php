@@ -152,7 +152,7 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
             <td style="padding:10px">
               <div style="display:flex;gap:6px;justify-content:flex-end">
               <a href="/?page=quote/quote-details&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">View</a>
-              <?php if ($r['status'] === 'pending'): ?>
+              <?php if (in_array($r['status'], ['draft','pending'], true)): ?>
                 <a href="/?page=quote/quotes-edit&id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Edit</a>
               <?php endif; ?>
               <?php if (strtolower((string)$r['status']) !== 'rejected'): ?>

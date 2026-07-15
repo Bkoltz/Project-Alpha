@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/cron_state.php';
+require_once __DIR__ . '/../utils/notifications.php';
 
 $logPrefix = '[LinkExpirationChecker]';
 $jobName = 'link_expiration_checker';
@@ -115,13 +116,7 @@ try {
                     
                     $message .= "\nPlease refresh or regenerate these links as needed.\n";
                     
-                    // Get admin email from config
-                    $stmt = $pdo->prepare("SELECT config_value FROM app_config WHERE config_key = 'admin_email'");
-                    $stmt->execute();
-                    $adminEmail = $stmt->fetchColumn();
-                    
-                    if ($adminEmail) {
-                        mail($adminEmail, $subject, $message);
+                    if (send_admin_notification($pdo, $appConfig, $subject, nl2br(htmlspecialchars($message)))) {
                         echo "{$logPrefix} Sent notification for {$entityName}\n";
                     }
                 } catch (Throwable $e) {

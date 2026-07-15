@@ -5,8 +5,8 @@
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/mailer.php';
-require_once __DIR__ . '/../utils/smtp.php';
 require_once __DIR__ . '/../utils/email_identity.php';
+require_once __DIR__ . '/EmailProviders.php';
 
 class EmailService {
     /**
@@ -94,7 +94,8 @@ class EmailService {
     }
 
     /**
-     * Send an HTML email using the configured SMTP server.
+     * Send through the one explicitly active provider. SMTP and Gmail may both
+     * remain configured, but there is never an automatic provider fallback.
      *
      * Options:
      *   - from_email: override from email
@@ -107,10 +108,10 @@ class EmailService {
      * @param string $subject
      * @param string $body
      * @param array $options
-     * @return array{0:bool,1:string} [ok, error]
+     * @return array{0:bool,1:string,2?:int|null} [ok, error, delivery log id]
      */
     public static function sendEmail(string $to, string $subject, string $body, array $options = []): array {
-        global $appConfig;
+        global $appConfig, $pdo;
 
         if (empty($to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
             return [false, 'Invalid recipient email'];
@@ -124,40 +125,18 @@ class EmailService {
         $isHtml     = (bool)($options['is_html'] ?? true);
         $body       = self::applyAutomatedNotice($body, $isHtml, $appConfig);
 
-        $sent = false;
-        $err  = '';
-
-        if (!empty($cfg['host'])) {
-            $smtpHostL = strtolower($cfg['host']);
-            if ($smtpHostL === 'smtp.gmail.com' && ($cfg['username'] === '' || $cfg['password'] === '')) {
-                return [false, 'Gmail SMTP requires username and app password'];
-            }
-
-            // PHPMailer (supports attachments)
-            [$ok, $msg] = mailer_send($cfg, $to, $subject, $body, $fromEmail, $fromName, $envelope, $attachments);
-            if (!$ok) {
-                // Fallback minimal SMTP without attachments
-                [$ok2, $msg2] = smtp_send($cfg, $to, $subject, $body, $fromEmail, $fromName, $envelope);
-                $ok = $ok2;
-                $msg = $ok2 ? '' : ($msg2 ?: $msg);
-            }
-            $sent = $ok;
-            $err  = $ok ? '' : ($msg ?: 'SMTP send failed');
+        if (!$pdo instanceof PDO) {
+            return [false, 'Outgoing email is unavailable because the database is not connected.'];
         }
-
-        if (!$sent) {
-            // Fallback: PHP mail()
-            $contentType = $isHtml ? 'text/html' : 'text/plain';
-            $headers = "MIME-Version: 1.0\r\n" .
-                       "Content-type: {$contentType}; charset=UTF-8\r\n" .
-                       "From: " . ($fromName ? ($fromName . ' <' . $fromEmail . '>') : $fromEmail) . "\r\n";
-            $mailOk = @mail($to, $subject, $body, $headers);
-            $sent   = $mailOk;
-            if (!$sent && $err === '') {
-                $err = 'Email send failed';
-            }
+        require_once __DIR__ . '/EmailProviderManager.php';
+        try {
+            $manager = new EmailProviderManager($pdo, $appConfig);
+            $message = new EmailMessage($to, $subject, $body, $fromEmail, $fromName, $attachments, $isHtml);
+            $result = $manager->send($message, $options);
+            return [$result->success, $result->message, $result->deliveryLogId];
+        } catch (Throwable $error) {
+            @error_log('[EmailService] ' . $error->getMessage());
+            return [false, 'Outgoing email could not be sent. Review the active provider configuration.'];
         }
-
-        return [$sent, $err];
     }
 }

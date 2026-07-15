@@ -16,6 +16,10 @@
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/phone-formatter.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/csrf-auto-link.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/settings-links.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<?php if (!empty($appConfig['address_route_assistance_enabled']) && !empty($appConfig['google_maps_browser_key'])): ?>
+<div id="paAddressAssistanceConfig" hidden data-enabled="1" data-key="<?php echo htmlspecialchars((string)$appConfig['google_maps_browser_key'], ENT_QUOTES, 'UTF-8'); ?>"></div>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/address-assistance.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<?php endif; ?>
 <script>
 (function() {
   function inferShareContext(modal) {

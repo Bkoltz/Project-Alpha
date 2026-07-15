@@ -2,6 +2,8 @@
 // src/controllers/project/projects_update_status.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../services/ScheduleService.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -29,6 +31,7 @@ if (!in_array($status, $validStatuses)) {
 
 $st = $pdo->prepare('UPDATE projects SET status=?, updated_at=NOW() WHERE id=?');
 $st->execute([$status, $id]);
+ScheduleService::syncProject($pdo, $id, (string)($appConfig['timezone'] ?? 'UTC'), (int)($_SESSION['user']['id']??0));
 
 $redirect = $_POST['redirect'] ?? '/?page=project/projects-details&id=' . $id;
 header('Location: ' . $redirect);
