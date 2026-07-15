@@ -1,259 +1,90 @@
 <?php
-// src/views/pages/financial/mileage-create.php
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/mileage.php';
 
 $orgId = request_client_org_id();
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-$defaultMileageRate = max(0.0, (float)($appConfig['default_mileage_rate'] ?? 0.670));
-$defaultIncludeReturnTrip = !array_key_exists('default_mileage_include_return_trip', $appConfig)
-    || !empty($appConfig['default_mileage_include_return_trip']);
-$defaultBillReturnTrip = !empty($appConfig['default_mileage_bill_return_trip']);
-
 $editMode = false;
 $log = [
-    'id' => null,
-    'trip_date' => date('Y-m-d'),
-    'start_location' => '',
-    'end_location' => '',
-    'miles' => '',
-    'purpose' => 'business',
-    'description' => '',
-    'round_trip' => $defaultIncludeReturnTrip ? 1 : 0,
-    'bill_return_trip' => $defaultBillReturnTrip ? 1 : 0,
-    'mileage_rate' => $defaultMileageRate,
-    'is_billable' => 0,
-    'client_id' => null,
-    'project_id' => null,
+    'id'=>null,'entry_mode'=>'simple','trip_date'=>date('Y-m-d'),'start_location'=>'','end_location'=>'','miles'=>'',
+    'purpose'=>'business','description'=>'','round_trip'=>!array_key_exists('default_mileage_include_return_trip',$appConfig)||!empty($appConfig['default_mileage_include_return_trip']) ? 1 : 0,
 ];
-
-$editId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$allocations = [];
+$trackingSessionId=max(0,(int)($_GET['tracking_session_id']??0));
+$trackingDraft=null;
+$editId = max(0, (int)($_GET['id'] ?? 0));
 if ($editId > 0) {
-    [$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
-    $stmt = $pdo->prepare('
-        SELECT m.*, c.name AS client_name
-        FROM mileage_logs m
-        LEFT JOIN clients c ON m.client_id = c.id
-        WHERE m.id = ? AND ' . $mileageScopeWhere . '
-    ');
-    $stmt->execute(array_merge([$editId], $mileageScopeParams));
-    $existing = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($existing) {
-        $editMode = true;
-        $log = array_merge($log, $existing);
+    [$scope,$params] = finance_scope_clause($pdo,'m',$userId,$orgId,'user_id');
+    $stmt=$pdo->prepare('SELECT m.* FROM mileage_logs m WHERE m.id=? AND '.$scope);
+    $stmt->execute(array_merge([$editId],$params));
+    if ($row=$stmt->fetch(PDO::FETCH_ASSOC)) {
+        $editMode=true; $log=array_merge($log,$row);
+        $a=$pdo->prepare('SELECT * FROM mileage_charge_allocations WHERE mileage_log_id=? ORDER BY id');
+        $a->execute([$editId]); $allocations=$a->fetchAll(PDO::FETCH_ASSOC);
     }
 }
+if(!$editMode&&$trackingSessionId>0){
+  try{$ts=$pdo->prepare('SELECT * FROM mileage_tracking_sessions WHERE id=? AND user_id=? AND status="draft_review"');$ts->execute([$trackingSessionId,$userId]);$trackingDraft=$ts->fetch(PDO::FETCH_ASSOC)?:null;if($trackingDraft){$log['entry_mode']='total_trip';$log['miles']=(float)$trackingDraft['calculated_miles'];$log['round_trip']=0;$log['trip_date']=substr((string)$trackingDraft['started_at'],0,10);}}catch(Throwable $e){$trackingDraft=null;}
+}
+$clients=$pdo->query('SELECT id,name FROM clients WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$projects=$pdo->query('SELECT id,client_id,name FROM projects WHERE status NOT IN ("completed","cancelled") ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$contracts=$pdo->query('SELECT id,client_id,doc_number,project_code FROM contracts WHERE status NOT IN ("cancelled","denied","void") ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+try { $locations=$pdo->query('SELECT id,client_id,project_id,name,city,state FROM service_locations WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC); } catch(Throwable $e) { $locations=[]; }
+try { $originsStmt=$pdo->prepare('SELECT id,label,is_default FROM user_mileage_origins WHERE user_id=? ORDER BY is_default DESC,label'); $originsStmt->execute([$userId]); $origins=$originsStmt->fetchAll(PDO::FETCH_ASSOC); } catch(Throwable $e) { $origins=[]; }
+try { $distanceStmt=$pdo->prepare('SELECT d.origin_id,d.service_location_id,d.one_way_miles FROM travel_distance_cache d JOIN user_mileage_origins o ON o.id=d.origin_id WHERE o.user_id=?');$distanceStmt->execute([$userId]);$distanceRows=$distanceStmt->fetchAll(PDO::FETCH_ASSOC); } catch(Throwable $e) { $distanceRows=[]; }
+try { $ruleStmt=$pdo->prepare('SELECT * FROM travel_billing_rules WHERE organization_id IS NULL OR organization_id=? ORDER BY id');$ruleStmt->execute([$orgId]);$allRules=$ruleStmt->fetchAll(PDO::FETCH_ASSOC); } catch(Throwable $e) { $allRules=[]; }
 
-// Clients for billable dropdown
-$clientsStmt = $pdo->prepare('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name ASC');
-$clientsStmt->execute();
-$clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
+$payload=[
+  'clients'=>$clients,'projects'=>$projects,'contracts'=>$contracts,'locations'=>$locations,'origins'=>$origins,'distances'=>$distanceRows,
+  'clientRules'=>array_values(array_filter($allRules,static fn($r)=>$r['scope_type']==='client')),'contractRules'=>array_values(array_filter($allRules,static fn($r)=>$r['scope_type']==='contract')),
+  'allocations'=>$allocations,
+  'defaults'=>[
+    'method'=>(string)($appConfig['default_mileage_charge_method']??'actual_trip'),
+    'rate'=>(float)($appConfig['default_mileage_rate']??0.670),
+    'included'=>(float)($appConfig['default_mileage_included_miles']??0),
+    'chargeReturn'=>!empty($appConfig['default_mileage_bill_return_trip']),
+  ],
+];
 ?>
-
-<section>
+<section class="mileage-editor" data-mileage-editor data-mileage-payload="<?php echo htmlspecialchars(json_encode($payload),ENT_QUOTES,'UTF-8'); ?>">
   <div class="page-head">
-    <h2><?php echo $editMode ? 'Edit Mileage Entry' : 'Log Mileage'; ?></h2>
-    <a href="/?page=financial/mileage-list" class="btn">← Back to List</a>
+    <div><h2><?php echo $editMode?'Edit Mileage Entry':($trackingDraft?'Review GPS Trip':'Log Mileage'); ?></h2><p class="muted"><?php echo $trackingDraft?'Confirm the tracked distance and client charges before finalizing this trip.':'Record the physical trip once, then add a separate charge for each client served.'; ?></p></div>
+    <a href="/?page=financial/mileage-list" class="btn">Back to Mileage</a>
   </div>
+  <?php if(!empty($_GET['error'])): ?><div class="alert alert-danger"><?php echo htmlspecialchars((string)$_GET['error']); ?></div><?php endif; ?>
+  <form id="mileageForm" method="post" action="/?page=financial/mileage-handler" style="display:grid;gap:18px;max-width:1050px">
+    <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('mileage')); ?>">
+    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+    <input type="hidden" name="action" value="<?php echo $editMode?'update':'create'; ?>">
+    <?php if($trackingDraft): ?><input type="hidden" name="tracking_session_id" value="<?php echo (int)$trackingDraft['id']; ?>"><?php endif; ?>
+    <?php if($editMode): ?><input type="hidden" name="id" value="<?php echo (int)$log['id']; ?>"><?php endif; ?>
 
-  <?php if (!empty($_GET['error'])): ?>
-    <div class="alert alert-danger"><?php echo htmlspecialchars($_GET['error']); ?></div>
-  <?php endif; ?>
-
-  <div class="card" style="max-width:720px">
-    <form id="mileageForm" method="post" action="/?page=financial/mileage-handler">
-      <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('mileage')); ?>">
-      <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-      <input type="hidden" name="action" value="<?php echo $editMode ? 'update' : 'create'; ?>">
-      <?php if ($editMode): ?>
-        <input type="hidden" name="id" value="<?php echo (int)$log['id']; ?>">
-      <?php endif; ?>
-
+    <div class="card">
+      <div class="card-head"><h3 class="card-title">Physical trip</h3><span class="muted">This is the distance actually traveled.</span></div>
       <div class="grid grid-2">
-        <div class="field">
-          <label class="label" for="trip_date">Trip Date *</label>
-          <input type="date" id="trip_date" name="trip_date" required
-                 value="<?php echo htmlspecialchars($log['trip_date']); ?>" class="input">
-        </div>
-
-        <div class="field">
-          <label class="label" for="miles">One-way Miles *</label>
-          <input type="number" id="miles" name="miles" required step="0.01" min="0.01"
-                 value="<?php echo $log['miles'] !== '' ? htmlspecialchars(number_format((float)$log['miles'], 2, '.', '')) : ''; ?>" class="input">
-        </div>
+        <label class="field"><span class="label">Trip date</span><input class="input" type="date" name="trip_date" required value="<?php echo htmlspecialchars((string)$log['trip_date']); ?>"></label>
+        <label class="field"><span class="label">Entry type</span><select class="input" id="entry_mode" name="entry_mode"><option value="simple" <?php echo ($log['entry_mode']??'simple')==='simple'?'selected':''; ?>>Simple trip (enter one-way miles)</option><option value="total_trip" <?php echo ($log['entry_mode']??'')==='total_trip'?'selected':''; ?>>Total or multi-stop trip</option></select></label>
       </div>
-
       <div class="grid grid-2">
-        <div class="field">
-          <label class="label" for="start_location">Start Location</label>
-          <input type="text" id="start_location" name="start_location"
-                 value="<?php echo htmlspecialchars($log['start_location'] ?? ''); ?>" class="input">
-        </div>
-
-        <div class="field">
-          <label class="label" for="end_location">End Location</label>
-          <input type="text" id="end_location" name="end_location"
-                 value="<?php echo htmlspecialchars($log['end_location'] ?? ''); ?>" class="input">
-        </div>
+        <label class="field"><span class="label" id="milesLabel">One-way miles</span><input class="input" id="miles" type="number" name="miles" min="0.001" step="0.001" required value="<?php echo $log['miles']!==''?htmlspecialchars(number_format((float)$log['miles'],3,'.','')):''; ?>"></label>
+        <div class="field" id="returnLogField"><span class="label">Trip log</span><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="round_trip" name="round_trip" value="1" <?php echo !empty($log['round_trip'])?'checked':''; ?>> Include return miles in the trip log</label></div>
       </div>
+      <div class="grid grid-2"><label class="field"><span class="label">Start location</span><input class="input" name="start_location" value="<?php echo htmlspecialchars((string)($log['start_location']??'')); ?>"></label><label class="field"><span class="label">End location</span><input class="input" name="end_location" value="<?php echo htmlspecialchars((string)($log['end_location']??'')); ?>"></label></div>
+      <div class="grid grid-2"><label class="field"><span class="label">Purpose</span><select class="input" name="purpose"><?php foreach(['business','medical','moving','charitable','personal'] as $p): ?><option value="<?php echo $p; ?>" <?php echo ($log['purpose']??'business')===$p?'selected':''; ?>><?php echo ucfirst($p); ?></option><?php endforeach; ?></select></label><label class="field"><span class="label">Description</span><input class="input" name="description" value="<?php echo htmlspecialchars((string)($log['description']??'')); ?>"></label></div>
+      <div class="card card-tight" style="margin-top:12px"><span class="label-muted">Total logged mileage</span><strong style="font-size:22px"><span id="loggedMilesDisplay">0.000</span> miles</strong></div>
+    </div>
 
-      <div class="field">
-        <label class="label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="round_trip" name="round_trip" value="1"
-                 <?php echo !empty($log['round_trip']) ? 'checked' : ''; ?> style="width:18px;height:18px">
-          Include return trip in mileage log
-        </label>
-        <div id="roundTripNote" class="muted-note" style="display:<?php echo !empty($log['round_trip']) ? 'block' : 'none'; ?>">
-          Logged miles: <span id="deductMilesBase">0</span> × 2 directions = <strong id="deductMilesTotal">0</strong>
-        </div>
-      </div>
-
-      <div class="grid grid-2">
-        <div class="field">
-          <label class="label" for="purpose">Purpose</label>
-          <select id="purpose" name="purpose" class="input">
-            <option value="business" <?php echo ($log['purpose'] ?? '') === 'business' ? 'selected' : ''; ?>>Business</option>
-            <option value="medical" <?php echo ($log['purpose'] ?? '') === 'medical' ? 'selected' : ''; ?>>Medical</option>
-            <option value="moving" <?php echo ($log['purpose'] ?? '') === 'moving' ? 'selected' : ''; ?>>Moving</option>
-            <option value="charitable" <?php echo ($log['purpose'] ?? '') === 'charitable' ? 'selected' : ''; ?>>Charitable</option>
-            <option value="personal" <?php echo ($log['purpose'] ?? '') === 'personal' ? 'selected' : ''; ?>>Personal</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label class="label" for="mileage_rate">Mileage Rate</label>
-          <input type="number" id="mileage_rate" name="mileage_rate" step="0.001" min="0"
-                 value="<?php echo htmlspecialchars(number_format((float)($log['mileage_rate'] ?? $defaultMileageRate), 3, '.', '')); ?>" class="input">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="label" for="description">Description</label>
-        <textarea id="description" name="description" rows="3" class="input"><?php echo htmlspecialchars($log['description'] ?? ''); ?></textarea>
-      </div>
-
-      <div class="field">
-        <label class="label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="is_billable" name="is_billable" value="1"
-                 <?php echo !empty($log['is_billable']) ? 'checked' : ''; ?> style="width:18px;height:18px">
-          Billable to client
-        </label>
-      </div>
-
-      <div class="field" id="billReturnField" style="display:<?php echo !empty($log['is_billable']) && !empty($log['round_trip']) ? 'block' : 'none'; ?>">
-        <label class="label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="bill_return_trip" name="bill_return_trip" value="1"
-                 <?php echo !empty($log['bill_return_trip']) ? 'checked' : ''; ?> style="width:18px;height:18px">
-          Bill client for return-trip mileage
-        </label>
-        <div class="muted-note">Leave this off to log both directions while billing only the outbound miles.</div>
-      </div>
-
-      <div class="field" id="clientField" style="display:<?php echo !empty($log['is_billable']) ? 'block' : 'none'; ?>">
-        <label class="label" for="client_id">Client</label>
-        <select id="client_id" name="client_id" class="input">
-          <option value="">-- Select Client --</option>
-          <?php foreach ($clients as $c): ?>
-            <option value="<?php echo (int)$c['id']; ?>" <?php echo (int)($log['client_id'] ?? 0) === (int)$c['id'] ? 'selected' : ''; ?>>
-              <?php echo htmlspecialchars($c['name']); ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-
-      <div class="field" id="projectField" style="display:<?php echo !empty($log['is_billable']) ? 'block' : 'none'; ?>">
-        <label class="label" for="project_id">Project</label>
-        <input type="number" id="project_id" name="project_id" min="0"
-               value="<?php echo $log['project_id'] ? htmlspecialchars((string)$log['project_id']) : ''; ?>" class="input">
-        <div class="muted-note">Optional project ID to associate with this trip.</div>
-      </div>
-
-      <div class="card card-tight" style="margin-bottom:16px">
-        <div class="label-muted">Estimated Mileage Amount</div>
-        <div class="font-600" style="font-size:22px">$<span id="deductibleDisplay">0.00</span></div>
-        <div class="muted-note">Based on all logged miles, including the return trip.</div>
-        <div id="billableSummary" class="muted-note" style="display:none;margin-top:6px">Client billing: <strong><span id="billableMilesDisplay">0.00</span> miles</strong> · $<strong id="billableAmountDisplay">0.00</strong></div>
-      </div>
-
-      <div class="field" style="display:flex;gap:12px">
-        <button type="submit" class="btn btn-primary"><?php echo $editMode ? 'Update Mileage' : 'Save Mileage'; ?></button>
-        <a href="/?page=financial/mileage-list" class="btn">Cancel</a>
-      </div>
-    </form>
-  </div>
+    <div class="card">
+      <div class="card-head"><div><h3 class="card-title">Client travel charges</h3><p class="muted" style="margin:4px 0 0">Optional. Each client is priced independently without duplicating the trip.</p></div><button type="button" class="btn btn-primary" id="addMileageAllocation">Add client travel charge</button></div>
+      <div id="mileageAllocations" style="display:grid;gap:14px"></div>
+      <div id="noMileageAllocations" class="muted" style="padding:18px;text-align:center">No client travel charges. Only the physical mileage will be recorded.</div>
+      <div id="allocationGrandTotal" class="card card-tight" style="display:none;margin-top:14px"><span class="label-muted">Total client travel charges</span><strong style="font-size:22px">$<span>0.00</span></strong></div>
+    </div>
+    <div style="display:flex;gap:10px"><button class="btn btn-primary" type="submit"><?php echo $editMode?'Update Mileage':'Save Mileage'; ?></button><a class="btn" href="/?page=financial/mileage-list">Cancel</a></div>
+  </form>
 </section>
-
-<script>
-(function () {
-  var milesInput = document.getElementById('miles');
-  var rateInput = document.getElementById('mileage_rate');
-  var roundTripCheck = document.getElementById('round_trip');
-  var billableCheck = document.getElementById('is_billable');
-  var billReturnCheck = document.getElementById('bill_return_trip');
-  var billReturnField = document.getElementById('billReturnField');
-  var clientField = document.getElementById('clientField');
-  var projectField = document.getElementById('projectField');
-  var roundTripNote = document.getElementById('roundTripNote');
-  var deductMilesBase = document.getElementById('deductMilesBase');
-  var deductMilesTotal = document.getElementById('deductMilesTotal');
-  var deductibleDisplay = document.getElementById('deductibleDisplay');
-  var billableSummary = document.getElementById('billableSummary');
-  var billableMilesDisplay = document.getElementById('billableMilesDisplay');
-  var billableAmountDisplay = document.getElementById('billableAmountDisplay');
-  var form = document.getElementById('mileageForm');
-
-  function getNum(el) {
-    var v = parseFloat(el.value);
-    return isNaN(v) || v < 0 ? 0 : v;
-  }
-
-  function formatCurrency(n) {
-    return n.toFixed(2);
-  }
-
-  function updateCalculations() {
-    var miles = getNum(milesInput);
-    var rate = getNum(rateInput);
-    var multiplier = roundTripCheck.checked ? 2 : 1;
-    var deductibleMiles = miles * multiplier;
-    var amount = deductibleMiles * rate;
-    var billableMultiplier = roundTripCheck.checked && billReturnCheck.checked ? 2 : 1;
-    var billableMiles = miles * billableMultiplier;
-
-    deductibleDisplay.textContent = formatCurrency(amount);
-
-    if (roundTripCheck.checked) {
-      deductMilesBase.textContent = miles.toFixed(2);
-      deductMilesTotal.textContent = deductibleMiles.toFixed(2);
-      roundTripNote.style.display = 'block';
-    } else {
-      roundTripNote.style.display = 'none';
-    }
-    billableMilesDisplay.textContent = billableMiles.toFixed(2);
-    billableAmountDisplay.textContent = formatCurrency(billableMiles * rate);
-    billableSummary.style.display = billableCheck.checked ? 'block' : 'none';
-  }
-
-  function updateBillableFields() {
-    var show = billableCheck.checked;
-    clientField.style.display = show ? 'block' : 'none';
-    projectField.style.display = show ? 'block' : 'none';
-    billReturnField.style.display = show && roundTripCheck.checked ? 'block' : 'none';
-    updateCalculations();
-  }
-
-  milesInput.addEventListener('input', updateCalculations);
-  rateInput.addEventListener('input', updateCalculations);
-  roundTripCheck.addEventListener('change', updateBillableFields);
-  billReturnCheck.addEventListener('change', updateCalculations);
-  billableCheck.addEventListener('change', updateBillableFields);
-
-  // Initial state
-  updateCalculations();
-  updateBillableFields();
-
-})();
-</script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/mileage-editor.js'),ENT_QUOTES,'UTF-8'); ?>" defer></script>

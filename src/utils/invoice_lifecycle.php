@@ -628,8 +628,10 @@ function invoice_void(PDO $pdo, int $invoiceId, array $appConfig, string $reason
 
         $pdo->prepare('UPDATE time_entries SET billed=0,invoice_item_id=NULL,invoice_id=NULL WHERE invoice_id=?')
             ->execute([$invoiceId]);
-        $pdo->prepare('UPDATE mileage_logs SET billed=0,invoice_item_id=NULL,invoice_id=NULL WHERE invoice_id=?')
+        $pdo->prepare('UPDATE mileage_charge_allocations SET billed=0,invoice_item_id=NULL,invoice_id=NULL WHERE invoice_id=?')
             ->execute([$invoiceId]);
+        $pdo->prepare('UPDATE mileage_logs m SET billed=0,invoice_item_id=NULL,invoice_id=NULL WHERE EXISTS (SELECT 1 FROM mileage_charge_allocations a WHERE a.mileage_log_id=m.id AND a.invoice_id IS NULL)')
+            ->execute();
         // A corrected invoice may already have links terminalized as paid.
         // Refresh those terminal redirects so the retained history is
         // consistently identified as void without re-enabling any link.

@@ -26,18 +26,23 @@
 <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">
   <legend style="padding:0 8px;font-weight:600">Mileage</legend>
   <label>
-    <div><strong>Default mileage rate</strong></div>
+    <div><strong>Default client mileage rate</strong></div>
     <input type="number" name="default_mileage_rate" step="0.001" min="0" required value="<?php echo htmlspecialchars(number_format((float)($appConfig['default_mileage_rate'] ?? 0.670), 3, '.', '')); ?>" style="width:100%;max-width:220px;margin-top:6px;padding:10px;border-radius:8px;border:1px solid #ddd">
-    <small style="display:block;margin-top:5px;color:var(--muted)">Used for new mileage entries. Each entry can still override the rate.</small>
+    <small style="display:block;margin-top:5px;color:var(--muted)">Used only for new client travel charges. Physical trip mileage has no monetary value by itself.</small>
   </label>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px">
+    <label><div><strong>Included miles before client charges begin</strong></div><input type="number" name="default_mileage_included_miles" step="0.001" min="0" required value="<?php echo htmlspecialchars(number_format((float)($appConfig['default_mileage_included_miles'] ?? 0),3,'.','')); ?>" style="width:100%;margin-top:6px;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+    <label><div><strong>Default client travel-charge method</strong></div><select name="default_mileage_charge_method" style="width:100%;margin-top:6px;padding:10px;border-radius:8px;border:1px solid #ddd"><?php $travelMethod=(string)($appConfig['default_mileage_charge_method']??'actual_trip'); ?><option value="actual_trip" <?php echo $travelMethod==='actual_trip'?'selected':''; ?>>Actual trip distance</option><option value="origin_distance" <?php echo $travelMethod==='origin_distance'?'selected':''; ?>>Billing origin to service location</option><option value="fixed_fee" <?php echo $travelMethod==='fixed_fee'?'selected':''; ?>>Fixed travel fee</option><option value="none" <?php echo $travelMethod==='none'?'selected':''; ?>>No client charge</option></select></label>
+  </div>
   <label style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 10px">
     <input type="checkbox" name="default_mileage_include_return_trip" value="1" <?php echo !array_key_exists('default_mileage_include_return_trip', $appConfig) || !empty($appConfig['default_mileage_include_return_trip']) ? 'checked' : ''; ?>>
-    <span><strong>New mileage entries include a return trip</strong><br><small>The entered distance is treated as one way, and the mileage log records both directions.</small></span>
+    <span><strong>Include return miles in new simple trip logs</strong><br><small>The entered distance is one way; total or multi-stop trips always use the full distance entered.</small></span>
   </label>
   <label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0">
     <input type="checkbox" name="default_mileage_bill_return_trip" value="1" <?php echo !empty($appConfig['default_mileage_bill_return_trip']) ? 'checked' : ''; ?>>
-    <span><strong>Bill return-trip mileage by default</strong><br><small>When off, a round trip is fully logged but only the outbound miles are billed. This can be overridden on each entry.</small></span>
+    <span><strong>Charge return travel by default</strong><br><small>This affects client pricing only. Return miles may still be included in the physical trip log when this is off.</small></span>
   </label>
+  <label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0"><input type="checkbox" name="mileage_tracking_enabled" value="1" <?php echo !empty($appConfig['mileage_tracking_enabled'])?'checked':''; ?>><span><strong>Enable foreground GPS mileage tracking beta</strong><br><small>Allows signed-in users to track a trip while the PA page remains visible on their phone.</small></span></label>
 </fieldset>
 
 <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">

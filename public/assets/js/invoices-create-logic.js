@@ -1,6 +1,6 @@
 function money(n) { return '$' + (Number(n) || 0).toFixed(2) }
 var itemCounterInv = 0;
-function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null, billingUnit = 'each', mileageLogId = null) {
+function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null, billingUnit = 'each', mileageAllocationId = null) {
     var wrap = document.createElement('div');
     var rowIndex = document.querySelectorAll('#itemsInv > div').length;
     var itemId = 'itemInv_' + (itemCounterInv++);
@@ -8,9 +8,9 @@ function addItemInv(item = '', desc = '', qty = 1, price = 0, timeEntryId = null
     var priceId = 'priceInv_' + itemCounterInv;
     wrap.style.display = 'grid'; wrap.style.gridTemplateColumns = '3fr 3fr 1fr 1fr 1fr auto'; wrap.style.gap = '8px';
     var teIds = Array.isArray(timeEntryId) ? timeEntryId : (timeEntryId ? [timeEntryId] : []);
-    var mileageIds = Array.isArray(mileageLogId) ? mileageLogId : (mileageLogId ? [mileageLogId] : []);
+    var mileageIds = Array.isArray(mileageAllocationId) ? mileageAllocationId : (mileageAllocationId ? [mileageAllocationId] : []);
     var teInput = teIds.map(id => `<input type="hidden" name="time_entry_ids[${rowIndex}][]" value="${id}">`).join('');
-    var mileageInput = mileageIds.map(id => `<input type="hidden" name="mileage_log_ids[${rowIndex}][]" value="${id}">`).join('');
+    var mileageInput = mileageIds.map(id => `<input type="hidden" name="mileage_allocation_ids[${rowIndex}][]" value="${id}">`).join('');
     var selectedUnit = ['each', 'hour', 'mile'].includes(billingUnit) ? billingUnit : 'each';
     wrap.innerHTML = teInput + mileageInput + `
     <input id="${itemId}" required placeholder="Item name..." name="item[]" style="padding:10px;border-radius:8px;border:1px solid #ddd" value="${item}" oninput="recalcInv()" data-item-autocomplete data-description-field="${descId}" data-price-field="${priceId}">
@@ -181,8 +181,8 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
         row.querySelectorAll('input[name^="time_entry_ids["]').forEach(function (input) {
             input.name = `time_entry_ids[${index}][]`;
         });
-        row.querySelectorAll('input[name^="mileage_log_ids["]').forEach(function (input) {
-            input.name = `mileage_log_ids[${index}][]`;
+        row.querySelectorAll('input[name^="mileage_allocation_ids["]').forEach(function (input) {
+            input.name = `mileage_allocation_ids[${index}][]`;
         });
     });
     const clientId = document.getElementById('clientIdInv');
@@ -354,18 +354,18 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
         }
         entries.forEach(function (entry) {
             const route = [entry.start_location, entry.end_location].filter(Boolean).join(' → ');
-            const loggedMiles = Number(entry.logged_quantity);
-            const billableMiles = Number(entry.quantity);
-            const billingNote = loggedMiles !== billableMiles ? `${loggedMiles.toFixed(2)} miles logged; ${billableMiles.toFixed(2)} miles billed` : '';
+            const loggedMiles = Number(entry.logged_miles);
+            const billableMiles = Number(entry.billable_miles);
+            const billingNote = entry.charge_method === 'fixed_fee' ? 'Fixed travel fee' : `${loggedMiles.toFixed(3)} miles logged; ${billableMiles.toFixed(3)} miles billed`;
             const detail = [entry.trip_date, route, entry.project_name, entry.description, billingNote].filter(Boolean).join(' | ');
             const tr = document.createElement('tr');
             tr.innerHTML = `
-              <td><input type="checkbox" class="mileage-checkbox" data-id="${Number(entry.id)}" data-quantity="${Number(entry.quantity)}" data-rate="${Number(entry.mileage_rate)}" data-detail="${escapeHtml(detail).replace(/"/g, '&quot;')}"></td>
+              <td><input type="checkbox" class="mileage-checkbox" data-id="${Number(entry.id)}" data-quantity="${Number(entry.quantity)}" data-rate="${Number(entry.unit_price)}" data-unit="${escapeHtml(entry.billing_unit)}" data-detail="${escapeHtml(detail).replace(/"/g, '&quot;')}"></td>
               <td>${escapeHtml(entry.trip_date)}</td>
               <td>${escapeHtml(route || entry.description || 'Mileage')}</td>
-              <td>${loggedMiles.toFixed(2)} / ${billableMiles.toFixed(2)}</td>
-              <td>$${Number(entry.mileage_rate).toFixed(3)}</td>
-              <td>$${Number(entry.amount).toFixed(2)}</td>`;
+              <td>${entry.charge_method === 'fixed_fee' ? 'Fixed' : loggedMiles.toFixed(3)+' / '+billableMiles.toFixed(3)}</td>
+              <td>$${Number(entry.unit_price).toFixed(entry.billing_unit === 'mile' ? 4 : 2)}</td>
+              <td>$${Number(entry.client_charge).toFixed(2)}</td>`;
             tbody.appendChild(tr);
         });
         empty.style.display = 'none';
@@ -406,15 +406,16 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
         const groups = new Map();
         checked.forEach(function (checkbox) {
             const rate = Number(checkbox.dataset.rate) || 0;
-            const key = rate.toFixed(3);
-            if (!groups.has(key)) groups.set(key, { rate, quantity: 0, ids: [], details: [] });
+            const unit = checkbox.dataset.unit || 'mile';
+            const key = unit + ':' + rate.toFixed(4);
+            if (!groups.has(key)) groups.set(key, { rate, unit, quantity: 0, ids: [], details: [] });
             const group = groups.get(key);
             group.quantity += Number(checkbox.dataset.quantity) || 0;
             group.ids.push(Number(checkbox.dataset.id));
             if (checkbox.dataset.detail) group.details.push(checkbox.dataset.detail);
         });
         groups.forEach(function (group) {
-            addItemInv('Mileage', group.details.join('\n'), group.quantity.toFixed(2), group.rate.toFixed(3), null, 'mile', group.ids);
+            addItemInv(group.unit === 'mile' ? 'Client travel mileage' : 'Client travel fee', group.details.join('\n'), group.quantity.toFixed(group.unit === 'mile' ? 3 : 0), group.rate.toFixed(group.unit === 'mile' ? 4 : 2), null, group.unit, group.ids);
         });
         modal.style.display = 'none';
         recalcInv();

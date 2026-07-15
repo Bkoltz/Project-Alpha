@@ -38,7 +38,7 @@ $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
 $timeEntryIdsByRow = $_POST['time_entry_ids'] ?? [];
 $legacyTimeEntryIds = $_POST['time_entry_id'] ?? [];
-$mileageLogIdsByRow = $_POST['mileage_log_ids'] ?? [];
+$mileageAllocationIdsByRow = $_POST['mileage_allocation_ids'] ?? [];
 
 if ($client_id <= 0 || empty($item)) {
     header('Location: /?page=invoice/invoices-create&error=Invalid%20input');
@@ -58,9 +58,9 @@ for ($i=0; $i<count($item); $i++) {
     $q = (float)($qty[$i] ?? 0);
     $p = (float)($price[$i] ?? 0);
     $rowTimeEntryIds = array_values(array_unique(array_filter(array_map('intval', $timeEntryIdsByRow[$i] ?? [($legacyTimeEntryIds[$i] ?? 0)]))));
-    $rowMileageLogIds = array_values(array_unique(array_filter(array_map('intval', $mileageLogIdsByRow[$i] ?? []))));
+    $rowMileageAllocationIds = array_values(array_unique(array_filter(array_map('intval', $mileageAllocationIdsByRow[$i] ?? []))));
     // Linked adjustment groups may legitimately net to zero or negative.
-    if ($itm === '' || ($q == 0.0 && !$rowTimeEntryIds && !$rowMileageLogIds) || $p < 0) continue;
+    if ($itm === '' || ($q == 0.0 && !$rowTimeEntryIds && !$rowMileageAllocationIds) || $p < 0) continue;
     $line = $q * $p;
     $subtotal += $line;
     $items[] = [
@@ -73,7 +73,8 @@ for ($i=0; $i<count($item); $i++) {
             ? 'hour'
             : (in_array(($billingUnits[$i] ?? 'each'), ['each', 'hour', 'mile'], true) ? (string)($billingUnits[$i] ?? 'each') : 'each'),
         'time_entry_ids' => $rowTimeEntryIds,
-        'mileage_log_ids' => $rowMileageLogIds,
+        'mileage_allocation_ids' => $rowMileageAllocationIds,
+        'is_travel' => !empty($rowMileageAllocationIds) ? 1 : 0,
     ];
 }
 if (!$items) {
@@ -100,13 +101,13 @@ try {
         static fn(array $row): array => $row['time_entry_ids'],
         $items
     ))));
-    $allMileageLogIds = array_merge(...array_map(
-        static fn(array $row): array => $row['mileage_log_ids'],
+    $allMileageAllocationIds = array_merge(...array_map(
+        static fn(array $row): array => $row['mileage_allocation_ids'],
         $items
     ));
-    $selectedMileageLogIds = array_values(array_unique($allMileageLogIds));
-    if (count($allMileageLogIds) !== count($selectedMileageLogIds)) {
-        throw new RuntimeException('A mileage entry cannot be added to more than one invoice row.');
+    $selectedMileageAllocationIds = array_values(array_unique($allMileageAllocationIds));
+    if (count($allMileageAllocationIds) !== count($selectedMileageAllocationIds)) {
+        throw new RuntimeException('A client travel charge cannot be added to more than one invoice row.');
     }
     foreach ($items as $row) {
         if (!$row['time_entry_ids']) continue;
@@ -145,23 +146,27 @@ try {
         }
     }
     foreach ($items as $row) {
-        if (!$row['mileage_log_ids']) continue;
-        $placeholders = implode(',', array_fill(0, count($row['mileage_log_ids']), '?'));
+        if (!$row['mileage_allocation_ids']) continue;
+        $placeholders = implode(',', array_fill(0, count($row['mileage_allocation_ids']), '?'));
         $checkMileage = $pdo->prepare(
             "SELECT COUNT(*) row_count,
-                    COALESCE(SUM(miles * CASE WHEN round_trip=1 AND bill_return_trip=1 THEN 2 ELSE 1 END),0) expected_miles,
-                    MIN(mileage_rate) min_rate,MAX(mileage_rate) max_rate
-             FROM mileage_logs
-             WHERE id IN ($placeholders) AND client_id=? AND is_billable=1 AND billed=0 FOR UPDATE"
+                    COALESCE(SUM(CASE WHEN charge_method='fixed_fee' THEN 1 ELSE billable_miles END),0) expected_quantity,
+                    MIN(CASE WHEN charge_method='fixed_fee' THEN client_charge ELSE mileage_rate END) min_rate,
+                    MAX(CASE WHEN charge_method='fixed_fee' THEN client_charge ELSE mileage_rate END) max_rate,
+                    MIN(CASE WHEN charge_method='fixed_fee' THEN 'each' ELSE 'mile' END) min_unit,
+                    MAX(CASE WHEN charge_method='fixed_fee' THEN 'each' ELSE 'mile' END) max_unit
+             FROM mileage_charge_allocations
+             WHERE id IN ($placeholders) AND client_id=? AND billed=0 FOR UPDATE"
         );
-        $checkMileage->execute(array_merge($row['mileage_log_ids'], [$client_id]));
+        $checkMileage->execute(array_merge($row['mileage_allocation_ids'], [$client_id]));
         $expected = $checkMileage->fetch(PDO::FETCH_ASSOC) ?: [];
-        if ((int)($expected['row_count'] ?? 0) !== count($row['mileage_log_ids'])
-            || abs((float)($expected['expected_miles'] ?? 0) - (float)$row['quantity']) > 0.005
+        if ((int)($expected['row_count'] ?? 0) !== count($row['mileage_allocation_ids'])
+            || abs((float)($expected['expected_quantity'] ?? 0) - (float)$row['quantity']) > 0.005
             || (string)($expected['min_rate'] ?? '') !== (string)($expected['max_rate'] ?? '')
             || abs((float)($expected['min_rate'] ?? 0) - (float)$row['unit_price']) > 0.0005
-            || $row['billing_unit'] !== 'mile') {
-            throw new RuntimeException('Billable mileage quantity or rate no longer matches the selected entries.');
+            || (string)($expected['min_unit'] ?? '') !== (string)($expected['max_unit'] ?? '')
+            || $row['billing_unit'] !== (string)($expected['min_unit'] ?? '')) {
+            throw new RuntimeException('Client travel quantity or rate no longer matches the selected charges.');
         }
     }
     $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -181,10 +186,10 @@ try {
     // Assign per-type doc_number for invoices
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([pa_next_invoice_doc_number($pdo, 'regular'), $invoice_id]);
 
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit, time_entry_id, hours) VALUES (?,?,?,?,?,?,?,?,?)');
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status,time_entry_id,hours) VALUES (?,?,?,?,?,?,?,?,"standard",?,?)');
     foreach ($items as $idx => $it) {
         $primaryTimeEntryId = !empty($it['time_entry_ids']) ? (int)$it['time_entry_ids'][0] : null;
-        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'], $primaryTimeEntryId, $it['billing_unit'] === 'hour' ? ($it['quantity'] ?? null) : null]);
+        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'], $it['is_travel'], $primaryTimeEntryId, $it['billing_unit'] === 'hour' ? ($it['quantity'] ?? null) : null]);
         if (!empty($it['time_entry_ids'])) {
             $itemId = (int)$pdo->lastInsertId();
             $check = $pdo->prepare('SELECT id FROM time_entries WHERE id = ? AND billed = 0 AND COALESCE(external_status,"approved") = "approved" AND (client_id = ? OR client_id IS NULL OR client_id = 0) FOR UPDATE');
@@ -197,17 +202,20 @@ try {
                 $mark->execute([$client_id, $itemId, $invoice_id, (int)$teId]);
             }
         }
-        if (!empty($it['mileage_log_ids'])) {
+        if (!empty($it['mileage_allocation_ids'])) {
             $itemId = (int)$pdo->lastInsertId();
             $markMileage = $pdo->prepare(
-                'UPDATE mileage_logs SET billed=1,invoice_item_id=?,invoice_id=?
-                 WHERE id=? AND client_id=? AND is_billable=1 AND billed=0'
+                'UPDATE mileage_charge_allocations SET billed=1,invoice_item_id=?,invoice_id=?
+                 WHERE id=? AND client_id=? AND billed=0'
             );
-            foreach ($it['mileage_log_ids'] as $mileageId) {
-                $markMileage->execute([$itemId, $invoice_id, (int)$mileageId, $client_id]);
+            foreach ($it['mileage_allocation_ids'] as $allocationId) {
+                $markMileage->execute([$itemId, $invoice_id, (int)$allocationId, $client_id]);
                 if ($markMileage->rowCount() !== 1) {
-                    throw new RuntimeException('Invalid or already billed mileage entry selected.');
+                    throw new RuntimeException('Invalid or already billed client travel charge selected.');
                 }
+                $logIdStmt=$pdo->prepare('SELECT mileage_log_id FROM mileage_charge_allocations WHERE id=?');
+                $logIdStmt->execute([(int)$allocationId]);$logId=(int)$logIdStmt->fetchColumn();
+                $pdo->prepare('UPDATE mileage_logs m SET billed=NOT EXISTS(SELECT 1 FROM mileage_charge_allocations x WHERE x.mileage_log_id=m.id AND x.billed=0) WHERE m.id=?')->execute([$logId]);
             }
         }
     }

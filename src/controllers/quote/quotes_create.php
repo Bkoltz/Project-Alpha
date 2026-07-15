@@ -1,11 +1,13 @@
 <?php
 // src/controllers/quotes_create.php
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
+require_once __DIR__ . '/../../utils/mileage.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -69,6 +71,7 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
+$travelRule = mileage_rule_from_post($_POST, ['rate'=>(float)($appConfig['default_mileage_rate']??0.670),'included'=>(float)($appConfig['default_mileage_included_miles']??0)]);
 
 // Validate client_id
 if ($client_id <= 0) {
@@ -143,6 +146,9 @@ if ($is_long_term && $pricing_type === 'per_invoice') {
     }
 }
 
+$travelItem=mileage_document_travel_item($travelRule);
+if($travelItem&&$travelItem['pricing_status']!=='variable')$subtotal+=(float)$travelItem['line_total'];
+
 $discount_amount = 0.0;
 if ($discount_type === 'percent') {
     $discount_amount = max(0.0, min(100.0, $discount_value)) * $subtotal / 100.0;
@@ -192,6 +198,10 @@ try {
             $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? 'each']);
         }
     }
+    if($travelItem){
+        $pdo->prepare('INSERT INTO quote_items (quote_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$quote_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
+    }
+    mileage_save_document_rule($pdo,'quote',$quote_id,$__orgId,$client_id,(int)$__creator,$travelRule);
 
     // Add to project_documents if project_id is set
     if ($project_id) {

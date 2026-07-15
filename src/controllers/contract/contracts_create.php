@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
+require_once __DIR__ . '/../../utils/mileage.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -46,6 +47,7 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
+$travelRule=mileage_rule_from_post($_POST,['rate'=>(float)($appConfig['default_mileage_rate']??0.670),'included'=>(float)($appConfig['default_mileage_included_miles']??0)]);
 
 if ($client_id <= 0) {
     // Fallback: try resolving by posted client name
@@ -86,6 +88,8 @@ if(!$items){
     header('Location: /?page=contract/contracts-create&error=Add%20at%20least%20one%20item');
     exit;
 }
+$travelItem=mileage_document_travel_item($travelRule);
+if($travelItem&&$travelItem['pricing_status']!=='variable')$subtotal+=(float)$travelItem['line_total'];
 $discount_amount=0.0; if($discount_type==='percent'){ $discount_amount = max(0,min(100,$discount_value))*$subtotal/100; } elseif($discount_type==='fixed'){ $discount_amount = max(0,$discount_value); }
 $tax = max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
 
@@ -95,7 +99,9 @@ if($deposit_type === 'percent') { $deposit_amount = max(0, min(100, $deposit_val
 elseif($deposit_type === 'fixed') { $deposit_amount = max(0, $deposit_value); }
 
 // Invoice total is the full amount - deposits are tracked via payments table
-$invoice_total = $total;
+$invoice_subtotal=$subtotal-($travelItem&&$travelItem['pricing_status']==='estimate'?(float)$travelItem['line_total']:0);
+$invoice_discount=$discount_type==='percent'?max(0,min(100,$discount_value))*$invoice_subtotal/100:($discount_type==='fixed'?min($invoice_subtotal,max(0,$discount_value)):0);
+$invoice_total=max(0,$invoice_subtotal-$invoice_discount+max(0,$tax_percent)*max(0,$invoice_subtotal-$invoice_discount)/100);
 
 $memo = trim((string)($_POST['memo'] ?? '')) ?: null;
 
@@ -131,17 +137,20 @@ try{
   // Save contract items
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$co_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+  if($travelItem)$pdo->prepare('INSERT INTO contract_items (contract_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$co_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
+  mileage_save_document_rule($pdo,'contract',$co_id,$__orgId,$client_id,(int)$__creator,$travelRule);
 
   // Auto-create an invoice for this contract (invoice total is balance after deposit)
   $dueDate = null;
   $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      ->execute([$co_id, null, $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $invoice_total, 'draft', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
+      ->execute([$co_id, null, $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $invoice_subtotal, $invoice_total, 'draft', $dueDate, $projectCode, $fulfillment_date, $__orgId, $__creator]);
   $invoice_id = (int)$pdo->lastInsertId();
   if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
     $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
   }
   $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
   foreach($items as $it){ $ii->execute([$invoice_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+  if($travelItem&&$travelItem['pricing_status']==='standard')$pdo->prepare('INSERT INTO invoice_items (invoice_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,"standard")')->execute([$invoice_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit']]);
   // Assign per-type doc_number for invoices
   $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([pa_next_invoice_doc_number($pdo, 'regular'), $invoice_id]);
 

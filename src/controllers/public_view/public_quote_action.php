@@ -18,6 +18,7 @@ require_once __DIR__ . '/../../utils/mailer.php';
 require_once __DIR__ . '/../../utils/smtp.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/mileage.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
   header('Location: /?page=public-doc&error=' . urlencode('Invalid request'));
@@ -120,7 +121,7 @@ try {
           pa_recurring_service_ensure_base($pdo, $contract_id);
         }
 
-        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
         foreach ($qitems as $it) {
           $ci->execute([
             $contract_id,
@@ -129,21 +130,32 @@ try {
             $it['quantity'],
             $it['unit_price'],
             $it['line_total'],
-            ($it['billing_unit'] ?? 'each') === 'hour' ? 'hour' : 'each'
+            in_array(($it['billing_unit'] ?? 'each'),['hour','mile'],true)?$it['billing_unit']:'each',
+            (int)($it['is_travel']??0),
+            $it['pricing_status']??'standard'
           ]);
         }
+        mileage_copy_document_rule($pdo,$qid,$contract_id,$quoteOrgId,(int)$quote['client_id'],$quoteCreator);
 
         if ($quoteType === 'regular') {
           // Create a private draft. Contract completion is the billing event.
+          $invoiceSubtotal=0.0;
+          foreach($qitems as $it){if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;$invoiceSubtotal+=(float)$it['line_total'];}
+          $invoiceDiscount=0.0;
+          if(($quote['discount_type']??'none')==='percent')$invoiceDiscount=max(0,min(100,(float)$quote['discount_value']))*$invoiceSubtotal/100;
+          elseif(($quote['discount_type']??'none')==='fixed')$invoiceDiscount=min($invoiceSubtotal,max(0,(float)$quote['discount_value']));
+          $invoiceTaxable=max(0,$invoiceSubtotal-$invoiceDiscount);
+          $invoiceTotal=$invoiceTaxable+(max(0,(float)$quote['tax_percent'])*$invoiceTaxable/100);
           $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+             ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
           $invoice_id = (int)$pdo->lastInsertId();
           if (!empty($quote['project_id']) && project_uses_monthly_invoice_billing($pdo, (int)$quote['project_id'])) {
             $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
           }
 
-          $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+          $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
           foreach ($qitems as $it) {
+            if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;
             $ii->execute([
               $invoice_id,
               $it['item'] ?? ($it['description'] ?? 'Item'),
@@ -151,7 +163,9 @@ try {
               $it['quantity'],
               $it['unit_price'],
               $it['line_total'],
-              ($it['billing_unit'] ?? 'each') === 'hour' ? 'hour' : 'each'
+              in_array(($it['billing_unit'] ?? 'each'),['hour','mile'],true)?$it['billing_unit']:'each',
+              (int)($it['is_travel']??0),
+              $it['pricing_status']??'standard'
             ]);
           }
         }

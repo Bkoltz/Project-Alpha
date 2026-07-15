@@ -769,7 +769,9 @@ CREATE TABLE IF NOT EXISTS quote_items (
     quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
-    billing_unit ENUM('each','hour') NOT NULL DEFAULT 'each',
+    billing_unit ENUM('each','hour','mile') NOT NULL DEFAULT 'each',
+    is_travel TINYINT(1) NOT NULL DEFAULT 0,
+    pricing_status ENUM('standard','estimate','variable') NOT NULL DEFAULT 'standard',
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -860,6 +862,8 @@ CREATE TABLE IF NOT EXISTS contract_items (
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
     billing_unit ENUM('each','hour','mile') NOT NULL DEFAULT 'each',
+    is_travel TINYINT(1) NOT NULL DEFAULT 0,
+    pricing_status ENUM('standard','estimate','variable') NOT NULL DEFAULT 'standard',
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -971,6 +975,8 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
     billing_unit ENUM('each','hour','mile') NOT NULL DEFAULT 'each',
+    is_travel TINYINT(1) NOT NULL DEFAULT 0,
+    pricing_status ENUM('standard','estimate','variable') NOT NULL DEFAULT 'standard',
     hours DECIMAL(10,2) DEFAULT NULL,
     time_entry_id INT DEFAULT NULL,
     is_extra_charge TINYINT(1) NOT NULL DEFAULT 0,
@@ -1715,12 +1721,17 @@ CREATE TABLE IF NOT EXISTS mileage_logs (
     user_id INT NULL DEFAULT NULL,
     client_id INT NULL DEFAULT NULL,
     project_id INT NULL DEFAULT NULL,
+    source ENUM('manual','gps') NOT NULL DEFAULT 'manual',
+    entry_mode ENUM('simple','total_trip') NOT NULL DEFAULT 'simple',
     trip_date DATE NOT NULL,
     start_location VARCHAR(255) NULL DEFAULT NULL,
     end_location VARCHAR(255) NULL DEFAULT NULL,
     miles DECIMAL(8,2) NOT NULL DEFAULT 0.00,
+    logged_miles DECIMAL(10,3) NULL,
+    tracking_session_id BIGINT NULL,
     purpose ENUM('business','medical','moving','charitable','personal') NOT NULL DEFAULT 'business',
     description TEXT NULL,
+    review_status ENUM('draft','finalized') NOT NULL DEFAULT 'finalized',
     round_trip TINYINT(1) NOT NULL DEFAULT 0,
     bill_return_trip TINYINT(1) NOT NULL DEFAULT 0,
     mileage_rate DECIMAL(5,3) NOT NULL DEFAULT 0.670,
@@ -1736,12 +1747,115 @@ CREATE TABLE IF NOT EXISTS mileage_logs (
     INDEX idx_mileage_purpose (purpose),
     INDEX idx_mileage_billable_billed (is_billable, billed),
     INDEX idx_mileage_invoice (invoice_id),
+    INDEX idx_mileage_tracking_session (tracking_session_id),
     CONSTRAINT fk_mileage_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
     CONSTRAINT fk_mileage_invoice_item FOREIGN KEY (invoice_item_id) REFERENCES invoice_items(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS service_locations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NULL, client_id INT NULL, project_id INT NULL,
+    name VARCHAR(150) NOT NULL,
+    address_line1 VARCHAR(255) NULL, address_line2 VARCHAR(255) NULL,
+    city VARCHAR(100) NULL, state VARCHAR(100) NULL, postal_code VARCHAR(32) NULL,
+    country VARCHAR(100) NULL DEFAULT 'US', archived TINYINT(1) NOT NULL DEFAULT 0,
+    created_by INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_service_location_org (organization_id), INDEX idx_service_location_client (client_id),
+    INDEX idx_service_location_project (project_id),
+    CONSTRAINT fk_service_location_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_service_location_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_service_location_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_service_location_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_mileage_origins (
+    id INT AUTO_INCREMENT PRIMARY KEY, organization_id INT NULL, user_id INT NOT NULL,
+    label VARCHAR(100) NOT NULL DEFAULT 'Billing origin', location_enc TEXT NOT NULL,
+    is_default TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_mileage_origin_org_user (organization_id,user_id),
+    CONSTRAINT fk_mileage_origin_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_origin_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS travel_distance_cache (
+    id INT AUTO_INCREMENT PRIMARY KEY, origin_id INT NOT NULL, service_location_id INT NOT NULL,
+    one_way_miles DECIMAL(10,3) NOT NULL, source ENUM('manual','routing') NOT NULL DEFAULT 'manual',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_travel_distance_pair (origin_id,service_location_id),
+    CONSTRAINT fk_travel_distance_origin FOREIGN KEY (origin_id) REFERENCES user_mileage_origins(id) ON DELETE CASCADE,
+    CONSTRAINT fk_travel_distance_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS travel_billing_rules (
+    id INT AUTO_INCREMENT PRIMARY KEY, organization_id INT NULL,
+    scope_type ENUM('organization','client','quote','contract') NOT NULL,
+    client_id INT NULL, quote_id INT NULL, contract_id INT NULL,
+    charge_method ENUM('actual_trip','origin_distance','fixed_fee','none') NOT NULL DEFAULT 'actual_trip',
+    mileage_rate DECIMAL(10,4) NOT NULL DEFAULT 0, included_miles DECIMAL(10,3) NOT NULL DEFAULT 0,
+    charge_return TINYINT(1) NOT NULL DEFAULT 0, fixed_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    origin_id INT NULL, service_location_id INT NULL, estimated_one_way_miles DECIMAL(10,3) NULL,
+    terms_text TEXT NULL, created_by INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_travel_rule_scope (scope_type,organization_id,client_id,quote_id,contract_id),
+    CONSTRAINT fk_travel_rule_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_travel_rule_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_travel_rule_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_travel_rule_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_travel_rule_origin FOREIGN KEY (origin_id) REFERENCES user_mileage_origins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_travel_rule_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_travel_rule_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mileage_tracking_sessions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY, organization_id INT NULL, user_id INT NOT NULL,
+    status ENUM('active','draft_review','finalized','discarded') NOT NULL DEFAULT 'active',
+    started_at DATETIME(3) NOT NULL, stopped_at DATETIME(3) NULL, finalized_at DATETIME(3) NULL,
+    calculated_miles DECIMAL(10,3) NOT NULL DEFAULT 0, point_count INT NOT NULL DEFAULT 0,
+    last_point_at DATETIME(3) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_tracking_org_user_status (organization_id,user_id,status), INDEX idx_tracking_retention (status,finalized_at),
+    CONSTRAINT fk_tracking_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_tracking_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mileage_tracking_points (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY, session_id BIGINT NOT NULL, sequence_no INT NOT NULL,
+    captured_at DATETIME(3) NOT NULL, latitude DECIMAL(10,7) NOT NULL, longitude DECIMAL(10,7) NOT NULL,
+    accuracy_m DECIMAL(8,2) NULL, speed_mps DECIMAL(8,2) NULL, accepted TINYINT(1) NOT NULL DEFAULT 1,
+    rejection_reason VARCHAR(60) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tracking_point_sequence (session_id,sequence_no), INDEX idx_tracking_point_time (session_id,captured_at),
+    CONSTRAINT fk_tracking_point_session FOREIGN KEY (session_id) REFERENCES mileage_tracking_sessions(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE mileage_logs ADD CONSTRAINT fk_mileage_tracking_session FOREIGN KEY (tracking_session_id) REFERENCES mileage_tracking_sessions(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS mileage_charge_allocations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY, mileage_log_id INT NOT NULL, organization_id INT NULL,
+    client_id INT NOT NULL, project_id INT NULL, contract_id INT NULL, service_location_id INT NULL, origin_id INT NULL,
+    charge_method ENUM('actual_trip','origin_distance','fixed_fee') NOT NULL DEFAULT 'actual_trip',
+    pricing_distance_miles DECIMAL(10,3) NOT NULL DEFAULT 0, included_miles DECIMAL(10,3) NOT NULL DEFAULT 0,
+    charge_return TINYINT(1) NOT NULL DEFAULT 0, billable_miles DECIMAL(10,3) NOT NULL DEFAULT 0,
+    mileage_rate DECIMAL(10,4) NOT NULL DEFAULT 0, fixed_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    client_charge DECIMAL(12,2) NOT NULL DEFAULT 0, rule_snapshot JSON NULL,
+    billed TINYINT(1) NOT NULL DEFAULT 0, invoice_id INT NULL, invoice_item_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_mileage_allocation_log (mileage_log_id), INDEX idx_mileage_allocation_client_unbilled (client_id,billed),
+    INDEX idx_mileage_allocation_invoice (invoice_id),
+    CONSTRAINT fk_mileage_allocation_log FOREIGN KEY (mileage_log_id) REFERENCES mileage_logs(id) ON DELETE CASCADE,
+    CONSTRAINT fk_mileage_allocation_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_allocation_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_mileage_allocation_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_allocation_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_allocation_location FOREIGN KEY (service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_allocation_origin FOREIGN KEY (origin_id) REFERENCES user_mileage_origins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_allocation_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_mileage_allocation_invoice_item FOREIGN KEY (invoice_item_id) REFERENCES invoice_items(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- FORM CATEGORIES
@@ -2090,6 +2204,9 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('default_mileage_rate', '0.670'),
     ('default_mileage_include_return_trip', '1'),
     ('default_mileage_bill_return_trip', '0'),
+    ('default_mileage_included_miles', '0.000'),
+    ('default_mileage_charge_method', 'actual_trip'),
+    ('mileage_tracking_enabled', '0'),
     ('email_no_reply_notice_enabled', '0'),
     ('email_no_reply_notice_text', 'This is an automated message. Please do not reply to this email.')
 ON DUPLICATE KEY UPDATE config_value = VALUES(config_value);

@@ -13,7 +13,7 @@
     echo '<p>Quote not found</p>';
     return;
   }
-  $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=?');
+  $items = $pdo->prepare('SELECT * FROM quote_items WHERE quote_id=? AND is_travel=0');
   $items->execute([$id]);
   $items = $items->fetchAll(PDO::FETCH_ASSOC);
   $clients = $pdo->query("SELECT id, name FROM clients ORDER BY name ASC")->fetchAll();
@@ -130,6 +130,7 @@
       </label>
     </div>
 
+    <?php $travelRuleScope='quote'; $travelDocumentId=(int)$quote['id']; require __DIR__.'/../../components/travel_billing_fields.php'; ?>
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
       <div id="items" style="display:grid;gap:8px"></div>

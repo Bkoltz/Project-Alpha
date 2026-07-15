@@ -19,6 +19,9 @@ CRON_LOG=/var/www/config/logs/cron/cron.log
 # Generate predictable recurring expenses - daily at 2:15 AM
 15 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_expenses.php >> $CRON_LOG 2>&1
 
+# Purge sensitive finalized GPS route points after 90 days - daily at 2:30 AM
+30 2 * * * root . /etc/environment && php /var/www/src/cron/purge_mileage_tracking_points.php >> $CRON_LOG 2>&1
+
 # Check hourly at :30; the script honors the configured PA timezone backup hour.
 30 * * * * root . /etc/environment && php /var/www/src/cron/backup_database.php --scheduled >> $CRON_LOG 2>&1
 

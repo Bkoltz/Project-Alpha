@@ -93,8 +93,11 @@ $settings = [
     'workforce_allow_non_admin_time_management' => 0,
     'workforce_allow_non_admin_time_approval' => 0,
     'default_mileage_rate' => 0.670,
+    'default_mileage_included_miles' => 0,
+    'default_mileage_charge_method' => 'actual_trip',
     'default_mileage_include_return_trip' => 1,
     'default_mileage_bill_return_trip' => 0,
+    'mileage_tracking_enabled' => 0,
     // App extras
     'primary_state' => null,
     'documents_valid_days' => 14,
@@ -356,8 +359,17 @@ if ($isWorkflowTab) {
         exit;
     }
     $settings['default_mileage_rate'] = number_format((float)$mileageRate, 3, '.', '');
+    $includedMiles = trim((string)($_POST['default_mileage_included_miles'] ?? '0'));
+    if (!preg_match('/^\d+(?:\.\d{1,3})?$/', $includedMiles)) {
+        header('Location: /?page=settings&tab=workflow&error=' . urlencode('Included mileage must be a non-negative number with at most three decimal places.'));
+        exit;
+    }
+    $chargeMethod = (string)($_POST['default_mileage_charge_method'] ?? 'actual_trip');
+    $settings['default_mileage_included_miles'] = number_format((float)$includedMiles, 3, '.', '');
+    $settings['default_mileage_charge_method'] = in_array($chargeMethod, ['actual_trip','origin_distance','fixed_fee','none'], true) ? $chargeMethod : 'actual_trip';
     $settings['default_mileage_include_return_trip'] = !empty($_POST['default_mileage_include_return_trip']) ? 1 : 0;
     $settings['default_mileage_bill_return_trip'] = !empty($_POST['default_mileage_bill_return_trip']) ? 1 : 0;
+    $settings['mileage_tracking_enabled'] = !empty($_POST['mileage_tracking_enabled']) ? 1 : 0;
     $settings['workforce_allow_non_admin_time_management'] = !empty($_POST['workforce_allow_non_admin_time_management']) ? 1 : 0;
     $settings['workforce_allow_non_admin_time_approval'] = !empty($_POST['workforce_allow_non_admin_time_approval']) ? 1 : 0;
 }
@@ -426,7 +438,8 @@ $generalConfigKeys = [
     'workforce_currency', 'workforce_default_hourly_rate', 'workforce_default_billing_rate',
     'workforce_require_project', 'workforce_require_description',
     'workforce_allow_non_admin_time_management', 'workforce_allow_non_admin_time_approval',
-    'default_mileage_rate', 'default_mileage_include_return_trip', 'default_mileage_bill_return_trip',
+    'default_mileage_rate', 'default_mileage_included_miles', 'default_mileage_charge_method',
+    'default_mileage_include_return_trip', 'default_mileage_bill_return_trip', 'mileage_tracking_enabled',
     'terms', 'long_term_terms', 'on_demand_terms',
     'net_terms_days', 'documents_valid_days', 'payment_methods',
     'quote_auto_create_contract', 'quote_auto_create_invoice', 'quotes_show_terms',

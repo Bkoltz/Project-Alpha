@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
+require_once __DIR__ . '/../../utils/mileage.php';
 
 // Auto-create settings (default to true/on when not explicitly set)
 $autoCreateContract = !isset($appConfig['quote_auto_create_contract']) || !empty($appConfig['quote_auto_create_contract']);
@@ -101,9 +102,9 @@ try {
       }
 
       if (!empty($qitems)) {
-        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
         foreach ($qitems as $it) {
-          $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each')]);
+          $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard']);
         }
       }
 
@@ -111,6 +112,7 @@ try {
       $cMaxStmt->execute([$quoteType]);
       $cMax = (int)$cMaxStmt->fetchColumn();
       $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+      mileage_copy_document_rule($pdo,$id,$contract_id,$quoteOrgId,(int)$quote['client_id'],$quoteCreator);
     }
   } else {
     // Regular quote: create contract and/or invoice based on settings
@@ -119,26 +121,31 @@ try {
           ->execute([$id, (int)$quote['client_id'], $projectId, 'pending', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $depositType, $contractDepositAmount, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $contract_id = (int)$pdo->lastInsertId();
 
-      $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+      $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
-        $ci->execute([$contract_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each')]);
+        $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard']);
       }
 
       $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "regular"')->fetchColumn();
       $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $contract_id]);
+      mileage_copy_document_rule($pdo,$id,$contract_id,$quoteOrgId,(int)$quote['client_id'],$quoteCreator);
     }
 
     if ($autoCreateInvoice) {
+      $invoiceSubtotal=0.0;foreach($qitems as $it){if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;$invoiceSubtotal+=(float)$it['line_total'];}
+      $invoiceDiscount=($quote['discount_type']??'none')==='percent'?max(0,min(100,(float)$quote['discount_value']))*$invoiceSubtotal/100:(($quote['discount_type']??'none')==='fixed'?min($invoiceSubtotal,max(0,(float)$quote['discount_value'])):0);
+      $invoiceTotal=max(0,$invoiceSubtotal-$invoiceDiscount+max(0,(float)$quote['tax_percent'])*max(0,$invoiceSubtotal-$invoiceDiscount)/100);
       $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
       $invoice_id = (int)$pdo->lastInsertId();
       if ($projectId && project_uses_monthly_invoice_billing($pdo, $projectId)) {
         $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
       }
 
-      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
-        $ii->execute([$invoice_id, $it['description'] ?? 'Item', $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each')]);
+        if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;
+        $ii->execute([$invoice_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard']);
       }
 
       $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "regular"')->fetchColumn();
