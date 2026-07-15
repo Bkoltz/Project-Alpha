@@ -31,10 +31,10 @@ $totalExpenses = (float)$expenseSummary['total'];
 $expenseCount = (int)$expenseSummary['count'];
 $netProfit = $totalIncome - $totalExpenses;
 
-$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM(m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END * m.mileage_rate),0) as total, COALESCE(SUM(m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END),0) as miles, COUNT(*) as trips FROM mileage_logs m WHERE {$mileageScopeWhere} AND m.purpose='business' AND m.trip_date BETWEEN ? AND ?");
+$mileageStmt = $pdo->prepare("SELECT COALESCE(SUM((SELECT SUM(a.client_charge) FROM mileage_charge_allocations a WHERE a.mileage_log_id=m.id)),0) as total, COALESCE(SUM(COALESCE(m.logged_miles,m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END)),0) as miles, COUNT(*) as trips FROM mileage_logs m WHERE {$mileageScopeWhere} AND m.purpose='business' AND m.trip_date BETWEEN ? AND ?");
 $mileageStmt->execute(array_merge($mileageScopeParams, [$start, $end]));
 $mileageSummary = $mileageStmt->fetch(PDO::FETCH_ASSOC);
-$totalMileageDeduction = (float)($mileageSummary['total'] ?? 0);
+$totalClientTravelCharges = (float)($mileageSummary['total'] ?? 0);
 $totalMiles = (float)($mileageSummary['miles'] ?? 0);
 $totalTrips = (int)($mileageSummary['trips'] ?? 0);
 
@@ -202,8 +202,8 @@ $avgExpense = $expenseCount > 0 ? $totalExpenses / $expenseCount : 0;
     <article class="finance-kpi">
       <div class="finance-kpi__icon info">mi</div>
       <div>
-        <div class="finance-kpi__label">Mileage Deduction</div>
-        <div class="finance-kpi__value"><?php echo finance_dashboard_money($totalMileageDeduction); ?></div>
+        <div class="finance-kpi__label">Client Travel Charges</div>
+        <div class="finance-kpi__value"><?php echo finance_dashboard_money($totalClientTravelCharges); ?></div>
         <div class="finance-kpi__meta"><?php echo number_format($totalMiles, 1); ?> mi / <?php echo number_format($totalTrips); ?> trips</div>
       </div>
     </article>

@@ -69,9 +69,9 @@ try {
     [$overviewMileageWhere, $overviewMileageParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
     $overviewStmt = $pdo->prepare(
         "SELECT COUNT(*) mileage_trips,
-                COALESCE(SUM(m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END),0) mileage_miles,
-                COALESCE(SUM(m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END * m.mileage_rate),0) mileage_amount,
-                COALESCE(SUM(CASE WHEN m.is_billable=1 AND m.billed=0 THEN m.miles * CASE WHEN m.round_trip=1 AND m.bill_return_trip=1 THEN 2 ELSE 1 END ELSE 0 END),0) mileage_unbilled
+                COALESCE(SUM(COALESCE(m.logged_miles,m.miles * CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END)),0) mileage_miles,
+                COALESCE(SUM((SELECT SUM(a.client_charge) FROM mileage_charge_allocations a WHERE a.mileage_log_id=m.id)),0) mileage_amount,
+                COALESCE(SUM((SELECT SUM(a.billable_miles) FROM mileage_charge_allocations a WHERE a.mileage_log_id=m.id AND a.billed=0)),0) mileage_unbilled
          FROM mileage_logs m WHERE {$overviewMileageWhere}"
     );
     $overviewStmt->execute($overviewMileageParams);
@@ -124,7 +124,7 @@ $overviewMoney = static fn(float $value): string => '$' . number_format($value, 
       <div class="finance-overview-card__head"><div><span>Mileage</span><strong><?php echo number_format($overview['mileage_miles'], 2); ?> mi</strong></div><a href="/?page=financial/expenses-list&amp;tab=mileage">View mileage</a></div>
       <dl>
         <div><dt>Trips logged</dt><dd><?php echo number_format($overview['mileage_trips']); ?></dd></div>
-        <div><dt>Mileage amount</dt><dd><?php echo $overviewMoney($overview['mileage_amount']); ?></dd></div>
+        <div><dt>Client travel charges</dt><dd><?php echo $overviewMoney($overview['mileage_amount']); ?></dd></div>
         <div><dt>Unbilled client miles</dt><dd><?php echo number_format($overview['mileage_unbilled'], 2); ?></dd></div>
       </dl>
     </article>

@@ -7,6 +7,8 @@ require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
+require_once __DIR__ . '/../../utils/mileage.php';
+require_once __DIR__ . '/../../config/app.php';
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'contracts', $id);
 $client_id = (int)($_POST['client_id'] ?? 0);
@@ -24,6 +26,7 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
+$travelRule=mileage_rule_from_post($_POST,['rate'=>(float)($appConfig['default_mileage_rate']??0.670),'included'=>(float)($appConfig['default_mileage_included_miles']??0)]);
 if ($id<=0 || $client_id<=0) { header('Location: /?page=contract/contracts-list&error=Invalid'); exit; }
 $contractTypeStmt = $pdo->prepare('SELECT * FROM contracts WHERE id=? LIMIT 1');
 $contractTypeStmt->execute([$id]);
@@ -95,6 +98,8 @@ if ($isLongTermContract) {
   ];
 }
 
+$travelItem=mileage_document_travel_item($travelRule);if($travelItem&&$travelItem['pricing_status']!=='variable')$subtotal+=(float)$travelItem['line_total'];
+$invoiceSubtotal=$subtotal-($travelItem&&$travelItem['pricing_status']==='estimate'?(float)$travelItem['line_total']:0);
 $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(100,$discount_value))*$subtotal/100;} elseif($discount_type==='fixed'){$discount_amount=max(0,$discount_value);} $tax=max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
 $terms = trim((string)($_POST['terms'] ?? '')) ?: null;
 $estimated = trim((string)($_POST['estimated_completion'] ?? '')) ?: null;
@@ -160,7 +165,8 @@ try{
   
   // Sync changes to regular linked invoices. Long-term recurring invoices are historical billing records and must not be rewritten.
   if (!$isLongTermContract) {
-    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$subtotal,$total,$estimated,$fulfillment_date,$weather,$scope,$id]);
+    $invoiceDiscount=$discount_type==='percent'?max(0,min(100,$discount_value))*$invoiceSubtotal/100:($discount_type==='fixed'?min($invoiceSubtotal,max(0,$discount_value)):0);$invoiceTotal=max(0,$invoiceSubtotal-$invoiceDiscount+max(0,$tax_percent)*max(0,$invoiceSubtotal-$invoiceDiscount)/100);
+    $pdo->prepare('UPDATE invoices SET client_id=?, project_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, estimated_completion=?, fulfillment_date=?, weather_pending=?, scope=? WHERE contract_id=?')->execute([$client_id,$project_id,$billing_mode,$discount_type,$discount_value,$tax_percent,$invoiceSubtotal,$invoiceTotal,$estimated,$fulfillment_date,$weather,$scope,$id]);
   }
   $pdo->prepare('DELETE FROM project_documents WHERE document_type="contract" AND document_id=?')->execute([$id]);
   if ($project_id) {
@@ -185,6 +191,7 @@ try{
       $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=?')->execute([$invId]);
       $insInv=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
       foreach($items as $it){ $insInv->execute([$invId,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+      if($travelItem&&$travelItem['pricing_status']==='standard')$pdo->prepare('INSERT INTO invoice_items (invoice_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,"standard")')->execute([$invId,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit']]);
     }
   }
   $row = $pdo->prepare('SELECT project_code FROM contracts WHERE id=?');
@@ -199,6 +206,8 @@ try{
   $pdo->prepare('DELETE FROM contract_items WHERE contract_id=?')->execute([$id]);
   $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
   foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+  if($travelItem)$pdo->prepare('INSERT INTO contract_items (contract_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
+  mileage_save_document_rule($pdo,'contract',$id,($existingContract['organization_id']??null),$client_id,(int)($_SESSION['user']['id']??0),$travelRule);
   
   // Save contract signatures (non-critical; failures must not roll back contract update)
   try {

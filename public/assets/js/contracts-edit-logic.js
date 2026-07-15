@@ -102,6 +102,7 @@ function initContractEditClientSearch() {
         var option = event.target.closest('[data-client-id]');
         if (!option) return;
         hidden.value = option.getAttribute('data-client-id') || '';
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
         input.value = option.getAttribute('data-client-name') || '';
         input.setCustomValidity('');
         hideSuggestions();

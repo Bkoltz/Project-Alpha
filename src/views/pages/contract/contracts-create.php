@@ -293,6 +293,7 @@ if ($selectedProjectId > 0) {
       </div>
     </div>
 
+    <?php $travelRuleScope='contract'; require __DIR__.'/../../components/travel_billing_fields.php'; ?>
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>
       <div id="itemsCo" style="display:grid;gap:8px"></div>

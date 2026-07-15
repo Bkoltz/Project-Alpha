@@ -21,7 +21,7 @@ function send_security_headers(): void {
     // Leak no more referrer than scheme/host/path on cross-origin requests.
     header('Referrer-Policy: strict-origin-when-cross-origin');
     // Disable powerful browser features by default.
-    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(self), payment=(), usb=(), magnetometer=(), gyroscope=()');
     // Hardened Content Security Policy. unsafe-inline is required by the existing
     // inline scripts/styles in this legacy codebase; remove as code is migrated.
     // Upgrade mixed content only when serving over HTTPS.

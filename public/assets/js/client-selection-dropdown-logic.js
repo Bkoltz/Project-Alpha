@@ -40,6 +40,7 @@ function initClientDropdown() {
                         e.stopPropagation();
                         ci.value = this.dataset.name;
                         cid.value = this.dataset.id;
+                        cid.dispatchEvent(new Event('change', { bubbles: true }));
 
                         // Dispatch change event for other listeners
                         ci.dispatchEvent(new Event('change', { bubbles: true }));

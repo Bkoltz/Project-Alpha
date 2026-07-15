@@ -282,6 +282,7 @@ if ($selectedProjectId > 0) {
         <strong>Note:</strong> On-demand quotes allow you to generate invoices manually as needed. No recurring billing schedule is set.
       </div>
     </div>
+    <?php $travelRuleScope='quote'; require __DIR__.'/../../components/travel_billing_fields.php'; ?>
     <!-- Items input -->
     <div>
       <div style="font-weight:600;margin-bottom:8px">Items / Rates</div>

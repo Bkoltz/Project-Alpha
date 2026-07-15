@@ -55,7 +55,8 @@ final class UnifiedAlphaLedgerModuleTest extends TestCase
 
     public function testWorkflowGatesTeamTimeAndSupportsMileageBilling(): void
     {
-        $migration = (string) file_get_contents($this->root . '/database/migrations/0041_workforce_access_and_mileage_billing.sql');
+        $migration = (string) file_get_contents($this->root . '/database/migrations/0041_workforce_access_and_mileage_billing.sql')
+            . (string) file_get_contents($this->root . '/database/migrations/0042_mileage_allocations_and_tracking.sql');
         $settings = (string) file_get_contents($this->root . '/src/Modules/Timekeeping/WorkforceSettings.php');
         $workflow = (string) file_get_contents($this->root . '/src/views/pages/settings/workflow.php');
         $time = (string) file_get_contents($this->root . '/src/views/pages/workforce/time.php');
@@ -85,15 +86,15 @@ final class UnifiedAlphaLedgerModuleTest extends TestCase
         self::assertStringContainsString("ENUM('each','hour','mile')", $migration);
         self::assertStringContainsString('bill_return_trip', $migration);
         self::assertStringContainsString("\$appConfig['default_mileage_rate']", $mileageCreate);
-        self::assertStringContainsString('Include return trip in mileage log', $mileageCreate);
-        self::assertStringContainsString('Bill client for return-trip mileage', $mileageCreate);
-        self::assertStringContainsString('is_billable=1 AND m.billed=0', $mileageEndpoint);
-        self::assertStringContainsString('m.bill_return_trip=1', $mileageEndpoint);
-        self::assertStringContainsString('mileage_log_ids', $invoiceCreate);
-        self::assertStringContainsString("is_billable=1 AND billed=0", $invoiceCreate);
+        self::assertStringContainsString('Include return miles in the trip log', $mileageCreate);
+        self::assertStringContainsString('Client travel charges', $mileageCreate);
+        self::assertStringContainsString('mileage_charge_allocations', $mileageEndpoint);
+        self::assertStringContainsString('billable_miles', $mileageEndpoint);
+        self::assertStringContainsString('mileage_allocation_ids', $invoiceCreate);
+        self::assertStringContainsString('client_id=? AND billed=0', $invoiceCreate);
         self::assertStringContainsString('financial/mileage-unbilled', $invoiceScript);
         self::assertStringContainsString("['each', 'hour', 'mile'].includes(billingUnit)", $invoiceScript);
-        self::assertStringContainsString('mileage_log_ids[${index}][]', $invoiceScript);
+        self::assertStringContainsString('mileage_allocation_ids[${index}][]', $invoiceScript);
     }
 
     public function testBillingConsumesSnapshotsWithoutRewritingWorkEntries(): void

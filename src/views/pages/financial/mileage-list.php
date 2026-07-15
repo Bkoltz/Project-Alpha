@@ -1,248 +1,39 @@
 <?php
-// src/views/pages/financial/mileage-list.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 
-$orgId = request_client_org_id();
-$userId = (int)($_SESSION['user']['id'] ?? 0);
-
-// Filters
-$start = $_GET['start'] ?? '';
-$end = $_GET['end'] ?? '';
-$purpose = $_GET['purpose'] ?? '';
-$clientId = isset($_GET['client_id']) && $_GET['client_id'] !== '' ? (int)$_GET['client_id'] : 0;
-$billable = $_GET['billable'] ?? '';
-
-[$mileageScopeWhere, $mileageScopeParams] = finance_scope_clause($pdo, 'm', $userId, $orgId, 'user_id');
-$where = [$mileageScopeWhere];
-$params = $mileageScopeParams;
-
-if ($start !== '') {
-    $where[] = 'm.trip_date >= ?';
-    $params[] = $start;
-}
-if ($end !== '') {
-    $where[] = 'm.trip_date <= ?';
-    $params[] = $end;
-}
-if ($purpose !== '' && in_array($purpose, ['business', 'medical', 'moving', 'charitable', 'personal'], true)) {
-    $where[] = 'm.purpose = ?';
-    $params[] = $purpose;
-}
-if ($clientId > 0) {
-    $where[] = 'm.client_id = ?';
-    $params[] = $clientId;
-}
-if ($billable === '1') {
-    $where[] = 'm.is_billable = 1';
-} elseif ($billable === '0') {
-    $where[] = 'm.is_billable = 0';
-}
-
-$whereClause = 'WHERE ' . implode(' AND ', $where);
-
-// Main list
-$stmt = $pdo->prepare("
-    SELECT m.*, c.name AS client_name
-    FROM mileage_logs m
-    LEFT JOIN clients c ON m.client_id = c.id
-    $whereClause
-    ORDER BY m.trip_date DESC
-");
-$stmt->execute($params);
-$logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Summary values over the filtered result set
-$totalMiles = 0.0;
-$totalDeductible = 0.0;
-$businessMiles = 0.0;
-$personalMiles = 0.0;
-
-foreach ($logs as $log) {
-    $miles = (float)$log['miles'];
-    $rate = (float)$log['mileage_rate'];
-    $loggedMiles = !empty($log['round_trip']) ? $miles * 2 : $miles;
-    $deductibleAmount = $loggedMiles * $rate;
-
-    $totalMiles += $loggedMiles;
-    $totalDeductible += $deductibleAmount;
-
-    if ($log['purpose'] === 'business') {
-        $businessMiles += $loggedMiles;
-    } else {
-        $personalMiles += $loggedMiles;
-    }
-}
-
-// Clients for filter dropdown
-$clientsStmt = $pdo->prepare('SELECT id, name FROM clients WHERE archived = 0 ORDER BY name ASC');
-$clientsStmt->execute();
-$clients = $clientsStmt->fetchAll(PDO::FETCH_ASSOC);
+$orgId=request_client_org_id(); $userId=(int)($_SESSION['user']['id']??0);
+$start=(string)($_GET['start']??''); $end=(string)($_GET['end']??''); $purpose=(string)($_GET['purpose']??'');
+$clientId=max(0,(int)($_GET['client_id']??0)); $billable=(string)($_GET['billable']??'');
+[$scope,$params]=finance_scope_clause($pdo,'m',$userId,$orgId,'user_id'); $where=[$scope];
+if($start!==''){$where[]='m.trip_date>=?';$params[]=$start;} if($end!==''){$where[]='m.trip_date<=?';$params[]=$end;}
+if(in_array($purpose,['business','medical','moving','charitable','personal'],true)){$where[]='m.purpose=?';$params[]=$purpose;}
+if($clientId>0){$where[]='EXISTS (SELECT 1 FROM mileage_charge_allocations af WHERE af.mileage_log_id=m.id AND af.client_id=?)';$params[]=$clientId;}
+if($billable==='1')$where[]='EXISTS (SELECT 1 FROM mileage_charge_allocations ab WHERE ab.mileage_log_id=m.id)';
+if($billable==='0')$where[]='NOT EXISTS (SELECT 1 FROM mileage_charge_allocations ab WHERE ab.mileage_log_id=m.id)';
+$stmt=$pdo->prepare('SELECT m.*,
+  COALESCE(m.logged_miles,m.miles*CASE WHEN m.round_trip=1 THEN 2 ELSE 1 END) canonical_logged_miles,
+  COALESCE(SUM(a.billable_miles),0) client_billable_miles,COALESCE(SUM(a.client_charge),0) client_charge_total,
+  COUNT(a.id) allocation_count,GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ", ") client_names,
+  SUM(CASE WHEN a.billed=1 THEN 1 ELSE 0 END) billed_allocations
+  FROM mileage_logs m LEFT JOIN mileage_charge_allocations a ON a.mileage_log_id=m.id LEFT JOIN clients c ON c.id=a.client_id
+  WHERE '.implode(' AND ',$where).' GROUP BY m.id ORDER BY m.trip_date DESC,m.id DESC');
+$stmt->execute($params);$logs=$stmt->fetchAll(PDO::FETCH_ASSOC);
+$totalMiles=$businessMiles=$otherMiles=$billableMiles=$clientCharges=0.0;
+foreach($logs as $log){$lm=(float)$log['canonical_logged_miles'];$totalMiles+=$lm;$billableMiles+=(float)$log['client_billable_miles'];$clientCharges+=(float)$log['client_charge_total'];if($log['purpose']==='business')$businessMiles+=$lm;else $otherMiles+=$lm;}
+$clients=$pdo->query('SELECT id,name FROM clients WHERE archived=0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 ?>
-
 <section>
-  <div class="expense-ledger__head">
-    <div><h2>Mileage</h2><p class="muted">Track business travel, reimbursement value, and client-billable miles.</p></div>
-    <div class="finance-actions"><a href="/?page=financial/mileage-create" class="btn btn-primary">Log Mileage</a></div>
-  </div>
-
-  <?php if (!empty($_GET['created'])): ?>
-    <div class="alert alert-success">Mileage entry created.</div>
-  <?php elseif (!empty($_GET['updated'])): ?>
-    <div class="alert alert-success">Mileage entry updated.</div>
-  <?php elseif (!empty($_GET['deleted'])): ?>
-    <div class="alert alert-success">Mileage entry deleted.</div>
-  <?php elseif (!empty($_GET['error'])): ?>
-    <div class="alert alert-danger"><?php echo htmlspecialchars($_GET['error']); ?></div>
-  <?php endif; ?>
-
-  <!-- Summary cards -->
-  <div class="grid grid-4" style="margin-bottom:20px">
-    <div class="card card-tight">
-      <div class="label-muted">Total Miles</div>
-      <div class="font-600" style="font-size:20px"><?php echo number_format($totalMiles, 2); ?></div>
-    </div>
-    <div class="card card-tight">
-      <div class="label-muted">Total Deductible Amount</div>
-      <div class="font-600" style="font-size:20px">$<?php echo number_format($totalDeductible, 2); ?></div>
-    </div>
-    <div class="card card-tight">
-      <div class="label-muted">Business Miles</div>
-      <div class="font-600" style="font-size:20px"><?php echo number_format($businessMiles, 2); ?></div>
-    </div>
-    <div class="card card-tight">
-      <div class="label-muted">Personal/Other Miles</div>
-      <div class="font-600" style="font-size:20px"><?php echo number_format($personalMiles, 2); ?></div>
-    </div>
-  </div>
-
-  <!-- Filters -->
-  <div class="card card-tight" style="margin-bottom:20px">
-    <form method="get" action="/" class="filter-form">
-      <input type="hidden" name="page" value="financial/mileage-list">
-      <div class="field">
-        <label class="label" for="filter-start">Start Date</label>
-        <input type="date" id="filter-start" name="start" value="<?php echo htmlspecialchars($start); ?>" class="input input-sm">
-      </div>
-      <div class="field">
-        <label class="label" for="filter-end">End Date</label>
-        <input type="date" id="filter-end" name="end" value="<?php echo htmlspecialchars($end); ?>" class="input input-sm">
-      </div>
-      <div class="field">
-        <label class="label" for="filter-purpose">Purpose</label>
-        <select id="filter-purpose" name="purpose" class="input input-sm">
-          <option value="">All</option>
-          <option value="business" <?php echo $purpose === 'business' ? 'selected' : ''; ?>>Business</option>
-          <option value="medical" <?php echo $purpose === 'medical' ? 'selected' : ''; ?>>Medical</option>
-          <option value="moving" <?php echo $purpose === 'moving' ? 'selected' : ''; ?>>Moving</option>
-          <option value="charitable" <?php echo $purpose === 'charitable' ? 'selected' : ''; ?>>Charitable</option>
-          <option value="personal" <?php echo $purpose === 'personal' ? 'selected' : ''; ?>>Personal</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="label" for="filter-client">Client</label>
-        <select id="filter-client" name="client_id" class="input input-sm">
-          <option value="">All</option>
-          <?php foreach ($clients as $c): ?>
-            <option value="<?php echo (int)$c['id']; ?>" <?php echo $clientId === (int)$c['id'] ? 'selected' : ''; ?>>
-              <?php echo htmlspecialchars($c['name']); ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="field">
-        <label class="label" for="filter-billable">Billable</label>
-        <select id="filter-billable" name="billable" class="input input-sm">
-          <option value="">All</option>
-          <option value="1" <?php echo $billable === '1' ? 'selected' : ''; ?>>Billable</option>
-          <option value="0" <?php echo $billable === '0' ? 'selected' : ''; ?>>Non-billable</option>
-        </select>
-      </div>
-      <div class="field filter-actions">
-        <button type="submit" class="btn btn-primary">Filter</button>
-        <a href="/?page=financial/mileage-list" class="btn">Clear</a>
-      </div>
-    </form>
-  </div>
-
-  <!-- Mileage table -->
-  <div class="pa-table-wrap">
-    <table class="pa-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Start → End</th>
-          <th>Logged Miles</th>
-          <th>Return Trip</th>
-          <th>Rate</th>
-          <th>Deductible Amount</th>
-          <th>Purpose</th>
-          <th>Billable</th>
-          <th>Client</th>
-          <th class="text-right">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php if (empty($logs)): ?>
-          <tr>
-            <td colspan="10" class="muted" style="text-align:center">No mileage entries found.</td>
-          </tr>
-        <?php else: ?>
-          <?php foreach ($logs as $log):
-            $miles = (float)$log['miles'];
-            $rate = (float)$log['mileage_rate'];
-            $loggedMiles = !empty($log['round_trip']) ? $miles * 2 : $miles;
-            $deductibleAmount = $loggedMiles * $rate;
-          ?>
-            <tr>
-              <td><?php echo htmlspecialchars($log['trip_date']); ?></td>
-              <td>
-                <?php
-                $startText = $log['start_location'] ? htmlspecialchars($log['start_location']) : '—';
-                $endText = $log['end_location'] ? htmlspecialchars($log['end_location']) : '—';
-                echo $startText . ' → ' . $endText;
-                ?>
-              </td>
-              <td><?php echo number_format($loggedMiles, 2); ?></td>
-              <td style="text-align:center">
-                <?php if (!empty($log['round_trip'])): ?>
-                  <span title="Both outbound and return miles are included in the log">Yes</span>
-                <?php else: ?>
-                  <span class="muted">—</span>
-                <?php endif; ?>
-              </td>
-              <td>$<?php echo number_format($rate, 3); ?></td>
-              <td>$<?php echo number_format($deductibleAmount, 2); ?></td>
-              <td><span class="status-pill status-pill--<?php echo strtolower(htmlspecialchars($log['purpose'])); ?>"><?php echo htmlspecialchars(ucfirst($log['purpose'])); ?></span></td>
-              <td>
-                <?php if (!empty($log['is_billable'])): ?>
-                  <span class="status-pill status-pill--paid">Yes</span>
-                  <?php if (!empty($log['round_trip'])): ?>
-                    <div class="muted text-sm"><?php echo !empty($log['bill_return_trip']) ? 'Both directions' : 'Outbound only'; ?></div>
-                  <?php endif; ?>
-                <?php else: ?>
-                  <span class="status-pill status-pill--unpaid">No</span>
-                <?php endif; ?>
-              </td>
-              <td><?php echo htmlspecialchars($log['client_name'] ?? '—'); ?></td>
-              <td class="text-right">
-                <div class="flex flex-end">
-                  <a href="/?page=financial/mileage-create&id=<?php echo (int)$log['id']; ?>" class="btn btn-sm">Edit</a>
-                  <form method="post" action="/?page=financial/mileage-handler" class="inline-form mileage-delete-form" style="display:inline" onsubmit="return confirm('Delete this mileage entry?')">
-                    <input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('mileage')); ?>">
-                    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="id" value="<?php echo (int)$log['id']; ?>">
-                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </tbody>
-    </table>
-  </div>
+ <div class="expense-ledger__head"><div><h2>Mileage</h2><p class="muted">Physical travel is logged once; each client charge is calculated separately.</p></div><div class="finance-actions"><a href="/?page=financial/mileage-settings" class="btn">Mileage Setup</a><?php if(!empty($appConfig['mileage_tracking_enabled'])): ?><a href="/?page=financial/mileage-track" class="btn">Track Miles</a><?php endif; ?><a href="/?page=financial/mileage-create" class="btn btn-primary">Log Mileage</a></div></div>
+ <?php foreach(['created'=>'Mileage entry created.','updated'=>'Mileage entry updated.','deleted'=>'Mileage entry deleted.'] as $key=>$message): if(!empty($_GET[$key])): ?><div class="alert alert-success"><?php echo $message; ?></div><?php endif; endforeach; ?>
+ <?php if(!empty($_GET['error'])): ?><div class="alert alert-danger"><?php echo htmlspecialchars((string)$_GET['error']); ?></div><?php endif; ?>
+ <div class="grid grid-4" style="margin-bottom:20px"><div class="card card-tight"><div class="label-muted">Total Logged Miles</div><strong style="font-size:20px"><?php echo number_format($totalMiles,2); ?></strong></div><div class="card card-tight"><div class="label-muted">Business Miles</div><strong style="font-size:20px"><?php echo number_format($businessMiles,2); ?></strong></div><div class="card card-tight"><div class="label-muted">Client-Billable Miles</div><strong style="font-size:20px"><?php echo number_format($billableMiles,2); ?></strong></div><div class="card card-tight"><div class="label-muted">Client Travel Charges</div><strong style="font-size:20px">$<?php echo number_format($clientCharges,2); ?></strong></div></div>
+ <div class="card" style="margin-bottom:20px"><form method="get" class="expense-filters"><input type="hidden" name="page" value="financial/mileage-list"><label class="field"><span class="label">From</span><input class="input input-sm" type="date" name="start" value="<?php echo htmlspecialchars($start); ?>"></label><label class="field"><span class="label">To</span><input class="input input-sm" type="date" name="end" value="<?php echo htmlspecialchars($end); ?>"></label><label class="field"><span class="label">Purpose</span><select class="input input-sm" name="purpose"><option value="">All</option><?php foreach(['business','medical','moving','charitable','personal'] as $p): ?><option value="<?php echo $p; ?>" <?php echo $purpose===$p?'selected':''; ?>><?php echo ucfirst($p); ?></option><?php endforeach; ?></select></label><label class="field"><span class="label">Client</span><select class="input input-sm" name="client_id"><option value="">All</option><?php foreach($clients as $c): ?><option value="<?php echo (int)$c['id']; ?>" <?php echo $clientId===(int)$c['id']?'selected':''; ?>><?php echo htmlspecialchars($c['name']); ?></option><?php endforeach; ?></select></label><label class="field"><span class="label">Client charge</span><select class="input input-sm" name="billable"><option value="">All</option><option value="1" <?php echo $billable==='1'?'selected':''; ?>>Has client charges</option><option value="0" <?php echo $billable==='0'?'selected':''; ?>>No client charges</option></select></label><div class="field filter-actions"><button class="btn btn-primary">Filter</button><a class="btn" href="/?page=financial/mileage-list">Clear</a></div></form></div>
+ <div class="pa-table-wrap"><table class="pa-table"><thead><tr><th>Date</th><th>Route</th><th>Source</th><th>Logged Miles</th><th>Purpose</th><th>Clients</th><th>Billable Miles</th><th>Client Charges</th><th>Status</th><th class="text-right">Actions</th></tr></thead><tbody>
+ <?php if(!$logs): ?><tr><td colspan="10" class="muted" style="text-align:center">No mileage entries found.</td></tr><?php endif; ?>
+ <?php foreach($logs as $log): ?><tr><td><?php echo htmlspecialchars($log['trip_date']); ?></td><td><?php echo htmlspecialchars(trim((string)($log['start_location']??''))?:'—'); ?> → <?php echo htmlspecialchars(trim((string)($log['end_location']??''))?:'—'); ?></td><td><?php echo ($log['source']??'manual')==='gps'?'GPS':'Manual'; ?><div class="muted text-sm"><?php echo ($log['entry_mode']??'simple')==='total_trip'?'Total / multi-stop':'Simple'; ?></div></td><td><?php echo number_format((float)$log['canonical_logged_miles'],3); ?></td><td><?php echo htmlspecialchars(ucfirst($log['purpose'])); ?></td><td><?php echo htmlspecialchars($log['client_names']?:'—'); ?><div class="muted text-sm"><?php echo (int)$log['allocation_count']; ?> charge<?php echo (int)$log['allocation_count']===1?'':'s'; ?></div></td><td><?php echo number_format((float)$log['client_billable_miles'],3); ?></td><td>$<?php echo number_format((float)$log['client_charge_total'],2); ?></td><td><?php echo (int)$log['allocation_count']===0?'Logged':((int)$log['billed_allocations']>0?'Invoiced':'Ready to invoice'); ?></td><td class="text-right"><a class="btn btn-sm" href="/?page=financial/mileage-create&id=<?php echo (int)$log['id']; ?>">Edit</a> <form method="post" action="/?page=financial/mileage-handler" style="display:inline" onsubmit="return confirm('Delete this mileage entry and its unbilled client charges?')"><input type="hidden" name="_token" value="<?php echo htmlspecialchars(csrf_sf_token('mileage')); ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?php echo (int)$log['id']; ?>"><button class="btn btn-sm btn-danger">Delete</button></form></td></tr><?php endforeach; ?>
+ </tbody></table></div>
 </section>

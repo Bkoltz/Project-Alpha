@@ -524,7 +524,7 @@ function initQuoteClientDropdown() {
                 Array.from(sug.children).forEach(el => {
                     el.addEventListener('click', function (e) {
                         e.stopPropagation();
-                        ci.value = this.dataset.name; cid.value = this.dataset.id;
+                        ci.value = this.dataset.name; cid.value = this.dataset.id; cid.dispatchEvent(new Event('change', { bubbles: true }));
                         if (this.dataset.taxexempt && taxBanner) { taxBanner.style.display = 'block'; } else if(taxBanner) { taxBanner.style.display = 'none'; }
                         loadProjectsForClient(this.dataset.id);
                         sug.style.display = 'none';

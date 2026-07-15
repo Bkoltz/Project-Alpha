@@ -5,6 +5,8 @@ require_once __DIR__ . '/../../utils/project_id.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
+require_once __DIR__ . '/../../config/app.php';
+require_once __DIR__ . '/../../utils/mileage.php';
 
 @error_log('[long_term_contracts_create] POST received', 0);
 
@@ -126,6 +128,7 @@ if ($pricing_type === 'fixed_total') {
     $subtotal = $price_per_invoice;
 }
 
+$travelRule=mileage_rule_from_post($_POST,['rate'=>(float)($appConfig['default_mileage_rate']??0.670),'included'=>(float)($appConfig['default_mileage_included_miles']??0)]);$travelItem=mileage_document_travel_item($travelRule);if($travelItem&&$travelItem['pricing_status']!=='variable')$subtotal+=(float)$travelItem['line_total'];
 $discount_amount = 0.0; 
 if($discount_type === 'percent'){ 
     $discount_amount = max(0, min(100, $discount_value)) * $subtotal / 100; 
@@ -195,6 +198,8 @@ try{
             $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
         }
     }
+    if($travelItem)$pdo->prepare('INSERT INTO contract_items (contract_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$contract_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
+    mileage_save_document_rule($pdo,'contract',$contract_id,$contractOrgId?:null,$client_id,$sessionUserId,$travelRule);
 
     // Save project notes
     $notes = trim((string)($_POST['project_notes'] ?? ''));

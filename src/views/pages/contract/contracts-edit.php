@@ -26,7 +26,7 @@ if ($isLongTermContract) {
     $baseRecurringService = null;
   }
 }
-$items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=?');
+$items = $pdo->prepare('SELECT * FROM contract_items WHERE contract_id=? AND is_travel=0');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
 $projectOptions = [];
@@ -317,6 +317,7 @@ try {
       </div>
     <?php endif; ?>
 
+    <?php $travelRuleScope='contract'; $travelDocumentId=(int)$contract['id']; require __DIR__.'/../../components/travel_billing_fields.php'; ?>
     <div>
       <div style="font-weight:600;margin-bottom:8px"><?php echo $isLongTermContract ? 'Items / Fixed Total Rates' : 'Items / Rates'; ?></div>
       <?php if ($isLongTermContract): ?>

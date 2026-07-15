@@ -10,6 +10,7 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 |---|---|---|
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
 | Daily 02:15 | `generate_recurring_expenses.php` | Generate due recurring expenses once per scheduled occurrence |
+| Daily 02:30 | `purge_mileage_tracking_points.php` | Delete finalized GPS route points after 90 days and discarded points immediately |
 | Hourly at :30 | `backup_database.php --scheduled` | Creates rotating backups when the configured local backup hour matches |
 | Daily 03:00 | `auto_terminate_contracts.php` | Complete contracts whose configured end date has passed |
 | Daily 04:00 | `link_expiration_checker.php` | Expire public document links |

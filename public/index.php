@@ -601,6 +601,10 @@ if ($page === 'financial/mileage-unbilled') {
     require_once __DIR__ . '/../src/controllers/financial/mileage_unbilled.php';
     exit;
 }
+if ($page === 'financial/mileage-tracking-api') {
+    require_once __DIR__ . '/../src/controllers/financial/mileage_tracking_api.php';
+    exit;
+}
 if ($page === 'time-tracking/options') {
     require_once __DIR__ . '/../src/controllers/time-tracking/time_entry_options.php';
     exit;
@@ -1388,6 +1392,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'financial/mileage-handler') {
         require_once __DIR__ . '/../src/controllers/financial/mileage_handler.php';
+        exit;
+    }
+    if ($page === 'financial/mileage-profile-handler') {
+        require_once __DIR__ . '/../src/controllers/financial/mileage_profile_handler.php';
         exit;
     }
     if ($page === 'financial/vendor-handler') {
