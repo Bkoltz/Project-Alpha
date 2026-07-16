@@ -38,8 +38,20 @@ $moduleRoutes = [
     '/pay/action' => 'workforce/action',
     '/api/v1/workforce' => 'api/workforce-v1',
     '/api/v1/catalog' => 'api/catalog-v1',
+    '/api/v1/ops/snapshot' => 'api-ops-snapshot',
 ];
-if (!isset($_GET['page']) && isset($moduleRoutes[$requestPath])) {
+if ($requestPath === '/api/v1/ops/snapshot') {
+    // The legacy front controller reserves `page` for routing, while this
+    // versioned endpoint exposes `page` as its public pagination parameter.
+    // Preserve the query value before selecting the clean-path route.
+    $opsSnapshotPage = $_GET['page'] ?? null;
+    $_GET['page'] = $moduleRoutes[$requestPath];
+    if ($opsSnapshotPage !== null) {
+        $_GET['_ops_snapshot_page'] = $opsSnapshotPage;
+    } else {
+        unset($_GET['_ops_snapshot_page']);
+    }
+} elseif (!isset($_GET['page']) && isset($moduleRoutes[$requestPath])) {
     $_GET['page'] = $moduleRoutes[$requestPath];
 }
 if (!isset($_GET['page']) && $requestPath === '/time-tracking') {
@@ -225,7 +237,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
     $apiKey = api_require_key([$requiredApiScope]);
 
     // Map API endpoints
-    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients'];
+    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients', 'api-ops-snapshot'];
     if (in_array($page, $dashboardPages, true)) {
         $map = [
             'api-dashboard-summary'   => __DIR__ . '/../src/controllers/api/dashboard_summary.php',
@@ -234,6 +246,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
             'api-quotes'                => __DIR__ . '/../src/controllers/api/quotes_list.php',
             'api-projects'              => __DIR__ . '/../src/controllers/api/projects_list.php',
             'api-clients'               => __DIR__ . '/../src/controllers/api/clients_list.php',
+            'api-ops-snapshot'           => __DIR__ . '/../src/controllers/api/ops_snapshot.php',
         ];
         require_once $map[$page];
         exit;

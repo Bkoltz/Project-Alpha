@@ -33,6 +33,11 @@ function api_scope_catalog(): array
             'description' => 'Read invoice lists.',
             'endpoints' => ['api-invoices'],
         ],
+        'ops.sync.read' => [
+            'label' => 'LTDS Ops synchronization',
+            'description' => 'Read the workforce, client, project, and service-location snapshot used by LTDS Ops.',
+            'endpoints' => ['api-ops-snapshot'],
+        ],
     ];
 }
 
