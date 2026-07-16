@@ -2,6 +2,23 @@
 // Handles the "Send Test Email" button on Settings > System.
 
 (function () {
+    function readJsonResponse(response) {
+        return response.text().then(function (body) {
+            var payload = null;
+            try {
+                payload = body ? JSON.parse(body) : {};
+            } catch (error) {
+                throw new Error(response.ok
+                    ? 'The server returned an invalid response.'
+                    : 'The request failed (HTTP ' + response.status + ').');
+            }
+            if (!response.ok) {
+                throw new Error(payload.message || payload.error || ('The request failed (HTTP ' + response.status + ').'));
+            }
+            return payload;
+        });
+    }
+
     function initSettingsSystem() {
         var btn = document.getElementById('btnEmailTest');
         var result = document.getElementById('emailTestResult');
@@ -32,12 +49,7 @@
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             })
-            .then(function (response) {
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status);
-                }
-                return response.json();
-            })
+            .then(readJsonResponse)
             .then(function (data) {
                 if (data.success) {
                     result.style.background = '#ecfdf5';
@@ -70,7 +82,7 @@
                 data.append('connection_id', actionButton.dataset.id || '0');
                 actionButton.disabled = true;
                 fetch('/?page=settings/email-provider-handler', { method: 'POST', body: data, headers: {'X-Requested-With':'XMLHttpRequest'} })
-                    .then(function (response) { return response.json(); })
+                    .then(readJsonResponse)
                     .then(function (payload) {
                         if (!payload.success) throw new Error(payload.message || 'Provider action failed');
                         window.location.reload();
@@ -86,7 +98,11 @@
     initSettingsSystem.pageInitializerId = 'settings-system';
 
     if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
-        window.ProjectAlpha.registerPage('settings/system', initSettingsSystem);
+        // Settings subsections are query-string tabs of the single `settings`
+        // page. Registering `settings/system` never ran after either a full
+        // load or AJAX navigation because the router normalizes the active
+        // page to `settings`.
+        window.ProjectAlpha.registerPage('settings', initSettingsSystem);
     } else if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initSettingsSystem, { once: true });
     } else {

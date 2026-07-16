@@ -115,6 +115,9 @@ function resolve_view_path(string $page): string
     if ($page === 'account-edit') {
         $candidates[] = $base . 'auth/account-edit.php';
     }
+    if ($page === 'passkeys') {
+        $candidates[] = $base . 'auth/passkeys.php';
+    }
     // GDPR/CCPA account pages are in account/ subdirectory
     if ($page === 'account-deleted') {
         $candidates[] = $base . 'account/account-deleted.php';

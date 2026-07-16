@@ -101,4 +101,82 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringContainsString("\$requestedTab === 'customization'", $view);
         self::assertStringContainsString("\$_GET['doc_tab'] = 'customization'", $view);
     }
+
+    public function testSettingsActionScriptsBindToTheActualRouterPage(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $systemScript = (string)file_get_contents($root . '/public/assets/js/settings-system.js');
+        $catalogScript = (string)file_get_contents($root . '/public/assets/js/item-library.js');
+        $notificationScript = (string)file_get_contents($root . '/public/assets/js/settings-notifications.js');
+
+        self::assertStringContainsString("registerPage('settings', initSettingsSystem)", $systemScript);
+        self::assertStringNotContainsString("registerPage('settings/system'", $systemScript);
+        self::assertStringContainsString("registerPage('settings',initItemLibraryPage)", $catalogScript);
+        self::assertStringContainsString("registerPage('settings', initSettingsNotifications)", $notificationScript);
+        self::assertStringContainsString('data-settings-notifications', (string)file_get_contents($root . '/src/views/pages/settings/notifications.php'));
+    }
+
+    public function testStaticSettingsScriptsNeverContainUnrenderedPhpTokens(): void
+    {
+        $root = dirname(__DIR__, 2);
+        foreach (['customization-logic.js', 'document-customization-logic.js'] as $file) {
+            $script = (string)file_get_contents($root . '/public/assets/js/' . $file);
+            self::assertStringNotContainsString('<?php', $script, $file . ' is served as a static asset and cannot render PHP.');
+            self::assertStringContainsString('CsrfToken()', $script, $file . ' must read the rendered form token.');
+        }
+
+        $documentView = (string)file_get_contents($root . '/src/views/pages/settings/documents/customization.php');
+        self::assertStringContainsString('data-active-field-tab=', $documentView);
+        self::assertStringContainsString('name="csrf"', $documentView);
+    }
+
+    public function testWorkforceSettingsActionsAndPermissionGateStayAligned(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $views = '';
+        foreach (['business-units.php', 'work-types.php', 'assignments.php', 'pay-periods.php'] as $file) {
+            $views .= (string)file_get_contents($root . '/src/views/pages/settings/' . $file);
+        }
+        preg_match_all('/name="action"\s+value="([a-z-]+)"/', $views, $matches);
+        // Worker-document upload uses its own `worker-documents` controller.
+        $actions = array_values(array_diff(array_unique($matches[1] ?? []), ['upload']));
+        $controller = (string)file_get_contents($root . '/src/controllers/settings/workforce_catalog_handler.php');
+
+        self::assertNotEmpty($actions);
+        foreach ($actions as $action) {
+            self::assertStringContainsString("\$action==='{$action}'", $controller, "Missing backend action: {$action}");
+        }
+        self::assertStringContainsString("user_can(\$pdo,\$userId,'settings.manage',0)", $controller);
+        self::assertStringNotContainsString("user_can(\$pdo,\$userId,'workforce.manage',0)", $controller);
+    }
+
+    public function testRestrictedSettingsActionsAreNotRenderedToIneligibleRoles(): void
+    {
+        $registry = pa_settings_visible_registry(
+            pa_settings_registry(),
+            static fn (string $permission): bool => $permission === 'settings.manage',
+            'staff'
+        );
+
+        self::assertArrayNotHasKey('permissions', $registry['people']['items']);
+        self::assertArrayHasKey('business-units', $registry['people']['items']);
+
+        $businessUnits = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings/business-units.php');
+        self::assertStringContainsString("user_can(\$pdo,(int)(\$_SESSION['user']['id']??0),'users.manage',0)", $businessUnits);
+        self::assertStringContainsString('if($canManageWorkerDocuments)', $businessUnits);
+    }
+
+    public function testSettingsFormEndpointsAreRegisteredByTheFrontController(): void
+    {
+        $index = (string)file_get_contents(dirname(__DIR__, 2) . '/public/index.php');
+        foreach ([
+            'settings', 'settings-backup', 'settings/item-library-handler',
+            'settings/links-handler', 'settings/permissions-handler',
+            'settings/stripe-import-payments', 'settings/stripe-net-backfill',
+            'settings/tax-import-handler', 'settings/tax-rates-handler',
+            'settings/workforce-catalog-handler', 'worker-documents',
+        ] as $endpoint) {
+            self::assertStringContainsString("'{$endpoint}'", $index, "Settings endpoint is not routed: {$endpoint}");
+        }
+    }
 }

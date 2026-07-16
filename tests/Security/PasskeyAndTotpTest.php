@@ -138,6 +138,35 @@ final class PasskeyAndTotpTest extends TestCase
         self::assertStringContainsString("credentials: 'same-origin'", $javascript);
     }
 
+    public function testPasskeyControlsInitializeAfterAjaxNavigationWithoutDuplicateHandlers(): void
+    {
+        $javascript = $this->read('public/assets/passkeys.js');
+
+        self::assertStringContainsString("window.ProjectAlpha.registerPage('passkeys', initPasskeyControls)", $javascript);
+        self::assertStringContainsString("button.dataset.passkeyLoginBound === '1'", $javascript);
+        self::assertStringContainsString("form.dataset.passkeyRegistrationBound === '1'", $javascript);
+        self::assertStringContainsString("form.dataset.passkeyConfirmBound === '1'", $javascript);
+    }
+
+    public function testPasskeyManagementPageIsRoutedToTheAuthenticationView(): void
+    {
+        $router = $this->read('public/index.php');
+
+        self::assertStringContainsString("if (\$page === 'passkeys')", $router);
+        self::assertStringContainsString("\$base . 'auth/passkeys.php'", $router);
+        self::assertStringContainsString("'passkey-register-options' => 'auth/passkey_register_options.php'", $router);
+        self::assertStringContainsString("'passkey-register-complete' => 'auth/passkey_register_complete.php'", $router);
+    }
+
+    public function testPasskeyAuthenticationCompletesLoginWithoutTotpChallenge(): void
+    {
+        $controller = $this->read('src/controllers/auth/passkey_complete.php');
+
+        self::assertStringContainsString("unset(\$_SESSION['2fa_pending'])", $controller);
+        self::assertStringContainsString("\$_SESSION['authn'] = ['method' => 'passkey'", $controller);
+        self::assertStringNotContainsString("page=2fa-verify", $controller);
+    }
+
     private function read(string $relative): string
     {
         $contents = file_get_contents($this->root . '/' . $relative);

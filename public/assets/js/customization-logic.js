@@ -1,3 +1,8 @@
+function customizationCsrfToken() {
+    const input = document.querySelector('#fieldForm input[name="csrf"]');
+    return input ? input.value : '';
+}
+
 // Show add field modal
 function showAddFieldModal() {
     document.getElementById('modalTitle').textContent = 'Add Custom Field';
@@ -39,11 +44,13 @@ function deleteField(fieldId) {
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = '/?page=settings/custom-fields-handler';
-    form.innerHTML = `
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <input type="hidden" name="action" value="delete">
-        <input type="hidden" name="field_id" value="${fieldId}">
-    `;
+    [['csrf', customizationCsrfToken()], ['action', 'delete'], ['field_id', String(fieldId)]].forEach(function (entry) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = entry[0];
+        input.value = entry[1];
+        form.appendChild(input);
+    });
     document.body.appendChild(form);
     form.submit();
 }
@@ -68,10 +75,12 @@ document.querySelectorAll('.field-item').forEach(item => {
 
     item.addEventListener('dragstart', function (e) {
         draggedElement = this;
+        this.classList.add('dragging');
         this.style.opacity = '0.5';
     });
 
     item.addEventListener('dragend', function (e) {
+        this.classList.remove('dragging');
         this.style.opacity = '1';
         saveNewOrder();
     });
@@ -114,13 +123,9 @@ function saveNewOrder() {
     });
 
     // Send to server
-    fetch('/?page=settings/custom-fields-handler', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'reorder',
-            order: order,
-            csrf: '<?php echo htmlspecialchars(csrf_token()); ?>'
-        })
-    });
+    const formData = new FormData();
+    formData.append('csrf', customizationCsrfToken());
+    formData.append('action', 'reorder');
+    formData.append('order', JSON.stringify(order));
+    fetch('/?page=settings/custom-fields-handler', { method: 'POST', body: formData });
 }

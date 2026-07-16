@@ -178,6 +178,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             echo json_encode(['success' => true]);
             exit;
+        } elseif ($action === 'reorder') {
+            header('Content-Type: application/json');
+            $order = json_decode((string)($_POST['order'] ?? '[]'), true);
+            if (!is_array($order) || $order === []) {
+                http_response_code(422);
+                echo json_encode(['success' => false, 'message' => 'Invalid field order']);
+                exit;
+            }
+
+            $pdo->beginTransaction();
+            $statement = $pdo->prepare('UPDATE document_custom_fields SET display_order = ? WHERE id = ?');
+            foreach ($order as $item) {
+                $fieldId = (int)($item['id'] ?? 0);
+                $displayOrder = (int)($item['order'] ?? 0);
+                if ($fieldId > 0 && $displayOrder > 0) {
+                    $statement->execute([$displayOrder, $fieldId]);
+                }
+            }
+            $pdo->commit();
+            echo json_encode(['success' => true]);
+            exit;
         }
         
     } catch (Throwable $e) {

@@ -62,7 +62,7 @@ function runPageInitializers(page, root = getMainContentRoot()) {
                 pageCleanupCallbacks.push(cleanup);
             }
         } catch (err) {
-            console.error('Page initializer failed for ' + normalizedPage, err);
+            console.error('Page initializer failed for %s', normalizedPage, err);
         }
     });
 }
@@ -194,9 +194,9 @@ async function loadPageContent(page) {
         if (newMainContent) {
             const scripts = Array.from(newMainContent.querySelectorAll('script'));
 
-            // Debug: check if script exists in raw HTML
-            if (scripts.length === 0 && html.match(/<script\b[^>]*>/i)) {
-                console.warn('WARNING: Script tags exist in raw HTML but not found in parsed DOM!');
+            // Debug: check the parsed response for scripts outside the main fragment.
+            if (scripts.length === 0 && doc.querySelector('script')) {
+                console.warn('WARNING: Script tags exist in the response but not in the main content!');
             }
             const inlineScripts = scripts.map(s => ({
                 src: s.getAttribute('src') || null,

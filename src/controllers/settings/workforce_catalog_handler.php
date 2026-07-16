@@ -12,7 +12,11 @@ require_once __DIR__ . '/../../utils/csrf.php';
 
 $userId=(int)($_SESSION['user']['id']??0);$action=(string)($_POST['action']??'');$tab=(string)($_POST['return_tab']??'work-types');
 $redirect='/?page=settings&tab='.rawurlencode($tab);
-if($userId<=0||!csrf_validate()||!(in_array((string)($_SESSION['user']['role']??''),['admin','owner'],true)||user_can($pdo,$userId,'workforce.manage',0))){http_response_code(403);exit('Forbidden');}
+// These actions are rendered by Settings sections gated by `settings.manage`,
+// and the central route middleware uses that same permission. Requiring the
+// unrelated `workforce.manage` capability here made every visible action fail
+// for custom installation-manager roles.
+if($userId<=0||!csrf_validate()||!(in_array((string)($_SESSION['user']['role']??''),['admin','owner'],true)||user_can($pdo,$userId,'settings.manage',0))){http_response_code(403);exit('Forbidden');}
 try{
  if($action==='save-worker-profile'){
   $display=trim((string)($_POST['display_name']??''));$relationship=strtolower(trim((string)($_POST['relationship_type']??'employee')));$accountId=(int)($_POST['user_id']??0)?:null;

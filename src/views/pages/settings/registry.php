@@ -77,6 +77,7 @@ function pa_settings_registry(): array
                     'description' => 'Define role permissions for this installation.',
                     'tab' => 'permissions',
                     'permission' => 'settings.manage',
+                    'roles' => ['admin'],
                     'keywords' => 'roles permissions acl capabilities',
                     'form_mode' => 'self',
                 ],

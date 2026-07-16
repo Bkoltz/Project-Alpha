@@ -2,7 +2,7 @@
 // src/views/pages/settings/notifications.php
 ?>
 
-<div style="max-width:900px">
+<div style="max-width:900px" data-settings-notifications>
   <h2 style="margin:0 0 8px 0">Notifications & Automation</h2>
   <p style="margin:0 0 24px 0;color:var(--muted)">Configure automated emails, reminders, and system tasks</p>
 
@@ -257,24 +257,4 @@
   </fieldset>
 </div>
 
-<script>
-(function() {
-  // Toggle cron schedule section
-  var cronEnabled = document.querySelector('input[name="cron_enabled"]');
-  var schedSection = document.getElementById('cronScheduleSection');
-  if (cronEnabled && schedSection) {
-    cronEnabled.addEventListener('change', function() {
-      schedSection.style.display = cronEnabled.checked ? '' : 'none';
-    });
-  }
-  
-  // Toggle custom cron section
-  var schedSelect = document.querySelector('select[name="cron_schedule"]');
-  var customSection = document.getElementById('customCronSection');
-  if (schedSelect && customSection) {
-    schedSelect.addEventListener('change', function() {
-      customSection.style.display = schedSelect.value === 'custom' ? '' : 'none';
-    });
-  }
-})();
-</script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/settings-notifications.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

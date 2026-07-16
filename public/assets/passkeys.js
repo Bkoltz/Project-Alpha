@@ -93,6 +93,8 @@
     var button = document.getElementById(config.buttonId);
     var status = document.getElementById(config.statusId);
     if (!button) return;
+    if (button.dataset.passkeyLoginBound === '1') return;
+    button.dataset.passkeyLoginBound = '1';
     if (!window.PublicKeyCredential || !navigator.credentials) {
       button.hidden = true;
       return;
@@ -127,6 +129,8 @@
     var form = document.getElementById(config.formId);
     var status = document.getElementById(config.statusId);
     if (!form) return;
+    if (form.dataset.passkeyRegistrationBound === '1') return;
+    form.dataset.passkeyRegistrationBound = '1';
     if (!window.PublicKeyCredential || !navigator.credentials) {
       form.hidden = true;
       message(status, 'This browser does not support passkeys. You can keep using your password and authenticator app.', true);
@@ -162,8 +166,10 @@
     });
   };
 
-  document.addEventListener('DOMContentLoaded', function () {
+  function initPasskeyControls() {
     document.querySelectorAll('[data-passkey-confirm]').forEach(function (form) {
+      if (form.dataset.passkeyConfirmBound === '1') return;
+      form.dataset.passkeyConfirmBound = '1';
       form.addEventListener('submit', function (event) {
         if (!window.confirm(form.dataset.passkeyConfirm || 'Continue?')) event.preventDefault();
       });
@@ -188,5 +194,15 @@
         statusId: registration.dataset.statusId || ''
       });
     }
-  });
+  }
+
+  initPasskeyControls.pageInitializerId = 'passkey-controls';
+  if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+    window.ProjectAlpha.registerPage('passkeys', initPasskeyControls);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPasskeyControls, { once: true });
+  } else {
+    initPasskeyControls();
+  }
 })();

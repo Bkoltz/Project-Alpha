@@ -135,7 +135,7 @@
         document.addEventListener('submit',handleSubmit);
     }
     window.showCreateModal = showCreateModal; window.editItem = editItem; window.closeModal = closeModal;
-    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') window.ProjectAlpha.registerPage('settings/item-library',initItemLibraryPage);
+    if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') window.ProjectAlpha.registerPage('settings',initItemLibraryPage);
     else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',initItemLibraryPage,{once:true});
     else initItemLibraryPage();
 })();
