@@ -578,7 +578,6 @@ if ($page === 'settings/gmail-oauth' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     require_once __DIR__ . '/../src/controllers/settings/gmail_oauth.php';
     exit;
 }
-
 // These endpoints validate their own JSON or form CSRF tokens and return
 // responses without the application layout.
 $directControllers = [
