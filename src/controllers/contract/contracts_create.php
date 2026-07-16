@@ -12,6 +12,7 @@ require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/contract_signatures.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -51,6 +52,7 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
+$catalogIds = $_POST['item_library_id'] ?? [];
 $travelRule=mileage_rule_from_post($_POST,['rate'=>(float)($appConfig['default_mileage_rate']??0.670),'included'=>(float)($appConfig['default_mileage_included_miles']??0)]);
 
 if ($client_id <= 0) {
@@ -85,7 +87,7 @@ $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){
   $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
-  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $requestedUnit=(string)($billingUnits[$i]??'each'); $unit=$billing_mode==='hourly'?'hour':(in_array($requestedUnit,['each','hour','mile'],true)?$requestedUnit:'each'); $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line,'u'=>$unit];
+  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $unit=$billing_mode==='hourly'?'hour':catalog_document_unit((string)($billingUnits[$i]??'each')); $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line,'u'=>$unit,'catalog_id'=>max(0,(int)($catalogIds[$i]??0))];
 }
 if(!$items){
     @error_log('[contracts_create] no valid items', 0);
@@ -141,8 +143,8 @@ try{
   $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $co_id]);
 
   // Save contract items
-  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
-  foreach($items as $it){ $ins->execute([$co_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
+  foreach($items as $it){$catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$it['catalog']=$catalog;$ins->execute([$co_id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);}
   if($travelItem)$pdo->prepare('INSERT INTO contract_items (contract_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$co_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
   mileage_save_document_rule($pdo,'contract',$co_id,$__orgId,$client_id,(int)$__creator,$travelRule);
 
@@ -154,8 +156,8 @@ try{
   if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
     $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
   }
-  $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
-  foreach($items as $it){ $ii->execute([$invoice_id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+  $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
+  foreach($items as $it){$catalog=$it['catalog']??catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$ii->execute([$invoice_id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);}
   if($travelItem&&$travelItem['pricing_status']==='standard')$pdo->prepare('INSERT INTO invoice_items (invoice_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,"standard")')->execute([$invoice_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit']]);
   // Assign per-type doc_number for invoices
   $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([pa_next_invoice_doc_number($pdo, 'regular'), $invoice_id]);

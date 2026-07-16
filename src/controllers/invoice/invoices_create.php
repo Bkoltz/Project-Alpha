@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -40,6 +41,7 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
+$catalogIds = $_POST['item_library_id'] ?? [];
 $timeEntryIdsByRow = $_POST['time_entry_ids'] ?? [];
 $legacyTimeEntryIds = $_POST['time_entry_id'] ?? [];
 $mileageAllocationIdsByRow = $_POST['mileage_allocation_ids'] ?? [];
@@ -75,7 +77,8 @@ for ($i=0; $i<count($item); $i++) {
         'line_total' => $line,
         'billing_unit' => $billing_mode === 'hourly'
             ? 'hour'
-            : (in_array(($billingUnits[$i] ?? 'each'), ['each', 'hour', 'mile'], true) ? (string)($billingUnits[$i] ?? 'each') : 'each'),
+            : catalog_document_unit((string)($billingUnits[$i] ?? 'each')),
+        'catalog_id' => max(0,(int)($catalogIds[$i]??0)),
         'time_entry_ids' => $rowTimeEntryIds,
         'mileage_allocation_ids' => $rowMileageAllocationIds,
         'is_travel' => !empty($rowMileageAllocationIds) ? 1 : 0,
@@ -192,10 +195,11 @@ try {
     // Assign per-type doc_number for invoices
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([pa_next_invoice_doc_number($pdo, 'regular'), $invoice_id]);
 
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status,time_entry_id,hours) VALUES (?,?,?,?,?,?,?,?,"standard",?,?)');
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,time_entry_id,hours,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,"standard",?,?,?)');
     foreach ($items as $idx => $it) {
         $primaryTimeEntryId = !empty($it['time_entry_ids']) ? (int)$it['time_entry_ids'][0] : null;
-        $ii->execute([$invoice_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'], $it['is_travel'], $primaryTimeEntryId, $it['billing_unit'] === 'hour' ? ($it['quantity'] ?? null) : null]);
+        $catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);
+        $ii->execute([$invoice_id,$catalog['item_library_id'],$it['item'],$it['description'],$it['quantity'],$it['unit_price'],$it['line_total'],$it['billing_unit'],$it['is_travel'],$primaryTimeEntryId,$it['billing_unit']==='hour'?($it['quantity']??null):null,$catalog['catalog_snapshot']]);
         if (!empty($it['time_entry_ids'])) {
             $itemId = (int)$pdo->lastInsertId();
             $check = $pdo->prepare('SELECT id FROM time_entries WHERE id = ? AND billed = 0 AND COALESCE(external_status,"approved") = "approved" AND (client_id = ? OR client_id IS NULL OR client_id = 0) FOR UPDATE');

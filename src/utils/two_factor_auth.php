@@ -4,6 +4,11 @@
 
 namespace App\Utils;
 
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
+
 class TwoFactorAuth {
     
     /**
@@ -70,43 +75,6 @@ class TwoFactorAuth {
     }
     
     /**
-     * Generate backup codes for account recovery
-     * @param int $count Number of codes to generate (default: 8)
-     * @return array Array of backup codes
-     */
-    public static function generateBackupCodes(int $count = 8): array {
-        $codes = [];
-        for ($i = 0; $i < $count; $i++) {
-            // Generate 8-character alphanumeric codes
-            $bytes = random_bytes(6);
-            $code = strtoupper(substr(bin2hex($bytes), 0, 8));
-            // Format as XXXX-XXXX for readability
-            $codes[] = substr($code, 0, 4) . '-' . substr($code, 4, 4);
-        }
-        return $codes;
-    }
-    
-    /**
-     * Hash a backup code for storage
-     * @param string $code Plain backup code
-     * @return string Hashed code
-     */
-    public static function hashBackupCode(string $code): string {
-        return hash('sha256', strtoupper(str_replace('-', '', $code)));
-    }
-    
-    /**
-     * Verify a backup code against stored hashes
-     * @param string $code User-provided backup code
-     * @param array $hashedCodes Array of hashed backup codes
-     * @return bool True if code matches one of the hashes
-     */
-    public static function verifyBackupCode(string $code, array $hashedCodes): bool {
-        $hash = self::hashBackupCode($code);
-        return in_array($hash, $hashedCodes, true);
-    }
-    
-    /**
      * Generate a QR code data URI for authenticator apps
      * @param string $secret Base32 encoded secret
      * @param string $email User's email/identifier
@@ -123,6 +91,26 @@ class TwoFactorAuth {
             'period' => 30
         ]);
         return "otpauth://totp/{$label}?{$params}";
+    }
+
+    /**
+     * Render an authenticator QR code locally. The TOTP secret is never sent to
+     * a third-party QR endpoint or written to disk.
+     */
+    public static function getQrCodeSvg(string $otpAuthUri, int $size = 256): string {
+        if (!str_starts_with($otpAuthUri, 'otpauth://totp/')) {
+            throw new \InvalidArgumentException('Only TOTP otpauth URIs may be rendered.');
+        }
+
+        $renderer = new ImageRenderer(
+            new RendererStyle(max(160, min(512, $size)), 4),
+            new SvgImageBackEnd()
+        );
+        return (new Writer($renderer))->writeString($otpAuthUri);
+    }
+
+    public static function getQrCodeDataUri(string $otpAuthUri, int $size = 256): string {
+        return 'data:image/svg+xml;base64,' . base64_encode(self::getQrCodeSvg($otpAuthUri, $size));
     }
     
     /**

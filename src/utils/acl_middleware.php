@@ -58,6 +58,11 @@ function page_permission_map(): array
         'workforce/pay'         => ['employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
         // The action controller performs an action-specific permission check.
         'workforce/action'      => null,
+        'workforce/contractor-invoice' => null,
+        'workforce/contractor-invoice-download' => null,
+        'api/workforce-v1'      => null,
+        'api/catalog-v1'        => null,
+        'settings/workforce-catalog-handler' => 'settings.manage',
 
         // Accounts / users
         'accounts'               => 'users.manage',
@@ -66,11 +71,22 @@ function page_permission_map(): array
         'accounts-reset-password' => 'users.reset_password',
         'accounts-update'        => 'users.manage',
         'account-edit'           => 'users.manage',
+        'worker-documents'       => 'users.manage',
+        'worker-document-download' => null,
+        'employee-documents'     => 'users.manage',
+        'employee-document-download' => null,
         '2fa-admin-disable'      => '2fa.manage',
         '2fa-setup'              => null,
         '2fa-setup-action'       => null,
         '2fa-verify'             => null,
         '2fa-verify-action'      => null,
+        'passkeys'               => null,
+        'passkey-options'        => null,
+        'passkey-complete'       => null,
+        'passkey-register-options' => null,
+        'passkey-register-complete' => null,
+        'passkey-manage'         => null,
+        'passkey-admin-reset'    => '2fa.manage',
 
         // API keys
         'api-keys'          => 'api_keys.manage',
@@ -252,7 +268,9 @@ function page_permission_map(): array
         'financial/expense-handler'        => 'financial.manage',
         'financial/expense_handler'        => 'financial.manage',
         'financial/csv-import'             => 'financial.manage',
-        'financial/mileage-handler'        => 'financial.manage',
+        'financial/mileage-list'           => null,
+        'financial/mileage-create'         => null,
+        'financial/mileage-handler'        => null,
         'financial/mileage-profile-handler'=> 'financial.manage',
         'financial/route-estimate'          => 'financial.manage',
         'financial/mileage-unbilled'       => 'invoices.create',
@@ -301,7 +319,7 @@ function page_permission_map(): array
 
 function acl_middleware(PDO $pdo, string $page): void
 {
-    $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', '2fa-verify', '2fa-verify-action', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+    $publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', '2fa-verify', '2fa-verify-action', 'passkey-options', 'passkey-complete', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
     if (in_array($page, $publicPages, true)) return;
 
     $userId = (int)($_SESSION['user']['id'] ?? 0);

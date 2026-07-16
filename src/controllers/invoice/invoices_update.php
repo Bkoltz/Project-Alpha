@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 $id = (int)($_POST['id'] ?? 0);
@@ -67,6 +68,7 @@ $ExtraPrices = $_POST['extra_price'] ?? [];
 $extraIds = $_POST['extra_id'] ?? [];
 $extraUnits = $_POST['extra_billing_unit'] ?? [];
 $extraTypes = $_POST['extra_adjustment_type'] ?? [];
+$extraCatalogIds = $_POST['extra_item_library_id'] ?? [];
 
 $extraItemsArr = [];
 $subtotal = 0.0;
@@ -85,8 +87,8 @@ for ($i = 0; $i < count($extraItems); $i++) {
   $signedPrice = $adjustmentType === 'credit' ? -$p : $p;
   $line = $q * $signedPrice;
   $subtotal += $line;
-  $unit = (($extraUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
-  $extraItemsArr[] = ['id' => $eid, 'i' => $itm, 'd' => $d, 'q' => $q, 'p' => $signedPrice, 't' => $line, 'u' => $unit, 'type' => $adjustmentType];
+  $unit = $billing_mode==='hourly'?'hour':catalog_document_unit((string)($extraUnits[$i]??'each'));
+  $extraItemsArr[] = ['id'=>$eid,'i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$signedPrice,'t'=>$line,'u'=>$unit,'type'=>$adjustmentType,'catalog_id'=>max(0,(int)($extraCatalogIds[$i]??0))];
 }
 
 // Fetch all existing items to calculate subtotal including contract items
@@ -147,15 +149,17 @@ try {
     $pdo->prepare('DELETE FROM invoice_items WHERE invoice_id=? AND is_extra_charge=1')->execute([$id]);
 
     // Insert new extra charges with the flag
-    $ins = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit, is_extra_charge) VALUES (?,?,?,?,?,?,?,1)');
+    $ins = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_extra_charge,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,1,?)');
     foreach ($extraItemsArr as $it) {
-      $ins->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
+      $catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);
+      $ins->execute([$id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);
     }
   } else {
     // Schema doesn't have is_extra_charge yet: append entries as regular invoice_items
-    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+    $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
     foreach ($extraItemsArr as $it) {
-      $ii->execute([$id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
+      $catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);
+      $ii->execute([$id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);
     }
   }
   $nextInvoiceRevision=max(1,(int)($invoiceState['revision_number']??1))+1;

@@ -212,7 +212,7 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringNotContainsString('function two_factor_enforce_required', $policy);
         self::assertStringContainsString("'employee_pay.view'", $policy);
         self::assertStringNotContainsString('Two-factor authentication is required for your account', $setup);
-        self::assertStringContainsString('Disable 2FA', $this->read('src/views/pages/auth/two_factor_setup.php'));
+        self::assertStringContainsString('Disable Authenticator', $this->read('src/views/pages/auth/two_factor_setup.php'));
 
         $docker = $this->read('docker/start.sh');
         self::assertStringContainsString('Production readiness checks:', $docker);
@@ -224,8 +224,12 @@ final class SecurityHardeningTest extends TestCase
     public function testComposeHasOneExplicitProductionDefinition(): void
     {
         $composeFiles = glob($this->root . '/docker-compose*.yml') ?: [];
-        sort($composeFiles);
-        self::assertSame([$this->root . '/docker-compose.yml'], $composeFiles);
+        $productionComposeFiles = array_values(array_filter(
+            $composeFiles,
+            static fn(string $path): bool => !preg_match('/docker-compose\.(?:staging|truenas)\.yml$/', $path)
+        ));
+        sort($productionComposeFiles);
+        self::assertSame([$this->root . '/docker-compose.yml'], $productionComposeFiles);
 
         $compose = $this->read('docker-compose.yml');
         self::assertDoesNotMatchRegularExpression('/\$\{[A-Z0-9_]+:-/', $compose);

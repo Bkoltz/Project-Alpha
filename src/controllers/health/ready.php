@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/api_response.php';
 
-const PA_REQUIRED_SCHEMA_VERSION = 43;
+const PA_REQUIRED_SCHEMA_VERSION = 46;
 
 try {
     $version = (int)$pdo->query('SELECT COALESCE(MAX(version),0) FROM schema_migrations')->fetchColumn();
@@ -18,6 +18,15 @@ try {
         'document_revisions',
         'invoice_adjustments',
         'schedule_entries',
+        'worker_documents',
+        'worker_profiles',
+        'work_types',
+        'catalog_work_components',
+        'job_work_components',
+        'work_assignments',
+        'pay_periods',
+        'passkey_credentials',
+        'passkey_challenges',
     ];
     $placeholders = implode(',', array_fill(0, count($requiredTables), '?'));
     $tableStmt = $pdo->prepare(

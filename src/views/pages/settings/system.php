@@ -8,6 +8,17 @@ try {
 } catch (Throwable $emailStatusError) {
   @error_log('[settings/system] Unable to load email providers: ' . $emailStatusError->getMessage());
 }
+$googleEmailSetupReady = trim((string)($appConfig['google_oauth_client_id'] ?? '')) !== ''
+  && trim((string)($appConfig['google_oauth_client_secret_enc'] ?? '')) !== '';
+$googleCallbackBase = trim((string)($appConfig['app_host'] ?? ''));
+if ($googleCallbackBase !== '' && !preg_match('#^https?://#i', $googleCallbackBase)) {
+  $googleCallbackBase = 'https://' . $googleCallbackBase;
+}
+if ($googleCallbackBase === '') {
+  $googleCallbackScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https' ? 'https' : 'http';
+  $googleCallbackBase = $googleCallbackScheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+}
+$googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-oauth&action=callback';
 ?>
 <fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
   <legend style="padding:0 6px;color:var(--muted)">Domain &amp; Public Access</legend>
@@ -182,15 +193,25 @@ try {
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
-  <div style="padding:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:14px">
-    <strong>Connect Google Gmail</strong>
-    <p style="margin:4px 0 10px;color:var(--muted);font-size:13px">Outbound email only. This does not enable Google sign-in.</p>
-    <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
-      <label><div>OAuth client ID</div><input name="google_oauth_client_id" value="<?php echo htmlspecialchars((string)($appConfig['google_oauth_client_id'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-      <label><div>OAuth client secret</div><input type="password" name="google_oauth_client_secret" placeholder="Enter to update" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
-    </div>
-    <p style="font-size:12px;color:var(--muted)">Save these installation credentials, then connect the business Gmail account.</p>
-    <a class="btn" href="/?page=settings/gmail-oauth&amp;action=connect&amp;csrf=<?php echo rawurlencode(csrf_token()); ?>">Connect Google</a>
+  <div style="padding:14px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:14px">
+    <strong>Sign in with Google to send email</strong>
+    <p style="margin:4px 0 10px;color:var(--muted);font-size:13px">Once the installation is configured, the normal experience is one click: sign in to the business Google account, approve sending email, and return to Project Alpha automatically. This affects outgoing email only—not PA login.</p>
+    <?php if ($googleEmailSetupReady): ?>
+      <a class="btn btn-primary" href="/?page=settings/gmail-oauth&amp;action=connect&amp;csrf=<?php echo rawurlencode(csrf_token()); ?>">Sign in with Google</a>
+    <?php else: ?>
+      <button class="btn" type="button" disabled title="Complete the one-time installation setup below">Sign in with Google</button>
+      <span style="margin-left:8px;color:#92400e;font-size:12px">One-time installation setup required</span>
+    <?php endif; ?>
+    <details style="margin-top:12px" <?php echo $googleEmailSetupReady ? '' : 'open'; ?>>
+      <summary style="cursor:pointer;font-weight:600">Advanced: one-time Google app setup</summary>
+      <p style="font-size:12px;color:var(--muted)">Google requires every self-hosted installation to identify the app before it can request Gmail permission. An installation administrator does this once; people connecting the sender account do not manage these values.</p>
+      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+        <label><div>Google client ID</div><input name="google_oauth_client_id" value="<?php echo htmlspecialchars((string)($appConfig['google_oauth_client_id'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+        <label><div>Google client secret</div><input type="password" name="google_oauth_client_secret" placeholder="Enter to update" autocomplete="new-password" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
+      </div>
+      <label style="display:block;margin-top:8px"><div>Authorized return URL</div><input readonly value="<?php echo htmlspecialchars($googleEmailCallback); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff"></label>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:0">Register that return URL in the Google app, save Settings once, then use <strong>Sign in with Google</strong>. Project Alpha handles the return automatically.</p>
+    </details>
   </div>
   <strong>SMTP configuration</strong>
   <p style="margin:4px 0 8px;color:var(--muted)">Use any compatible mail server, including a Google App Password if preferred.</p>

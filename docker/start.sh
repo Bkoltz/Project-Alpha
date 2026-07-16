@@ -39,6 +39,9 @@ if [ "$APP_ENV_NORMALIZED" = "production" ] || [ "$APP_ENV_NORMALIZED" = "prod" 
   if [ -z "${APP_HOST:-}" ]; then
     echo "WARNING: APP_HOST is not set. Configure the canonical HTTPS/proxy hostname before exposing Project Alpha."
   fi
+  if [ -z "${WEBAUTHN_ORIGIN:-}" ]; then
+    echo "WARNING: WEBAUTHN_ORIGIN is not set. Password and TOTP sign-in work, but passkeys are disabled."
+  fi
   if [ "$APP_ENCRYPTION_KEY_WAS_SET" = "0" ]; then
     echo "WARNING: APP_ENCRYPTION_KEY was not explicitly supplied. A persisted key was used/generated; back it up securely."
   fi

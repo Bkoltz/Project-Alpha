@@ -2,7 +2,7 @@ var itemData = getItemData();
 
 //Add loaded data
 itemData.forEach(item => {
-    addItemCo(item.item, item.description, Number(item.quantity), Number(item.unit_price), item.billing_unit || 'each');
+    addItemCo(item.item, item.description, Number(item.quantity), Number(item.unit_price), item.billing_unit || 'each', item.item_library_id || '');
 });
 
 function escapeHtmlCo(text) {
@@ -143,7 +143,7 @@ function money(n) {
 }
 
 var itemCounterCo = 0;
-function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each') {
+function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each', itemLibraryId = '') {
     var wrap = document.createElement('div');
     var itemId = 'itemCo_' + (itemCounterCo++);
     var descId = 'descCo_' + itemCounterCo;
@@ -161,6 +161,7 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each
     itemInput.setAttribute('data-item-autocomplete', '');
     itemInput.setAttribute('data-description-field', descId);
     itemInput.setAttribute('data-price-field', priceId);
+    itemInput.setAttribute('data-item-library-id', itemLibraryId);
 
     var descTextarea = document.createElement('textarea');
     descTextarea.id = descId;
@@ -193,13 +194,13 @@ function addItemCo(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each
 
     var unitInput = document.createElement('select');
     unitInput.name = 'item_billing_unit[]';
-    ['each', 'hour', 'mile'].forEach(function (value) {
+    ['each', 'hour', 'day', 'mile', 'project'].forEach(function (value) {
         var option = document.createElement('option');
         option.value = value;
-        option.textContent = value === 'mile' ? 'Miles' : (value === 'hour' ? 'Hours' : 'Each');
+        option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
         unitInput.appendChild(option);
     });
-    unitInput.value = ['each', 'hour', 'mile'].includes(billingUnit) ? billingUnit : 'each';
+    unitInput.value = ['each', 'hour', 'day', 'mile', 'project'].includes(billingUnit) ? billingUnit : 'each';
     unitInput.setAttribute('aria-label', 'Billing unit');
     unitInput.style.cssText = 'padding:10px;border-radius:8px;border:1px solid #ddd';
 

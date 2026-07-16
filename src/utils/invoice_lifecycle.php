@@ -203,6 +203,10 @@ function invoice_refresh_payment_totals(PDO $pdo, int $invoiceId, bool $revokePa
     if ($revokePaidPublicLinks && !in_array($status, ['unpaid', 'partial'], true)) {
         pa_public_link_terminalize($pdo, 'invoice', $invoiceId, $status);
     }
+    if ($status === 'paid') {
+        require_once __DIR__ . '/workforce_compensation.php';
+        workforce_release_invoice_paid($pdo, $invoiceId, (int)($_SESSION['user']['id'] ?? 0));
+    }
 
     return [
         'status' => $status,
@@ -389,6 +393,9 @@ function invoice_finalize(PDO $pdo, int $invoiceId, array $appConfig, string $so
 
         $stmt->execute([$invoiceId]);
         $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        require_once __DIR__ . '/job_work_materialization.php';
+        catalog_plan_direct_invoice($pdo, $invoiceId, (int)($userId ?? 0));
 
         if ($ownsTransaction) {
             $pdo->commit();

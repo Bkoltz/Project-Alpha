@@ -7,6 +7,7 @@ class ItemAutocomplete {
     this.descriptionField = options.descriptionField || null;
     this.priceField = options.priceField || null;
     this.onSelect = options.onSelect || null;
+    this.libraryIdField = options.libraryIdField || null;
     
     this.dropdown = null;
     this.debounceTimer = null;
@@ -17,6 +18,7 @@ class ItemAutocomplete {
   }
   
   init() {
+    this.ensureLibraryIdField();
     // Create dropdown element
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'item-autocomplete-dropdown';
@@ -42,13 +44,43 @@ class ItemAutocomplete {
     this.input.parentElement.appendChild(this.dropdown);
     
     // Bind events
-    this.input.addEventListener('input', (e) => this.handleInput(e));
+    this.input.addEventListener('input', (e) => {
+      if (this.libraryIdField) this.libraryIdField.value = '';
+      this.handleInput(e);
+    });
     this.input.addEventListener('keydown', (e) => this.handleKeydown(e));
     this.input.addEventListener('blur', () => {
       // Delay to allow click on dropdown
       setTimeout(() => this.hideDropdown(), 200);
     });
     
+  }
+
+  ensureLibraryIdField() {
+    if (this.libraryIdField) return;
+    const explicitId = this.input.dataset.libraryIdField;
+    if (explicitId) {
+      this.libraryIdField = document.getElementById(explicitId);
+      if (this.libraryIdField) return;
+    }
+
+    const inputName = this.input.getAttribute('name') || '';
+    const hiddenName = inputName === 'item[]'
+      ? 'item_library_id[]'
+      : (inputName === 'extra_item[]' ? 'extra_item_library_id[]' : '');
+    if (!hiddenName) return;
+
+    const sibling = this.input.parentElement?.querySelector(`input[type="hidden"][name="${hiddenName}"]`);
+    if (sibling) {
+      this.libraryIdField = sibling;
+      return;
+    }
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = hiddenName;
+    hidden.value = this.input.dataset.itemLibraryId || '';
+    this.input.insertAdjacentElement('afterend', hidden);
+    this.libraryIdField = hidden;
   }
   
   handleInput(e) {
@@ -179,6 +211,9 @@ class ItemAutocomplete {
   selectItem(item) {
     // Set the item name in the input
     this.input.value = item.item_name;
+    if (this.libraryIdField) {
+      this.libraryIdField.value = String(item.id || '');
+    }
     
     // Auto-fill description if field is provided
     if (this.descriptionField && item.description) {
@@ -195,19 +230,20 @@ class ItemAutocomplete {
     if (row) {
       const qtyInput = row.querySelector('.qty-input') || row.querySelector('[name="item_qty[]"]');
       const unitInput = row.querySelector('[name="item_billing_unit[]"]');
-      if (item.is_hourly) {
+      const billingUnit = item.billing_unit || (item.is_hourly ? 'hour' : 'each');
+      if (billingUnit === 'hour') {
         if (qtyInput) {
           qtyInput.placeholder = 'Hours';
         }
         if (unitInput) {
-          unitInput.value = 'hour';
+          unitInput.value = billingUnit;
         }
       } else {
         if (qtyInput) {
           qtyInput.placeholder = 'Qty';
         }
         if (unitInput) {
-          unitInput.value = 'each';
+          unitInput.value = billingUnit;
         }
       }
     }
@@ -257,6 +293,7 @@ function initItemAutocomplete() {
     const instance = new ItemAutocomplete(input, {
       descriptionField: descriptionFieldId ? document.getElementById(descriptionFieldId) : null,
       priceField: priceFieldId ? document.getElementById(priceFieldId) : null
+      ,libraryIdField: input.dataset.libraryIdField ? document.getElementById(input.dataset.libraryIdField) : null
     });
     
     // Mark as initialized

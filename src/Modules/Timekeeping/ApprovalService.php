@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Timekeeping;
 
+use App\Services\CompensationRuleService;
+use App\Services\JobWorkPlanningService;
 use DateTimeImmutable;
 use DateTimeZone;
 use DomainException;
@@ -25,10 +27,15 @@ final class ApprovalService
         try {
             $stmt = $this->pdo->prepare(
                 "SELECT t.*,u.email,u.username,ep.first_name,ep.last_name,ep.hourly_rate employee_rate,
+                        wp.id worker_profile_id,wp.relationship_type,
+                        jwc.catalog_work_component_id,
                         pa.pay_rate_override,p.name project_name,c.name client_name,
                         i.doc_number invoice_number,i.invoice_type
                  FROM work_time_entries t JOIN users u ON u.id=t.user_id
                  LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id
+                 LEFT JOIN worker_profiles wp ON wp.user_id=t.user_id
+                 LEFT JOIN work_assignments wa ON wa.id=t.work_assignment_id
+                 LEFT JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
                  LEFT JOIN projects p ON p.id=t.project_id
                  LEFT JOIN clients c ON c.id=t.client_id
                  LEFT JOIN invoices i ON i.id=t.invoice_id
@@ -46,8 +53,17 @@ final class ApprovalService
             if ((int) $entry['revision'] > 1 && $this->hasPaidAccrual($entryId)) {
                 throw new DomainException('Paid time cannot be replaced by a correction. Return the pay accrual to pending first.');
             }
+            $effectivePayable=(int)$entry['is_payable']===1&&($entry['relationship_type']??'')!=='owner'&&empty($entry['work_assignment_id']);
             $payRate = $entry['pay_rate_override'] ?? $entry['employee_rate'] ?? $entry['default_hourly_rate'];
-            if ((int) $entry['is_payable'] === 1 && $payRate === null) {
+            $catalogPay=null;
+            if($effectivePayable&&!empty($entry['worker_profile_id'])&&!empty($entry['work_type_id'])){
+                $rules=new CompensationRuleService($this->pdo);
+                $rule=$rules->resolve((int)$entry['worker_profile_id'],(int)$entry['work_type_id'],!empty($entry['catalog_work_component_id'])?(int)$entry['catalog_work_component_id']:null);
+                if($rule['method']==='nonpayable'||$rule['eligibility_trigger']!=='completed_approved')$effectivePayable=false;
+                elseif($rule['method']==='percentage')throw new DomainException('Percentage compensation must be linked to a catalog assignment with an eligible client-price basis.');
+                else{$catalogPay=$rules->calculate($rule,['duration_seconds'=>(int)$entry['duration_seconds'],'quantity'=>1]);$payRate=$rule['amount'];}
+            }
+            if ($effectivePayable && $payRate === null) {
                 throw new DomainException('A project, employee, or business pay rate is required.');
             }
             $billingRate = $this->billingRate($entry);
@@ -59,8 +75,8 @@ final class ApprovalService
             if ($employeeName === '') {
                 $employeeName = (string) ($entry['username'] ?: $entry['email']);
             }
-            $payAmount = (int) $entry['is_payable'] === 1
-                ? DecimalMoney::payAmount((int) $entry['duration_seconds'], (string) $payRate)
+            $payAmount = $effectivePayable
+                ? ($catalogPay['amount']??DecimalMoney::payAmount((int) $entry['duration_seconds'], (string) $payRate))
                 : null;
             $snapshot = [
                 'id' => $snapshotId,
@@ -79,7 +95,7 @@ final class ApprovalService
                 'duration_seconds' => (int) $entry['duration_seconds'],
                 'description' => (string) $entry['description'],
                 'billable' => (int) $entry['billable'],
-                'is_payable' => (int) $entry['is_payable'],
+                'is_payable' => $effectivePayable ? 1 : 0,
                 'pay_rate' => $payRate,
                 'billing_rate' => $billingRate,
                 'pay_amount' => $payAmount,
@@ -104,7 +120,7 @@ final class ApprovalService
                      WHERE s.time_entry_id=? AND s.entry_revision<? AND a.status='pending'"
                 )->execute([$entryId, $entry['revision']]);
             }
-            if ((int) $entry['is_payable'] === 1) {
+            if ($effectivePayable) {
                 $hours = number_format(((int) $entry['duration_seconds']) / 3600, 4, '.', '');
                 $this->pdo->prepare(
                     "INSERT INTO work_pay_accruals
@@ -113,6 +129,10 @@ final class ApprovalService
                 )->execute([Uuid::v4(), $snapshotId, $entry['user_id'], $employeeName, $hours, $payRate, $payAmount, $entry['currency']]);
             }
             $this->billing->consume($snapshot);
+            if(!empty($entry['work_assignment_id'])){
+                $pending=$this->pdo->prepare("SELECT COUNT(*) FROM work_time_entries WHERE work_assignment_id=? AND id<>? AND status NOT IN ('approved','cancelled','voided')");$pending->execute([$entry['work_assignment_id'],$entryId]);
+                if((int)$pending->fetchColumn()===0){$assignment=$this->pdo->prepare("SELECT status,JSON_UNQUOTE(JSON_EXTRACT(compensation_snapshot,'$.eligibility_trigger')) trigger_name FROM work_assignments WHERE id=?");$assignment->execute([$entry['work_assignment_id']]);$assignment=$assignment->fetch(PDO::FETCH_ASSOC);if($assignment&&$assignment['status']==='completed'&&$assignment['trigger_name']==='completed_approved')(new JobWorkPlanningService($this->pdo,new CompensationRuleService($this->pdo)))->markEligible((int)$entry['work_assignment_id'],['trigger_event'=>'completed_approved'],$approverId);}
+            }
             $this->audit->record('time_entry.approved', 'work_time_entry', $entryId, $approverId, $entry, $snapshot, $snapshotId);
             $this->pdo->commit();
             return $snapshotId;

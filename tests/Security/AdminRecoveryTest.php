@@ -177,7 +177,7 @@ final class AdminRecoveryTest extends TestCase
     {
         $this->pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, '123456', DATE_ADD(NOW(), INTERVAL 5 MINUTE))")->execute([$id]);
         $this->pdo->prepare("INSERT INTO trusted_devices (user_id, device_token, device_name, ip_address, user_agent_hash, expires_at) VALUES (?, 'device', 'test', '127.0.0.1', REPEAT('a',64), DATE_ADD(NOW(), INTERVAL 1 DAY))")->execute([$id]);
-        $this->pdo->prepare("INSERT INTO user_2fa (user_id, secret, enabled, backup_codes) VALUES (?, 'TESTSECRET', 1, '[]')")->execute([$id]);
+        $this->pdo->prepare("INSERT INTO user_2fa (user_id, secret, enabled) VALUES (?, 'TESTSECRET', 1)")->execute([$id]);
     }
 
     private function user(int $id): array

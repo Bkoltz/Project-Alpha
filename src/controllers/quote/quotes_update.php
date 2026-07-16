@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
@@ -31,12 +32,13 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
+$catalogIds = $_POST['item_library_id'] ?? [];
 $travelRule=mileage_rule_from_post($_POST,['rate'=>(float)($appConfig['default_mileage_rate']??0.670),'included'=>(float)($appConfig['default_mileage_included_miles']??0)]);
 if ($id<=0 || $client_id<=0) { header('Location: /?page=quote/quotes-list&error=Invalid'); exit; }
 $items=[];$subtotal=0.0;
 for($i=0;$i<count($item);$i++){
   $itm=trim((string)($item[$i]??'')); $d=trim((string)($desc[$i]??'')); $q=(float)($qty[$i]??0); $p=(float)($price[$i]??0);
-  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $unit=(($billingUnits[$i]??'each')==='hour'||$billing_mode==='hourly')?'hour':'each'; $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line,'u'=>$unit];
+  if($itm===''||$q<=0||$p<0) continue; $line=$q*$p; $subtotal+=$line; $unit=$billing_mode==='hourly'?'hour':catalog_document_unit((string)($billingUnits[$i]??'each')); $items[]=['i'=>$itm,'d'=>$d,'q'=>$q,'p'=>$p,'t'=>$line,'u'=>$unit,'catalog_id'=>max(0,(int)($catalogIds[$i]??0))];
 }
 $travelItem=mileage_document_travel_item($travelRule);if($travelItem&&$travelItem['pricing_status']!=='variable')$subtotal+=(float)$travelItem['line_total'];
 $discount_amount=0.0; if($discount_type==='percent'){$discount_amount=max(0,min(100,$discount_value))*$subtotal/100;} elseif($discount_type==='fixed'){$discount_amount=max(0,$discount_value);} $tax=max(0,$tax_percent)*max(0,$subtotal-$discount_amount)/100; $total=max(0,$subtotal-$discount_amount+$tax);
@@ -59,8 +61,8 @@ try{
     $up->execute([$pc, $client_id, $pn !== '' ? $pn : null, $pt !== '' ? $pt : null]);
   }
   $pdo->prepare('DELETE FROM quote_items WHERE quote_id=?')->execute([$id]);
-  $ins=$pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
-  foreach($items as $it){ $ins->execute([$id,$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u']]); }
+  $ins=$pdo->prepare('INSERT INTO quote_items (quote_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
+  foreach($items as $it){$catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$ins->execute([$id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);}
   if($travelItem)$pdo->prepare('INSERT INTO quote_items (quote_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
   $quoteOrg=$pdo->prepare('SELECT organization_id FROM quotes WHERE id=?');$quoteOrg->execute([$id]);mileage_save_document_rule($pdo,'quote',$id,($quoteOrg->fetchColumn()?:null),$client_id,(int)($_SESSION['user']['id']??0),$travelRule);
   DocumentRevisionService::snapshotAndSave($pdo,'quote',$id,(int)($_SESSION['user']['id']??0));

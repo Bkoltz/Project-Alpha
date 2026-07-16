@@ -233,7 +233,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('name="client_id"', $view);
         self::assertStringContainsString('name="invoice_id"', $view);
         self::assertStringContainsString('Assigned project', $view);
-        self::assertStringContainsString("['clock-in','clock-out','break-start','break-end','manual-create','resubmit','cancel']", $controller);
+        self::assertStringContainsString("['clock-in','clock-out','break-start','break-end','manual-create','quick-duration','resubmit','cancel']", $controller);
         self::assertStringContainsString('public function clockIn', $service);
         self::assertStringContainsString('public function startBreak', $service);
         self::assertStringContainsString('public function saveManual', $service);

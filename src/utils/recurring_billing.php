@@ -128,16 +128,19 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
 
         $insertInvoice = $pdo->prepare('
             INSERT INTO invoices (
-                contract_id, client_id, project_id, project_code, organization_id, created_by, invoice_type,
+                contract_id, quote_id, client_id, project_id, job_id, service_location_id, project_code, organization_id, created_by, invoice_type,
                 discount_type, discount_value, tax_percent,
                 subtotal, total, balance_due, status, due_date, finalized_at, finalization_source, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), "recurring_schedule", NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), "recurring_schedule", NOW())
         ');
 
         $insertInvoice->execute([
             $contractId, // Link to long-term contract
+            !empty($contract['quote_id']) ? (int)$contract['quote_id'] : null,
             $clientId,
             $projectId,
+            !empty($contract['job_id']) ? (int)$contract['job_id'] : null,
+            !empty($contract['service_location_id']) ? (int)$contract['service_location_id'] : null,
             $projectCode,
             $organizationId,
             $createdBy,
@@ -204,13 +207,19 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
 
                 $description = $item['description'] . ' (Payment ' . $invoiceNum . ' of ' . $invoiceCount . ')';
 
-                $pdo->prepare('INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, line_total) VALUES (?,?,?,?,?)')
+                $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
                     ->execute([
                         $invoiceId,
+                        $item['item_library_id'] ?? null,
+                        $item['item'] ?? null,
                         $description,
                         $proportionalQty,
                         $item['unit_price'],
-                        $proportionalTotal
+                        $proportionalTotal,
+                        $item['billing_unit'] ?? 'each',
+                        (int)($item['is_travel'] ?? 0),
+                        $item['pricing_status'] ?? 'standard',
+                        $item['catalog_snapshot'] ?? null,
                     ]);
             }
         }
@@ -321,15 +330,18 @@ function generate_recurring_proration_invoice(
 
         $insert = $pdo->prepare('
             INSERT INTO invoices
-                (contract_id,client_id,project_id,project_code,organization_id,created_by,invoice_type,
+                (contract_id,quote_id,client_id,project_id,job_id,service_location_id,project_code,organization_id,created_by,invoice_type,
                  discount_type,discount_value,tax_percent,subtotal,total,balance_due,status,due_date,
                  finalized_at,finalization_source,generated_at,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),"amendment_proration",NOW(),NOW())
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),"amendment_proration",NOW(),NOW())
         ');
         $insert->execute([
             $contractId,
+            !empty($contract['quote_id']) ? (int)$contract['quote_id'] : null,
             (int)$contract['client_id'],
             !empty($contract['project_id']) ? (int)$contract['project_id'] : null,
+            !empty($contract['job_id']) ? (int)$contract['job_id'] : null,
+            !empty($contract['service_location_id']) ? (int)$contract['service_location_id'] : null,
             $contract['project_code'] ?? null,
             !empty($contract['organization_id']) ? (int)$contract['organization_id'] : null,
             !empty($contract['created_by']) ? (int)$contract['created_by'] : null,

@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
+require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -75,6 +76,7 @@ $desc = $_POST['item_desc'] ?? [];
 $qty = $_POST['item_qty'] ?? [];
 $price = $_POST['item_price'] ?? [];
 $billingUnits = $_POST['item_billing_unit'] ?? [];
+$catalogIds = $_POST['item_library_id'] ?? [];
 $travelRule = mileage_rule_from_post($_POST, ['rate'=>(float)($appConfig['default_mileage_rate']??0.670),'included'=>(float)($appConfig['default_mileage_included_miles']??0)]);
 
 // Validate client_id
@@ -122,8 +124,8 @@ if ($is_long_term && $pricing_type === 'per_invoice') {
         if ($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
-        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit];
+        $unit = $billing_mode === 'hourly' ? 'hour' : catalog_document_unit((string)($billingUnits[$i] ?? 'each'));
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit, 'catalog_id' => max(0,(int)($catalogIds[$i]??0))];
     }
     // Fallback: if no valid line items were entered, use the flat amount if provided.
     if (!$items) {
@@ -141,8 +143,8 @@ if ($is_long_term && $pricing_type === 'per_invoice') {
         if ($itm === '' || $q <= 0 || $p < 0) continue;
         $line = $q * $p;
         $subtotal += $line;
-        $unit = (($billingUnits[$i] ?? 'each') === 'hour' || $billing_mode === 'hourly') ? 'hour' : 'each';
-        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit];
+        $unit = $billing_mode === 'hourly' ? 'hour' : catalog_document_unit((string)($billingUnits[$i] ?? 'each'));
+        $items[] = ['item' => $itm, 'description' => $d, 'quantity' => $q, 'unit_price' => $p, 'line_total' => $line, 'billing_unit' => $unit, 'catalog_id' => max(0,(int)($catalogIds[$i]??0))];
     }
     if (!$items) {
         header('Location: /?page=quote/quotes-create&error=Add%20at%20least%20one%20item');
@@ -199,9 +201,10 @@ try {
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {
-        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
         foreach ($items as $it) {
-            $qi->execute([$quote_id, $it['item'], $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? 'each']);
+            $catalog = catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);
+            $qi->execute([$quote_id,$catalog['item_library_id'],$it['item'],$it['description'],$it['quantity'],$it['unit_price'],$it['line_total'],$it['billing_unit']??'each',$catalog['catalog_snapshot']]);
         }
     }
     if($travelItem){

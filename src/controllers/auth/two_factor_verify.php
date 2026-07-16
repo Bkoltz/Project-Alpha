@@ -115,30 +115,12 @@ try {
     }
     
     if ($action === 'verify') {
-        $useBackup = !empty($_POST['use_backup']);
         $rememberDevice = !empty($_POST['remember_device']);
         $verified = false;
-        
-        if ($useBackup) {
-            // Verify backup code
-            $backupCodes = json_decode($twofa['backup_codes'] ?? '[]', true);
-            if (TwoFactorAuth::verifyBackupCode($code, $backupCodes)) {
-                // Remove used backup code
-                $hash = TwoFactorAuth::hashBackupCode($code);
-                $backupCodes = array_values(array_filter($backupCodes, fn($h) => $h !== $hash));
-                
-                $st = $pdo->prepare('UPDATE user_2fa SET backup_codes = ? WHERE user_id = ?');
-                $st->execute([json_encode($backupCodes), $userId]);
-                
-                $verified = true;
-                app_log('2fa', '2FA verified with backup code', ['user_id' => $userId, 'ip' => $ip]);
-            }
-        } else {
-            // Verify TOTP code
-            if (TwoFactorAuth::verifyCode($code, $twofa['secret'])) {
-                $verified = true;
-                app_log('2fa', '2FA verified', ['user_id' => $userId, 'ip' => $ip]);
-            }
+
+        if (TwoFactorAuth::verifyCode($code, $twofa['secret'])) {
+            $verified = true;
+            app_log('2fa', '2FA verified', ['user_id' => $userId, 'ip' => $ip]);
         }
         
         // Log attempt
@@ -149,6 +131,7 @@ try {
             // Complete login
             session_regenerate_id(true);
             $_SESSION['user'] = $_SESSION['2fa_pending']['user_data'];
+            $_SESSION['authn'] = ['method' => 'password_totp', 'authenticated_at' => time()];
             unset($_SESSION['2fa_pending']);
             password_reset_revoke_for_user($pdo, $userId);
             
@@ -173,8 +156,7 @@ try {
             header('Location: /');
             exit;
         } else {
-            $errorMsg = $useBackup ? 'Invalid backup code' : 'Invalid verification code';
-            header('Location: /?page=2fa-verify&error=' . urlencode($errorMsg));
+            header('Location: /?page=2fa-verify&error=' . urlencode('Invalid verification code'));
             exit;
         }
     }

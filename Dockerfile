@@ -68,7 +68,7 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get inst
 # PHP extensions. DOM is already enabled in the official php:* images;
 # PHP 8.5's bundled DOM depends on bundled Lexbor and should not be rebuilt here.
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" gd mbstring zip pdo_mysql mysqli curl \
+    && docker-php-ext-install -j"$(nproc)" gd mbstring zip pdo_mysql mysqli curl xmlwriter \
     && a2enmod rewrite
 
 # Create php ini file for error logging and future php customization
