@@ -314,10 +314,21 @@ document.getElementById('invoiceForm').addEventListener('submit', function (e) {
                 group.ids.push(cb.dataset.id);
                 group.descriptions.push(cb.dataset.detail || cb.dataset.desc || '');
             });
-            groups.forEach(function (group) {
+            for (const group of groups.values()) {
+                if (!(group.rate > 0)) {
+                    const enteredRate = window.prompt('Enter the hourly billing rate for this tracked time:');
+                    const parsedRate = Number(enteredRate);
+                    if (!(parsedRate > 0)) {
+                        window.alert('A positive hourly billing rate is required before tracked time can be invoiced.');
+                        return;
+                    }
+                    group.rate = parsedRate;
+                }
+            }
+            for (const group of groups.values()) {
                 const detail = group.descriptions.filter(Boolean).join('\n');
                 addItemInv(group.item, detail, group.hours.toFixed(2), group.rate.toFixed(2), group.ids, 'hour');
-            });
+            }
             modal.style.display = 'none';
             recalcInv();
         });

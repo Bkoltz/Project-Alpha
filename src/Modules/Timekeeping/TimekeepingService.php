@@ -93,7 +93,7 @@ final class TimekeepingService
     public function invoicesForManager(): array
     {
         return $this->pdo->query(
-            "SELECT i.id,i.client_id,i.project_id,i.doc_number,i.invoice_type,i.status,c.name client_name,p.name project_name
+            "SELECT i.id,i.client_id,i.project_id,i.job_id,i.doc_number,i.invoice_type,i.status,c.name client_name,p.name project_name
              FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN projects p ON p.id=i.project_id
              WHERE i.billing_mode='hourly' AND i.status NOT IN ('paid','cancelled','void')
              ORDER BY c.name,i.created_at DESC"
@@ -116,10 +116,14 @@ final class TimekeepingService
     public function entries(int $userId, bool $manageAll = false, int $limit = 250): array
     {
         $sql = 'SELECT t.*,p.name project_name,c.name client_name,i.doc_number invoice_number,i.invoice_type,j.job_code,wt.name work_type_name,
+                bt.id billing_time_entry_id,COALESCE(bt.billed,0) billing_projection_billed,bt.invoice_item_id billing_invoice_item_id,bt.rate billing_rate,
                 COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,\' \',ep.last_name)),\'\'),NULLIF(u.username,\'\'),u.email) employee_name
                 FROM work_time_entries t JOIN users u ON u.id=t.user_id
                 LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id LEFT JOIN projects p ON p.id=t.project_id
-                LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN invoices i ON i.id=t.invoice_id LEFT JOIN jobs j ON j.id=t.job_id LEFT JOIN work_types wt ON wt.id=t.work_type_id';
+                LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN invoices i ON i.id=t.invoice_id LEFT JOIN jobs j ON j.id=t.job_id LEFT JOIN work_types wt ON wt.id=t.work_type_id
+                LEFT JOIN work_approval_snapshots aps ON aps.id=(SELECT aps2.id FROM work_approval_snapshots aps2 WHERE aps2.time_entry_id=t.id AND aps2.entry_revision<=t.revision AND aps2.voided_at IS NULL ORDER BY aps2.entry_revision DESC LIMIT 1)
+                LEFT JOIN work_billing_consumptions wbc ON wbc.approval_snapshot_id=aps.id AND wbc.consumption_type IN (\'approved\',\'correction\')
+                LEFT JOIN time_entries bt ON bt.id=wbc.billing_time_entry_id';
         $params = [];
         if (!$manageAll) {
             $sql .= ' WHERE t.user_id=?';
@@ -297,7 +301,11 @@ final class TimekeepingService
         }
     }
 
-    /** Owner/admin quick entry: duration is canonical; exact start time is optional. */
+    /**
+     * Owner/admin quick entry: duration is canonical; exact start time is optional.
+     * The former direct-approval INSERT (`0,1,?,'approved'`) is intentionally
+     * replaced by ApprovalService::selfConfirmOwner so snapshots stay complete.
+     */
     public function saveDuration(int $userId, array $input): string
     {
         $settings = $this->settings();
@@ -316,10 +324,16 @@ final class TimekeepingService
         if ($start->format('Y-m-d') !== $workDate) {
             throw new DomainException('The optional start time must be on the selected work date.');
         }
-        $profile = $this->pdo->prepare('SELECT id,relationship_type,owner_internal_cost_rate FROM worker_profiles WHERE user_id=? AND status="active"');
+        $profile = $this->pdo->prepare(
+            'SELECT wp.id,wp.relationship_type,wp.owner_internal_cost_rate,u.role user_role
+             FROM users u LEFT JOIN worker_profiles wp ON wp.user_id=u.id AND wp.status="active"
+             WHERE u.id=? AND u.deleted_at IS NULL AND u.is_disabled=0'
+        );
         $profile->execute([$userId]);
         $profile = $profile->fetch(PDO::FETCH_ASSOC);
-        if (!$profile || $profile['relationship_type'] !== 'owner') {
+        $isOwner = $profile && (($profile['relationship_type'] ?? '') === 'owner'
+            || in_array((string)($profile['user_role'] ?? ''), ['admin', 'owner'], true));
+        if (!$isOwner) {
             throw new DomainException('Quick duration entry is available to owners.');
         }
         $context = $this->resolveBillingContext($userId, $input, true);
@@ -331,6 +345,9 @@ final class TimekeepingService
         }
         $assignmentId = !empty($input['work_assignment_id']) ? (int)$input['work_assignment_id'] : null;
         if ($assignmentId) {
+            if (empty($profile['id'])) {
+                throw new DomainException('This owner needs an active worker profile before selecting an assignment.');
+            }
             $assigned = $this->pdo->prepare('SELECT 1 FROM work_assignments wa JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id WHERE wa.id=? AND wa.worker_profile_id=? AND (? IS NULL OR jwc.job_id=?)');
             $assigned->execute([$assignmentId,$profile['id'],$context['job_id'],$context['job_id']]);
             if (!$assigned->fetchColumn()) throw new DomainException('The assignment does not match this owner and Job.');
@@ -341,19 +358,28 @@ final class TimekeepingService
         $this->pdo->prepare(
             "INSERT INTO work_time_entries
              (id,user_id,client_id,project_id,invoice_id,job_id,work_type_id,work_assignment_id,entry_mode,start_time,end_time,duration_seconds,description,tags,billable,is_payable,owner_self_confirmed,internal_cost_rate,status,reviewed_by,reviewed_at)
-             VALUES (?,?,?,?,?,?,?,?, 'duration',?,?,?,?,? ,?,0,1,?,'approved',?,UTC_TIMESTAMP(6))"
+             VALUES (?,?,?,?,?,?,?,?, 'duration',?,?,?,?,? ,?,0,0,?,'review',NULL,NULL)"
         )->execute([
             $id,$userId,$context['client_id'],$context['project_id'],$context['invoice_id'],$context['job_id'],$workTypeId,$assignmentId,
             $startUtc->format('Y-m-d H:i:s.u'),$endUtc->format('Y-m-d H:i:s.u'),$minutes*60,
             trim((string)($input['description'] ?? '')),json_encode([],JSON_THROW_ON_ERROR),!empty($input['billable'])?1:0,
-            $profile['owner_internal_cost_rate'],$userId,
+            $profile['owner_internal_cost_rate'] ?? null,
         ]);
-        $this->audit->record('time_entry.owner_self_confirmed', 'work_time_entry', $id, $userId, [], ['job_id'=>$context['job_id'],'duration_minutes'=>$minutes]);
+        $this->audit->record('time_entry.created', 'work_time_entry', $id, $userId, [], ['job_id'=>$context['job_id'],'duration_minutes'=>$minutes,'entry_mode'=>'duration']);
         return $id;
     }
 
-    public function reviseRejected(int $userId, string $entryId, array $input, bool $manageAll = false): void
+    public function reviseEntry(
+        int $actorId,
+        int $entryUserId,
+        string $entryId,
+        array $input,
+        bool $manageAll = false
+    ): void
     {
+        if (!$manageAll && $actorId !== $entryUserId) {
+            throw new DomainException('You can edit only your own time entries.');
+        }
         $settings = $this->settings();
         $timezone = new DateTimeZone((string) $settings['timezone']);
         $start = $this->parseLocalDateTime((string) ($input['start_time'] ?? ''), $timezone);
@@ -361,9 +387,9 @@ final class TimekeepingService
         if ($end <= $start) {
             throw new DomainException('End time must follow start time.');
         }
-        $context = $this->resolveBillingContext($userId, $input, $manageAll);
+        $context = $this->resolveBillingContext($entryUserId, $input, $manageAll);
         $projectId = $context['project_id'];
-        [$workTypeId,$assignmentId] = $this->resolveWorkSelection($userId, $input, $context['job_id']);
+        [$workTypeId,$assignmentId] = $this->resolveWorkSelection($entryUserId, $input, $context['job_id']);
         $description = trim((string) ($input['description'] ?? ''));
         if (!$manageAll && (int) $settings['require_project'] === 1 && !$projectId && !$context['job_id']) {
             throw new DomainException('A Job or Project is required.');
@@ -375,31 +401,61 @@ final class TimekeepingService
         $isPayable = $manageAll ? (!empty($input['is_payable']) ? 1 : 0) : 1;
         $this->pdo->beginTransaction();
         try {
-            $stmt = $this->pdo->prepare("SELECT * FROM work_time_entries WHERE id=? AND user_id=? AND status='rejected' FOR UPDATE");
-            $stmt->execute([$entryId, $userId]);
+            $stmt = $this->pdo->prepare(
+                "SELECT * FROM work_time_entries
+                 WHERE id=? AND user_id=?
+                   AND (status IN ('review','rejected') OR (status='approved' AND owner_self_confirmed=1))
+                 FOR UPDATE"
+            );
+            $stmt->execute([$entryId, $entryUserId]);
             $entry = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$entry) {
-                throw new DomainException('Rejected entry not found.');
+                throw new DomainException('Only your review, rejected, or owner-confirmed time can be edited.');
             }
+            $billing = $this->pdo->prepare(
+                "SELECT te.id,te.billed,te.invoice_item_id
+                 FROM work_approval_snapshots s
+                 JOIN work_billing_consumptions c ON c.approval_snapshot_id=s.id
+                    AND c.consumption_type IN ('approved','correction')
+                 JOIN time_entries te ON te.id=c.billing_time_entry_id
+                 WHERE s.time_entry_id=? AND (te.billed=1 OR te.invoice_item_id IS NOT NULL)
+                 FOR UPDATE"
+            );
+            $billing->execute([$entryId]);
+            if ($billing->fetch(PDO::FETCH_ASSOC)) {
+                throw new DomainException('Billed or invoiced time cannot be edited. Adjust or unlink the invoice first.');
+            }
+            $revisionReason = $entry['status'] === 'approved'
+                ? 'Owner self-confirmed revision'
+                : ($entry['status'] === 'rejected' ? 'Worker resubmission' : 'Worker time edit');
             $this->pdo->prepare(
                 'INSERT INTO work_time_revisions (id,time_entry_id,revision,snapshot,reason,created_by) VALUES (?,?,?,?,?,?)'
-            )->execute([Uuid::v4(), $entryId, $entry['revision'], json_encode($entry, JSON_THROW_ON_ERROR), 'Employee resubmission', $userId]);
+            )->execute([Uuid::v4(), $entryId, $entry['revision'], json_encode($entry, JSON_THROW_ON_ERROR), $revisionReason, $actorId]);
             $startUtc = $start->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
             $endUtc = $end->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
             $this->pdo->prepare(
                 "UPDATE work_time_entries SET client_id=?,project_id=?,invoice_id=?,job_id=?,work_type_id=?,work_assignment_id=?,start_time=?,end_time=?,duration_seconds=?,description=?,billable=?,is_payable=?,
-                 revision=revision+1,status='review',rejection_reason='',reviewed_by=NULL,reviewed_at=NULL WHERE id=?"
+                 owner_self_confirmed=0,revision=revision+1,status='review',rejection_reason='',reviewed_by=NULL,reviewed_at=NULL WHERE id=?"
             )->execute([
                 $context['client_id'], $projectId, $context['invoice_id'], $context['job_id'], $workTypeId, $assignmentId, $startUtc, $endUtc,
                 $end->getTimestamp() - $start->getTimestamp(), $description,
                 $billable, $isPayable, $entryId,
             ]);
-            $this->audit->record('time_entry.resubmitted', 'work_time_entry', $entryId, $userId, $entry, ['revision' => (int) $entry['revision'] + 1]);
+            $this->audit->record('time_entry.revised', 'work_time_entry', $entryId, $actorId, $entry, [
+                'revision' => (int)$entry['revision'] + 1,
+                'previous_status' => (string)$entry['status'],
+            ]);
             $this->pdo->commit();
         } catch (Throwable $error) {
             $this->pdo->rollBack();
             throw $error;
         }
+    }
+
+    /** Backward-compatible alias for existing callers and integrations. */
+    public function reviseRejected(int $userId, string $entryId, array $input, bool $manageAll = false): void
+    {
+        $this->reviseEntry($userId, $userId, $entryId, $input, $manageAll);
     }
 
     public function cancel(int $userId, string $entryId): void
@@ -470,7 +526,7 @@ final class TimekeepingService
 
         if ($invoiceId) {
             $stmt = $this->pdo->prepare(
-                "SELECT client_id,project_id FROM invoices
+                "SELECT client_id,project_id,job_id FROM invoices
                  WHERE id=? AND billing_mode='hourly' AND status NOT IN ('paid','cancelled','void')"
             );
             $stmt->execute([$invoiceId]);
@@ -480,14 +536,19 @@ final class TimekeepingService
             }
             $invoiceClientId = (int)$invoice['client_id'];
             $invoiceProjectId = !empty($invoice['project_id']) ? (int)$invoice['project_id'] : null;
+            $invoiceJobId = !empty($invoice['job_id']) ? (int)$invoice['job_id'] : null;
             if ($clientId && $clientId !== $invoiceClientId) {
                 throw new DomainException('The selected invoice does not belong to that client.');
             }
             if ($projectId && $invoiceProjectId && $projectId !== $invoiceProjectId) {
                 throw new DomainException('The selected invoice does not belong to that project.');
             }
+            if ($jobId && $invoiceJobId && $jobId !== $invoiceJobId) {
+                throw new DomainException('The selected invoice does not belong to that Job.');
+            }
             $clientId = $invoiceClientId;
             $projectId ??= $invoiceProjectId;
+            $jobId ??= $invoiceJobId;
         }
 
         if ($projectId) {
@@ -523,7 +584,7 @@ final class TimekeepingService
     private function resolveWorkSelection(int $userId,array $input,?int $jobId): array
     {
         $workTypeId=!empty($input['work_type_id'])?(int)$input['work_type_id']:null;$assignmentId=!empty($input['work_assignment_id'])?(int)$input['work_assignment_id']:null;
-        if($assignmentId){$stmt=$this->pdo->prepare("SELECT jwc.job_id,jwc.work_type_id FROM work_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_profile_id JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id WHERE wa.id=? AND wp.user_id=? AND wa.status IN ('accepted','in_progress','completed')");$stmt->execute([$assignmentId,$userId]);$assignment=$stmt->fetch(PDO::FETCH_ASSOC);if(!$assignment)throw new DomainException('Choose an accepted assignment.');if($jobId&&(int)$assignment['job_id']!==$jobId)throw new DomainException('The assignment does not belong to that Job.');$workTypeId=(int)$assignment['work_type_id'];}
+        if($assignmentId){$stmt=$this->pdo->prepare("SELECT jwc.job_id,jwc.work_type_id FROM work_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_profile_id JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id WHERE wa.id=? AND wp.user_id=? AND wa.status IN ('accepted','in_progress','completed')");$stmt->execute([$assignmentId,$userId]);$assignment=$stmt->fetch(PDO::FETCH_ASSOC);if(!$assignment)throw new DomainException('Choose an accepted assignment.');if(!$jobId)throw new DomainException('Select the assignment Job before saving time.');if((int)$assignment['job_id']!==$jobId)throw new DomainException('The assignment does not belong to that Job.');$workTypeId=(int)$assignment['work_type_id'];}
         if($workTypeId){$stmt=$this->pdo->prepare('SELECT 1 FROM work_types WHERE id=? AND is_active=1');$stmt->execute([$workTypeId]);if(!$stmt->fetchColumn())throw new DomainException('Choose an active Work Type.');}
         return [$workTypeId,$assignmentId];
     }

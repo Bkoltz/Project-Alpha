@@ -229,7 +229,9 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('Entries are stored in UTC', $view);
         self::assertStringContainsString('Manual entry', $view);
         self::assertStringContainsString('Clock in', $view);
-        self::assertStringContainsString('Submit for review', $view);
+        self::assertStringContainsString('Save time entry', $view);
+        self::assertStringContainsString('Add to invoice', $view);
+        self::assertStringContainsString('Type to search clients', $view);
         self::assertStringContainsString('name="client_id"', $view);
         self::assertStringContainsString('name="invoice_id"', $view);
         self::assertStringContainsString('Assigned project', $view);
@@ -239,6 +241,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('public function saveManual', $service);
         self::assertStringContainsString('FOR UPDATE', $service);
         self::assertStringContainsString('Client and invoice details are available only to timekeeping managers.', $service);
+        self::assertStringContainsString('public function reviseEntry', $service);
         self::assertStringContainsString('work_timer_locks', $migration);
         self::assertStringContainsString('work_time_breaks', $migration);
     }

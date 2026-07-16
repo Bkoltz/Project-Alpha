@@ -67,6 +67,34 @@ final class PasskeyAndTotpTest extends TestCase
         self::assertStringContainsString("setAllowedOrigins([\$this->origin]", $source);
     }
 
+    public function testApplicationDomainFallbackDerivesTheBrowserFacingOrigin(): void
+    {
+        $pdo = new PDO('sqlite::memory:');
+
+        $bareDomain = new PasskeyService($pdo, ['app_host' => 'pa.example.test']);
+        $proxiedPath = new PasskeyService($pdo, ['app_host' => 'https://pa.example.test/project-alpha']);
+        $localDevelopment = new PasskeyService($pdo, ['app_host' => 'localhost:1627']);
+        $secureLocalDevelopment = new PasskeyService($pdo, ['app_host' => 'https://localhost:1627']);
+
+        $origin = new ReflectionProperty(PasskeyService::class, 'origin');
+        self::assertSame('https://pa.example.test', $origin->getValue($bareDomain));
+        self::assertSame('https://pa.example.test', $origin->getValue($proxiedPath));
+        self::assertSame('http://localhost:1627', $origin->getValue($localDevelopment));
+        self::assertSame('https://localhost:1627', $origin->getValue($secureLocalDevelopment));
+    }
+
+    public function testExplicitWebauthnOriginRemainsStrict(): void
+    {
+        putenv('WEBAUTHN_ORIGIN=https://pa.example.test/project-alpha');
+
+        try {
+            new PasskeyService(new PDO('sqlite::memory:'), ['app_host' => 'pa.example.test']);
+            self::fail('An explicit WebAuthn origin with a path must fail closed.');
+        } catch (PasskeyException $e) {
+            self::assertSame('passkey_origin_invalid', $e->errorCode);
+        }
+    }
+
     public function testPasskeySchemaAndCeremonyGuardrailsArePresent(): void
     {
         $migration = $this->read('database/migrations/0046_passkeys_and_totp_recovery.sql');

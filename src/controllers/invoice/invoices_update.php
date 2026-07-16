@@ -10,6 +10,9 @@ require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../../services/WorkTimeBillingContextService.php';
+
+use App\Services\WorkTimeBillingContextService;
 $id = (int)($_POST['id'] ?? 0);
 require_record_ownership($pdo, 'invoices', $id);
 $statusStmt = $pdo->prepare('SELECT * FROM invoices WHERE id=?');
@@ -174,6 +177,11 @@ try {
     WHERE te.invoice_id = ? OR ii.invoice_id = ?
   ');
   $syncTimeEntries->execute([$client_id, $id, $id, $id]);
+
+  (new WorkTimeBillingContextService($pdo))->synchronizeInvoice(
+    $id,
+    (int)($_SESSION['user']['id'] ?? 0)
+  );
 
   if (!empty($invoiceState['finalized_at']) || invoice_effective_paid_total($pdo,$id)>0.005) {
     invoice_refresh_payment_totals($pdo, $id, false);

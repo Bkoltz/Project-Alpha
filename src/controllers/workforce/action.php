@@ -10,10 +10,15 @@ use App\Modules\Timekeeping\WorkforceSettings;
 use App\Services\CompensationRuleService;
 use App\Services\JobWorkPlanningService;
 use App\Services\PayPeriodService;
+use App\Services\WorkTimeInvoiceLinkService;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../../services/DocumentPolicy.php';
+require_once __DIR__ . '/../../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../../services/WorkTimeInvoiceLinkService.php';
 
 $userId = (int) ($_SESSION['user']['id'] ?? 0);
 if ($userId <= 0 || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -57,6 +62,31 @@ function workforce_require_any(PDO $pdo, int $userId, array $permissions): void
 }
 
 try {
+    if ($action === 'link-invoice') {
+        $manageAll = WorkforceSettings::canManageAllTime($pdo, $userId);
+        if (!$manageAll || !user_can($pdo, $userId, 'invoices.edit', 0)) {
+            http_response_code(403);
+            exit('Permission denied.');
+        }
+        $entryId = trim((string)($_POST['entry_id'] ?? ''));
+        $entryUserId = (int)($_POST['entry_user_id'] ?? $userId);
+        $invoiceId = (int)($_POST['invoice_id'] ?? 0);
+        if ($invoiceId <= 0) {
+            throw new DomainException('Choose an invoice.');
+        }
+        require_record_ownership($pdo, 'invoices', $invoiceId);
+        if ($entryUserId === $userId && $approval->canSelfConfirmOwner($userId)) {
+            $approval->ensureOwnerProjection($userId, $entryId);
+        }
+        (new WorkTimeInvoiceLinkService($pdo))->link(
+            $userId,
+            $entryId,
+            $invoiceId,
+            isset($_POST['billing_rate']) ? (string)$_POST['billing_rate'] : null,
+            $manageAll
+        );
+        workforce_redirect('/?page=workforce/time' . ($manageAll ? '&user=' . $entryUserId : ''), 'success', 'Time was added to the invoice.');
+    }
     if(in_array($action,['assignment-accept','assignment-decline','assignment-start','assignment-complete'],true)){
         $worker=$pdo->prepare("SELECT id FROM worker_profiles WHERE user_id=? AND status='active'");$worker->execute([$userId]);$workerId=(int)$worker->fetchColumn();if($workerId<=0)throw new DomainException('This account is not linked to an active worker profile.');
         $planning=new JobWorkPlanningService($pdo,new CompensationRuleService($pdo));$assignmentId=(int)($_POST['assignment_id']??0);
@@ -66,7 +96,7 @@ try {
         else $planning->complete($assignmentId,$workerId);
         workforce_redirect('/?page=workforce/time','success','Assignment updated.');
     }
-    if (in_array($action, ['clock-in','clock-out','break-start','break-end','manual-create','quick-duration','resubmit','cancel'], true)) {
+    if (in_array($action, ['clock-in','clock-out','break-start','break-end','manual-create','quick-duration','resubmit','cancel'], true) || $action === 'edit') {
         $manageAll = WorkforceSettings::canManageAllTime($pdo, $userId);
         if (!$manageAll && !user_can($pdo, $userId, 'timekeeping.self', 0)) {
             http_response_code(403);
@@ -81,25 +111,33 @@ try {
                 throw new DomainException('Choose an active PA account for this time entry.');
             }
         }
+        $entryToSelfConfirm = null;
         if ($action === 'clock-in') {
             $time->clockIn($entryUserId, $_POST, $manageAll);
         } elseif ($action === 'clock-out') {
-            $time->clockOut($entryUserId, (string) ($_POST['entry_id'] ?? ''));
+            $entryToSelfConfirm = (string)($_POST['entry_id'] ?? '');
+            $time->clockOut($entryUserId, $entryToSelfConfirm);
         } elseif ($action === 'break-start') {
             $time->startBreak($entryUserId, (string) ($_POST['entry_id'] ?? ''));
         } elseif ($action === 'break-end') {
             $time->endBreak($entryUserId, (string) ($_POST['break_id'] ?? ''));
         } elseif ($action === 'manual-create') {
-            $time->saveManual($entryUserId, $_POST, $manageAll);
+            $entryToSelfConfirm = $time->saveManual($entryUserId, $_POST, $manageAll);
         } elseif ($action === 'quick-duration') {
             if (!$manageAll) {
                 throw new DomainException('Quick duration entry is limited to owners and timekeeping managers.');
             }
-            $time->saveDuration($entryUserId, $_POST);
-        } elseif ($action === 'resubmit') {
-            $time->reviseRejected($entryUserId, (string) ($_POST['entry_id'] ?? ''), $_POST, $manageAll);
+            $entryToSelfConfirm = $time->saveDuration($entryUserId, $_POST);
+        } elseif (in_array($action, ['resubmit', 'edit'], true)) {
+            $entryToSelfConfirm = (string)($_POST['entry_id'] ?? '');
+            $time->reviseEntry($userId, $entryUserId, $entryToSelfConfirm, $_POST, $manageAll);
         } else {
             $time->cancel($entryUserId, (string) ($_POST['entry_id'] ?? ''));
+        }
+        if ($entryToSelfConfirm !== ''
+            && $entryUserId === $userId
+            && $approval->canSelfConfirmOwner($userId)) {
+            $approval->selfConfirmOwner($userId, $entryToSelfConfirm);
         }
         $returnPath = '/?page=workforce/time' . ($manageAll ? '&user=' . $entryUserId : '');
         workforce_redirect($returnPath, 'success', 'Time entry updated.');
