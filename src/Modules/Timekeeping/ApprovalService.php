@@ -6,6 +6,10 @@ namespace App\Modules\Timekeeping;
 
 use App\Services\CompensationRuleService;
 use App\Services\JobWorkPlanningService;
+use App\Services\TimeApprovalPolicy;
+use App\Services\TimeBillingAllocationService;
+use App\Services\TimeSubmissionService;
+use App\Services\WorkerEarningService;
 use DateTimeImmutable;
 use DateTimeZone;
 use DomainException;
@@ -14,14 +18,20 @@ use Throwable;
 
 final class ApprovalService
 {
+    private readonly TimeApprovalPolicy $policy;
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly AuditRecorder $audit,
-        private readonly ApprovedTimeConsumer $billing
-    ) {}
+        private readonly ApprovedTimeConsumer $billing,
+        ?TimeApprovalPolicy $policy = null
+    ) {
+        $this->policy = $policy ?? new TimeApprovalPolicy($pdo);
+    }
 
     public function approve(int $approverId, string $entryId): string
     {
+        $this->policy->assertCanReviewEntry($approverId, $entryId, 'approve');
         return $this->finalize($approverId, $entryId, false);
     }
 
@@ -44,7 +54,7 @@ final class ApprovalService
     public function canSelfConfirmOwner(int $userId): bool
     {
         $stmt = $this->pdo->prepare(
-            "SELECT u.role,wp.relationship_type
+            "SELECT u.role,wp.relationship_type,COALESCE(wp.relationship_review_required,0) relationship_review_required
              FROM users u
              LEFT JOIN worker_profiles wp ON wp.user_id=u.id AND wp.status='active'
              WHERE u.id=? AND u.deleted_at IS NULL AND u.is_disabled=0
@@ -54,8 +64,52 @@ final class ApprovalService
         $identity = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return is_array($identity)
-            && (($identity['relationship_type'] ?? '') === 'owner'
-                || in_array((string)($identity['role'] ?? ''), ['admin', 'owner'], true));
+            && ($identity['relationship_type'] ?? '') === 'owner'
+            && empty($identity['relationship_review_required']);
+    }
+
+    /**
+     * Keep an owner entry editable if snapshot materialization fails after the
+     * capture service committed it. Owner entries are excluded from ordinary
+     * self-review, so leaving one in review would make it unreachable.
+     */
+    public function returnOwnerForRepair(int $ownerId, string $entryId): void
+    {
+        if (!$this->canSelfConfirmOwner($ownerId)) {
+            throw new DomainException('Only an owner can recover owner time confirmation.');
+        }
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare(
+                "SELECT * FROM work_time_entries WHERE id=? AND user_id=? AND status='review' FOR UPDATE"
+            );
+            $stmt->execute([$entryId, $ownerId]);
+            $entry = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$entry) {
+                throw new DomainException('Owner time is no longer awaiting confirmation.');
+            }
+            $reason = 'Owner confirmation could not be completed. Review the entry and resubmit it.';
+            $this->pdo->prepare(
+                "UPDATE work_time_entries
+                 SET status='rejected',workflow_status='returned',owner_self_confirmed=0,
+                     rejection_reason=?,reviewed_by=NULL,reviewed_at=NULL
+                 WHERE id=?"
+            )->execute([$reason, $entryId]);
+            $this->audit->record(
+                'time_entry.owner_confirmation_deferred',
+                'work_time_entry',
+                $entryId,
+                $ownerId,
+                $entry,
+                ['status' => 'rejected', 'recoverable' => true]
+            );
+            $this->pdo->commit();
+        } catch (Throwable $error) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $error;
+        }
     }
 
     private function finalize(
@@ -70,7 +124,8 @@ final class ApprovalService
         try {
             $stmt = $this->pdo->prepare(
                 "SELECT t.*,u.email,u.username,u.role user_role,ep.first_name,ep.last_name,ep.hourly_rate employee_rate,
-                        wp.id worker_profile_id,wp.relationship_type,
+                        wp.id worker_profile_id,wp.relationship_type,wp.compensation_policy,
+                        COALESCE(wp.relationship_review_required,0) relationship_review_required,
                         jwc.catalog_work_component_id,
                         pa.pay_rate_override,p.name project_name,c.name client_name,
                         i.doc_number invoice_number,i.invoice_type
@@ -88,7 +143,9 @@ final class ApprovalService
             $stmt->execute([$entryId]);
             $entry = $stmt->fetch(PDO::FETCH_ASSOC);
             $readyStatus = $entry && (
-                $entry['status'] === 'review'
+                ($entry['status'] === 'review'
+                    && (($ownerSelfConfirmation && in_array((string)($entry['workflow_status'] ?? ''), ['draft','returned'], true))
+                        || (!$ownerSelfConfirmation && (string)($entry['workflow_status'] ?? '') === 'submitted')))
                 || ($ownerSelfConfirmation && $allowLegacyApproved
                     && $entry['status'] === 'approved' && !empty($entry['owner_self_confirmed']))
             );
@@ -100,7 +157,7 @@ final class ApprovalService
             }
             if ($ownerSelfConfirmation) {
                 $isOwner = ($entry['relationship_type'] ?? '') === 'owner'
-                    || in_array((string)($entry['user_role'] ?? ''), ['admin', 'owner'], true);
+                    && empty($entry['relationship_review_required']);
                 if ((int)$entry['user_id'] !== $approverId || !$isOwner) {
                     throw new DomainException('Only an owner can self-confirm their own time entry.');
                 }
@@ -111,7 +168,14 @@ final class ApprovalService
             if ((int) $entry['revision'] > 1 && $this->hasPaidAccrual($entryId)) {
                 throw new DomainException('Paid time cannot be replaced by a correction. Return the pay accrual to pending first.');
             }
-            $effectivePayable=!$ownerSelfConfirmation&&(int)$entry['is_payable']===1&&($entry['relationship_type']??'')!=='owner'&&empty($entry['work_assignment_id']);
+            $payPolicyReady = !empty($entry['worker_profile_id'])
+                && empty($entry['relationship_review_required'])
+                && (string)($entry['compensation_policy'] ?? '') === 'rules';
+            $effectivePayable = !$ownerSelfConfirmation
+                && (int)$entry['is_payable'] === 1
+                && ($entry['relationship_type'] ?? '') !== 'owner'
+                && empty($entry['work_assignment_id'])
+                && $payPolicyReady;
             $payRate = $entry['pay_rate_override'] ?? $entry['employee_rate'] ?? $entry['default_hourly_rate'];
             $catalogPay=null;
             if($effectivePayable&&!empty($entry['worker_profile_id'])&&!empty($entry['work_type_id'])){
@@ -121,16 +185,13 @@ final class ApprovalService
                 elseif($rule['method']==='percentage')throw new DomainException('Percentage compensation must be linked to a catalog assignment with an eligible client-price basis.');
                 else{$catalogPay=$rules->calculate($rule,['duration_seconds'=>(int)$entry['duration_seconds'],'quantity'=>1]);$payRate=$rule['amount'];}
             }
-            if ($effectivePayable && $payRate === null) {
-                throw new DomainException('A project, employee, or business pay rate is required.');
-            }
             $billingRate = $this->billingRate($entry);
             $snapshotId = Uuid::v4();
             $employeeName = trim((string) $entry['first_name'] . ' ' . (string) $entry['last_name']);
             if ($employeeName === '') {
                 $employeeName = (string) ($entry['username'] ?: $entry['email']);
             }
-            $payAmount = $effectivePayable
+            $payAmount = $effectivePayable && $payRate !== null
                 ? ($catalogPay['amount']??DecimalMoney::payAmount((int) $entry['duration_seconds'], (string) $payRate))
                 : null;
             $snapshot = [
@@ -164,11 +225,30 @@ final class ApprovalService
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
             );
             $insert->execute(array_values($snapshot));
+            $billingState = (int)$entry['billable'] === 1
+                ? ($billingRate !== null && (float)$billingRate > 0 ? 'ready' : 'rate_needed')
+                : (in_array((string)($entry['billing_state'] ?? ''), ['internal','fixed_price_included','decide_later'], true)
+                    ? (string)$entry['billing_state'] : 'decide_later');
+            $compensationState = match (true) {
+                $ownerSelfConfirmation || ($entry['relationship_type'] ?? '') === 'owner' => 'owner_no_pay',
+                (string)($entry['compensation_policy'] ?? '') === 'nonpayable' => 'nonpayable',
+                !empty($entry['work_assignment_id']) => 'provisional',
+                $effectivePayable => $payAmount === null ? 'needs_setup' : 'eligible',
+                $payPolicyReady => 'nonpayable',
+                default => 'needs_setup',
+            };
             $this->pdo->prepare(
                 "UPDATE work_time_entries
-                 SET status='approved',owner_self_confirmed=?,rejection_reason='',reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6)
+                 SET status='approved',workflow_status='confirmed',billing_state=?,compensation_state=?,
+                     owner_self_confirmed=?,rejection_reason='',reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6)
                  WHERE id=?"
-            )->execute([$ownerSelfConfirmation ? 1 : (int)$entry['owner_self_confirmed'], $approverId, $entryId]);
+            )->execute([
+                $billingState,
+                $compensationState,
+                $ownerSelfConfirmation ? 1 : (int)$entry['owner_self_confirmed'],
+                $approverId,
+                $entryId,
+            ]);
             if ((int) $entry['revision'] > 1) {
                 $this->pdo->prepare(
                     "UPDATE work_pay_accruals a
@@ -177,7 +257,7 @@ final class ApprovalService
                      WHERE s.time_entry_id=? AND s.entry_revision<? AND a.status='pending'"
                 )->execute([$entryId, $entry['revision']]);
             }
-            if ($effectivePayable) {
+            if ($effectivePayable && $payAmount !== null) {
                 $hours = number_format(((int) $entry['duration_seconds']) / 3600, 4, '.', '');
                 $this->pdo->prepare(
                     "INSERT INTO work_pay_accruals
@@ -185,6 +265,51 @@ final class ApprovalService
                      VALUES (?,?,?,?,?,?,?,?,'pending')"
                 )->execute([Uuid::v4(), $snapshotId, $entry['user_id'], $employeeName, $hours, $payRate, $payAmount, $entry['currency']]);
             }
+            if ($effectivePayable) {
+                $hours = number_format(((int)$entry['duration_seconds']) / 3600, 4, '.', '');
+                (new WorkerEarningService($this->pdo))->record(
+                    'time_entry',
+                    $entryId,
+                    (int)$entry['revision'],
+                    (int)$entry['worker_profile_id'],
+                    'hourly',
+                    $hours,
+                    $payRate !== null ? (string)$payRate : null,
+                    $payAmount !== null ? (string)$payAmount : null,
+                    (string)$entry['currency'],
+                    [
+                        'approval_snapshot_id' => $snapshotId,
+                        'time_entry_revision' => (int)$entry['revision'],
+                        'duration_seconds' => (int)$entry['duration_seconds'],
+                        'rate_source' => $catalogPay !== null ? 'compensation_rule' : 'worker_or_business_default',
+                    ],
+                    $approverId,
+                    $payAmount === null ? 'needs_setup' : 'eligible',
+                    $entryId
+                );
+            }
+            $billingTreatment = match (true) {
+                (int)$entry['billable'] === 1 => 'hourly',
+                (string)($entry['billing_state'] ?? '') === 'fixed_price_included' => 'fixed_price_included',
+                (string)($entry['billing_state'] ?? '') === 'internal' => 'internal',
+                default => 'undecided',
+            };
+            (new TimeBillingAllocationService($this->pdo))->allocate(
+                $entryId,
+                (int)$entry['revision'],
+                $billingTreatment,
+                (int)$entry['duration_seconds'],
+                $billingTreatment === 'hourly' && $billingRate !== null ? (string)$billingRate : null,
+                (string)$entry['currency'],
+                $approverId,
+                [
+                    'client_id' => $entry['client_id'],
+                    'project_id' => $entry['project_id'],
+                    'job_id' => $entry['job_id'],
+                    'invoice_id' => $entry['invoice_id'],
+                ],
+                'approval:' . $snapshotId
+            );
             $this->billing->consume($snapshot);
             if(!$ownerSelfConfirmation&&!empty($entry['work_assignment_id'])){
                 $pending=$this->pdo->prepare("SELECT COUNT(*) FROM work_time_entries WHERE work_assignment_id=? AND id<>? AND status NOT IN ('approved','cancelled','voided')");$pending->execute([$entry['work_assignment_id'],$entryId]);
@@ -199,6 +324,15 @@ final class ApprovalService
                 $snapshot,
                 $snapshotId
             );
+            if (!empty($entry['current_submission_id'])) {
+                (new TimeSubmissionService($this->pdo))->recordDecision(
+                    (string)$entry['current_submission_id'],
+                    $entryId,
+                    (int)$entry['revision'],
+                    'confirmed',
+                    $approverId
+                );
+            }
             $this->pdo->commit();
             return $snapshotId;
         } catch (Throwable $error) {
@@ -209,18 +343,35 @@ final class ApprovalService
 
     public function reject(int $approverId, string $entryId, string $reason): void
     {
+        $this->policy->assertCanReviewEntry($approverId, $entryId, 'reject');
         if (trim($reason) === '') {
             throw new DomainException('A rejection reason is required.');
         }
         $this->pdo->beginTransaction();
         try {
-            $stmt = $this->pdo->prepare(
-                "UPDATE work_time_entries SET status='rejected',rejection_reason=?,reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6)
-                 WHERE id=? AND status='review'"
+            $entryStmt = $this->pdo->prepare(
+                "SELECT * FROM work_time_entries
+                 WHERE id=? AND status='review' AND workflow_status='submitted' FOR UPDATE"
             );
-            $stmt->execute([trim($reason), $approverId, $entryId]);
-            if ($stmt->rowCount() !== 1) {
+            $entryStmt->execute([$entryId]);
+            $entry = $entryStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$entry) {
                 throw new DomainException('Entry is not awaiting review.');
+            }
+            $this->pdo->prepare(
+                "UPDATE work_time_entries
+                 SET status='rejected',workflow_status='returned',rejection_reason=?,reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6)
+                 WHERE id=?"
+            )->execute([trim($reason), $approverId, $entryId]);
+            if (!empty($entry['current_submission_id'])) {
+                (new TimeSubmissionService($this->pdo))->recordDecision(
+                    (string)$entry['current_submission_id'],
+                    $entryId,
+                    (int)$entry['revision'],
+                    'returned',
+                    $approverId,
+                    trim($reason)
+                );
             }
             $this->audit->record('time_entry.rejected', 'work_time_entry', $entryId, $approverId, [], ['reason' => trim($reason)]);
             $this->pdo->commit();
@@ -232,6 +383,7 @@ final class ApprovalService
 
     public function correct(int $approverId, string $entryId, array $input): void
     {
+        $this->policy->assertCanReviewEntry($approverId, $entryId, 'correct');
         $reason = trim((string) ($input['reason'] ?? ''));
         if ($reason === '') {
             throw new DomainException('A correction reason is required.');
@@ -257,6 +409,22 @@ final class ApprovalService
             if ($this->billingProjectionIsInvoiced($entryId, (int) $entry['revision'])) {
                 throw new DomainException('Invoiced time cannot be corrected. Reverse or adjust the invoice first.');
             }
+            $earningStmt = $this->pdo->prepare(
+                'SELECT id,status FROM worker_earnings WHERE work_time_entry_id=? AND source_revision=? FOR UPDATE'
+            );
+            $earningStmt->execute([$entryId, (int)$entry['revision']]);
+            $earning = $earningStmt->fetch(PDO::FETCH_ASSOC);
+            if ($earning && in_array((string)$earning['status'], ['included','settled'], true)) {
+                throw new DomainException('Time included on a worker statement cannot be edited. Create a reviewed pay adjustment instead.');
+            }
+            if ($earning && in_array((string)$earning['status'], ['provisional','needs_setup','eligible','approved'], true)) {
+                (new WorkerEarningService($this->pdo))->transition(
+                    (string)$earning['id'],
+                    'voided',
+                    $approverId,
+                    'Time entry corrected: ' . $reason
+                );
+            }
             $projectId = !empty($input['project_id']) ? (int) $input['project_id'] : null;
             if ($projectId) {
                 $assigned = $this->pdo->prepare(
@@ -278,10 +446,16 @@ final class ApprovalService
             $endUtc = $end->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
             $this->pdo->prepare(
                 "UPDATE work_time_entries SET project_id=?,start_time=?,end_time=?,duration_seconds=?,description=?,billable=?,is_payable=?,
-                 revision=revision+1,status='review',reviewed_by=NULL,reviewed_at=NULL,rejection_reason='' WHERE id=?"
+                 revision=revision+1,status='review',workflow_status='draft',
+                 billing_state=?,compensation_state=?,current_submission_id=NULL,submitted_at=NULL,
+                 reviewed_by=NULL,reviewed_at=NULL,rejection_reason='' WHERE id=?"
             )->execute([
                 $projectId, $startUtc, $endUtc, $duration, trim((string) ($input['description'] ?? $entry['description'])),
-                !empty($input['billable']) ? 1 : 0, !empty($input['is_payable']) ? 1 : 0, $entryId,
+                !empty($input['billable']) ? 1 : 0,
+                !empty($input['is_payable']) ? 1 : 0,
+                !empty($input['billable']) ? 'ready' : 'internal',
+                !empty($input['is_payable']) ? 'provisional' : (($entry['compensation_state'] ?? '') === 'owner_no_pay' ? 'owner_no_pay' : 'nonpayable'),
+                $entryId,
             ]);
             $this->audit->record('time_entry.correction_requested', 'work_time_entry', $entryId, $approverId, $entry, ['reason' => $reason, 'revision' => (int) $entry['revision'] + 1], $revisionId);
             $this->pdo->commit();
@@ -293,6 +467,7 @@ final class ApprovalService
 
     public function void(int $approverId, string $entryId, string $reason): void
     {
+        $this->policy->assertCanReviewEntry($approverId, $entryId, 'void');
         if (trim($reason) === '') {
             throw new DomainException('A void reason is required.');
         }
@@ -322,11 +497,35 @@ final class ApprovalService
             if ($payStatus->fetchColumn() === 'paid') {
                 throw new DomainException('Paid time cannot be voided. Return the pay accrual to pending first.');
             }
+            $earningStmt = $this->pdo->prepare(
+                'SELECT id,status FROM worker_earnings
+                 WHERE work_time_entry_id=? AND source_revision<=?
+                 ORDER BY source_revision DESC LIMIT 1 FOR UPDATE'
+            );
+            $earningStmt->execute([$entryId, (int)$entry['revision']]);
+            $earning = $earningStmt->fetch(PDO::FETCH_ASSOC);
+            if ($earning && in_array((string)$earning['status'], ['included','settled'], true)) {
+                throw new DomainException('Time included on a worker statement cannot be voided. Create a reviewed pay adjustment instead.');
+            }
+            if ($earning && in_array((string)$earning['status'], ['provisional','needs_setup','eligible','approved'], true)) {
+                (new WorkerEarningService($this->pdo))->transition(
+                    (string)$earning['id'],
+                    'voided',
+                    $approverId,
+                    trim($reason)
+                );
+            }
             $revisionId = Uuid::v4();
             $this->pdo->prepare(
                 'INSERT INTO work_time_revisions (id,time_entry_id,revision,snapshot,reason,created_by) VALUES (?,?,?,?,?,?)'
             )->execute([$revisionId, $entryId, $entry['revision'], json_encode($entry, JSON_THROW_ON_ERROR), 'Void: ' . trim($reason), $approverId]);
-            $this->pdo->prepare("UPDATE work_time_entries SET status='voided',revision=revision+1 WHERE id=?")->execute([$entryId]);
+            $this->pdo->prepare(
+                "UPDATE work_time_entries
+                 SET status='voided',workflow_status='voided',compensation_state='voided',
+                     billing_state=CASE WHEN billing_state IN ('partially_invoiced','invoiced','ready','rate_needed') THEN 'reversed' ELSE billing_state END,
+                     revision=revision+1
+                 WHERE id=?"
+            )->execute([$entryId]);
             $this->pdo->prepare(
                 'UPDATE work_approval_snapshots SET voided_at=UTC_TIMESTAMP(6),voided_by=?,void_reason=? WHERE id=?'
             )->execute([$approverId, trim($reason), $snapshot['id']]);

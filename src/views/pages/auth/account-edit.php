@@ -372,7 +372,7 @@ try {
             </label>
             <label>
               <span style="font-weight:600">Hourly pay rate</span>
-              <input class="input" type="number" name="employee_hourly_rate" min="0" step="0.0001" value="<?php echo e($employeeProfile['hourly_rate']); ?>" placeholder="Use System Settings default">
+              <input class="input" type="number" name="employee_hourly_rate" min="0" step="0.0001" value="<?php echo e($employeeProfile['hourly_rate']); ?>" placeholder="Use business fallback">
             </label>
             <label style="display:flex;flex-direction:row;align-items:center;gap:8px;align-self:end;padding-bottom:10px;">
               <input type="checkbox" name="employee_can_view_pay" value="1" <?php echo !empty($employeeProfile['employee_can_view_pay']) ? 'checked' : ''; ?> style="width:auto">

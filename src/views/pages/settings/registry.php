@@ -44,7 +44,7 @@ function pa_settings_registry(): array
                     'tab' => 'system',
                     'permission' => 'settings.manage',
                     'roles' => ['admin', 'owner'],
-                    'keywords' => 'system brand logo domain business email smtp gmail google maps routes timezone workforce',
+                    'keywords' => 'system brand logo domain business email smtp gmail google maps routes timezone',
                     'form_mode' => 'wrapped',
                 ],
             ],
@@ -92,10 +92,10 @@ function pa_settings_registry(): array
             'items' => [
                 'work-types' => [
                     'title' => 'Work Types',
-                    'description' => 'Define reusable work and its default compensation behavior.',
+                    'description' => 'Define reusable work with separate client billing and worker compensation defaults.',
                     'tab' => 'work-types',
-                    'permission' => 'settings.manage',
-                    'keywords' => 'work types hourly fixed base overage percentage pay',
+                    'permission' => 'workforce.catalog.manage',
+                    'keywords' => 'work types client billing hourly fixed base overage percentage pay compensation',
                     'form_mode' => 'self',
                 ],
                 'assignments' => [
@@ -116,10 +116,10 @@ function pa_settings_registry(): array
                 ],
                 'workflow' => [
                     'title' => 'Workflow defaults',
-                    'description' => 'Configure document conversion, time access, mileage, and Job location behavior.',
+                    'description' => 'Configure time and workforce defaults, document conversion, mileage, and Job location behavior.',
                     'tab' => 'workflow',
                     'permission' => 'settings.manage',
-                    'keywords' => 'workflow quote conversion time approval mileage route job project location',
+                    'keywords' => 'workflow workforce pay billing currency quote conversion time approval mileage route job project location',
                     'form_mode' => 'wrapped',
                 ],
             ],

@@ -1,38 +1,37 @@
 <?php
 
 use App\Modules\Timekeeping\WorkforceSettings;
+use App\Services\TimeApprovalPolicy;
+use App\Services\TimeReviewQueueService;
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-if (!WorkforceSettings::canReviewTime($pdo, $userId)) {
+$approvalPolicy = new TimeApprovalPolicy($pdo);
+if (!$approvalPolicy->canAccessQueue($userId)) {
     http_response_code(403);
-    echo '<p style="padding:24px">Time approval is limited to administrators unless non-admin reviewers are enabled in Workflow settings and granted the Approvals Review permission.</p>';
+    echo '<p style="padding:24px">Time approval requires reviewer permission and an approval scope.</p>';
     return;
 }
 
-$queueStmt = $pdo->prepare(
-    "SELECT t.*,p.name project_name,c.name client_name,i.doc_number invoice_number,i.invoice_type,
-            COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),u.username,u.email) employee_name
-     FROM work_time_entries t JOIN users u ON u.id=t.user_id
-     LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id
-     LEFT JOIN projects p ON p.id=t.project_id LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN invoices i ON i.id=t.invoice_id
-     WHERE t.status='review' AND t.user_id<>? ORDER BY t.start_time"
-);
-$queueStmt->execute([$userId]);
-$queue = $queueStmt->fetchAll(PDO::FETCH_ASSOC);
-$approved = $pdo->query(
-    "SELECT t.*,s.id snapshot_id,s.client_name,s.invoice_number,
-            COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),u.username,u.email) employee_name,
-            p.name project_name
-     FROM work_time_entries t JOIN users u ON u.id=t.user_id
-     LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id LEFT JOIN projects p ON p.id=t.project_id
-     LEFT JOIN work_approval_snapshots s ON s.id=(
-         SELECT s2.id FROM work_approval_snapshots s2
-         WHERE s2.time_entry_id=t.id AND s2.entry_revision<=t.revision AND s2.voided_at IS NULL
-         ORDER BY s2.entry_revision DESC LIMIT 1
-     )
-     WHERE t.status='approved' ORDER BY t.reviewed_at DESC LIMIT 50"
-)->fetchAll(PDO::FETCH_ASSOC);
-$projects = $pdo->query("SELECT id,name FROM projects WHERE status NOT IN ('completed','cancelled') ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$reviewQueue = new TimeReviewQueueService($pdo, $approvalPolicy);
+$queue = $reviewQueue->pendingFor($userId);
+$approved = $reviewQueue->recentlyApprovedFor($userId, 50);
+if ($approvalPolicy->hasGlobalReviewScope($userId)) {
+    $projects = $pdo->query("SELECT id,name FROM projects WHERE status NOT IN ('completed','cancelled') ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $projectIds = array_values(array_unique(array_filter(array_map(
+        static fn(array $row): int => (int)($row['project_id'] ?? 0),
+        array_merge($queue, $approved)
+    ))));
+    $projects = [];
+    if ($projectIds) {
+        $projectStmt = $pdo->prepare(
+            'SELECT id,name FROM projects WHERE status NOT IN (\'completed\',\'cancelled\') AND id IN ('
+            . implode(',', array_fill(0, count($projectIds), '?')) . ') ORDER BY name'
+        );
+        $projectStmt->execute($projectIds);
+        $projects = $projectStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
 $settings = WorkforceSettings::load($pdo);
 $timezone = (string)$settings['timezone'];
 $h = static fn(mixed $value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -62,12 +61,12 @@ $invoiceLabel = static function (array $entry): string {
       <?php foreach ($queue as $entry): ?>
         <section class="workforce-review-item">
           <div class="workforce-review-item__head"><div><strong><?= $h($entry['employee_name']) ?></strong><span><?= $h($entry['project_name'] ?: 'No project') ?></span></div><span class="status-pill status-pill--pending">Review</span></div>
-          <div class="workforce-review-meta"><span><?= $h($displayTime($entry['start_time'])) ?> – <?= $h($displayTime($entry['end_time'])) ?></span><span><?= number_format(((int)$entry['duration_seconds']) / 3600, 2) ?> hours</span><?php if ($entry['client_name']): ?><span><?= $h($entry['client_name']) ?><?= $entry['invoice_number'] ? ' · ' . $h($invoiceLabel($entry)) : '' ?></span><?php endif; ?></div>
+          <div class="workforce-review-meta"><span><?= $h($displayTime($entry['start_time'])) ?> &ndash; <?= $h($displayTime($entry['end_time'])) ?></span><span><?= number_format(((int)$entry['duration_seconds']) / 3600, 2) ?> hours</span><?php if ($entry['client_name']): ?><span><?= $h($entry['client_name']) ?><?= $entry['invoice_number'] ? ' &middot; ' . $h($invoiceLabel($entry)) : '' ?></span><?php endif; ?></div>
           <?php if ($entry['description']): ?><p><?= $h($entry['description']) ?></p><?php endif; ?>
-          <div class="workforce-actions">
+          <?php if ($approvalPolicy->canReviewRecord($userId, $entry, 'approve')): ?><div class="workforce-actions">
             <form method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="approve"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><button class="btn btn-primary">Approve</button></form>
-            <form class="workforce-inline-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="reject"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input class="input" name="reason" placeholder="Reason for rejection" required><button class="btn">Reject</button></form>
-          </div>
+            <form class="workforce-inline-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="reject"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input class="input" name="reason" placeholder="What should the worker change?" required><button class="btn">Return for changes</button></form>
+          </div><?php endif; ?>
         </section>
       <?php endforeach; ?>
       <?php if (!$queue): ?><p class="workforce-empty">Nothing is waiting for review.</p><?php endif; ?>
@@ -77,16 +76,20 @@ $invoiceLabel = static function (array $entry): string {
   <article class="card workforce-card">
     <div class="card-head"><h3 class="card-title">Recently approved</h3></div>
     <?php foreach ($approved as $entry): ?>
-      <details class="workforce-approved-item"><summary><span><strong><?= $h($entry['employee_name']) ?></strong> · <?= $h($entry['project_name'] ?: 'No project') ?><?php if ($entry['client_name']): ?> · <?= $h($entry['client_name']) ?><?php endif; ?></span><span><?= number_format(((int)$entry['duration_seconds']) / 3600, 2) ?> h</span></summary>
+      <details class="workforce-approved-item"><summary><span><strong><?= $h($entry['employee_name']) ?></strong> &middot; <?= $h($entry['project_name'] ?: 'No project') ?><?php if ($entry['client_name']): ?> &middot; <?= $h($entry['client_name']) ?><?php endif; ?></span><span><?= number_format(((int)$entry['duration_seconds']) / 3600, 2) ?> h</span></summary>
         <div class="workforce-approved-item__body">
+          <?php if ($approvalPolicy->canReviewRecord($userId, $entry, 'correct')): ?>
           <form class="workforce-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="correct"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>">
             <label class="field"><span class="label">Project</span><select class="input" name="project_id"><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
             <div class="workforce-context-grid workforce-context-grid--time"><label class="field"><span class="label">Start</span><input class="input" type="datetime-local" name="start_time" value="<?= $h($localInput($entry['start_time'])) ?>" required></label><label class="field"><span class="label">End</span><input class="input" type="datetime-local" name="end_time" value="<?= $h($localInput($entry['end_time'])) ?>" required></label></div>
             <label class="field"><span class="label">Description</span><textarea class="input" name="description" rows="2"><?= $h($entry['description']) ?></textarea></label>
-            <div class="workforce-checks"><label><input type="checkbox" name="billable" value="1" <?= $entry['billable'] ? 'checked' : '' ?>> Billable</label><label><input type="checkbox" name="is_payable" value="1" <?= $entry['is_payable'] ? 'checked' : '' ?>> Payable</label></div>
+            <div class="workforce-checks"><label><input type="checkbox" name="billable" value="1" <?= $entry['billable'] ? 'checked' : '' ?>> Prepare for hourly client billing</label><label><input type="checkbox" name="is_payable" value="1" <?= $entry['is_payable'] ? 'checked' : '' ?>> Eligible for worker compensation</label></div>
             <label class="field"><span class="label">Correction reason</span><input class="input" name="reason" required></label><button class="btn">Create correction revision</button>
           </form>
+          <?php endif; ?>
+          <?php if ($approvalPolicy->canReviewRecord($userId, $entry, 'void')): ?>
           <form class="workforce-inline-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="void"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input class="input" name="reason" placeholder="Void reason" required><button class="btn btn-danger">Void entry</button></form>
+          <?php endif; ?>
         </div>
       </details>
     <?php endforeach; ?>

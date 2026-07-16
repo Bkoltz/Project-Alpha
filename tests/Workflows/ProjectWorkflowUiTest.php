@@ -227,9 +227,10 @@ final class ProjectWorkflowUiTest extends TestCase
         $migration = (string) file_get_contents($this->root . '/database/migrations/0039_unified_workforce_timekeeping.sql');
 
         self::assertStringContainsString('Entries are stored in UTC', $view);
-        self::assertStringContainsString('Manual entry', $view);
-        self::assertStringContainsString('Clock in', $view);
-        self::assertStringContainsString('Save time entry', $view);
+        self::assertStringContainsString('Record time', $view);
+        self::assertStringContainsString('Add duration', $view);
+        self::assertStringContainsString('Start timer', $view);
+        self::assertStringContainsString('Exact times', $view);
         self::assertStringContainsString('Add to invoice', $view);
         self::assertStringContainsString('Type to search clients', $view);
         self::assertStringContainsString('name="client_id"', $view);
@@ -272,7 +273,7 @@ final class ProjectWorkflowUiTest extends TestCase
         $accountEdit = (string) file_get_contents($this->root . '/src/views/pages/auth/account-edit.php');
         $accountCreate = (string) file_get_contents($this->root . '/src/controllers/accounts/accounts_create.php');
         $accountUpdate = (string) file_get_contents($this->root . '/src/controllers/accounts/accounts_update.php');
-        $settings = (string) file_get_contents($this->root . '/src/views/pages/settings/system.php');
+        $settings = (string) file_get_contents($this->root . '/src/views/pages/settings/workflow.php');
         $login = (string) file_get_contents($this->root . '/src/views/pages/auth/login.php');
         $authHeader = (string) file_get_contents($this->root . '/src/views/partials/auth_header.php');
         $navigation = (string) file_get_contents($this->root . '/public/assets/navigation.js');

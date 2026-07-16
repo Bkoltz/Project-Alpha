@@ -23,9 +23,10 @@ compatibility API.
 ## Initial setup
 
 1. Sign in as an administrator. PA recommends TOTP, but the reminder may be dismissed.
-2. Open **Settings > System**. The main PA business name and timezone are used
-   by Workforce; set the Workforce currency, default pay/billing rates, and
-   employee time requirements in the **Time & Workforce** section.
+2. Open **Settings > Work, Jobs & Pay > Workflow defaults**. Set the Workforce
+   currency, fallback pay/billing rates, and worker time requirements in the
+   **Time & Workforce** section. The business name and timezone remain under
+   **Business & Branding**.
 3. Open **Accounts**, create or edit a PA user, and choose the **Employee** role.
    The Employee role loads the strict self-service ACL defaults automatically.
 4. Complete the employee profile, pay visibility, and assigned projects on the

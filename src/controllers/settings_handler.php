@@ -98,7 +98,10 @@ $settings = [
     'workforce_currency' => 'USD',
     'workforce_default_hourly_rate' => null,
     'workforce_default_billing_rate' => null,
+    'workforce_default_capture_mode' => 'duration',
+    'workforce_default_billing_treatment' => 'undecided',
     'workforce_require_project' => 0,
+    'workforce_require_work_type' => 0,
     'workforce_require_description' => 0,
     'workforce_allow_non_admin_time_management' => 0,
     'workforce_allow_non_admin_time_approval' => 0,
@@ -343,24 +346,32 @@ if (isset($_POST['timezone'])) {
     }
 }
 
-// Workforce defaults live in PA System Settings so business identity and time
-// rules have one source of truth.
-if ($isSystemTab) {
+// Workforce defaults live with the rest of the Work, Jobs & Pay workflow rules.
+if ($isWorkflowTab) {
     $currency = strtoupper(trim((string)($_POST['workforce_currency'] ?? 'USD')));
     if (!preg_match('/^[A-Z]{3}$/', $currency)) {
-        header('Location: /?page=settings&tab=system&error=' . urlencode('Workforce currency must be a three-letter ISO code.'));
+        header('Location: /?page=settings&tab=workflow&error=' . urlencode('Workforce currency must be a three-letter ISO code.'));
         exit;
     }
     $settings['workforce_currency'] = $currency;
     foreach (['workforce_default_hourly_rate', 'workforce_default_billing_rate'] as $rateKey) {
         $rate = trim((string)($_POST[$rateKey] ?? ''));
         if ($rate !== '' && !preg_match('/^\d+(?:\.\d{1,4})?$/', $rate)) {
-            header('Location: /?page=settings&tab=system&error=' . urlencode('Workforce rates must be non-negative decimals with at most four places.'));
+            header('Location: /?page=settings&tab=workflow&error=' . urlencode('Workforce rates must be non-negative decimals with at most four places.'));
             exit;
         }
         $settings[$rateKey] = $rate !== '' ? $rate : null;
     }
+    $captureMode = (string)($_POST['workforce_default_capture_mode'] ?? 'duration');
+    $settings['workforce_default_capture_mode'] = in_array($captureMode, ['duration', 'timer', 'exact'], true)
+        ? $captureMode
+        : 'duration';
+    $billingTreatment = (string)($_POST['workforce_default_billing_treatment'] ?? 'undecided');
+    $settings['workforce_default_billing_treatment'] = in_array($billingTreatment, ['undecided', 'nonbillable', 'included_fixed', 'ready'], true)
+        ? $billingTreatment
+        : 'undecided';
     $settings['workforce_require_project'] = !empty($_POST['workforce_require_project']) ? 1 : 0;
+    $settings['workforce_require_work_type'] = !empty($_POST['workforce_require_work_type']) ? 1 : 0;
     $settings['workforce_require_description'] = !empty($_POST['workforce_require_description']) ? 1 : 0;
 }
 
@@ -500,7 +511,8 @@ $generalConfigKeys = [
     'from_city', 'from_state', 'from_postal', 'from_country', 'from_email', 'from_phone',
     'app_host', 'public_links_in_email', 'primary_state', 'timezone',
     'workforce_currency', 'workforce_default_hourly_rate', 'workforce_default_billing_rate',
-    'workforce_require_project', 'workforce_require_description',
+    'workforce_default_capture_mode', 'workforce_default_billing_treatment',
+    'workforce_require_project', 'workforce_require_work_type', 'workforce_require_description',
     'workforce_allow_non_admin_time_management', 'workforce_allow_non_admin_time_approval',
     'default_mileage_rate', 'default_mileage_included_miles', 'default_mileage_charge_method',
     'default_mileage_include_return_trip', 'default_mileage_bill_return_trip', 'mileage_tracking_enabled',

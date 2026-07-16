@@ -81,7 +81,7 @@ final class UnifiedAlphaLedgerModuleTest extends TestCase
         self::assertStringContainsString('canManageAllTime', $settings);
         self::assertStringContainsString('canReviewTime', $settings);
         self::assertStringContainsString('WorkforceSettings::canManageAllTime', $time);
-        self::assertStringContainsString('WorkforceSettings::canReviewTime', $approvals);
+        self::assertStringContainsString('$approvalPolicy->canAccessQueue', $approvals);
 
         self::assertStringContainsString("ENUM('each','hour','mile')", $migration);
         self::assertStringContainsString('bill_return_trip', $migration);

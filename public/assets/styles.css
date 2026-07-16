@@ -263,6 +263,50 @@ body.nav-open{overflow:hidden}
 .workforce-form textarea{resize:vertical;min-height:74px}
 .workforce-context-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .workforce-context-grid--time{grid-template-columns:repeat(2,minmax(0,1fr))}
+.workforce-record-card{gap:18px}
+.workforce-capture-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.workforce-capture-modes label{display:flex;gap:10px;align-items:flex-start;padding:13px 14px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer}
+.workforce-capture-modes label:has(input:checked){border-color:#38bdf8;background:#f0f9ff;box-shadow:0 0 0 1px #38bdf8}
+.workforce-capture-modes label:has(input:disabled){cursor:not-allowed;opacity:.62;background:#f8fafc}
+.workforce-capture-modes input{margin-top:3px}
+.workforce-capture-modes span{display:grid;gap:2px;font-weight:750;color:#172033}
+.workforce-capture-modes small{color:var(--muted);font-size:12px;font-weight:500}
+.workforce-capture-panel{padding:14px;border:1px solid #dbe5ef;border-radius:10px;background:#f8fafc}
+.workforce-capture-panel[hidden]{display:none}
+.workforce-card--submit{gap:16px}
+.workforce-submission-form{display:grid;gap:14px;padding:14px;border:1px solid #dbe5ef;border-radius:10px;background:#f8fafc}
+.workforce-submission-form+.workforce-submission-form{margin-top:12px}
+.workforce-submission-form__head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.workforce-submission-form__head>div{display:grid;gap:2px}
+.workforce-submission-form__head small{color:var(--muted)}
+.workforce-submission-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.workforce-submission-list label{display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.workforce-submission-list input{margin-top:4px}
+.workforce-submission-list span{display:grid;gap:2px;min-width:0}
+.workforce-submission-list small{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.workforce-mode-note{margin:0;color:#334155;line-height:1.5}
+.workforce-form-section,.workforce-outcome{min-width:0;margin:0;padding:0;border:0}
+.workforce-form-section{display:grid;gap:13px;padding-top:4px}
+.workforce-form-section>legend,.workforce-outcome>legend{width:100%;margin:0 0 10px;padding:0;color:#172033;font-size:14px;font-weight:800}
+.workforce-form-section>legend small{color:var(--muted);font-weight:500}
+.workforce-search-select{display:grid;align-content:start;gap:5px}
+.workforce-search-select .label{margin-bottom:0}
+.workforce-search-select .input--filter{min-height:34px;padding-block:6px;background:#f8fafc;font-size:13px}
+.workforce-outcome-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.workforce-outcome{display:grid;align-content:start;gap:10px;padding:14px 15px;border:1px solid var(--border);border-radius:10px;background:#fff}
+.workforce-outcome--billing{border-left:4px solid #0284c7}
+.workforce-outcome--compensation{border-left:4px solid #7c3aed}
+.workforce-outcome__choice{display:flex;gap:9px;align-items:flex-start;cursor:pointer;color:#172033;font-size:14px;font-weight:700}
+.workforce-outcome__choice input{margin-top:3px}
+.workforce-outcome__choice span{display:grid;gap:3px}
+.workforce-outcome__choice small{color:var(--muted);font-size:12px;font-weight:500;line-height:1.4}
+.workforce-outcome__summary{display:grid;gap:3px;margin:0;color:#334155}
+.workforce-outcome__summary strong{font-size:14px}
+.workforce-outcome__summary span{color:var(--muted);font-size:12px;line-height:1.45}
+.workforce-outcome-grid--compact{margin-top:2px}
+.workforce-outcome-grid--compact .workforce-outcome{padding:10px}
+.workforce-record-submit{display:flex;gap:12px;align-items:center;justify-content:flex-start;flex-wrap:wrap}
+.workforce-record-submit small{color:var(--muted)}
 .workforce-checks{display:flex;gap:18px;align-items:center;flex-wrap:wrap;color:#374151;font-size:14px}
 .workforce-checks label{display:flex;gap:7px;align-items:center;cursor:pointer}
 .workforce-running{display:grid;gap:5px;padding:14px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0}
@@ -307,9 +351,13 @@ body.nav-open{overflow:hidden}
 @media (max-width:900px){
   .workforce-grid--two,.workforce-overview-grid{grid-template-columns:1fr}
   .workforce-kpis{grid-template-columns:1fr}
+  .workforce-outcome-grid{grid-template-columns:1fr}
 }
 @media (max-width:640px){
   .workforce-context-grid,.workforce-context-grid--time{grid-template-columns:1fr}
+  .workforce-capture-modes{grid-template-columns:1fr}
+  .workforce-submission-form__head{align-items:stretch;flex-direction:column}
+  .workforce-submission-list{grid-template-columns:1fr}
   .workforce-head__actions{width:100%}
   .workforce-head__actions .btn{flex:1}
 }
