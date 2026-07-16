@@ -110,7 +110,7 @@ if ($step === 'verify' && $twofa && !empty($twofa['secret'])) {
     <?php endif; ?>
   <?php elseif ($step === 'verify'): ?>
     <h2>Step 1: Scan the QR Code</h2>
-    <p style="color:#6b7280">Open your authenticator app, add an account, and scan this code. PA generates it locally and does not send the secret to a QR service.</p>
+    <p style="color:#6b7280">Open your authenticator app, add an account, and scan this code. PA generates it locally and does not send it to an external QR service.</p>
     <?php if ($twofa): ?>
       <div class="qr-container">
         <?php if ($qrDataUri): ?><img class="totp-qr" src="<?php echo htmlspecialchars($qrDataUri, ENT_QUOTES, 'UTF-8'); ?>" alt="QR code for adding this account to an authenticator app"><?php endif; ?>
