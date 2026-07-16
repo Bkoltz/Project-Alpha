@@ -247,6 +247,49 @@ try {
         $pdo->prepare('UPDATE project_assignments SET ends_at=UTC_TIMESTAMP(6) WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))')->execute([$userId]);
     }
 
+    // Keep an existing worker relationship independent from the account ACL
+    // role. Only create a default relationship when an Employee or explicit
+    // Owner account has no worker profile yet.
+    $workerStmt = $pdo->prepare('SELECT id,relationship_type,status FROM worker_profiles WHERE user_id=?');
+    $workerStmt->execute([$userId]);
+    $workerProfile = $workerStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    $defaultWorkerRelationship = $role === 'owner' ? 'owner' : ($role === 'employee' ? 'employee' : null);
+    $workerStatus = $accountDisabled
+        ? 'inactive'
+        : ($role === 'employee'
+            ? $effectiveEmployeeStatus
+            : ($role === 'owner' ? 'active' : (string)($workerProfile['status'] ?? 'active')));
+    $workerCurrency = isset($currency) ? (string)$currency : (string)\App\Modules\Timekeeping\WorkforceSettings::load($pdo)['currency'];
+    if ($workerProfile) {
+        $pdo->prepare(
+            'UPDATE worker_profiles SET display_name=?,currency=?,status=?,hired_at=COALESCE(?,hired_at),ended_at=? WHERE id=?'
+        )->execute([
+            $displayName,
+            $workerCurrency,
+            $workerStatus,
+            $role === 'employee' && $employeeHiredAt !== '' ? $employeeHiredAt : null,
+            $workerStatus === 'terminated' ? date('Y-m-d') : null,
+            (int)$workerProfile['id'],
+        ]);
+    } elseif ($defaultWorkerRelationship !== null) {
+        $workerReviewPolicy = $defaultWorkerRelationship === 'owner' ? 'self_confirm' : 'manager_review';
+        $workerCompensationPolicy = $defaultWorkerRelationship === 'owner' ? 'owner_no_pay' : 'rules';
+        $pdo->prepare(
+            'INSERT INTO worker_profiles (user_id,relationship_type,time_review_policy,compensation_policy,status,display_name,currency,hired_at,ended_at)
+             VALUES (?,?,?,?,?,?,?,?,?)'
+        )->execute([
+            $userId,
+            $defaultWorkerRelationship,
+            $workerReviewPolicy,
+            $workerCompensationPolicy,
+            $workerStatus,
+            $displayName,
+            $workerCurrency,
+            $role === 'employee' && $employeeHiredAt !== '' ? $employeeHiredAt : null,
+            $workerStatus === 'terminated' ? date('Y-m-d') : null,
+        ]);
+    }
+
     if (!empty($_POST['save_account_permissions'])) {
         $allPermissions = permission_catalog_flat();
         $wipeStmt = $pdo->prepare('DELETE FROM user_permissions_overrides WHERE user_id = ? AND organization_id IS NULL AND permission = ?');

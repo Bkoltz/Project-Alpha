@@ -183,6 +183,36 @@ final class JobWorkPlanningService
             ];
             $this->pdo->prepare("UPDATE work_assignments SET status='eligible',estimated_pay=?,currency=?,eligibility_snapshot=?,eligible_by=?,eligible_at=UTC_TIMESTAMP(6) WHERE id=?")
                 ->execute([$preview['amount'], $preview['currency'], json_encode($eligibilitySnapshot, JSON_THROW_ON_ERROR), $actorId ?: null, $assignmentId]);
+            if ((string)($preview['method'] ?? '') !== 'nonpayable') {
+                $earningActor = $actorId > 0
+                    ? $actorId
+                    : (int)($assignment['offered_by'] ?? $assignment['worker_user_id'] ?? 0);
+                if ($earningActor <= 0) {
+                    throw new DomainException('An authenticated actor is required to release worker compensation.');
+                }
+                $ruleSnapshot = (array)($preview['rule_snapshot'] ?? []);
+                $rate = match ((string)$preview['method']) {
+                    'percentage' => isset($ruleSnapshot['percentage']) ? (string)$ruleSnapshot['percentage'] : null,
+                    'hourly', 'fixed', 'base_overage' => isset($ruleSnapshot['amount']) ? (string)$ruleSnapshot['amount'] : null,
+                    default => null,
+                };
+                (new WorkerEarningService($this->pdo))->record(
+                    'work_assignment',
+                    (string)$assignmentId,
+                    1,
+                    (int)$assignment['worker_profile_id'],
+                    (string)$preview['method'],
+                    (string)($preview['quantity'] ?? '1'),
+                    $rate,
+                    (string)$preview['amount'],
+                    (string)$preview['currency'],
+                    $eligibilitySnapshot,
+                    $earningActor,
+                    'eligible',
+                    null,
+                    $assignmentId
+                );
+            }
             return $preview + ['released_by' => $actorId];
         });
     }
@@ -234,14 +264,35 @@ final class JobWorkPlanningService
 
     public function approvePayable(int $assignmentId, int $actorId): void
     {
-        $stmt = $this->pdo->prepare(
-            "UPDATE work_assignments SET status='approved_payable',approved_pay=estimated_pay,approved_by=?,approved_at=UTC_TIMESTAMP(6)
-             WHERE id=? AND status='eligible'"
-        );
-        $stmt->execute([$actorId, $assignmentId]);
-        if ($stmt->rowCount() !== 1) {
-            throw new DomainException('Only eligible compensation can be approved.');
-        }
+        $this->transaction(function () use ($assignmentId, $actorId): void {
+            $assignment = $this->assignmentForUpdate($assignmentId);
+            if ((string)$assignment['status'] !== 'eligible') {
+                throw new DomainException('Only eligible compensation can be approved.');
+            }
+            $stmt = $this->pdo->prepare(
+                "UPDATE work_assignments SET status='approved_payable',approved_pay=estimated_pay,approved_by=?,approved_at=UTC_TIMESTAMP(6)
+                 WHERE id=? AND status='eligible'"
+            );
+            $stmt->execute([$actorId, $assignmentId]);
+            if ($stmt->rowCount() !== 1) {
+                throw new DomainException('Only eligible compensation can be approved.');
+            }
+            $earning = $this->pdo->prepare(
+                "SELECT id FROM worker_earnings
+                 WHERE source_type='work_assignment' AND source_id=? AND source_revision=1 AND status='eligible'
+                 LIMIT 1 FOR UPDATE"
+            );
+            $earning->execute([(string)$assignmentId]);
+            $earningId = (string)($earning->fetchColumn() ?: '');
+            if ($earningId !== '') {
+                (new WorkerEarningService($this->pdo))->transition(
+                    $earningId,
+                    'approved',
+                    $actorId,
+                    'Assignment compensation approved'
+                );
+            }
+        });
     }
 
     public function settle(int $assignmentId): void
@@ -336,10 +387,11 @@ final class JobWorkPlanningService
     private function assignmentForUpdate(int $assignmentId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT wa.*,jwc.work_type_id,jwc.catalog_work_component_id,jwc.expected_duration_minutes,jwc.planned_quantity,
+            'SELECT wa.*,wp.user_id worker_user_id,jwc.work_type_id,jwc.catalog_work_component_id,jwc.expected_duration_minutes,jwc.planned_quantity,
                     jwc.compensation_snapshot planned_compensation_snapshot,
                     COALESCE(JSON_UNQUOTE(JSON_EXTRACT(jwc.compensation_snapshot,"$.source_line_total")),"0") source_line_total
              FROM work_assignments wa JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
+             LEFT JOIN worker_profiles wp ON wp.id=wa.worker_profile_id
              WHERE wa.id=? FOR UPDATE'
         );
         $stmt->execute([$assignmentId]);

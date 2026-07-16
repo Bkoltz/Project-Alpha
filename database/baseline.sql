@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     username VARCHAR(50) NULL,
-    role ENUM('admin', 'owner', 'staff', 'member', 'user') NOT NULL DEFAULT 'member',
+    role ENUM('admin', 'owner', 'staff', 'member', 'employee', 'user') NOT NULL DEFAULT 'member',
     force_password_reset TINYINT(1) NOT NULL DEFAULT 0,
     auth_version INT UNSIGNED NOT NULL DEFAULT 1,
     totp_reenroll_required TINYINT(1) NOT NULL DEFAULT 0,
@@ -2529,6 +2529,12 @@ CREATE TABLE IF NOT EXISTS worker_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
     relationship_type VARCHAR(50) NOT NULL DEFAULT 'employee',
+    relationship_review_required TINYINT(1) NOT NULL DEFAULT 0,
+    relationship_review_reason VARCHAR(255) NULL,
+    relationship_reviewed_by INT NULL,
+    relationship_reviewed_at DATETIME(6) NULL,
+    time_review_policy ENUM('manager_review','self_confirm','auto_confirm') NOT NULL DEFAULT 'manager_review',
+    compensation_policy ENUM('rules','nonpayable','owner_no_pay','needs_setup','needs_review') NOT NULL DEFAULT 'rules',
     status ENUM('active','inactive','terminated') NOT NULL DEFAULT 'active',
     display_name VARCHAR(255) NOT NULL DEFAULT '',
     currency CHAR(3) NOT NULL DEFAULT 'USD',
@@ -2539,7 +2545,9 @@ CREATE TABLE IF NOT EXISTS worker_profiles (
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     UNIQUE KEY uq_worker_profile_user (user_id),
     INDEX idx_worker_profile_status (status,relationship_type),
-    CONSTRAINT fk_worker_profile_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    INDEX idx_worker_relationship_review (relationship_review_required,status),
+    CONSTRAINT fk_worker_profile_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_worker_relationship_reviewer FOREIGN KEY (relationship_reviewed_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET @has_worker_document_profile := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='worker_documents' AND column_name='worker_profile_id');
@@ -2972,6 +2980,190 @@ CREATE TABLE IF NOT EXISTS passkey_attempts (
     INDEX idx_passkey_attempt_user (user_id,ceremony,attempted_at),
     CONSTRAINT fk_passkey_attempt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Canonical Workforce workflow foundation. Legacy status, pay-accrual, and
+-- billing-projection fields remain present for read compatibility.
+ALTER TABLE work_time_entries
+    ADD COLUMN worker_profile_id INT NULL AFTER user_id,
+    ADD COLUMN entered_by_user_id INT NULL AFTER worker_profile_id,
+    ADD COLUMN workflow_status ENUM('running','draft','submitted','returned','confirmed','voided') NOT NULL DEFAULT 'draft' AFTER status,
+    ADD COLUMN billing_state ENUM('decide_later','internal','fixed_price_included','rate_needed','ready','partially_invoiced','invoiced','reversed') NOT NULL DEFAULT 'decide_later' AFTER workflow_status,
+    ADD COLUMN compensation_state ENUM('owner_no_pay','nonpayable','needs_setup','provisional','eligible','approved','included','settled','adjusted','voided') NOT NULL DEFAULT 'provisional' AFTER billing_state,
+    ADD COLUMN submitted_at DATETIME(6) NULL AFTER rejection_reason,
+    ADD INDEX idx_work_time_worker_status (worker_profile_id,status,start_time),
+    ADD INDEX idx_work_time_recorder (entered_by_user_id,created_at),
+    ADD INDEX idx_work_time_workflow (workflow_status,start_time,worker_profile_id),
+    ADD INDEX idx_work_time_billing_state (billing_state,workflow_status),
+    ADD INDEX idx_work_time_compensation_state (compensation_state,workflow_status),
+    ADD CONSTRAINT fk_work_time_worker FOREIGN KEY (worker_profile_id) REFERENCES worker_profiles(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT fk_work_time_recorder FOREIGN KEY (entered_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS time_submissions (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    pay_period_id BIGINT NOT NULL,
+    worker_profile_id INT NOT NULL,
+    submission_sequence INT UNSIGNED NOT NULL,
+    status ENUM('submitted','partially_reviewed','returned','confirmed','voided') NOT NULL DEFAULT 'submitted',
+    source ENUM('workflow','legacy_backfill') NOT NULL DEFAULT 'workflow',
+    legacy_submission_key VARCHAR(190) NULL,
+    notes TEXT NULL,
+    submitted_by INT NULL,
+    submitted_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    reviewed_by INT NULL,
+    reviewed_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_time_submission_sequence (pay_period_id,worker_profile_id,submission_sequence),
+    UNIQUE KEY uq_time_submission_legacy (legacy_submission_key),
+    INDEX idx_time_submission_review (status,submitted_at,worker_profile_id),
+    CONSTRAINT fk_time_submission_period FOREIGN KEY (pay_period_id) REFERENCES pay_periods(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_time_submission_worker FOREIGN KEY (worker_profile_id) REFERENCES worker_profiles(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_time_submission_submitter FOREIGN KEY (submitted_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_time_submission_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS time_submission_entries (
+    submission_id CHAR(36) NOT NULL,
+    time_entry_id CHAR(36) NOT NULL,
+    entry_revision INT UNSIGNED NOT NULL,
+    entry_snapshot JSON NOT NULL,
+    decision ENUM('pending','confirmed','returned','voided') NOT NULL DEFAULT 'pending',
+    decision_reason VARCHAR(1000) NULL,
+    reviewed_by INT NULL,
+    reviewed_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (submission_id,time_entry_id),
+    INDEX idx_submission_entry_time (time_entry_id,entry_revision),
+    INDEX idx_submission_entry_decision (decision,submission_id),
+    CONSTRAINT fk_submission_entry_submission FOREIGN KEY (submission_id) REFERENCES time_submissions(id) ON DELETE CASCADE,
+    CONSTRAINT fk_submission_entry_time FOREIGN KEY (time_entry_id) REFERENCES work_time_entries(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_submission_entry_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE work_time_entries
+    ADD COLUMN current_submission_id CHAR(36) NULL AFTER submitted_at,
+    ADD INDEX idx_work_time_submission (current_submission_id),
+    ADD CONSTRAINT fk_work_time_current_submission FOREIGN KEY (current_submission_id) REFERENCES time_submissions(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS work_type_billing_defaults (
+    work_type_id INT NOT NULL PRIMARY KEY,
+    default_treatment ENUM('undecided','internal','fixed_price_included','hourly') NOT NULL DEFAULT 'undecided',
+    default_billing_rate DECIMAL(12,4) NULL,
+    currency CHAR(3) NOT NULL DEFAULT 'USD',
+    created_by INT NULL,
+    updated_by INT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    CONSTRAINT fk_work_type_billing_default_type FOREIGN KEY (work_type_id) REFERENCES work_types(id) ON DELETE CASCADE,
+    CONSTRAINT fk_work_type_billing_default_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_work_type_billing_default_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT chk_work_type_default_billing_rate CHECK (default_billing_rate IS NULL OR default_billing_rate >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS work_time_billing_allocations (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    allocation_key CHAR(64) NOT NULL,
+    time_entry_id CHAR(36) NOT NULL,
+    entry_revision INT UNSIGNED NOT NULL,
+    treatment ENUM('undecided','internal','fixed_price_included','hourly') NOT NULL DEFAULT 'undecided',
+    status ENUM('pending','rate_needed','ready','invoiced','reversed') NOT NULL DEFAULT 'pending',
+    duration_seconds INT UNSIGNED NOT NULL,
+    quantity DECIMAL(12,4) NOT NULL,
+    rate DECIMAL(12,4) NULL,
+    amount DECIMAL(12,2) NULL,
+    currency CHAR(3) NOT NULL DEFAULT 'USD',
+    client_id INT NULL,
+    project_id INT NULL,
+    job_id INT NULL,
+    invoice_id INT NULL,
+    invoice_item_id INT NULL,
+    allocation_snapshot JSON NOT NULL,
+    created_by INT NULL,
+    reversed_by INT NULL,
+    reversed_at DATETIME(6) NULL,
+    reversal_reason VARCHAR(1000) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_time_billing_allocation_key (allocation_key),
+    INDEX idx_time_billing_entry (time_entry_id,entry_revision,status),
+    INDEX idx_time_billing_queue (status,treatment,created_at),
+    INDEX idx_time_billing_invoice (invoice_id,invoice_item_id),
+    CONSTRAINT fk_time_billing_entry FOREIGN KEY (time_entry_id) REFERENCES work_time_entries(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_time_billing_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    CONSTRAINT fk_time_billing_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_time_billing_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL,
+    CONSTRAINT fk_time_billing_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+    CONSTRAINT fk_time_billing_invoice_item FOREIGN KEY (invoice_item_id) REFERENCES invoice_items(id) ON DELETE SET NULL,
+    CONSTRAINT fk_time_billing_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_time_billing_reverser FOREIGN KEY (reversed_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT chk_time_billing_quantity CHECK (quantity >= 0),
+    CONSTRAINT chk_time_billing_amount CHECK (amount IS NULL OR amount >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS worker_earnings (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    source_key VARCHAR(190) NOT NULL,
+    source_type ENUM('time_entry','work_assignment','adjustment','mileage','manual','legacy') NOT NULL,
+    source_id VARCHAR(64) NOT NULL,
+    source_revision INT UNSIGNED NOT NULL DEFAULT 1,
+    worker_profile_id INT NOT NULL,
+    work_time_entry_id CHAR(36) NULL,
+    work_assignment_id BIGINT NULL,
+    pay_period_id BIGINT NULL,
+    status ENUM('provisional','needs_setup','eligible','approved','included','settled','adjusted','voided') NOT NULL DEFAULT 'provisional',
+    method ENUM('hourly','fixed','base_overage','percentage','reimbursement','adjustment','manual') NOT NULL,
+    quantity DECIMAL(12,4) NOT NULL DEFAULT 1,
+    rate DECIMAL(12,4) NULL,
+    amount DECIMAL(12,2) NULL,
+    currency CHAR(3) NOT NULL DEFAULT 'USD',
+    calculation_snapshot JSON NOT NULL,
+    eligible_by INT NULL,
+    eligible_at DATETIME(6) NULL,
+    approved_by INT NULL,
+    approved_at DATETIME(6) NULL,
+    statement_line_id BIGINT NULL,
+    settled_at DATETIME(6) NULL,
+    voided_by INT NULL,
+    voided_at DATETIME(6) NULL,
+    void_reason VARCHAR(1000) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_worker_earning_source (source_key),
+    UNIQUE KEY uq_worker_earning_statement_line (statement_line_id),
+    INDEX idx_worker_earning_queue (worker_profile_id,status,created_at),
+    INDEX idx_worker_earning_period (pay_period_id,status,worker_profile_id),
+    INDEX idx_worker_earning_time (work_time_entry_id,source_revision),
+    INDEX idx_worker_earning_assignment (work_assignment_id),
+    CONSTRAINT fk_worker_earning_worker FOREIGN KEY (worker_profile_id) REFERENCES worker_profiles(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_worker_earning_time FOREIGN KEY (work_time_entry_id) REFERENCES work_time_entries(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_worker_earning_assignment FOREIGN KEY (work_assignment_id) REFERENCES work_assignments(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_worker_earning_period FOREIGN KEY (pay_period_id) REFERENCES pay_periods(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_worker_earning_eligible_actor FOREIGN KEY (eligible_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_worker_earning_approver FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_worker_earning_statement_line FOREIGN KEY (statement_line_id) REFERENCES worker_statement_lines(id) ON DELETE SET NULL,
+    CONSTRAINT fk_worker_earning_voider FOREIGN KEY (voided_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT chk_worker_earning_quantity CHECK (quantity >= 0),
+    CONSTRAINT chk_worker_earning_amount CHECK (amount IS NULL OR amount >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS worker_earning_events (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    worker_earning_id CHAR(36) NOT NULL,
+    from_status VARCHAR(32) NULL,
+    to_status VARCHAR(32) NOT NULL,
+    reason VARCHAR(1000) NULL,
+    event_snapshot JSON NOT NULL,
+    actor_id INT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    INDEX idx_worker_earning_event (worker_earning_id,created_at),
+    CONSTRAINT fk_worker_earning_event_earning FOREIGN KEY (worker_earning_id) REFERENCES worker_earnings(id) ON DELETE CASCADE,
+    CONSTRAINT fk_worker_earning_event_actor FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE worker_statement_lines
+    ADD COLUMN worker_earning_id CHAR(36) NULL AFTER worker_statement_id,
+    ADD UNIQUE KEY uq_statement_earning (worker_earning_id),
+    ADD CONSTRAINT fk_statement_line_earning FOREIGN KEY (worker_earning_id) REFERENCES worker_earnings(id) ON DELETE RESTRICT;
 
 CREATE TABLE schema_migrations (
     version INT UNSIGNED NOT NULL PRIMARY KEY,

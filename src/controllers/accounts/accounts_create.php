@@ -157,6 +157,29 @@ try {
         }
     }
 
+    // Authentication role and worker relationship are separate. Employee and
+    // explicit owner roles receive a linked worker profile automatically;
+    // administrators are not silently classified as owners.
+    if (in_array($role, ['employee', 'owner'], true)) {
+        $settings ??= \App\Modules\Timekeeping\WorkforceSettings::load($pdo);
+        $workerCurrency = (string)$settings['currency'];
+        $workerRelationship = $role === 'owner' ? 'owner' : 'employee';
+        $workerReviewPolicy = $workerRelationship === 'owner' ? 'self_confirm' : 'manager_review';
+        $workerCompensationPolicy = $workerRelationship === 'owner' ? 'owner_no_pay' : 'rules';
+        $pdo->prepare(
+            'INSERT INTO worker_profiles (user_id,relationship_type,time_review_policy,compensation_policy,status,display_name,currency,hired_at)
+             VALUES (?,?,?, ?,"active",?,?,?)'
+        )->execute([
+            $newUserId,
+            $workerRelationship,
+            $workerReviewPolicy,
+            $workerCompensationPolicy,
+            $displayName,
+            $workerCurrency,
+            $role === 'employee' ? date('Y-m-d') : null,
+        ]);
+    }
+
     require_once __DIR__ . '/../../utils/permission_catalog.php';
     if ($role !== 'admin') {
         $allPermissions = permission_catalog_flat();

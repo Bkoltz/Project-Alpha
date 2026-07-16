@@ -64,16 +64,35 @@ final class PayPeriodService
             $this->pdo->prepare("UPDATE pay_periods SET status='closing' WHERE id=?")->execute([$periodId]);
             $workers = $this->pdo->prepare(
                 "SELECT DISTINCT wp.id,wp.relationship_type,wp.currency FROM worker_profiles wp JOIN (
-                   SELECT wa.worker_profile_id FROM work_assignments wa WHERE wa.status='approved_payable' AND DATE(wa.approved_at) BETWEEN ? AND ?
+                   SELECT e.worker_profile_id
+                   FROM worker_earnings e
+                   LEFT JOIN work_time_entries wt ON wt.id=e.work_time_entry_id
+                   LEFT JOIN work_assignments wa0 ON wa0.id=e.work_assignment_id
+                   WHERE e.status='approved'
+                     AND (e.pay_period_id=? OR (e.pay_period_id IS NULL AND
+                          COALESCE(DATE(wt.start_time),DATE(wa0.completed_at),DATE(e.eligible_at),DATE(e.approved_at),DATE(e.created_at)) BETWEEN ? AND ?))
                    UNION ALL
-                   SELECT wp2.id FROM work_pay_accruals a JOIN work_approval_snapshots s ON s.id=a.approval_snapshot_id JOIN worker_profiles wp2 ON wp2.user_id=a.employee_user_id
-                   WHERE a.status='pending' AND DATE(s.approved_at) BETWEEN ? AND ?
+                   SELECT wa.worker_profile_id FROM work_assignments wa
+                   WHERE wa.status='approved_payable'
+                     AND DATE(COALESCE(wa.completed_at,wa.approved_at,wa.eligible_at,wa.created_at)) BETWEEN ? AND ?
+                     AND NOT EXISTS (SELECT 1 FROM worker_earnings le WHERE le.work_assignment_id=wa.id)
+                   UNION ALL
+                   SELECT wp2.id FROM work_pay_accruals a
+                   JOIN work_approval_snapshots s ON s.id=a.approval_snapshot_id
+                   JOIN worker_profiles wp2 ON wp2.user_id=a.employee_user_id
+                   WHERE a.status='pending' AND DATE(s.start_time) BETWEEN ? AND ?
+                     AND NOT EXISTS (SELECT 1 FROM worker_earnings le WHERE le.work_time_entry_id=s.time_entry_id)
                    UNION ALL
                    SELECT ca.worker_profile_id FROM compensation_adjustments ca
                    WHERE ca.pay_period_id=? AND ca.status='reviewed'
                  ) payable ON payable.worker_profile_id=wp.id WHERE wp.relationship_type<>'owner'"
             );
-            $workers->execute([$period['period_start'], $period['period_end'],$period['period_start'], $period['period_end'], $periodId]);
+            $workers->execute([
+                $periodId, $period['period_start'], $period['period_end'],
+                $period['period_start'], $period['period_end'],
+                $period['period_start'], $period['period_end'],
+                $periodId,
+            ]);
             $statementIds = [];
             foreach ($workers->fetchAll(PDO::FETCH_ASSOC) as $worker) {
                 $statementIds[] = $this->buildStatement($period, $worker, $actorId);
@@ -84,13 +103,43 @@ final class PayPeriodService
         });
     }
 
-    public function settleStatement(int $statementId): void
+    public function settleStatement(int $statementId, ?int $actorId = null): void
     {
-        $this->transaction(function () use ($statementId): void {
+        $this->transaction(function () use ($statementId, $actorId): void {
             $stmt = $this->pdo->prepare("SELECT status FROM worker_statements WHERE id=? FOR UPDATE");
             $stmt->execute([$statementId]);
             if ($stmt->fetchColumn() !== 'issued') {
                 throw new DomainException('Only an issued statement can be settled.');
+            }
+            $earnings = $this->pdo->prepare(
+                "SELECT e.id,e.source_key,e.amount,e.currency,e.work_time_entry_id
+                 FROM worker_earnings e
+                 JOIN worker_statement_lines l ON l.worker_earning_id=e.id
+                 WHERE l.worker_statement_id=? AND e.status='included' FOR UPDATE"
+            );
+            $earnings->execute([$statementId]);
+            $earnings = $earnings->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($earnings as $earning) {
+                $update = $this->pdo->prepare(
+                    "UPDATE worker_earnings SET status='settled',settled_at=UTC_TIMESTAMP(6)
+                     WHERE id=? AND status='included'"
+                );
+                $update->execute([$earning['id']]);
+                if ($update->rowCount() !== 1) {
+                    throw new DomainException('An earning changed before the statement was settled.');
+                }
+                $this->pdo->prepare(
+                    "INSERT INTO worker_earning_events
+                     (worker_earning_id,from_status,to_status,reason,event_snapshot,actor_id)
+                     VALUES (?,'included','settled','statement_settled',JSON_OBJECT('statement_id',?,'source_key',?,'amount',?,'currency',?),?)"
+                )->execute([
+                    $earning['id'], $statementId, $earning['source_key'], $earning['amount'],
+                    $earning['currency'], ($actorId ?? 0) > 0 ? $actorId : null,
+                ]);
+                if (!empty($earning['work_time_entry_id'])) {
+                    $this->pdo->prepare("UPDATE work_time_entries SET compensation_state='settled' WHERE id=?")
+                        ->execute([$earning['work_time_entry_id']]);
+                }
             }
             $this->pdo->prepare("UPDATE worker_statements SET status='settled',settled_at=UTC_TIMESTAMP(6) WHERE id=?")
                 ->execute([$statementId]);
@@ -133,10 +182,58 @@ final class PayPeriodService
         )->execute([$period['id'], $worker['id'], $type, $worker['currency'], $actorId]);
         $statementId = (int)$this->pdo->lastInsertId();
 
+        $earnings = $this->pdo->prepare(
+            "SELECT e.*,wt.description AS time_description,wt.start_time AS time_worked_at,
+                    jwc.name AS assignment_name,wa.completed_at AS assignment_completed_at
+             FROM worker_earnings e
+             LEFT JOIN work_time_entries wt ON wt.id=e.work_time_entry_id
+             LEFT JOIN work_assignments wa ON wa.id=e.work_assignment_id
+             LEFT JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
+             WHERE e.worker_profile_id=? AND e.status='approved'
+               AND (e.pay_period_id=? OR (e.pay_period_id IS NULL AND
+                    COALESCE(DATE(wt.start_time),DATE(wa.completed_at),DATE(e.eligible_at),DATE(e.approved_at),DATE(e.created_at)) BETWEEN ? AND ?))
+             ORDER BY COALESCE(wt.start_time,wa.completed_at,e.eligible_at,e.approved_at,e.created_at),e.created_at
+             FOR UPDATE"
+        );
+        $earnings->execute([$worker['id'], $period['id'], $period['period_start'], $period['period_end']]);
+        $earningService = new WorkerEarningService($this->pdo);
+        foreach ($earnings->fetchAll(PDO::FETCH_ASSOC) as $earning) {
+            $description = trim((string)($earning['assignment_name'] ?: $earning['time_description']));
+            if ($description === '') {
+                $description = match ((string)$earning['source_type']) {
+                    'mileage' => 'Mileage reimbursement',
+                    'adjustment' => 'Compensation adjustment',
+                    default => 'Approved work',
+                };
+            }
+            $this->pdo->prepare(
+                'INSERT INTO worker_statement_lines
+                 (worker_statement_id,work_assignment_id,work_time_entry_id,description,quantity,rate,amount,calculation_snapshot)
+                 VALUES (?,?,?,?,?,?,?,?)'
+            )->execute([
+                $statementId,
+                $earning['work_assignment_id'],
+                $earning['work_time_entry_id'],
+                mb_substr($description, 0, 500),
+                $earning['quantity'],
+                $earning['rate'],
+                $earning['amount'],
+                $earning['calculation_snapshot'],
+            ]);
+            $lineId = (int)$this->pdo->lastInsertId();
+            $this->pdo->prepare('UPDATE worker_earnings SET pay_period_id=? WHERE id=? AND pay_period_id IS NULL')
+                ->execute([$period['id'], $earning['id']]);
+            $earningService->includeOnStatement((string)$earning['id'], $lineId, $actorId);
+        }
+
+        // Compatibility only: legacy compensation is used when no canonical
+        // earning exists for the source row.
         $assignments = $this->pdo->prepare(
             "SELECT wa.id,wa.approved_pay,wa.compensation_snapshot,jwc.name,jwc.planned_quantity
              FROM work_assignments wa JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
-             WHERE wa.worker_profile_id=? AND wa.status='approved_payable' AND DATE(wa.approved_at) BETWEEN ? AND ?"
+             WHERE wa.worker_profile_id=? AND wa.status='approved_payable'
+               AND DATE(COALESCE(wa.completed_at,wa.approved_at,wa.eligible_at,wa.created_at)) BETWEEN ? AND ?
+               AND NOT EXISTS (SELECT 1 FROM worker_earnings e WHERE e.work_assignment_id=wa.id)"
         );
         $assignments->execute([$worker['id'], $period['period_start'], $period['period_end']]);
         foreach ($assignments->fetchAll(PDO::FETCH_ASSOC) as $assignment) {
@@ -153,7 +250,8 @@ final class PayPeriodService
             "SELECT a.amount,a.hours,a.rate,s.time_entry_id,s.description,s.pay_rate,s.duration_seconds,s.approved_at
              FROM work_pay_accruals a JOIN work_approval_snapshots s ON s.id=a.approval_snapshot_id
              JOIN worker_profiles wp ON wp.user_id=a.employee_user_id
-             WHERE wp.id=? AND a.status='pending' AND DATE(s.approved_at) BETWEEN ? AND ?"
+             WHERE wp.id=? AND a.status='pending' AND DATE(s.start_time) BETWEEN ? AND ?
+               AND NOT EXISTS (SELECT 1 FROM worker_earnings e WHERE e.work_time_entry_id=s.time_entry_id)"
         );
         $time->execute([$worker['id'],$period['period_start'],$period['period_end']]);
         foreach($time->fetchAll(PDO::FETCH_ASSOC) as $line){
@@ -167,19 +265,48 @@ final class PayPeriodService
         $adjustments->execute([$worker['id'], $period['id']]);
         foreach ($adjustments->fetchAll(PDO::FETCH_ASSOC) as $adjustment) {
             $signed = $adjustment['adjustment_type'] === 'debit' ? -(float)$adjustment['amount'] : (float)$adjustment['amount'];
+            $earning = $earningService->record(
+                'adjustment',
+                (string)$adjustment['id'],
+                1,
+                (int)$worker['id'],
+                'adjustment',
+                '1',
+                null,
+                (string)$adjustment['amount'],
+                (string)$worker['currency'],
+                [
+                    'adjustment_id' => (int)$adjustment['id'],
+                    'direction' => (string)$adjustment['adjustment_type'],
+                    'reason' => (string)$adjustment['reason'],
+                    'source_snapshot' => $adjustment['source_snapshot'],
+                ],
+                $actorId,
+                'approved',
+                null,
+                null,
+                (int)$period['id']
+            );
             $this->pdo->prepare(
                 'INSERT INTO worker_statement_lines (worker_statement_id,description,quantity,amount,calculation_snapshot) VALUES (?, ?, 1, ?, ?)'
             )->execute([$statementId, $adjustment['reason'], number_format($signed, 2, '.', ''), json_encode($adjustment, JSON_THROW_ON_ERROR)]);
             $lineId = (int)$this->pdo->lastInsertId();
+            $earningService->includeOnStatement((string)$earning['id'], $lineId, $actorId);
             $this->pdo->prepare("UPDATE compensation_adjustments SET status='applied',statement_line_id=? WHERE id=?")
                 ->execute([$lineId, $adjustment['id']]);
         }
 
         $totals = $this->pdo->prepare(
-            'SELECT COALESCE(SUM(CASE WHEN work_assignment_id IS NOT NULL OR work_time_entry_id IS NOT NULL THEN amount ELSE 0 END),0) gross,
-                    COALESCE(SUM(CASE WHEN work_assignment_id IS NULL AND work_time_entry_id IS NULL THEN amount ELSE 0 END),0) adjustments,
-                    COALESCE(SUM(amount),0) total
-             FROM worker_statement_lines WHERE worker_statement_id=?'
+            "SELECT COALESCE(SUM(CASE WHEN COALESCE(e.source_type,'')<>'adjustment'
+                                           AND (e.id IS NOT NULL OR l.work_assignment_id IS NOT NULL OR l.work_time_entry_id IS NOT NULL)
+                                      THEN l.amount ELSE 0 END),0) gross,
+                    COALESCE(SUM(CASE WHEN e.source_type='adjustment'
+                                           OR (e.id IS NULL AND l.work_assignment_id IS NULL AND l.work_time_entry_id IS NULL)
+                                      THEN l.amount ELSE 0 END),0) adjustments,
+                    COALESCE(SUM(l.amount),0) total
+             FROM worker_statement_lines l
+             LEFT JOIN worker_earnings e ON e.id=l.worker_earning_id
+             WHERE l.worker_statement_id=?"
         );
         $totals->execute([$statementId]);
         $totals = $totals->fetch(PDO::FETCH_ASSOC);

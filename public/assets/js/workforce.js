@@ -124,6 +124,149 @@
         });
     }
 
+    function initSearchSelect(wrapper) {
+        if (!wrapper || wrapper.dataset.ready === '1') return;
+        wrapper.dataset.ready = '1';
+        const filter = wrapper.querySelector('[data-workforce-option-filter]');
+        const select = wrapper.querySelector('select');
+        if (!filter || !select) return;
+
+        function applyFilter() {
+            const query = filter.value.trim().toLocaleLowerCase();
+            Array.from(select.options).forEach(function (option) {
+                if (!option.value) return;
+                const matches = !query || option.textContent.toLocaleLowerCase().includes(query);
+                option.hidden = option.disabled || !matches;
+            });
+        }
+
+        filter.addEventListener('input', applyFilter);
+        select.addEventListener('change', function () {
+            filter.value = '';
+            applyFilter();
+        });
+        wrapper.addEventListener('workforce:refilter', applyFilter);
+        applyFilter();
+    }
+
+    function initRecordForm(form) {
+        if (!form || form.dataset.captureReady === '1') return;
+        form.dataset.captureReady = '1';
+        const card = form.closest('[data-workforce-record-card]');
+        if (!card) return;
+        const modes = Array.from(card.querySelectorAll('[data-workforce-capture-mode]'));
+        const panels = Array.from(form.querySelectorAll('[data-workforce-capture-panel]'));
+        const action = form.querySelector('[data-workforce-action]');
+        const captureModeValue = form.querySelector('[data-workforce-capture-mode-value]');
+        const startTime = form.querySelector('[data-workforce-start-time]');
+        const endTime = form.querySelector('[data-workforce-end-time]');
+        const workDate = form.querySelector('[data-workforce-work-date]');
+        const durationMinutes = form.querySelector('[data-workforce-duration-minutes]');
+        const durationStart = form.querySelector('[data-workforce-duration-start]');
+        const exactStart = form.querySelector('[data-workforce-exact-start]');
+        const exactEnd = form.querySelector('[data-workforce-exact-end]');
+        const submitLabel = form.querySelector('[data-workforce-submit-label]');
+        const billingTreatment = form.querySelector('[data-workforce-billing-treatment]');
+        const legacyBillable = form.querySelector('[data-workforce-billable]');
+        const billingSummary = form.querySelector('[data-workforce-billing-summary]');
+        const payable = form.querySelector('[data-workforce-payable]');
+        const paySummary = form.querySelector('[data-workforce-pay-summary]');
+
+        function selectedMode() {
+            const selected = modes.find(function (mode) { return mode.checked; });
+            return selected ? selected.value : 'duration';
+        }
+
+        function setRequired(input, required) {
+            if (!input) return;
+            input.required = required;
+            if (!required) input.setCustomValidity('');
+        }
+
+        function updateMode() {
+            const mode = selectedMode();
+            panels.forEach(function (panel) {
+                panel.hidden = panel.dataset.workforceCapturePanel !== mode;
+            });
+            if (action) action.value = mode === 'timer' ? 'clock-in' : 'manual-create';
+            if (captureModeValue) captureModeValue.value = mode;
+            if (submitLabel) submitLabel.textContent = mode === 'timer' ? 'Start timer' : 'Record time';
+            setRequired(workDate, mode === 'duration');
+            setRequired(durationMinutes, mode === 'duration');
+            setRequired(exactStart, mode === 'exact');
+            setRequired(exactEnd, mode === 'exact');
+            if (startTime) startTime.value = '';
+            if (endTime) endTime.value = '';
+        }
+
+        function localDateTimeValue(date) {
+            function two(value) { return String(value).padStart(2, '0'); }
+            return date.getFullYear() + '-' + two(date.getMonth() + 1) + '-' + two(date.getDate())
+                + 'T' + two(date.getHours()) + ':' + two(date.getMinutes());
+        }
+
+        function updateBillingSummary() {
+            if (!billingTreatment || billingTreatment.tagName !== 'SELECT') return;
+            const labels = {
+                undecided: 'Undecided',
+                nonbillable: 'Internal / nonbillable',
+                included_fixed: 'Included in fixed-price work',
+                ready: 'Ready for hourly billing'
+            };
+            if (legacyBillable) legacyBillable.value = billingTreatment.value === 'ready' ? '1' : '0';
+            if (billingSummary) billingSummary.textContent = labels[billingTreatment.value] || 'Undecided';
+        }
+
+        modes.forEach(function (mode) { mode.addEventListener('change', updateMode); });
+        if (billingTreatment) billingTreatment.addEventListener('change', updateBillingSummary);
+        if (payable && paySummary) payable.addEventListener('change', function () {
+            paySummary.textContent = payable.checked ? 'Provisional' : 'Nonpayable / internal';
+        });
+
+        form.addEventListener('submit', function (event) {
+            const mode = selectedMode();
+            if (!startTime || !endTime) return;
+            if (mode === 'timer') {
+                startTime.value = '';
+                endTime.value = '';
+                return;
+            }
+            if (mode === 'exact') {
+                startTime.value = exactStart ? exactStart.value : '';
+                endTime.value = exactEnd ? exactEnd.value : '';
+                if (exactStart && exactEnd && exactStart.value && exactEnd.value && exactEnd.value <= exactStart.value) {
+                    event.preventDefault();
+                    exactEnd.setCustomValidity('End time must follow start time.');
+                    exactEnd.reportValidity();
+                }
+                return;
+            }
+
+            const minutes = durationMinutes ? Number.parseInt(durationMinutes.value, 10) : 0;
+            const dateValue = workDate ? workDate.value : '';
+            const timeValue = durationStart && durationStart.value ? durationStart.value : '00:00';
+            const start = new Date(dateValue + 'T' + timeValue);
+            if (!dateValue || !Number.isFinite(minutes) || minutes < 1 || minutes > 1440 || Number.isNaN(start.getTime())) {
+                event.preventDefault();
+                if (durationMinutes) {
+                    durationMinutes.setCustomValidity('Enter a duration from 1 to 1,440 minutes.');
+                    durationMinutes.reportValidity();
+                }
+                return;
+            }
+            if (durationMinutes) durationMinutes.setCustomValidity('');
+            startTime.value = localDateTimeValue(start);
+            endTime.value = localDateTimeValue(new Date(start.getTime() + (minutes * 60000)));
+        });
+
+        if (durationMinutes) durationMinutes.addEventListener('input', function () {
+            durationMinutes.setCustomValidity('');
+        });
+        if (exactEnd) exactEnd.addEventListener('input', function () { exactEnd.setCustomValidity(''); });
+        updateMode();
+        updateBillingSummary();
+    }
+
     function initEntryForm(root, form) {
         const assignment = form.querySelector('[name="work_assignment_id"]');
         const assignmentSelect = assignment && assignment.tagName === 'SELECT' ? assignment : null;
@@ -161,6 +304,9 @@
                     assignment.value = '';
                 }
             }
+            form.querySelectorAll('[data-workforce-search-select]').forEach(function (wrapper) {
+                wrapper.dispatchEvent(new CustomEvent('workforce:refilter'));
+            });
         }
 
         if (assignmentSelect) assignmentSelect.addEventListener('change', function () {
@@ -221,8 +367,14 @@
         root.querySelectorAll('[data-workforce-client-combobox]').forEach(function (combobox) {
             initClientCombobox(root, combobox);
         });
+        root.querySelectorAll('[data-workforce-search-select]').forEach(function (wrapper) {
+            initSearchSelect(wrapper);
+        });
         root.querySelectorAll('[data-workforce-entry-form]').forEach(function (form) {
             initEntryForm(root, form);
+        });
+        root.querySelectorAll('[data-workforce-record-form]').forEach(function (form) {
+            initRecordForm(form);
         });
 
         return function () {

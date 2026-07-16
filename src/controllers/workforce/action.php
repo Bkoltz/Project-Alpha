@@ -10,7 +10,11 @@ use App\Modules\Timekeeping\WorkforceSettings;
 use App\Services\CompensationRuleService;
 use App\Services\JobWorkPlanningService;
 use App\Services\PayPeriodService;
+use App\Services\TimeApprovalPolicy;
+use App\Services\TimeSubmissionService;
 use App\Services\WorkTimeInvoiceLinkService;
+use App\Services\WorkerEarningService;
+use App\Services\WorkforceCommandRegistry;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
@@ -29,7 +33,8 @@ if ($userId <= 0 || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 $action = trim((string) ($_POST['action'] ?? ''));
 $audit = new AuditRecorder($pdo);
 $time = new TimekeepingService($pdo, $audit);
-$approval = new ApprovalService($pdo, $audit, new BillingTimeConsumer($pdo));
+$approvalPolicy = new TimeApprovalPolicy($pdo);
+$approval = new ApprovalService($pdo, $audit, new BillingTimeConsumer($pdo), $approvalPolicy);
 
 function workforce_redirect(string $path, string $key, string $message): never
 {
@@ -40,7 +45,8 @@ function workforce_redirect(string $path, string $key, string $message): never
 
 function workforce_require(PDO $pdo, int $userId, string $permission): void
 {
-    if (($_SESSION['user']['role'] ?? '') === 'admin' || user_can($pdo, $userId, $permission, 0)) {
+    if (in_array((string)($_SESSION['user']['role'] ?? ''), ['admin','owner'], true)
+        || user_can($pdo, $userId, $permission, 0)) {
         return;
     }
     http_response_code(403);
@@ -49,7 +55,7 @@ function workforce_require(PDO $pdo, int $userId, string $permission): void
 
 function workforce_require_any(PDO $pdo, int $userId, array $permissions): void
 {
-    if (($_SESSION['user']['role'] ?? '') === 'admin') {
+    if (in_array((string)($_SESSION['user']['role'] ?? ''), ['admin','owner'], true)) {
         return;
     }
     foreach ($permissions as $permission) {
@@ -61,7 +67,56 @@ function workforce_require_any(PDO $pdo, int $userId, array $permissions): void
     exit('Permission denied.');
 }
 
+function workforce_self_confirm_owner(ApprovalService $approval, int $ownerId, string $entryId): void
+{
+    try {
+        $approval->selfConfirmOwner($ownerId, $entryId);
+    } catch (Throwable $error) {
+        try {
+            $approval->returnOwnerForRepair($ownerId, $entryId);
+        } catch (Throwable $recoveryError) {
+            throw new DomainException(
+                'Time was saved, but owner confirmation and automatic recovery both failed. Contact an administrator before editing it.',
+                0,
+                $recoveryError
+            );
+        }
+        throw new DomainException(
+            'Time was saved but could not be confirmed. It remains editable so you can review and resubmit it.',
+            0,
+            $error
+        );
+    }
+}
+
 try {
+    WorkforceCommandRegistry::require($action, (string)($_SERVER['REQUEST_METHOD'] ?? ''));
+    if ($action === 'submit-period') {
+        $manageAll = WorkforceSettings::canManageAllTime($pdo, $userId);
+        if (!$manageAll && !user_can($pdo, $userId, 'timekeeping.self', 0)) {
+            http_response_code(403);
+            exit('Permission denied.');
+        }
+        $workerProfileId = (int)($_POST['worker_profile_id'] ?? 0);
+        $periodId = (int)($_POST['pay_period_id'] ?? 0);
+        $workerStmt = $pdo->prepare('SELECT user_id FROM worker_profiles WHERE id=? AND status="active"');
+        $workerStmt->execute([$workerProfileId]);
+        $workerUserId = (int)($workerStmt->fetchColumn() ?: 0);
+        if ($workerUserId <= 0 || (!$manageAll && $workerUserId !== $userId)) {
+            throw new DomainException('You cannot submit time for that worker.');
+        }
+        $entryIds = is_array($_POST['entry_ids'] ?? null) ? $_POST['entry_ids'] : [];
+        $result = (new TimeSubmissionService($pdo))->submit(
+            $periodId,
+            $workerProfileId,
+            $userId,
+            $entryIds,
+            (string)($_POST['notes'] ?? ''),
+            $manageAll
+        );
+        $returnPath = '/?page=workforce/time' . ($manageAll ? '&user=' . $workerUserId : '');
+        workforce_redirect($returnPath, 'success', $result['entry_count'] . ' time entr' . ($result['entry_count'] === 1 ? 'y was' : 'ies were') . ' submitted for review.');
+    }
     if ($action === 'link-invoice') {
         $manageAll = WorkforceSettings::canManageAllTime($pdo, $userId);
         if (!$manageAll || !user_can($pdo, $userId, 'invoices.edit', 0)) {
@@ -112,6 +167,7 @@ try {
             }
         }
         $entryToSelfConfirm = null;
+        $_POST['entered_by_user_id'] = $userId;
         if ($action === 'clock-in') {
             $time->clockIn($entryUserId, $_POST, $manageAll);
         } elseif ($action === 'clock-out') {
@@ -137,24 +193,25 @@ try {
         if ($entryToSelfConfirm !== ''
             && $entryUserId === $userId
             && $approval->canSelfConfirmOwner($userId)) {
-            $approval->selfConfirmOwner($userId, $entryToSelfConfirm);
+            workforce_self_confirm_owner($approval, $userId, $entryToSelfConfirm);
         }
         $returnPath = '/?page=workforce/time' . ($manageAll ? '&user=' . $entryUserId : '');
         workforce_redirect($returnPath, 'success', 'Time entry updated.');
     }
 
     if (in_array($action, ['approve','reject','correct','void'], true)) {
-        if (!WorkforceSettings::canReviewTime($pdo, $userId)) {
-            http_response_code(403);
-            exit('Time approval is limited to administrators unless enabled in Workflow settings.');
-        }
         $entryId = (string) ($_POST['entry_id'] ?? '');
+        $approvalPolicy->assertCanReviewEntry($userId, $entryId, $action);
+        $ownerSelfCorrection = $action === 'correct' && $approvalPolicy->isOwnerSelfAction($userId, $entryId);
         if ($action === 'approve') {
             $approval->approve($userId, $entryId);
         } elseif ($action === 'reject') {
             $approval->reject($userId, $entryId, (string) ($_POST['reason'] ?? ''));
         } elseif ($action === 'correct') {
             $approval->correct($userId, $entryId, $_POST);
+            if ($ownerSelfCorrection) {
+                workforce_self_confirm_owner($approval, $userId, $entryId);
+            }
         } else {
             $approval->void($userId, $entryId, (string) ($_POST['reason'] ?? ''));
         }
@@ -169,8 +226,19 @@ try {
         audit_log($pdo, 'employee_pay.status_updated', 'work_pay_accrual', null, ['id' => (string) ($_POST['accrual_id'] ?? ''), 'status' => $status]);
         workforce_redirect('/?page=workforce/pay', 'success', 'Pay status updated.');
     }
+    if ($action === 'earning-approve') {
+        workforce_require_any($pdo, $userId, ['workforce.statements.manage','employee_pay.manage']);
+        (new WorkerEarningService($pdo))->transition(
+            trim((string)($_POST['earning_id'] ?? '')),
+            'approved',
+            $userId,
+            'Approved for the next open worker statement'
+        );
+        workforce_redirect('/?page=workforce/pay', 'success', 'Worker earning approved for statement inclusion.');
+    }
     if($action==='statement-settle'){
-        workforce_require($pdo,$userId,'employee_pay.manage');(new PayPeriodService($pdo))->settleStatement((int)($_POST['statement_id']??0));
+        workforce_require_any($pdo,$userId,['workforce.statements.manage','employee_pay.manage']);
+        (new PayPeriodService($pdo))->settleStatement((int)($_POST['statement_id']??0),$userId);
         workforce_redirect('/?page=workforce/pay','success','Statement settled.');
     }
 
@@ -178,7 +246,7 @@ try {
 } catch (Throwable $error) {
     $target = match (true) {
         in_array($action, ['approve','reject','correct','void'], true) => '/?page=workforce/approvals',
-        in_array($action,['pay-status','statement-settle'],true) => '/?page=workforce/pay',
+        in_array($action,['pay-status','earning-approve','statement-settle'],true) => '/?page=workforce/pay',
         default => '/?page=workforce/time',
     };
     workforce_redirect($target, 'error', $error instanceof DomainException ? $error->getMessage() : 'The operation could not be completed.');

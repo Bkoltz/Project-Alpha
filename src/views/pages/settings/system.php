@@ -134,35 +134,6 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
   </div>
 </fieldset>
 
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Time &amp; Workforce</legend>
-  <p style="margin:0 0 14px;color:var(--muted);font-size:13px">These defaults are used by Time, Approvals, and Employee Pay. Business name and timezone come from the fields above.</p>
-  <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-    <label>
-      <div>Currency</div>
-      <input name="workforce_currency" maxlength="3" value="<?php echo htmlspecialchars((string)($appConfig['workforce_currency'] ?? 'USD')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="USD">
-    </label>
-    <label>
-      <div>Default employee pay rate</div>
-      <input name="workforce_default_hourly_rate" inputmode="decimal" value="<?php echo htmlspecialchars((string)($appConfig['workforce_default_hourly_rate'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional">
-    </label>
-    <label>
-      <div>Default customer billing rate</div>
-      <input name="workforce_default_billing_rate" inputmode="decimal" value="<?php echo htmlspecialchars((string)($appConfig['workforce_default_billing_rate'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional">
-    </label>
-  </div>
-  <div style="display:grid;gap:8px;margin-top:14px">
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-      <input type="checkbox" name="workforce_require_project" value="1" <?php echo !empty($appConfig['workforce_require_project']) ? 'checked' : ''; ?>>
-      <span>Require employees to select an assigned project</span>
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-      <input type="checkbox" name="workforce_require_description" value="1" <?php echo !empty($appConfig['workforce_require_description']) ? 'checked' : ''; ?>>
-      <span>Require employees to enter a description</span>
-    </label>
-  </div>
-</fieldset>
-
 <?php if (!empty($_GET['email_test']) && $_GET['email_test'] === '1'): ?>
   <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Test email sent.</div>
 <?php elseif (!empty($_GET['email_err'])): ?>

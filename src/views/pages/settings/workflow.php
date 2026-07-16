@@ -19,15 +19,61 @@
 
 <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">
   <legend style="padding:0 8px;font-weight:600">Time Access &amp; Approval</legend>
-  <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Employees can always access their own permitted time. Team-wide time and approval access is limited to administrators and owners unless enabled here and granted through ACL permissions.</p>
+  <p style="margin:0 0 12px;color:var(--muted);font-size:13px">Workers can access their own permitted time. Team-wide access requires both the matching ACL permission and a worker capability scope under People &amp; Business Units.</p>
   <label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0">
     <input type="checkbox" name="workforce_allow_non_admin_time_management" value="1" <?php echo !empty($appConfig['workforce_allow_non_admin_time_management']) ? 'checked' : ''; ?>>
-    <span><strong>Allow non-admin time managers to view and edit team time</strong><br><small>Requires the <code>timekeeping.manage</code> permission on the role or user.</small></span>
+    <span><strong>Allow non-admin time managers to view and edit team time</strong><br><small>Requires <code>timekeeping.manage</code> in both ACL and the worker's scoped capabilities.</small></span>
   </label>
   <label style="display:flex;gap:10px;align-items:flex-start;margin:10px 0">
     <input type="checkbox" name="workforce_allow_non_admin_time_approval" value="1" <?php echo !empty($appConfig['workforce_allow_non_admin_time_approval']) ? 'checked' : ''; ?>>
-    <span><strong>Allow non-admin reviewers to approve time</strong><br><small>Requires the <code>approvals.review</code> permission on the role or user.</small></span>
+    <span><strong>Allow non-admin reviewers to review submitted time</strong><br><small>Requires <code>approvals.review</code> in both ACL and the worker's scoped capabilities.</small></span>
   </label>
+  <div style="padding:10px 12px;border-radius:8px;background:#f8fafc;border:1px solid #cbd5e1;color:#334155;font-size:13px"><strong>Owner time is self-confirmed.</strong> A worker profile explicitly classified as Owner never enters its own review queue and never creates payroll compensation. Administrator access alone does not make a worker an owner.</div>
+</fieldset>
+
+<fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">
+  <legend style="padding:0 8px;font-weight:600">Time &amp; Workforce</legend>
+  <p style="margin:0 0 14px;color:var(--muted);font-size:13px">Time records what happened. Client billing and worker compensation are separate outcomes with separate rules. Business name and timezone remain under Business &amp; Branding.</p>
+  <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+    <label>
+      <div>Currency</div>
+      <input name="workforce_currency" maxlength="3" value="<?php echo htmlspecialchars((string)($appConfig['workforce_currency'] ?? 'USD')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="USD">
+    </label>
+    <label>
+      <div>Default time capture mode</div>
+      <?php $captureMode = (string)($appConfig['workforce_default_capture_mode'] ?? 'duration'); ?>
+      <select name="workforce_default_capture_mode" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><option value="duration" <?php echo $captureMode === 'duration' ? 'selected' : ''; ?>>Duration</option><option value="timer" <?php echo $captureMode === 'timer' ? 'selected' : ''; ?>>Timer</option><option value="exact" <?php echo $captureMode === 'exact' ? 'selected' : ''; ?>>Exact start and end</option></select>
+    </label>
+    <label>
+      <div>Fallback worker hourly pay rate</div>
+      <input name="workforce_default_hourly_rate" inputmode="decimal" value="<?php echo htmlspecialchars((string)($appConfig['workforce_default_hourly_rate'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional">
+      <small style="display:block;margin-top:5px;color:var(--muted)">Used only when an eligible worker has no assignment, worker, or Work Type rule.</small>
+    </label>
+    <label>
+      <div>Fallback client hourly billing rate</div>
+      <input name="workforce_default_billing_rate" inputmode="decimal" value="<?php echo htmlspecialchars((string)($appConfig['workforce_default_billing_rate'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd" placeholder="Optional">
+      <small style="display:block;margin-top:5px;color:var(--muted)">Used only when time is explicitly prepared for hourly client billing.</small>
+    </label>
+    <label>
+      <div>Default client billing treatment</div>
+      <?php $billingTreatment = (string)($appConfig['workforce_default_billing_treatment'] ?? 'undecided'); ?>
+      <select name="workforce_default_billing_treatment" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"><option value="undecided" <?php echo $billingTreatment === 'undecided' ? 'selected' : ''; ?>>Decide later</option><option value="nonbillable" <?php echo $billingTreatment === 'nonbillable' ? 'selected' : ''; ?>>Internal / nonbillable</option><option value="included_fixed" <?php echo $billingTreatment === 'included_fixed' ? 'selected' : ''; ?>>Included in fixed price</option><option value="ready" <?php echo $billingTreatment === 'ready' ? 'selected' : ''; ?>>Ready for hourly billing</option></select>
+    </label>
+  </div>
+  <div style="display:grid;gap:8px;margin-top:14px">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" name="workforce_require_project" value="1" <?php echo !empty($appConfig['workforce_require_project']) ? 'checked' : ''; ?>>
+      <span>Require workers to select a Job or assigned Project</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" name="workforce_require_work_type" value="1" <?php echo !empty($appConfig['workforce_require_work_type']) ? 'checked' : ''; ?>>
+      <span>Require workers to classify entries with a Work Type</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" name="workforce_require_description" value="1" <?php echo !empty($appConfig['workforce_require_description']) ? 'checked' : ''; ?>>
+      <span>Require workers to enter a description</span>
+    </label>
+  </div>
 </fieldset>
 
 <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:16px">

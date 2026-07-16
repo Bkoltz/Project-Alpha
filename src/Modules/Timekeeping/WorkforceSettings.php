@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Timekeeping;
 
+use App\Services\TimeApprovalPolicy;
 use PDO;
 use Throwable;
 
@@ -17,7 +18,10 @@ final class WorkforceSettings
             'currency' => 'USD',
             'default_hourly_rate' => null,
             'default_billing_rate' => null,
+            'default_capture_mode' => 'duration',
+            'default_billing_treatment' => 'undecided',
             'require_project' => 0,
+            'require_work_type' => 0,
             'require_description' => 0,
             'allow_non_admin_time_management' => 0,
             'allow_non_admin_time_approval' => 0,
@@ -40,7 +44,10 @@ final class WorkforceSettings
             'workforce_currency',
             'workforce_default_hourly_rate',
             'workforce_default_billing_rate',
+            'workforce_default_capture_mode',
+            'workforce_default_billing_treatment',
             'workforce_require_project',
+            'workforce_require_work_type',
             'workforce_require_description',
             'workforce_allow_non_admin_time_management',
             'workforce_allow_non_admin_time_approval',
@@ -74,8 +81,23 @@ final class WorkforceSettings
                 $settings[$settingsKey] = $value === '' ? null : $value;
             }
         }
+        if (in_array(($config['workforce_default_capture_mode'] ?? ''), ['duration', 'timer', 'exact'], true)) {
+            $settings['default_capture_mode'] = (string)$config['workforce_default_capture_mode'];
+        }
+        $billingTreatment = (string)($config['workforce_default_billing_treatment'] ?? '');
+        $billingTreatment = [
+            'internal' => 'nonbillable',
+            'included' => 'included_fixed',
+            'hourly' => 'ready',
+        ][$billingTreatment] ?? $billingTreatment;
+        if (in_array($billingTreatment, ['undecided', 'nonbillable', 'included_fixed', 'ready'], true)) {
+            $settings['default_billing_treatment'] = $billingTreatment;
+        }
         $settings['require_project'] = self::boolValue(
             $config['workforce_require_project'] ?? $settings['require_project']
+        );
+        $settings['require_work_type'] = self::boolValue(
+            $config['workforce_require_work_type'] ?? $settings['require_work_type']
         );
         $settings['require_description'] = self::boolValue(
             $config['workforce_require_description'] ?? $settings['require_description']
@@ -103,13 +125,7 @@ final class WorkforceSettings
 
     public static function canReviewTime(PDO $pdo, int $userId): bool
     {
-        $role = function_exists('acl_user_role') ? \acl_user_role($pdo, $userId) : (string)($_SESSION['user']['role'] ?? '');
-        if (in_array($role, ['admin', 'owner'], true)) {
-            return true;
-        }
-        return self::load($pdo)['allow_non_admin_time_approval'] === 1
-            && function_exists('user_can')
-            && \user_can($pdo, $userId, 'approvals.review', 0);
+        return (new TimeApprovalPolicy($pdo))->canAccessQueue($userId);
     }
 
     private static function boolValue(mixed $value): int

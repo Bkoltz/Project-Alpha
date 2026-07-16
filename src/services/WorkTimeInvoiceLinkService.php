@@ -33,9 +33,10 @@ final class WorkTimeInvoiceLinkService
         try {
             $entryStmt = $this->pdo->prepare(
                 "SELECT t.*,
-                        s.id approval_snapshot_id,s.billing_rate snapshot_billing_rate,
+                        s.id approval_snapshot_id,s.billing_rate snapshot_billing_rate,s.currency snapshot_currency,
                         c.billing_time_entry_id,bt.billed billing_projection_billed,
-                        bt.invoice_item_id billing_projection_invoice_item_id,bt.rate billing_projection_rate
+                        bt.invoice_item_id billing_projection_invoice_item_id,bt.rate billing_projection_rate,
+                        ba.id billing_allocation_id,ba.status billing_allocation_status,ba.rate billing_allocation_rate
                  FROM work_time_entries t
                  LEFT JOIN work_approval_snapshots s ON s.id=(
                      SELECT s2.id FROM work_approval_snapshots s2
@@ -45,6 +46,12 @@ final class WorkTimeInvoiceLinkService
                  LEFT JOIN work_billing_consumptions c ON c.approval_snapshot_id=s.id
                     AND c.consumption_type IN ('approved','correction')
                  LEFT JOIN time_entries bt ON bt.id=c.billing_time_entry_id
+                 LEFT JOIN work_time_billing_allocations ba ON ba.id=(
+                     SELECT ba2.id FROM work_time_billing_allocations ba2
+                     WHERE ba2.time_entry_id=t.id AND ba2.entry_revision=t.revision
+                       AND ba2.treatment='hourly' AND ba2.status IN ('rate_needed','ready')
+                     ORDER BY ba2.id DESC LIMIT 1
+                 )
                  WHERE t.id=? FOR UPDATE"
             );
             $entryStmt->execute([$entryId]);
@@ -55,7 +62,9 @@ final class WorkTimeInvoiceLinkService
             if ((int)$entry['user_id'] !== $actorId && !$canManageAll) {
                 throw new DomainException('You cannot link another user\'s time entry.');
             }
-            if ((string)$entry['status'] !== 'approved' || empty($entry['end_time'])) {
+            if ((string)$entry['status'] !== 'approved'
+                || (string)($entry['workflow_status'] ?? '') !== 'confirmed'
+                || empty($entry['end_time'])) {
                 throw new DomainException('Confirm the time entry before adding it to an invoice.');
             }
             if ((int)$entry['billable'] !== 1) {
@@ -90,6 +99,35 @@ final class WorkTimeInvoiceLinkService
             if ($description === '') {
                 $description = 'Tracked time';
             }
+            $allocationService = new TimeBillingAllocationService($this->pdo);
+            $allocationId = (int)($entry['billing_allocation_id'] ?? 0);
+            $allocationRate = (float)($entry['billing_allocation_rate'] ?? 0);
+            if ($allocationId > 0 && (
+                (string)($entry['billing_allocation_status'] ?? '') !== 'ready'
+                || abs($allocationRate - $rate) > 0.0001
+            )) {
+                $allocationService->reverse($allocationId, $actorId, 'Billing rate resolved while linking the invoice.');
+                $allocationId = 0;
+            }
+            if ($allocationId <= 0) {
+                $allocation = $allocationService->allocate(
+                    $entryId,
+                    (int)$entry['revision'],
+                    'hourly',
+                    (int)$entry['duration_seconds'],
+                    number_format($rate, 4, '.', ''),
+                    (string)($entry['snapshot_currency'] ?? 'USD'),
+                    $actorId,
+                    [
+                        'client_id' => (int)$invoice['client_id'],
+                        'project_id' => $invoice['project_id'],
+                        'job_id' => $invoice['job_id'],
+                        'invoice_id' => $invoiceId,
+                    ],
+                    'invoice-link:' . $entryId . ':' . (int)$entry['revision'] . ':' . $invoiceId . ':' . number_format($rate, 4, '.', '')
+                );
+                $allocationId = (int)$allocation['id'];
+            }
 
             $item = $this->pdo->prepare(
                 'INSERT INTO invoice_items
@@ -116,6 +154,7 @@ final class WorkTimeInvoiceLinkService
             if ($markBilled->rowCount() !== 1) {
                 throw new DomainException('This time entry was linked by another request. Refresh and try again.');
             }
+            $allocationService->markInvoiced($allocationId, $invoiceId, $invoiceItemId);
 
             (new WorkTimeBillingContextService($this->pdo))->synchronizeInvoice($invoiceId, $actorId);
 
@@ -155,6 +194,7 @@ final class WorkTimeInvoiceLinkService
                     'billing_time_entry_id' => $billingTimeEntryId,
                     'invoice_id' => $invoiceId,
                     'invoice_item_id' => $invoiceItemId,
+                    'billing_allocation_id' => $allocationId,
                     'rate' => $rate,
                     'hours' => $hours,
                 ]);
@@ -164,6 +204,7 @@ final class WorkTimeInvoiceLinkService
             return [
                 'invoice_id' => $invoiceId,
                 'invoice_item_id' => $invoiceItemId,
+                'billing_allocation_id' => $allocationId,
                 'hours' => $hours,
                 'rate' => $rate,
                 'amount' => $lineTotal,

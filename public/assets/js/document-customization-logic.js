@@ -1,3 +1,13 @@
+function documentCustomizationCsrfToken() {
+    const input = document.querySelector('#fieldForm input[name="csrf"]');
+    return input ? input.value : '';
+}
+
+function documentCustomizationActiveTab() {
+    const root = document.querySelector('[data-document-customization]');
+    return root ? (root.getAttribute('data-active-field-tab') || 'regular') : 'regular';
+}
+
 function toggleOptionsField() {
     const fieldType = document.getElementById('fieldType').value;
     const optionsField = document.getElementById('optionsField');
@@ -16,7 +26,7 @@ function showAddFieldModal() {
     // Show document type checkboxes for create, check current tab
     document.getElementById('docTypesSection').style.display = 'block';
     document.querySelectorAll('[name="document_types[]"]').forEach(cb => {
-        cb.checked = cb.value === activeTab;
+        cb.checked = cb.value === documentCustomizationActiveTab();
     });
     
     toggleOptionsField();
@@ -58,7 +68,7 @@ function deleteField(fieldId) {
     if (!confirm('Are you sure you want to delete this field? This cannot be undone.')) return;
     
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', documentCustomizationCsrfToken());
     formData.append('action', 'delete');
     formData.append('field_id', fieldId);
     
@@ -109,7 +119,7 @@ document.querySelectorAll('.field-toggle').forEach(toggle => {
         const isEnabled = this.checked ? 1 : 0;
         
         const formData = new FormData();
-        formData.append('csrf', '<?php echo csrf_token(); ?>');
+        formData.append('csrf', documentCustomizationCsrfToken());
         formData.append('action', 'toggle');
         formData.append('field_id', fieldId);
         formData.append('is_enabled', isEnabled);
@@ -191,7 +201,7 @@ function saveFieldOrder() {
     }));
     
     const formData = new FormData();
-    formData.append('csrf', '<?php echo csrf_token(); ?>');
+    formData.append('csrf', documentCustomizationCsrfToken());
     formData.append('action', 'reorder');
     formData.append('order', JSON.stringify(order));
     

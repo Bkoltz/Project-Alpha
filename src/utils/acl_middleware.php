@@ -53,16 +53,18 @@ function page_permission_map(): array
 
         // Unified Workforce modules
         'workforce/time'        => ['timekeeping.self', 'timekeeping.manage'],
-        'workforce/overview'    => ['timekeeping.self', 'timekeeping.manage', 'workforce.manage', 'approvals.review', 'employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
+        'workforce/overview'    => ['timekeeping.self', 'timekeeping.manage', 'workforce.manage', 'workforce.assignments.self', 'workforce.assignments.manage', 'workforce.pay_periods.manage', 'workforce.statements.self', 'workforce.statements.manage', 'workforce.business_units.manage', 'approvals.review', 'employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
         'workforce/approvals'   => 'approvals.review',
-        'workforce/pay'         => ['employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
+        'workforce/pay'         => ['workforce.statements.self', 'workforce.statements.manage', 'employee_pay.self', 'employee_pay.view', 'employee_pay.manage'],
         // The action controller performs an action-specific permission check.
         'workforce/action'      => null,
         'workforce/contractor-invoice' => null,
         'workforce/contractor-invoice-download' => null,
         'api/workforce-v1'      => null,
         'api/catalog-v1'        => null,
-        'settings/workforce-catalog-handler' => 'settings.manage',
+        // This endpoint contains both configuration and operational commands;
+        // its controller enforces the canonical permission for each action.
+        'settings/workforce-catalog-handler' => null,
 
         // Accounts / users
         'accounts'               => 'users.manage',
@@ -336,6 +338,17 @@ function acl_middleware(PDO $pdo, string $page): void
             header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
             exit;
         }
+    }
+
+    // Approval access has a feature gate and worker/business-unit scope in
+    // addition to the role ACL. Evaluate the same policy as the page and POST
+    // controller so a visible route cannot diverge from its data queue.
+    if ($page === 'workforce/approvals') {
+        if ((new \App\Services\TimeApprovalPolicy($pdo))->canAccessQueue($userId)) {
+            return;
+        }
+        audit_log($pdo, 'acl.denied', 'permission', null, ['page' => $page, 'required' => 'time-approval-policy', 'user_id' => $userId]);
+        deny_response($page);
     }
 
     $map = page_permission_map();

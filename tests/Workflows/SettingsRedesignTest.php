@@ -20,8 +20,9 @@ final class SettingsRedesignTest extends TestCase
         }
 
         $expected = [
-            'backup', 'billing', 'documents', 'item-library', 'links', 'logs',
-            'notifications', 'permissions', 'system', 'taxes', 'terms', 'workflow',
+            'assignments', 'backup', 'billing', 'business-units', 'documents',
+            'item-library', 'links', 'logs', 'notifications', 'pay-periods',
+            'permissions', 'system', 'taxes', 'terms', 'work-types', 'workflow',
         ];
         sort($tabs);
         sort($expected);
@@ -93,6 +94,21 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringContainsString('.settings-form-grid { grid-template-columns: 1fr; }', $styles);
     }
 
+    public function testTimeAndWorkforceSettingsLiveUnderWorkJobsAndPay(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $system = (string)file_get_contents($root . '/src/views/pages/settings/system.php');
+        $workflow = (string)file_get_contents($root . '/src/views/pages/settings/workflow.php');
+        $handler = (string)file_get_contents($root . '/src/controllers/settings_handler.php');
+
+        self::assertStringNotContainsString('Time &amp; Workforce', $system);
+        self::assertStringContainsString('Time &amp; Workforce', $workflow);
+        self::assertStringContainsString('name="workforce_currency"', $workflow);
+        self::assertStringContainsString('if ($isWorkflowTab)', $handler);
+        self::assertStringContainsString('tab=workflow&error=', $handler);
+        self::assertStringContainsString('tab=workflow', (string)file_get_contents($root . '/src/views/pages/workforce/overview.php'));
+    }
+
     public function testLegacyAccountAndCustomizationAliasesRemainSupported(): void
     {
         $view = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings.php');
@@ -100,5 +116,117 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringContainsString("\$requestedTab === 'account'", $view);
         self::assertStringContainsString("\$requestedTab === 'customization'", $view);
         self::assertStringContainsString("\$_GET['doc_tab'] = 'customization'", $view);
+    }
+
+    public function testSettingsActionScriptsBindToTheActualRouterPage(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $systemScript = (string)file_get_contents($root . '/public/assets/js/settings-system.js');
+        $catalogScript = (string)file_get_contents($root . '/public/assets/js/item-library.js');
+        $notificationScript = (string)file_get_contents($root . '/public/assets/js/settings-notifications.js');
+
+        self::assertStringContainsString("registerPage('settings', initSettingsSystem)", $systemScript);
+        self::assertStringNotContainsString("registerPage('settings/system'", $systemScript);
+        self::assertStringContainsString("registerPage('settings',initItemLibraryPage)", $catalogScript);
+        self::assertStringContainsString("registerPage('settings', initSettingsNotifications)", $notificationScript);
+        self::assertStringContainsString('data-settings-notifications', (string)file_get_contents($root . '/src/views/pages/settings/notifications.php'));
+    }
+
+    public function testStaticSettingsScriptsNeverContainUnrenderedPhpTokens(): void
+    {
+        $root = dirname(__DIR__, 2);
+        foreach (['customization-logic.js', 'document-customization-logic.js'] as $file) {
+            $script = (string)file_get_contents($root . '/public/assets/js/' . $file);
+            self::assertStringNotContainsString('<?php', $script, $file . ' is served as a static asset and cannot render PHP.');
+            self::assertStringContainsString('CsrfToken()', $script, $file . ' must read the rendered form token.');
+        }
+
+        $documentView = (string)file_get_contents($root . '/src/views/pages/settings/documents/customization.php');
+        self::assertStringContainsString('data-active-field-tab=', $documentView);
+        self::assertStringContainsString('name="csrf"', $documentView);
+    }
+
+    public function testWorkforceSettingsActionsAndPermissionGateStayAligned(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $views = '';
+        foreach (['business-units.php', 'work-types.php', 'assignments.php', 'pay-periods.php'] as $file) {
+            $views .= (string)file_get_contents($root . '/src/views/pages/settings/' . $file);
+        }
+        preg_match_all('/name="action"\s+value="([a-z-]+)"/', $views, $matches);
+        // Worker-document upload uses its own `worker-documents` controller.
+        $actions = array_values(array_diff(array_unique($matches[1] ?? []), ['upload']));
+        $controller = (string)file_get_contents($root . '/src/controllers/settings/workforce_catalog_handler.php');
+
+        self::assertNotEmpty($actions);
+        foreach ($actions as $action) {
+            self::assertStringContainsString("\$action==='{$action}'", $controller, "Missing backend action: {$action}");
+        }
+        self::assertStringContainsString('user_can($pdo,$userId,$permission,0)', $controller);
+        self::assertStringContainsString("'save-work-type','set-work-type-status'=>['workforce.catalog.manage','settings.manage']", $controller);
+        self::assertStringNotContainsString("in_array((string)(\$_SESSION['user']['role']??''),['admin','owner']", $controller);
+        self::assertStringNotContainsString("user_can(\$pdo,\$userId,'workforce.manage',0)", $controller);
+    }
+
+    public function testWorkTypesSeparateClientBillingFromWorkerCompensation(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $view = (string)file_get_contents($root . '/src/views/pages/settings/work-types.php');
+        $controller = (string)file_get_contents($root . '/src/controllers/settings/workforce_catalog_handler.php');
+        $registry = pa_settings_registry();
+
+        self::assertStringContainsString('LEFT JOIN work_type_billing_defaults', $view);
+        self::assertStringContainsString('Client billing default', $view);
+        self::assertStringContainsString('Worker compensation default', $view);
+        self::assertStringContainsString('name="billing_treatment"', $view);
+        self::assertStringContainsString('name="billing_rate"', $view);
+        self::assertStringContainsString('name="compensation_currency"', $view);
+        self::assertStringContainsString('edit_work_type=', $view);
+        self::assertStringContainsString('value="set-work-type-status"', $view);
+        self::assertStringContainsString('settings-action-row', $view);
+        self::assertStringContainsString('settings-save-bar', $view);
+
+        self::assertStringContainsString('INSERT INTO work_type_billing_defaults', $controller);
+        self::assertStringContainsString("\$action==='set-work-type-status'", $controller);
+        self::assertStringContainsString("['undecided','internal','fixed_price_included','hourly']", $controller);
+        self::assertSame('workforce.catalog.manage', $registry['work']['items']['work-types']['permission']);
+
+        $catalogManagerRegistry = pa_settings_visible_registry(
+            $registry,
+            static fn (string $permission): bool => $permission === 'workforce.catalog.manage',
+            'staff'
+        );
+        self::assertArrayHasKey('work-types', $catalogManagerRegistry['work']['items']);
+        self::assertArrayNotHasKey('workflow', $catalogManagerRegistry['work']['items']);
+    }
+
+    public function testRestrictedSettingsActionsAreNotRenderedToIneligibleRoles(): void
+    {
+        $registry = pa_settings_visible_registry(
+            pa_settings_registry(),
+            static fn (string $permission): bool => $permission === 'settings.manage',
+            'staff'
+        );
+
+        self::assertArrayNotHasKey('permissions', $registry['people']['items']);
+        self::assertArrayHasKey('business-units', $registry['people']['items']);
+
+        $businessUnits = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings/business-units.php');
+        self::assertStringContainsString("user_can(\$pdo,(int)(\$_SESSION['user']['id']??0),'users.manage',0)", $businessUnits);
+        self::assertStringContainsString('if($canManageWorkerDocuments)', $businessUnits);
+    }
+
+    public function testSettingsFormEndpointsAreRegisteredByTheFrontController(): void
+    {
+        $index = (string)file_get_contents(dirname(__DIR__, 2) . '/public/index.php');
+        foreach ([
+            'settings', 'settings-backup', 'settings/item-library-handler',
+            'settings/links-handler', 'settings/permissions-handler',
+            'settings/stripe-import-payments', 'settings/stripe-net-backfill',
+            'settings/tax-import-handler', 'settings/tax-rates-handler',
+            'settings/workforce-catalog-handler', 'worker-documents',
+        ] as $endpoint) {
+            self::assertStringContainsString("'{$endpoint}'", $index, "Settings endpoint is not routed: {$endpoint}");
+        }
     }
 }

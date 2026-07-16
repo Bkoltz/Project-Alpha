@@ -403,6 +403,35 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString(':cron-sha-${{ github.sha }}', $docker);
     }
 
+    public function testNavigationDiagnosticsDoNotTreatExternalInputAsCodeOrMarkup(): void
+    {
+        $navigation = $this->read('public/assets/navigation.js');
+
+        self::assertStringContainsString(
+            "console.error('Page initializer failed for %s', normalizedPage, err);",
+            $navigation
+        );
+        self::assertStringNotContainsString(
+            "console.error('Page initializer failed for ' + normalizedPage, err);",
+            $navigation
+        );
+        self::assertStringContainsString("scripts.length === 0 && doc.querySelector('script')", $navigation);
+        self::assertStringNotContainsString('html.match(/<script', $navigation);
+    }
+
+    public function testSecurityWorkflowsUseExplicitLeastPrivilegeTokens(): void
+    {
+        $gitleaks = str_replace(["\r\n", "\r"], "\n", $this->read('.github/workflows/gitleaks.yml'));
+        self::assertMatchesRegularExpression('/(?m)^permissions:\n  contents: read$/', $gitleaks);
+
+        $docker = str_replace(["\r\n", "\r"], "\n", $this->read('.github/workflows/docker-publish.yml'));
+        self::assertMatchesRegularExpression(
+            '/(?m)^    permissions:\n      contents: read\n      packages: write$/',
+            $docker
+        );
+        self::assertFileDoesNotExist($this->root . '/.github/workflows/docker-image.yml');
+    }
+
     private function mysql(): PDO
     {
         if ($this->pdo instanceof PDO) {

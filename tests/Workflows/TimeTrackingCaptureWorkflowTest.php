@@ -14,17 +14,44 @@ final class TimeTrackingCaptureWorkflowTest extends TestCase
         $this->root = dirname(__DIR__, 2);
     }
 
-    public function testClientFieldsUseAjaxTypeaheadAcrossTimeEntryForms(): void
+    public function testUnifiedTimeEntryUsesSearchableContextAndAjaxClientLookup(): void
     {
         $view = (string)file_get_contents($this->root . '/src/views/pages/workforce/time.php');
         $script = (string)file_get_contents($this->root . '/public/assets/js/workforce.js');
 
-        self::assertGreaterThanOrEqual(4, substr_count($view, 'data-workforce-client-combobox'));
+        self::assertGreaterThanOrEqual(2, substr_count($view, 'data-workforce-client-combobox'));
+        self::assertSame(1, substr_count($view, 'data-workforce-record-form'));
         self::assertStringNotContainsString('<select class="input" name="client_id"', $view);
         self::assertStringContainsString('Type to search clients', $view);
+        self::assertStringContainsString('data-workforce-search-select', $view);
+        self::assertStringContainsString('data-workforce-option-filter', $view);
         self::assertStringContainsString("resource=clients&q=' + encodeURIComponent(query)", $script);
         self::assertStringContainsString("registerPage('workforce/time'", $script);
         self::assertStringContainsString("event.key === 'ArrowDown'", $script);
+        self::assertStringContainsString('function initSearchSelect', $script);
+    }
+
+    public function testRecordTimeModesUseCompatibleActionsAndSeparateOutcomes(): void
+    {
+        $view = (string)file_get_contents($this->root . '/src/views/pages/workforce/time.php');
+        $script = (string)file_get_contents($this->root . '/public/assets/js/workforce.js');
+
+        self::assertStringContainsString('Record time', $view);
+        self::assertStringContainsString('value="duration"', $view);
+        self::assertStringContainsString('value="timer"', $view);
+        self::assertStringContainsString('value="exact"', $view);
+        self::assertStringContainsString('name="capture_mode"', $view);
+        self::assertStringNotContainsString('<h3 class="card-title">Quick work entry</h3>', $view);
+        self::assertStringNotContainsString('<h3 class="card-title">Manual entry</h3>', $view);
+        self::assertStringContainsString('name="billing_treatment"', $view);
+        self::assertStringContainsString('Client billing', $view);
+        self::assertStringContainsString('Worker compensation', $view);
+        self::assertStringContainsString('<th>Client billing</th>', $view);
+        self::assertStringContainsString('<th>Worker compensation</th>', $view);
+        self::assertStringContainsString("mode === 'timer' ? 'clock-in' : 'manual-create'", $script);
+        self::assertStringContainsString('startTime.value = localDateTimeValue(start)', $script);
+        self::assertStringContainsString("billingTreatment.value === 'ready' ? '1' : '0'", $script);
+        self::assertStringContainsString("registerPage('workforce/time'", $script);
     }
 
     public function testConfirmedTimeCanBeLinkedToAnInvoiceWithAnAuditedRevision(): void

@@ -14,7 +14,7 @@ $stmt->execute([$activeTab]);
 $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<div style="max-width:1100px">
+<div style="max-width:1100px" data-document-customization data-active-field-tab="<?php echo e($activeTab); ?>">
     <h3 style="margin:0 0 8px 0">Document Header Fields</h3>
     <p style="margin:0 0 20px 0;color:var(--muted);font-size:14px">Customize which fields appear in the top section of your documents. Fields left empty won't appear on the document.</p>
 
@@ -188,9 +188,5 @@ $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </form>
     </div>
 </div>
-
-<script>
-const activeTab = '<?php echo e($activeTab); ?>';
-</script>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-customization-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

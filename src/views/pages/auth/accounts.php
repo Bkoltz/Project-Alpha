@@ -277,7 +277,7 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
             </label>
             <label>
               <span style="font-weight:600">Hourly pay rate</span>
-              <input type="number" name="employee_hourly_rate" class="input" min="0" step="0.0001" placeholder="Use System Settings default">
+              <input type="number" name="employee_hourly_rate" class="input" min="0" step="0.0001" placeholder="Use business fallback">
             </label>
             <label style="display:flex;flex-direction:row;align-items:center;gap:8px;align-self:end;padding-bottom:10px;">
               <input type="checkbox" name="employee_can_view_pay" value="1" checked style="width:auto">
