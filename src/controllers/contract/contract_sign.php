@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/contract_billing_start.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/job_work_materialization.php';
 
 $contract_id = (int)($_POST['id'] ?? 0);
 if ($contract_id <= 0) { header('Location: /?page=contract/contracts-list&error=Invalid%20contract'); exit; }
@@ -96,6 +97,7 @@ try {
   if($pdo->query('SELECT ROW_COUNT()')->fetchColumn()!=1)throw new Exception('This contract was signed by another request. The existing signed file was not replaced.');
 
   pa_public_link_terminalize($pdo, 'contract', $contract_id, 'signed');
+  catalog_plan_direct_contract($pdo, $contract_id, (int)($_SESSION['user']['id'] ?? 0));
 
   $pdo->commit();
 } catch (Throwable $e) {

@@ -2,6 +2,31 @@
 
 declare(strict_types=1);
 
+function mileage_financial_treatment_for_relationship(string $relationship): string
+{
+    return match ($relationship) {
+        'employee' => 'worker_reimbursement',
+        'contractor' => 'contractor_record_only',
+        'owner' => 'organization_mileage',
+        default => 'nonreimbursable',
+    };
+}
+
+function mileage_financial_treatment_labels(): array
+{
+    return [
+        'organization_mileage' => 'Organization mileage',
+        'worker_reimbursement' => 'Organization repays worker',
+        'contractor_record_only' => 'Contractor record only',
+        'nonreimbursable' => 'Record only — no organization repayment',
+    ];
+}
+
+function mileage_organization_total_exclusions(): array
+{
+    return ['contractor_record_only', 'nonreimbursable'];
+}
+
 interface MileageRoutingAdapter
 {
     /** @return array{one_way_miles:float,provider_reference:?string}|null */

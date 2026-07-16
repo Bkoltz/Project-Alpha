@@ -19,6 +19,7 @@ require_once __DIR__ . '/../../utils/smtp.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/mileage.php';
+require_once __DIR__ . '/../../utils/job_work_materialization.php';
 $submitted = (string)($_POST['_token'] ?? ($_POST['csrf'] ?? ''));
 if (!csrf_sf_is_valid('public_quote_action', $submitted)) {
   header('Location: /?page=public-doc&error=' . urlencode('Invalid request'));
@@ -117,22 +118,26 @@ try {
              $quoteCreator
            ]);
         $contract_id = (int)$pdo->lastInsertId();
+        $pdo->prepare('UPDATE contracts SET job_id=?,service_location_id=? WHERE id=?')
+          ->execute([!empty($quote['job_id'])?(int)$quote['job_id']:null,!empty($quote['service_location_id'])?(int)$quote['service_location_id']:null,$contract_id]);
         if ($quoteType === 'long_term' && ($quote['pricing_type'] ?? '') === 'per_invoice') {
           pa_recurring_service_ensure_base($pdo, $contract_id);
         }
 
-        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
         foreach ($qitems as $it) {
           $ci->execute([
             $contract_id,
+            $it['item_library_id']??null,
             $it['item'] ?? ($it['description'] ?? 'Item'),
             $it['description'],
             $it['quantity'],
             $it['unit_price'],
             $it['line_total'],
-            in_array(($it['billing_unit'] ?? 'each'),['hour','mile'],true)?$it['billing_unit']:'each',
+            in_array(($it['billing_unit'] ?? 'each'),['each','hour','day','mile','project'],true)?$it['billing_unit']:'each',
             (int)($it['is_travel']??0),
-            $it['pricing_status']??'standard'
+            $it['pricing_status']??'standard',
+            $it['catalog_snapshot']??null
           ]);
         }
         mileage_copy_document_rule($pdo,$qid,$contract_id,$quoteOrgId,(int)$quote['client_id'],$quoteCreator);
@@ -149,23 +154,27 @@ try {
           $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, invoice_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
              ->execute([$contract_id, $qid, (int)$quote['client_id'], !empty($quote['project_id']) ? (int)$quote['project_id'] : null, 'regular', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
           $invoice_id = (int)$pdo->lastInsertId();
+          $pdo->prepare('UPDATE invoices SET job_id=?,service_location_id=? WHERE id=?')
+            ->execute([!empty($quote['job_id'])?(int)$quote['job_id']:null,!empty($quote['service_location_id'])?(int)$quote['service_location_id']:null,$invoice_id]);
           if (!empty($quote['project_id']) && project_uses_monthly_invoice_billing($pdo, (int)$quote['project_id'])) {
             $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
           }
 
-          $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
+          $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
           foreach ($qitems as $it) {
             if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;
             $ii->execute([
               $invoice_id,
+              $it['item_library_id']??null,
               $it['item'] ?? ($it['description'] ?? 'Item'),
               $it['description'],
               $it['quantity'],
               $it['unit_price'],
               $it['line_total'],
-              in_array(($it['billing_unit'] ?? 'each'),['hour','mile'],true)?$it['billing_unit']:'each',
+              in_array(($it['billing_unit'] ?? 'each'),['each','hour','day','mile','project'],true)?$it['billing_unit']:'each',
               (int)($it['is_travel']??0),
-              $it['pricing_status']??'standard'
+              $it['pricing_status']??'standard',
+              $it['catalog_snapshot']??null
             ]);
           }
         }
@@ -180,6 +189,7 @@ try {
           $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$iMax + 1, $invoice_id]);
         }
 
+        catalog_plan_document_work($pdo,'quote',$qid,$quoteCreator);
         $pdo->commit();
         $changed = true;
       } catch (Throwable $e) {

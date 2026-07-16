@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../../utils/password_reset_tokens.php';
 
 $csrf = csrf_sf_token('auth');
+$passkeyCsrf = csrf_sf_token('passkey_login');
 $noUsers = false;
 try {
     $noUsers = ((int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn()) === 0;
@@ -56,6 +57,13 @@ $h = static fn(mixed $value): string => htmlspecialchars((string)$value, ENT_QUO
   .login-submit:hover { filter: brightness(.97); transform: translateY(-1px); }
   .login-reset { justify-self: center; color: #0369a1; font-size: 13px; font-weight: 600; }
   .login-reset:hover { text-decoration: underline; }
+  .login-divider { display:flex; align-items:center; gap:12px; margin:18px 0; color:#94a3b8; font-size:12px; }
+  .login-divider::before,.login-divider::after { content:""; height:1px; flex:1; background:#e2e8f0; }
+  .login-passkey { width:100%; padding:12px 18px; border:1px solid #94a3b8; border-radius:10px; color:#0f172a; background:#fff; font:inherit; font-weight:700; cursor:pointer; }
+  .login-passkey:hover { background:#f8fafc; }
+  .login-passkey:disabled { opacity:.6; cursor:wait; }
+  .passkey-login-status { margin:10px 0 0; color:#475569; font-size:13px; text-align:center; }
+  .passkey-message-error { color:#b91c1c; }
   .login-footnote { margin: 28px 0 0; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 12px; text-align: center; }
   @media (max-width: 820px) {
     .login-page { padding: 18px; place-items: start center; }
@@ -104,7 +112,7 @@ $h = static fn(mixed $value): string => htmlspecialchars((string)$value, ENT_QUO
           <input type="hidden" name="action" value="<?php echo $noUsers ? 'register_first' : 'login'; ?>">
           <label class="login-field">
             <span><?php echo $noUsers ? 'Administrator email' : 'Email or username'; ?></span>
-            <input required class="login-input" type="<?php echo $noUsers ? 'email' : 'text'; ?>" name="email" autocomplete="username" autofocus>
+            <input required class="login-input" type="<?php echo $noUsers ? 'email' : 'text'; ?>" name="email" autocomplete="<?php echo $noUsers ? 'username' : 'username webauthn'; ?>" autofocus>
           </label>
           <?php if ($noUsers): ?>
             <label class="login-field">
@@ -128,6 +136,12 @@ $h = static fn(mixed $value): string => htmlspecialchars((string)$value, ENT_QUO
             <?php if (!$noUsers && $resetAvailable): ?><a href="/?page=reset-password" class="login-reset">Forgot your password?</a><?php endif; ?>
           </div>
         </form>
+        <?php if (!$noUsers): ?>
+          <div class="login-divider"><span>or</span></div>
+          <button type="button" id="passkey-login-button" class="login-passkey" data-passkey-login data-csrf="<?php echo $h($passkeyCsrf); ?>" data-options-url="/?page=passkey-options" data-complete-url="/?page=passkey-complete" data-status-id="passkey-login-status">Sign in with a passkey</button>
+          <p id="passkey-login-status" class="passkey-login-status" hidden aria-live="polite"></p>
+          <script src="/assets/passkeys.js" defer></script>
+        <?php endif; ?>
         <p class="login-footnote">Protected access to <?php echo $h($brandName); ?></p>
       </div>
     </section>

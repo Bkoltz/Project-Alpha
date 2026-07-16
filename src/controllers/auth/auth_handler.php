@@ -177,6 +177,28 @@ if ($action === 'login') {
             $st2fa->execute([(int)$u['id']]);
             $twofa_enabled = (bool)$st2fa->fetchColumn();
         } catch (Throwable $e) {}
+        $trustedDevice = false;
+        if ($twofa_enabled) {
+            $deviceToken = (string)($_COOKIE['device_trust'] ?? '');
+            if (preg_match('/^[a-f0-9]{64}$/', $deviceToken)) {
+                try {
+                    $agentHash = hash('sha256', (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
+                    $trusted = $pdo->prepare(
+                        'SELECT id FROM trusted_devices
+                         WHERE user_id=? AND device_token=? AND ip_address=? AND user_agent_hash=? AND expires_at>NOW()
+                         LIMIT 1'
+                    );
+                    $trusted->execute([(int)$u['id'], $deviceToken, $ip, $agentHash]);
+                    $trustedId = (int)$trusted->fetchColumn();
+                    if ($trustedId > 0) {
+                        $trustedDevice = true;
+                        $pdo->prepare('UPDATE trusted_devices SET last_verified_at=NOW() WHERE id=?')->execute([$trustedId]);
+                    }
+                } catch (Throwable $e) {
+                    $trustedDevice = false;
+                }
+            }
+        }
         
         // Build the full session user data before storing or redirecting
         require_once __DIR__ . '/../../utils/acl.php';
@@ -189,7 +211,7 @@ if ($action === 'login') {
             'permissions_hash' => compute_permissions_hash($pdo, (int)$u['id'], 0),
         ];
 
-        if ($twofa_enabled) {
+        if ($twofa_enabled && !$trustedDevice) {
             // User has 2FA enabled, redirect to 2FA verification
             session_regenerate_id(true);
             $_SESSION['2fa_pending'] = [
@@ -204,6 +226,7 @@ if ($action === 'login') {
         // on success (no 2FA), regenerate session and optionally clear attempts
         session_regenerate_id(true);
         $_SESSION['user'] = $userSession;
+        $_SESSION['authn'] = ['method' => $trustedDevice ? 'password_trusted_device' : 'password', 'authenticated_at' => time()];
         password_reset_revoke_for_user($pdo, (int)$u['id']);
         // Clear old login attempts on success
         try {

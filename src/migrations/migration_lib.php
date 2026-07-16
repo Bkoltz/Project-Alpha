@@ -252,12 +252,19 @@ function migration_schema_health(PDO $pdo): void
         'project_service_locations', 'document_revisions', 'document_deliveries',
         'document_address_snapshots', 'invoice_adjustments', 'route_estimate_cache',
         'schedule_entries', 'mileage_charge_allocations', 'mileage_tracking_sessions',
+        'worker_documents', 'business_units', 'worker_profiles', 'worker_business_units',
+        'client_business_units', 'worker_capability_scopes', 'work_types',
+        'catalog_bundle_items', 'catalog_work_components', 'worker_compensation_rules',
+        'job_work_components', 'work_assignments', 'pay_periods',
+        'worker_period_submissions', 'worker_statements', 'worker_statement_lines',
+        'compensation_adjustments', 'passkey_credentials', 'passkey_challenges',
+        'passkey_attempts',
     ];
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',
         'recurring_invoices', 'recurring_invoice_items', 'webhook_deliveries',
         'notification_settings', 'notification_log', 'document_custom_field_values',
-        'financial_records', 'migrations',
+        'financial_records', 'migrations', 'employee_documents',
     ];
 
     $present = $pdo->query(
@@ -294,7 +301,7 @@ function migration_schema_health(PDO $pdo): void
         'business_settings' => ['business_uuid','business_name','timezone','currency','default_hourly_rate','default_billing_rate'],
         'employee_profiles' => ['user_id','employment_status','hourly_rate','currency','employee_can_view_pay'],
         'project_assignments' => ['project_id','user_id','pay_rate_override','ends_at'],
-        'work_time_entries' => ['id','user_id','project_id','start_time','end_time','duration_seconds','status','revision'],
+        'work_time_entries' => ['id','user_id','project_id','job_id','work_type_id','work_assignment_id','entry_mode','owner_self_confirmed','internal_cost_rate','start_time','end_time','duration_seconds','status','revision'],
         'work_approval_snapshots' => ['time_entry_id','entry_revision','pay_rate','billing_rate','pay_amount','currency'],
         'work_pay_accruals' => ['approval_snapshot_id','employee_user_id','amount','currency','status'],
         'work_billing_consumptions' => ['approval_snapshot_id','billing_time_entry_id','consumption_type'],
@@ -307,6 +314,16 @@ function migration_schema_health(PDO $pdo): void
         'document_revisions' => ['document_type','document_id','revision_number','snapshot','content_hash'],
         'invoice_adjustments' => ['invoice_id','adjustment_type','amount','revision_number','superseded_at'],
         'schedule_entries' => ['project_id','job_id','starts_at','timezone','source_type'],
+        'worker_documents' => ['user_id','worker_profile_id','worker_name_snapshot','category','title','signed_on','expires_on','status','worker_visible','file_path','content_sha256','version_number','archived_at'],
+        'worker_profiles' => ['user_id','relationship_type','status','display_name','owner_internal_cost_rate'],
+        'item_library' => ['entry_type','billing_unit','tax_behavior','fulfillment_notes'],
+        'quote_items' => ['item_library_id','catalog_snapshot'],
+        'contract_items' => ['item_library_id','catalog_snapshot'],
+        'invoice_items' => ['item_library_id','catalog_snapshot'],
+        'mileage_logs' => ['recorded_by_user_id','traveler_user_id','traveler_worker_id','financial_treatment'],
+        'work_assignments' => ['worker_profile_id','status','compensation_snapshot','eligibility_snapshot','estimated_pay','approved_pay','eligible_at','eligible_by'],
+        'passkey_credentials' => ['user_id','credential_id','user_handle','credential_record','signature_counter','revoked_at'],
+        'passkey_challenges' => ['user_id','ceremony','challenge_hash','session_hash','expires_at','consumed_at'],
     ];
     $columnQuery = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.columns

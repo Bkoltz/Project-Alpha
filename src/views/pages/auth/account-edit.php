@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/escaper.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/document_sender.php';
+require_once __DIR__ . '/../../../utils/worker_documents.php';
 
 // Require admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -65,12 +66,33 @@ try {
     @error_log('[account-edit] employee profile load failed: ' . $e->getMessage());
 }
 
+$personnelDocuments = [];
+$personnelDocumentsAvailable = true;
+$personnelDocumentCategories = worker_document_category_labels();
+try {
+    $documentStmt = $pdo->prepare(
+        'SELECT d.*,u.username uploaded_by_username,u.email uploaded_by_email
+         FROM worker_documents d LEFT JOIN users u ON u.id=d.uploaded_by
+         WHERE d.user_id=?
+         ORDER BY (d.status="archived"),COALESCE(d.expires_on,"9999-12-31"),d.created_at DESC'
+    );
+    $documentStmt->execute([$userId]);
+    $personnelDocuments = $documentStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $personnelDocumentsAvailable = false;
+    @error_log('[account-edit] personnel document load failed: ' . $e->getMessage());
+}
+
 // Get 2FA status
 $twofaEnabled = false;
+$activePasskeyCount = 0;
 try {
     $st = $pdo->prepare('SELECT enabled FROM user_2fa WHERE user_id = ?');
     $st->execute([$userId]);
     $twofaEnabled = (bool)$st->fetchColumn();
+    $passkeyStatement = $pdo->prepare('SELECT COUNT(*) FROM passkey_credentials WHERE user_id=? AND revoked_at IS NULL');
+    $passkeyStatement->execute([$userId]);
+    $activePasskeyCount = (int)$passkeyStatement->fetchColumn();
 } catch (Throwable $e) {}
 
 $success = $_GET['success'] ?? '';
@@ -198,6 +220,10 @@ try {
     .pa-edit-project { display: grid; grid-template-columns: minmax(220px, 1fr) 180px; gap: 16px; align-items: center; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
     .pa-edit-project > label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
     .pa-edit-secondary { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+    .pa-personnel-upload { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end; }
+    .pa-personnel-upload .pa-span-2 { grid-column:span 2; }
+    .pa-personnel-table { width:100%;border-collapse:collapse;margin-bottom:18px; }
+    .pa-personnel-table th,.pa-personnel-table td { padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top; }
     #permissions-panel-edit.pa-hidden {
       opacity: 0;
       max-height: 0 !important;
@@ -213,6 +239,8 @@ try {
     @media (max-width: 720px) {
       .pa-edit-grid { grid-template-columns: 1fr; }
       .pa-edit-sender-grid { grid-template-columns: 1fr; }
+      .pa-personnel-upload { grid-template-columns:1fr; }
+      .pa-personnel-upload .pa-span-2 { grid-column:auto; }
     }
   </style>
 
@@ -461,6 +489,70 @@ try {
       });
     </script>
 
+    <div class="pa-edit-card" id="personnel-documents">
+      <h3 style="margin-bottom:6px">Personnel Documents &amp; Agreements</h3>
+      <p style="margin:0 0 16px;color:#6b7280;font-size:14px">Keep signed equipment-use agreements, waivers, policies, certifications, and other worker records with this account. Uploaded files are integrity-hashed and are never replaced in place.</p>
+      <?php if (!empty($_GET['document_msg'])): ?>
+        <div class="alert alert-success"><?php echo e((string)$_GET['document_msg']); ?></div>
+      <?php endif; ?>
+      <?php if (!empty($_GET['document_error'])): ?>
+        <div class="alert alert-danger"><?php echo e((string)$_GET['document_error']); ?></div>
+      <?php endif; ?>
+
+      <?php if (!$personnelDocumentsAvailable): ?>
+        <div class="alert alert-warning">Personnel documents are unavailable until database migration 0044 is applied.</div>
+      <?php else: ?>
+        <?php if ($personnelDocuments): ?>
+          <div style="overflow:auto">
+            <table class="pa-personnel-table">
+              <thead><tr><th>Document</th><th>Signed / expires</th><th>Status</th><th>File</th><th>Actions</th></tr></thead>
+              <tbody>
+              <?php foreach ($personnelDocuments as $document): ?>
+                <?php
+                  $isArchived = ($document['status'] ?? '') === 'archived';
+                  $isExpired = !$isArchived && !empty($document['expires_on']) && (string)$document['expires_on'] < date('Y-m-d');
+                  $statusLabel = $isArchived ? 'Archived' : ($isExpired ? 'Expired' : 'Current');
+                  $statusStyle = $isArchived ? 'background:#f3f4f6;color:#4b5563' : ($isExpired ? 'background:#fef3c7;color:#92400e' : 'background:#d1fae5;color:#065f46');
+                ?>
+                <tr>
+                  <td><strong><?php echo e((string)$document['title']); ?></strong><div style="font-size:12px;color:#6b7280"><?php echo e($personnelDocumentCategories[$document['category']] ?? ucwords(str_replace('_', ' ', (string)$document['category']))); ?></div><?php if (!empty($document['notes'])): ?><div style="font-size:12px;margin-top:4px"><?php echo nl2br(e((string)$document['notes'])); ?></div><?php endif; ?></td>
+                  <td><?php echo !empty($document['signed_on']) ? e((string)$document['signed_on']) : 'Not recorded'; ?><div style="font-size:12px;color:#6b7280">Expires: <?php echo !empty($document['expires_on']) ? e((string)$document['expires_on']) : 'No expiration'; ?></div></td>
+                  <td><span style="display:inline-flex;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;<?php echo $statusStyle; ?>"><?php echo $statusLabel; ?></span><div style="font-size:11px;color:#6b7280;margin-top:4px">SHA-256: <?php echo e(substr((string)$document['content_sha256'], 0, 12)); ?>&hellip;</div></td>
+                  <td><a class="btn btn-sm" href="/?page=worker-document-download&amp;id=<?php echo (int)$document['id']; ?>" target="_blank" rel="noopener">View</a> <a class="btn btn-sm" href="/?page=worker-document-download&amp;id=<?php echo (int)$document['id']; ?>&amp;download=1">Download</a><div style="font-size:11px;color:#6b7280;margin-top:4px"><?php echo e((string)$document['original_name']); ?></div></td>
+                  <td>
+                    <form method="post" action="/?page=worker-documents" onsubmit="return confirm('<?php echo $isArchived ? 'Restore this worker document?' : 'Archive this worker document? The signed file will be retained.'; ?>')">
+                      <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+                      <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
+                      <input type="hidden" name="document_id" value="<?php echo (int)$document['id']; ?>">
+                      <input type="hidden" name="action" value="<?php echo $isArchived ? 'restore' : 'archive'; ?>">
+                      <button class="btn btn-sm" type="submit"><?php echo $isArchived ? 'Restore' : 'Archive'; ?></button>
+                    </form>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php else: ?>
+          <p style="padding:14px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;color:#6b7280">No personnel documents are attached yet.</p>
+        <?php endif; ?>
+
+        <form method="post" action="/?page=worker-documents" enctype="multipart/form-data" class="pa-personnel-upload">
+          <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+          <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
+          <input type="hidden" name="action" value="upload">
+          <label><span style="display:block;font-weight:600;margin-bottom:4px">Document type</span><select class="input" name="category"><?php foreach ($personnelDocumentCategories as $categoryKey => $categoryLabel): ?><option value="<?php echo e($categoryKey); ?>"><?php echo e($categoryLabel); ?></option><?php endforeach; ?></select></label>
+          <label class="pa-span-2"><span style="display:block;font-weight:600;margin-bottom:4px">Title *</span><input class="input" name="title" maxlength="255" required placeholder="Drone equipment use agreement"></label>
+          <label><span style="display:block;font-weight:600;margin-bottom:4px">Signed date</span><input class="input" type="date" name="signed_on"></label>
+          <label><span style="display:block;font-weight:600;margin-bottom:4px">Expiration date</span><input class="input" type="date" name="expires_on"></label>
+          <label class="pa-span-2"><span style="display:block;font-weight:600;margin-bottom:4px">Notes</span><input class="input" name="notes" maxlength="5000" placeholder="Equipment covered, limitations, renewal details"></label>
+          <label><span style="display:block;font-weight:600;margin-bottom:4px">Signed file *</span><input class="input" type="file" name="worker_document" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required></label>
+          <button class="btn btn-primary" type="submit">Attach document</button>
+        </form>
+        <p style="margin:10px 0 0;color:#6b7280;font-size:12px">PDF, Word, JPG, or PNG; maximum 15 MB. Archiving preserves the original file and audit history.</p>
+      <?php endif; ?>
+    </div>
+
     <!-- Secondary actions: 2FA, Reset Password, Danger Zone -->
     <div class="pa-edit-secondary">
       <div class="pa-edit-card">
@@ -484,6 +576,16 @@ try {
             <p style="color:#6b7280;font-size:13px;margin:0;">The user has not set up two-factor authentication. They can enable it from their own Account page.</p>
           <?php endif; ?>
         <?php endif; ?>
+        <div style="border-top:1px solid #e5e7eb;margin-top:18px;padding-top:16px">
+          <p style="margin:0 0 10px"><strong>Passkeys:</strong> <?php echo $activePasskeyCount; ?> active</p>
+          <?php if ($activePasskeyCount > 0): ?>
+            <form method="post" action="/?page=passkey-admin-reset" onsubmit="return confirm('Revoke every passkey for this user and sign out their existing sessions?')">
+              <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+              <input type="hidden" name="user_id" value="<?php echo (int)$userId; ?>">
+              <button type="submit" class="btn btn-sm btn-danger">Revoke all passkeys</button>
+            </form>
+          <?php endif; ?>
+        </div>
       </div>
 
       <div class="pa-edit-card">

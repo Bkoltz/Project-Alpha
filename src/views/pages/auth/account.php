@@ -20,6 +20,20 @@ try {
     $twofaEnabled = (bool)$st->fetchColumn();
 } catch (Throwable $e) {}
 
+$passkeyCount = 0;
+try {
+    $st = $pdo->prepare('SELECT COUNT(*) FROM passkey_credentials WHERE user_id=? AND revoked_at IS NULL');
+    $st->execute([$uid]);
+    $passkeyCount = (int)$st->fetchColumn();
+} catch (Throwable $e) {}
+
+$myDocuments = [];
+try {
+    $st = $pdo->prepare("SELECT id,title,category,signed_on,expires_on,original_name FROM worker_documents WHERE user_id=? AND worker_visible=1 AND status='current' ORDER BY created_at DESC");
+    $st->execute([$uid]);
+    $myDocuments = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {}
+
 // Get active trusted devices
 $devices = [];
 try {
@@ -77,7 +91,7 @@ try {
 
     <!-- Right: 2FA + Info -->
     <div style="display:grid;gap:16px;">
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
+      <div id="security" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;scroll-margin-top:24px;">
         <h3 style="margin-top:0">Two-Factor Authentication</h3>
         <p style="margin:0 0 12px;">Status:
           <span style="padding:4px 10px;border-radius:4px;font-size:13px;font-weight:600;<?php echo $twofaEnabled ? 'background:#d1fae5;color:#065f46' : 'background:#f3f4f6;color:#374151'; ?>">
@@ -89,6 +103,28 @@ try {
           <?php echo $twofaEnabled ? 'Manage 2FA' : 'Enable 2FA'; ?>
         </a>
       </div>
+
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
+        <h3 style="margin-top:0">Passkeys</h3>
+        <p style="margin:0 0 12px;">Status: <span style="padding:4px 10px;border-radius:4px;font-size:13px;font-weight:600;<?php echo $passkeyCount > 0 ? 'background:#d1fae5;color:#065f46' : 'background:#f3f4f6;color:#374151'; ?>"><?php echo $passkeyCount > 0 ? $passkeyCount . ' active' : 'None added'; ?></span></p>
+        <p style="color:#6b7280;font-size:13px;margin:0 0 12px;">Sign in with your fingerprint, face, device PIN, or security key. Add a second passkey for recovery.</p>
+        <a href="/?page=passkeys" style="padding:10px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;text-decoration:none;font-weight:600;display:inline-block;">Manage Passkeys</a>
+      </div>
+
+      <?php if ($myDocuments): ?>
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
+        <h3 style="margin-top:0">My Documents</h3>
+        <p style="margin:0 0 12px;color:#6b7280;font-size:13px;">Agreements, waivers, and other records your organization has shared with you.</p>
+        <div style="display:grid;gap:10px;">
+          <?php foreach ($myDocuments as $document): ?>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px;border:1px solid #e5e7eb;border-radius:6px;">
+              <div><div style="font-weight:600;font-size:14px;"><?php echo htmlspecialchars((string)$document['title'], ENT_QUOTES, 'UTF-8'); ?></div><div style="font-size:12px;color:#6b7280;"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string)$document['category'])), ENT_QUOTES, 'UTF-8'); ?><?php if ($document['signed_on']): ?> · Signed <?php echo htmlspecialchars((string)$document['signed_on'], ENT_QUOTES, 'UTF-8'); ?><?php endif; ?><?php if ($document['expires_on']): ?> · Expires <?php echo htmlspecialchars((string)$document['expires_on'], ENT_QUOTES, 'UTF-8'); ?><?php endif; ?></div></div>
+              <a href="/?page=worker-document-download&amp;id=<?php echo (int)$document['id']; ?>&amp;download=1">Download</a>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      <?php endif; ?>
 
       <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;">
         <h3 style="margin-top:0">Account Info</h3>

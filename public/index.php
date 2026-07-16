@@ -36,6 +36,8 @@ $moduleRoutes = [
     '/approvals/action' => 'workforce/action',
     '/pay' => 'workforce/pay',
     '/pay/action' => 'workforce/action',
+    '/api/v1/workforce' => 'api/workforce-v1',
+    '/api/v1/catalog' => 'api/catalog-v1',
 ];
 if (!isset($_GET['page']) && isset($moduleRoutes[$requestPath])) {
     $_GET['page'] = $moduleRoutes[$requestPath];
@@ -291,7 +293,7 @@ if ($page === 'logout') {
 
 // Allow unauthenticated access only to explicit public pages
 // NOTE: serve-upload enforces granular access itself (public images/logos only; PDFs & subdirs require auth)
-$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', '2fa-verify', '2fa-verify-action', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
+$publicPages = ['login', 'session-status', 'serve-upload', 'reset-password', 'reset-verify', 'reset-new', 'reset-request', 'reset-update', '2fa-verify', '2fa-verify-action', 'passkey-options', 'passkey-complete', 'public-doc', 'public-doc-pdf', 'public-redirect', 'public-project', 'public-project-upload', 'public-project-file', 'payment-receipt', 'client-onboarding', 'client-onboarding-submit', 'public-quote-action', 'public-contract-sign', 'stripe-checkout', 'stripe-success', 'stripe-webhook', 'stripe-webhook-legacy', 'legal/terms-of-service', 'legal/privacy-policy', 'legal/acceptable-use-policy', 'legal/dmca-policy', 'legal/data-retention-policy', 'account-deleted'];
 
 // Toggle to disable auth checks in development/testing
 $authDisabled = filter_var(getenv('AUTH_DISABLED') ?: getenv('APP_AUTH_DISABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
@@ -576,6 +578,25 @@ if ($page === 'settings/gmail-oauth' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     require_once __DIR__ . '/../src/controllers/settings/gmail_oauth.php';
     exit;
 }
+// These endpoints validate their own JSON or form CSRF tokens and return
+// responses without the application layout.
+$directControllers = [
+    'passkey-options' => 'auth/passkey_options.php',
+    'passkey-complete' => 'auth/passkey_complete.php',
+    'passkey-register-options' => 'auth/passkey_register_options.php',
+    'passkey-register-complete' => 'auth/passkey_register_complete.php',
+    'passkey-manage' => 'auth/passkey_manage.php',
+    'passkey-admin-reset' => 'auth/admin_passkey_reset.php',
+    'api/workforce-v1' => 'api/workforce_v1.php',
+    'api/catalog-v1' => 'api/catalog_v1.php',
+    'settings/workforce-catalog-handler' => 'settings/workforce_catalog_handler.php',
+    'workforce/contractor-invoice' => 'workforce/contractor_invoice.php',
+    'workforce/contractor-invoice-download' => 'workforce/contractor_invoice_download.php',
+];
+if (isset($directControllers[$page])) {
+    require_once __DIR__ . '/../src/controllers/' . $directControllers[$page];
+    exit;
+}
 
 // API/GET endpoints that should bypass layout (still require auth by default)
 if ($page === 'clients-search') {
@@ -728,6 +749,10 @@ if ($page === 'project/project-file-download') {
     require_once __DIR__ . '/../src/controllers/project/project_file_download.php';
     exit;
 }
+if (in_array($page, ['worker-document-download', 'employee-document-download'], true)) {
+    require_once __DIR__ . '/../src/controllers/accounts/worker_document_download.php';
+    exit;
+}
 if (in_array($page, ['quote/long-term-quote-pdf', 'long-term-quote-pdf'])) {
     require_once __DIR__ . '/../src/controllers/quote/quote_pdf.php';
     exit;
@@ -776,6 +801,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'account/delete',
         'accounts-create',
         'accounts-update',
+        'worker-documents',
+        'employee-documents',
         'accounts-delete',
         'accounts-reset-password',
         '2fa-setup-action',
@@ -1011,6 +1038,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'accounts-update') {
         require_once __DIR__ . '/../src/controllers/accounts/accounts_update.php';
+        exit;
+    }
+    if (in_array($page, ['worker-documents', 'employee-documents'], true)) {
+        require_once __DIR__ . '/../src/controllers/accounts/worker_documents.php';
         exit;
     }
     if ($page === 'accounts-delete') {

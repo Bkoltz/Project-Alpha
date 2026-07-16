@@ -1,33 +1,23 @@
-# Two-Factor Authentication
+# Sign-in security
 
-Project Alpha supports optional time-based one-time passwords (TOTP), backup codes, and remembered-device controls.
+Project Alpha supports password sign-in, optional authenticator-app TOTP, trusted devices after password/TOTP verification, and optional passwordless WebAuthn passkeys.
 
-## User Flow
+## TOTP
 
-1. The user signs in with email and password.
-2. If 2FA is enabled and the device is not trusted, the user enters a TOTP or backup code.
-3. Successful verification completes the session and may remember the device when requested.
+Enrollment renders a local SVG QR code from the `otpauth://` URI and verifies an initial six-digit code before enabling TOTP. The manual secret is available only in a collapsed fallback. No secret is sent to an external QR service.
 
-Users manage 2FA from their account page. Setup displays an authenticator URI or QR code, verifies an initial code, and generates backup codes. Backup codes should be stored outside Project Alpha and treated like passwords.
+Application backup codes were retired in schema 46. Recovery uses another passkey, TOTP, an authorized administrator reset, or the audited Docker administrator-recovery command.
 
-## Main Files
+## Passkeys
 
-- `src/controllers/auth/two_factor_setup.php`
-- `src/controllers/auth/two_factor_verify.php`
-- `src/controllers/auth/admin_2fa_disable.php`
-- `src/views/pages/auth/two_factor_setup.php`
-- `src/views/pages/auth/two_factor_verify.php`
-- `src/utils/two_factor_auth.php`
+Set `WEBAUTHN_ORIGIN` to the installation's canonical HTTPS origin (for example `https://pa.example.com`). `WEBAUTHN_RP_ID` is optional and defaults to that origin's hostname. HTTP is accepted only for localhost development. Request `Host` headers are never used to choose the relying party.
 
-The schema begins at `database/baseline.sql` and advances through active migrations. Do not apply obsolete standalone 2FA migration instructions.
+Passkeys are discoverable credentials with user verification required. Users can register multiple named credentials. Registration, rename, and revocation require current-password confirmation. Challenges are hashed, session-bound, expire after five minutes, and are consumed once.
 
-## Security Requirements
+## Operational notes
 
-- Require HTTPS in production.
-- Rate-limit login and verification attempts.
-- Regenerate sessions after authentication state changes.
-- Protect TOTP secrets and backup codes.
-- Revoke remembered devices after a password reset or suspected compromise.
-- Record administrative 2FA changes in the audit log.
-
-Test setup, valid and invalid codes, clock drift, backup-code consumption, remembered devices, revocation, password reset, administrative disable, and throttling.
+- Run migration 0046 before enabling passkey routes.
+- Keep `APP_ENCRYPTION_KEY` and session configuration secure.
+- Use HTTPS in production.
+- Review `auth.passkey_*`, `auth.totp_admin_reset`, and recovery audit events.
+- A successful passkey assertion satisfies both primary authentication and MFA; a password login still requires TOTP when enabled.

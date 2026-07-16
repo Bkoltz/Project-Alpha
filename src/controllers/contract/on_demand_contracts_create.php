@@ -85,6 +85,7 @@ if ($hasLineItems) {
     $qty = $_POST['item_qty'] ?? [];
     $price = $_POST['item_price'] ?? [];
     $billingUnits = $_POST['item_billing_unit'] ?? [];
+    $catalogIds = $_POST['item_library_id'] ?? [];
     
     for ($i = 0; $i < count($item); $i++) {
         $itm = trim((string)($item[$i] ?? ''));
@@ -95,8 +96,8 @@ if ($hasLineItems) {
         $line = $q * $p;
         $subtotal += $line;
         $requestedUnit = (string)($billingUnits[$i] ?? 'each');
-        $unit = $billing_mode === 'hourly' ? 'hour' : (in_array($requestedUnit, ['each', 'hour', 'mile'], true) ? $requestedUnit : 'each');
-        $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line, 'u' => $unit];
+        $unit = $billing_mode === 'hourly' ? 'hour' : catalog_document_unit($requestedUnit);
+        $items[] = ['i' => $itm, 'd' => $d, 'q' => $q, 'p' => $p, 't' => $line, 'u' => $unit,'catalog_id'=>max(0,(int)($catalogIds[$i]??0))];
     }
 }
 
@@ -169,9 +170,10 @@ try{
 
     // Save line items if we have them
     if (!empty($items)) {
-        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+        $ins = $pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
         foreach ($items as $it) {
-            $ins->execute([$contract_id, $it['i'], $it['d'], $it['q'], $it['p'], $it['t'], $it['u']]);
+            $catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);
+            $ins->execute([$contract_id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);
         }
     }
     if($travelItem)$pdo->prepare('INSERT INTO contract_items (contract_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$contract_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);

@@ -39,22 +39,18 @@ try {
     $twofa = $st->fetch(PDO::FETCH_ASSOC);
     
     if ($action === 'enable_init') {
-        // Generate new secret and backup codes
+        // Generate the secret only. Recovery codes were retired in schema 46;
+        // users can enroll another passkey or use audited administrator recovery.
         $secret = TwoFactorAuth::generateSecret();
-        $backupCodesPlain = TwoFactorAuth::generateBackupCodes(8);
-        $backupCodesHashed = array_map([TwoFactorAuth::class, 'hashBackupCode'], $backupCodesPlain);
         
         // Store in database (not enabled yet, waiting for verification)
         if ($twofa) {
-            $st = $pdo->prepare('UPDATE user_2fa SET secret = ?, enabled = 0, backup_codes = ? WHERE user_id = ?');
-            $st->execute([$secret, json_encode($backupCodesHashed), $userId]);
+            $st = $pdo->prepare('UPDATE user_2fa SET secret = ?, enabled = 0, enabled_at = NULL WHERE user_id = ?');
+            $st->execute([$secret, $userId]);
         } else {
-            $st = $pdo->prepare('INSERT INTO user_2fa (user_id, secret, enabled, backup_codes) VALUES (?, ?, 0, ?)');
-            $st->execute([$userId, $secret, json_encode($backupCodesHashed)]);
+            $st = $pdo->prepare('INSERT INTO user_2fa (user_id, secret, enabled) VALUES (?, ?, 0)');
+            $st->execute([$userId, $secret]);
         }
-        
-        // Store backup codes in session temporarily for display
-        $_SESSION['2fa_backup_codes'] = $backupCodesPlain;
         
         header('Location: /?page=2fa-setup&step=verify');
         exit;
@@ -90,10 +86,6 @@ try {
             
             app_log('2fa', '2FA enabled', ['user_id' => $userId]);
             
-            // Clear backup codes from session after successful setup
-            // (user should have saved them already)
-            unset($_SESSION['2fa_backup_codes']);
-            
             header('Location: /?page=2fa-setup&success=enabled');
             exit;
         } else {
@@ -124,42 +116,18 @@ try {
         
         // Disable 2FA
         if ($twofa) {
-            $st = $pdo->prepare('DELETE FROM user_2fa WHERE user_id = ?');
-            $st->execute([$userId]);
-            
+            $pdo->beginTransaction();
+            $pdo->prepare('DELETE FROM user_2fa WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('DELETE FROM trusted_devices WHERE user_id = ?')->execute([$userId]);
+            $pdo->prepare('UPDATE users SET auth_version=auth_version+1 WHERE id=?')->execute([$userId]);
+            $version = $pdo->prepare('SELECT auth_version FROM users WHERE id=?');
+            $version->execute([$userId]);
+            $_SESSION['user']['auth_version'] = (int)$version->fetchColumn();
+            $pdo->commit();
             app_log('2fa', '2FA disabled', ['user_id' => $userId]);
         }
         
         header('Location: /?page=2fa-setup&success=disabled');
-        exit;
-    }
-    
-    if ($action === 'regenerate_backup') {
-        // Regenerate backup codes (requires current 2FA code)
-        $code = trim($_POST['code'] ?? '');
-        
-        if (!$twofa || !$twofa['enabled']) {
-            header('Location: /?page=2fa-setup&error=' . urlencode('2FA not enabled'));
-            exit;
-        }
-        
-        if (!TwoFactorAuth::verifyCode($code, $twofa['secret'])) {
-            header('Location: /?page=2fa-setup&error=' . urlencode('Invalid 2FA code'));
-            exit;
-        }
-        
-        // Generate new backup codes
-        $backupCodesPlain = TwoFactorAuth::generateBackupCodes(8);
-        $backupCodesHashed = array_map([TwoFactorAuth::class, 'hashBackupCode'], $backupCodesPlain);
-        
-        $st = $pdo->prepare('UPDATE user_2fa SET backup_codes = ? WHERE user_id = ?');
-        $st->execute([json_encode($backupCodesHashed), $userId]);
-        
-        $_SESSION['2fa_backup_codes'] = $backupCodesPlain;
-        
-        app_log('2fa', 'Backup codes regenerated', ['user_id' => $userId]);
-        
-        header('Location: /?page=2fa-setup&success=backup_regenerated');
         exit;
     }
     

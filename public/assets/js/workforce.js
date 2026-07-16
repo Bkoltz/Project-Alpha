@@ -23,6 +23,15 @@
         }
 
         root.querySelectorAll('[data-workforce-entry-form]').forEach(function (form) {
+            const assignment = form.querySelector('[name="work_assignment_id"]');
+            const job = form.querySelector('[name="job_id"]');
+            const workType = form.querySelector('[name="work_type_id"]');
+            if (assignment) assignment.addEventListener('change', function () {
+                const option = assignment.options[assignment.selectedIndex];
+                if (!option || !option.value) return;
+                if (job && option.dataset.jobId) job.value = option.dataset.jobId;
+                if (workType && option.dataset.workTypeId) workType.value = option.dataset.workTypeId;
+            });
             const client = form.querySelector('[data-workforce-client]');
             const project = form.querySelector('[data-workforce-project]');
             const invoice = form.querySelector('[data-workforce-invoice]');

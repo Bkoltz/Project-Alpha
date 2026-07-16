@@ -100,7 +100,6 @@ try {
             user_id INT NOT NULL UNIQUE,
             secret VARCHAR(255) NOT NULL,
             enabled TINYINT(1) NOT NULL DEFAULT 0,
-            backup_codes TEXT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             enabled_at TIMESTAMP NULL,
             INDEX idx_user_2fa_user (user_id),

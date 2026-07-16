@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/recurring_billing.php';
 require_once __DIR__ . '/../../utils/contract_billing_start.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
+require_once __DIR__ . '/../../utils/job_work_materialization.php';
 
 $id = (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -43,6 +44,7 @@ try {
     $update = $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=? WHERE id=? AND contract_type="long_term"');
     $update->execute(['active', $nextInvoiceDate, $id]);
     pa_recurring_services_activate($pdo, $id, $nextInvoiceDate);
+    catalog_plan_direct_contract($pdo, $id, (int)($_SESSION['user']['id'] ?? 0));
 
     $pdo->commit();
 

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/public_links.php';
 require_once __DIR__ . '/../../utils/recurring_services.php';
 require_once __DIR__ . '/../../utils/mileage.php';
+require_once __DIR__ . '/../../utils/job_work_materialization.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -107,9 +108,9 @@ try {
       }
 
       if (!empty($qitems)) {
-        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
+        $ci = $pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
         foreach ($qitems as $it) {
-          $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard']);
+          $ci->execute([$contract_id,$it['item_library_id']??null,$it['item']??($it['description']??'Item'),$it['description'],$it['quantity'],$it['unit_price'],$it['line_total'],$it['billing_unit']??($billingMode==='hourly'?'hour':'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard',$it['catalog_snapshot']??null]);
         }
       }
 
@@ -127,9 +128,9 @@ try {
       $contract_id = (int)$pdo->lastInsertId();
       $pdo->prepare('UPDATE contracts SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $contract_id]);
 
-      $ci = $pdo->prepare('INSERT INTO contract_items (contract_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
+      $ci = $pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
-        $ci->execute([$contract_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard']);
+        $ci->execute([$contract_id,$it['item_library_id']??null,$it['item']??($it['description']??'Item'),$it['description'],$it['quantity'],$it['unit_price'],$it['line_total'],$it['billing_unit']??($billingMode==='hourly'?'hour':'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard',$it['catalog_snapshot']??null]);
       }
 
       $cMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM contracts WHERE contract_type = "regular"')->fetchColumn();
@@ -149,10 +150,10 @@ try {
         $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
       }
 
-      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,?,?)');
+      $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
       foreach ($qitems as $it) {
         if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;
-        $ii->execute([$invoice_id, $it['item'] ?? ($it['description'] ?? 'Item'), $it['description'], $it['quantity'], $it['unit_price'], $it['line_total'], $it['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard']);
+        $ii->execute([$invoice_id,$it['item_library_id']??null,$it['item']??($it['description']??'Item'),$it['description'],$it['quantity'],$it['unit_price'],$it['line_total'],$it['billing_unit']??($billingMode==='hourly'?'hour':'each'),(int)($it['is_travel']??0),$it['pricing_status']??'standard',$it['catalog_snapshot']??null]);
       }
 
       $iMax = (int)$pdo->query('SELECT COALESCE(MAX(doc_number),0) FROM invoices WHERE invoice_type = "regular"')->fetchColumn();
@@ -162,6 +163,7 @@ try {
 
   if(isset($contract_id))DocumentRevisionService::snapshotAndSave($pdo,'contract',(int)$contract_id,$quoteCreator,false);
   if(isset($invoice_id))DocumentRevisionService::snapshotAndSave($pdo,'invoice',(int)$invoice_id,$quoteCreator,false);
+  catalog_plan_document_work($pdo,'quote',$id,$quoteCreator);
   $pdo->commit();
 
   // Notify client that their quote has been approved (best-effort; don't fail approval)

@@ -35,6 +35,10 @@ services:
       MYSQL_PASSWORD: changeme_secure_pass
       APP_ENV: production
       APP_AUTH_DISABLED: "false"
+      # Required to enable passkeys. Use the exact public HTTPS origin.
+      WEBAUTHN_ORIGIN: ""
+      # Optional. Defaults to the origin hostname.
+      WEBAUTHN_RP_ID: ""
       AUTOPAY_BETA_ENABLED: "false"
       # Optional. Match the cron value exactly and retain it for restores.
       BACKUP_ENCRYPTION_KEY: ""

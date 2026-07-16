@@ -2,7 +2,7 @@ var itemData = getItemData();
 var itemCounter = 0;
 
 itemData.forEach(item => {
-    addItem(item.item ?? '', item.description ?? '', Number(item.quantity), Number(item.unit_price), item.billing_unit || 'each');
+    addItem(item.item ?? '', item.description ?? '', Number(item.quantity), Number(item.unit_price), item.billing_unit || 'each', item.item_library_id || '');
 });
 
 function money(n) {
@@ -23,7 +23,7 @@ function getItemData() {
     }
 }
 
-function addItem(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each') {
+function addItem(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each', itemLibraryId = '') {
     var wrap = document.createElement('div');
     var itemId = 'item_' + (itemCounter++);
     var descId = 'desc_' + itemCounter;
@@ -43,6 +43,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each')
     itemInput.setAttribute('data-item-autocomplete', '');
     itemInput.setAttribute('data-description-field', descId);
     itemInput.setAttribute('data-price-field', priceId);
+    itemInput.setAttribute('data-item-library-id', itemLibraryId);
 
     var descTextarea = document.createElement('textarea');
     descTextarea.id = descId;
@@ -77,7 +78,7 @@ function addItem(item = '', desc = '', qty = 1, price = 0, billingUnit = 'each')
     var unitInput = document.createElement('input');
     unitInput.type = 'hidden';
     unitInput.name = 'item_billing_unit[]';
-    unitInput.value = billingUnit === 'hour' ? 'hour' : 'each';
+    unitInput.value = ['each','hour','day','mile','project'].includes(billingUnit) ? billingUnit : 'each';
 
     var removeBtn = document.createElement('button');
     removeBtn.type = 'button';

@@ -280,6 +280,10 @@ function notify_admin_contract_signed(PDO $pdo, array $appConfig, array $contrac
  */
 function notify_admin_invoice_paid(PDO $pdo, array $appConfig, int $invoiceId, float $amount, string $status): void {
     try {
+        if ($status === 'paid') {
+            require_once __DIR__ . '/workforce_compensation.php';
+            workforce_release_invoice_paid($pdo, $invoiceId, (int)($_SESSION['user']['id'] ?? 0));
+        }
         // Get invoice and client info
         $stmt = $pdo->prepare('SELECT i.*, c.name as client_name FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.id = ?');
         $stmt->execute([$invoiceId]);

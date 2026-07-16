@@ -122,21 +122,23 @@ try {
     $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([$docNumber, $invoiceId]);
     
     // Add invoice items. Preserve itemized contracts; flat contracts get one line.
-    $contractItemsStmt = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit FROM contract_items WHERE contract_id = ? ORDER BY sort_order, id');
+    $contractItemsStmt = $pdo->prepare('SELECT item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot FROM contract_items WHERE contract_id=? ORDER BY sort_order,id');
     $contractItemsStmt->execute([$contract_id]);
     $contractItems = $contractItemsStmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (!empty($contractItems)) {
-        $insertItem = $pdo->prepare('INSERT INTO invoice_items (invoice_id, item, description, quantity, unit_price, line_total, billing_unit) VALUES (?,?,?,?,?,?,?)');
+        $insertItem = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
         foreach ($contractItems as $item) {
             $insertItem->execute([
                 $invoiceId,
+                $item['item_library_id']??null,
                 $item['item'] ?? '',
                 $item['description'] ?? '',
                 (float)($item['quantity'] ?? 0),
                 (float)($item['unit_price'] ?? 0),
                 (float)($item['line_total'] ?? 0),
                 $item['billing_unit'] ?? ($billingMode === 'hourly' ? 'hour' : 'each'),
+                $item['catalog_snapshot']??null,
             ]);
         }
     } else {

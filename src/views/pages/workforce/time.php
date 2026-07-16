@@ -32,6 +32,10 @@ if ($manageAll && !$selectedUser) {
 }
 $selectedRole = (string)($selectedUser['role'] ?? ($_SESSION['user']['role'] ?? 'member'));
 $projects = $service->projectsFor($selectedUserId, $manageAll);
+$jobs = $service->jobsFor($selectedUserId, $manageAll);
+$workTypes = $service->workTypes();
+$assignments = $service->assignmentsFor($selectedUserId);
+$offeredAssignments = $selectedUserId===$userId ? $service->offeredAssignmentsFor($selectedUserId) : [];
 $clients = $manageAll ? $service->clientsForManager() : [];
 $invoices = $manageAll ? $service->invoicesForManager() : [];
 $running = $service->running($selectedUserId);
@@ -117,7 +121,24 @@ $defaultPayable = $selectedRole === 'employee';
     <article class="workforce-kpi"><span>Timer</span><strong class="<?= $running ? 'is-running' : '' ?>"><?= $running ? 'Running' : 'Stopped' ?></strong><small id="workforce-timer-display"><?= $running ? '00:00:00' : 'Ready to clock in' ?></small></article>
   </div>
 
+  <?php if($offeredAssignments):?><article class="card workforce-card"><div class="card-head"><div><h3 class="card-title">Assignment offers</h3><p class="muted text-sm mb-0">Review the scope and estimated compensation before accepting.</p></div></div><div class="pa-table-wrap"><table class="pa-table"><thead><tr><th>Job / work</th><th>Expected time</th><th>Estimated compensation</th><th class="text-right">Decision</th></tr></thead><tbody><?php foreach($offeredAssignments as $offer):?><tr><td><strong><?=$h($offer['job_code'])?></strong><small><?=$h($offer['name'].' · '.$offer['work_type_name'])?></small></td><td><?=$offer['expected_duration_minutes']!==null?(int)$offer['expected_duration_minutes'].' min':'Not estimated'?></td><td><?=$offer['estimated_pay']!==null?'$'.number_format((float)$offer['estimated_pay'],2).' '.$h($offer['currency']):'Nonpayable / internal'?></td><td class="text-right"><form method="post" action="/?page=workforce/action" class="inline-form"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="assignment-accept"><input type="hidden" name="assignment_id" value="<?=(int)$offer['id']?>"><button class="btn btn-sm btn-primary">Accept</button></form><form method="post" action="/?page=workforce/action" class="inline-form"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="assignment-decline"><input type="hidden" name="assignment_id" value="<?=(int)$offer['id']?>"><input class="input input--small" name="reason" placeholder="Reason" required><button class="btn btn-sm">Decline</button></form></td></tr><?php endforeach;?></tbody></table></div></article><?php endif;?>
+
+  <?php if($selectedUserId===$userId&&$assignments):?><article class="card workforce-card"><div class="card-head"><h3 class="card-title">My active assignments</h3></div><div class="pa-table-wrap"><table class="pa-table"><thead><tr><th>Job / work</th><th>Status</th><th class="text-right">Action</th></tr></thead><tbody><?php foreach($assignments as $assignment):?><tr><td><strong><?=$h($assignment['job_code'])?></strong><small><?=$h($assignment['name'].' · '.$assignment['work_type_name'])?></small></td><td><?=$h(ucfirst($assignment['status']))?></td><td class="text-right"><form method="post" action="/?page=workforce/action" class="inline-form"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="assignment_id" value="<?=(int)$assignment['id']?>"><input type="hidden" name="action" value="<?=$assignment['status']==='accepted'?'assignment-start':'assignment-complete'?>"><button class="btn btn-sm"><?=$assignment['status']==='accepted'?'Start work':'Mark completed'?></button></form></td></tr><?php endforeach;?></tbody></table></div></article><?php endif;?>
+
   <div class="workforce-grid workforce-grid--two">
+    <?php if ($manageAll && in_array($selectedRole, ['admin','owner'], true)): ?>
+    <article class="card workforce-card">
+      <div class="card-head"><div><h3 class="card-title">Quick work entry</h3><p class="muted text-sm mb-0">Record owner onsite or editing time without clocking in. It is self-confirmed and never creates owner pay.</p></div></div>
+      <form class="workforce-form" method="post" action="/?page=workforce/action">
+        <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="quick-duration"><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>">
+        <div class="workforce-context-grid"><label class="field"><span class="label">Work date</span><input class="input" type="date" name="work_date" value="<?= $h((new DateTimeImmutable('now',new DateTimeZone($timezone)))->format('Y-m-d')) ?>" required></label><label class="field"><span class="label">Duration (minutes)</span><input class="input" type="number" name="duration_minutes" min="1" max="1440" required></label><label class="field"><span class="label">Optional exact start</span><input class="input" type="datetime-local" name="start_time"></label></div>
+        <div class="workforce-context-grid"><label class="field"><span class="label">Job</span><select class="input" name="job_id"><option value="">No Job</option><?php foreach($jobs as $job): ?><option value="<?= (int)$job['id'] ?>"><?= $h($job['job_code'].' · '.$job['client_name']) ?></option><?php endforeach; ?></select></label><label class="field"><span class="label">Work Type</span><select class="input" name="work_type_id"><option value="">Unclassified work</option><?php foreach($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>"><?= $h($type['name']) ?></option><?php endforeach; ?></select></label></div>
+        <label class="field"><span class="label">Description</span><textarea class="input" name="description" rows="2" placeholder="Onsite work, editing, client call…"></textarea></label>
+        <label class="check-row"><input type="checkbox" name="billable" value="1"> Available for client billing</label>
+        <button class="btn btn-primary">Record work</button>
+      </form>
+    </article>
+    <?php endif; ?>
     <article class="card workforce-card">
       <div class="card-head"><h3 class="card-title"><?= $running ? 'Running timer' : 'Clock in' ?></h3></div>
       <?php if ($running): ?>
@@ -157,6 +178,7 @@ $defaultPayable = $selectedRole === 'employee';
           <?php else: ?>
             <label class="field"><span class="label">Assigned project</span><select class="input" name="project_id"><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>"><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
           <?php endif; ?>
+          <div class="workforce-context-grid"><label class="field"><span class="label">Job</span><select class="input" name="job_id"><option value="">No Job</option><?php foreach($jobs as $job):?><option value="<?=(int)$job['id']?>"><?=$h($job['job_code'].' · '.$job['client_name'])?></option><?php endforeach;?></select></label><label class="field"><span class="label">Work Type</span><select class="input" name="work_type_id"><option value="">Unclassified</option><?php foreach($workTypes as $type):?><option value="<?=(int)$type['id']?>"><?=$h($type['name'])?></option><?php endforeach;?></select></label><label class="field"><span class="label">Accepted assignment</span><select class="input" name="work_assignment_id"><option value="">No assignment</option><?php foreach($assignments as $assignment):?><option value="<?=(int)$assignment['id']?>" data-job-id="<?=(int)$assignment['job_id']?>" data-work-type-id="<?=(int)$assignment['work_type_id']?>"><?=$h($assignment['job_code'].' · '.$assignment['name'])?></option><?php endforeach;?></select></label></div>
           <label class="field"><span class="label">Description</span><textarea class="input" name="description" rows="3" placeholder="What are you working on?"></textarea></label>
           <?php if ($manageAll): ?><div class="workforce-checks"><label><input type="checkbox" name="billable" value="1" checked> Billable</label><label><input type="checkbox" name="is_payable" value="1" <?= $defaultPayable ? 'checked' : '' ?>> Payable</label></div><?php endif; ?>
           <button class="btn btn-primary">Clock in</button>
@@ -179,6 +201,7 @@ $defaultPayable = $selectedRole === 'employee';
         <?php else: ?>
           <label class="field"><span class="label">Assigned project</span><select class="input" name="project_id"><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>"><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
         <?php endif; ?>
+        <div class="workforce-context-grid"><label class="field"><span class="label">Job</span><select class="input" name="job_id"><option value="">No Job</option><?php foreach($jobs as $job):?><option value="<?=(int)$job['id']?>"><?=$h($job['job_code'].' · '.$job['client_name'])?></option><?php endforeach;?></select></label><label class="field"><span class="label">Work Type</span><select class="input" name="work_type_id"><option value="">Unclassified</option><?php foreach($workTypes as $type):?><option value="<?=(int)$type['id']?>"><?=$h($type['name'])?></option><?php endforeach;?></select></label><label class="field"><span class="label">Accepted assignment</span><select class="input" name="work_assignment_id"><option value="">No assignment</option><?php foreach($assignments as $assignment):?><option value="<?=(int)$assignment['id']?>" data-job-id="<?=(int)$assignment['job_id']?>" data-work-type-id="<?=(int)$assignment['work_type_id']?>"><?=$h($assignment['job_code'].' · '.$assignment['name'])?></option><?php endforeach;?></select></label></div>
         <div class="workforce-context-grid workforce-context-grid--time">
           <label class="field"><span class="label">Start</span><input class="input" type="datetime-local" name="start_time" required></label>
           <label class="field"><span class="label">End</span><input class="input" type="datetime-local" name="end_time" required></label>
@@ -194,13 +217,13 @@ $defaultPayable = $selectedRole === 'employee';
     <div class="card-head"><div><h3 class="card-title">Time entries</h3><p class="muted text-sm mb-0">Client and invoice details are visible only to timekeeping managers.</p></div></div>
     <div class="pa-table-wrap">
       <table class="pa-table workforce-table">
-        <thead><tr><th>Date</th><?php if ($manageAll): ?><th>Client / Invoice</th><?php endif; ?><th>Project</th><th>Duration</th><th>Status</th><th>Description</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><?php if ($manageAll): ?><th>Client / Invoice</th><?php endif; ?><th>Job / work</th><th>Duration</th><th>Status</th><th>Description</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($entries as $entry): ?>
           <tr>
             <td><?= $h($displayTime($entry['start_time'])) ?></td>
             <?php if ($manageAll): ?><td><strong><?= $h($entry['client_name'] ?: 'Internal / unassigned') ?></strong><?php if ($entry['invoice_number']): ?><small><?= $h($invoiceLabel($entry)) ?></small><?php endif; ?></td><?php endif; ?>
-            <td><?= $h($entry['project_name'] ?: 'No project') ?></td>
+            <td><strong><?= $h($entry['job_code'] ?: ($entry['project_name'] ?: 'No Job')) ?></strong><?php if($entry['work_type_name']):?><small><?=$h($entry['work_type_name'])?></small><?php endif;?></td>
             <td><?= number_format(((int)$entry['duration_seconds']) / 3600, 2) ?> h</td>
             <td><span class="status-pill status-pill--<?= $h($entry['status']) ?>"><?= $h(ucfirst((string)$entry['status'])) ?></span><?php if ($entry['rejection_reason']): ?><small class="workforce-reason"><?= $h($entry['rejection_reason']) ?></small><?php endif; ?></td>
             <td><?= $h($entry['description']) ?></td>
@@ -208,7 +231,7 @@ $defaultPayable = $selectedRole === 'employee';
               <?php if ($entry['status'] === 'rejected'): ?>
                 <details class="workforce-entry-edit"><summary class="btn btn-sm">Edit</summary>
                   <form class="workforce-form" method="post" action="/?page=workforce/action">
-                    <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="resubmit"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>">
+                    <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="resubmit"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>"><input type="hidden" name="job_id" value="<?=(int)($entry['job_id']??0)?>"><input type="hidden" name="work_type_id" value="<?=(int)($entry['work_type_id']??0)?>"><input type="hidden" name="work_assignment_id" value="<?=(int)($entry['work_assignment_id']??0)?>">
                     <?php if ($manageAll): ?><input type="hidden" name="client_id" value="<?= (int)($entry['client_id'] ?? 0) ?>"><input type="hidden" name="invoice_id" value="<?= (int)($entry['invoice_id'] ?? 0) ?>"><?php endif; ?>
                     <label class="field"><span class="label">Project</span><select class="input" name="project_id"><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
                     <div class="workforce-context-grid workforce-context-grid--time"><label class="field"><span class="label">Start</span><input class="input" type="datetime-local" name="start_time" value="<?= $h($inputTime($entry['start_time'])) ?>" required></label><label class="field"><span class="label">End</span><input class="input" type="datetime-local" name="end_time" value="<?= $h($inputTime($entry['end_time'])) ?>" required></label></div>
