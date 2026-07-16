@@ -26,7 +26,7 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
   <label style="display:block;margin-bottom:12px">
     <div style="margin-bottom:4px;font-weight:500">Application Domain <span style="color:#666;font-weight:normal">(Optional)</span></div>
     <input type="text" name="app_host" value="<?php echo htmlspecialchars($appConfig['app_host'] ?? ''); ?>" placeholder="invoices.example.com" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-    <div style="font-size:0.85em;color:#666;margin-top:4px">If set, public links and emails will use this domain. Must be a valid domain that points to this server.</div>
+    <div style="font-size:0.85em;color:#666;margin-top:4px">Enter the public address people open in their browser, not the proxy's internal address. Public links, email callbacks, and passkeys use this value; a reverse-proxy path is allowed.</div>
   </label>
   
   <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:8px">

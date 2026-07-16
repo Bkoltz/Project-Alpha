@@ -10,7 +10,7 @@ Application backup codes were retired in schema 46. Recovery uses another passke
 
 ## Passkeys
 
-Set `WEBAUTHN_ORIGIN` to the installation's canonical HTTPS origin (for example `https://pa.example.com`). `WEBAUTHN_RP_ID` is optional and defaults to that origin's hostname. HTTP is accepted only for localhost development. Request `Host` headers are never used to choose the relying party.
+Set Settings → System → Application Domain to the public hostname users open in their browser. PA derives its HTTPS WebAuthn origin from that hostname, including when a reverse proxy serves PA under a path. To override it, set `WEBAUTHN_ORIGIN` to the exact canonical HTTPS origin (for example `https://pa.example.com`, without a path). `WEBAUTHN_RP_ID` is optional and defaults to that origin's hostname. HTTP is accepted only for localhost development. Request `Host` and forwarded headers are never used to choose the relying party.
 
 Passkeys are discoverable credentials with user verification required. Users can register multiple named credentials. Registration, rename, and revocation require current-password confirmation. Challenges are hashed, session-bound, expire after five minutes, and are consumed once.
 

@@ -14,6 +14,9 @@ require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../../services/WorkTimeBillingContextService.php';
+
+use App\Services\WorkTimeBillingContextService;
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -125,11 +128,20 @@ try {
         );
         $checkTotals->execute($row['time_entry_ids']);
         $expected = $checkTotals->fetch(PDO::FETCH_ASSOC) ?: [];
+        $allTimeUnpriced = abs((float)($expected['min_rate'] ?? 0)) < 0.0005
+            && abs((float)($expected['max_rate'] ?? 0)) < 0.0005;
         if ((int)($expected['row_count'] ?? 0) !== count($row['time_entry_ids'])
             || abs((float)($expected['expected_hours'] ?? 0) - (float)$row['quantity']) > 0.005
             || (string)($expected['min_rate'] ?? '') !== (string)($expected['max_rate'] ?? '')
-            || abs((float)($expected['min_rate'] ?? 0) - (float)$row['unit_price']) > 0.005) {
+            || (!$allTimeUnpriced && abs((float)($expected['min_rate'] ?? 0) - (float)$row['unit_price']) > 0.005)) {
             throw new RuntimeException('Tracked-time quantity or rate does not match the selected entries.');
+        }
+        if ((float)$row['unit_price'] <= 0) {
+            throw new RuntimeException('Set an hourly billing rate before adding tracked time to the invoice.');
+        }
+        if ($allTimeUnpriced) {
+            $priceUnrated = $pdo->prepare("UPDATE time_entries SET rate=? WHERE id IN ($placeholders) AND billed=0 AND rate=0");
+            $priceUnrated->execute(array_merge([(float)$row['unit_price']], $row['time_entry_ids']));
         }
     }
     if ($selectedTimeEntryIds) {
@@ -229,6 +241,11 @@ try {
             }
         }
     }
+
+    (new WorkTimeBillingContextService($pdo))->synchronizeInvoice(
+        $invoice_id,
+        (int)($__creator ?? 0)
+    );
     
     // Add to project_documents if project_id is set
     if ($project_id) {

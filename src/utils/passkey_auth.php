@@ -58,18 +58,42 @@ final class PasskeyService
     /** @param array<string,mixed> $appConfig */
     public function __construct(private readonly PDO $pdo, array $appConfig = [])
     {
-        $configuredOrigin = trim((string)(getenv('WEBAUTHN_ORIGIN') ?: getenv('APP_HOST') ?: ($appConfig['webauthn_origin'] ?? $appConfig['app_host'] ?? '')));
+        $explicitOrigin = trim((string)(getenv('WEBAUTHN_ORIGIN') ?: ($appConfig['webauthn_origin'] ?? '')));
+        $configuredOrigin = $explicitOrigin !== ''
+            ? $explicitOrigin
+            : trim((string)(getenv('APP_HOST') ?: ($appConfig['app_host'] ?? '')));
         if ($configuredOrigin === '') {
-            throw new PasskeyException('passkey_not_configured', 'Passkeys require a canonical WebAuthn origin in WEBAUTHN_ORIGIN.', 503);
+            throw new PasskeyException(
+                'passkey_not_configured',
+                'Passkeys require the public Application Domain or a canonical origin in WEBAUTHN_ORIGIN.',
+                503
+            );
         }
 
+        // Settings stores Application Domain as a host (for example,
+        // pa.example.com), while WebAuthn requires an origin. Treat only this
+        // generic fallback as an HTTPS host and derive its origin. An explicit
+        // WEBAUTHN_ORIGIN remains strict and must already be a valid origin.
+        $fallbackWasBareHost = $explicitOrigin === '' && !preg_match('#^https?://#i', $configuredOrigin);
+        if ($fallbackWasBareHost) {
+            $configuredOrigin = 'https://' . ltrim($configuredOrigin, '/');
+        }
         $configuredOrigin = rtrim($configuredOrigin, '/');
         $parts = parse_url($configuredOrigin);
         $scheme = strtolower((string)($parts['scheme'] ?? ''));
         $host = strtolower(rtrim((string)($parts['host'] ?? ''), '.'));
         $path = (string)($parts['path'] ?? '');
         $isLocal = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
-        if ($host === '' || ($scheme !== 'https' && !($scheme === 'http' && $isLocal)) || ($path !== '' && $path !== '/')) {
+        if ($fallbackWasBareHost && $isLocal && $scheme === 'https') {
+            $scheme = 'http';
+        }
+        $hasInvalidComponents = isset($parts['user']) || isset($parts['pass'])
+            || isset($parts['query']) || isset($parts['fragment']);
+        $explicitPathInvalid = $explicitOrigin !== '' && $path !== '' && $path !== '/';
+        if ($host === ''
+            || ($scheme !== 'https' && !($scheme === 'http' && $isLocal))
+            || $hasInvalidComponents
+            || $explicitPathInvalid) {
             throw new PasskeyException('passkey_origin_invalid', 'The WebAuthn origin must be an HTTPS origin without a path (HTTP is allowed only on localhost).', 503);
         }
 

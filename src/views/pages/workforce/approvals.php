@@ -9,21 +9,27 @@ if (!WorkforceSettings::canReviewTime($pdo, $userId)) {
     return;
 }
 
-$queue = $pdo->query(
+$queueStmt = $pdo->prepare(
     "SELECT t.*,p.name project_name,c.name client_name,i.doc_number invoice_number,i.invoice_type,
             COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),u.username,u.email) employee_name
      FROM work_time_entries t JOIN users u ON u.id=t.user_id
      LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id
      LEFT JOIN projects p ON p.id=t.project_id LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN invoices i ON i.id=t.invoice_id
-     WHERE t.status='review' ORDER BY t.start_time"
-)->fetchAll(PDO::FETCH_ASSOC);
+     WHERE t.status='review' AND t.user_id<>? ORDER BY t.start_time"
+);
+$queueStmt->execute([$userId]);
+$queue = $queueStmt->fetchAll(PDO::FETCH_ASSOC);
 $approved = $pdo->query(
     "SELECT t.*,s.id snapshot_id,s.client_name,s.invoice_number,
             COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),u.username,u.email) employee_name,
             p.name project_name
      FROM work_time_entries t JOIN users u ON u.id=t.user_id
      LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id LEFT JOIN projects p ON p.id=t.project_id
-     LEFT JOIN work_approval_snapshots s ON s.time_entry_id=t.id AND s.entry_revision=t.revision
+     LEFT JOIN work_approval_snapshots s ON s.id=(
+         SELECT s2.id FROM work_approval_snapshots s2
+         WHERE s2.time_entry_id=t.id AND s2.entry_revision<=t.revision AND s2.voided_at IS NULL
+         ORDER BY s2.entry_revision DESC LIMIT 1
+     )
      WHERE t.status='approved' ORDER BY t.reviewed_at DESC LIMIT 50"
 )->fetchAll(PDO::FETCH_ASSOC);
 $projects = $pdo->query("SELECT id,name FROM projects WHERE status NOT IN ('completed','cancelled') ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);

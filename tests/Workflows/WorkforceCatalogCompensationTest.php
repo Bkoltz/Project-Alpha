@@ -98,7 +98,8 @@ final class WorkforceCatalogCompensationTest extends TestCase
         $service = (string)file_get_contents(dirname(__DIR__,2).'/src/Modules/Timekeeping/TimekeepingService.php');
         self::assertStringContainsString('public function saveDuration', $service);
         self::assertStringContainsString("'duration'", $service);
-        self::assertStringContainsString("0,1,?,'approved'", $service);
+        self::assertStringContainsString("'review',NULL,NULL", $service);
+        self::assertStringContainsString('ApprovalService::selfConfirmOwner', $service);
         self::assertStringContainsString('owner_internal_cost_rate', $service);
     }
 

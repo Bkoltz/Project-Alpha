@@ -35,7 +35,8 @@ services:
       MYSQL_PASSWORD: changeme_secure_pass
       APP_ENV: production
       APP_AUTH_DISABLED: "false"
-      # Required to enable passkeys. Use the exact public HTTPS origin.
+      # Optional when Settings -> Application Domain is configured. Otherwise,
+      # use the exact browser-facing HTTPS origin with no path or trailing slash.
       WEBAUTHN_ORIGIN: ""
       # Optional. Defaults to the origin hostname.
       WEBAUTHN_RP_ID: ""

@@ -78,6 +78,21 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringContainsString('.settings-category-grid', $styles);
     }
 
+    public function testSharedSettingsStylesKeepFormsReadableAndActionsInline(): void
+    {
+        $styles = (string)file_get_contents(dirname(__DIR__, 2) . '/public/assets/settings.css');
+
+        self::assertStringContainsString('--settings-muted: #475467', $styles);
+        self::assertStringContainsString('--settings-control-border: #8491a5', $styles);
+        self::assertStringContainsString('.settings-managed-section .settings-card', $styles);
+        self::assertStringContainsString('.settings-form-grid', $styles);
+        self::assertStringContainsString('.settings-content .check-row', $styles);
+        self::assertStringContainsString('.settings-managed-section .inline-form', $styles);
+        self::assertStringContainsString('.settings-action-row', $styles);
+        self::assertStringContainsString('display: inline-flex', $styles);
+        self::assertStringContainsString('.settings-form-grid { grid-template-columns: 1fr; }', $styles);
+    }
+
     public function testLegacyAccountAndCustomizationAliasesRemainSupported(): void
     {
         $view = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings.php');

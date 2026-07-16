@@ -1,9 +1,11 @@
 .settings-page {
-  --settings-ink: #172033;
-  --settings-muted: #667085;
-  --settings-border: #e2e8f0;
+  --settings-ink: #111827;
+  --settings-muted: #475467;
+  --settings-border: #cbd5e1;
+  --settings-control-border: #8491a5;
   --settings-soft: #f7f9fc;
   --settings-accent: var(--nav-accent, #2563eb);
+  --muted: var(--settings-muted);
   color: var(--settings-ink);
   margin: 0 auto;
   max-width: 1380px;
@@ -118,7 +120,7 @@
   height: 20px;
   left: 14px;
   position: absolute;
-  stroke: #667085;
+  stroke: var(--settings-muted);
   stroke-linecap: round;
   stroke-width: 1.8;
   top: 50%;
@@ -128,7 +130,7 @@
 
 .settings-search-control input {
   background: #fff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--settings-control-border);
   border-radius: 11px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
   color: var(--settings-ink);
@@ -310,7 +312,7 @@
 
 .settings-nav-heading {
   align-items: center;
-  color: #667085;
+  color: var(--settings-muted);
   display: flex;
   font-size: .72rem;
   font-weight: 800;
@@ -332,7 +334,7 @@
 
 .settings-nav-group a {
   border-radius: 7px;
-  color: #667085;
+  color: var(--settings-muted);
   display: block;
   font-size: .77rem;
   line-height: 1.35;
@@ -396,7 +398,7 @@
 .settings-content select,
 .settings-content textarea {
   background-color: #fff;
-  border-color: #cfd7e3;
+  border-color: var(--settings-control-border);
   color: var(--settings-ink);
   font: inherit;
 }
@@ -439,7 +441,7 @@
 
 .settings-content .settings-button-secondary {
   background: #fff !important;
-  border: 1px solid #cbd5e1 !important;
+  border: 1px solid var(--settings-control-border) !important;
   color: #344054 !important;
   padding: 8px 13px !important;
 }
@@ -459,6 +461,80 @@
   max-width: none !important;
 }
 
+.settings-managed-section .settings-card {
+  background: #fff;
+  border: 1px solid var(--settings-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  display: grid;
+  gap: 14px;
+  margin: 0 0 17px !important;
+  min-width: 0;
+  padding: 18px;
+}
+
+.settings-managed-section .settings-card > h3,
+.settings-managed-section .settings-card > p {
+  margin: 0;
+}
+
+.settings-managed-section .settings-card > p {
+  color: var(--settings-muted);
+  line-height: 1.5;
+}
+
+.settings-form-grid {
+  display: grid;
+  gap: 14px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.settings-form-grid .field {
+  margin: 0;
+  min-width: 0;
+}
+
+.settings-form-grid .field--wide {
+  grid-column: 1 / -1;
+}
+
+.settings-content .check-row {
+  align-items: center;
+  color: var(--settings-ink);
+  display: inline-flex;
+  gap: 8px;
+  line-height: 1.4;
+  min-height: 38px;
+}
+
+.settings-content .check-row input {
+  flex: 0 0 auto;
+}
+
+.settings-managed-section .inline-form {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.settings-managed-section .settings-action-table .inline-form .input {
+  min-width: 150px;
+  width: auto;
+}
+
+.settings-action-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .settings-managed-section table {
   border-collapse: collapse;
   width: 100%;
@@ -475,6 +551,11 @@
 .settings-managed-section .settings-action-table td:last-child {
   text-align: right !important;
   white-space: nowrap;
+}
+
+.settings-managed-section .settings-action-table td:last-child > .inline-form + .inline-form,
+.settings-managed-section .settings-action-table td:last-child > .btn + .inline-form {
+  margin-left: 6px;
 }
 
 .settings-save-bar {
@@ -505,7 +586,7 @@
 }
 
 .settings-save-actions { display: flex; gap: 8px; }
-.settings-cancel-button { background: #fff; border: 1px solid #cbd5e1; color: #344054; }
+.settings-cancel-button { background: #fff; border: 1px solid var(--settings-control-border); color: #344054; }
 
 .settings-category-detail-grid {
   display: grid;
@@ -546,6 +627,10 @@
   .settings-sidebar { margin-bottom: 20px; max-height: none; position: static; }
   .settings-sidebar nav { display: grid; gap: 4px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-nav-group { border: 1px solid #edf1f5; border-radius: 9px; padding: 6px; }
+  .settings-form-grid { grid-template-columns: 1fr; }
+  .settings-form-grid .field--wide { grid-column: auto; }
+  .settings-managed-section .settings-action-table td:last-child { white-space: normal; }
+  .settings-action-row { justify-content: flex-start; }
   .settings-save-bar { bottom: 8px; }
 }
 
