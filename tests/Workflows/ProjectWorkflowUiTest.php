@@ -571,6 +571,44 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('Choose a client from the search results.', (string)$paymentScript);
     }
 
+    public function testSignedContractUploadsWorkWithProductionCspAndRespectSignatureLock(): void
+    {
+        $navigation = file_get_contents($this->root . '/public/assets/navigation.js');
+        $controller = file_get_contents($this->root . '/src/controllers/contract/contract_sign.php');
+        $dockerStart = file_get_contents($this->root . '/docker/start.sh');
+        $securityHeaders = file_get_contents($this->root . '/src/utils/security_headers.php');
+        $organizationView = file_get_contents($this->root . '/src/views/pages/organization/organization-view.php');
+        $views = [
+            file_get_contents($this->root . '/src/views/pages/contract/contracts-list.php'),
+            file_get_contents($this->root . '/src/views/pages/contract/on-demand-contracts-list.php'),
+            file_get_contents($this->root . '/src/views/pages/contract/long-term-contracts-list.php'),
+            file_get_contents($this->root . '/src/views/pages/contract/contract-details.php'),
+            file_get_contents($this->root . '/src/views/pages/contract/long-term-contract-details.php'),
+        ];
+
+        self::assertStringContainsString('handleFilePickerAction', (string)$navigation);
+        self::assertStringContainsString('handleFileAutoSubmit', (string)$navigation);
+        self::assertStringContainsString("document.addEventListener('change', handleFileAutoSubmit)", (string)$navigation);
+        foreach ($views as $view) {
+            self::assertStringContainsString('data-file-picker-target=', (string)$view);
+            self::assertStringContainsString('data-submit-on-file', (string)$view);
+            self::assertStringNotContainsString('Replace Signed PDF', (string)$view);
+            self::assertStringNotContainsString(".click()\"", (string)$view);
+        }
+
+        self::assertStringContainsString("'on_demand' => 'contract/on-demand-contracts-list'", (string)$controller);
+        self::assertStringContainsString("'long_term' => 'contract/long-term-contracts-list'", (string)$controller);
+        self::assertStringContainsString('validate_and_store_upload(', (string)$controller);
+        self::assertStringContainsString("'require_pdf_header' => true", (string)$controller);
+        self::assertStringContainsString("'reject_pdf_active_content' => true", (string)$controller);
+        self::assertStringContainsString("empty(\$r['signed_at']) && empty(\$r['signed_pdf_path'])", (string)$views[1]);
+        self::assertStringNotContainsString('Header always set Content-Security-Policy', (string)$dockerStart);
+        self::assertStringContainsString('Content-Security-Policy:', (string)$securityHeaders);
+        self::assertStringContainsString('name="tax_exempt_file"', (string)$organizationView);
+        self::assertStringContainsString('data-submit-on-file', (string)$organizationView);
+        self::assertStringNotContainsString('onchange="this.form.submit()"', (string)$organizationView);
+    }
+
     public function testLegacyServerSchemaRepairsProtectAjaxPages(): void
     {
         $migration = file_get_contents($this->root . '/database/migrations/0012_activity_log_and_legacy_schema_repairs.sql');

@@ -160,7 +160,7 @@ $taxFileUrl = !empty($org['tax_exempt_file'])
         <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
         <input type="hidden" name="id" value="<?php echo $id; ?>">
         <label class="org-view__button" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="file" name="tax_exempt_file" accept="application/pdf,image/*" style="display:none" onchange="this.form.submit()">
+          <input type="file" name="tax_exempt_file" accept="application/pdf,image/*" style="display:none" data-submit-on-file required>
           <span style="pointer-events:none">Upload Tax Exempt</span>
         </label>
       </form>

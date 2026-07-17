@@ -135,13 +135,12 @@ $isOngoing = empty($contract['end_date']);
         <button type="submit" class="btn btn-sm">Email</button>
       </form>
     <?php endif; ?>
-    <?php if (($contract['status'] ?? '') !== 'cancelled'): ?>
+    <?php if (in_array($contractStatus, ['draft','pending'], true) && empty($contract['signed_at']) && empty($contract['signed_pdf_path'])): ?>
       <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <input id="upload-signed-lt" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
-        <?php $uplLabel = empty($contract['signed_pdf_path']) ? 'Upload Signed PDF' : 'Replace Signed PDF'; ?>
-        <button type="button" onclick="document.getElementById('upload-signed-lt').click()" class="btn btn-sm"><?php echo $uplLabel; ?></button>
+        <input id="upload-signed-lt" type="file" name="signed_pdf" accept="application/pdf,.pdf" style="display:none" data-submit-on-file required>
+        <button type="button" data-file-picker-target="upload-signed-lt" class="btn btn-sm">Upload Signed PDF</button>
       </form>
     <?php endif; ?>
     <?php if (!empty($contract['signed_pdf_path'])): ?>
