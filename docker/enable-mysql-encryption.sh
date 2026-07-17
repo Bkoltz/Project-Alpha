@@ -35,9 +35,9 @@ if [ "$component_status" != "Active" ]; then
 fi
 
 encryption_defaults="$(mysql_root -N -s -e \
-  "SELECT CONCAT(@@global.default_table_encryption, ':', @@global.table_encryption_privilege_check, ':', @@global.innodb_redo_log_encrypt, ':', @@global.innodb_undo_log_encrypt)")"
-if [ "$encryption_defaults" != "1:1:1:1" ]; then
-  echo "MySQL encryption failed: required table, privilege, redo, and undo encryption settings are not all enabled." >&2
+  "SELECT CONCAT(@@global.default_table_encryption, ':', @@global.table_encryption_privilege_check, ':', @@global.innodb_redo_log_encrypt, ':', @@global.innodb_undo_log_encrypt, ':', @@global.binlog_encryption)")"
+if [ "$encryption_defaults" != "1:1:1:1:1" ]; then
+  echo "MySQL encryption failed: required table, privilege, redo, undo, and binary log encryption settings are not all enabled." >&2
   exit 1
 fi
 
@@ -110,4 +110,4 @@ if [ "$remaining" != "0" ] || [ "$schema_default" != "YES" ] || [ "$mysql_tables
   exit 1
 fi
 
-echo "MySQL native encryption verified: keyring active, schema/table/system tablespaces encrypted, redo and undo encryption enabled."
+echo "MySQL native encryption verified: keyring active, schema/table/system tablespaces encrypted, redo, undo, and binary log encryption enabled."

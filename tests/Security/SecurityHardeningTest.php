@@ -252,6 +252,7 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('--table-encryption-privilege-check=ON', $compose);
         self::assertStringContainsString('--innodb-redo-log-encrypt=ON', $compose);
         self::assertStringContainsString('--innodb-undo-log-encrypt=ON', $compose);
+        self::assertStringContainsString('--binlog-encryption=ON', $compose);
         self::assertStringContainsString('target: /usr/sbin/mysqld.my', $compose);
         self::assertStringContainsString('target: /usr/lib64/mysql/plugin/component_keyring_file.cnf', $compose);
         self::assertStringContainsString('/var/lib/mysql-keyring', $compose);
@@ -259,6 +260,7 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('{"version":"1.0","elements":[]}', $compose);
         self::assertStringContainsString('chmod 0600 /var/lib/mysql-keyring/component_keyring_file', $compose);
         self::assertStringContainsString("STATUS_KEY='Component_status'", $compose);
+        self::assertStringContainsString('@@global.binlog_encryption=1', $compose);
 
         $migrator = $this->read('docker/migrate.sh');
         $encryption = $this->read('docker/enable-mysql-encryption.sh');
@@ -268,6 +270,7 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString("ALTER TABLESPACE mysql ENCRYPTION = 'Y'", $encryption);
         self::assertStringContainsString("ENCRYPTION = ''Y''", $encryption);
         self::assertStringContainsString('remaining=$remaining', $encryption);
+        self::assertStringContainsString('@@global.binlog_encryption', $encryption);
 
         if (PHP_OS_FAMILY !== 'Windows') {
             $output = [];

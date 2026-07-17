@@ -75,7 +75,8 @@ on the backup volume rather than an encrypted application archive.
 ## MySQL-Native Encryption
 
 The canonical Compose deployment enables MySQL's file keyring, application and
-system tablespace encryption, and redo/undo log encryption. Its one-shot
+system tablespace encryption, redo/undo log encryption, and binary/relay log
+encryption. Its one-shot
 migrator converts existing InnoDB tables before the web service starts. Follow
 the backup, key custody, verification, and recovery requirements in
 [Database Encryption](database-encryption.html) before enabling it on an
