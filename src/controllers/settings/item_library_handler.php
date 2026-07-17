@@ -13,9 +13,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !csrf_validate()) {
 }
 
 $action = (string)($_POST['action'] ?? '');
-$types = ['product','service','fee','bundle'];
+$types = ['service','fee','bundle'];
 $billingUnits = ['each','hour','day','mile','project'];
-$taxBehaviors = ['inherit','taxable','exempt'];
 $methods = ['nonpayable','hourly','fixed','base_overage','percentage'];
 $bases = ['gross_line','net_line','cash_collected'];
 $triggers = ['completed_approved','delivered','invoice_paid','manual_release'];
@@ -36,17 +35,15 @@ try {
     $id = (int)($_POST['id'] ?? 0);
     $itemName = trim((string)($_POST['item_name'] ?? ''));
     $description = trim((string)($_POST['description'] ?? ''));
-    $sku = trim((string)($_POST['sku'] ?? ''));
     $unitPrice = round((float)($_POST['unit_price'] ?? 0), 2);
-    $entryType = (string)($_POST['entry_type'] ?? 'product');
+    $entryType = (string)($_POST['entry_type'] ?? 'service');
     $billingUnit = (string)($_POST['billing_unit'] ?? 'each');
-    $taxBehavior = (string)($_POST['tax_behavior'] ?? 'inherit');
     $fulfillmentNotes = trim((string)($_POST['fulfillment_notes'] ?? ''));
     $isActive = isset($_POST['is_active']) ? 1 : 0;
     if ($itemName === '') throw new DomainException('Item name is required.');
     if ($action === 'update' && $id <= 0) throw new DomainException('Invalid item ID.');
     if ($unitPrice < 0) throw new DomainException('Client price cannot be negative.');
-    if (!in_array($entryType, $types, true) || !in_array($billingUnit, $billingUnits, true) || !in_array($taxBehavior, $taxBehaviors, true)) {
+    if (!in_array($entryType, $types, true) || !in_array($billingUnit, $billingUnits, true)) {
         throw new DomainException('Choose valid catalog settings.');
     }
     $components = json_decode((string)($_POST['components_json'] ?? '[]'), true);
@@ -57,16 +54,16 @@ try {
     $pdo->beginTransaction();
     if ($action === 'create') {
         $stmt = $pdo->prepare(
-            'INSERT INTO item_library (item_name,description,entry_type,unit_price,billing_unit,tax_behavior,fulfillment_notes,category,sku,is_active)
-             VALUES (?,?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO item_library (item_name,description,entry_type,unit_price,billing_unit,tax_behavior,fulfillment_notes,category,is_active)
+             VALUES (?,?,?,?,?,?,?,?,?)'
         );
-        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$billingUnit,$taxBehavior,$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$sku ?: null,$isActive]);
+        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive]);
         $id = (int)$pdo->lastInsertId();
     } else {
         $stmt = $pdo->prepare(
-            'UPDATE item_library SET item_name=?,description=?,entry_type=?,unit_price=?,billing_unit=?,tax_behavior=?,fulfillment_notes=?,category=?,sku=?,is_active=? WHERE id=?'
+            'UPDATE item_library SET item_name=?,description=?,entry_type=?,unit_price=?,billing_unit=?,tax_behavior=?,fulfillment_notes=?,category=?,is_active=? WHERE id=?'
         );
-        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$billingUnit,$taxBehavior,$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$sku ?: null,$isActive,$id]);
+        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive,$id]);
         if ($stmt->rowCount() === 0) {
             $exists = $pdo->prepare('SELECT 1 FROM item_library WHERE id=?'); $exists->execute([$id]);
             if (!$exists->fetchColumn()) throw new DomainException('Catalog item not found.');
@@ -132,7 +129,7 @@ try {
             if ($childId <= 0 || $childId === $id || $childQuantity <= 0) throw new DomainException('Choose valid bundle contents and quantities.');
             $child = $pdo->prepare("SELECT 1 FROM item_library WHERE id=? AND is_active=1 AND entry_type<>'bundle'");
             $child->execute([$childId]);
-            if (!$child->fetchColumn()) throw new DomainException('Bundles may contain active products, services, or fees, but not another bundle.');
+            if (!$child->fetchColumn()) throw new DomainException('Packages may contain active services or fees, but not another package.');
             $bundleInsert->execute([$id,$childId,$childQuantity,$order]);
         }
     }

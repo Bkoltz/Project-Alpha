@@ -1,4 +1,7 @@
 (function () {
+  var lookupCache = {};
+  var clientCache = {};
+
   function qs(root, selector) {
     return root.querySelector(selector);
   }
@@ -58,6 +61,15 @@
     clearChoices(root);
   }
 
+  function clearAppliedTax(root) {
+    var id = root.getAttribute('data-tax-input-id');
+    var input = id ? document.getElementById(id) : null;
+    if (!input) return;
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   function uniqueChoices(choices) {
     var seen = {};
     return (choices || []).filter(function (choice) {
@@ -105,16 +117,26 @@
     if (stateHint && !params.state) {
       params.state = stateHint;
     }
+    var url = '/?page=tax-lookup&' + new URLSearchParams(params).toString();
+    if (lookupCache[url]) {
+      renderChoices(root, lookupCache[url].choices || [], lookupCache[url].message || '');
+      return;
+    }
+    if (root._taxLookupController) root._taxLookupController.abort();
+    root._taxLookupController = typeof AbortController === 'function' ? new AbortController() : null;
     setStatus(root, 'Looking up tax rate...');
     clearChoices(root);
-    fetch('/?page=tax-lookup&' + new URLSearchParams(params).toString(), {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    fetch(url, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      signal: root._taxLookupController ? root._taxLookupController.signal : undefined
     })
       .then(function (response) { return response.json(); })
       .then(function (result) {
+        lookupCache[url] = result;
         renderChoices(root, result.choices || [], result.message || '');
       })
-      .catch(function () {
+      .catch(function (error) {
+        if (error && error.name === 'AbortError') return;
         setStatus(root, 'Tax lookup failed. Enter the percentage manually.', 'error');
       });
   }
@@ -135,6 +157,29 @@
     return '';
   }
 
+  function selectedClientRows(clientId) {
+    if (clientCache[clientId]) return Promise.resolve(clientCache[clientId]);
+    return fetch('/?page=clients-search&id=' + encodeURIComponent(clientId), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (response) { return response.json(); }).then(function (rows) {
+      clientCache[clientId] = rows;
+      return rows;
+    });
+  }
+
+  function isTaxExemptClient(client) {
+    return !!client && String(client.tax_exempt_file || '').trim() !== '';
+  }
+
+  function clearForTaxExemptClient(root) {
+    var zipInput = qs(root, '[data-tax-zip]');
+    if (zipInput) zipInput.value = '';
+    root.removeAttribute('data-tax-state-hint');
+    clearAppliedTax(root);
+    clearChoices(root);
+    setStatus(root, 'Tax-exempt client selected. Automatic lookup was skipped; enter tax manually if needed.', 'warn');
+  }
+
   function fillZipFromSelectedClient(root) {
     var zipInput = qs(root, '[data-tax-zip]');
     if (!zipInput || zipInput.value.trim() !== '') return;
@@ -145,12 +190,13 @@
       return;
     }
 
-    fetch('/?page=clients-search&id=' + encodeURIComponent(clientId), {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-      .then(function (response) { return response.json(); })
+    selectedClientRows(clientId)
       .then(function (rows) {
         var client = Array.isArray(rows) && rows.length ? rows[0] : null;
+        if (isTaxExemptClient(client)) {
+          clearForTaxExemptClient(root);
+          return;
+        }
         var zip = client ? String(client.preferred_tax_zip || client.organization_postal_code || client.postal_code || '').replace(/\D+/g, '').slice(0, 5) : '';
         var stateHint = client ? String(client.preferred_tax_state || client.organization_state || client.state || '').trim() : '';
         if (stateHint) {
@@ -222,12 +268,38 @@
     var form = root.closest('form');
     if (form) {
       form.addEventListener('click', function (event) {
-        if (!event.target.closest('[data-id], [data-client-id]')) return;
+        if (!event.target.closest('[data-taxexempt][data-id], [data-client-id]')) return;
         window.setTimeout(function () {
-          if (activeMode(root) !== 'zip') return;
+          if (activeMode(root) !== 'zip') {
+            var clientId = selectedClientId(root);
+            if (!clientId) return;
+            selectedClientRows(clientId).then(function (rows) {
+              var client = Array.isArray(rows) && rows.length ? rows[0] : null;
+              if (isTaxExemptClient(client)) clearForTaxExemptClient(root);
+            }).catch(function () {});
+            return;
+          }
           var input = qs(root, '[data-tax-zip]');
           if (input) input.value = '';
           fillZipFromSelectedClient(root);
+        }, 0);
+      });
+      form.addEventListener('change', function (event) {
+        var target = event.target;
+        if (!target || !target.matches('#clientId, #clientIdInv, #clientIdCo, #contractEditClientId, input[name="client_id"]')) return;
+        window.setTimeout(function () {
+          if (activeMode(root) === 'zip') {
+            var zipInput = qs(root, '[data-tax-zip]');
+            if (zipInput) zipInput.value = '';
+            fillZipFromSelectedClient(root);
+            return;
+          }
+          var clientId = selectedClientId(root);
+          if (!clientId) return;
+          selectedClientRows(clientId).then(function (rows) {
+            var client = Array.isArray(rows) && rows.length ? rows[0] : null;
+            if (isTaxExemptClient(client)) clearForTaxExemptClient(root);
+          }).catch(function () {});
         }, 0);
       });
     }

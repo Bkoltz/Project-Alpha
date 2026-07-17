@@ -272,10 +272,45 @@
         const assignmentSelect = assignment && assignment.tagName === 'SELECT' ? assignment : null;
         const job = form.querySelector('[name="job_id"]');
         const workType = form.querySelector('[name="work_type_id"]');
+        const billingTreatment = form.querySelector('[data-workforce-billing-treatment]');
+        const workTypeGuidance = form.querySelector('[data-workforce-work-type-guidance]');
         const client = form.querySelector('[data-workforce-client]');
         const clientSearch = form.querySelector('[data-workforce-client-search]');
         const project = form.querySelector('[data-workforce-project]');
         const invoice = form.querySelector('[data-workforce-invoice]');
+
+        function applyWorkTypeBillingDefault() {
+            if (!workType || !billingTreatment) return;
+            const option = workType.options[workType.selectedIndex];
+            const treatmentMap = {
+                internal: 'nonbillable',
+                fixed_price_included: 'included_fixed',
+                hourly: 'ready',
+                undecided: 'undecided'
+            };
+            const treatment = option && option.value
+                ? (treatmentMap[option.dataset.billingTreatment] || 'undecided')
+                : (billingTreatment.dataset.defaultTreatment || 'undecided');
+            billingTreatment.value = treatment;
+            billingTreatment.dispatchEvent(new Event('change', { bubbles: true }));
+            if (!workTypeGuidance) return;
+            if (!option || !option.value) {
+                workTypeGuidance.textContent = 'Selecting a Work Type can apply its client-billing default. Worker pay remains separate.';
+                return;
+            }
+            if (treatment === 'ready') {
+                const rate = Number(option.dataset.billingRate || 0);
+                workTypeGuidance.textContent = rate > 0
+                    ? 'Defaults to hourly client billing at ' + (option.dataset.billingCurrency || 'USD') + ' $' + rate.toFixed(2) + '/hr. Project or client rates may override it.'
+                    : 'Defaults to hourly client billing. The rate will be resolved during approval or invoice linking.';
+            } else if (treatment === 'included_fixed') {
+                workTypeGuidance.textContent = 'Defaults to included in fixed-price work, so this time will not create a second client charge.';
+            } else if (treatment === 'nonbillable') {
+                workTypeGuidance.textContent = 'Defaults to internal / nonbillable time.';
+            } else {
+                workTypeGuidance.textContent = 'Client billing will be decided during review.';
+            }
+        }
 
         function setClient(id, name) {
             if (!client) return;
@@ -314,6 +349,7 @@
             if (!option || !option.value) return;
             if (job && option.dataset.jobId) job.value = option.dataset.jobId;
             if (workType && option.dataset.workTypeId) workType.value = option.dataset.workTypeId;
+            applyWorkTypeBillingDefault();
             if (job) job.dispatchEvent(new Event('change', { bubbles: true }));
         });
         if (client) client.addEventListener('change', filterOptions);
@@ -339,8 +375,10 @@
             if (option.dataset.projectId && project) project.value = option.dataset.projectId;
             filterOptions();
         });
+        if (workType) workType.addEventListener('change', applyWorkTypeBillingDefault);
         if (clientSearch && client && client.value) clientSearch.dataset.selectedName = clientSearch.value;
         filterOptions();
+        applyWorkTypeBillingDefault();
     }
 
     function initWorkforceTime() {

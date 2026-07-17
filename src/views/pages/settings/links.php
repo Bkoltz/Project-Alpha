@@ -37,7 +37,7 @@ try {
     $linkStats['total_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links')->fetchColumn();
     $linkStats['expired_links'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE is_expired = 1')->fetchColumn();
     $linkStats['ignored_clients'] = (int)$pdo->query('SELECT COUNT(*) FROM entity_links WHERE ignore_auto_generation = 1')->fetchColumn();
-    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM entity_links WHERE link_type IN ('auto_dropbox','auto_gdrive','auto_s3')")->fetchColumn();
+    $linkStats['auto_links'] = (int)$pdo->query("SELECT COUNT(*) FROM entity_links WHERE link_type IN ('auto_dropbox','auto_gdrive','auto_s3','auto_r2')")->fetchColumn();
 } catch (Throwable $e) {
     @error_log('[links] Error fetching link stats: ' . $e->getMessage());
 }
@@ -62,7 +62,7 @@ if (empty($_SESSION['csrf'])) {
 }
 $csrfToken = $_SESSION['csrf'];
 
-$providers = ['dropbox', 'gdrive', 's3'];
+$providers = ['dropbox', 'gdrive', 's3', 'r2'];
 $helpIcon = static function (string $text): string {
     return '<span class="pa-help" tabindex="0" aria-label="' . e($text) . '" title="' . e($text) . '">?</span>';
 };
@@ -241,6 +241,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                 $providerName = $provider;
                 if ($provider === 'gdrive') $providerName = 'Google Drive';
                 elseif ($provider === 's3') $providerName = 'Amazon S3';
+                elseif ($provider === 'r2') $providerName = 'Cloudflare R2';
                 else $providerName = ucfirst($provider);
                 echo e($providerName); 
             ?>
@@ -342,10 +343,11 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                     <label>
                         <div style="margin-bottom:4px;font-weight:600">Service Account JSON</div>
                         <textarea name="<?php echo e($provider); ?>_credentials" rows="4"
-                                  placeholder='Paste Google Service Account JSON here'
-                                  style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px"><?php echo e($credentials['service_account'] ?? ''); ?></textarea>
+                                  placeholder="<?php echo !empty($credentials['service_account']) ? 'Saved - paste new JSON to replace it' : 'Paste Google Service Account JSON here'; ?>"
+                                  autocomplete="new-password"
+                                  style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px"></textarea>
 	                        <div style="margin-top:4px;font-size:12px;color:var(--muted)">
-	                            Get credentials from <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--nav-accent)">Google Cloud Console</a>. Share the target folders with this service account.
+	                            Get credentials from <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--nav-accent)">Google Cloud Console</a>. Share the target folders with this service account. Saved private-key JSON is not displayed; leave blank to keep it.
 	                        </div>
                     </label>
 
@@ -361,8 +363,9 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                         <label>
                             <div style="margin-bottom:4px;font-weight:600">Secret Access Key</div>
                             <input type="password" name="<?php echo e($provider); ?>_secret_key"
-                                   value="<?php echo e($credentials['secret_key'] ?? ''); ?>"
-                                   placeholder="AWS Secret Access Key"
+                                   value=""
+                                   placeholder="<?php echo !empty($credentials['secret_key']) ? 'Saved - enter a new secret to replace it' : 'Secret Access Key'; ?>"
+                                   autocomplete="new-password"
                                    style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
                         </label>
                     </div>
@@ -373,15 +376,78 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                                placeholder="my-bucket-name"
                                style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
                     </label>
+                    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+                        <label>
+                            <div style="margin-bottom:4px;font-weight:600">Region</div>
+                            <input type="text" name="<?php echo e($provider); ?>_region"
+                                   value="<?php echo e($credentials['region'] ?? 'us-east-1'); ?>"
+                                   placeholder="us-east-1"
+                                   style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
+                        </label>
+                        <label>
+                            <div style="margin-bottom:4px;font-weight:600">CDN / Public Base URL<?php echo $helpIcon('Optional customer-facing CDN or bucket URL. PA appends the matched folder prefix.'); ?></div>
+                            <input type="text" name="<?php echo e($provider); ?>_public_base_url"
+                                   value="<?php echo e($credentials['public_base_url'] ?? ''); ?>"
+                                   placeholder="https://files.example.com/"
+                                   style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px">
+                        </label>
+                    </div>
+                    <div class="pa-setting-note">
+                        Amazon S3 uses the bucket region and IAM access keys. PA verifies exact prefixes; the bucket or CDN must already provide customer access to the generated URL.
+                    </div>
+
+                <?php elseif ($provider === 'r2'): ?>
+                    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+                        <label>
+                            <div style="margin-bottom:4px;font-weight:600">Cloudflare Account ID<?php echo $helpIcon('Find this on the Cloudflare dashboard account home. PA uses it to build the R2 S3 API endpoint.'); ?></div>
+                            <input type="text" name="<?php echo e($provider); ?>_account_id"
+                                   value="<?php echo e($credentials['account_id'] ?? ''); ?>"
+                                   placeholder="32-character Cloudflare Account ID"
+                                   autocomplete="off"
+                                   style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
+                        </label>
+                        <label>
+                            <div style="margin-bottom:4px;font-weight:600">Bucket Name</div>
+                            <input type="text" name="<?php echo e($provider); ?>_bucket"
+                                   value="<?php echo e($credentials['bucket'] ?? ''); ?>"
+                                   placeholder="client-data"
+                                   style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd">
+                        </label>
+                    </div>
+                    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
+                        <label>
+                            <div style="margin-bottom:4px;font-weight:600">R2 Access Key ID</div>
+                            <input type="text" name="<?php echo e($provider); ?>_access_key"
+                                   value="<?php echo e($credentials['access_key'] ?? ''); ?>"
+                                   placeholder="R2 API token Access Key ID"
+                                   autocomplete="off"
+                                   style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
+                        </label>
+                        <label>
+                            <div style="margin-bottom:4px;font-weight:600">R2 Secret Access Key</div>
+                            <input type="password" name="<?php echo e($provider); ?>_secret_key"
+                                   value=""
+                                   placeholder="<?php echo !empty($credentials['secret_key']) ? 'Saved - enter a new secret to replace it' : 'R2 API token Secret Access Key'; ?>"
+                                   autocomplete="new-password"
+                                   style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:13px">
+                        </label>
+                    </div>
                     <label>
-                        <div style="margin-bottom:4px;font-weight:600">Region</div>
-                        <input type="text" name="<?php echo e($provider); ?>_region"
-                               value="<?php echo e($credentials['region'] ?? 'us-east-1'); ?>"
-                               placeholder="us-east-1"
-                               style="width:200px;padding:8px;border-radius:6px;border:1px solid #ddd">
+                        <div style="margin-bottom:4px;font-weight:600">LTDS-Ops Worker / Public Base URL<?php echo $helpIcon('The Worker or R2 custom-domain URL that clients open. PA appends the matched folder prefix. You may place {prefix} in the URL as a template.'); ?></div>
+                        <input type="text" name="<?php echo e($provider); ?>_public_base_url"
+                               value="<?php echo e($credentials['public_base_url'] ?? ''); ?>"
+                               placeholder="https://files.example.com/"
+                               style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px">
+                    </label>
+                    <label>
+                        <div style="margin-bottom:4px;font-weight:600">R2 API Endpoint Override<?php echo $helpIcon('Usually leave blank. Use the full jurisdiction-specific endpoint only for an EU or FedRAMP bucket.'); ?></div>
+                        <input type="url" name="<?php echo e($provider); ?>_endpoint"
+                               value="<?php echo e($credentials['endpoint'] ?? ''); ?>"
+                               placeholder="Optional: https://ACCOUNT_ID.eu.r2.cloudflarestorage.com"
+                               style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;font-family:monospace;font-size:12px">
                     </label>
                     <div class="pa-setting-note">
-                        S3 does not create folder share links automatically. PA verifies the exact prefix and returns its HTTPS URL; the bucket, prefix, or CDN must already allow customer access.
+                        R2 is S3-compatible internally, but it has separate settings here for clarity. Create a bucket-scoped R2 API token with object read/list permission. Client links use the Worker/public URL and never expose the API credentials.
                     </div>
                 <?php endif; ?>
 
@@ -470,6 +536,14 @@ function testConnection(event, provider) {
         formData.append('secret_key', document.querySelector(`input[name="${provider}_secret_key"]`).value);
         formData.append('bucket', document.querySelector(`input[name="${provider}_bucket"]`).value);
         formData.append('region', document.querySelector(`input[name="${provider}_region"]`).value);
+        formData.append('public_base_url', document.querySelector(`input[name="${provider}_public_base_url"]`).value);
+    } else if (provider === 'r2') {
+        formData.append('account_id', document.querySelector(`input[name="${provider}_account_id"]`).value);
+        formData.append('access_key', document.querySelector(`input[name="${provider}_access_key"]`).value);
+        formData.append('secret_key', document.querySelector(`input[name="${provider}_secret_key"]`).value);
+        formData.append('bucket', document.querySelector(`input[name="${provider}_bucket"]`).value);
+        formData.append('endpoint', document.querySelector(`input[name="${provider}_endpoint"]`).value);
+        formData.append('public_base_url', document.querySelector(`input[name="${provider}_public_base_url"]`).value);
     }
     
     fetch('/?page=settings/link-test-connection', {

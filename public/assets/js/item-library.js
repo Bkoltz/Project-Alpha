@@ -4,6 +4,9 @@
     function byId(id) { return document.getElementById(id); }
     function setValue(id, value) { var el = byId(id); if (el) el.value = value == null ? '' : value; }
     function setChecked(id, value) { var el = byId(id); if (el) el.checked = !!value; }
+    function billingUnitLabel(unit) {
+        return unit === 'each' ? 'service unit' : String(unit || '');
+    }
 
     function openModal() {
         var modal = byId('itemModal');
@@ -60,26 +63,81 @@
     }
     function clearComponents() { var target = byId('workComponents'); if (target) target.innerHTML = ''; }
     function syncBundleVisibility() { var box = byId('bundleContents'); if (box) box.hidden = (byId('entryType') || {}).value !== 'bundle'; }
-    function setBundleItems(items, currentId) {
-        var selected = {}; (items || []).forEach(function (row) { selected[String(row.item_library_id)] = row.quantity; });
-        document.querySelectorAll('[data-bundle-row]').forEach(function (row) {
-            var id = row.getAttribute('data-item-id'), checkbox = row.querySelector('[data-bundle-child]'), quantity = row.querySelector('[data-bundle-quantity]');
-            row.hidden = String(currentId || '') === id; checkbox.checked = Object.prototype.hasOwnProperty.call(selected,id); quantity.value = selected[id] || 1;
+    var bundleSelection = {};
+    var bundleCurrentId = '';
+    function bundleChoices() {
+        var source = byId('bundleChoicesData');
+        if (!source) return [];
+        try { return JSON.parse(source.textContent || '[]'); } catch (error) { return []; }
+    }
+    function bundleChoice(id) {
+        return bundleChoices().find(function (choice) { return String(choice.id) === String(id); });
+    }
+    function renderBundleSelection() {
+        var target = document.querySelector('[data-bundle-selected]');
+        var empty = document.querySelector('[data-bundle-empty]');
+        if (!target) return;
+        target.innerHTML = '';
+        Object.keys(bundleSelection).forEach(function (id) {
+            var choice = bundleChoice(id);
+            if (!choice) return;
+            var row = document.createElement('article');
+            row.className = 'catalog-bundle-selected-row';
+            row.setAttribute('data-selected-bundle-row','');
+            row.setAttribute('data-item-id',id);
+            var details = document.createElement('span');
+            var name = document.createElement('strong'); name.textContent = choice.name;
+            var price = document.createElement('small'); price.textContent = '$' + Number(choice.unit_price || 0).toFixed(2) + ' / ' + billingUnitLabel(choice.billing_unit);
+            details.appendChild(name); details.appendChild(price);
+            var quantityLabel = document.createElement('label'); quantityLabel.className = 'field';
+            var quantityText = document.createElement('span'); quantityText.className = 'label'; quantityText.textContent = 'Quantity';
+            var quantity = document.createElement('input'); quantity.className = 'input input--small'; quantity.type = 'number'; quantity.min = '0.01'; quantity.step = '0.01'; quantity.value = bundleSelection[id]; quantity.setAttribute('data-bundle-quantity',''); quantity.setAttribute('aria-label','Package quantity for ' + choice.name);
+            quantityLabel.appendChild(quantityText); quantityLabel.appendChild(quantity);
+            var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-sm btn-danger-outline'; remove.textContent = 'Remove'; remove.setAttribute('data-bundle-selected-remove',id);
+            row.appendChild(details); row.appendChild(quantityLabel); row.appendChild(remove); target.appendChild(row);
         });
+        if (empty) empty.hidden = target.children.length > 0;
+    }
+    function renderBundleResults(query) {
+        var target = document.querySelector('[data-bundle-results]');
+        var search = document.querySelector('[data-bundle-search]');
+        if (!target) return;
+        query = String(query || '').trim().toLocaleLowerCase();
+        target.innerHTML = '';
+        if (query === '') { target.hidden = true; if (search) search.setAttribute('aria-expanded','false'); return; }
+        var matches = bundleChoices().filter(function (choice) {
+            return String(choice.id) !== bundleCurrentId
+                && !Object.prototype.hasOwnProperty.call(bundleSelection,String(choice.id))
+                && (choice.name + ' ' + (choice.description || '')).toLocaleLowerCase().includes(query);
+        }).slice(0,8);
+        matches.forEach(function (choice) {
+            var button = document.createElement('button'); button.type = 'button'; button.className = 'catalog-bundle-result'; button.setAttribute('data-bundle-result-add',choice.id); button.setAttribute('role','option');
+            var label = document.createElement('strong'); label.textContent = choice.name;
+            var detail = document.createElement('small'); detail.textContent = '$' + Number(choice.unit_price || 0).toFixed(2) + ' / ' + billingUnitLabel(choice.billing_unit);
+            button.appendChild(label); button.appendChild(detail); target.appendChild(button);
+        });
+        if (!matches.length) { var none = document.createElement('p'); none.textContent = 'No matching services or fees.'; target.appendChild(none); }
+        target.hidden = false; if (search) search.setAttribute('aria-expanded','true');
+    }
+    function setBundleItems(items, currentId) {
+        bundleSelection = {}; bundleCurrentId = String(currentId || '');
+        (items || []).forEach(function (row) { bundleSelection[String(row.item_library_id)] = row.quantity || 1; });
+        var search = document.querySelector('[data-bundle-search]'); if (search) search.value = '';
+        renderBundleSelection(); renderBundleResults('');
         syncBundleVisibility();
     }
 
     function showCreateModal() {
-        var title = byId('modalTitle'); if (title) title.textContent = 'Add catalog item';
-        setValue('formAction','create'); setValue('formId',''); setValue('itemName',''); setValue('itemSku','');
-        setValue('itemDescription',''); setValue('unitPrice',''); setValue('entryType','product'); setValue('billingUnit','each');
-        setValue('taxBehavior','inherit'); setValue('fulfillmentNotes',''); setChecked('isActive',true); clearComponents(); setBundleItems([],null); openModal();
+        var title = byId('modalTitle'); if (title) title.textContent = 'Add service';
+        setValue('formAction','create'); setValue('formId',''); setValue('itemName','');
+        setValue('itemDescription',''); setValue('unitPrice',''); setValue('entryType','service'); setValue('billingUnit','each');
+        setValue('fulfillmentNotes',''); setChecked('isActive',true); clearComponents(); setBundleItems([],null); openModal();
     }
     function editItem(item) {
         var title = byId('modalTitle'); if (title) title.textContent = 'Edit catalog item';
-        setValue('formAction','update'); setValue('formId',item.id); setValue('itemName',item.item_name); setValue('itemSku',item.sku);
-        setValue('itemDescription',item.description); setValue('unitPrice',item.unit_price); setValue('entryType',item.entry_type || 'product');
-        setValue('billingUnit',item.billing_unit || (item.category === 'Hourly' ? 'hour' : 'each')); setValue('taxBehavior',item.tax_behavior || 'inherit');
+        setValue('formAction','update'); setValue('formId',item.id); setValue('itemName',item.item_name);
+        setValue('itemDescription',item.description); setValue('unitPrice',item.unit_price); setValue('entryType',item.entry_type === 'product' ? 'service' : (item.entry_type || 'service'));
+        setValue('billingUnit',item.billing_unit || (item.category === 'Hourly' ? 'hour' : 'each'));
         setValue('fulfillmentNotes',item.fulfillment_notes); setChecked('isActive',item.is_active == 1); clearComponents();
         (item.work_components || []).forEach(addComponent); setBundleItems(item.bundle_items || [],item.id); openModal();
     }
@@ -96,8 +154,8 @@
         });
         byId('componentsJson').value = JSON.stringify(components);
         var bundleItems = [];
-        if ((byId('entryType') || {}).value === 'bundle') document.querySelectorAll('[data-bundle-row]').forEach(function (row) {
-            var checkbox=row.querySelector('[data-bundle-child]'); if(checkbox.checked) bundleItems.push({item_library_id:checkbox.value,quantity:row.querySelector('[data-bundle-quantity]').value});
+        if ((byId('entryType') || {}).value === 'bundle') document.querySelectorAll('[data-selected-bundle-row]').forEach(function (row) {
+            bundleItems.push({item_library_id:row.getAttribute('data-item-id'),quantity:row.querySelector('[data-bundle-quantity]').value});
         });
         byId('bundleItemsJson').value = JSON.stringify(bundleItems);
     }
@@ -109,6 +167,10 @@
         if (button) { event.preventDefault(); editItem(parseItem(button)); return; }
         if (event.target.closest('[data-item-library-close]')) { event.preventDefault(); closeModal(); return; }
         if (event.target.closest('[data-add-work-component]')) { event.preventDefault(); addComponent({}); return; }
+        button = event.target.closest('[data-bundle-result-add]');
+        if (button) { event.preventDefault(); bundleSelection[String(button.getAttribute('data-bundle-result-add'))] = 1; renderBundleSelection(); var search=document.querySelector('[data-bundle-search]'); renderBundleResults(search ? search.value : ''); return; }
+        button = event.target.closest('[data-bundle-selected-remove]');
+        if (button) { event.preventDefault(); delete bundleSelection[String(button.getAttribute('data-bundle-selected-remove'))]; renderBundleSelection(); var bundleSearch=document.querySelector('[data-bundle-search]'); renderBundleResults(bundleSearch ? bundleSearch.value : ''); return; }
         button = event.target.closest('[data-remove-work-component]');
         if (button) { event.preventDefault(); button.closest('[data-work-component]').remove(); renumberComponents(); return; }
         var modal = byId('itemModal'); if (modal && event.target === modal) closeModal();
@@ -122,6 +184,9 @@
         if (!event.target.matches('[data-catalog-form]')) return;
         serializeComponents(event.target);
     }
+    function handleInput(event) {
+        if (event.target.matches('[data-bundle-search]')) renderBundleResults(event.target.value);
+    }
     function initItemLibraryPage() {
         var modal = byId('itemModal'); if (!modal) return;
         modal.setAttribute('data-item-library-ready','1');
@@ -132,6 +197,7 @@
         window.__projectAlphaItemLibraryClickReady = true;
         document.addEventListener('click',handleClick);
         document.addEventListener('change',handleChange);
+        document.addEventListener('input',handleInput);
         document.addEventListener('submit',handleSubmit);
     }
     window.showCreateModal = showCreateModal; window.editItem = editItem; window.closeModal = closeModal;
