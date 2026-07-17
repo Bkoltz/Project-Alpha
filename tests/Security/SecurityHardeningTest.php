@@ -215,10 +215,14 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('Disable Authenticator', $this->read('src/views/pages/auth/two_factor_setup.php'));
 
         $docker = $this->read('docker/start.sh');
+        $dockerfile = $this->read('Dockerfile');
         self::assertStringContainsString('Production readiness checks:', $docker);
         self::assertStringContainsString('BACKUP_ENCRYPTION_KEY is not set', $docker);
         self::assertStringContainsString('Stripe webhook secret is not configured in app settings', $docker);
         self::assertStringContainsString('AUTH_DISABLED/APP_AUTH_DISABLED is set but ignored in production', $docker);
+        self::assertStringNotContainsString('ServerTokens Prod', $docker);
+        self::assertStringContainsString('echo "ServerTokens Prod"', $dockerfile);
+        self::assertStringContainsString('echo "ServerSignature Off"', $dockerfile);
     }
 
     public function testComposeHasOneExplicitProductionDefinition(): void
@@ -238,6 +242,39 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('image: "mysql:8.4"', $compose);
         self::assertStringContainsString('APP_ENV: production', $compose);
         self::assertStringContainsString('- "1627:80"', $compose);
+    }
+
+    public function testMysqlNativeEncryptionDeploymentFailsClosed(): void
+    {
+        $compose = $this->read('docker-compose.yml');
+        self::assertStringContainsString('MYSQL_ENCRYPTION_REQUIRED: "true"', $compose);
+        self::assertStringContainsString('--default-table-encryption=ON', $compose);
+        self::assertStringContainsString('--table-encryption-privilege-check=ON', $compose);
+        self::assertStringContainsString('--innodb-redo-log-encrypt=ON', $compose);
+        self::assertStringContainsString('--innodb-undo-log-encrypt=ON', $compose);
+        self::assertStringContainsString('target: /usr/sbin/mysqld.my', $compose);
+        self::assertStringContainsString('target: /usr/lib64/mysql/plugin/component_keyring_file.cnf', $compose);
+        self::assertStringContainsString('/var/lib/mysql-keyring', $compose);
+        self::assertStringContainsString('if [ ! -s /var/lib/mysql-keyring/component_keyring_file ]', $compose);
+        self::assertStringContainsString('{"version":"1.0","elements":[]}', $compose);
+        self::assertStringContainsString('chmod 0600 /var/lib/mysql-keyring/component_keyring_file', $compose);
+        self::assertStringContainsString("STATUS_KEY='Component_status'", $compose);
+
+        $migrator = $this->read('docker/migrate.sh');
+        $encryption = $this->read('docker/enable-mysql-encryption.sh');
+        self::assertStringContainsString('/usr/local/bin/enable-mysql-encryption.sh', $migrator);
+        self::assertStringContainsString('component_keyring_file is not active', $encryption);
+        self::assertStringContainsString('ALTER DATABASE', $encryption);
+        self::assertStringContainsString("ALTER TABLESPACE mysql ENCRYPTION = 'Y'", $encryption);
+        self::assertStringContainsString("ENCRYPTION = ''Y''", $encryption);
+        self::assertStringContainsString('remaining=$remaining', $encryption);
+
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $output = [];
+            $exitCode = 0;
+            exec('bash -n ' . escapeshellarg($this->root . '/docker/enable-mysql-encryption.sh') . ' 2>&1', $output, $exitCode);
+            self::assertSame(0, $exitCode, implode("\n", $output));
+        }
     }
 
     public function testBackupRestoreAvoidsShellCommandComposition(): void

@@ -6,6 +6,24 @@
 # optional; if enabled, use the same durable key in both web and cron.
 
 services:
+  keyring-init:
+    image: "mysql:8.4"
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        set -eu;
+        chown 999:999 /var/lib/mysql-keyring;
+        chmod 0700 /var/lib/mysql-keyring;
+        if [ ! -s /var/lib/mysql-keyring/component_keyring_file ]; then
+          printf '%s' '{"version":"1.0","elements":[]}' > /var/lib/mysql-keyring/component_keyring_file;
+        fi;
+        chown 999:999 /var/lib/mysql-keyring/component_keyring_file;
+        chmod 0600 /var/lib/mysql-keyring/component_keyring_file
+    restart: "no"
+    volumes:
+      - pa_mysql_keyring:/var/lib/mysql-keyring
+
   migrate:
     image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"
     command: ["/usr/local/bin/migrate.sh"]
@@ -16,6 +34,7 @@ services:
       MYSQL_USER: appuser
       MYSQL_PASSWORD: changeme_secure_pass
       MYSQL_ROOT_PASSWORD: changeme_root_pass
+      MYSQL_ENCRYPTION_REQUIRED: "true"
     depends_on:
       db:
         condition: service_healthy
@@ -109,7 +128,12 @@ services:
   db:
     image: "mysql:8.4"
     restart: unless-stopped
-    command: --log-error-verbosity=1
+    command:
+      - --log-error-verbosity=1
+      - --default-table-encryption=ON
+      - --table-encryption-privilege-check=ON
+      - --innodb-redo-log-encrypt=ON
+      - --innodb-undo-log-encrypt=ON
     environment:
       MYSQL_ROOT_PASSWORD: changeme_root_pass
       MYSQL_DATABASE: project_alpha
@@ -117,8 +141,25 @@ services:
       MYSQL_PASSWORD: changeme_secure_pass
     volumes:
       - pa_db_data:/var/lib/mysql
+      - pa_mysql_keyring:/var/lib/mysql-keyring
+    configs:
+      - source: mysql_keyring_manifest
+        target: /usr/sbin/mysqld.my
+        mode: 0444
+      - source: mysql_keyring_component
+        target: /usr/lib64/mysql/plugin/component_keyring_file.cnf
+        mode: 0444
+    depends_on:
+      keyring-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", 'MYSQL_PWD="$${MYSQL_ROOT_PASSWORD}" mysqladmin ping -h 127.0.0.1 -uroot --silent']
+      test:
+        - CMD-SHELL
+        - >-
+          test "$$(MYSQL_PWD="$${MYSQL_ROOT_PASSWORD}" mysql -h 127.0.0.1 -uroot -N -s -e
+          "SELECT IF(EXISTS(SELECT 1 FROM performance_schema.keyring_component_status WHERE STATUS_KEY='Component_status' AND STATUS_VALUE='Active')
+          AND @@global.default_table_encryption=1 AND @@global.table_encryption_privilege_check=1
+          AND @@global.innodb_redo_log_encrypt=1 AND @@global.innodb_undo_log_encrypt=1,1,0)")" = "1"
       interval: 10s
       timeout: 5s
       start_period: 60s
@@ -129,3 +170,17 @@ volumes:
   pa_config: {}
   pa_backups: {}
   pa_db_data: {}
+  pa_mysql_keyring: {}
+
+configs:
+  mysql_keyring_manifest:
+    content: |
+      {
+        "components": "file://component_keyring_file"
+      }
+  mysql_keyring_component:
+    content: |
+      {
+        "path": "/var/lib/mysql-keyring/component_keyring_file",
+        "read_only": false
+      }

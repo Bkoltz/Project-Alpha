@@ -16,9 +16,7 @@ Operational requirements:
 
 ## MySQL Tablespace Encryption
 
-The repository contains MySQL keyring configuration files under `database/mysql/`, but the published `docker-compose.yml` does not currently mount or enable them. Therefore, MySQL tablespace encryption must not be assumed for a default installation.
-
-Operators requiring database-file encryption should use a reviewed deployment-specific design such as encrypted host storage or a fully configured MySQL keyring setup. Validate it after every MySQL image upgrade and test disaster recovery with the key material.
+The canonical Compose deployment now activates MySQL's file keyring, requires encrypted application and system tablespaces, and enables redo and undo log encryption. The migrator converts existing PA InnoDB tables before application services start. See the current [Database Encryption](../admin/database-encryption.html) operating guide.
 
 Do not enable tablespace encryption without a key-backup plan. Losing the database keyring can make otherwise healthy data files unrecoverable.
 

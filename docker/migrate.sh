@@ -49,4 +49,5 @@ if [ "$ledger_count" -eq 0 ]; then
 fi
 
 php /var/www/src/migrations/run_migrations.php --verbose
+/usr/local/bin/enable-mysql-encryption.sh
 echo "Database initialization and validation completed successfully. Create the first administrator in the web setup if this is a clean installation."
