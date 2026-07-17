@@ -19,6 +19,7 @@ jobs:
         run: |
           docker build --target test -t ghcr.io/ledgetoptechnologies/project-alpha:latest .
           docker build --target cron -t ghcr.io/ledgetoptechnologies/project-alpha:cron-latest .
+          docker build --target db -t ghcr.io/ledgetoptechnologies/project-alpha:db-latest .
 
       - name: Build and start real compose path
         run: |

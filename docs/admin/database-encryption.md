@@ -18,13 +18,13 @@ application secrets.
 
 ## Deployment
 
-The canonical Compose definition mounts the keyring manifest at
-`/usr/sbin/mysqld.my`, the component configuration at
-`/usr/lib64/mysql/plugin/component_keyring_file.cnf`, and a persistent keyring
-volume at `/var/lib/mysql-keyring`. A one-shot initializer creates a valid
-empty keyring only when the file is absent, then restricts the directory to the
-MySQL user (`999:999`, mode `0700`) and keyring file to mode `0600`. It never
-overwrites a non-empty existing keyring.
+The published Project Alpha database image contains the reviewed keyring
+manifest, component configuration, encryption defaults, bootstrap logic, and
+health check. Compose only mounts a persistent keyring volume at
+`/var/lib/mysql-keyring`. The database entrypoint creates a valid empty keyring
+only when the file is absent, resolves the image's MySQL account rather than a
+hard-coded UID, restricts the directory to mode `0700` and the keyring file to
+mode `0600`, and never overwrites a non-empty existing keyring.
 
 The database health check fails until the keyring reports `Active` and these
 settings are enabled:
@@ -59,9 +59,8 @@ point-in-time recovery, purge the pre-encryption logs during the maintenance
 window. Never purge logs still required by a replica or recovery policy.
 
 For TrueNAS bind mounts, create a persistent `mysql-keyring` dataset alongside
-the database dataset and replace the `pa_mysql_keyring` named volume in the
-canonical `docker-compose.yml` with the real dataset path. Never place the
-keyring file inside `/var/lib/mysql`.
+the database dataset and add its bind mount to the `db` service alongside the
+existing database mount. Never place the keyring file inside `/var/lib/mysql`.
 
 ## Verification
 

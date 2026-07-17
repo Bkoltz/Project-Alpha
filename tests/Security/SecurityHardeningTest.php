@@ -239,7 +239,10 @@ final class SecurityHardeningTest extends TestCase
         self::assertDoesNotMatchRegularExpression('/\$\{[A-Z0-9_]+:-/', $compose);
         self::assertStringContainsString('image: "ghcr.io/ledgetoptechnologies/project-alpha:latest"', $compose);
         self::assertStringContainsString('image: "ghcr.io/ledgetoptechnologies/project-alpha:cron-latest"', $compose);
-        self::assertStringContainsString('image: "mysql:8.4"', $compose);
+        self::assertStringContainsString('image: "ghcr.io/ledgetoptechnologies/project-alpha:db-latest"', $compose);
+        self::assertStringNotContainsString('x-pa-settings:', $compose);
+        self::assertStringNotContainsString('&pa-', $compose);
+        self::assertLessThanOrEqual(140, count(file($this->root . '/docker-compose.yml') ?: []));
         self::assertStringContainsString('APP_ENV: production', $compose);
         self::assertStringContainsString('- "1627:80"', $compose);
     }
@@ -247,20 +250,34 @@ final class SecurityHardeningTest extends TestCase
     public function testMysqlNativeEncryptionDeploymentFailsClosed(): void
     {
         $compose = $this->read('docker-compose.yml');
+        $dockerfile = $this->read('Dockerfile');
+        $mysqlConfig = $this->read('docker/mysql/pa-encryption.cnf');
+        $manifest = $this->read('docker/mysql/mysqld.my');
+        $componentConfig = $this->read('docker/mysql/component_keyring_file.cnf');
+        $entrypoint = $this->read('docker/mysql/entrypoint.sh');
+        $healthcheck = $this->read('docker/mysql/healthcheck.sh');
+        $publishWorkflow = $this->read('.github/workflows/docker-publish.yml');
+
         self::assertStringContainsString('MYSQL_ENCRYPTION_REQUIRED: "true"', $compose);
-        self::assertStringContainsString('--default-table-encryption=ON', $compose);
-        self::assertStringContainsString('--table-encryption-privilege-check=ON', $compose);
-        self::assertStringContainsString('--innodb-redo-log-encrypt=ON', $compose);
-        self::assertStringContainsString('--innodb-undo-log-encrypt=ON', $compose);
-        self::assertStringContainsString('--binlog-encryption=ON', $compose);
-        self::assertStringContainsString('target: /usr/sbin/mysqld.my', $compose);
-        self::assertStringContainsString('target: /usr/lib64/mysql/plugin/component_keyring_file.cnf', $compose);
         self::assertStringContainsString('/var/lib/mysql-keyring', $compose);
-        self::assertStringContainsString('if [ ! -s /var/lib/mysql-keyring/component_keyring_file ]', $compose);
-        self::assertStringContainsString('{"version":"1.0","elements":[]}', $compose);
-        self::assertStringContainsString('chmod 0600 /var/lib/mysql-keyring/component_keyring_file', $compose);
-        self::assertStringContainsString("STATUS_KEY='Component_status'", $compose);
-        self::assertStringContainsString('@@global.binlog_encryption=1', $compose);
+        self::assertStringNotContainsString('keyring-init:', $compose);
+        self::assertStringNotContainsString('mysql_keyring_manifest:', $compose);
+        self::assertStringContainsString('FROM mysql:8.4 AS db', $dockerfile);
+        self::assertStringContainsString('pa-mysql-entrypoint.sh', $dockerfile);
+        self::assertStringContainsString('pa-mysql-healthcheck.sh', $dockerfile);
+        self::assertStringContainsString('default_table_encryption=ON', $mysqlConfig);
+        self::assertStringContainsString('table_encryption_privilege_check=ON', $mysqlConfig);
+        self::assertStringContainsString('innodb_redo_log_encrypt=ON', $mysqlConfig);
+        self::assertStringContainsString('innodb_undo_log_encrypt=ON', $mysqlConfig);
+        self::assertStringContainsString('binlog_encryption=ON', $mysqlConfig);
+        self::assertStringContainsString('file://component_keyring_file', $manifest);
+        self::assertStringContainsString('/var/lib/mysql-keyring/component_keyring_file', $componentConfig);
+        self::assertStringContainsString('{"version":"1.0","elements":[]}', $entrypoint);
+        self::assertStringContainsString('chmod 0600 "$keyring_file"', $entrypoint);
+        self::assertStringContainsString("STATUS_KEY='Component_status'", $healthcheck);
+        self::assertStringContainsString('@@global.binlog_encryption=1', $healthcheck);
+        self::assertStringContainsString('target: db', $publishWorkflow);
+        self::assertStringContainsString('db_tag=db-latest', $publishWorkflow);
 
         $migrator = $this->read('docker/migrate.sh');
         $encryption = $this->read('docker/enable-mysql-encryption.sh');
@@ -273,10 +290,16 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('@@global.binlog_encryption', $encryption);
 
         if (PHP_OS_FAMILY !== 'Windows') {
-            $output = [];
-            $exitCode = 0;
-            exec('bash -n ' . escapeshellarg($this->root . '/docker/enable-mysql-encryption.sh') . ' 2>&1', $output, $exitCode);
-            self::assertSame(0, $exitCode, implode("\n", $output));
+            foreach ([
+                'docker/enable-mysql-encryption.sh' => 'bash',
+                'docker/mysql/entrypoint.sh' => 'sh',
+                'docker/mysql/healthcheck.sh' => 'sh',
+            ] as $script => $shell) {
+                $output = [];
+                $exitCode = 0;
+                exec($shell . ' -n ' . escapeshellarg($this->root . '/' . $script) . ' 2>&1', $output, $exitCode);
+                self::assertSame(0, $exitCode, $script . ': ' . implode("\n", $output));
+            }
         }
     }
 
