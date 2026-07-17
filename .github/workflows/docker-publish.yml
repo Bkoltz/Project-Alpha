@@ -40,12 +40,15 @@ jobs:
             version="${GITHUB_REF_NAME#v}"
             echo "tag=${version}" >> $GITHUB_OUTPUT
             echo "cron_tag=cron-${version}" >> $GITHUB_OUTPUT
+            echo "db_tag=db-${version}" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
             echo "cron_tag=cron-latest" >> $GITHUB_OUTPUT
+            echo "db_tag=db-latest" >> $GITHUB_OUTPUT
           else
             echo "tag=dev" >> $GITHUB_OUTPUT
             echo "cron_tag=cron" >> $GITHUB_OUTPUT
+            echo "db_tag=db-dev" >> $GITHUB_OUTPUT
           fi
 
       - name: Compute version
@@ -80,12 +83,36 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push encrypted database image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: db
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.db_tag }}
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:db-sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.tag }}
           format: table
           output: trivy-report.txt
+          exit-code: '1'
+          ignore-unfixed: true
+          scanners: 'vuln'
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy database image scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.tag.outputs.db_tag }}
+          format: table
+          output: trivy-db-report.txt
           exit-code: '1'
           ignore-unfixed: true
           scanners: 'vuln'
@@ -100,10 +127,17 @@ jobs:
           else
             echo "Trivy report was not generated."
           fi
+          if [ -f trivy-db-report.txt ]; then
+            cat trivy-db-report.txt
+          else
+            echo "Database Trivy report was not generated."
+          fi
 
       - name: Upload Trivy report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: trivy-report
-          path: trivy-report.txt
+          path: |
+            trivy-report.txt
+            trivy-db-report.txt

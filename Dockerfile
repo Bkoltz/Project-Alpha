@@ -132,7 +132,37 @@ RUN mkdir -p /var/www/config
 COPY ./config/.env.example /var/www/config/.env.example
 RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/docker-compose.yml /var/www/Dockerfile /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
 
-# ---------- Stage 3: Cron service ----------
+# ---------- Stage 3: Encrypted MySQL runtime ----------
+FROM mysql:8.4 AS db
+
+USER root
+# The upstream image includes MySQL Shell (about 500 MB of optional Python
+# tooling) and a statically linked gosu binary. PA uses neither. Use the base
+# image's maintained coreutils chroot for the one privilege drop performed by
+# the official entrypoint, then remove those unused binaries.
+RUN microdnf remove -y mysql-shell \
+    && microdnf clean all \
+    && sed -i 's/exec gosu mysql "\$BASH_SOURCE" "\$@"/exec chroot --userspec=mysql:mysql --groups=mysql \/ "\$BASH_SOURCE" "\$@"/' /usr/local/bin/docker-entrypoint.sh \
+    && rm -f /usr/local/bin/gosu \
+    && test -x /usr/sbin/chroot \
+    && ! command -v mysqlsh >/dev/null 2>&1 \
+    && ! command -v gosu >/dev/null 2>&1
+COPY ./docker/mysql/mysqld.my /usr/sbin/mysqld.my
+COPY ./docker/mysql/component_keyring_file.cnf /usr/lib64/mysql/plugin/component_keyring_file.cnf
+COPY ./docker/mysql/pa-encryption.cnf /etc/mysql/conf.d/pa-encryption.cnf
+COPY ./docker/mysql/entrypoint.sh /usr/local/bin/pa-mysql-entrypoint.sh
+COPY ./docker/mysql/healthcheck.sh /usr/local/bin/pa-mysql-healthcheck.sh
+RUN sed -i 's/\r$//' /usr/local/bin/pa-mysql-entrypoint.sh /usr/local/bin/pa-mysql-healthcheck.sh \
+    && chmod 0555 /usr/local/bin/pa-mysql-entrypoint.sh /usr/local/bin/pa-mysql-healthcheck.sh \
+    && chown root:root /usr/sbin/mysqld.my /usr/lib64/mysql/plugin/component_keyring_file.cnf /etc/mysql/conf.d/pa-encryption.cnf \
+    && chmod 0444 /usr/sbin/mysqld.my /usr/lib64/mysql/plugin/component_keyring_file.cnf /etc/mysql/conf.d/pa-encryption.cnf
+
+ENTRYPOINT ["/usr/local/bin/pa-mysql-entrypoint.sh"]
+CMD ["mysqld"]
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=12 \
+  CMD ["/usr/local/bin/pa-mysql-healthcheck.sh"]
+
+# ---------- Stage 4: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
 FROM php:8.5-cli AS cron
 ARG APP_VERSION=dev

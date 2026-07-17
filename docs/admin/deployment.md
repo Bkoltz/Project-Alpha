@@ -12,8 +12,7 @@ Project Alpha is commonly deployed with Docker Compose or as a TrueNAS Scale Cus
 | Service | Purpose |
 |---|---|
 | `web` | PHP and Apache application runtime |
-| `db` | MySQL database |
-| `keyring-init` | One-shot ownership initialization for the persistent MySQL keyring |
+| `db` | Project Alpha's MySQL 8.4 image with built-in at-rest encryption and keyring health checks |
 | `worker` | Durable background and maintenance jobs |
 | `cron` | Scheduled jobs, reminders, backups, and reconciliation |
 | `migrate` | One-shot database initialization and migration validation |
@@ -27,7 +26,11 @@ docker compose pull
 docker compose up -d
 ```
 
-Before first start, replace both database passwords in Compose configuration. No administrator environment variable is required. On a clean database, open PA and complete the first-time setup form to create the initial normal administrator.
+Before first start, replace both database passwords and adjust the public
+origin, backup encryption key, port, and storage mappings as needed. No
+administrator environment variable is required. On a clean database, open PA
+and complete the first-time setup form to create the initial normal
+administrator.
 
 `docker-compose.yml` is the only tracked deployment definition. It contains the
 production image tags, port, service settings, and named volumes directly.
@@ -74,7 +77,7 @@ on the backup volume rather than an encrypted application archive.
 
 ## MySQL-Native Encryption
 
-The canonical Compose deployment enables MySQL's file keyring, application and
+The published database image enables MySQL's file keyring, application and
 system tablespace encryption, redo/undo log encryption, and binary/relay log
 encryption. Its one-shot
 migrator converts existing InnoDB tables before the web service starts. Follow

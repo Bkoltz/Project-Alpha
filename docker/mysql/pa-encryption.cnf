@@ -1,0 +1,7 @@
+[mysqld]
+log_error_verbosity=1
+default_table_encryption=ON
+table_encryption_privilege_check=ON
+innodb_redo_log_encrypt=ON
+innodb_undo_log_encrypt=ON
+binlog_encryption=ON
