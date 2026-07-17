@@ -1,12 +1,13 @@
 <?php
 // src/controllers/settings/link_test_connection.php
-// Tests connection to storage providers (Dropbox, Google Drive, S3)
+// Tests connection to storage providers (Dropbox, Google Drive, Amazon S3, Cloudflare R2)
 
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/link_provider_config.php';
 require_once __DIR__ . '/../../link_resolvers/auto_resolver/google_drive_link_resolver.php';
 require_once __DIR__ . '/../../link_resolvers/auto_resolver/s3_link_resolver.php';
+require_once __DIR__ . '/../../link_resolvers/auto_resolver/r2_link_resolver.php';
 
 header('Content-Type: application/json');
 
@@ -125,8 +126,13 @@ try {
         }
         
     } elseif ($provider === 'gdrive') {
-        $credentials = $_POST['credentials'] ?? '';
+        $credentials = trim((string)($_POST['credentials'] ?? ''));
         $rootPath = trim((string)($_POST['root_path'] ?? ''));
+        if ($credentials === '') {
+            $row = pa_link_provider_best_row($pdo, 'gdrive');
+            $stored = $row ? pa_link_provider_credentials_from_row($row) : [];
+            $credentials = (string)($stored['service_account'] ?? '');
+        }
         
         if (empty($credentials)) {
             echo json_encode(['success' => false, 'error' => 'Service account credentials are required']);
@@ -159,11 +165,21 @@ try {
         ]);
         
     } elseif ($provider === 's3') {
-        $accessKey = $_POST['access_key'] ?? '';
-        $secretKey = $_POST['secret_key'] ?? '';
-        $bucket = $_POST['bucket'] ?? '';
-        $region = $_POST['region'] ?? 'us-east-1';
+        $accessKey = trim((string)($_POST['access_key'] ?? ''));
+        $secretKey = trim((string)($_POST['secret_key'] ?? ''));
+        $bucket = trim((string)($_POST['bucket'] ?? ''));
+        $region = trim((string)($_POST['region'] ?? 'us-east-1')) ?: 'us-east-1';
+        $publicBaseUrl = trim((string)($_POST['public_base_url'] ?? ''));
         $rootPath = trim((string)($_POST['root_path'] ?? ''), '/');
+
+        $row = pa_link_provider_best_row($pdo, 's3');
+        $stored = $row ? pa_link_provider_credentials_from_row($row) : [];
+        if ($accessKey === '') {
+            $accessKey = (string)($stored['access_key'] ?? '');
+        }
+        if ($secretKey === '') {
+            $secretKey = (string)($stored['secret_key'] ?? '');
+        }
         
         if (empty($accessKey) || empty($secretKey) || empty($bucket)) {
             echo json_encode(['success' => false, 'error' => 'Access key, secret key, and bucket are required']);
@@ -175,13 +191,56 @@ try {
             'secret_key' => $secretKey,
             'bucket' => $bucket,
             'region' => $region,
+            'public_base_url' => $publicBaseUrl,
             'root_path' => $rootPath,
+            'session_token' => (string)($stored['session_token'] ?? ''),
         ]);
         $result = $resolver->testConnection();
         echo json_encode([
             'success' => !empty($result['success']),
             'message' => $result['message'] ?? null,
             'error' => empty($result['success']) ? ($result['message'] ?? 'S3 connection failed') : null,
+            'tip' => $result['tip'] ?? null,
+        ]);
+
+    } elseif ($provider === 'r2') {
+        $accountId = trim((string)($_POST['account_id'] ?? ''));
+        $accessKey = trim((string)($_POST['access_key'] ?? ''));
+        $secretKey = trim((string)($_POST['secret_key'] ?? ''));
+        $bucket = trim((string)($_POST['bucket'] ?? ''));
+        $endpoint = trim((string)($_POST['endpoint'] ?? ''));
+        $publicBaseUrl = trim((string)($_POST['public_base_url'] ?? ''));
+        $rootPath = trim((string)($_POST['root_path'] ?? ''), '/');
+
+        $row = pa_link_provider_best_row($pdo, 'r2');
+        $stored = $row ? pa_link_provider_credentials_from_row($row) : [];
+        if ($accessKey === '') {
+            $accessKey = (string)($stored['access_key'] ?? '');
+        }
+        if ($secretKey === '') {
+            $secretKey = (string)($stored['secret_key'] ?? '');
+        }
+
+        if (($accountId === '' && $endpoint === '') || $accessKey === '' || $secretKey === '' || $bucket === '') {
+            echo json_encode(['success' => false, 'error' => 'Account ID (or endpoint), access key, secret key, and bucket are required']);
+            exit;
+        }
+
+        $resolver = new R2LinkResolver([
+            'account_id' => $accountId,
+            'access_key' => $accessKey,
+            'secret_key' => $secretKey,
+            'bucket' => $bucket,
+            'endpoint' => $endpoint,
+            'public_base_url' => $publicBaseUrl,
+            'root_path' => $rootPath,
+            'session_token' => (string)($stored['session_token'] ?? ''),
+        ]);
+        $result = $resolver->testConnection();
+        echo json_encode([
+            'success' => !empty($result['success']),
+            'message' => $result['message'] ?? null,
+            'error' => empty($result['success']) ? ($result['message'] ?? 'Cloudflare R2 connection failed') : null,
             'tip' => $result['tip'] ?? null,
         ]);
         

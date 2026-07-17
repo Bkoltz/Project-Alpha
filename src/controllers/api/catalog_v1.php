@@ -37,7 +37,7 @@ try {
         $stmt = $pdo->prepare(
             'SELECT i.*,COUNT(c.id) work_component_count FROM item_library i
              LEFT JOIN catalog_work_components c ON c.item_library_id=i.id AND c.is_active=1
-             WHERE (?=1 OR i.is_active=1) AND (?="" OR i.item_name LIKE ? OR i.sku LIKE ?)
+             WHERE (?=1 OR i.is_active=1) AND (?="" OR i.item_name LIKE ? OR i.description LIKE ?)
              GROUP BY i.id ORDER BY i.is_active DESC,i.item_name LIMIT 250'
         );
         $q = trim((string)($_GET['q'] ?? ''));

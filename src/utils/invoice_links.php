@@ -350,6 +350,7 @@ function pa_invoice_link_type_label(string $linkType): string
         'auto_dropbox' => 'Dropbox Folder',
         'auto_gdrive' => 'Google Drive Folder',
         'auto_s3' => 'S3 Folder',
+        'auto_r2' => 'Cloudflare R2 Folder',
         default => ucwords(str_replace(['manual_', 'auto_', '_'], ['', '', ' '], $linkType ?: 'Link')),
     };
 }

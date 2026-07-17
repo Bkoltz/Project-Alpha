@@ -358,7 +358,7 @@ class DropboxLinkResolver
     /**
      * Search for a folder by name in Dropbox
      */
-    public function searchFolder(string $folderName): array
+    public function searchFolder(string $folderName, array $parentNames = []): array
     {
         try {
             $ch = curl_init('https://api.dropboxapi.com/2/files/search_v2');

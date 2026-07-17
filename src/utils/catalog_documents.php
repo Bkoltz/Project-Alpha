@@ -14,7 +14,7 @@ function catalog_document_snapshot(PDO $pdo, int $itemLibraryId, array $line): a
     }
 
     $stmt = $pdo->prepare(
-        'SELECT id,item_name,description,unit_price,entry_type,billing_unit,tax_behavior,sku,is_active,updated_at
+        'SELECT id,item_name,description,unit_price,entry_type,billing_unit,tax_behavior,is_active,updated_at
          FROM item_library WHERE id=? LIMIT 1'
     );
     $stmt->execute([$itemLibraryId]);
@@ -76,7 +76,6 @@ function catalog_document_snapshot(PDO $pdo, int $itemLibraryId, array $line): a
             'entry_type' => (string)$item['entry_type'],
             'billing_unit' => (string)$item['billing_unit'],
             'tax_behavior' => (string)$item['tax_behavior'],
-            'sku' => $item['sku'],
             'updated_at' => (string)$item['updated_at'],
         ],
         'document_line' => [

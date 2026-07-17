@@ -29,7 +29,7 @@ if (empty($appConfig['link_resolver_daily_scan_enabled'])) {
 try {
     $enabledProviders = [];
     foreach (pa_link_provider_best_rows($pdo) as $provider => $row) {
-        if (!empty($row['is_enabled']) && in_array($provider, ['dropbox', 'gdrive', 's3'], true)) {
+        if (!empty($row['is_enabled']) && in_array($provider, ['dropbox', 'gdrive', 's3', 'r2'], true)) {
             $enabledProviders[] = $provider;
         }
     }

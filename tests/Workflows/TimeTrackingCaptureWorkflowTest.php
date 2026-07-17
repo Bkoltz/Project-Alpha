@@ -92,6 +92,20 @@ final class TimeTrackingCaptureWorkflowTest extends TestCase
         );
     }
 
+    public function testWorkTypeBillingDefaultsFlowIntoTimeReviewAndApproval(): void
+    {
+        $service = (string)file_get_contents($this->root . '/src/Modules/Timekeeping/TimekeepingService.php');
+        $approval = (string)file_get_contents($this->root . '/src/Modules/Timekeeping/ApprovalService.php');
+        $view = (string)file_get_contents($this->root . '/src/views/pages/workforce/time.php');
+        $script = (string)file_get_contents($this->root . '/public/assets/js/workforce.js');
+
+        self::assertStringContainsString('LEFT JOIN work_type_billing_defaults', $service);
+        self::assertStringContainsString('data-billing-treatment=', $view);
+        self::assertStringContainsString('applyWorkTypeBillingDefault', $script);
+        self::assertStringContainsString('work_type_billing_rate', $approval);
+        self::assertStringContainsString('$entry[\'work_type_billing_rate\'] ?? $settings[\'default_billing_rate\']', $approval);
+    }
+
     public function testWorkforceActionSupportsEditAndInvoiceLinking(): void
     {
         $controller = (string)file_get_contents($this->root . '/src/controllers/workforce/action.php');

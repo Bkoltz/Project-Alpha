@@ -58,8 +58,18 @@ $compensationLabels = [
   <div class="settings-list-header">
     <div>
       <h3>Work Types</h3>
-      <p>A Work Type describes what a person did. Client billing and worker compensation are separate defaults and can be reviewed independently on each entry.</p>
+      <p>A Work Type describes what a person did. It classifies tracked time and can supply separate defaults for client billing and worker compensation.</p>
     </div>
+  </div>
+
+  <div class="settings-card settings-work-type-guide">
+    <div><h3>How Item Library and Work Types fit together</h3><p class="muted">They describe different sides of the same job.</p></div>
+    <div class="settings-work-type-guide__steps">
+      <article><strong>1. Client offering</strong><span>Add an Item Library service, fee, or package to a quote, contract, or invoice.</span></article>
+      <article><strong>2. Internal work</strong><span>Track what a worker actually did with a Work Type, such as 3D Modeling or 2D Mapping.</span></article>
+      <article><strong>3. Optional connection</strong><span>An Item Library offering can contain internal work components that point to Work Types for Job planning and assignments.</span></article>
+    </div>
+    <p class="settings-work-type-guide__note"><strong>Hourly billing:</strong> manually adding an hourly service to a document uses the Item Library price. Adding confirmed tracked time to an invoice uses the Work Type rate after any project or client rate override. Fixed-price work should be marked as included so tracked time does not create a second client charge.</p>
   </div>
 
   <form method="post"
@@ -73,11 +83,12 @@ $compensationLabels = [
 
     <fieldset>
       <legend><?=$editing ? 'Edit Work Type' : 'New Work Type'?></legend>
-      <p class="muted">This classification is shared by time tracking, assignments, billing review, and compensation review.</p>
+      <p class="muted">This classification is shared by time tracking, assignments, billing review, and compensation review. Creating a Work Type does not create a client-facing catalog service.</p>
       <div class="settings-form-grid">
         <label class="field">
           <span class="label">Name</span>
           <input class="input" name="name" maxlength="190" value="<?=$h($form['name'])?>" required>
+          <small>Use the activity name a worker will recognize when recording time, such as 3D Modeling.</small>
         </label>
         <label class="field">
           <span class="label">Code</span>
@@ -87,6 +98,7 @@ $compensationLabels = [
         <label class="field field--wide">
           <span class="label">Description</span>
           <textarea class="input" name="description" rows="3" maxlength="5000"><?=$h($form['description'])?></textarea>
+          <small>Explain what belongs in this Work Type so time is classified consistently.</small>
         </label>
         <label class="check-row">
           <input type="checkbox" name="is_active" value="1" <?=!empty($form['is_active']) ? 'checked' : ''?>>
@@ -97,7 +109,7 @@ $compensationLabels = [
 
     <fieldset>
       <legend>Client billing default</legend>
-      <p class="muted">This controls how the business normally charges a client for this work. It does not determine what a worker earns.</p>
+      <p class="muted">This is the starting treatment when someone selects this Work Type on a time entry. A manager can change the treatment during review. It does not determine what a worker earns.</p>
       <div class="settings-form-grid">
         <label class="field">
           <span class="label">Default billing treatment</span>
@@ -106,11 +118,12 @@ $compensationLabels = [
               <option value="<?=$h($value)?>" <?=$form['billing_treatment'] === $value ? 'selected' : ''?>><?=$h($label)?></option>
             <?php endforeach; ?>
           </select>
+          <small>Choose hourly only when this time should become a separate invoice charge. Choose included for work already covered by a service or package price.</small>
         </label>
         <label class="field">
           <span class="label">Default client hourly rate</span>
           <input class="input" type="number" min="0" step="0.0001" name="billing_rate" value="<?=$h($form['default_billing_rate'])?>" placeholder="Leave blank to decide later">
-          <small>Used only when the billing treatment is hourly.</small>
+          <small>Used only for hourly tracked time. A project rate overrides a client rate, which overrides this rate; the global fallback is used last.</small>
         </label>
         <label class="field">
           <span class="label">Billing currency</span>
@@ -121,7 +134,7 @@ $compensationLabels = [
 
     <fieldset>
       <legend>Worker compensation default</legend>
-      <p class="muted">This controls what an eligible employee or contractor normally earns. Owners remain nonpayable, and worker- or assignment-specific rules may override this default.</p>
+      <p class="muted">This controls what an eligible employee or contractor normally earns for this kind of work. It is independent of what the client is charged. Owners remain nonpayable, and assignment- or worker-specific rules may override this default.</p>
       <div class="settings-form-grid">
         <label class="field">
           <span class="label">Compensation method</span>
@@ -130,10 +143,12 @@ $compensationLabels = [
               <option value="<?=$h($value)?>" <?=$form['default_compensation_method'] === $value ? 'selected' : ''?>><?=$h($label)?></option>
             <?php endforeach; ?>
           </select>
+          <small>Choose the normal pay calculation for eligible workers performing this Work Type.</small>
         </label>
         <label class="field">
           <span class="label">Hourly rate, fixed amount, or base amount</span>
           <input class="input" type="number" min="0" step="0.0001" name="amount" value="<?=$h($form['default_amount'])?>">
+          <small>Hourly uses this as the pay rate; fixed uses it as the total; base + overage uses it as the base.</small>
         </label>
         <label class="field">
           <span class="label">Minutes included in base amount</span>
@@ -162,6 +177,7 @@ $compensationLabels = [
               <option value="<?=$h($value)?>" <?=$form['default_eligibility_trigger'] === $value ? 'selected' : ''?>><?=$h($label)?></option>
             <?php endforeach; ?>
           </select>
+          <small>This controls when calculated compensation can move forward for approval or payment.</small>
         </label>
         <label class="field">
           <span class="label">Compensation currency</span>

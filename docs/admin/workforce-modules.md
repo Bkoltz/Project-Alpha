@@ -30,7 +30,8 @@ compatibility API.
 3. Open **Accounts**, create or edit a PA user, and choose the **Employee** role.
    The Employee role loads the strict self-service ACL defaults automatically.
 4. Complete the employee profile, pay visibility, and assigned projects on the
-   same Account form. Optional project pay-rate overrides take precedence.
+   same Account form. Optional assignment and service-component compensation
+   rules take precedence over broader defaults.
 5. Employees use **Workforce > Time**; approvers use **Approvals**; authorized
    users use **Employee Pay**. The Workforce Overview summarizes time and pay.
 
@@ -38,9 +39,14 @@ Timekeeping managers can enter time for any active PA account. Client, project,
 and open hourly-invoice context is optional for managers. Employees never see
 direct client or invoice details and can select only assigned projects.
 
-Pay-rate precedence is assignment override, employee rate, then business
-default. Missing pay rates block payable approvals; missing billing rates block
-billable approvals.
+Client billing and worker compensation resolve separately. For hourly client
+billing, PA uses project override, client override, Work Type default, then the
+business fallback billing rate. Compensation uses the most specific valid
+assignment or service-component rule before Work Type and worker/business
+fallbacks. Missing required rates block the affected payable or billable step.
+
+See [Service Catalog and Work Types](../workflows/service-catalog-and-work-types.html)
+for the complete integration and examples.
 
 ## Security boundaries
 

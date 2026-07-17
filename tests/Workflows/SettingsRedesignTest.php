@@ -200,6 +200,66 @@ final class SettingsRedesignTest extends TestCase
         self::assertArrayNotHasKey('workflow', $catalogManagerRegistry['work']['items']);
     }
 
+    public function testItemLibraryIsServiceFocusedAndPackagesUseSearchSelection(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $view = (string)file_get_contents($root . '/src/views/pages/settings/item-library.php');
+        $script = (string)file_get_contents($root . '/public/assets/js/item-library.js');
+        $handler = (string)file_get_contents($root . '/src/controllers/settings/item_library_handler.php');
+
+        self::assertStringNotContainsString('id="itemSku"', $view);
+        self::assertStringNotContainsString('value="product"', $view);
+        self::assertStringNotContainsString('name="tax_behavior"', $view);
+        self::assertStringContainsString('Uses the document default automatically', $view);
+        self::assertStringContainsString('<option value="each">Service unit</option>', $view);
+        self::assertStringContainsString('Type to search the Item Library', $view);
+        self::assertStringContainsString('data-bundle-selected', $view);
+        self::assertStringContainsString('renderBundleResults', $script);
+        self::assertStringContainsString('$types = [\'service\',\'fee\',\'bundle\']', $handler);
+        self::assertStringContainsString('$billingUnit,\'inherit\'', $handler);
+    }
+
+    public function testItemLibrarySkuIsRemovedFromRuntimeAndSchema(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $handler = (string)file_get_contents($root . '/src/controllers/settings/item_library_handler.php');
+        $snapshots = (string)file_get_contents($root . '/src/utils/catalog_documents.php');
+        $baseline = (string)file_get_contents($root . '/database/baseline.sql');
+        $migration = (string)file_get_contents($root . '/database/migrations/0048_service_catalog_tax_lookup_performance.sql');
+
+        self::assertStringNotContainsString('sku', strtolower($handler));
+        self::assertStringNotContainsString('sku', strtolower($snapshots));
+        self::assertStringNotContainsString('sku varchar', strtolower($baseline));
+        self::assertStringContainsString('DROP COLUMN sku', $migration);
+    }
+
+    public function testServiceCatalogWorkflowIsPublishedInRepositoryDocs(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $workflowPath = $root . '/docs/workflows/service-catalog-and-work-types.md';
+        if (!is_readable($workflowPath)) {
+            self::markTestSkipped('Repository documentation is not packaged in the production web image.');
+        }
+        $workflow = (string)file_get_contents($workflowPath);
+        $index = (string)file_get_contents($root . '/docs/workflows/index.md');
+
+        self::assertStringContainsString('Item Library Settings', $workflow);
+        self::assertStringContainsString('Work Type Settings', $workflow);
+        self::assertStringContainsString('How Hourly Billing Resolves', $workflow);
+        self::assertStringContainsString('Tax-Exempt Clients', $workflow);
+        self::assertStringContainsString('service-catalog-and-work-types.html', $index);
+    }
+
+    public function testItemLibraryLoadsRelatedDataInBulk(): void
+    {
+        $view = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings/item-library.php');
+
+        self::assertStringContainsString('$componentsByItem', $view);
+        self::assertStringContainsString('$bundleItemsByItem', $view);
+        self::assertStringNotContainsString('$componentStmt->execute([$item[\'id\']])', $view);
+        self::assertStringNotContainsString('$bundleStmt->execute([$item[\'id\']])', $view);
+    }
+
     public function testRestrictedSettingsActionsAreNotRenderedToIneligibleRoles(): void
     {
         $registry = pa_settings_visible_registry(

@@ -94,26 +94,20 @@ try {
     }
     
     // Process provider configurations
-    $providers = ['dropbox', 'gdrive', 's3'];
+    $providers = ['dropbox', 'gdrive', 's3', 'r2'];
     
     foreach ($providers as $provider) {
         $isEnabled = isset($_POST["provider_enabled_{$provider}"]) ? 1 : 0;
+        $existingRow = pa_link_provider_best_row($pdo, $provider);
+        $existingCredentials = $existingRow ? pa_link_provider_credentials_from_row($existingRow) : [];
         
         // Build credentials array based on provider
         $credentials = [];
         
         if ($provider === 'dropbox') {
             // For Dropbox, preserve existing OAuth credentials if present
-            $existingCredentials = [];
-            try {
-                $existingRow = pa_link_provider_best_row($pdo, $provider);
-                if ($existingRow) {
-                    $existingCredentials = pa_link_provider_credentials_from_row($existingRow);
-                }
-            } catch (Throwable $e) {}
-            
             // Only update access token if provided, otherwise keep existing OAuth tokens
-            $accessToken = $_POST["{$provider}_access_token"] ?? '';
+            $accessToken = trim((string)($_POST["{$provider}_access_token"] ?? ''));
             if (!empty($accessToken)) {
                 // Legacy access token provided
                 $credentials = [
@@ -132,18 +126,40 @@ try {
                 ];
             }
         } elseif ($provider === 'gdrive') {
+            $serviceAccount = trim((string)($_POST["{$provider}_credentials"] ?? ''));
             $credentials = [
-                'service_account' => $_POST["{$provider}_credentials"] ?? '',
+                'service_account' => $serviceAccount !== '' ? $serviceAccount : (string)($existingCredentials['service_account'] ?? ''),
                 'root_path' => $_POST["{$provider}_root_path"] ?? ''
             ];
         } elseif ($provider === 's3') {
+            $accessKey = trim((string)($_POST["{$provider}_access_key"] ?? ''));
+            $secretKey = trim((string)($_POST["{$provider}_secret_key"] ?? ''));
             $credentials = [
-                'access_key' => $_POST["{$provider}_access_key"] ?? '',
-                'secret_key' => $_POST["{$provider}_secret_key"] ?? '',
-                'bucket' => $_POST["{$provider}_bucket"] ?? '',
-                'region' => $_POST["{$provider}_region"] ?? 'us-east-1',
+                'access_key' => $accessKey !== '' ? $accessKey : (string)($existingCredentials['access_key'] ?? ''),
+                'secret_key' => $secretKey !== '' ? $secretKey : (string)($existingCredentials['secret_key'] ?? ''),
+                'bucket' => trim((string)($_POST["{$provider}_bucket"] ?? '')),
+                'region' => trim((string)($_POST["{$provider}_region"] ?? 'us-east-1')) ?: 'us-east-1',
+                'public_base_url' => trim((string)($_POST["{$provider}_public_base_url"] ?? '')),
                 'root_path' => $_POST["{$provider}_root_path"] ?? ''
             ];
+            if (!empty($existingCredentials['session_token'])) {
+                $credentials['session_token'] = (string)$existingCredentials['session_token'];
+            }
+        } elseif ($provider === 'r2') {
+            $accessKey = trim((string)($_POST["{$provider}_access_key"] ?? ''));
+            $secretKey = trim((string)($_POST["{$provider}_secret_key"] ?? ''));
+            $credentials = [
+                'account_id' => trim((string)($_POST["{$provider}_account_id"] ?? '')),
+                'access_key' => $accessKey !== '' ? $accessKey : (string)($existingCredentials['access_key'] ?? ''),
+                'secret_key' => $secretKey !== '' ? $secretKey : (string)($existingCredentials['secret_key'] ?? ''),
+                'bucket' => trim((string)($_POST["{$provider}_bucket"] ?? '')),
+                'endpoint' => trim((string)($_POST["{$provider}_endpoint"] ?? '')),
+                'public_base_url' => trim((string)($_POST["{$provider}_public_base_url"] ?? '')),
+                'root_path' => $_POST["{$provider}_root_path"] ?? ''
+            ];
+            if (!empty($existingCredentials['session_token'])) {
+                $credentials['session_token'] = (string)$existingCredentials['session_token'];
+            }
         }
         
         $expirationDays = (int)($globalSettings['default_link_expiration_days'] ?? $readConfig('default_link_expiration_days', 365));

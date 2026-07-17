@@ -1360,7 +1360,9 @@ CREATE TABLE IF NOT EXISTS tax_jurisdictions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_tax_jurisdiction_state (state_fips, county_fips),
-    INDEX idx_tax_jurisdiction_code (state_fips, county_fips, jurisdiction_code)
+    INDEX idx_tax_jurisdiction_code (state_fips, county_fips, jurisdiction_code),
+    INDEX idx_tax_jurisdiction_county_active (state_fips, county_fips, jurisdiction_type, is_active),
+    INDEX idx_tax_jurisdiction_state_code (state_fips, jurisdiction_code, jurisdiction_type, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tax_boundaries (
@@ -1376,6 +1378,7 @@ CREATE TABLE IF NOT EXISTS tax_boundaries (
     end_date DATE DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_tax_boundaries_state_zip (state_fips, zip5_start),
+    INDEX idx_tax_boundaries_zip_range (zip5_start, zip5_end),
     INDEX idx_tax_boundaries_county (state_fips, county_fips),
     INDEX idx_tax_boundaries_jurisdiction (state_fips, county_fips, jurisdiction_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1451,13 +1454,11 @@ CREATE TABLE IF NOT EXISTS item_library (
     description TEXT NULL,
     unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
     category VARCHAR(100) NULL,
-    sku VARCHAR(100) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_item_lib_org (organization_id),
-    INDEX idx_item_lib_item_name (item_name),
-    INDEX idx_item_lib_sku (sku)
+    INDEX idx_item_lib_item_name (item_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- EXPENSE CATEGORIES (IRS Schedule C aligned)
