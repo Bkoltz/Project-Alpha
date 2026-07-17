@@ -111,8 +111,8 @@ if ($termsText === '') {
         <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
           <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
           <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-          <input id="upload-signed" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
-          <button type="button" onclick="document.getElementById('upload-signed').click()" class="btn btn-sm">Upload Signed PDF</button>
+          <input id="upload-signed" type="file" name="signed_pdf" accept="application/pdf,.pdf" style="display:none" data-submit-on-file required>
+          <button type="button" data-file-picker-target="upload-signed" class="btn btn-sm">Upload Signed PDF</button>
         </form>
       <?php endif; ?>
       <?php if (!empty($contract['signed_pdf_path'])): ?>

@@ -42,7 +42,7 @@ $offset = ($pageN - 1) * $per;
 $sqlCount = 'SELECT COUNT(*) FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.subtotal, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, odc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
+$sql="SELECT odc.id, odc.doc_number, odc.project_code, odc.status, odc.start_date, odc.end_date, odc.billing_interval_count, odc.billing_interval_unit, odc.price_per_invoice, odc.subtotal, odc.total_invoiced, odc.invoice_count, odc.last_invoice_date, odc.signed_at, odc.signed_pdf_path, c.name client, c.id AS client_id FROM contracts odc LEFT JOIN clients c ON c.id=odc.client_id";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY odc.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -66,6 +66,9 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
   <?php endif; ?>
   <?php if (!empty($_GET['activated'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Contract activated.</div>
+  <?php endif; ?>
+  <?php if (!empty($_GET['signed'])): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">Signed PDF uploaded. Review the contract, then activate it when ready.</div>
   <?php endif; ?>
   <?php if (!empty($_GET['error'])): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
@@ -178,13 +181,12 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
                 </form>
               <?php endif; ?>
               <a href="/?page=contract/on-demand-invoices-list&contract_id=<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Invoices</a>
-              <?php if ($r['status'] !== 'cancelled'): ?>
+              <?php if (in_array($r['status'], ['draft','pending'], true) && empty($r['signed_at']) && empty($r['signed_pdf_path'])): ?>
                 <form method="post" action="/?page=contract/contract-sign" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">
                   <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <input id="upl-od-<?php echo (int)$r['id']; ?>" type="file" name="signed_pdf" accept="application/pdf" style="display:none" onchange="this.form.submit()">
-                  <?php $uplLabel = empty($r['signed_pdf_path']) ? 'Upload' : 'New Upload'; ?>
-                  <button type="button" onclick="document.getElementById('upl-od-<?php echo (int)$r['id']; ?>').click()" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;"><?php echo $uplLabel; ?></button>
+                  <input id="upl-od-<?php echo (int)$r['id']; ?>" type="file" name="signed_pdf" accept="application/pdf,.pdf" style="display:none" data-submit-on-file required>
+                  <button type="button" data-file-picker-target="upl-od-<?php echo (int)$r['id']; ?>" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff; font-size: small;">Upload</button>
                 </form>
               <?php endif; ?>
               <?php if (!empty($r['signed_pdf_path'])): ?>

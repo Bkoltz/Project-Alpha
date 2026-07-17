@@ -524,6 +524,29 @@ function handleDocumentFilterToggle(event) {
     setDocumentFilterPanel(button, panel, !isOpen, true);
 }
 
+function handleFilePickerAction(event) {
+    const trigger = event.target.closest('[data-file-picker-target]');
+    if (!trigger) return;
+
+    const inputId = trigger.getAttribute('data-file-picker-target');
+    const input = inputId ? document.getElementById(inputId) : null;
+    if (!(input instanceof HTMLInputElement) || input.type !== 'file') return;
+
+    event.preventDefault();
+    input.click();
+}
+
+function handleFileAutoSubmit(event) {
+    const input = event.target.closest('input[type="file"][data-submit-on-file]');
+    if (!(input instanceof HTMLInputElement) || !input.form || input.files.length === 0) return;
+
+    if (typeof input.form.requestSubmit === 'function') {
+        input.form.requestSubmit();
+    } else {
+        input.form.submit();
+    }
+}
+
 // Initialize client-side navigation
 function initialize() {
     if (navigationInitialized) return;
@@ -532,6 +555,8 @@ function initialize() {
     // Set up event listeners
     document.addEventListener('click', handleNavigation);
     document.addEventListener('click', handleDocumentFilterToggle);
+    document.addEventListener('click', handleFilePickerAction);
+    document.addEventListener('change', handleFileAutoSubmit);
     window.addEventListener('popstate', handlePopState);
 
     // Set initial state
