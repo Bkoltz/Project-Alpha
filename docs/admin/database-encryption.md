@@ -10,7 +10,7 @@ Project Alpha uses separate controls for separate data-at-rest risks:
 - ZFS or another encrypted host filesystem protects whole datasets while locked.
 - `APP_ENCRYPTION_KEY` protects selected application credentials and private fields with AES-256-GCM.
 - `BACKUP_ENCRYPTION_KEY` protects PA-created database and full backup archives.
-- MySQL's `component_keyring_file` protects InnoDB application tables, the `mysql` system tablespace, redo logs, and undo logs.
+- MySQL's `component_keyring_file` protects InnoDB application tables, the `mysql` system tablespace, redo logs, undo logs, and binary/relay logs.
 
 Do not reuse one key for these different purposes. Do not replace an existing
 `APP_ENCRYPTION_KEY`; PA must retain the original key to decrypt existing
@@ -34,6 +34,7 @@ default_table_encryption=ON
 table_encryption_privilege_check=ON
 innodb_redo_log_encrypt=ON
 innodb_undo_log_encrypt=ON
+binlog_encryption=ON
 ```
 
 After normal migrations, the one-shot migrator sets the application schema
@@ -49,6 +50,13 @@ the deployment on an established installation:
 3. Store recovery copies of both PA keys outside the server.
 4. Snapshot the database, config, uploads, and backups datasets.
 5. Ensure enough free storage and use a maintenance window.
+
+MySQL 8.4 enables binary logging by default. Enabling `binlog_encryption`
+encrypts newly rotated binary and relay logs, but does not retroactively encrypt
+older files. After the first successful encrypted startup, review `SHOW BINARY
+LOGS`. If this installation has no replicas and does not retain those logs for
+point-in-time recovery, purge the pre-encryption logs during the maintenance
+window. Never purge logs still required by a replica or recovery policy.
 
 For TrueNAS bind mounts, create a persistent `mysql-keyring` dataset alongside
 the database dataset and replace the `pa_mysql_keyring` named volume in the
@@ -67,7 +75,8 @@ MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -t -e \
   "SELECT @@global.default_table_encryption,
           @@global.table_encryption_privilege_check,
           @@global.innodb_redo_log_encrypt,
-          @@global.innodb_undo_log_encrypt;"
+          @@global.innodb_undo_log_encrypt,
+          @@global.binlog_encryption;"
 
 MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -t -e \
   "SELECT ENCRYPTION, COUNT(*)
@@ -79,7 +88,7 @@ MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -t -e \
     WHERE NAME='mysql';"
 ```
 
-The component must be `Active`, all four variables must be `1`, application
+The component must be `Active`, all five variables must be `1`, application
 tablespaces must report only `Y`, and the `mysql` tablespace must report `Y`.
 
 ## Recovery
@@ -101,6 +110,8 @@ keyring snapshot or restore a verified logical PA backup into a clean database.
 
 MySQL-native encryption protects files at rest. Authorized SQL clients, the
 running MySQL process, and application memory receive decrypted data. The
-Community file keyring is also not a compliance-grade external KMS or HSM.
+Community file keyring is not password-protected like MySQL Enterprise's
+encrypted-file component, so keep its separate dataset ZFS-encrypted, tightly
+permissioned, and backed up. It is also not a compliance-grade external KMS or HSM.
 Deployments with regulatory key-custody requirements need a reviewed external
 key-management design.
