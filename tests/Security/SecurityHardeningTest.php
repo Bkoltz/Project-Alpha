@@ -263,6 +263,9 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringNotContainsString('keyring-init:', $compose);
         self::assertStringNotContainsString('mysql_keyring_manifest:', $compose);
         self::assertStringContainsString('FROM mysql:8.4 AS db', $dockerfile);
+        self::assertStringContainsString('microdnf remove -y mysql-shell', $dockerfile);
+        self::assertStringContainsString('exec chroot --userspec=mysql:mysql --groups=mysql', $dockerfile);
+        self::assertStringContainsString('rm -f /usr/local/bin/gosu', $dockerfile);
         self::assertStringContainsString('pa-mysql-entrypoint.sh', $dockerfile);
         self::assertStringContainsString('pa-mysql-healthcheck.sh', $dockerfile);
         self::assertStringContainsString('default_table_encryption=ON', $mysqlConfig);

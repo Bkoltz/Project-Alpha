@@ -136,6 +136,17 @@ RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database 
 FROM mysql:8.4 AS db
 
 USER root
+# The upstream image includes MySQL Shell (about 500 MB of optional Python
+# tooling) and a statically linked gosu binary. PA uses neither. Use the base
+# image's maintained coreutils chroot for the one privilege drop performed by
+# the official entrypoint, then remove those unused binaries.
+RUN microdnf remove -y mysql-shell \
+    && microdnf clean all \
+    && sed -i 's/exec gosu mysql "\$BASH_SOURCE" "\$@"/exec chroot --userspec=mysql:mysql --groups=mysql \/ "\$BASH_SOURCE" "\$@"/' /usr/local/bin/docker-entrypoint.sh \
+    && rm -f /usr/local/bin/gosu \
+    && test -x /usr/sbin/chroot \
+    && ! command -v mysqlsh >/dev/null 2>&1 \
+    && ! command -v gosu >/dev/null 2>&1
 COPY ./docker/mysql/mysqld.my /usr/sbin/mysqld.my
 COPY ./docker/mysql/component_keyring_file.cnf /usr/lib64/mysql/plugin/component_keyring_file.cnf
 COPY ./docker/mysql/pa-encryption.cnf /etc/mysql/conf.d/pa-encryption.cnf
