@@ -58,7 +58,13 @@ final class TimekeepingService
 
     public function workTypes(): array
     {
-        return $this->pdo->query('SELECT id,name FROM work_types WHERE is_active=1 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+        return $this->pdo->query(
+            'SELECT wt.id,wt.name,COALESCE(wtb.default_treatment,\'undecided\') billing_treatment,
+                    wtb.default_billing_rate,COALESCE(wtb.currency,wt.currency,\'USD\') billing_currency
+             FROM work_types wt
+             LEFT JOIN work_type_billing_defaults wtb ON wtb.work_type_id=wt.id
+             WHERE wt.is_active=1 ORDER BY wt.name'
+        )->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** @return array<string,mixed>|null */

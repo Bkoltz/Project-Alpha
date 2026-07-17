@@ -15,6 +15,8 @@ Use manual tax entry when you already know the rate or need a one-off override.
 
 Document create/edit pages can look up imported rates by ZIP or county. ZIP lookup may show multiple choices when the ZIP crosses jurisdictions or state lines.
 
+If the selected organization is tax exempt, PA shows the tax-exempt banner but does not automatically copy its ZIP into the lookup or apply an imported rate. The tax controls remain available for a manual exception. Selecting a non-exempt client can prefill the service-address ZIP and rank that client's state first when a ZIP crosses boundaries.
+
 ## State Imports
 
 The tax import page is state-scoped. Select the state before uploading files. PA keeps separate status for each state and only replaces imported rows for the selected state.

@@ -351,7 +351,7 @@ final class FakeResolverProvider
         $this->folders = $folders;
     }
 
-    public function searchFolder(string $folderName): array
+    public function searchFolder(string $folderName, array $parentNames = []): array
     {
         $matches = $this->folders[$folderName] ?? [];
         if (!$matches) {

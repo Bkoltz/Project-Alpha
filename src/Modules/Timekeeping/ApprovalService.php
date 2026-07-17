@@ -127,6 +127,7 @@ final class ApprovalService
                         wp.id worker_profile_id,wp.relationship_type,wp.compensation_policy,
                         COALESCE(wp.relationship_review_required,0) relationship_review_required,
                         jwc.catalog_work_component_id,
+                        wtb.default_billing_rate work_type_billing_rate,
                         pa.pay_rate_override,p.name project_name,c.name client_name,
                         i.doc_number invoice_number,i.invoice_type
                  FROM work_time_entries t JOIN users u ON u.id=t.user_id
@@ -134,6 +135,7 @@ final class ApprovalService
                  LEFT JOIN worker_profiles wp ON wp.user_id=t.user_id AND wp.status='active'
                  LEFT JOIN work_assignments wa ON wa.id=t.work_assignment_id
                  LEFT JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
+                 LEFT JOIN work_type_billing_defaults wtb ON wtb.work_type_id=t.work_type_id
                  LEFT JOIN projects p ON p.id=t.project_id
                  LEFT JOIN clients c ON c.id=t.client_id
                  LEFT JOIN invoices i ON i.id=t.invoice_id
@@ -163,7 +165,7 @@ final class ApprovalService
                 }
             }
             $entry['default_hourly_rate'] = $settings['default_hourly_rate'];
-            $entry['default_billing_rate'] = $settings['default_billing_rate'];
+            $entry['default_billing_rate'] = $entry['work_type_billing_rate'] ?? $settings['default_billing_rate'];
             $entry['currency'] = $settings['currency'];
             if ((int) $entry['revision'] > 1 && $this->hasPaidAccrual($entryId)) {
                 throw new DomainException('Paid time cannot be replaced by a correction. Return the pay accrual to pending first.');

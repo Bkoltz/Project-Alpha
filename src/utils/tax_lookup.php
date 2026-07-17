@@ -159,12 +159,11 @@ function pa_tax_lookup_by_zip(PDO $pdo, string $zip5, ?string $zip4 = null, ?str
     $params = [$zip5, $zip5];
     $zip4Clause = '';
     if (is_string($zip4) && strlen($zip4) === 4) {
-        $zip4Clause = ' AND (
-            zip5_start <> zip5_end
-            OR (zip4_start <= ? AND zip4_end >= ?)
-        )';
-        $params[] = $zip4;
-        $params[] = $zip4;
+        // Compare the full ZIP+4 point against both ends of the imported
+        // range. This also handles a boundary whose start/end span ZIP5s.
+        $zip4Clause = ' AND (zip5_start < ? OR (zip5_start = ? AND zip4_start <= ?))
+                        AND (zip5_end > ? OR (zip5_end = ? AND zip4_end >= ?))';
+        array_push($params, $zip5, $zip5, $zip4, $zip5, $zip5, $zip4);
     }
 
     $stmt = $pdo->prepare(
@@ -177,7 +176,11 @@ function pa_tax_lookup_by_zip(PDO $pdo, string $zip5, ?string $zip4 = null, ?str
          LIMIT 250'
     );
     $stmt->execute($params);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rows = array_values(array_filter(
+        $stmt->fetchAll(PDO::FETCH_ASSOC),
+        static fn(array $row): bool => pa_tax_boundary_contains_zip($row, $zip5, $zip4)
+    ));
+    $rows = pa_tax_unique_boundaries($rows);
     if (!$rows) {
         return [
             'status' => 'not_found',
@@ -186,16 +189,7 @@ function pa_tax_lookup_by_zip(PDO $pdo, string $zip5, ?string $zip4 = null, ?str
         ];
     }
 
-    $choices = [];
-    foreach ($rows as $row) {
-        $choice = pa_tax_choice_for_boundary($pdo, $row);
-        if ($choice === null) {
-            continue;
-        }
-        $choices[] = $choice;
-    }
-
-    $choices = pa_tax_dedupe_choices($choices);
+    $choices = pa_tax_dedupe_choices(pa_tax_choices_for_boundaries($pdo, $rows));
     usort($choices, static function (array $a, array $b) use ($stateHintFips): int {
         if ($stateHintFips !== null) {
             $aRank = (($a['state_fips'] ?? '') === $stateHintFips) ? 0 : 1;
@@ -242,59 +236,149 @@ function pa_tax_zip_multiple_message(array $choices, ?string $stateHintFips = nu
     return 'This ZIP can map to multiple tax jurisdictions. Choose the one that matches the sale location.';
 }
 
-function pa_tax_choice_for_boundary(PDO $pdo, array $boundary): ?array
+function pa_tax_unique_boundaries(array $rows): array
 {
-    $stateFips = (string)$boundary['state_fips'];
-    $countyFips = (string)$boundary['county_fips'];
-    $jurisdictionCode = isset($boundary['jurisdiction_code']) ? trim((string)$boundary['jurisdiction_code']) : '';
+    $unique = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $key = (string)($row['state_fips'] ?? '') . '|'
+            . (string)($row['county_fips'] ?? '') . '|'
+            . trim((string)($row['jurisdiction_code'] ?? ''));
+        if (!isset($unique[$key])) {
+            $unique[$key] = $row;
+        }
+    }
+    return array_values($unique);
+}
 
-    $countyStmt = $pdo->prepare(
-        'SELECT f.state_abbr, f.county_name, j.state_rate, j.county_rate, j.total_rate
-         FROM tax_jurisdictions j
-         JOIN fips_counties f
-           ON f.state_fips = j.state_fips
-          AND f.county_fips = j.county_fips
-         WHERE j.state_fips = ?
-           AND j.county_fips = ?
-           AND j.jurisdiction_type = "county"
-           AND j.is_active = 1
-           AND ' . pa_tax_active_date_clause('j') . '
-         LIMIT 1'
-    );
-    $countyStmt->execute([$stateFips, $countyFips]);
-    $county = $countyStmt->fetch(PDO::FETCH_ASSOC);
-    if (!$county) {
-        return null;
+function pa_tax_boundary_contains_zip(array $boundary, string $zip5, ?string $zip4 = null): bool
+{
+    $zip5 = preg_replace('/\D+/', '', $zip5) ?? '';
+    $zip4 = $zip4 !== null ? (preg_replace('/\D+/', '', $zip4) ?? '') : '';
+    $startZip5 = str_pad((string)($boundary['zip5_start'] ?? ''), 5, '0', STR_PAD_LEFT);
+    $endZip5 = str_pad((string)($boundary['zip5_end'] ?? ''), 5, '0', STR_PAD_LEFT);
+    if (strlen($zip5) !== 5 || $zip5 < $startZip5 || $zip5 > $endZip5) {
+        return false;
+    }
+    if (strlen($zip4) !== 4) {
+        return true;
     }
 
-    $stateRate = (float)$county['state_rate'];
-    $countyRate = (float)$county['county_rate'];
-    $extraRate = 0.0;
-    $extraLabels = [];
+    $start = $startZip5 . str_pad((string)($boundary['zip4_start'] ?? '0000'), 4, '0', STR_PAD_LEFT);
+    $end = $endZip5 . str_pad((string)($boundary['zip4_end'] ?? '9999'), 4, '0', STR_PAD_LEFT);
+    $target = $zip5 . $zip4;
+    return strcmp($target, $start) >= 0 && strcmp($target, $end) <= 0;
+}
 
-    if ($jurisdictionCode !== '') {
-        $extraStmt = $pdo->prepare(
-            'SELECT jurisdiction_code, jurisdiction_type, city_rate, special_rate, county_rate, total_rate
-             FROM tax_jurisdictions
-             WHERE state_fips = ?
-               AND jurisdiction_code = ?
-               AND jurisdiction_type <> "county"
-               AND is_active = 1
-               AND ' . pa_tax_active_date_clause() . '
-             ORDER BY jurisdiction_type, id'
-        );
-        $extraStmt->execute([$stateFips, $jurisdictionCode]);
-        foreach ($extraStmt->fetchAll(PDO::FETCH_ASSOC) as $extra) {
-            $local = max((float)$extra['city_rate'], (float)$extra['special_rate'], (float)$extra['county_rate'], 0.0);
-            if ($local <= 0.0) {
-                continue;
-            }
-            $extraRate += $local;
-            $extraLabels[] = pa_tax_jurisdiction_label($stateFips, (string)$extra['jurisdiction_code'], (string)$extra['jurisdiction_type']);
+/**
+ * Resolve every matched boundary in two bulk jurisdiction queries. A ZIP
+ * lookup therefore performs a fixed three queries instead of two queries per
+ * boundary row.
+ */
+function pa_tax_choices_for_boundaries(PDO $pdo, array $boundaries): array
+{
+    if (!$boundaries) {
+        return [];
+    }
+
+    $countyPairs = [];
+    $jurisdictionPairs = [];
+    foreach ($boundaries as $boundary) {
+        $stateFips = (string)($boundary['state_fips'] ?? '');
+        $countyFips = (string)($boundary['county_fips'] ?? '');
+        $jurisdictionCode = trim((string)($boundary['jurisdiction_code'] ?? ''));
+        if ($stateFips === '' || $countyFips === '') {
+            continue;
+        }
+        $countyPairs[$stateFips . '|' . $countyFips] = [$stateFips, $countyFips];
+        if ($jurisdictionCode !== '') {
+            $jurisdictionPairs[$stateFips . '|' . $jurisdictionCode] = [$stateFips, $jurisdictionCode];
         }
     }
 
-    $rate = round($stateRate + $countyRate + $extraRate, 4);
+    $counties = [];
+    if ($countyPairs) {
+        $clauses = [];
+        $params = [];
+        foreach ($countyPairs as [$stateFips, $countyFips]) {
+            $clauses[] = '(j.state_fips = ? AND j.county_fips = ?)';
+            array_push($params, $stateFips, $countyFips);
+        }
+        $countyStmt = $pdo->prepare(
+            'SELECT j.id,j.state_fips,j.county_fips,f.state_abbr,f.county_name,j.state_rate,j.county_rate,j.total_rate
+             FROM tax_jurisdictions j
+             JOIN fips_counties f ON f.state_fips=j.state_fips AND f.county_fips=j.county_fips
+             WHERE j.jurisdiction_type="county" AND j.is_active=1
+               AND ' . pa_tax_active_date_clause('j') . '
+               AND (' . implode(' OR ', $clauses) . ')
+             ORDER BY j.state_fips,j.county_fips,j.id'
+        );
+        $countyStmt->execute($params);
+        foreach ($countyStmt->fetchAll(PDO::FETCH_ASSOC) as $county) {
+            $key = (string)$county['state_fips'] . '|' . (string)$county['county_fips'];
+            if (!isset($counties[$key])) {
+                $counties[$key] = $county;
+            }
+        }
+    }
+
+    $extras = [];
+    if ($jurisdictionPairs) {
+        $clauses = [];
+        $params = [];
+        foreach ($jurisdictionPairs as [$stateFips, $jurisdictionCode]) {
+            $clauses[] = '(state_fips = ? AND jurisdiction_code = ?)';
+            array_push($params, $stateFips, $jurisdictionCode);
+        }
+        $extraStmt = $pdo->prepare(
+            'SELECT id,state_fips,jurisdiction_code,jurisdiction_type,city_rate,special_rate,county_rate,total_rate
+             FROM tax_jurisdictions
+             WHERE jurisdiction_type<>"county" AND is_active=1
+               AND ' . pa_tax_active_date_clause() . '
+               AND (' . implode(' OR ', $clauses) . ')
+             ORDER BY state_fips,jurisdiction_code,jurisdiction_type,id'
+        );
+        $extraStmt->execute($params);
+        foreach ($extraStmt->fetchAll(PDO::FETCH_ASSOC) as $extra) {
+            $key = (string)$extra['state_fips'] . '|' . (string)$extra['jurisdiction_code'];
+            $extras[$key][] = $extra;
+        }
+    }
+
+    $choices = [];
+    foreach ($boundaries as $boundary) {
+        $choice = pa_tax_choice_from_maps($boundary, $counties, $extras);
+        if ($choice !== null) {
+            $choices[] = $choice;
+        }
+    }
+    return $choices;
+}
+
+function pa_tax_choice_from_maps(array $boundary, array $counties, array $extras): ?array
+{
+    $stateFips = (string)($boundary['state_fips'] ?? '');
+    $countyFips = (string)($boundary['county_fips'] ?? '');
+    $jurisdictionCode = trim((string)($boundary['jurisdiction_code'] ?? ''));
+    $county = $counties[$stateFips . '|' . $countyFips] ?? null;
+    if (!is_array($county)) {
+        return null;
+    }
+
+    $extraRate = 0.0;
+    $extraLabels = [];
+    foreach ($extras[$stateFips . '|' . $jurisdictionCode] ?? [] as $extra) {
+        $local = max((float)$extra['city_rate'], (float)$extra['special_rate'], (float)$extra['county_rate'], 0.0);
+        if ($local <= 0.0) {
+            continue;
+        }
+        $extraRate += $local;
+        $extraLabels[] = pa_tax_jurisdiction_label($stateFips, (string)$extra['jurisdiction_code'], (string)$extra['jurisdiction_type']);
+    }
+
+    $rate = round((float)$county['state_rate'] + (float)$county['county_rate'] + $extraRate, 4);
     $label = (string)$county['county_name'] . ' County, ' . (string)$county['state_abbr'];
     if ($extraLabels) {
         $label .= ' - ' . implode(', ', array_unique($extraLabels));
@@ -307,6 +391,12 @@ function pa_tax_choice_for_boundary(PDO $pdo, array $boundary): ?array
         'county' => (string)$county['county_name'],
         'jurisdiction_code' => $jurisdictionCode,
     ]);
+}
+
+function pa_tax_choice_for_boundary(PDO $pdo, array $boundary): ?array
+{
+    $choices = pa_tax_choices_for_boundaries($pdo, [$boundary]);
+    return $choices[0] ?? null;
 }
 
 function pa_tax_choice(float $rate, string $label, string $source, array $extra = []): array

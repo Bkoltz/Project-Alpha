@@ -83,7 +83,7 @@ function initInvoiceClientDropdown() {
                 Array.from(sugI.children).forEach(el => {
                     el.addEventListener('click', function (e) {
                         e.stopPropagation();
-                        ciI.value = this.dataset.name; cidI.value = this.dataset.id;
+                        ciI.value = this.dataset.name; cidI.value = this.dataset.id; cidI.dispatchEvent(new Event('change', { bubbles: true }));
                         if (this.dataset.taxexempt && taxBannerInv) { taxBannerInv.style.display = 'block'; } else if(taxBannerInv) { taxBannerInv.style.display = 'none'; }
                         loadProjectsForClientInv(this.dataset.id);
                         sugI.style.display = 'none';

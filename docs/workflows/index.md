@@ -31,6 +31,7 @@ Client or Organization
 | Many related documents, files, or client contacts | Project |
 | Client enters their own contact details | Client onboarding |
 | Client needs document access without a login | Public links |
+| Reuse service pricing or connect sold services to internal work | Item Library and Work Types |
 
 ## Workflow Guides
 
@@ -39,4 +40,5 @@ Client or Organization
 - [Client Onboarding](client-onboarding.html)
 - [Payments](payments.html)
 - [Recurring Billing](recurring-billing.html)
+- [Service Catalog and Work Types](service-catalog-and-work-types.html)
 

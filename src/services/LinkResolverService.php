@@ -365,6 +365,7 @@ class LinkResolverService
             'dropbox' => 'auto_dropbox',
             'gdrive' => 'auto_gdrive',
             's3' => 'auto_s3',
+            'r2' => 'auto_r2',
         ];
         $linkType = $typeMap[$provider] ?? ('auto_' . preg_replace('/[^a-z0-9_]/i', '', $provider));
         if ($linkType === 'auto_') {
@@ -465,11 +466,13 @@ class LinkResolverService
             'dropbox' => 'dropbox_link_resolver.php',
             'gdrive' => 'google_drive_link_resolver.php',
             's3' => 's3_link_resolver.php',
+            'r2' => 'r2_link_resolver.php',
         ];
         $resolverClasses = [
             'dropbox' => 'DropboxLinkResolver',
             'gdrive' => 'GdriveLinkResolver',
             's3' => 'S3LinkResolver',
+            'r2' => 'R2LinkResolver',
         ];
 
         $resolverPath = __DIR__ . '/../link_resolvers/auto_resolver/' . ($resolverFiles[$provider] ?? "{$provider}_link_resolver.php");
@@ -498,10 +501,15 @@ class LinkResolverService
         $safe = [];
         $seen = [];
         $candidateNames = array_values(array_unique(array_filter(array_map('strval', $context['candidate_names'] ?? []), static fn($v) => trim($v) !== '')));
-        $parentNames = array_values(array_unique(array_filter(array_map([$this, 'normalizeName'], $context['parent_names'] ?? []))));
+        $providerParentNames = array_values(array_unique(array_filter(array_map('strval', $context['parent_names'] ?? []), static fn($v) => trim($v) !== '')));
+        $parentNames = array_values(array_unique(array_filter(array_map([$this, 'normalizeName'], $providerParentNames))));
 
         foreach ($candidateNames as $candidateName) {
-            $result = $resolver->searchFolder($candidateName);
+            // Providers that support exact parent-aware lookup (notably S3/R2)
+            // can avoid scanning an entire bucket. Dropbox and Google Drive also
+            // accept this optional context while the checks below remain the
+            // final safety boundary for every provider.
+            $result = $resolver->searchFolder($candidateName, $providerParentNames);
             if (empty($result['success']) && !empty($result['message'])) {
                 $message = (string)$result['message'];
                 if (!in_array($message, ['Folder not found', 'Exact folder match not found'], true)) {
@@ -824,7 +832,7 @@ class LinkResolverService
 
     public function runProviderScan(string $provider): array
     {
-        if (!in_array($provider, ['dropbox', 'gdrive', 's3'], true)) {
+        if (!in_array($provider, ['dropbox', 'gdrive', 's3', 'r2'], true)) {
             return ['success' => false, 'message' => 'Invalid provider'];
         }
         if (!$this->config['enabled']) {

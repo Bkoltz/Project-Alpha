@@ -114,7 +114,11 @@ final class TaxImportBackendTest extends TestCase
         self::assertStringContainsString('uniqueChoices', (string)$script);
         self::assertStringContainsString('fillZipFromSelectedClient', (string)$script);
         self::assertStringContainsString('data-tax-state-hint', (string)$script);
-        self::assertStringContainsString('[data-id], [data-client-id]', (string)$script);
+        self::assertStringContainsString('tax_exempt_file', (string)$script);
+        self::assertStringContainsString('Automatic lookup was skipped', (string)$script);
+        self::assertStringContainsString('AbortController', (string)$script);
+        self::assertStringContainsString('[data-taxexempt][data-id], [data-client-id]', (string)$script);
+        self::assertStringContainsString('form.addEventListener(\'change\'', (string)$script);
         self::assertStringContainsString("window.ProjectAlpha.registerPage", (string)$script);
         self::assertStringContainsString('$stateHint', (string)$lookup);
     }
@@ -140,6 +144,57 @@ final class TaxImportBackendTest extends TestCase
         self::assertCount(2, $choices);
         self::assertSame('Brown County, WI', $choices[0]['label']);
         self::assertSame('Manitowoc County, WI', $choices[1]['label']);
+    }
+
+    public function testZipBoundaryMatchingHandlesZip4RangeEndpoints(): void
+    {
+        require_once $this->root . '/src/utils/tax_lookup.php';
+
+        $boundary = [
+            'zip5_start' => '53200', 'zip4_start' => '5000',
+            'zip5_end' => '53202', 'zip4_end' => '2500',
+        ];
+
+        self::assertTrue(pa_tax_boundary_contains_zip($boundary, '53201'));
+        self::assertTrue(pa_tax_boundary_contains_zip($boundary, '53200', '5000'));
+        self::assertTrue(pa_tax_boundary_contains_zip($boundary, '53202', '2500'));
+        self::assertFalse(pa_tax_boundary_contains_zip($boundary, '53200', '4999'));
+        self::assertFalse(pa_tax_boundary_contains_zip($boundary, '53202', '2501'));
+        self::assertFalse(pa_tax_boundary_contains_zip($boundary, '53203', '0000'));
+    }
+
+    public function testBulkTaxChoiceResolutionKeepsCountyAndExtraRatesCorrect(): void
+    {
+        require_once $this->root . '/src/utils/tax_lookup.php';
+
+        $choice = pa_tax_choice_from_maps(
+            ['state_fips' => '55', 'county_fips' => '079', 'jurisdiction_code' => '53000'],
+            ['55|079' => [
+                'state_abbr' => 'WI', 'county_name' => 'Milwaukee',
+                'state_rate' => '5.0', 'county_rate' => '0.9',
+            ]],
+            ['55|53000' => [[
+                'jurisdiction_code' => '53000', 'jurisdiction_type' => 'city',
+                'city_rate' => '2.0', 'special_rate' => '0', 'county_rate' => '0',
+            ]]]
+        );
+
+        self::assertNotNull($choice);
+        self::assertSame(7.9, $choice['rate']);
+        self::assertSame('Milwaukee County, WI - City of Milwaukee', $choice['label']);
+        self::assertSame('zip_complex', $choice['source']);
+    }
+
+    public function testZipLookupUsesBulkQueriesAndPerformanceIndexes(): void
+    {
+        $lookup = (string)file_get_contents($this->root . '/src/utils/tax_lookup.php');
+        $migration = (string)file_get_contents($this->root . '/database/migrations/0048_service_catalog_tax_lookup_performance.sql');
+
+        self::assertStringContainsString('pa_tax_choices_for_boundaries($pdo, $rows)', $lookup);
+        self::assertStringContainsString('pa_tax_unique_boundaries', $lookup);
+        self::assertStringContainsString('idx_tax_boundaries_zip_range', $migration);
+        self::assertStringContainsString('idx_tax_jurisdiction_county_active', $migration);
+        self::assertStringContainsString('idx_tax_jurisdiction_state_code', $migration);
     }
 
     public function testSchemaIncludesTaxImportSourceCacheTables(): void

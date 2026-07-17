@@ -179,7 +179,7 @@ class GdriveLinkResolver
     /**
      * Search for a folder by exact name in Google Drive.
      */
-    public function searchFolder(string $folderName): array
+    public function searchFolder(string $folderName, array $parentNames = []): array
     {
         try {
             $query = "name = '" . addslashes($folderName) . "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
