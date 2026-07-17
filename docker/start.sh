@@ -173,10 +173,6 @@ if [ -n "$APP_HOST" ]; then
     Header always set Content-Security-Policy "script-src 'self' https://js.stripe.com https://static.cloudflareinsights.com; default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://js.stripe.com https://hooks.stripe.com; connect-src 'self' https://api.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self';"
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
     
-    # Disable server signature
-    ServerTokens Prod
-    ServerSignature Off
-    
     <Directory /var/www/html>
         AllowOverride All
         Require all granted

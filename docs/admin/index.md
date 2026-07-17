@@ -26,7 +26,7 @@ PA administration is mostly handled from Settings plus the deployment environmen
 
 1. Configure [settings](settings.html).
 2. Confirm [backups](backups.html).
-3. Configure [security](security.html).
+3. Configure [security](security.html) and verify [database encryption](database-encryption.html).
 4. Add [Stripe](payments-stripe.html), if needed.
 5. Import [tax rates](tax-rates.html), if needed.
 6. Verify deployment and cron behavior.

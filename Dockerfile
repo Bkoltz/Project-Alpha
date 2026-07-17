@@ -105,9 +105,10 @@ RUN mkdir -p /var/log && \
 WORKDIR /var/www
 COPY ./docker/start.sh /usr/local/bin/start.sh
 COPY ./docker/migrate.sh /usr/local/bin/migrate.sh
+COPY ./docker/enable-mysql-encryption.sh /usr/local/bin/enable-mysql-encryption.sh
 # Normalize Windows CRLF to LF to avoid "env: 'bash\r'" errors
-RUN sed -i 's/\r$//' /usr/local/bin/start.sh /usr/local/bin/migrate.sh \
-    && chmod +x /usr/local/bin/start.sh /usr/local/bin/migrate.sh
+RUN sed -i 's/\r$//' /usr/local/bin/start.sh /usr/local/bin/migrate.sh /usr/local/bin/enable-mysql-encryption.sh \
+    && chmod +x /usr/local/bin/start.sh /usr/local/bin/migrate.sh /usr/local/bin/enable-mysql-encryption.sh
 
 EXPOSE 80
 CMD ["start.sh"]
@@ -124,11 +125,12 @@ COPY ./public/ /var/www/public/
 COPY ./cron/ /var/www/cron/
 COPY ./docker/ /var/www/docker/
 COPY ./docker-compose.yml /var/www/docker-compose.yml
+COPY ./Dockerfile /var/www/Dockerfile
 COPY ./.github/ /var/www/.github/
 COPY ./SECURITY.md /var/www/SECURITY.md
 RUN mkdir -p /var/www/config
 COPY ./config/.env.example /var/www/config/.env.example
-RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/docker-compose.yml /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/docker-compose.yml /var/www/Dockerfile /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
 
 # ---------- Stage 3: Cron service ----------
 # Uses the same vendor stage as web. Source code is volume-mounted at runtime.
@@ -149,12 +151,13 @@ COPY ./src/ /var/www/src/
 COPY ./database/migrations/ /var/www/database/migrations/
 COPY ./database/baseline.sql /usr/local/share/app-migrations/baseline.sql
 COPY ./docker/migrate.sh /usr/local/bin/migrate.sh
+COPY ./docker/enable-mysql-encryption.sh /usr/local/bin/enable-mysql-encryption.sh
 RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
     && mkdir -p /var/www/config/logs/cron /var/www/backups \
     && chown -R root:root /var/www \
     && chmod -R 755 /var/www \
-    && sed -i 's/\r$//' /usr/local/bin/migrate.sh \
-    && chmod +x /usr/local/bin/migrate.sh
+    && sed -i 's/\r$//' /usr/local/bin/migrate.sh /usr/local/bin/enable-mysql-encryption.sh \
+    && chmod +x /usr/local/bin/migrate.sh /usr/local/bin/enable-mysql-encryption.sh
 
 RUN mkdir -p /var/log/cron && \
     touch /var/log/cron/generate_recurring_invoices.log \

@@ -13,6 +13,7 @@ Project Alpha is commonly deployed with Docker Compose or as a TrueNAS Scale Cus
 |---|---|
 | `web` | PHP and Apache application runtime |
 | `db` | MySQL database |
+| `keyring-init` | One-shot ownership initialization for the persistent MySQL keyring |
 | `worker` | Durable background and maintenance jobs |
 | `cron` | Scheduled jobs, reminders, backups, and reconciliation |
 | `migrate` | One-shot database initialization and migration validation |
@@ -71,6 +72,15 @@ the old value. Existing unencrypted backups are not retroactively encrypted,
 and the required pre-migration safety dump remains a compressed `.sql.gz` file
 on the backup volume rather than an encrypted application archive.
 
+## MySQL-Native Encryption
+
+The canonical Compose deployment enables MySQL's file keyring, application and
+system tablespace encryption, and redo/undo log encryption. Its one-shot
+migrator converts existing InnoDB tables before the web service starts. Follow
+the backup, key custody, verification, and recovery requirements in
+[Database Encryption](database-encryption.html) before enabling it on an
+established installation.
+
 ## TrueNAS
 
 Paste the canonical `docker-compose.yml` into the TrueNAS Custom App. Its
@@ -82,6 +92,7 @@ sources in the YAML pasted into TrueNAS, for example:
 - /mnt/tank/apps/project-alpha/config:/var/www/config
 - /mnt/tank/apps/project-alpha/backups:/var/www/backups
 - /mnt/tank/apps/project-alpha/db:/var/lib/mysql
+- /mnt/tank/apps/project-alpha/mysql-keyring:/var/lib/mysql-keyring
 ```
 
 Replace `/mnt/tank` with the actual pool path. Keep staging and production
