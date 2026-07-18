@@ -66,18 +66,16 @@ function api_require_key(array $requiredScopes = []) {
             $pdo->prepare('UPDATE api_keys SET last_used_at=NOW() WHERE id=?')->execute([(int)$row['id']]);
         } catch (Throwable $e) {}
         $GLOBALS['pa_api_key'] = $row;
-        $_SESSION['api_key'] = [
-            'id' => (int)$row['id'],
-            'name' => (string)($row['name'] ?? ''),
+        // API keys are explicit service principals. They never synthesize an
+        // administrator user session, so future write-capable APIs cannot
+        // accidentally inherit interactive-admin authorization.
+        $servicePrincipal = [
+            'type' => 'api_key',
+            'api_key_id' => (int)$row['id'],
+            'name' => (string)($row['name'] ?? $row['key_prefix'] ?? 'external'),
             'scopes' => api_normalize_scopes($row['scopes'] ?? ''),
         ];
-        if (empty($_SESSION['user'])) {
-            $_SESSION['user'] = [
-                'id' => 0,
-                'role' => 'admin',
-                'name' => 'API Key: ' . (string)($row['name'] ?? $row['key_prefix'] ?? 'external'),
-            ];
-        }
+        $GLOBALS['pa_service_principal'] = $servicePrincipal;
         return $row;
     } catch (Throwable $e) {
         api_json_error(500, 'API auth error');

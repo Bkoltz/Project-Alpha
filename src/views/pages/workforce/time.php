@@ -40,6 +40,7 @@ $selectedIsOwner = $selectedRelationship === 'owner' && empty($selectedUser['rel
 $projects = $service->projectsFor($selectedUserId, $manageAll);
 $jobs = $service->jobsFor($selectedUserId, $manageAll);
 $workTypes = $service->workTypes();
+$serviceActivities = $service->serviceActivities();
 $assignments = $service->assignmentsFor($selectedUserId);
 $offeredAssignments = $selectedUserId === $userId ? $service->offeredAssignmentsFor($selectedUserId) : [];
 $canEditInvoices = $manageAll && user_can($pdo, $userId, 'invoices.edit', 0);
@@ -162,7 +163,7 @@ foreach ($entries as $entry) {
     <div>
       <p class="workforce-eyebrow">Workforce</p>
       <h2>Time</h2>
-      <p class="workforce-subtitle">Capture time now and add client, Job, Work Type, or invoice details when they are available. Entries are stored in UTC.</p>
+      <p class="workforce-subtitle">Record the Service and Work Activity completed. PA keeps client billing and worker compensation separate. Entries are stored in UTC.</p>
     </div>
     <div class="workforce-head__actions">
       <a class="btn" href="/?page=workforce/overview">Overview</a>
@@ -264,7 +265,9 @@ foreach ($entries as $entry) {
       <section class="workforce-capture-panel" data-workforce-capture-panel="duration" <?= $defaultCaptureMode !== 'duration' ? 'hidden' : '' ?>>
         <div class="workforce-context-grid">
           <label class="field"><span class="label">Work date</span><input class="input" type="date" name="work_date" value="<?= $h($today) ?>" data-workforce-work-date></label>
-          <label class="field"><span class="label">Duration (minutes)</span><input class="input" type="number" name="duration_minutes" min="1" max="1440" inputmode="numeric" data-workforce-duration-minutes></label>
+          <label class="field"><span class="label">Hours</span><input class="input" type="number" min="0" max="24" step="1" value="0" inputmode="numeric" data-workforce-duration-hours></label>
+          <label class="field"><span class="label">Minutes</span><input class="input" type="number" min="0" max="59" step="1" value="0" inputmode="numeric" data-workforce-duration-minute-part></label>
+          <input type="hidden" name="duration_minutes" value="0" data-workforce-duration-minutes>
           <label class="field"><span class="label">Start time <small>optional</small></span><input class="input" type="time" name="duration_start_time" data-workforce-duration-start></label>
         </div>
         <p class="muted text-sm mb-0">Without a start time, the entry begins at midnight on the selected work date.</p>
@@ -284,10 +287,12 @@ foreach ($entries as $entry) {
             <label class="field workforce-combobox" data-workforce-client-combobox><span class="label">Client</span><input class="input" type="search" autocomplete="off" placeholder="Type to search clients" data-workforce-client-search aria-autocomplete="list" aria-expanded="false"><input type="hidden" name="client_id" data-workforce-client><span class="workforce-combobox__results" data-workforce-client-results role="listbox" hidden></span></label>
           <?php endif; ?>
           <label class="field workforce-search-select" data-workforce-search-select><span class="label"><?= $manageAll ? 'Project' : 'Assigned project' ?></span><input class="input input--filter" type="search" placeholder="Search projects" autocomplete="off" data-workforce-option-filter><select class="input" name="project_id" data-workforce-project><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" data-client-id="<?= (int)($project['client_id'] ?? 0) ?>" data-client-name="<?= $h($project['client_name'] ?? '') ?>"><?= $h($project['name']) ?><?= !empty($project['client_name']) ? ' · ' . $h($project['client_name']) : '' ?></option><?php endforeach; ?></select></label>
-          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Job</span><input class="input input--filter" type="search" placeholder="Search Jobs" autocomplete="off" data-workforce-option-filter><select class="input" name="job_id"><option value="">No Job</option><?php foreach ($jobs as $job): ?><option value="<?= (int)$job['id'] ?>" data-client-id="<?= (int)$job['client_id'] ?>" data-client-name="<?= $h($job['client_name']) ?>" data-project-id="<?= (int)($job['project_id'] ?? 0) ?>"><?= $h($job['job_code'] . ' · ' . $job['client_name']) ?></option><?php endforeach; ?></select></label>
-          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Work Type</span><input class="input input--filter" type="search" placeholder="Search Work Types" autocomplete="off" data-workforce-option-filter><select class="input" name="work_type_id" data-workforce-work-type><option value="">Unclassified work</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>" data-billing-treatment="<?= $h($type['billing_treatment']) ?>" data-billing-rate="<?= $h($type['default_billing_rate']) ?>" data-billing-currency="<?= $h($type['billing_currency']) ?>"><?= $h($type['name']) ?></option><?php endforeach; ?></select><small data-workforce-work-type-guidance>Selecting a Work Type can apply its client-billing default. Worker pay remains separate.</small></label>
+          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Service Job <small>optional</small></span><input class="input input--filter" type="search" placeholder="Search service Jobs" autocomplete="off" data-workforce-option-filter><select class="input" name="job_id" data-workforce-job><option value="">Create a new Job for this entry</option><?php foreach ($jobs as $job): ?><?php if (($job['job_origin'] ?? 'planned') !== 'unscheduled_time') continue; $jobClientName = trim((string)($job['client_name'] ?? '')); ?><option value="<?= (int)$job['id'] ?>" data-client-id="<?= (int)($job['client_id'] ?? 0) ?>" data-client-name="<?= $h($jobClientName) ?>" data-project-id="<?= (int)($job['project_id'] ?? 0) ?>" data-service-id="<?= (int)($job['service_item_id'] ?? 0) ?>"><?= $h($job['job_code'] . ($jobClientName !== '' ? ' · ' . $jobClientName : '') . (($job['status'] ?? '') === 'completed' ? ' · completed (reuse)' : '')) ?></option><?php endforeach; ?></select><small>Leave this blank to create a one-entry service Job. Select a completed service Job only for follow-up work on the same service. Use Accepted assignment for scheduled Jobs.</small></label>
+          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Service</span><input class="input input--filter" type="search" placeholder="Search Services" autocomplete="off" data-workforce-option-filter><select class="input" name="service_item_id" data-workforce-service><option value="">Unclassified / no Service</option><?php $seenServices = []; foreach ($serviceActivities as $activity): ?><?php $serviceItemId = (int)$activity['service_item_id']; if (isset($seenServices[$serviceItemId])) continue; $seenServices[$serviceItemId] = true; ?><option value="<?= $serviceItemId ?>"><?= $h($activity['service_name']) ?></option><?php endforeach; ?></select><small>Choose the service delivered to the client. Use unclassified only as an exception.</small></label>
+          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Work Activity</span><input class="input input--filter" type="search" placeholder="Search Work Activities" autocomplete="off" data-workforce-option-filter><select class="input" name="catalog_work_component_id" data-workforce-service-activity disabled><option value="">Choose a Service first</option><?php foreach ($serviceActivities as $activity): ?><option value="<?= (int)$activity['catalog_work_component_id'] ?>" data-service-id="<?= (int)$activity['service_item_id'] ?>" data-work-type-id="<?= (int)$activity['work_type_id'] ?>" data-billing-treatment="<?= $h($activity['client_billing_treatment']) ?>" hidden disabled><?= $h($activity['activity_name']) ?></option><?php endforeach; ?></select><input type="hidden" name="work_type_id" data-workforce-work-type><small data-workforce-work-type-guidance>The activity supplies client billing and worker compensation defaults; workers do not choose financial treatment.</small></label>
           <label class="field workforce-search-select" data-workforce-search-select><span class="label">Accepted assignment</span><input class="input input--filter" type="search" placeholder="Search assignments" autocomplete="off" data-workforce-option-filter><select class="input" name="work_assignment_id"><option value="">No assignment</option><?php foreach ($assignments as $assignment): ?><option value="<?= (int)$assignment['id'] ?>" data-job-id="<?= (int)$assignment['job_id'] ?>" data-work-type-id="<?= (int)$assignment['work_type_id'] ?>"><?= $h($assignment['job_code'] . ' · ' . $assignment['name']) ?></option><?php endforeach; ?></select></label>
         </div>
+        <p class="alert alert-warning workforce-unclassified-warning" data-workforce-unclassified-warning>Unclassified time is allowed, but an owner or manager should classify it before billing or compensation is finalized.</p>
         <label class="field"><span class="label">Description <small>optional unless required by settings</small></span><textarea class="input" name="description" rows="2" placeholder="What work was completed?"></textarea></label>
       </fieldset>
 
@@ -372,6 +377,11 @@ foreach ($entries as $entry) {
                 ? ((string)$entry['status'] === 'approved' ? 'Eligible' : 'Awaiting approval')
                 : 'Nonpayable / internal');
             $timeState = (string)($entry['workflow_status'] ?? $entry['status']);
+            $availableInvoices = array_values(array_filter(
+                $invoices,
+                static fn(array $invoice): bool => empty($entry['client_id'])
+                    || (int)$invoice['client_id'] === (int)$entry['client_id']
+            ));
           ?>
           <tr>
             <td><?= $h($displayTime($entry['start_time'])) ?></td>
@@ -396,7 +406,7 @@ foreach ($entries as $entry) {
                     <?php endif; ?>
                     <div class="workforce-context-grid">
                       <label class="field"><span class="label">Job</span><select class="input" name="job_id"><option value="">No Job</option><?php foreach ($jobs as $job): ?><option value="<?= (int)$job['id'] ?>" data-client-id="<?= (int)$job['client_id'] ?>" data-client-name="<?= $h($job['client_name']) ?>" data-project-id="<?= (int)($job['project_id'] ?? 0) ?>" <?= (int)$entry['job_id'] === (int)$job['id'] ? 'selected' : '' ?>><?= $h($job['job_code'] . ' · ' . $job['client_name']) ?></option><?php endforeach; ?></select></label>
-                      <label class="field"><span class="label">Work Type</span><select class="input" name="work_type_id"><option value="">Unclassified</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>" <?= (int)$entry['work_type_id'] === (int)$type['id'] ? 'selected' : '' ?>><?= $h($type['name']) ?></option><?php endforeach; ?></select></label>
+                      <label class="field"><span class="label">Work Activity</span><select class="input" name="work_type_id"><option value="">Unclassified</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>" <?= (int)$entry['work_type_id'] === (int)$type['id'] ? 'selected' : '' ?>><?= $h($type['name']) ?></option><?php endforeach; ?></select></label>
                     </div>
                     <div class="workforce-context-grid workforce-context-grid--time"><label class="field"><span class="label">Start</span><input class="input" type="datetime-local" name="start_time" value="<?= $h($inputTime($entry['start_time'])) ?>" required></label><label class="field"><span class="label">End</span><input class="input" type="datetime-local" name="end_time" value="<?= $h($inputTime($entry['end_time'])) ?>" required></label></div>
                     <label class="field"><span class="label">Description</span><textarea class="input" name="description" rows="2"><?= $h($entry['description']) ?></textarea></label>
@@ -410,11 +420,11 @@ foreach ($entries as $entry) {
                   </form>
                 </details>
               <?php endif; ?>
-              <?php if ($manageAll && (string)$entry['status'] === 'approved' && !empty($entry['billable']) && !$projectionBilled && $invoices): ?>
+              <?php if ($manageAll && (string)$entry['status'] === 'approved' && !empty($entry['billable']) && !$projectionBilled && $availableInvoices): ?>
                 <details class="workforce-entry-edit"><summary class="btn btn-sm btn-primary">Add to invoice</summary>
                   <form class="workforce-form" method="post" action="/?page=workforce/action" data-workforce-entry-form>
                     <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="link-invoice"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>">
-                    <label class="field"><span class="label">Invoice</span><select class="input" name="invoice_id" data-workforce-invoice required><option value="">Choose an invoice</option><?php foreach ($invoices as $invoice): ?><option value="<?= (int)$invoice['id'] ?>" data-client-id="<?= (int)$invoice['client_id'] ?>" data-client-name="<?= $h($invoice['client_name'] ?? '') ?>" data-project-id="<?= (int)($invoice['project_id'] ?? 0) ?>" data-job-id="<?= (int)($invoice['job_id'] ?? 0) ?>"><?= $h(($invoice['client_name'] ?? '') . ' · ' . $invoiceLabel($invoice)) ?></option><?php endforeach; ?></select></label>
+                    <label class="field"><span class="label">Invoice</span><select class="input" name="invoice_id" data-workforce-invoice required><option value="">Choose an invoice</option><?php foreach ($availableInvoices as $invoice): ?><option value="<?= (int)$invoice['id'] ?>" data-client-id="<?= (int)$invoice['client_id'] ?>" data-client-name="<?= $h($invoice['client_name'] ?? '') ?>" data-project-id="<?= (int)($invoice['project_id'] ?? 0) ?>" data-job-id="<?= (int)($invoice['job_id'] ?? 0) ?>"><?= $h(($invoice['client_name'] ?? '') . ' · ' . $invoiceLabel($invoice)) ?></option><?php endforeach; ?></select></label>
                     <label class="field"><span class="label">Hourly billing rate <small>only needed when PA cannot infer it</small></span><input class="input" type="number" name="billing_rate" min="0.01" step="0.01" value="<?= (float)($entry['billing_rate'] ?? 0) > 0 ? $h((string)$entry['billing_rate']) : '' ?>" placeholder="Use saved or invoice rate"></label>
                     <p class="muted text-sm">PA will add a visible tracked-time line and update this entry's client, Project, Job, and invoice automatically.</p>
                     <button class="btn btn-primary btn-sm">Add time to invoice</button>

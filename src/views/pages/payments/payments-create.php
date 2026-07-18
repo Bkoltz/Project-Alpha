@@ -3,6 +3,17 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../services/ManualPaymentJobService.php';
+
+use App\Services\ManualPaymentJobService;
+
+$manualJobs = [];
+try {
+  $manualJobs = (new ManualPaymentJobService($pdo))->availableJobs((int)($_SESSION['user']['id'] ?? 0));
+} catch (Throwable $jobLoadError) {
+  @error_log('[PaymentsCreate] Service jobs unavailable: ' . $jobLoadError->getMessage());
+}
 
 $invoices = $pdo->query("
   SELECT i.id, i.total, COALESCE(p.paid,0) AS paid, i.status, c.name client
@@ -72,14 +83,50 @@ if ($pref > 0) {
 
     <div id="manualPaymentFields" style="display:none;gap:12px">
       <label>
-        <div>Client</div>
+        <div>Client <span style="color:var(--muted);font-weight:400">(optional)</span></div>
         <div style="position:relative">
           <input type="hidden" name="client_id" id="manualClientId">
           <input type="text" id="manualClientSearch" placeholder="Type a client name or email..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <div id="manualClientSuggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;max-height:220px;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 12px 24px rgba(15,23,42,.12)"></div>
         </div>
-        <small style="display:block;margin-top:6px;color:var(--muted)">Start typing, then choose the matching client.</small>
+        <small style="display:block;margin-top:6px;color:var(--muted)">Choose a client when one exists, or leave this blank for anonymous or walk-in income.</small>
       </label>
+
+      <label>
+        <div>Service Job <span style="color:var(--muted);font-weight:400">(optional)</span></div>
+        <input type="search" id="manualJobSearch" placeholder="Filter by job code, service, or client..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px 8px 0 0;border:1px solid #ddd;border-bottom:0">
+        <select name="job_id" id="manualJobSelect" size="5" style="width:100%;padding:8px;border-radius:0 0 8px 8px;border:1px solid #ddd">
+          <option value="">No service job — standalone income</option>
+          <?php foreach ($manualJobs as $job): ?>
+            <?php
+              $jobClient = trim((string)($job['client_name'] ?? ''));
+              $jobServices = trim((string)($job['service_names'] ?? ''));
+              $jobLabel = (string)$job['job_code']
+                . ($jobServices !== '' ? ' — ' . $jobServices : '')
+                . ($jobClient !== '' ? ' — ' . $jobClient : ' — No client');
+            ?>
+            <option
+              value="<?php echo (int)$job['id']; ?>"
+              data-search="<?php echo htmlspecialchars(strtolower($jobLabel), ENT_QUOTES, 'UTF-8'); ?>"
+              data-client-id="<?php echo (int)($job['client_id'] ?? 0); ?>"
+              data-client-name="<?php echo htmlspecialchars($jobClient, ENT_QUOTES, 'UTF-8'); ?>"
+              data-client-email="<?php echo htmlspecialchars((string)($job['client_email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+              data-expected-known="<?php echo !empty($job['expected_charge_known']) ? '1' : '0'; ?>"
+              data-expected="<?php echo htmlspecialchars(number_format((float)($job['expected_charge'] ?? 0), 2, '.', ''), ENT_QUOTES, 'UTF-8'); ?>"
+              data-currency="<?php echo htmlspecialchars((string)($job['expected_currency'] ?? 'USD'), ENT_QUOTES, 'UTF-8'); ?>"
+            ><?php echo htmlspecialchars($jobLabel, ENT_QUOTES, 'UTF-8'); ?></option>
+          <?php endforeach; ?>
+        </select>
+        <small style="display:block;margin-top:6px;color:var(--muted)">Linking a job preserves which service produced the income. Leave it blank for generic standalone income.</small>
+      </label>
+
+      <div id="manualJobExpected" hidden style="padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1e3a8a">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline">
+          <strong>Expected service charge</strong>
+          <span id="manualJobExpectedAmount" style="font-size:18px;font-weight:700"></span>
+        </div>
+        <div id="manualJobVariance" style="margin-top:5px;font-size:13px"></div>
+      </div>
     </div>
 
     <label>
@@ -132,7 +179,7 @@ if ($pref > 0) {
         <input type="checkbox" name="send_receipt" value="1" id="sendReceiptInput" style="margin-top:3px">
         <span>
           <span style="font-weight:600">Email receipt</span><br>
-          <span style="font-size:13px;color:var(--muted)">Invoice payments default on. Manual legacy payments default off.</span>
+          <span id="sendReceiptHelp" style="font-size:13px;color:var(--muted)">Invoice payments default on. For standalone payments, choose a client with an email address.</span>
         </span>
       </label>
     <?php endif; ?>

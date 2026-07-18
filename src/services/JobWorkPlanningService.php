@@ -38,7 +38,7 @@ final class JobWorkPlanningService
             return [];
         }
         $items = $this->pdo->prepare(
-            "SELECT id,item_library_id,quantity,line_total,catalog_snapshot FROM {$meta['items']}
+            "SELECT id,item_library_id,quantity,unit_price,line_total,billing_unit,catalog_snapshot FROM {$meta['items']}
              WHERE {$meta['parent']}=? AND item_library_id IS NOT NULL ORDER BY id"
         );
         $items->execute([$documentId]);
@@ -328,7 +328,7 @@ final class JobWorkPlanningService
         }
         if($snapshotComponents!==null){$components=$snapshotComponents;}
         else{$stmt = $this->pdo->prepare(
-            'SELECT c.*,i.is_active item_active FROM catalog_work_components c
+            'SELECT c.*,i.is_active item_active,i.unit_price service_unit_price FROM catalog_work_components c
              JOIN item_library i ON i.id=c.item_library_id
              WHERE c.item_library_id=? AND c.is_active=1 ORDER BY c.display_order,c.id'
         );$stmt->execute([$itemLibraryId]);$components = $stmt->fetchAll(PDO::FETCH_ASSOC);}
@@ -357,16 +357,30 @@ final class JobWorkPlanningService
                     'source' => 'catalog_component_default',
                     'source_line_total' => (string)($sourceLine['line_total'] ?? '0.00'),
                 ];
+                $clientTreatment = (string)($component['client_billing_treatment'] ?? 'fixed_price_included');
+                $serviceUnitPrice = $sourceLine['unit_price']
+                    ?? $component['service_unit_price']
+                    ?? 0;
+                $clientRateSnapshot = in_array($clientTreatment, ['fixed_price_included', 'base_overage'], true)
+                    ? $serviceUnitPrice
+                    : ($component['client_billing_rate'] ?? $serviceUnitPrice);
                 $this->pdo->prepare(
                     "INSERT INTO job_work_components
-                     (job_id,item_library_id,catalog_work_component_id,work_type_id,source_type,source_document_id,source_line_id,source_revision,idempotency_key,name,description,planned_quantity,expected_duration_minutes,assignment_required,compensation_snapshot,created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                     (job_id,item_library_id,catalog_work_component_id,work_type_id,source_type,source_document_id,source_line_id,source_revision,idempotency_key,name,description,planned_quantity,expected_duration_minutes,assignment_required,compensation_snapshot,
+                      client_billing_treatment_snapshot,client_billing_rate_snapshot,client_included_minutes_snapshot,client_overage_rate_snapshot,client_billing_currency_snapshot,created_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                      ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id),planned_quantity=IF(status='planned',VALUES(planned_quantity),planned_quantity),source_revision=GREATEST(COALESCE(source_revision,0),COALESCE(VALUES(source_revision),0))"
                 )->execute([
                     $jobId, $itemLibraryId, $component['id'], $component['work_type_id'], $sourceType,
                     $documentId, $lineId, $revision, $key, $component['name'], $component['description'],
                     $plannedQuantity, $component['expected_duration_minutes'], $component['assignment_required'],
-                    json_encode($rule, JSON_THROW_ON_ERROR), $actorId,
+                    json_encode($rule, JSON_THROW_ON_ERROR),
+                    $clientTreatment,
+                    $clientRateSnapshot,
+                    $component['client_included_minutes'] ?? null,
+                    $component['client_overage_rate'] ?? null,
+                    $component['client_billing_currency'] ?? $component['currency'] ?? 'USD',
+                    $actorId,
                 ]);
                 $componentId = (int)$this->pdo->lastInsertId();
                 $created[] = $componentId;

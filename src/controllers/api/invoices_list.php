@@ -14,7 +14,7 @@ if ($status !== '') {
     $where[] = 'i.status=?';
     $params[] = $status;
 }
-[$scopeWhere, $scopeParams] = scope_clause($pdo, 'i', (int)$_SESSION['user']['id']);
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'i', (int)($_SESSION['user']['id'] ?? 0));
 if ($scopeWhere !== '') {
     $where[] = trim($scopeWhere);
     $params = array_merge($params, $scopeParams);

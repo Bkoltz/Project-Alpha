@@ -13,10 +13,11 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
     }
 
     $stmt = $pdo->prepare(
-        'SELECT p.id,p.invoice_id,p.processor_transaction_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
-                i.doc_number,i.invoice_type,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
+        'SELECT p.id,p.invoice_id,p.job_id,p.processor_transaction_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
+                i.doc_number,i.invoice_type,j.job_code,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
          FROM payments p
          LEFT JOIN invoices i ON i.id=p.invoice_id
+         LEFT JOIN jobs j ON j.id=p.job_id
          LEFT JOIN clients c ON c.id=p.client_id
          LEFT JOIN processor_payment_transactions ppt ON ppt.payment_id=p.id
          WHERE p.id=? AND p.status="succeeded"'
@@ -59,10 +60,13 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
     $base = invoice_public_base_url($appConfig);
     $url = $base . '/?page=payment-receipt&token=' . rawurlencode((string)$receipt['public_token']);
     $invoiceLabel = !empty($payment['invoice_id']) ? ' for invoice ' . pa_invoice_label_from_row($payment) : '';
+    $serviceLabel = empty($payment['invoice_id']) && !empty($payment['job_code'])
+        ? ' for service job ' . (string)$payment['job_code']
+        : '';
     $subject = 'Payment receipt ' . $receipt['receipt_number'];
     $body = '<p>Hello ' . htmlspecialchars((string)($payment['client_name'] ?: 'there')) . ',</p>'
         . '<p>We received your payment of <strong>$' . number_format((float)$payment['amount'], 2) . '</strong>'
-        . htmlspecialchars($invoiceLabel) . '.</p>'
+        . htmlspecialchars($invoiceLabel . $serviceLabel) . '.</p>'
         . '<p><a href="' . htmlspecialchars($url) . '">View and print your Project Alpha receipt</a></p>';
 
     [$ok, $error] = EmailService::sendEmail((string)$receipt['email_to'], $subject, $body);

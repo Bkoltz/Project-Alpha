@@ -31,6 +31,11 @@ final class OpsSnapshotService
      *   projects:list<array<string,mixed>>,
      *   project_assignments:list<array<string,mixed>>,
      *   service_locations:list<array<string,mixed>>,
+     *   application_entitlements:list<array<string,mixed>>,
+     *   operations:list<array<string,mixed>>,
+     *   operation_assignments:list<array<string,mixed>>,
+     *   tasks:list<array<string,mixed>>,
+     *   calendar_events:list<array<string,mixed>>,
      *   has_more:bool,
      *   next_page:?int
      * }
@@ -39,7 +44,8 @@ final class OpsSnapshotService
         PDO $pdo,
         int $page = 1,
         int $limit = self::DEFAULT_LIMIT,
-        ?DateTimeImmutable $generatedAt = null
+        ?DateTimeImmutable $generatedAt = null,
+        ?string $applicationKey = null
     ): array {
         if ($page < 1) {
             throw new \InvalidArgumentException('Page must be at least 1.');
@@ -48,13 +54,20 @@ final class OpsSnapshotService
             throw new \InvalidArgumentException('Limit must be between 1 and ' . self::MAX_LIMIT . '.');
         }
 
-        $definitions = $this->definitions();
+        $applicationKey = strtolower(trim((string)($applicationKey ?: ExternalOpsIntegrationService::APPLICATION_KEY)));
+        if (!preg_match('/^[a-z0-9][a-z0-9_-]{1,63}$/', $applicationKey)) {
+            throw new \InvalidArgumentException('Invalid external operations application key.');
+        }
+        $definitions = $this->definitions($applicationKey);
         $offset = ($page - 1) * $limit;
         $result = [];
         $hasMore = false;
 
         foreach ($definitions as $name => $definition) {
             $statement = $pdo->prepare($definition['sql'] . ' LIMIT :fetch_limit OFFSET :offset');
+            foreach (($definition['parameters'] ?? []) as $parameter => $value) {
+                $statement->bindValue(':' . $parameter, $value, PDO::PARAM_STR);
+            }
             $statement->bindValue(':fetch_limit', $limit + 1, PDO::PARAM_INT);
             $statement->bindValue(':offset', $offset, PDO::PARAM_INT);
             $statement->execute();
@@ -64,10 +77,28 @@ final class OpsSnapshotService
                 $hasMore = true;
                 $rows = array_slice($rows, 0, $limit);
             }
-            $result[$name] = array_map(
+            $normalizedRows = array_map(
                 fn(array $row): array => $this->normalizeRow($row, $definition),
                 $rows
             );
+            if ($name === 'application_entitlements') {
+                $scopeStatement = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_business_units WHERE entitlement_id=? ORDER BY business_unit_id');
+                foreach ($normalizedRows as &$row) {
+                    if ((string)$row['role_key'] === 'role-admin') {
+                        $row['business_unit_ids'] = [];
+                    } else {
+                        $scopeStatement->execute([(int)$row['id']]);
+                        $row['business_unit_ids'] = array_map('intval', $scopeStatement->fetchAll(PDO::FETCH_COLUMN));
+                    }
+                }
+                unset($row);
+            } elseif ($name === 'calendar_events') {
+                foreach ($normalizedRows as &$row) {
+                    $row['id'] = (string)$row['source_type'] . ':' . (int)$row['source_id'];
+                }
+                unset($row);
+            }
+            $result[$name] = $normalizedRows;
         }
 
         $timestamp = ($generatedAt ?? new DateTimeImmutable('now', new DateTimeZone('UTC')))
@@ -83,15 +114,20 @@ final class OpsSnapshotService
             'projects' => $result['projects'],
             'project_assignments' => $result['project_assignments'],
             'service_locations' => $result['service_locations'],
+            'application_entitlements' => $result['application_entitlements'],
+            'operations' => $result['operations'],
+            'operation_assignments' => $result['operation_assignments'],
+            'tasks' => $result['tasks'],
+            'calendar_events' => $result['calendar_events'],
             'has_more' => $hasMore,
             'next_page' => $hasMore ? $page + 1 : null,
         ];
     }
 
     /**
-     * @return array<string,array{sql:string,integers:list<string>,booleans:list<string>}>
+     * @return array<string,array{sql:string,integers:list<string>,booleans:list<string>,parameters?:array<string,string>}>
      */
-    private function definitions(): array
+    private function definitions(string $applicationKey): array
     {
         return [
             'users' => [
@@ -152,12 +188,68 @@ final class OpsSnapshotService
                 'integers' => ['id', 'organization_id', 'client_id', 'project_id', 'address_id', 'created_by'],
                 'booleans' => ['archived'],
             ],
+            'application_entitlements' => [
+                'sql' => 'SELECT ae.id,ae.user_id,ae.application_key,
+                                 CASE WHEN ae.enabled=1 AND u.is_disabled=0 AND u.deleted_at IS NULL
+                                           AND (wp.id IS NULL OR wp.status=\'active\') THEN 1 ELSE 0 END AS enabled,
+                                 CASE WHEN u.role=\'admin\' THEN \'role-admin\' ELSE \'role-operator\' END AS role_key,
+                                 ae.created_at,ae.updated_at
+                          FROM application_entitlements ae
+                          JOIN users u ON u.id=ae.user_id
+                          LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+                          WHERE ae.application_key=:application_key ORDER BY ae.id',
+                'integers' => ['id', 'user_id'],
+                'booleans' => ['enabled'],
+                'parameters' => ['application_key' => $applicationKey],
+            ],
+            'operations' => [
+                'sql' => 'SELECT id,project_id,business_unit_id,title,status,scheduled_start_at,scheduled_end_at,
+                                 location,notes,created_by,created_at,updated_at
+                          FROM operations ORDER BY id',
+                'integers' => ['id', 'project_id', 'business_unit_id', 'created_by'],
+                'booleans' => [],
+            ],
+            'operation_assignments' => [
+                'sql' => 'SELECT operation_id,user_id,assignment_role,assigned_by,assigned_at
+                          FROM operation_assignments ORDER BY operation_id,user_id',
+                'integers' => ['operation_id', 'user_id', 'assigned_by'],
+                'booleans' => [],
+            ],
+            'tasks' => [
+                'sql' => 'SELECT id,operation_id,project_id,business_unit_id,assignee_user_id,title,status,due_at,
+                                 notes,created_by,created_at,updated_at
+                          FROM tasks ORDER BY id',
+                'integers' => ['id', 'operation_id', 'project_id', 'business_unit_id', 'assignee_user_id', 'created_by'],
+                'booleans' => [],
+            ],
+            'calendar_events' => [
+                'sql' => 'SELECT source_type,source_id,title,start_at,end_at,all_day,project_id,business_unit_id FROM (
+                            SELECT \'operation\' AS source_type,id AS source_id,title,scheduled_start_at AS start_at,
+                                   scheduled_end_at AS end_at,0 AS all_day,project_id,business_unit_id
+                            FROM operations WHERE scheduled_start_at IS NOT NULL
+                            UNION ALL
+                            SELECT \'task\' AS source_type,id AS source_id,title,due_at AS start_at,due_at AS end_at,
+                                   0 AS all_day,project_id,business_unit_id
+                            FROM tasks WHERE due_at IS NOT NULL
+                            UNION ALL
+                            SELECT \'contract\' AS source_type,id AS source_id,\'Contract\' AS title,
+                                   COALESCE(scheduled_date,start_date,end_date) AS start_at,end_date AS end_at,
+                                   1 AS all_day,project_id,NULL AS business_unit_id
+                            FROM contracts WHERE COALESCE(scheduled_date,start_date,end_date) IS NOT NULL
+                            UNION ALL
+                            SELECT \'invoice\' AS source_type,id AS source_id,\'Invoice due\' AS title,
+                                   due_date AS start_at,due_date AS end_at,1 AS all_day,project_id,NULL AS business_unit_id
+                            FROM invoices WHERE due_date IS NOT NULL
+                          ) calendar_projection ORDER BY source_type,source_id',
+                'integers' => ['source_id', 'project_id', 'business_unit_id'],
+                'booleans' => ['all_day'],
+            ],
         ];
     }
 
     /**
      * @param array<string,mixed> $row
-     * @param array{sql:string,integers:list<string>,booleans:list<string>} $definition
+     * @param array{sql:string,integers:list<string>,booleans:list<string>,parameters?:array<string,string>} $definition
      * @return array<string,mixed>
      */
     private function normalizeRow(array $row, array $definition): array

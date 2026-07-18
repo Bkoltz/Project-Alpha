@@ -57,19 +57,19 @@ $compensationLabels = [
 <div class="settings-managed-list">
   <div class="settings-list-header">
     <div>
-      <h3>Work Types</h3>
-      <p>A Work Type describes what a person did. It classifies tracked time and can supply separate defaults for client billing and worker compensation.</p>
+      <h3>Work Activities</h3>
+      <p>A Work Activity describes what a person did. It classifies tracked time and can supply separate defaults for client billing and worker compensation.</p>
     </div>
   </div>
 
   <div class="settings-card settings-work-type-guide">
-    <div><h3>How Item Library and Work Types fit together</h3><p class="muted">They describe different sides of the same job.</p></div>
+    <div><h3>How the Service Library and Work Activities fit together</h3><p class="muted">A service describes what the client receives; an activity describes what a worker did.</p></div>
     <div class="settings-work-type-guide__steps">
-      <article><strong>1. Client offering</strong><span>Add an Item Library service, fee, or package to a quote, contract, or invoice.</span></article>
-      <article><strong>2. Internal work</strong><span>Track what a worker actually did with a Work Type, such as 3D Modeling or 2D Mapping.</span></article>
-      <article><strong>3. Optional connection</strong><span>An Item Library offering can contain internal work components that point to Work Types for Job planning and assignments.</span></article>
+      <article><strong>1. Client service</strong><span>Add a Service Library service, fee, or package to a quote, contract, or invoice.</span></article>
+      <article><strong>2. Worker activity</strong><span>Track what a worker actually did with a Work Activity, such as 3D Modeling or 2D Mapping.</span></article>
+      <article><strong>3. Reusable connection</strong><span>A service links to one or more reusable Work Activities for time, Job planning, billing, and assignments.</span></article>
     </div>
-    <p class="settings-work-type-guide__note"><strong>Hourly billing:</strong> manually adding an hourly service to a document uses the Item Library price. Adding confirmed tracked time to an invoice uses the Work Type rate after any project or client rate override. Fixed-price work should be marked as included so tracked time does not create a second client charge.</p>
+    <p class="settings-work-type-guide__note"><strong>Hourly billing:</strong> manually adding an hourly service to a document uses the Service Library price. Adding confirmed tracked time to an invoice uses the linked service-activity rate after any project or client override. Fixed-price work should be marked as included so tracked time does not create a second client charge.</p>
   </div>
 
   <form method="post"
@@ -82,8 +82,8 @@ $compensationLabels = [
     <input type="hidden" name="id" value="<?=(int)$form['id']?>">
 
     <fieldset>
-      <legend><?=$editing ? 'Edit Work Type' : 'New Work Type'?></legend>
-      <p class="muted">This classification is shared by time tracking, assignments, billing review, and compensation review. Creating a Work Type does not create a client-facing catalog service.</p>
+      <legend><?=$editing ? 'Edit Work Activity' : 'New Work Activity'?></legend>
+      <p class="muted">This activity is shared by time tracking, assignments, billing review, and compensation review. Creating a Work Activity does not create a client-facing service.</p>
       <div class="settings-form-grid">
         <label class="field">
           <span class="label">Name</span>
@@ -98,7 +98,7 @@ $compensationLabels = [
         <label class="field field--wide">
           <span class="label">Description</span>
           <textarea class="input" name="description" rows="3" maxlength="5000"><?=$h($form['description'])?></textarea>
-          <small>Explain what belongs in this Work Type so time is classified consistently.</small>
+          <small>Explain what belongs in this Work Activity so time is classified consistently.</small>
         </label>
         <label class="check-row">
           <input type="checkbox" name="is_active" value="1" <?=!empty($form['is_active']) ? 'checked' : ''?>>
@@ -109,7 +109,7 @@ $compensationLabels = [
 
     <fieldset>
       <legend>Client billing default</legend>
-      <p class="muted">This is the starting treatment when someone selects this Work Type on a time entry. A manager can change the treatment during review. It does not determine what a worker earns.</p>
+      <p class="muted">This is the fallback treatment when someone records this Work Activity without a more specific Service Library rule. It does not determine what a worker earns.</p>
       <div class="settings-form-grid">
         <label class="field">
           <span class="label">Default billing treatment</span>
@@ -143,7 +143,7 @@ $compensationLabels = [
               <option value="<?=$h($value)?>" <?=$form['default_compensation_method'] === $value ? 'selected' : ''?>><?=$h($label)?></option>
             <?php endforeach; ?>
           </select>
-          <small>Choose the normal pay calculation for eligible workers performing this Work Type.</small>
+          <small>Choose the normal pay calculation for eligible workers performing this Work Activity.</small>
         </label>
         <label class="field">
           <span class="label">Hourly rate, fixed amount, or base amount</span>
@@ -187,24 +187,24 @@ $compensationLabels = [
     </fieldset>
 
     <div class="settings-save-bar" data-settings-save-bar>
-      <p class="settings-save-status" aria-live="polite" data-settings-save-status><?=$editing ? 'Editing '.$h($form['name']) : 'Create a reusable Work Type'?></p>
+      <p class="settings-save-status" aria-live="polite" data-settings-save-status><?=$editing ? 'Editing '.$h($form['name']) : 'Create a reusable Work Activity'?></p>
       <div class="settings-save-actions">
         <a class="btn settings-cancel-button" data-settings-cancel href="/?page=settings&amp;tab=work-types">Cancel</a>
-        <button class="btn btn-primary" type="submit"><?=$editing ? 'Save Work Type' : 'Add Work Type'?></button>
+        <button class="btn btn-primary" type="submit"><?=$editing ? 'Save Work Activity' : 'Add Work Activity'?></button>
       </div>
     </div>
   </form>
 
   <div class="settings-card">
     <div>
-      <h3>Existing Work Types</h3>
-      <p class="muted">Deactivating a Work Type keeps historical time, billing, and compensation records intact.</p>
+      <h3>Existing Work Activities</h3>
+      <p class="muted">Deactivating a Work Activity keeps historical time, billing, and compensation records intact.</p>
     </div>
     <div class="pa-table-wrap">
       <table class="pa-table settings-action-table">
         <thead>
           <tr>
-            <th>Work Type</th>
+            <th>Work Activity</th>
             <th>Client billing default</th>
             <th>Worker compensation default</th>
             <th>Status</th>
@@ -242,7 +242,7 @@ $compensationLabels = [
             </tr>
           <?php endforeach; ?>
           <?php if (!$workTypes): ?>
-            <tr><td colspan="5">No Work Types yet.</td></tr>
+            <tr><td colspan="5">No Work Activities yet.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>

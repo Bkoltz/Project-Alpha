@@ -28,7 +28,7 @@ $per = (int)($_GET['per_page'] ?? 50); if(!in_array($per,[50,100],true)) $per=50
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$fromSql = ' FROM payments p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN invoices i ON i.id=p.invoice_id LEFT JOIN processor_payment_transactions ppt ON ppt.payment_id=p.id';
+$fromSql = ' FROM payments p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN invoices i ON i.id=p.invoice_id LEFT JOIN jobs j ON j.id=p.job_id LEFT JOIN processor_payment_transactions ppt ON ppt.payment_id=p.id';
 $sqlCount = 'SELECT COUNT(*)' . $fromSql;
 if($where){$sqlCount.=' WHERE '.implode(' AND ',$where);} $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
@@ -38,7 +38,7 @@ $sql = 'SELECT p.id, p.amount, p.refunded_amount, p.disputed_amount, p.status, p
                p.processor_payment_id, p.stripe_payment_intent_id, p.stripe_session_id, p.project_invoice_payment_id,
                p.reversed_at, p.reversal_reason,
                p.processor_fee_policy, p.processor_fee_source, i.id AS invoice_id, i.doc_number, i.invoice_type, i.collection_mode,
-               c.name AS client, ppt.payer_name, ppt.payer_email,
+               p.job_id,j.job_code,c.name AS client,ppt.payer_name,ppt.payer_email,
                EXISTS (
                    SELECT 1
                    FROM invoices correction_target
@@ -114,6 +114,7 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
         <tr style="text-align:left;border-bottom:1px solid #eee">
           <th style="padding:10px">ID</th>
           <th style="padding:10px">Invoice</th>
+          <th style="padding:10px">Service Job</th>
           <th style="padding:10px">Client</th>
           <th style="padding:10px">Method</th>
           <th style="padding:10px;text-align:right">Amount</th>
@@ -168,6 +169,13 @@ $rows = $pdo->prepare($sql); $rows->execute($p); $rows = $rows->fetchAll(PDO::FE
                 Processor income
               <?php else: ?>
                 Manual
+              <?php endif; ?>
+            </td>
+            <td style="padding:10px">
+              <?php if (!empty($r['job_id'])): ?>
+                <?php echo htmlspecialchars((string)($r['job_code'] ?: ('Job #' . (int)$r['job_id']))); ?>
+              <?php else: ?>
+                <span style="color:var(--muted)">—</span>
               <?php endif; ?>
             </td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['client'] ?: ($r['payer_name'] ?: ($r['payer_email'] ?: 'No client'))); ?></td>

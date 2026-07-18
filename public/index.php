@@ -606,6 +606,7 @@ $directControllers = [
     'api/workforce-v1' => 'api/workforce_v1.php',
     'api/catalog-v1' => 'api/catalog_v1.php',
     'settings/workforce-catalog-handler' => 'settings/workforce_catalog_handler.php',
+    'settings/external-ops-handler' => 'settings/external_ops_handler.php',
     'workforce/contractor-invoice' => 'workforce/contractor_invoice.php',
     'workforce/contractor-invoice-download' => 'workforce/contractor_invoice_download.php',
 ];

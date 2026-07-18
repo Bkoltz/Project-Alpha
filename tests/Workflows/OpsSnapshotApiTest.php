@@ -33,6 +33,7 @@ final class OpsSnapshotApiTest extends TestCase
         self::assertSame([
             'generated_at', 'users', 'business_units', 'worker_business_units', 'clients',
             'organizations', 'projects', 'project_assignments', 'service_locations',
+            'application_entitlements', 'operations', 'operation_assignments', 'tasks', 'calendar_events',
             'has_more', 'next_page',
         ], array_keys($first));
         self::assertSame('2026-07-16T22:00:00.000000Z', $first['generated_at']);
@@ -45,15 +46,27 @@ final class OpsSnapshotApiTest extends TestCase
         self::assertArrayNotHasKey('public_project_token', $first['projects'][0]);
         self::assertArrayNotHasKey('pay_rate_override', $first['project_assignments'][0]);
         self::assertSame('01234', $first['service_locations'][0]['postal_code']);
+        self::assertSame('ltds_ops', $first['application_entitlements'][0]['application_key']);
+        self::assertFalse($first['application_entitlements'][0]['enabled']);
+        self::assertSame('role-operator', $first['application_entitlements'][0]['role_key']);
+        self::assertSame([30], $first['application_entitlements'][0]['business_unit_ids']);
+        self::assertSame(100, $first['operations'][0]['id']);
+        self::assertSame(2, $first['operation_assignments'][0]['user_id']);
+        self::assertSame(110, $first['tasks'][0]['id']);
+        self::assertContains($first['calendar_events'][0]['source_type'], ['contract', 'invoice', 'operation', 'task']);
 
         $second = $service->snapshot($this->pdo, 2, 1, $generatedAt);
 
-        self::assertFalse($second['has_more']);
-        self::assertNull($second['next_page']);
+        self::assertTrue($second['has_more']);
+        self::assertSame(3, $second['next_page']);
         self::assertSame(2, $second['users'][0]['id']);
         self::assertTrue($second['users'][0]['is_disabled']);
         self::assertSame([], $second['business_units']);
         self::assertSame([], $second['projects']);
+
+        $fourth = $service->snapshot($this->pdo, 4, 1, $generatedAt);
+        self::assertFalse($fourth['has_more']);
+        self::assertNull($fourth['next_page']);
     }
 
     public function testPaginationBoundsAreEnforced(): void
@@ -122,6 +135,32 @@ final class OpsSnapshotApiTest extends TestCase
                 address_id INTEGER, name TEXT, address_line1 TEXT, address_line2 TEXT, city TEXT, state TEXT,
                 postal_code TEXT, country TEXT, archived INTEGER, created_by INTEGER, created_at TEXT, updated_at TEXT
             )',
+            'CREATE TABLE application_entitlements (
+                id INTEGER PRIMARY KEY, user_id INTEGER, application_key TEXT, enabled INTEGER, role_key TEXT,
+                created_at TEXT, updated_at TEXT
+            )',
+            'CREATE TABLE application_entitlement_business_units (
+                entitlement_id INTEGER, business_unit_id INTEGER
+            )',
+            'CREATE TABLE operations (
+                id INTEGER PRIMARY KEY, project_id INTEGER, business_unit_id INTEGER, title TEXT,
+                status TEXT, scheduled_start_at TEXT, scheduled_end_at TEXT, location TEXT, notes TEXT, created_by INTEGER,
+                created_at TEXT, updated_at TEXT
+            )',
+            'CREATE TABLE operation_assignments (
+                operation_id INTEGER, user_id INTEGER, assignment_role TEXT, assigned_by INTEGER, assigned_at TEXT
+            )',
+            'CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY, operation_id INTEGER, project_id INTEGER, business_unit_id INTEGER,
+                assignee_user_id INTEGER, title TEXT, status TEXT, due_at TEXT, notes TEXT,
+                created_by INTEGER, created_at TEXT, updated_at TEXT
+            )',
+            'CREATE TABLE contracts (
+                id INTEGER PRIMARY KEY, project_id INTEGER, scheduled_date TEXT, start_date TEXT, end_date TEXT
+            )',
+            'CREATE TABLE invoices (
+                id INTEGER PRIMARY KEY, project_id INTEGER, due_date TEXT
+            )',
         ];
 
         foreach ($schema as $statement) {
@@ -150,5 +189,17 @@ final class OpsSnapshotApiTest extends TestCase
             (70,60,2,'2026-07-01',NULL,1,'2026-07-01','2026-07-01','100.00')");
         $this->pdo->exec("INSERT INTO service_locations VALUES
             (80,40,50,60,NULL,'Flight Site','100 Site Rd',NULL,'Eau Claire','WI','01234','US',0,1,'2026-01-01','2026-07-01')");
+        $this->pdo->exec("INSERT INTO application_entitlements VALUES
+            (90,2,'ltds_ops',1,'role-operator','2026-07-01','2026-07-01')");
+        $this->pdo->exec("INSERT INTO application_entitlement_business_units VALUES (90,30)");
+        $this->pdo->exec("INSERT INTO operations VALUES
+            (100,60,30,'Aerial capture','scheduled','2026-07-20 14:00:00','2026-07-20 16:00:00','Flight Site','Capture imagery',1,'2026-07-01','2026-07-01')");
+        $this->pdo->exec("INSERT INTO operation_assignments VALUES
+            (100,2,'operator',1,'2026-07-01')");
+        $this->pdo->exec("INSERT INTO tasks VALUES
+            (110,100,60,30,2,'Upload imagery','todo','2026-07-21 17:00:00','Upload processed files',1,'2026-07-01','2026-07-01')");
+        $this->pdo->exec("INSERT INTO contracts VALUES
+            (120,60,'2026-07-18','2026-07-19','2026-07-22')");
+        $this->pdo->exec("INSERT INTO invoices VALUES (130,60,'2026-07-30')");
     }
 }

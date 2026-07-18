@@ -275,6 +275,8 @@ final class ProjectWorkflowUiTest extends TestCase
         $accountUpdate = (string) file_get_contents($this->root . '/src/controllers/accounts/accounts_update.php');
         $settings = (string) file_get_contents($this->root . '/src/views/pages/settings/workflow.php');
         $login = (string) file_get_contents($this->root . '/src/views/pages/auth/login.php');
+        $twoFactor = (string) file_get_contents($this->root . '/src/views/pages/auth/two_factor_verify.php');
+        $authLoginStyles = (string) file_get_contents($this->root . '/public/assets/auth-login.css');
         $authHeader = (string) file_get_contents($this->root . '/src/views/partials/auth_header.php');
         $navigation = (string) file_get_contents($this->root . '/public/assets/navigation.js');
 
@@ -293,6 +295,19 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('login-shell', $login);
         self::assertStringContainsString('$brandLogo', $login);
         self::assertStringNotContainsString('IMG_0342.JPG', $login);
+        self::assertStringContainsString("asset_url('/assets/auth-login.css')", $login);
+        self::assertStringContainsString("asset_url('/assets/auth-login.css')", $twoFactor);
+        self::assertStringContainsString('class="login-shell"', $twoFactor);
+        self::assertStringContainsString('class="login-story"', $twoFactor);
+        self::assertStringContainsString('class="login-panel"', $twoFactor);
+        self::assertStringContainsString('Verify your sign-in', $twoFactor);
+        self::assertStringContainsString('name="remember_device"', $twoFactor);
+        self::assertStringContainsString('name="code"', $twoFactor);
+        self::assertStringContainsString('autocomplete="one-time-code"', $twoFactor);
+        self::assertStringNotContainsString('IMG_0342.JPG', $twoFactor);
+        self::assertStringNotContainsString('photo-credit', $twoFactor);
+        self::assertStringContainsString('.two-factor-code', $authLoginStyles);
+        self::assertStringContainsString('@media (max-width: 480px)', $authLoginStyles);
         self::assertStringContainsString("\$favicon = \$logo !== '' ? \$logo : '/assets/favicon-32.png';", $authHeader);
         self::assertStringContainsString('<link rel="icon" href="<?php echo htmlspecialchars($favicon); ?>">', $authHeader);
         self::assertStringContainsString("'/workforce': 'workforce/overview'", $navigation);
@@ -568,7 +583,8 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('reference_number', (string)$paymentController);
         self::assertStringContainsString('referenceLabel.textContent', (string)$paymentScript);
         self::assertStringContainsString('/?page=clients-search&term=', (string)$paymentScript);
-        self::assertStringContainsString('Choose a client from the search results.', (string)$paymentScript);
+        self::assertStringContainsString('sendReceiptInput.disabled = !hasEmail;', (string)$paymentScript);
+        self::assertStringContainsString('id="manualJobSelect"', (string)$paymentView);
     }
 
     public function testSignedContractUploadsWorkWithProductionCspAndRespectSignatureLock(): void

@@ -170,6 +170,13 @@ function user_can(PDO $pdo, int $userId, string $permission, ?int $organizationI
 
 function acl_user_has_org_wide_scope(PDO $pdo, int $userId, ?int $organizationId = null): bool
 {
+    $servicePrincipal = $GLOBALS['pa_service_principal'] ?? null;
+    if (is_array($servicePrincipal) && ($servicePrincipal['type'] ?? null) === 'api_key') {
+        // API endpoint scopes are checked before controller dispatch. Preserve
+        // the historical global read projection without impersonating an
+        // interactive administrator account.
+        return true;
+    }
     if (($_SESSION['user']['role'] ?? '') === 'admin') {
         return true;
     }
