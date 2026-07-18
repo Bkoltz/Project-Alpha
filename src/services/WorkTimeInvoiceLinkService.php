@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Modules\Timekeeping\WorkforceSettings;
+use DateTimeImmutable;
+use DateTimeZone;
 use DomainException;
 use PDO;
 use Throwable;
@@ -16,6 +19,8 @@ use Throwable;
  */
 final class WorkTimeInvoiceLinkService
 {
+    private ?DateTimeZone $displayTimezone = null;
+
     public function __construct(private readonly PDO $pdo) {}
 
     public function link(
@@ -36,7 +41,19 @@ final class WorkTimeInvoiceLinkService
                         s.id approval_snapshot_id,s.billing_rate snapshot_billing_rate,s.currency snapshot_currency,
                         c.billing_time_entry_id,bt.billed billing_projection_billed,
                         bt.invoice_item_id billing_projection_invoice_item_id,bt.rate billing_projection_rate,
-                        ba.id billing_allocation_id,ba.status billing_allocation_status,ba.rate billing_allocation_rate
+                        ba.id billing_allocation_id,ba.status billing_allocation_status,ba.rate billing_allocation_rate,
+                        wt.name work_type_name,
+                        COALESCE(jwc.item_library_id,(
+                            SELECT jwc2.item_library_id FROM job_work_components jwc2
+                            WHERE jwc2.job_id=t.job_id AND jwc2.work_type_id=t.work_type_id
+                            ORDER BY jwc2.id LIMIT 1
+                        )) service_item_id,
+                        COALESCE(il.item_name,(
+                            SELECT il2.item_name FROM job_work_components jwc2
+                            JOIN item_library il2 ON il2.id=jwc2.item_library_id
+                            WHERE jwc2.job_id=t.job_id AND jwc2.work_type_id=t.work_type_id
+                            ORDER BY jwc2.id LIMIT 1
+                        )) service_name
                  FROM work_time_entries t
                  LEFT JOIN work_approval_snapshots s ON s.id=(
                      SELECT s2.id FROM work_approval_snapshots s2
@@ -52,6 +69,10 @@ final class WorkTimeInvoiceLinkService
                        AND ba2.treatment='hourly' AND ba2.status IN ('rate_needed','ready')
                      ORDER BY ba2.id DESC LIMIT 1
                  )
+                 LEFT JOIN work_types wt ON wt.id=t.work_type_id
+                 LEFT JOIN work_assignments wa ON wa.id=t.work_assignment_id
+                 LEFT JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
+                 LEFT JOIN item_library il ON il.id=jwc.item_library_id
                  WHERE t.id=? FOR UPDATE"
             );
             $entryStmt->execute([$entryId]);
@@ -80,25 +101,29 @@ final class WorkTimeInvoiceLinkService
             }
 
             $invoiceStmt = $this->pdo->prepare(
-                "SELECT * FROM invoices WHERE id=? AND status NOT IN ('void','voided','cancelled') FOR UPDATE"
+                "SELECT * FROM invoices WHERE id=? AND status='draft' AND finalized_at IS NULL FOR UPDATE"
             );
             $invoiceStmt->execute([$invoiceId]);
             $invoice = $invoiceStmt->fetch(PDO::FETCH_ASSOC);
             if (!$invoice) {
-                throw new DomainException('Choose an active invoice.');
+                throw new DomainException('Choose a mutable draft invoice.');
             }
             \DocumentPolicy::assertMutable($this->pdo, 'invoice', $invoiceId, 'monetary_adjustment');
+            if (!empty($entry['client_id']) && (int)$entry['client_id'] !== (int)$invoice['client_id']) {
+                throw new DomainException('The time entry and invoice must belong to the same client.');
+            }
 
             $rate = $this->resolveRate($invoiceId, $requestedRate, $entry);
-            $hours = round(((int)$entry['duration_seconds']) / 3600, 2);
-            if ($hours <= 0) {
+            $durationSeconds = (int)$entry['duration_seconds'];
+            if ($durationSeconds <= 0) {
                 throw new DomainException('The time entry must contain a positive duration.');
             }
-            $lineTotal = round($hours * $rate, 2);
-            $description = trim((string)$entry['description']);
-            if ($description === '') {
-                $description = 'Tracked time';
-            }
+            $hours = round($durationSeconds / 3600, 2);
+            $lineTotal = round(($durationSeconds / 3600) * $rate, 2);
+            $currency = strtoupper((string)($entry['snapshot_currency'] ?? 'USD'));
+            $serviceItemId = !empty($entry['service_item_id']) ? (int)$entry['service_item_id'] : null;
+            $workTypeId = !empty($entry['work_type_id']) ? (int)$entry['work_type_id'] : null;
+            $itemLabel = $this->trackedTimeItemLabel($entry);
             $allocationService = new TimeBillingAllocationService($this->pdo);
             $allocationId = (int)($entry['billing_allocation_id'] ?? 0);
             $allocationRate = (float)($entry['billing_allocation_rate'] ?? 0);
@@ -116,7 +141,7 @@ final class WorkTimeInvoiceLinkService
                     'hourly',
                     (int)$entry['duration_seconds'],
                     number_format($rate, 4, '.', ''),
-                    (string)($entry['snapshot_currency'] ?? 'USD'),
+                    $currency,
                     $actorId,
                     [
                         'client_id' => (int)$invoice['client_id'],
@@ -129,13 +154,32 @@ final class WorkTimeInvoiceLinkService
                 $allocationId = (int)$allocation['id'];
             }
 
-            $item = $this->pdo->prepare(
-                'INSERT INTO invoice_items
-                 (invoice_id,item,description,quantity,unit_price,line_total,billing_unit,is_extra_charge,time_entry_id,hours)
-                 VALUES (?,\'Tracked time\',?,?,?,?,\'hour\',0,?,?)'
+            $invoiceItemId = $this->matchingTrackedTimeLine(
+                $invoiceId,
+                $serviceItemId,
+                $workTypeId,
+                $rate,
+                $currency
             );
-            $item->execute([$invoiceId, $description, $hours, $rate, $lineTotal, $billingTimeEntryId, $hours]);
-            $invoiceItemId = (int)$this->pdo->lastInsertId();
+            if ($invoiceItemId <= 0) {
+                $item = $this->pdo->prepare(
+                    'INSERT INTO invoice_items
+                     (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_extra_charge,time_entry_id,hours)
+                     VALUES (?,?,?,?,?,?,?,\'hour\',0,?,?)'
+                );
+                $item->execute([
+                    $invoiceId,
+                    $serviceItemId,
+                    $itemLabel,
+                    '',
+                    $hours,
+                    $rate,
+                    $lineTotal,
+                    $billingTimeEntryId,
+                    $hours,
+                ]);
+                $invoiceItemId = (int)$this->pdo->lastInsertId();
+            }
 
             $markBilled = $this->pdo->prepare(
                 'UPDATE time_entries
@@ -155,6 +199,7 @@ final class WorkTimeInvoiceLinkService
                 throw new DomainException('This time entry was linked by another request. Refresh and try again.');
             }
             $allocationService->markInvoiced($allocationId, $invoiceId, $invoiceItemId);
+            $line = $this->refreshTrackedTimeLine($invoiceItemId, $itemLabel, $serviceItemId, $rate);
 
             (new WorkTimeBillingContextService($this->pdo))->synchronizeInvoice($invoiceId, $actorId);
 
@@ -169,15 +214,26 @@ final class WorkTimeInvoiceLinkService
             };
             $tax = max(0.0, (float)($invoice['tax_percent'] ?? 0)) * max(0.0, $subtotal - $discount) / 100;
             $total = max(0.0, $subtotal - $discount + $tax);
-            $this->pdo->prepare('UPDATE invoices SET subtotal=?,tax_amount=?,total=? WHERE id=?')
-                ->execute([$subtotal, $tax, $total, $invoiceId]);
+            $this->pdo->prepare(
+                'UPDATE invoices
+                 SET subtotal=?,tax_amount=?,total=?,balance_due=GREATEST(0,?-COALESCE(amount_paid,0))
+                 WHERE id=?'
+            )->execute([$subtotal, $tax, $total, $total, $invoiceId]);
 
             $nextRevision = max(1, (int)($invoice['revision_number'] ?? 1)) + 1;
             $this->pdo->prepare(
                 'INSERT INTO invoice_adjustments
                  (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,revision_number,created_by)
                  VALUES (?,\'charge\',\'Tracked time\',?,?,?,?,?,?)'
-            )->execute([$invoiceId, $description, $hours, $rate, $lineTotal, $nextRevision, $actorId]);
+            )->execute([
+                $invoiceId,
+                $this->formatTimeToken((string)$entry['start_time'], (int)$entry['duration_seconds']),
+                $hours,
+                $rate,
+                $lineTotal,
+                $nextRevision,
+                $actorId,
+            ]);
             if (!empty($invoice['finalized_at']) || \invoice_effective_paid_total($this->pdo, $invoiceId) > 0.005) {
                 \invoice_refresh_payment_totals($this->pdo, $invoiceId, false);
             }
@@ -197,6 +253,7 @@ final class WorkTimeInvoiceLinkService
                     'billing_allocation_id' => $allocationId,
                     'rate' => $rate,
                     'hours' => $hours,
+                    'aggregated_quantity' => $line['quantity'],
                 ]);
             }
             $this->pdo->commit();
@@ -239,6 +296,118 @@ final class WorkTimeInvoiceLinkService
             return round((float)$values[0], 2);
         }
         throw new DomainException('Enter the hourly billing rate to add this time to the invoice.');
+    }
+
+    private function matchingTrackedTimeLine(
+        int $invoiceId,
+        ?int $serviceItemId,
+        ?int $workTypeId,
+        float $rate,
+        string $currency
+    ): int {
+        $statement = $this->pdo->prepare(
+            "SELECT a.invoice_item_id
+             FROM work_time_billing_allocations a
+             JOIN work_time_entries t ON t.id=a.time_entry_id
+             JOIN invoice_items ii ON ii.id=a.invoice_item_id AND ii.invoice_id=a.invoice_id
+             LEFT JOIN work_assignments wa ON wa.id=t.work_assignment_id
+             LEFT JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
+             WHERE a.invoice_id=? AND a.status='invoiced' AND a.treatment='hourly'
+               AND ii.billing_unit='hour' AND a.rate=? AND a.currency=?
+               AND t.work_type_id <=> ?
+               AND COALESCE(jwc.item_library_id,(
+                    SELECT jwc2.item_library_id FROM job_work_components jwc2
+                    WHERE jwc2.job_id=t.job_id AND jwc2.work_type_id=t.work_type_id
+                    ORDER BY jwc2.id LIMIT 1
+               )) <=> ?
+             ORDER BY a.invoice_item_id
+             LIMIT 1
+             FOR UPDATE"
+        );
+        $statement->execute([$invoiceId, $rate, $currency, $workTypeId, $serviceItemId]);
+        return (int)($statement->fetchColumn() ?: 0);
+    }
+
+    /** @return array{quantity:float,amount:float,description:string} */
+    private function refreshTrackedTimeLine(
+        int $invoiceItemId,
+        string $itemLabel,
+        ?int $serviceItemId,
+        float $rate
+    ): array {
+        $statement = $this->pdo->prepare(
+            "SELECT t.start_time,a.duration_seconds
+             FROM work_time_billing_allocations a
+             JOIN work_time_entries t ON t.id=a.time_entry_id
+             WHERE a.invoice_item_id=? AND a.status='invoiced' AND a.treatment='hourly'
+             ORDER BY t.start_time,a.id"
+        );
+        $statement->execute([$invoiceItemId]);
+        $seconds = 0;
+        $tokens = [];
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $source) {
+            $duration = max(0, (int)($source['duration_seconds'] ?? 0));
+            $seconds += $duration;
+            $tokens[] = $this->formatTimeToken((string)$source['start_time'], $duration);
+        }
+        if ($seconds <= 0) {
+            throw new DomainException('Tracked-time sources are unavailable for this invoice line.');
+        }
+        $quantity = round($seconds / 3600, 2);
+        $amount = round(($seconds / 3600) * $rate, 2);
+        $descriptionLines = [];
+        foreach (array_chunk($tokens, 3) as $chunk) {
+            $descriptionLines[] = implode(' | ', $chunk);
+        }
+        $description = implode("\n", $descriptionLines);
+        $this->pdo->prepare(
+            'UPDATE invoice_items
+             SET item_library_id=?,item=?,description=?,quantity=?,hours=?,unit_price=?,line_total=?
+             WHERE id=?'
+        )->execute([
+            $serviceItemId,
+            $itemLabel,
+            $description,
+            $quantity,
+            $quantity,
+            $rate,
+            $amount,
+            $invoiceItemId,
+        ]);
+        return ['quantity' => $quantity, 'amount' => $amount, 'description' => $description];
+    }
+
+    private function trackedTimeItemLabel(array $entry): string
+    {
+        $service = trim((string)($entry['service_name'] ?? ''));
+        $activity = trim((string)($entry['work_type_name'] ?? ''));
+        if ($service !== '' && $activity !== '' && strcasecmp($service, $activity) !== 0) {
+            return $service . ' — ' . $activity;
+        }
+        return $service !== '' ? $service : ($activity !== '' ? $activity : 'Tracked time');
+    }
+
+    private function formatTimeToken(string $startTime, int $durationSeconds): string
+    {
+        if ($this->displayTimezone === null) {
+            $timezoneName = (string)(WorkforceSettings::load($this->pdo)['timezone'] ?? 'UTC');
+            try {
+                $this->displayTimezone = new DateTimeZone($timezoneName ?: 'UTC');
+            } catch (\Throwable) {
+                $this->displayTimezone = new DateTimeZone('UTC');
+            }
+        }
+        $date = (new DateTimeImmutable($startTime, new DateTimeZone('UTC')))
+            ->setTimezone($this->displayTimezone)
+            ->format('m-d-Y');
+        $minutes = max(1, (int)round($durationSeconds / 60));
+        $hours = intdiv($minutes, 60);
+        $minutePart = $minutes % 60;
+        $duration = $hours > 0 ? $hours . 'h' : '';
+        if ($minutePart > 0 || $hours === 0) {
+            $duration .= ($duration !== '' ? ' ' : '') . $minutePart . 'm';
+        }
+        return $date . ' × ' . $duration;
     }
 
 }

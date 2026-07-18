@@ -9,11 +9,17 @@ use App\Services\PayPeriodService;
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/external_ops.php';
 
 $userId=(int)($_SESSION['user']['id']??0);$action=(string)($_POST['action']??'');$tab=(string)($_POST['return_tab']??'work-types');
 $redirect='/?page=settings&tab='.rawurlencode($tab);
 if($userId<=0||!csrf_validate()){http_response_code(403);exit('Forbidden');}
 $can=static fn(string $permission):bool=>user_can($pdo,$userId,$permission,0);
+$syncOpsAccount=static function(?int $accountId)use($pdo,$userId):void{
+ if(!$accountId)return;
+ $config=pa_external_ops_delivery_config($pdo);
+ if(!empty($config['enabled']))(new \App\Services\ExternalOpsIntegrationService())->resyncAccountAccess($pdo,$accountId,(string)$config['application_key'],$userId);
+};
 $requiredPermissions=match($action){
  'save-worker-profile','save-business-unit','assign-worker-unit','assign-client-unit','save-worker-scope'=>['workforce.business_units.manage','settings.manage'],
  'save-work-type','set-work-type-status'=>['workforce.catalog.manage','settings.manage'],
@@ -27,6 +33,7 @@ if(!$requiredPermissions||!array_filter($requiredPermissions,$can)){http_respons
 try{
  if($action==='save-worker-profile'){
   $id=(int)($_POST['id']??0);$display=trim((string)($_POST['display_name']??''));$relationship=strtolower(trim((string)($_POST['relationship_type']??'employee')));$accountId=(int)($_POST['user_id']??0)?:null;$status=(string)($_POST['status']??'active');$currency=strtoupper(trim((string)($_POST['currency']??'USD')));
+  $previousAccountId=null;if($id){$previousAccount=$pdo->prepare('SELECT user_id FROM worker_profiles WHERE id=?');$previousAccount->execute([$id]);$previousAccountId=(int)($previousAccount->fetchColumn()?:0)?:null;}
   if($display===''||!preg_match('/^[a-z0-9_-]{2,50}$/',$relationship))throw new DomainException('Enter a worker name and valid relationship type.');
   if(!in_array($status,['active','inactive','terminated'],true)||!preg_match('/^[A-Z]{3}$/',$currency))throw new DomainException('Choose a valid worker status and currency.');
   if($id){
@@ -36,6 +43,7 @@ try{
    $reviewPolicy=$relationship==='owner'?'self_confirm':'manager_review';$compensationPolicy=$relationship==='owner'?'owner_no_pay':'rules';
    $pdo->prepare('INSERT INTO worker_profiles (user_id,relationship_type,time_review_policy,compensation_policy,status,display_name,currency) VALUES (?,?,?,?,?,?,?)')->execute([$accountId,$relationship,$reviewPolicy,$compensationPolicy,$status,$display,$currency]);
   }
+  $syncOpsAccount($previousAccountId);if($accountId!==$previousAccountId)$syncOpsAccount($accountId);
  }elseif($action==='save-work-type'){
   $id=max(0,(int)($_POST['id']??0));
   $name=trim((string)($_POST['name']??''));
@@ -55,7 +63,7 @@ try{
   $billingRate=($_POST['billing_rate']??'')===''?null:(float)$_POST['billing_rate'];
 
   if($name===''||$code==='')throw new DomainException('Name and code are required.');
-  if(strlen($name)>190||strlen($code)>64)throw new DomainException('The Work Type name or code is too long.');
+  if(strlen($name)>190||strlen($code)>64)throw new DomainException('The Work Activity name or code is too long.');
   if(!in_array($method,['nonpayable','hourly','fixed','base_overage','percentage'],true))throw new DomainException('Invalid compensation method.');
   if(!in_array($basis,['gross_line','net_line','cash_collected'],true)||!in_array($trigger,['completed_approved','delivered','invoice_paid','manual_release'],true))throw new DomainException('Invalid compensation basis or eligibility trigger.');
   if(!in_array($billingTreatment,['undecided','internal','fixed_price_included','hourly'],true))throw new DomainException('Invalid client billing treatment.');
@@ -78,7 +86,7 @@ try{
   $workTypeValues=[$name,$code,$description!==''?$description:null,isset($_POST['is_active'])?1:0,$method,$amount,$includedMinutes,$overageRate,$percentage,$basis,$trigger,$compensationCurrency];
   if($id>0){
    $exists=$pdo->prepare('SELECT id FROM work_types WHERE id=? FOR UPDATE');$exists->execute([$id]);
-   if(!$exists->fetchColumn())throw new DomainException('Work Type not found.');
+   if(!$exists->fetchColumn())throw new DomainException('Work Activity not found.');
    $pdo->prepare('UPDATE work_types SET name=?,code=?,description=?,is_active=?,default_compensation_method=?,default_amount=?,default_base_minutes=?,default_overage_rate=?,default_percentage=?,default_percentage_basis=?,default_eligibility_trigger=?,currency=? WHERE id=?')->execute(array_merge($workTypeValues,[$id]));
   }else{
    $pdo->prepare('INSERT INTO work_types (name,code,description,is_active,default_compensation_method,default_amount,default_base_minutes,default_overage_rate,default_percentage,default_percentage_basis,default_eligibility_trigger,currency,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array_merge($workTypeValues,[$userId]));
@@ -88,15 +96,17 @@ try{
   $pdo->commit();
  }elseif($action==='set-work-type-status'){
   $id=max(0,(int)($_POST['id']??0));$status=(string)($_POST['status']??'');
-  if($id<=0||!in_array($status,['active','inactive'],true))throw new DomainException('Choose a valid Work Type status.');
+  if($id<=0||!in_array($status,['active','inactive'],true))throw new DomainException('Choose a valid Work Activity status.');
   $update=$pdo->prepare('UPDATE work_types SET is_active=? WHERE id=?');$update->execute([$status==='active'?1:0,$id]);
-  if($update->rowCount()===0){$exists=$pdo->prepare('SELECT 1 FROM work_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new DomainException('Work Type not found.');}
+  if($update->rowCount()===0){$exists=$pdo->prepare('SELECT 1 FROM work_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new DomainException('Work Activity not found.');}
  }elseif($action==='save-business-unit'){
   $id=(int)($_POST['id']??0);$name=trim((string)($_POST['name']??''));$code=strtoupper(preg_replace('/[^A-Za-z0-9]+/','_',trim((string)($_POST['code']??$name))));if($name===''||$code==='')throw new DomainException('Name and code are required.');
   if($id)$pdo->prepare('UPDATE business_units SET name=?,code=?,description=?,is_active=? WHERE id=?')->execute([$name,$code,trim((string)($_POST['description']??''))?:null,isset($_POST['is_active'])?1:0,$id]);
   else $pdo->prepare('INSERT INTO business_units (name,code,description,is_active,created_by) VALUES (?,?,?,?,?)')->execute([$name,$code,trim((string)($_POST['description']??''))?:null,isset($_POST['is_active'])?1:0,$userId]);
+  if($id){$affected=$pdo->prepare('SELECT DISTINCT wp.user_id FROM worker_business_units wbu JOIN worker_profiles wp ON wp.id=wbu.worker_profile_id WHERE wbu.business_unit_id=? AND wp.user_id IS NOT NULL');$affected->execute([$id]);foreach($affected->fetchAll(PDO::FETCH_COLUMN) as $affectedUserId)$syncOpsAccount((int)$affectedUserId);}
  }elseif($action==='assign-worker-unit'){
-  $pdo->prepare('INSERT INTO worker_business_units (worker_profile_id,business_unit_id,is_lead,assigned_by) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE is_lead=VALUES(is_lead),assigned_by=VALUES(assigned_by),assigned_at=UTC_TIMESTAMP(6),ends_at=NULL')->execute([(int)$_POST['worker_profile_id'],(int)$_POST['business_unit_id'],isset($_POST['is_lead'])?1:0,$userId]);
+  $workerProfileId=(int)$_POST['worker_profile_id'];$pdo->prepare('INSERT INTO worker_business_units (worker_profile_id,business_unit_id,is_lead,assigned_by) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE is_lead=VALUES(is_lead),assigned_by=VALUES(assigned_by),assigned_at=UTC_TIMESTAMP(6),ends_at=NULL')->execute([$workerProfileId,(int)$_POST['business_unit_id'],isset($_POST['is_lead'])?1:0,$userId]);
+  $workerAccount=$pdo->prepare('SELECT user_id FROM worker_profiles WHERE id=?');$workerAccount->execute([$workerProfileId]);$syncOpsAccount((int)($workerAccount->fetchColumn()?:0));
  }elseif($action==='assign-client-unit'){
   $pdo->prepare('INSERT INTO client_business_units (client_id,business_unit_id,assigned_by) VALUES (?,?,?) ON DUPLICATE KEY UPDATE assigned_by=VALUES(assigned_by),assigned_at=UTC_TIMESTAMP(6)')->execute([(int)$_POST['client_id'],(int)$_POST['business_unit_id'],$userId]);
  }elseif($action==='save-worker-scope'){

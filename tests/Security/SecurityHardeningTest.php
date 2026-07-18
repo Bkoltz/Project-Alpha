@@ -362,7 +362,10 @@ final class SecurityHardeningTest extends TestCase
         }
 
         self::assertStringContainsString('api_key_has_scope', $auth);
-        self::assertStringContainsString('$_SESSION[\'api_key\']', $auth);
+        self::assertStringContainsString('$GLOBALS[\'pa_service_principal\']', $auth);
+        self::assertStringNotContainsString('$_SESSION[\'service_principal\']', $auth);
+        self::assertStringNotContainsString('$_SESSION[\'user\'] =', $auth);
+        self::assertStringNotContainsString("'role' => 'admin'", $auth);
         self::assertStringContainsString("['read', 'write', 'read.write', 'read_write']", $scopes);
         self::assertStringContainsString("['*', 'all', 'admin', 'full_access', 'full-access']", $scopes);
 

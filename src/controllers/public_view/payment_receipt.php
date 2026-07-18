@@ -19,11 +19,12 @@ if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
 
 $stmt = $pdo->prepare(
     'SELECT r.*,p.payment_date,p.payment_method,p.reference_number,p.status AS payment_status,
-            p.refunded_amount,p.disputed_amount,p.reversed_at,p.reversal_reason,
-            i.doc_number,i.invoice_type,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS client_email
+            p.refunded_amount,p.disputed_amount,p.reversed_at,p.reversal_reason,p.job_id,
+            i.doc_number,i.invoice_type,j.job_code,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS client_email
      FROM payment_receipts r
      JOIN payments p ON p.id=r.payment_id
      LEFT JOIN clients c ON c.id=p.client_id
+     LEFT JOIN jobs j ON j.id=p.job_id
      LEFT JOIN processor_payment_transactions ppt ON ppt.payment_id=p.id
      LEFT JOIN invoices i ON i.id=r.invoice_id
      WHERE r.public_token=?'
@@ -68,6 +69,7 @@ $brand = (string)($appConfig['brand_name'] ?? 'Project Alpha');
       <div><div class="label">Received from</div><div class="value"><?php echo htmlspecialchars($receipt['client_name'] ?: 'Processor payment'); ?></div><div><?php echo htmlspecialchars((string)$receipt['client_email']); ?></div></div>
       <div><div class="label">Payment date</div><div class="value"><?php echo htmlspecialchars(date('F j, Y', strtotime((string)$receipt['payment_date']))); ?></div></div>
       <div><div class="label">Invoice</div><div class="value"><?php echo !empty($receipt['invoice_id']) ? htmlspecialchars(pa_invoice_label_from_row($receipt)) : 'Not linked'; ?></div></div>
+      <?php if (!empty($receipt['job_id'])): ?><div><div class="label">Service job</div><div class="value"><?php echo htmlspecialchars((string)($receipt['job_code'] ?: ('Job #' . (int)$receipt['job_id']))); ?></div></div><?php endif; ?>
       <div><div class="label">Payment method</div><div class="value"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', (string)$receipt['payment_method']))); ?></div></div>
       <?php if (!empty($receipt['reference_number'])): ?><div><div class="label">Reference</div><div class="value"><?php echo htmlspecialchars($receipt['reference_number']); ?></div></div><?php endif; ?>
     </div>

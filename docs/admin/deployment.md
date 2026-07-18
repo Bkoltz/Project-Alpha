@@ -36,6 +36,11 @@ administrator.
 production image tags, port, service settings, and named volumes directly.
 Environment-specific copies belong to the deployment host, not the repository.
 
+The optional External Operations module is disabled by default. Deployments
+that use it configure it from the administrator-only **Custom integrations**
+settings page; no integration-specific Compose variables are required. See
+[External Operations](external-operations.html).
+
 ## Administrator Recovery
 
 PA does not keep a permanent default administrator. If email recovery is unavailable, a Docker operator can issue a one-time temporary password for an existing active administrator:

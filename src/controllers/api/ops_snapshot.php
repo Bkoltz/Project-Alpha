@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Services\OpsSnapshotService;
 
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../utils/external_ops.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store');
@@ -37,7 +38,13 @@ if ($limit === false || $limit === null || $limit < 1 || $limit > OpsSnapshotSer
 }
 
 try {
-    $snapshot = (new OpsSnapshotService())->snapshot($pdo, (int)$page, (int)$limit);
+    $snapshot = (new OpsSnapshotService())->snapshot(
+        $pdo,
+        (int)$page,
+        (int)$limit,
+        null,
+        pa_external_ops_application_key($pdo)
+    );
     echo json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 } catch (PDOException $error) {
     error_log('[OpsSnapshot] Database query failed: ' . $error->getMessage());

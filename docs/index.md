@@ -46,7 +46,7 @@ If you have never seen PA before, use this path:
 | Task | Start Here |
 |---|---|
 | Create a quote, contract, or invoice | [Quotes, Contracts, Invoices](workflows/documents.html) |
-| Configure services, packages, Work Types, or hourly billing | [Service Catalog and Work Types](workflows/service-catalog-and-work-types.html) |
+| Configure services, packages, Work Activities, or hourly billing | [Service Library and Work Activities](workflows/service-catalog-and-work-types.html) |
 | Send a client a secure document link | [Public Links](reference/public-links.html) |
 | Invite a client to submit their information | [Client Onboarding](workflows/client-onboarding.html) |
 | Set up monthly or yearly billing | [Recurring Billing](workflows/recurring-billing.html) |

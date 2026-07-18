@@ -127,6 +127,7 @@ final class ApprovalService
                         wp.id worker_profile_id,wp.relationship_type,wp.compensation_policy,
                         COALESCE(wp.relationship_review_required,0) relationship_review_required,
                         jwc.catalog_work_component_id,
+                        jwc.client_billing_rate_snapshot service_activity_billing_rate,
                         wtb.default_billing_rate work_type_billing_rate,
                         pa.pay_rate_override,p.name project_name,c.name client_name,
                         i.doc_number invoice_number,i.invoice_type
@@ -165,7 +166,9 @@ final class ApprovalService
                 }
             }
             $entry['default_hourly_rate'] = $settings['default_hourly_rate'];
-            $entry['default_billing_rate'] = $entry['work_type_billing_rate'] ?? $settings['default_billing_rate'];
+            $entry['default_billing_rate'] = $entry['service_activity_billing_rate']
+                ?? $entry['work_type_billing_rate']
+                ?? $settings['default_billing_rate'];
             $entry['currency'] = $settings['currency'];
             if ((int) $entry['revision'] > 1 && $this->hasPaidAccrual($entryId)) {
                 throw new DomainException('Paid time cannot be replaced by a correction. Return the pay accrual to pending first.');

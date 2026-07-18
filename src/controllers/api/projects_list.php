@@ -8,7 +8,7 @@ $limit = (int)($_GET['limit'] ?? 25);
 if ($limit < 1 || $limit > 100) $limit = 25;
 $status = $_GET['status'] ?? '';
 
-[$scopeWhere, $scopeParams] = scope_clause($pdo, 'projects', (int)$_SESSION['user']['id']);
+[$scopeWhere, $scopeParams] = scope_clause($pdo, 'projects', (int)($_SESSION['user']['id'] ?? 0));
 
 $sql = "SELECT id, name, client_id, status, created_at, updated_at FROM projects";
 $params = [];

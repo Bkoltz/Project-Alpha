@@ -6,12 +6,16 @@ require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/audit.php';
 require_once __DIR__ . '/../utils/csrf.php';
 require_once __DIR__ . '/../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../services/ManualPaymentJobService.php';
+
+use App\Services\ManualPaymentJobService;
 
 csrf_verify_post_or_redirect('payments/payments-create');
 
 $payment_scope = ($_POST['payment_scope'] ?? 'invoice') === 'manual' ? 'manual' : 'invoice';
 $invoice_id = (int)($_POST['invoice_id'] ?? 0);
 $client_id_input = (int)($_POST['client_id'] ?? 0);
+$job_id_input = (int)($_POST['job_id'] ?? 0);
 $amount = (float)($_POST['amount'] ?? 0);
 $method = trim((string)($_POST['method'] ?? 'card'));
 $check_number = trim((string)($_POST['reference_number'] ?? $_POST['check_number'] ?? ''));
@@ -49,44 +53,97 @@ if ($amount <= 0) {
 }
 
 if ($payment_scope === 'manual') {
-  if ($client_id_input <= 0) {
-    header('Location: /?page=payments/payments-create&error=' . urlencode('Select a client for manual payments.'));
-    exit;
+  $userId = (int)($_SESSION['user']['id'] ?? 0);
+  $job = null;
+  if ($job_id_input > 0) {
+    try {
+      $job = (new ManualPaymentJobService($pdo))->accessibleJob($job_id_input, $userId);
+    } catch (Throwable $e) {
+      header('Location: /?page=payments/payments-create&error=' . urlencode($e->getMessage()));
+      exit;
+    }
   }
-  if (!can_access_record($pdo, 'clients', $client_id_input, (int)($_SESSION['user']['id'] ?? 0))) {
+  if ($client_id_input > 0 && !can_access_record($pdo, 'clients', $client_id_input, $userId)) {
     header('Location: /?page=payments/payments-create&error=' . urlencode('Permission denied'));
     exit;
   }
+  $jobClientId = (int)($job['client_id'] ?? 0);
+  if ($client_id_input > 0 && $jobClientId > 0 && $client_id_input !== $jobClientId) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('The selected client does not match the service job.'));
+    exit;
+  }
+  $client_id = $client_id_input > 0 ? $client_id_input : ($jobClientId > 0 ? $jobClientId : null);
   if (strtolower($method) === 'check' && empty($check_number)) {
     header('Location: /?page=payments/payments-create&error=Check%20number%20is%20required');
     exit;
   }
 
-  $clientStmt = $pdo->prepare('SELECT organization_id FROM clients WHERE id=?');
-  $clientStmt->execute([$client_id_input]);
-  $organization_id = (int)($clientStmt->fetchColumn() ?: 0) ?: null;
+  $organization_id = !empty($job['organization_id']) ? (int)$job['organization_id'] : null;
+  $clientEmail = null;
+  if ($client_id !== null) {
+    $clientStmt = $pdo->prepare('SELECT organization_id,email FROM clients WHERE id=?');
+    $clientStmt->execute([$client_id]);
+    $clientRecord = $clientStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $organization_id ??= (int)($clientRecord['organization_id'] ?? 0) ?: null;
+    $clientEmail = filter_var((string)($clientRecord['email'] ?? ''), FILTER_VALIDATE_EMAIL) ?: null;
+  }
+  $send_receipt = $send_receipt && $clientEmail !== null;
   invoice_ensure_payments_schema($pdo);
+
+  if ($job_id_input > 0 && !acl_table_has_column($pdo, 'payments', 'job_id')) {
+    header('Location: /?page=payments/payments-create&error=' . urlencode('The service-job payment migration has not been applied yet.'));
+    exit;
+  }
 
   $pdo->beginTransaction();
   try {
-    $insert = $pdo->prepare('
-      INSERT INTO payments
-        (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
-      VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, "succeeded", ?)
-    ');
-    $insert->execute([
-      $client_id_input,
-      $organization_id,
-      $amount,
-      $method ?: 'cash',
-      $check_number ?: null,
-      $notes !== '' ? $notes : 'Manual payment not tied to an invoice',
-      $payment_date,
-    ]);
+    $defaultNotes = $job !== null
+      ? 'Manual payment for service job ' . (string)$job['job_code']
+      : 'Standalone manual income';
+    if (acl_table_has_column($pdo, 'payments', 'job_id')) {
+      $insert = $pdo->prepare('
+        INSERT INTO payments
+          (client_id, invoice_id, job_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
+        VALUES (?, NULL, ?, NULL, ?, ?, ?, ?, ?, "succeeded", ?)
+      ');
+      $insert->execute([
+        $client_id,
+        $job_id_input > 0 ? $job_id_input : null,
+        $organization_id,
+        $amount,
+        $method ?: 'cash',
+        $check_number ?: null,
+        $notes !== '' ? $notes : $defaultNotes,
+        $payment_date,
+      ]);
+    } else {
+      $insert = $pdo->prepare('
+        INSERT INTO payments
+          (client_id, invoice_id, contract_id, organization_id, amount, payment_method, reference_number, notes, status, payment_date)
+        VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, "succeeded", ?)
+      ');
+      $insert->execute([
+        $client_id,
+        $organization_id,
+        $amount,
+        $method ?: 'cash',
+        $check_number ?: null,
+        $notes !== '' ? $notes : $defaultNotes,
+        $payment_date,
+      ]);
+    }
     $paymentId = (int)$pdo->lastInsertId();
     $pdo->commit();
 
-    audit_log($pdo, 'payment.manual_recorded', 'payment', $paymentId, ['amount' => $amount, 'method' => $method, 'client_id' => $client_id_input]);
+    $expectedCharge = !empty($job['expected_charge_known']) ? (float)$job['expected_charge'] : null;
+    audit_log($pdo, 'payment.manual_recorded', 'payment', $paymentId, [
+      'amount' => $amount,
+      'method' => $method,
+      'client_id' => $client_id,
+      'job_id' => $job_id_input > 0 ? $job_id_input : null,
+      'expected_charge' => $expectedCharge,
+      'variance' => $expectedCharge !== null ? round($amount - $expectedCharge, 2) : null,
+    ]);
 
     if (!empty($appConfig['payment_receipts_enabled'])) {
       try {
