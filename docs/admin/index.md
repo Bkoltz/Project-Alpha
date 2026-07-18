@@ -21,6 +21,7 @@ PA administration is mostly handled from Settings plus the deployment environmen
 | Permissions | Roles, permissions, and user access |
 | Workforce | Employee PA accounts, employment state, pay rates, and project assignments |
 | Timekeeping and Approvals | Timers, breaks, review, correction revisions, and immutable approval snapshots |
+| Custom integrations | Optional, deployment-specific entitlements, operations, tasks, and read-only synchronization |
 
 ## Recommended Order
 
@@ -31,4 +32,5 @@ PA administration is mostly handled from Settings plus the deployment environmen
 5. Import [tax rates](tax-rates.html), if needed.
 6. Verify deployment and cron behavior.
 7. Configure [Workforce modules](workforce-modules.html), employees, assignments, and rates.
+8. If this deployment has a separate operations dashboard, configure [External Operations](external-operations.html).
 

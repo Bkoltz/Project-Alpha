@@ -1036,8 +1036,9 @@ DEALLOCATE PREPARE project_invoice_fk_stmt;
 -- PAYMENTS
 CREATE TABLE IF NOT EXISTS payments (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    client_id INT NOT NULL,
+    client_id INT NULL,
     invoice_id INT NULL,
+    job_id INT NULL,
     project_invoice_payment_id BIGINT NULL,
     contract_id INT NULL,
     organization_id INT NULL,
@@ -1062,12 +1063,13 @@ CREATE TABLE IF NOT EXISTS payments (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_payments_client (client_id),
     INDEX idx_payments_invoice (invoice_id),
+    INDEX idx_payments_job (job_id),
     INDEX idx_payments_project_payment (project_invoice_payment_id),
     INDEX idx_payments_contract (contract_id),
     INDEX idx_payments_date (payment_date),
     UNIQUE KEY uq_payments_stripe_session (stripe_session_id),
     UNIQUE KEY uq_payments_stripe_pi (stripe_payment_intent_id),
-    CONSTRAINT fk_payments_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_payments_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_project_payment FOREIGN KEY (project_invoice_payment_id) REFERENCES project_invoice_payments(id) ON DELETE SET NULL,
     CONSTRAINT fk_payments_contract FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL
@@ -2264,11 +2266,13 @@ ALTER TABLE service_locations ADD COLUMN address_id INT NULL AFTER project_id,
 
 CREATE TABLE IF NOT EXISTS jobs (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    client_id INT NOT NULL,
+    client_id INT NULL,
     organization_id INT NULL,
     project_id INT NULL,
     job_code VARCHAR(64) NOT NULL,
+    job_origin ENUM('planned','unscheduled_time') NOT NULL DEFAULT 'planned',
     status ENUM('not_started','active','completed','cancelled') NOT NULL DEFAULT 'not_started',
+    completed_at DATETIME(6) NULL,
     default_service_location_id INT NULL,
     notes TEXT NULL,
     archived TINYINT(1) NOT NULL DEFAULT 0,
@@ -2279,12 +2283,15 @@ CREATE TABLE IF NOT EXISTS jobs (
     INDEX idx_job_project (project_id),
     INDEX idx_job_created (created_at),
     INDEX idx_job_archived (archived),
-    CONSTRAINT fk_job_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    INDEX idx_job_origin_status (job_origin,status,updated_at),
+    CONSTRAINT fk_job_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
     CONSTRAINT fk_job_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
     CONSTRAINT fk_job_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_job_location FOREIGN KEY (default_service_location_id) REFERENCES service_locations(id) ON DELETE SET NULL,
     CONSTRAINT fk_job_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE payments ADD CONSTRAINT fk_payments_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS project_service_locations (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -2650,6 +2657,11 @@ CREATE TABLE IF NOT EXISTS catalog_work_components (
     fixed_quantity DECIMAL(10,2) NULL,
     expected_duration_minutes INT UNSIGNED NULL,
     assignment_required TINYINT(1) NOT NULL DEFAULT 1,
+    client_billing_treatment ENUM('hourly','fixed_price_included','base_overage','internal') NOT NULL DEFAULT 'fixed_price_included',
+    client_billing_rate DECIMAL(12,4) NULL,
+    client_included_minutes INT UNSIGNED NULL,
+    client_overage_rate DECIMAL(12,4) NULL,
+    client_billing_currency CHAR(3) NOT NULL DEFAULT 'USD',
     compensation_method ENUM('nonpayable','hourly','fixed','base_overage','percentage') NOT NULL DEFAULT 'nonpayable',
     compensation_amount DECIMAL(12,4) NULL,
     included_minutes INT UNSIGNED NULL,
@@ -2712,7 +2724,7 @@ CREATE TABLE IF NOT EXISTS job_work_components (
     item_library_id INT NULL,
     catalog_work_component_id INT NULL,
     work_type_id INT NOT NULL,
-    source_type ENUM('quote','contract','invoice','catalog','manual') NOT NULL,
+    source_type ENUM('quote','contract','invoice','catalog','manual','time_entry') NOT NULL,
     source_document_id INT NULL,
     source_line_id INT NULL,
     source_revision INT NULL,
@@ -2723,6 +2735,11 @@ CREATE TABLE IF NOT EXISTS job_work_components (
     expected_duration_minutes INT UNSIGNED NULL,
     assignment_required TINYINT(1) NOT NULL DEFAULT 1,
     compensation_snapshot JSON NOT NULL,
+    client_billing_treatment_snapshot ENUM('hourly','fixed_price_included','base_overage','internal') NULL,
+    client_billing_rate_snapshot DECIMAL(12,4) NULL,
+    client_included_minutes_snapshot INT UNSIGNED NULL,
+    client_overage_rate_snapshot DECIMAL(12,4) NULL,
+    client_billing_currency_snapshot CHAR(3) NULL,
     status ENUM('planned','in_progress','completed','cancelled') NOT NULL DEFAULT 'planned',
     created_by INT NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -2980,6 +2997,111 @@ CREATE TABLE IF NOT EXISTS passkey_attempts (
     INDEX idx_passkey_attempt_ip (ip_address,ceremony,attempted_at),
     INDEX idx_passkey_attempt_user (user_id,ceremony,attempted_at),
     CONSTRAINT fk_passkey_attempt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OPTIONAL EXTERNAL OPERATIONS INTEGRATION
+CREATE TABLE IF NOT EXISTS application_entitlements (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    application_key VARCHAR(64) NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 0,
+    role_key VARCHAR(64) NOT NULL,
+    created_by INT NULL,
+    updated_by INT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_application_entitlement (user_id, application_key),
+    INDEX idx_application_entitlement_app (application_key, enabled, user_id),
+    CONSTRAINT fk_application_entitlement_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_application_entitlement_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_application_entitlement_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT chk_application_entitlement_role CHECK (role_key IN ('role-admin','role-operator'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS application_entitlement_business_units (
+    entitlement_id BIGINT UNSIGNED NOT NULL,
+    business_unit_id INT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (entitlement_id, business_unit_id),
+    INDEX idx_entitlement_business_unit (business_unit_id, entitlement_id),
+    CONSTRAINT fk_entitlement_scope_entitlement FOREIGN KEY (entitlement_id) REFERENCES application_entitlements(id) ON DELETE CASCADE,
+    CONSTRAINT fk_entitlement_scope_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS integration_outbox (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    event_id CHAR(36) NOT NULL,
+    integration_key VARCHAR(64) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    schema_version SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    payload_json JSON NOT NULL,
+    occurred_at DATETIME(6) NOT NULL,
+    attempts INT UNSIGNED NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME(6) NOT NULL,
+    delivered_at DATETIME(6) NULL,
+    last_error TEXT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_integration_outbox_event (event_id),
+    INDEX idx_integration_outbox_due (integration_key, delivered_at, next_attempt_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS operations (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    business_unit_id INT NULL,
+    title VARCHAR(255) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'draft',
+    scheduled_start_at DATETIME(6) NULL,
+    scheduled_end_at DATETIME(6) NULL,
+    location VARCHAR(500) NULL,
+    notes TEXT NULL,
+    created_by INT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    INDEX idx_operations_project (project_id, status, scheduled_start_at),
+    INDEX idx_operations_business_unit (business_unit_id, status, scheduled_start_at),
+    CONSTRAINT fk_operations_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_operations_business_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE SET NULL,
+    CONSTRAINT fk_operations_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT chk_operations_status CHECK (status IN ('draft','scheduled','in_progress','completed','cancelled'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS operation_assignments (
+    operation_id BIGINT UNSIGNED NOT NULL,
+    user_id INT NOT NULL,
+    assignment_role VARCHAR(100) NULL,
+    assigned_by INT NULL,
+    assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (operation_id, user_id),
+    INDEX idx_operation_assignment_user (user_id, operation_id),
+    CONSTRAINT fk_operation_assignment_operation FOREIGN KEY (operation_id) REFERENCES operations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_operation_assignment_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_operation_assignment_actor FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    operation_id BIGINT UNSIGNED NULL,
+    project_id INT NOT NULL,
+    business_unit_id INT NULL,
+    assignee_user_id INT NULL,
+    title VARCHAR(255) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'todo',
+    due_at DATETIME(6) NULL,
+    notes TEXT NULL,
+    created_by INT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    INDEX idx_tasks_project (project_id, status, due_at),
+    INDEX idx_tasks_operation (operation_id, status, due_at),
+    INDEX idx_tasks_assignee (assignee_user_id, status, due_at),
+    INDEX idx_tasks_business_unit (business_unit_id, status, due_at),
+    CONSTRAINT fk_tasks_operation FOREIGN KEY (operation_id) REFERENCES operations(id) ON DELETE SET NULL,
+    CONSTRAINT fk_tasks_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_tasks_business_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE SET NULL,
+    CONSTRAINT fk_tasks_assignee FOREIGN KEY (assignee_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_tasks_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT chk_tasks_status CHECK (status IN ('todo','in_progress','blocked','completed','cancelled'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Canonical Workforce workflow foundation. Legacy status, pay-accrual, and

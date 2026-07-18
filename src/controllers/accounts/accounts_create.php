@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/password_policy.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../Modules/Timekeeping/WorkforceSettings.php';
+require_once __DIR__ . '/../../utils/external_ops.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -195,6 +196,17 @@ try {
                 }
             }
         } catch (Throwable $e) { /* non-fatal — ACL tables may not exist */ }
+    }
+
+    $externalOpsConfig = pa_external_ops_delivery_config($pdo);
+    if (!empty($externalOpsConfig['enabled'])) {
+        (new \App\Services\ExternalOpsIntegrationService())->saveAccountAccess(
+            $pdo,
+            $newUserId,
+            (string)$externalOpsConfig['application_key'],
+            !empty($_POST['external_ops_enabled']),
+            (int)$_SESSION['user']['id']
+        );
     }
 
     $pdo->commit();

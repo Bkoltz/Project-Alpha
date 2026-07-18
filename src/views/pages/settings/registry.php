@@ -9,7 +9,7 @@
  */
 function pa_settings_registry(): array
 {
-    return [
+    $registry = [
         'account' => [
             'title' => 'My Account & Security',
             'short_title' => 'Account & Security',
@@ -91,8 +91,8 @@ function pa_settings_registry(): array
             'keywords' => 'work jobs pay time review mileage locations scheduling compensation workflow',
             'items' => [
                 'work-types' => [
-                    'title' => 'Work Types',
-                    'description' => 'Define reusable work with separate client billing and worker compensation defaults.',
+                    'title' => 'Work Activities',
+                    'description' => 'Define reusable activities workers select when recording time.',
                     'tab' => 'work-types',
                     'permission' => 'workforce.catalog.manage',
                     'keywords' => 'work types client billing hourly fixed base overage percentage pay compensation',
@@ -129,14 +129,14 @@ function pa_settings_registry(): array
             'short_title' => 'Sales & Documents',
             'marker' => 'SD',
             'description' => 'Catalog entries, document behavior, presentation, and standard terms.',
-            'keywords' => 'sales catalog items services products documents quotes contracts invoices terms',
+            'keywords' => 'sales service library services packages documents quotes contracts invoices terms',
             'items' => [
                 'item-library' => [
-                    'title' => 'Item Library',
-                    'description' => 'Manage reusable products, services, fees, bundles, and work components.',
+                    'title' => 'Service Library',
+                    'description' => 'Manage client services, packages, and their linked Work Activities.',
                     'tab' => 'item-library',
                     'permission' => 'settings.manage',
-                    'keywords' => 'catalog item library products services fees bundles worker compensation',
+                    'keywords' => 'service library services fees packages work activities worker compensation',
                     'form_mode' => 'self',
                 ],
                 'documents' => [
@@ -240,6 +240,18 @@ function pa_settings_registry(): array
             ],
         ],
     ];
+
+    $registry['communications']['items']['external-ops'] = [
+        'title' => 'Custom integrations',
+        'description' => 'Configure optional deployment-specific application synchronization.',
+        'tab' => 'external-ops',
+        'permission' => 'settings.manage',
+        'roles' => ['admin', 'owner'],
+        'keywords' => 'advanced custom external operations application entitlements webhook synchronization',
+        'form_mode' => 'self',
+    ];
+
+    return $registry;
 }
 
 function pa_settings_item_visible(array $item, callable $can, string $role): bool

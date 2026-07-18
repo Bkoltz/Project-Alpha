@@ -44,6 +44,7 @@ function page_permission_map(): array
         'settings/logs-handler'                => 'settings.manage',
         'settings/permissions'                 => 'settings.manage',
         'settings/permissions-handler'         => 'settings.manage',
+        'settings/external-ops-handler'        => 'settings.manage',
         'settings/link-test-connection'      => 'settings.manage',
         'settings/stripe-net-backfill'       => 'settings.manage',
         'settings/stripe-import-payments'    => 'settings.manage',

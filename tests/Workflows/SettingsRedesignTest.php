@@ -212,7 +212,7 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringNotContainsString('name="tax_behavior"', $view);
         self::assertStringContainsString('Uses the document default automatically', $view);
         self::assertStringContainsString('<option value="each">Service unit</option>', $view);
-        self::assertStringContainsString('Type to search the Item Library', $view);
+        self::assertStringContainsString('Type to search the Service Library', $view);
         self::assertStringContainsString('data-bundle-selected', $view);
         self::assertStringContainsString('renderBundleResults', $script);
         self::assertStringContainsString('$types = [\'service\',\'fee\',\'bundle\']', $handler);
@@ -243,8 +243,8 @@ final class SettingsRedesignTest extends TestCase
         $workflow = (string)file_get_contents($workflowPath);
         $index = (string)file_get_contents($root . '/docs/workflows/index.md');
 
-        self::assertStringContainsString('Item Library Settings', $workflow);
-        self::assertStringContainsString('Work Type Settings', $workflow);
+        self::assertStringContainsString('Service Library Settings', $workflow);
+        self::assertStringContainsString('Work Activity Settings', $workflow);
         self::assertStringContainsString('How Hourly Billing Resolves', $workflow);
         self::assertStringContainsString('Tax-Exempt Clients', $workflow);
         self::assertStringContainsString('service-catalog-and-work-types.html', $index);

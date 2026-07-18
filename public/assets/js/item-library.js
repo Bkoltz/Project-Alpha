@@ -1,4 +1,4 @@
-// Item Library modal and repeatable internal work components. Safe after AJAX navigation.
+// Service Library modal and reusable Work Activity connections. Safe after AJAX navigation.
 (function () {
     'use strict';
     function byId(id) { return document.getElementById(id); }
@@ -41,9 +41,20 @@
             componentField(card, 'eligibility_trigger').value = 'invoice_paid';
         }
     }
+    function syncClientBillingFields(card) {
+        var treatment = (componentField(card, 'client_billing_treatment') || {}).value || 'fixed_price_included';
+        card.querySelectorAll('[data-client-billing-field]').forEach(function (field) {
+            var kind = field.getAttribute('data-client-billing-field');
+            var visible = (kind === 'rate' && treatment === 'hourly')
+                || ((kind === 'included' || kind === 'overage') && treatment === 'base_overage')
+                || (kind === 'currency' && (treatment === 'hourly' || treatment === 'base_overage'));
+            field.hidden = !visible;
+            field.querySelectorAll('input,select').forEach(function (input) { input.disabled = !visible; });
+        });
+    }
     function renumberComponents() {
         document.querySelectorAll('#workComponents [data-work-component]').forEach(function (card, index) {
-            var label = card.querySelector('[data-component-number]'); if (label) label.textContent = 'Work component ' + (index + 1);
+            var label = card.querySelector('[data-component-number]'); if (label) label.textContent = 'Work Activity ' + (index + 1);
         });
     }
     function addComponent(data) {
@@ -51,15 +62,20 @@
         if (!template || !target) return;
         var card = template.content.firstElementChild.cloneNode(true);
         data = data || {};
-        ['id','name','work_type_id','quantity_behavior','expected_duration_minutes','compensation_method','compensation_amount','included_minutes','overage_rate','percentage','percentage_basis','eligibility_trigger'].forEach(function (name) {
+        ['id','name','work_type_id','quantity_behavior','expected_duration_minutes','client_billing_treatment','client_billing_rate','client_included_minutes','client_overage_rate','client_billing_currency','compensation_method','compensation_amount','included_minutes','overage_rate','percentage','percentage_basis','eligibility_trigger'].forEach(function (name) {
             setComponentValue(card, name, data[name]);
         });
         setComponentValue(card, 'assignment_required', data.assignment_required == null ? true : data.assignment_required);
         if (!(componentField(card, 'quantity_behavior').value)) componentField(card, 'quantity_behavior').value = 'per_line';
+        if (!(componentField(card, 'work_type_id').value)) componentField(card, 'work_type_id').value = 'new';
+        if (!(componentField(card, 'client_billing_treatment').value)) componentField(card, 'client_billing_treatment').value = 'fixed_price_included';
+        if (!(componentField(card, 'client_billing_currency').value)) componentField(card, 'client_billing_currency').value = 'USD';
         if (!(componentField(card, 'compensation_method').value)) componentField(card, 'compensation_method').value = 'nonpayable';
         if (!(componentField(card, 'percentage_basis').value)) componentField(card, 'percentage_basis').value = 'net_line';
         if (!(componentField(card, 'eligibility_trigger').value)) componentField(card, 'eligibility_trigger').value = 'completed_approved';
-        target.appendChild(card); syncPayFields(card); renumberComponents();
+        if (data.auto_name) card.setAttribute('data-auto-activity-name','1');
+        if (data.auto_billing) card.setAttribute('data-auto-activity-billing','1');
+        target.appendChild(card); syncPayFields(card); syncClientBillingFields(card); renumberComponents();
     }
     function clearComponents() { var target = byId('workComponents'); if (target) target.innerHTML = ''; }
     function syncBundleVisibility() { var box = byId('bundleContents'); if (box) box.hidden = (byId('entryType') || {}).value !== 'bundle'; }
@@ -131,10 +147,12 @@
         var title = byId('modalTitle'); if (title) title.textContent = 'Add service';
         setValue('formAction','create'); setValue('formId',''); setValue('itemName','');
         setValue('itemDescription',''); setValue('unitPrice',''); setValue('entryType','service'); setValue('billingUnit','each');
-        setValue('fulfillmentNotes',''); setChecked('isActive',true); clearComponents(); setBundleItems([],null); openModal();
+        setValue('fulfillmentNotes',''); setChecked('isActive',true); clearComponents();
+        addComponent({work_type_id:'new',client_billing_treatment:'fixed_price_included',client_billing_currency:'USD',auto_name:true,auto_billing:true});
+        setBundleItems([],null); openModal();
     }
     function editItem(item) {
-        var title = byId('modalTitle'); if (title) title.textContent = 'Edit catalog item';
+        var title = byId('modalTitle'); if (title) title.textContent = 'Edit service';
         setValue('formAction','update'); setValue('formId',item.id); setValue('itemName',item.item_name);
         setValue('itemDescription',item.description); setValue('unitPrice',item.unit_price); setValue('entryType',item.entry_type === 'product' ? 'service' : (item.entry_type || 'service'));
         setValue('billingUnit',item.billing_unit || (item.category === 'Hourly' ? 'hour' : 'each'));
@@ -177,8 +195,27 @@
     }
     function handleChange(event) {
         if (event.target.id === 'entryType') { syncBundleVisibility(); return; }
-        if (!event.target.matches('[data-field="compensation_method"],[data-field="percentage_basis"]')) return;
-        syncPayFields(event.target.closest('[data-work-component]'));
+        if (event.target.id === 'billingUnit') {
+            document.querySelectorAll('[data-auto-activity-billing]').forEach(function (card) {
+                var treatment = componentField(card,'client_billing_treatment');
+                if (treatment) treatment.value = event.target.value === 'hour' ? 'hourly' : 'fixed_price_included';
+                syncClientBillingFields(card);
+            });
+            return;
+        }
+        var card = event.target.closest('[data-work-component]');
+        if (!card) return;
+        if (event.target.matches('[data-field="compensation_method"],[data-field="percentage_basis"]')) syncPayFields(card);
+        if (event.target.matches('[data-field="client_billing_treatment"]')) {
+            card.removeAttribute('data-auto-activity-billing');
+            syncClientBillingFields(card);
+        }
+        if (event.target.matches('[data-field="work_type_id"]') && event.target.value !== 'new') {
+            card.removeAttribute('data-auto-activity-name');
+            var selected = event.target.options[event.target.selectedIndex];
+            var name = componentField(card,'name');
+            if (name && selected) name.value = selected.textContent.replace(/^Use\s+/,'').trim();
+        }
     }
     function handleSubmit(event) {
         if (!event.target.matches('[data-catalog-form]')) return;
@@ -186,6 +223,12 @@
     }
     function handleInput(event) {
         if (event.target.matches('[data-bundle-search]')) renderBundleResults(event.target.value);
+        if (event.target.id === 'itemName') {
+            document.querySelectorAll('[data-auto-activity-name]').forEach(function (card) {
+                var name = componentField(card,'name'); if (name) name.value = event.target.value;
+            });
+        }
+        if (event.target.matches('[data-field="name"]')) event.target.closest('[data-work-component]').removeAttribute('data-auto-activity-name');
     }
     function initItemLibraryPage() {
         var modal = byId('itemModal'); if (!modal) return;

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Timekeeping;
 
+use App\Services\CompensationRuleService;
+use App\Services\UnscheduledServiceJobService;
 use DateTimeImmutable;
 use DateTimeZone;
 use DomainException;
@@ -36,19 +38,31 @@ final class TimekeepingService
     {
         if ($manageAll) {
             return $this->pdo->query(
-                "SELECT j.id,j.job_code,j.client_id,j.project_id,c.name client_name
-                 FROM jobs j JOIN clients c ON c.id=j.client_id
-                 WHERE j.archived=0 AND j.status NOT IN ('completed','cancelled')
+                "SELECT j.id,j.job_code,j.client_id,j.project_id,j.status,j.job_origin,c.name client_name,
+                        (SELECT jwc.item_library_id FROM job_work_components jwc
+                         WHERE jwc.job_id=j.id ORDER BY jwc.id LIMIT 1) service_item_id,
+                        (SELECT il.item_name FROM job_work_components jwc
+                         JOIN item_library il ON il.id=jwc.item_library_id
+                         WHERE jwc.job_id=j.id ORDER BY jwc.id LIMIT 1) service_name
+                 FROM jobs j LEFT JOIN clients c ON c.id=j.client_id
+                 WHERE j.archived=0 AND (j.status NOT IN ('completed','cancelled')
+                    OR (j.job_origin='unscheduled_time' AND j.status='completed'))
                  ORDER BY j.created_at DESC,j.id DESC"
             )->fetchAll(PDO::FETCH_ASSOC);
         }
         $stmt = $this->pdo->prepare(
-            "SELECT DISTINCT j.id,j.job_code,j.client_id,j.project_id,c.name client_name
-             FROM jobs j JOIN clients c ON c.id=j.client_id
+            "SELECT DISTINCT j.id,j.job_code,j.client_id,j.project_id,j.status,j.job_origin,c.name client_name,
+                    (SELECT jwc2.item_library_id FROM job_work_components jwc2
+                     WHERE jwc2.job_id=j.id ORDER BY jwc2.id LIMIT 1) service_item_id,
+                    (SELECT il.item_name FROM job_work_components jwc2
+                     JOIN item_library il ON il.id=jwc2.item_library_id
+                     WHERE jwc2.job_id=j.id ORDER BY jwc2.id LIMIT 1) service_name
+             FROM jobs j LEFT JOIN clients c ON c.id=j.client_id
              LEFT JOIN job_work_components jwc ON jwc.job_id=j.id
              LEFT JOIN work_assignments wa ON wa.job_work_component_id=jwc.id
              LEFT JOIN worker_profiles wp ON wp.id=wa.worker_profile_id
-             WHERE j.archived=0 AND j.status NOT IN ('completed','cancelled')
+             WHERE j.archived=0 AND (j.status NOT IN ('completed','cancelled')
+                    OR (j.job_origin='unscheduled_time' AND j.status='completed'))
                AND (j.created_by=? OR (wp.user_id=? AND wa.status NOT IN ('declined','cancelled')))
              ORDER BY j.created_at DESC,j.id DESC"
         );
@@ -65,6 +79,12 @@ final class TimekeepingService
              LEFT JOIN work_type_billing_defaults wtb ON wtb.work_type_id=wt.id
              WHERE wt.is_active=1 ORDER BY wt.name'
         )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function serviceActivities(): array
+    {
+        $organizationId = function_exists('request_client_org_id') ? \request_client_org_id() : null;
+        return $this->unscheduledServices()->activities($organizationId ?: null);
     }
 
     /** @return array<string,mixed>|null */
@@ -115,9 +135,10 @@ final class TimekeepingService
     public function invoicesForManager(): array
     {
         return $this->pdo->query(
-            "SELECT i.id,i.client_id,i.project_id,i.job_id,i.doc_number,i.invoice_type,i.status,c.name client_name,p.name project_name
+            "SELECT i.id,i.client_id,i.project_id,i.job_id,i.doc_number,i.doc_number invoice_number,
+                    i.invoice_type,i.status,c.name client_name,p.name project_name
              FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN projects p ON p.id=i.project_id
-             WHERE i.billing_mode='hourly' AND i.status NOT IN ('paid','cancelled','void')
+             WHERE i.status='draft' AND i.finalized_at IS NULL
              ORDER BY c.name,i.created_at DESC"
         )->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -161,29 +182,30 @@ final class TimekeepingService
     {
         $settings = $this->settings();
         $description = trim((string)($input['description'] ?? ''));
-        $context = $this->resolveBillingContext($userId, $input, $manageAll);
-        $projectId = $context['project_id'];
-        [$workTypeId,$assignmentId]=$this->resolveWorkSelection($userId,$input,$context['job_id']);
-        if (!$manageAll && (int) $settings['require_project'] === 1 && !$projectId && !$context['job_id']) {
-            throw new DomainException('A Job or Project is required.');
-        }
         if (!$manageAll && (int) $settings['require_description'] === 1 && $description === '') {
             throw new DomainException('A description is required.');
         }
-        if (!$manageAll && (int)($settings['require_work_type'] ?? 0) === 1 && !$workTypeId) {
-            throw new DomainException('A Work Type is required.');
-        }
-        // Work context never implies money. Client billing is an explicit
-        // treatment, while worker compensation follows the worker policy.
-        $billable = $this->explicitBillableFlag($input);
-        $worker = $this->workerContext($userId);
-        $isPayable = $manageAll
-            ? (!empty($input['is_payable']) && $worker['compensation_state'] === 'provisional' ? 1 : 0)
-            : $worker['is_payable'];
-        $billingState = $this->billingStateForInput($input);
         $id = Uuid::v4();
         $this->pdo->beginTransaction();
         try {
+            $input = $this->withServiceContext($userId, $input, $manageAll);
+            $context = $this->resolveBillingContext($userId, $input, $manageAll);
+            $projectId = $context['project_id'];
+            [$workTypeId,$assignmentId] = $this->resolveWorkSelection($userId, $input, $context['job_id']);
+            $input['work_type_id'] = $workTypeId;
+            $input = $this->withWorkTypeBillingContext($input, $manageAll);
+            if (!$manageAll && (int)$settings['require_project'] === 1 && !$projectId && !$context['job_id']) {
+                throw new DomainException('A Job or Project is required.');
+            }
+            if (!$manageAll && (int)($settings['require_work_type'] ?? 0) === 1 && !$workTypeId) {
+                throw new DomainException('A Work Activity is required.');
+            }
+            $billable = $this->explicitBillableFlag($input);
+            $worker = $this->workerContext($userId);
+            $isPayable = $manageAll
+                ? (!empty($input['is_payable']) && $worker['compensation_state'] === 'provisional' ? 1 : 0)
+                : $worker['is_payable'];
+            $billingState = $this->billingStateForInput($input);
             $stmt = $this->pdo->prepare(
                 "INSERT INTO work_time_entries
                  (id,user_id,worker_profile_id,entered_by_user_id,client_id,project_id,invoice_id,job_id,work_type_id,work_assignment_id,
@@ -200,7 +222,9 @@ final class TimekeepingService
             $this->pdo->commit();
             return $id;
         } catch (Throwable $error) {
-            $this->pdo->rollBack();
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             if ($error instanceof \PDOException && $error->getCode() === '23000') {
                 throw new DomainException('A timer is already running.');
             }
@@ -234,6 +258,7 @@ final class TimekeepingService
                  WHERE id=?"
             )->execute([$seconds, $entryId]);
             $this->pdo->prepare('DELETE FROM work_timer_locks WHERE user_id=?')->execute([$userId]);
+            $this->unscheduledServices()->completeForTimeEntry($entryId);
             $this->audit->record('timer.stopped', 'work_time_entry', $entryId, $userId, $entry, ['duration_seconds' => $seconds]);
             $this->pdo->commit();
         } catch (Throwable $error) {
@@ -301,25 +326,10 @@ final class TimekeepingService
         if ($end <= $start) {
             throw new DomainException('End time must follow start time.');
         }
-        $context = $this->resolveBillingContext($userId, $input, $manageAll);
-        $projectId = $context['project_id'];
-        [$workTypeId,$assignmentId]=$this->resolveWorkSelection($userId,$input,$context['job_id']);
         $description = trim((string) ($input['description'] ?? ''));
-        if (!$manageAll && (int) $settings['require_project'] === 1 && !$projectId && !$context['job_id']) {
-            throw new DomainException('A Job or Project is required.');
-        }
         if (!$manageAll && (int) $settings['require_description'] === 1 && $description === '') {
             throw new DomainException('A description is required.');
         }
-        if (!$manageAll && (int)($settings['require_work_type'] ?? 0) === 1 && !$workTypeId) {
-            throw new DomainException('A Work Type is required.');
-        }
-        $billable = $this->explicitBillableFlag($input);
-        $worker = $this->workerContext($userId);
-        $isPayable = $manageAll
-            ? (!empty($input['is_payable']) && $worker['compensation_state'] === 'provisional' ? 1 : 0)
-            : $worker['is_payable'];
-        $billingState = $this->billingStateForInput($input);
         $captureMode = strtolower(trim((string)($input['capture_mode'] ?? 'exact')));
         if (!in_array($captureMode, ['duration', 'exact'], true)) {
             $captureMode = 'exact';
@@ -329,6 +339,24 @@ final class TimekeepingService
         $endUtc = $end->setTimezone(new DateTimeZone('UTC'));
         $this->pdo->beginTransaction();
         try {
+            $input = $this->withServiceContext($userId, $input, $manageAll);
+            $context = $this->resolveBillingContext($userId, $input, $manageAll);
+            $projectId = $context['project_id'];
+            [$workTypeId,$assignmentId] = $this->resolveWorkSelection($userId, $input, $context['job_id']);
+            $input['work_type_id'] = $workTypeId;
+            $input = $this->withWorkTypeBillingContext($input, $manageAll);
+            if (!$manageAll && (int)$settings['require_project'] === 1 && !$projectId && !$context['job_id']) {
+                throw new DomainException('A Job or Project is required.');
+            }
+            if (!$manageAll && (int)($settings['require_work_type'] ?? 0) === 1 && !$workTypeId) {
+                throw new DomainException('A Work Activity is required.');
+            }
+            $billable = $this->explicitBillableFlag($input);
+            $worker = $this->workerContext($userId);
+            $isPayable = $manageAll
+                ? (!empty($input['is_payable']) && $worker['compensation_state'] === 'provisional' ? 1 : 0)
+                : $worker['is_payable'];
+            $billingState = $this->billingStateForInput($input);
             $stmt = $this->pdo->prepare(
                 "INSERT INTO work_time_entries
                  (id,user_id,worker_profile_id,entered_by_user_id,client_id,project_id,invoice_id,job_id,work_type_id,work_assignment_id,
@@ -342,11 +370,14 @@ final class TimekeepingService
                 $end->getTimestamp() - $start->getTimestamp(), $description,
                 json_encode([], JSON_THROW_ON_ERROR), $billable, $isPayable, $billingState, $worker['compensation_state'],
             ]);
+            $this->unscheduledServices()->completeForTimeEntry($id);
             $this->audit->record('time_entry.created', 'work_time_entry', $id, $userId, [], ['project_id' => $projectId]);
             $this->pdo->commit();
             return $id;
         } catch (Throwable $error) {
-            $this->pdo->rollBack();
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             throw $error;
         }
     }
@@ -579,7 +610,7 @@ final class TimekeepingService
         $invoiceId = !empty($input['invoice_id']) ? (int)$input['invoice_id'] : null;
         $jobId = !empty($input['job_id']) ? (int)$input['job_id'] : null;
 
-        if (!$manageAll && ($clientId || $invoiceId)) {
+        if (!$manageAll && ($invoiceId || ($clientId && empty($input['_service_context'])))) {
             throw new DomainException('Client and invoice details are available only to timekeeping managers.');
         }
 
@@ -588,11 +619,11 @@ final class TimekeepingService
             $stmt->execute([$jobId]);
             $job = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$job) throw new DomainException('Choose an active Job.');
-            $jobClientId = (int)$job['client_id'];
+            $jobClientId = !empty($job['client_id']) ? (int)$job['client_id'] : null;
             $jobProjectId = !empty($job['project_id']) ? (int)$job['project_id'] : null;
             if ($clientId && $clientId !== $jobClientId) throw new DomainException('The selected Job does not belong to that client.');
             if ($projectId && $jobProjectId && $projectId !== $jobProjectId) throw new DomainException('The selected Job does not belong to that Project.');
-            $clientId = $jobClientId;
+            $clientId ??= $jobClientId;
             $projectId ??= $jobProjectId;
             if(!$manageAll){$allowed=$this->pdo->prepare("SELECT 1 FROM jobs j LEFT JOIN job_work_components jwc ON jwc.job_id=j.id LEFT JOIN work_assignments wa ON wa.job_work_component_id=jwc.id LEFT JOIN worker_profiles wp ON wp.id=wa.worker_profile_id WHERE j.id=? AND (j.created_by=? OR (wp.user_id=? AND wa.status NOT IN ('declined','cancelled'))) LIMIT 1");$allowed->execute([$jobId,$userId,$userId]);if(!$allowed->fetchColumn())throw new DomainException('The selected Job is not assigned to this worker.');}
         }
@@ -600,12 +631,12 @@ final class TimekeepingService
         if ($invoiceId) {
             $stmt = $this->pdo->prepare(
                 "SELECT client_id,project_id,job_id FROM invoices
-                 WHERE id=? AND billing_mode='hourly' AND status NOT IN ('paid','cancelled','void')"
+                 WHERE id=? AND status='draft' AND finalized_at IS NULL"
             );
             $stmt->execute([$invoiceId]);
             $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$invoice) {
-                throw new DomainException('Choose an open hourly invoice.');
+                throw new DomainException('Choose a mutable draft invoice.');
             }
             $invoiceClientId = (int)$invoice['client_id'];
             $invoiceProjectId = !empty($invoice['project_id']) ? (int)$invoice['project_id'] : null;
@@ -660,6 +691,60 @@ final class TimekeepingService
         if($assignmentId){$stmt=$this->pdo->prepare("SELECT jwc.job_id,jwc.work_type_id FROM work_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_profile_id JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id WHERE wa.id=? AND wp.user_id=? AND wa.status IN ('accepted','in_progress','completed')");$stmt->execute([$assignmentId,$userId]);$assignment=$stmt->fetch(PDO::FETCH_ASSOC);if(!$assignment)throw new DomainException('Choose an accepted assignment.');if(!$jobId)throw new DomainException('Select the assignment Job before saving time.');if((int)$assignment['job_id']!==$jobId)throw new DomainException('The assignment does not belong to that Job.');$workTypeId=(int)$assignment['work_type_id'];}
         if($workTypeId){$stmt=$this->pdo->prepare('SELECT 1 FROM work_types WHERE id=? AND is_active=1');$stmt->execute([$workTypeId]);if(!$stmt->fetchColumn())throw new DomainException('Choose an active Work Type.');}
         return [$workTypeId,$assignmentId];
+    }
+
+    private function withServiceContext(int $userId, array $input, bool $manageAll): array
+    {
+        $serviceItemId = (int)($input['service_item_id'] ?? 0);
+        $componentId = (int)($input['catalog_work_component_id'] ?? 0);
+        if ($serviceItemId <= 0 && $componentId <= 0) {
+            return $input;
+        }
+        $organizationId = function_exists('request_client_org_id') ? \request_client_org_id() : null;
+        $context = $this->unscheduledServices()->prepare(
+            $userId,
+            $input,
+            $manageAll,
+            $organizationId ?: null
+        );
+        foreach ($context as $key => $value) {
+            $input[$key] = $value;
+        }
+        $input['_service_context'] = true;
+        $input['billable'] = $context['billing_treatment'] === 'ready' ? '1' : '0';
+        return $input;
+    }
+
+    private function unscheduledServices(): UnscheduledServiceJobService
+    {
+        return new UnscheduledServiceJobService(
+            $this->pdo,
+            new CompensationRuleService($this->pdo)
+        );
+    }
+
+    private function withWorkTypeBillingContext(array $input, bool $manageAll): array
+    {
+        if (($manageAll && empty($input['work_assignment_id'])) || !empty($input['service_item_id'])) {
+            return $input;
+        }
+        $workTypeId = (int)($input['work_type_id'] ?? 0);
+        if ($workTypeId <= 0) {
+            return $input;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT default_treatment FROM work_type_billing_defaults WHERE work_type_id=?'
+        );
+        $stmt->execute([$workTypeId]);
+        $treatment = (string)($stmt->fetchColumn() ?: 'undecided');
+        $input['billing_treatment'] = match ($treatment) {
+            'hourly' => 'ready',
+            'fixed_price_included' => 'included_fixed',
+            'internal' => 'nonbillable',
+            default => 'undecided',
+        };
+        $input['billable'] = $input['billing_treatment'] === 'ready' ? '1' : '0';
+        return $input;
     }
 
     private function explicitBillableFlag(array $input): int

@@ -36,16 +36,16 @@ compatibility API.
    users use **Employee Pay**. The Workforce Overview summarizes time and pay.
 
 Timekeeping managers can enter time for any active PA account. Client, project,
-and open hourly-invoice context is optional for managers. Employees never see
-direct client or invoice details and can select only assigned projects.
+and mutable draft-invoice context is optional for managers. Employees never see
+direct client or invoice rates and select only the services and Work Activities available to them.
 
 Client billing and worker compensation resolve separately. For hourly client
-billing, PA uses project override, client override, Work Type default, then the
-business fallback billing rate. Compensation uses the most specific valid
-assignment or service-component rule before Work Type and worker/business
+billing, PA uses project override, client override, Service Activity rate, Work
+Activity default, then the business fallback billing rate. Compensation uses
+the most specific valid assignment or service-activity rule before Work Activity and worker/business
 fallbacks. Missing required rates block the affected payable or billable step.
 
-See [Service Catalog and Work Types](../workflows/service-catalog-and-work-types.html)
+See [Service Library and Work Activities](../workflows/service-catalog-and-work-types.html)
 for the complete integration and examples.
 
 ## Security boundaries

@@ -41,6 +41,10 @@ final class TimeTrackingCaptureWorkflowTest extends TestCase
         self::assertStringContainsString('value="timer"', $view);
         self::assertStringContainsString('value="exact"', $view);
         self::assertStringContainsString('name="capture_mode"', $view);
+        self::assertStringContainsString('data-workforce-duration-hours', $view);
+        self::assertStringContainsString('data-workforce-duration-minute-part', $view);
+        self::assertStringContainsString('type="hidden" name="duration_minutes"', $view);
+        self::assertStringNotContainsString('Duration (minutes)', $view);
         self::assertStringNotContainsString('<h3 class="card-title">Quick work entry</h3>', $view);
         self::assertStringNotContainsString('<h3 class="card-title">Manual entry</h3>', $view);
         self::assertStringContainsString('name="billing_treatment"', $view);
@@ -49,6 +53,7 @@ final class TimeTrackingCaptureWorkflowTest extends TestCase
         self::assertStringContainsString('<th>Client billing</th>', $view);
         self::assertStringContainsString('<th>Worker compensation</th>', $view);
         self::assertStringContainsString("mode === 'timer' ? 'clock-in' : 'manual-create'", $script);
+        self::assertStringContainsString('const minutes = (hours * 60) + minutePart', $script);
         self::assertStringContainsString('startTime.value = localDateTimeValue(start)', $script);
         self::assertStringContainsString("billingTreatment.value === 'ready' ? '1' : '0'", $script);
         self::assertStringContainsString("registerPage('workforce/time'", $script);
@@ -103,7 +108,9 @@ final class TimeTrackingCaptureWorkflowTest extends TestCase
         self::assertStringContainsString('data-billing-treatment=', $view);
         self::assertStringContainsString('applyWorkTypeBillingDefault', $script);
         self::assertStringContainsString('work_type_billing_rate', $approval);
-        self::assertStringContainsString('$entry[\'work_type_billing_rate\'] ?? $settings[\'default_billing_rate\']', $approval);
+        self::assertStringContainsString('$entry[\'service_activity_billing_rate\']', $approval);
+        self::assertStringContainsString('?? $entry[\'work_type_billing_rate\']', $approval);
+        self::assertStringContainsString('?? $settings[\'default_billing_rate\']', $approval);
     }
 
     public function testWorkforceActionSupportsEditAndInvoiceLinking(): void

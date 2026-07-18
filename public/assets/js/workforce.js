@@ -162,6 +162,8 @@
         const endTime = form.querySelector('[data-workforce-end-time]');
         const workDate = form.querySelector('[data-workforce-work-date]');
         const durationMinutes = form.querySelector('[data-workforce-duration-minutes]');
+        const durationHours = form.querySelector('[data-workforce-duration-hours]');
+        const durationMinutePart = form.querySelector('[data-workforce-duration-minute-part]');
         const durationStart = form.querySelector('[data-workforce-duration-start]');
         const exactStart = form.querySelector('[data-workforce-exact-start]');
         const exactEnd = form.querySelector('[data-workforce-exact-end]');
@@ -192,7 +194,8 @@
             if (captureModeValue) captureModeValue.value = mode;
             if (submitLabel) submitLabel.textContent = mode === 'timer' ? 'Start timer' : 'Record time';
             setRequired(workDate, mode === 'duration');
-            setRequired(durationMinutes, mode === 'duration');
+            setRequired(durationHours, mode === 'duration');
+            setRequired(durationMinutePart, mode === 'duration');
             setRequired(exactStart, mode === 'exact');
             setRequired(exactEnd, mode === 'exact');
             if (startTime) startTime.value = '';
@@ -242,25 +245,34 @@
                 return;
             }
 
-            const minutes = durationMinutes ? Number.parseInt(durationMinutes.value, 10) : 0;
+            const hours = durationHours ? Number.parseInt(durationHours.value, 10) : 0;
+            const minutePart = durationMinutePart ? Number.parseInt(durationMinutePart.value, 10) : 0;
+            const minutes = (hours * 60) + minutePart;
             const dateValue = workDate ? workDate.value : '';
             const timeValue = durationStart && durationStart.value ? durationStart.value : '00:00';
             const start = new Date(dateValue + 'T' + timeValue);
-            if (!dateValue || !Number.isFinite(minutes) || minutes < 1 || minutes > 1440 || Number.isNaN(start.getTime())) {
+            const durationValid = Number.isFinite(hours) && Number.isFinite(minutePart)
+                && hours >= 0 && hours <= 24 && minutePart >= 0 && minutePart <= 59
+                && minutes >= 1 && minutes <= 1440;
+            if (!dateValue || !durationValid || Number.isNaN(start.getTime())) {
                 event.preventDefault();
-                if (durationMinutes) {
-                    durationMinutes.setCustomValidity('Enter a duration from 1 to 1,440 minutes.');
-                    durationMinutes.reportValidity();
+                if (durationHours) {
+                    durationHours.setCustomValidity('Enter a duration between 1 minute and 24 hours.');
+                    durationHours.reportValidity();
                 }
                 return;
             }
-            if (durationMinutes) durationMinutes.setCustomValidity('');
+            if (durationHours) durationHours.setCustomValidity('');
+            if (durationMinutes) durationMinutes.value = String(minutes);
             startTime.value = localDateTimeValue(start);
             endTime.value = localDateTimeValue(new Date(start.getTime() + (minutes * 60000)));
         });
 
-        if (durationMinutes) durationMinutes.addEventListener('input', function () {
-            durationMinutes.setCustomValidity('');
+        [durationHours, durationMinutePart].forEach(function (input) {
+            if (!input) return;
+            input.addEventListener('input', function () {
+                if (durationHours) durationHours.setCustomValidity('');
+            });
         });
         if (exactEnd) exactEnd.addEventListener('input', function () { exactEnd.setCustomValidity(''); });
         updateMode();
@@ -272,6 +284,9 @@
         const assignmentSelect = assignment && assignment.tagName === 'SELECT' ? assignment : null;
         const job = form.querySelector('[name="job_id"]');
         const workType = form.querySelector('[name="work_type_id"]');
+        const service = form.querySelector('[data-workforce-service]');
+        const serviceActivity = form.querySelector('[data-workforce-service-activity]');
+        const unclassifiedWarning = form.querySelector('[data-workforce-unclassified-warning]');
         const billingTreatment = form.querySelector('[data-workforce-billing-treatment]');
         const workTypeGuidance = form.querySelector('[data-workforce-work-type-guidance]');
         const client = form.querySelector('[data-workforce-client]');
@@ -281,11 +296,14 @@
 
         function applyWorkTypeBillingDefault() {
             if (!workType || !billingTreatment) return;
-            const option = workType.options[workType.selectedIndex];
+            const option = serviceActivity && serviceActivity.value
+                ? serviceActivity.options[serviceActivity.selectedIndex]
+                : (workType.tagName === 'SELECT' ? workType.options[workType.selectedIndex] : null);
             const treatmentMap = {
                 internal: 'nonbillable',
                 fixed_price_included: 'included_fixed',
                 hourly: 'ready',
+                base_overage: 'included_fixed',
                 undecided: 'undecided'
             };
             const treatment = option && option.value
@@ -295,7 +313,7 @@
             billingTreatment.dispatchEvent(new Event('change', { bubbles: true }));
             if (!workTypeGuidance) return;
             if (!option || !option.value) {
-                workTypeGuidance.textContent = 'Selecting a Work Type can apply its client-billing default. Worker pay remains separate.';
+                workTypeGuidance.textContent = 'Choose a Service and Work Activity to apply the owner-defined billing and compensation rules.';
                 return;
             }
             if (treatment === 'ready') {
@@ -312,6 +330,39 @@
             }
         }
 
+        function filterServiceActivities() {
+            if (!service || !serviceActivity) return;
+            const serviceId = service.value;
+            const matches = [];
+            Array.from(serviceActivity.options).forEach(function (option) {
+                if (!option.value) return;
+                const visible = !!serviceId && option.dataset.serviceId === serviceId;
+                option.hidden = !visible;
+                option.disabled = !visible;
+                if (visible) matches.push(option);
+            });
+            if (!serviceId) {
+                serviceActivity.value = '';
+                serviceActivity.disabled = true;
+                serviceActivity.required = false;
+            } else {
+                serviceActivity.disabled = false;
+                serviceActivity.required = true;
+                const selected = serviceActivity.options[serviceActivity.selectedIndex];
+                if (!selected || selected.disabled) {
+                    serviceActivity.value = matches.length === 1 ? matches[0].value : '';
+                }
+            }
+            const activityOption = serviceActivity.options[serviceActivity.selectedIndex];
+            workType.value = activityOption && activityOption.value ? (activityOption.dataset.workTypeId || '') : '';
+            if (unclassifiedWarning) {
+                unclassifiedWarning.hidden = !!serviceId && !!serviceActivity.value;
+            }
+            serviceActivity.closest('[data-workforce-search-select]')
+                ?.dispatchEvent(new CustomEvent('workforce:refilter'));
+            applyWorkTypeBillingDefault();
+        }
+
         function setClient(id, name) {
             if (!client) return;
             client.dispatchEvent(new CustomEvent('workforce:set-client', {
@@ -325,7 +376,10 @@
                 if (!select) return;
                 Array.from(select.options).forEach(function (option) {
                     if (!option.value || !option.dataset.clientId) return;
-                    const visible = !clientId || option.dataset.clientId === clientId;
+                    const clientMatches = !clientId || !option.dataset.clientId || option.dataset.clientId === clientId;
+                    const serviceMatches = select !== job || !service || !service.value
+                        || option.dataset.serviceId === service.value;
+                    const visible = clientMatches && serviceMatches;
                     option.hidden = !visible;
                     option.disabled = !visible;
                     if (!visible && option.selected) select.value = '';
@@ -348,6 +402,8 @@
             const option = assignmentSelect.options[assignmentSelect.selectedIndex];
             if (!option || !option.value) return;
             if (job && option.dataset.jobId) job.value = option.dataset.jobId;
+            if (service) service.value = '';
+            if (serviceActivity) serviceActivity.value = '';
             if (workType && option.dataset.workTypeId) workType.value = option.dataset.workTypeId;
             applyWorkTypeBillingDefault();
             if (job) job.dispatchEvent(new Event('change', { bubbles: true }));
@@ -373,10 +429,25 @@
             if (!option) return;
             if (option.dataset.clientId) setClient(option.dataset.clientId, option.dataset.clientName || '');
             if (option.dataset.projectId && project) project.value = option.dataset.projectId;
+            if (service && option.dataset.serviceId) {
+                service.value = option.dataset.serviceId;
+                filterServiceActivities();
+            }
             filterOptions();
         });
-        if (workType) workType.addEventListener('change', applyWorkTypeBillingDefault);
+        if (service) service.addEventListener('change', function () {
+            filterServiceActivities();
+            filterOptions();
+        });
+        if (serviceActivity) serviceActivity.addEventListener('change', function () {
+            const option = serviceActivity.options[serviceActivity.selectedIndex];
+            if (workType) workType.value = option && option.value ? (option.dataset.workTypeId || '') : '';
+            if (unclassifiedWarning) unclassifiedWarning.hidden = !!serviceActivity.value;
+            applyWorkTypeBillingDefault();
+        });
+        if (workType && workType.tagName === 'SELECT') workType.addEventListener('change', applyWorkTypeBillingDefault);
         if (clientSearch && client && client.value) clientSearch.dataset.selectedName = clientSearch.value;
+        filterServiceActivities();
         filterOptions();
         applyWorkTypeBillingDefault();
     }

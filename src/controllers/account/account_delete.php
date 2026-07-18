@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/admin_account_policy.php';
+require_once __DIR__ . '/../../utils/external_ops.php';
 
 $userId = !empty($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : 0;
 
@@ -71,6 +72,15 @@ try {
 
     // Re-insert a single audit record documenting the erasure after clearing system_audit
     audit_log($pdo, 'user.account_deleted', 'user', $userId);
+
+    $externalOpsConfig = pa_external_ops_delivery_config($pdo);
+    if (!empty($externalOpsConfig['enabled'])) {
+        (new \App\Services\ExternalOpsIntegrationService())->enqueueDeprovisionBeforeDelete(
+            $pdo,
+            $userId,
+            (string)$externalOpsConfig['application_key']
+        );
+    }
 
     $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
 

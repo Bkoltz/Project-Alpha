@@ -25,11 +25,11 @@ PA has three document families:
 | Long-term | Monthly, yearly, or recurring work | Scheduled invoices from an active contract |
 | On-demand | As-needed work under an agreement | Invoices generated manually from the active contract |
 
-## Services and Work Types
+## Services and Work Activities
 
-The Item Library stores reusable client-facing services, fees, and packages. Work Types classify internal work and time entries. An Item Library offering can connect to one or more Work Types through internal work components, while client billing and worker compensation remain independent calculations.
+The Service Library stores reusable client-facing services, fees, and packages. Work Activities classify what workers did on time entries. Each service can connect to one or more reusable activities while client billing and worker compensation remain independent calculations.
 
-See [Service Catalog and Work Types](../workflows/service-catalog-and-work-types.html) for the settings, rate precedence, and hourly billing workflow.
+See [Service Library and Work Activities](../workflows/service-catalog-and-work-types.html) for the settings, rate precedence, and hourly billing workflow.
 
 ## Public Links
 

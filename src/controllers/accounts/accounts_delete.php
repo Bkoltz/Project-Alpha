@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/admin_account_policy.php';
+require_once __DIR__ . '/../../utils/external_ops.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -40,6 +41,15 @@ try {
     $pdo->prepare('UPDATE receipts SET uploaded_by = NULL WHERE uploaded_by = ?')->execute([$userId]);
     $pdo->prepare('UPDATE form_documents SET uploaded_by = NULL WHERE uploaded_by = ?')->execute([$userId]);
     $pdo->prepare('UPDATE form_categories SET created_by = NULL WHERE created_by = ?')->execute([$userId]);
+
+    $externalOpsConfig = pa_external_ops_delivery_config($pdo);
+    if (!empty($externalOpsConfig['enabled'])) {
+        (new \App\Services\ExternalOpsIntegrationService())->enqueueDeprovisionBeforeDelete(
+            $pdo,
+            $userId,
+            (string)$externalOpsConfig['application_key']
+        );
+    }
 
     // Delete the user account
     $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
