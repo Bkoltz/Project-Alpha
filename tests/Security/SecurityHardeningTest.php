@@ -485,6 +485,7 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString('github.event.pull_request.merge_commit_sha', $docker);
         self::assertStringContainsString('cancel-in-progress: true', $docker);
         self::assertStringContainsString('github.event_name }}" == "pull_request_target"', $docker);
+        self::assertSame(3, substr_count($docker, 'cache-to: type=gha,mode=max,ignore-error=true'));
     }
 
     public function testNavigationDiagnosticsDoNotTreatExternalInputAsCodeOrMarkup(): void
