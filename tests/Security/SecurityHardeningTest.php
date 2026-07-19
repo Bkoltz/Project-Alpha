@@ -484,7 +484,8 @@ final class SecurityHardeningTest extends TestCase
             "console.error('Page initializer failed for ' + normalizedPage, err);",
             $navigation
         );
-        self::assertStringContainsString("scripts.length === 0 && doc.querySelector('script')", $navigation);
+        self::assertStringContainsString("newMainContent.querySelectorAll('script')", $navigation);
+        self::assertStringNotContainsString("scripts.length === 0 && doc.querySelector('script')", $navigation);
         self::assertStringNotContainsString('html.match(/<script', $navigation);
     }
 

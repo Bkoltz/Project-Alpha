@@ -15,6 +15,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !csrf_validate()) {
 $action = (string)($_POST['action'] ?? '');
 $types = ['service','fee','bundle'];
 $billingUnits = ['each','hour','day','mile','project'];
+$pricingModels = ['fixed','hourly','base_overage'];
 $methods = ['nonpayable','hourly','fixed','base_overage','percentage'];
 $bases = ['gross_line','net_line','cash_collected'];
 $triggers = ['completed_approved','delivered','invoice_paid','manual_release'];
@@ -35,12 +36,66 @@ $uniqueWorkActivityCode = static function (PDO $pdo, string $name): string {
 };
 
 try {
+    if ($action === 'purge') {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) throw new DomainException('Invalid service ID.');
+        $pdo->beginTransaction();
+        $exists = $pdo->prepare('SELECT item_name FROM item_library WHERE id=? FOR UPDATE');
+        $exists->execute([$id]);
+        if (!$exists->fetchColumn()) throw new DomainException('Service not found.');
+        $referenceChecks = [
+            ['quote_items', 'item_library_id'],
+            ['contract_items', 'item_library_id'],
+            ['invoice_items', 'item_library_id'],
+            ['catalog_bundle_items', 'child_item_library_id'],
+        ];
+        foreach ($referenceChecks as [$table, $column]) {
+            $reference = $pdo->prepare("SELECT 1 FROM {$table} WHERE {$column}=? LIMIT 1");
+            $reference->execute([$id]);
+            if ($reference->fetchColumn()) {
+                throw new DomainException('This service has already been used. Deactivate it to preserve historical documents and Jobs.');
+            }
+        }
+        $jobReference = $pdo->prepare(
+            'SELECT 1 FROM job_work_components jwc
+             WHERE jwc.item_library_id=? OR jwc.catalog_work_component_id IN (
+               SELECT id FROM catalog_work_components WHERE item_library_id=?
+             ) LIMIT 1'
+        );
+        $jobReference->execute([$id, $id]);
+        if ($jobReference->fetchColumn()) {
+            throw new DomainException('This service has already been used by a Job. Deactivate it to preserve history.');
+        }
+        $linkedActivity = $pdo->prepare('SELECT work_type_id FROM catalog_work_components WHERE item_library_id=? AND is_active=1 LIMIT 1 FOR UPDATE');
+        $linkedActivity->execute([$id]);
+        $linkedWorkTypeId = (int)($linkedActivity->fetchColumn() ?: 0);
+        if ($linkedWorkTypeId > 0) {
+            foreach ([['work_time_entries','work_type_id'],['job_work_components','work_type_id'],['worker_compensation_rules','work_type_id']] as [$table,$column]) {
+                $reference = $pdo->prepare("SELECT 1 FROM {$table} WHERE {$column}=? LIMIT 1");
+                $reference->execute([$linkedWorkTypeId]);
+                if ($reference->fetchColumn()) throw new DomainException('The linked Work Activity has already been used. Deactivate the pair to preserve workforce history.');
+            }
+        }
+        $pdo->prepare('DELETE FROM catalog_bundle_items WHERE bundle_item_library_id=?')->execute([$id]);
+        $pdo->prepare('DELETE FROM catalog_work_components WHERE item_library_id=?')->execute([$id]);
+        $pdo->prepare('DELETE FROM item_library WHERE id=?')->execute([$id]);
+        if ($linkedWorkTypeId > 0) $pdo->prepare('DELETE FROM work_types WHERE id=?')->execute([$linkedWorkTypeId]);
+        $pdo->commit();
+        header("Location: {$redirect}&purged=1");
+        exit;
+    }
     if ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) throw new DomainException('Invalid service ID.');
         $pdo->beginTransaction();
         $pdo->prepare('UPDATE item_library SET is_active=0 WHERE id=?')->execute([$id]);
-        $pdo->prepare('UPDATE catalog_work_components SET is_active=0 WHERE item_library_id=?')->execute([$id]);
+        $linked = $pdo->prepare('SELECT work_type_id FROM catalog_work_components WHERE item_library_id=? AND is_active=1 FOR UPDATE');
+        $linked->execute([$id]);
+        $linkedWorkTypeIds = array_map('intval', $linked->fetchAll(PDO::FETCH_COLUMN));
+        if ($linkedWorkTypeIds) {
+            $placeholders = implode(',', array_fill(0, count($linkedWorkTypeIds), '?'));
+            $pdo->prepare("UPDATE work_types SET is_active=0 WHERE id IN ({$placeholders})")->execute($linkedWorkTypeIds);
+        }
         $pdo->commit();
         header("Location: {$redirect}&deleted=1");
         exit;
@@ -51,6 +106,10 @@ try {
     $itemName = trim((string)($_POST['item_name'] ?? ''));
     $description = trim((string)($_POST['description'] ?? ''));
     $unitPrice = round((float)($_POST['unit_price'] ?? 0), 2);
+    $pricingModel = (string)($_POST['client_pricing_model'] ?? (((string)($_POST['billing_unit'] ?? 'each')) === 'hour' ? 'hourly' : 'fixed'));
+    $clientIncludedMinutes = trim((string)($_POST['client_included_minutes'] ?? '')) === '' ? null : max(0, (int)$_POST['client_included_minutes']);
+    $clientOverageRate = trim((string)($_POST['client_overage_rate'] ?? '')) === '' ? null : max(0, (float)$_POST['client_overage_rate']);
+    $pricingCurrency = strtoupper(trim((string)($_POST['pricing_currency'] ?? 'USD')));
     $entryType = (string)($_POST['entry_type'] ?? 'service');
     $billingUnit = (string)($_POST['billing_unit'] ?? 'each');
     $fulfillmentNotes = trim((string)($_POST['fulfillment_notes'] ?? ''));
@@ -58,27 +117,66 @@ try {
     if ($itemName === '') throw new DomainException('Service name is required.');
     if ($action === 'update' && $id <= 0) throw new DomainException('Invalid service ID.');
     if ($unitPrice < 0) throw new DomainException('Client price cannot be negative.');
-    if (!in_array($entryType, $types, true) || !in_array($billingUnit, $billingUnits, true)) {
+    if (!in_array($entryType, $types, true) || !in_array($billingUnit, $billingUnits, true) || !in_array($pricingModel, $pricingModels, true)) {
         throw new DomainException('Choose valid service settings.');
     }
+    if (!preg_match('/^[A-Z]{3}$/', $pricingCurrency)) throw new DomainException('Pricing currency must use a three-letter code.');
+    if ($pricingModel === 'base_overage' && ($clientIncludedMinutes === null || $clientOverageRate === null)) {
+        throw new DomainException('Base-plus-overage pricing requires included minutes and an hourly overage rate.');
+    }
+    if ($pricingModel !== 'base_overage') { $clientIncludedMinutes = null; $clientOverageRate = null; }
+    if ($pricingModel === 'hourly') $billingUnit = 'hour';
     $components = json_decode((string)($_POST['components_json'] ?? '[]'), true);
     if (!is_array($components)) throw new DomainException('Work Activity settings are invalid.');
+    if (array_key_exists('activity_link_mode', $_POST)) {
+        $linkMode = (string)$_POST['activity_link_mode'];
+        if (!in_array($linkMode, ['none','new','existing'], true)) throw new DomainException('Choose a valid Work Activity link.');
+        if ($entryType === 'bundle' && $linkMode !== 'none') throw new DomainException('Packages use the Work Activity links from their contained Services.');
+        $components = [];
+        if ($linkMode !== 'none') {
+            $requestedWorkType = $linkMode === 'new' ? 'new' : (string)max(0, (int)($_POST['linked_work_type_id'] ?? 0));
+            if ($requestedWorkType !== 'new' && (int)$requestedWorkType <= 0) throw new DomainException('Choose an available Work Activity.');
+            $components[] = [
+                'id' => max(0, (int)($_POST['linked_component_id'] ?? 0)),
+                'work_type_id' => $requestedWorkType,
+                'name' => $itemName,
+                'description' => null,
+                'quantity_behavior' => 'per_line',
+                'expected_duration_minutes' => null,
+                'assignment_required' => 1,
+                'client_billing_treatment' => match ($pricingModel) {
+                    'hourly' => 'hourly',
+                    'base_overage' => 'base_overage',
+                    default => 'fixed_price_included',
+                },
+                'client_billing_rate' => $pricingModel === 'hourly' ? $unitPrice : null,
+                'client_included_minutes' => $clientIncludedMinutes,
+                'client_overage_rate' => $clientOverageRate,
+                'client_billing_currency' => $pricingCurrency,
+                // Compatibility snapshots only. Work Activity/effective-dated rules remain authoritative for pay.
+                'compensation_method' => 'nonpayable',
+                'percentage_basis' => 'net_line',
+                'eligibility_trigger' => 'completed_approved',
+                'currency' => $pricingCurrency,
+            ];
+        }
+    }
     $bundleItems = json_decode((string)($_POST['bundle_items_json'] ?? '[]'), true);
     if (!is_array($bundleItems)) throw new DomainException('Bundle contents are invalid.');
 
     $pdo->beginTransaction();
     if ($action === 'create') {
         $stmt = $pdo->prepare(
-            'INSERT INTO item_library (item_name,description,entry_type,unit_price,billing_unit,tax_behavior,fulfillment_notes,category,is_active)
-             VALUES (?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO item_library (item_name,description,entry_type,unit_price,client_pricing_model,client_included_minutes,client_overage_rate,pricing_currency,billing_unit,tax_behavior,fulfillment_notes,category,is_active)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
-        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive]);
+        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$pricingModel,$clientIncludedMinutes,$clientOverageRate,$pricingCurrency,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive]);
         $id = (int)$pdo->lastInsertId();
     } else {
         $stmt = $pdo->prepare(
-            'UPDATE item_library SET item_name=?,description=?,entry_type=?,unit_price=?,billing_unit=?,tax_behavior=?,fulfillment_notes=?,category=?,is_active=? WHERE id=?'
+            'UPDATE item_library SET item_name=?,description=?,entry_type=?,unit_price=?,client_pricing_model=?,client_included_minutes=?,client_overage_rate=?,pricing_currency=?,billing_unit=?,tax_behavior=?,fulfillment_notes=?,category=?,is_active=? WHERE id=?'
         );
-        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive,$id]);
+        $stmt->execute([$itemName,$description ?: null,$entryType,$unitPrice,$pricingModel,$clientIncludedMinutes,$clientOverageRate,$pricingCurrency,$billingUnit,'inherit',$fulfillmentNotes ?: null,$billingUnit === 'hour' ? 'Hourly' : null,$isActive,$id]);
         if ($stmt->rowCount() === 0) {
             $exists = $pdo->prepare('SELECT 1 FROM item_library WHERE id=?'); $exists->execute([$id]);
             if (!$exists->fetchColumn()) throw new DomainException('Service not found.');
@@ -134,10 +232,20 @@ try {
                     $basis,$trigger,strtoupper((string)($component['currency'] ?? 'USD')),$userId ?: null,
                 ]);
                 $workTypeId = (int)$pdo->lastInsertId();
-                $workTypeTreatment = $clientBillingTreatment === 'base_overage' ? 'fixed_price_included' : $clientBillingTreatment;
+                $workTypeTreatment = 'undecided';
                 $pdo->prepare('INSERT INTO work_type_billing_defaults (work_type_id,default_treatment,default_billing_rate,currency,created_by,updated_by) VALUES (?,?,?,?,?,?)')
-                    ->execute([$workTypeId,$workTypeTreatment,$clientBillingRate,$clientBillingCurrency,$userId ?: null,$userId ?: null]);
+                    ->execute([$workTypeId,$workTypeTreatment,null,$clientBillingCurrency,$userId ?: null,$userId ?: null]);
             }
+        }
+        $pdo->prepare('UPDATE work_types SET is_active=1 WHERE id=?')->execute([$workTypeId]);
+        $exclusive = $pdo->prepare(
+            'SELECT c.id,i.item_name FROM catalog_work_components c
+             JOIN item_library i ON i.id=c.item_library_id
+             WHERE c.work_type_id=? AND c.is_active=1 AND c.item_library_id<>? LIMIT 1 FOR UPDATE'
+        );
+        $exclusive->execute([$workTypeId,$id]);
+        if ($linkedElsewhere = $exclusive->fetch(PDO::FETCH_ASSOC)) {
+            throw new DomainException('That Work Activity is already linked to ' . (string)$linkedElsewhere['item_name'] . '. Unlink it before creating another one-to-one link.');
         }
         $values = [
             $workTypeId,$name,trim((string)($component['description'] ?? '')) ?: null,$quantityBehavior,

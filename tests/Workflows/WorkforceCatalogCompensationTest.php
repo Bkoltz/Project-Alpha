@@ -127,11 +127,19 @@ final class WorkforceCatalogCompensationTest extends TestCase
         self::assertStringContainsString('Cache-Control: private, no-store', $download);
     }
 
-    public function testCatalogDeactivationPreservesHistoricalReferences(): void
+    public function testCatalogDeactivationPreservesHistoryAndPermanentDeletionIsGuarded(): void
     {
         $handler = (string)file_get_contents(dirname(__DIR__,2).'/src/controllers/settings/item_library_handler.php');
         self::assertStringContainsString('UPDATE item_library SET is_active=0', $handler);
-        self::assertStringNotContainsString('DELETE FROM item_library', $handler);
+        self::assertStringContainsString("['quote_items', 'item_library_id']", $handler);
+        self::assertStringContainsString("['contract_items', 'item_library_id']", $handler);
+        self::assertStringContainsString("['invoice_items', 'item_library_id']", $handler);
+        self::assertStringContainsString('job_work_components', $handler);
+        self::assertStringContainsString('DELETE FROM item_library WHERE id=?', $handler);
+        self::assertLessThan(
+            strpos($handler, 'DELETE FROM item_library WHERE id=?'),
+            strpos($handler, "['quote_items', 'item_library_id']")
+        );
     }
 
     public function testApisUseStandardResponsesAndSchemaError(): void

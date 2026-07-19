@@ -25,6 +25,12 @@ final class TrackedTimeInvoiceAggregationTest extends TestCase
         $timeView = (string)file_get_contents(
             $this->root . '/src/views/pages/workforce/time.php'
         );
+        $invoiceEdit = (string)file_get_contents(
+            $this->root . '/src/views/pages/invoice/invoices-edit.php'
+        );
+        $workforceAction = (string)file_get_contents(
+            $this->root . '/src/controllers/workforce/action.php'
+        );
 
         self::assertStringContainsString("WHERE i.status='draft' AND i.finalized_at IS NULL", $timekeeping);
         self::assertStringNotContainsString("WHERE i.billing_mode='hourly'", $timekeeping);
@@ -34,6 +40,12 @@ final class TrackedTimeInvoiceAggregationTest extends TestCase
         self::assertStringContainsString('DocumentPolicy::assertMutable', $linker);
         self::assertStringContainsString('$availableInvoices = array_values(array_filter(', $timeView);
         self::assertStringContainsString('foreach ($availableInvoices as $invoice)', $timeView);
+        self::assertStringContainsString('name="invoice_id" data-workforce-invoice', $timeView);
+        self::assertStringContainsString('Add confirmed time to this draft', $invoiceEdit);
+        self::assertStringContainsString("t.status='approved' AND t.workflow_status='confirmed'", $invoiceEdit);
+        self::assertStringContainsString('name="return_to" value="invoice-edit"', $invoiceEdit);
+        self::assertStringContainsString('workforce_link_preselected_invoice', $workforceAction);
+        self::assertStringContainsString("=== 'invoice-edit'", $workforceAction);
     }
 
     public function testTrackedTimeLinesUseExistingMappingsAndAggregateMatchingSources(): void

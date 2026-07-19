@@ -40,7 +40,6 @@ $selectedIsOwner = $selectedRelationship === 'owner' && empty($selectedUser['rel
 $projects = $service->projectsFor($selectedUserId, $manageAll);
 $jobs = $service->jobsFor($selectedUserId, $manageAll);
 $workTypes = $service->workTypes();
-$serviceActivities = $service->serviceActivities();
 $assignments = $service->assignmentsFor($selectedUserId);
 $offeredAssignments = $selectedUserId === $userId ? $service->offeredAssignmentsFor($selectedUserId) : [];
 $canEditInvoices = $manageAll && user_can($pdo, $userId, 'invoices.edit', 0);
@@ -158,7 +157,7 @@ foreach ($entries as $entry) {
 }
 ?>
 
-<section class="workforce-page" data-workforce-time-page data-running-start="<?= $h($running['start_time'] ?? '') ?>">
+<section class="workforce-page" data-workforce-page data-workforce-time-page data-running-start="<?= $h($running['start_time'] ?? '') ?>">
   <div class="workforce-head">
     <div>
       <p class="workforce-eyebrow">Workforce</p>
@@ -280,37 +279,40 @@ foreach ($entries as $entry) {
         </div>
       </section>
 
+      <fieldset class="workforce-form-section workforce-form-section--primary">
+        <legend>What did you do?</legend>
+        <div class="workforce-context-grid">
+          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Work Activity <small>optional</small></span><input class="input input--filter" type="search" placeholder="Search Work Activities" autocomplete="off" data-workforce-option-filter><select class="input" name="work_type_id" data-workforce-work-type><option value="">Unclassified</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>" data-billing-treatment="<?= $h($type['billing_treatment']) ?>" data-billing-rate="<?= $h($type['default_billing_rate'] ?? '') ?>" data-billing-currency="<?= $h($type['billing_currency'] ?? 'USD') ?>"><?= $h($type['name']) ?></option><?php endforeach; ?></select><small data-workforce-work-type-guidance>Activities classify the work. Owners define billing and compensation separately.</small></label>
+          <label class="field"><span class="label">Description <small>optional unless required by settings</small></span><textarea class="input" name="description" rows="2" placeholder="What work was completed?"></textarea></label>
+        </div>
+        <p class="alert alert-warning workforce-unclassified-warning" data-workforce-unclassified-warning>Unclassified time is allowed and remains in Work Review until an owner or manager adds the missing context.</p>
+      </fieldset>
+
       <fieldset class="workforce-form-section">
-        <legend>Work context <small>optional</small></legend>
+        <legend>Job context <small>optional while recording</small></legend>
         <div class="workforce-context-grid">
           <?php if ($manageAll): ?>
             <label class="field workforce-combobox" data-workforce-client-combobox><span class="label">Client</span><input class="input" type="search" autocomplete="off" placeholder="Type to search clients" data-workforce-client-search aria-autocomplete="list" aria-expanded="false"><input type="hidden" name="client_id" data-workforce-client><span class="workforce-combobox__results" data-workforce-client-results role="listbox" hidden></span></label>
           <?php endif; ?>
           <label class="field workforce-search-select" data-workforce-search-select><span class="label"><?= $manageAll ? 'Project' : 'Assigned project' ?></span><input class="input input--filter" type="search" placeholder="Search projects" autocomplete="off" data-workforce-option-filter><select class="input" name="project_id" data-workforce-project><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" data-client-id="<?= (int)($project['client_id'] ?? 0) ?>" data-client-name="<?= $h($project['client_name'] ?? '') ?>"><?= $h($project['name']) ?><?= !empty($project['client_name']) ? ' · ' . $h($project['client_name']) : '' ?></option><?php endforeach; ?></select></label>
-          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Service Job <small>optional</small></span><input class="input input--filter" type="search" placeholder="Search service Jobs" autocomplete="off" data-workforce-option-filter><select class="input" name="job_id" data-workforce-job><option value="">Create a new Job for this entry</option><?php foreach ($jobs as $job): ?><?php if (($job['job_origin'] ?? 'planned') !== 'unscheduled_time') continue; $jobClientName = trim((string)($job['client_name'] ?? '')); ?><option value="<?= (int)$job['id'] ?>" data-client-id="<?= (int)($job['client_id'] ?? 0) ?>" data-client-name="<?= $h($jobClientName) ?>" data-project-id="<?= (int)($job['project_id'] ?? 0) ?>" data-service-id="<?= (int)($job['service_item_id'] ?? 0) ?>"><?= $h($job['job_code'] . ($jobClientName !== '' ? ' · ' . $jobClientName : '') . (($job['status'] ?? '') === 'completed' ? ' · completed (reuse)' : '')) ?></option><?php endforeach; ?></select><small>Leave this blank to create a one-entry service Job. Select a completed service Job only for follow-up work on the same service. Use Accepted assignment for scheduled Jobs.</small></label>
-          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Service</span><input class="input input--filter" type="search" placeholder="Search Services" autocomplete="off" data-workforce-option-filter><select class="input" name="service_item_id" data-workforce-service><option value="">Unclassified / no Service</option><?php $seenServices = []; foreach ($serviceActivities as $activity): ?><?php $serviceItemId = (int)$activity['service_item_id']; if (isset($seenServices[$serviceItemId])) continue; $seenServices[$serviceItemId] = true; ?><option value="<?= $serviceItemId ?>"><?= $h($activity['service_name']) ?></option><?php endforeach; ?></select><small>Choose the service delivered to the client. Use unclassified only as an exception.</small></label>
-          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Work Activity</span><input class="input input--filter" type="search" placeholder="Search Work Activities" autocomplete="off" data-workforce-option-filter><select class="input" name="catalog_work_component_id" data-workforce-service-activity disabled><option value="">Choose a Service first</option><?php foreach ($serviceActivities as $activity): ?><option value="<?= (int)$activity['catalog_work_component_id'] ?>" data-service-id="<?= (int)$activity['service_item_id'] ?>" data-work-type-id="<?= (int)$activity['work_type_id'] ?>" data-billing-treatment="<?= $h($activity['client_billing_treatment']) ?>" hidden disabled><?= $h($activity['activity_name']) ?></option><?php endforeach; ?></select><input type="hidden" name="work_type_id" data-workforce-work-type><small data-workforce-work-type-guidance>The activity supplies client billing and worker compensation defaults; workers do not choose financial treatment.</small></label>
+          <label class="field workforce-search-select" data-workforce-search-select><span class="label">Job <small>optional</small></span><input class="input input--filter" type="search" placeholder="Search Jobs" autocomplete="off" data-workforce-option-filter><select class="input" name="job_id" data-workforce-job><option value="">No Job — keep unclassified</option><?php foreach ($jobs as $job): ?><?php $jobClientName = trim((string)($job['client_name'] ?? '')); ?><option value="<?= (int)$job['id'] ?>" data-client-id="<?= (int)($job['client_id'] ?? 0) ?>" data-client-name="<?= $h($jobClientName) ?>" data-project-id="<?= (int)($job['project_id'] ?? 0) ?>" data-service-id="<?= (int)($job['service_item_id'] ?? 0) ?>"><?= $h($job['job_code'] . ($jobClientName !== '' ? ' · ' . $jobClientName : '')) ?></option><?php endforeach; ?></select><small>Billable time needs a Job before it can be added to an invoice.</small></label>
+          <?php if ($manageAll): ?>
+            <label class="field workforce-search-select" data-workforce-search-select><span class="label">Draft invoice <small>optional</small></span><input class="input input--filter" type="search" placeholder="Search draft invoices" autocomplete="off" data-workforce-option-filter><select class="input" name="invoice_id" data-workforce-invoice><option value="">Add to an invoice later</option><?php foreach ($invoices as $invoice): ?><option value="<?= (int)$invoice['id'] ?>" data-client-id="<?= (int)$invoice['client_id'] ?>" data-client-name="<?= $h($invoice['client_name'] ?? '') ?>" data-project-id="<?= (int)($invoice['project_id'] ?? 0) ?>" data-job-id="<?= (int)($invoice['job_id'] ?? 0) ?>"><?= $h(($invoice['client_name'] ?? '') . ' · ' . $invoiceLabel($invoice)) ?></option><?php endforeach; ?></select><small>If selected, confirmed billable time is added to this mutable draft invoice. Finalized invoices are never offered.</small></label>
+          <?php endif; ?>
           <label class="field workforce-search-select" data-workforce-search-select><span class="label">Accepted assignment</span><input class="input input--filter" type="search" placeholder="Search assignments" autocomplete="off" data-workforce-option-filter><select class="input" name="work_assignment_id"><option value="">No assignment</option><?php foreach ($assignments as $assignment): ?><option value="<?= (int)$assignment['id'] ?>" data-job-id="<?= (int)$assignment['job_id'] ?>" data-work-type-id="<?= (int)$assignment['work_type_id'] ?>"><?= $h($assignment['job_code'] . ' · ' . $assignment['name']) ?></option><?php endforeach; ?></select></label>
         </div>
-        <p class="alert alert-warning workforce-unclassified-warning" data-workforce-unclassified-warning>Unclassified time is allowed, but an owner or manager should classify it before billing or compensation is finalized.</p>
-        <label class="field"><span class="label">Description <small>optional unless required by settings</small></span><textarea class="input" name="description" rows="2" placeholder="What work was completed?"></textarea></label>
       </fieldset>
 
-      <div class="workforce-outcome-grid">
+      <?php if ($manageAll): ?><div class="workforce-outcome-grid">
         <fieldset class="workforce-outcome workforce-outcome--billing">
           <legend>Client billing</legend>
-          <?php if ($manageAll): ?>
             <label class="field"><span class="label">Billing treatment</span><select class="input" name="billing_treatment" data-workforce-billing-treatment data-default-treatment="<?= $h($defaultBillingTreatment) ?>"><?php foreach ($billingTreatmentLabels as $value => $label): ?><option value="<?= $h($value) ?>" <?= $value === $defaultBillingTreatment ? 'selected' : '' ?>><?= $h($label) ?></option><?php endforeach; ?></select></label>
             <input type="hidden" name="billable" value="<?= $defaultBillingTreatment === 'ready' ? '1' : '0' ?>" data-workforce-billable>
             <p class="workforce-outcome__summary"><strong data-workforce-billing-summary><?= $h($billingTreatmentLabels[$defaultBillingTreatment]) ?></strong><span>Invoice linking happens after time is confirmed.</span></p>
-          <?php else: ?>
-            <input type="hidden" name="billing_treatment" value="<?= $h($defaultBillingTreatment) ?>" data-workforce-billing-treatment data-default-treatment="<?= $h($defaultBillingTreatment) ?>"><input type="hidden" name="billable" value="<?= $defaultBillingTreatment === 'ready' ? '1' : '0' ?>" data-workforce-billable>
-            <p class="workforce-outcome__summary"><strong><?= $h($billingTreatmentLabels[$defaultBillingTreatment]) ?></strong><span>Adding a Job or Project does not itself link this time to an invoice.</span></p>
-          <?php endif; ?>
         </fieldset>
         <fieldset class="workforce-outcome workforce-outcome--compensation">
           <legend>Worker compensation</legend>
-          <?php if ($manageAll && !$selectedIsOwner): ?>
+          <?php if (!$selectedIsOwner): ?>
             <label class="workforce-outcome__choice"><input type="checkbox" name="is_payable" value="1" <?= $defaultPayable ? 'checked' : '' ?> data-workforce-payable> <span>Eligible for worker compensation<small>Final eligibility is determined after time approval.</small></span></label>
             <p class="workforce-outcome__summary"><strong data-workforce-pay-summary><?= $h($defaultPaySummary) ?></strong><span>Compensation remains separate from client billing.</span></p>
           <?php elseif ($selectedIsOwner): ?>
@@ -319,9 +321,9 @@ foreach ($entries as $entry) {
             <p class="workforce-outcome__summary"><strong>Based on worker pay setup</strong><span>Approval confirms time; compensation rules are applied separately.</span></p>
           <?php endif; ?>
         </fieldset>
-      </div>
+      </div><?php else: ?><input type="hidden" name="billing_treatment" value="<?= $h($defaultBillingTreatment) ?>" data-workforce-billing-treatment data-default-treatment="<?= $h($defaultBillingTreatment) ?>"><input type="hidden" name="billable" value="<?= $defaultBillingTreatment === 'ready' ? '1' : '0' ?>" data-workforce-billable><?php endif; ?>
 
-      <div class="workforce-record-submit"><button class="btn btn-primary" data-workforce-submit-label>Record time</button><small>Invoice link: add later from the confirmed entry.</small></div>
+      <div class="workforce-record-submit"><button class="btn btn-primary" data-workforce-submit-label>Record time</button><small>Workers record work only. Billing and pay rules are owner-controlled.</small></div>
     </form>
   </article>
 
@@ -367,7 +369,7 @@ foreach ($entries as $entry) {
                 || ($canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved' && !empty($entry['owner_self_confirmed']))
             );
             $canonicalBillingState = (string)($entry['billing_state'] ?? '');
-            $billingState = $projectionBilled || !empty($entry['invoice_number'])
+            $billingState = $projectionBilled
                 ? 'Invoiced'
                 : ($entryBillingLabels[$canonicalBillingState] ?? (!empty($entry['billable'])
                     ? ((string)$entry['status'] === 'approved' ? 'Ready to invoice' : 'Available after approval')
@@ -400,6 +402,7 @@ foreach ($entries as $entry) {
                       <div class="workforce-context-grid">
                         <label class="field workforce-combobox" data-workforce-client-combobox><span class="label">Client <small>optional</small></span><input class="input" type="search" value="<?= $h($entry['client_name'] ?? '') ?>" data-selected-name="<?= $h($entry['client_name'] ?? '') ?>" autocomplete="off" placeholder="Type to search clients" data-workforce-client-search aria-autocomplete="list" aria-expanded="false"><input type="hidden" name="client_id" value="<?= (int)($entry['client_id'] ?? 0) ?>" data-workforce-client><span class="workforce-combobox__results" data-workforce-client-results role="listbox" hidden></span></label>
                         <label class="field"><span class="label">Project</span><select class="input" name="project_id" data-workforce-project><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" data-client-id="<?= (int)($project['client_id'] ?? 0) ?>" data-client-name="<?= $h($project['client_name'] ?? '') ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
+                        <label class="field"><span class="label">Draft invoice <small>optional</small></span><select class="input" name="invoice_id" data-workforce-invoice><option value="">Add to an invoice later</option><?php foreach ($invoices as $invoice): ?><option value="<?= (int)$invoice['id'] ?>" data-client-id="<?= (int)$invoice['client_id'] ?>" data-client-name="<?= $h($invoice['client_name'] ?? '') ?>" data-project-id="<?= (int)($invoice['project_id'] ?? 0) ?>" data-job-id="<?= (int)($invoice['job_id'] ?? 0) ?>" <?= (int)($entry['invoice_id'] ?? 0) === (int)$invoice['id'] ? 'selected' : '' ?>><?= $h(($invoice['client_name'] ?? '') . ' · ' . $invoiceLabel($invoice)) ?></option><?php endforeach; ?></select></label>
                       </div>
                     <?php else: ?>
                       <label class="field"><span class="label">Assigned project</span><select class="input" name="project_id"><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
@@ -417,6 +420,24 @@ foreach ($entries as $entry) {
                       </div>
                     <?php endif; ?>
                     <button class="btn btn-primary btn-sm">Save changes</button>
+                  </form>
+                </details>
+              <?php endif; ?>
+              <?php if ($canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved'): ?>
+                <details class="workforce-entry-edit"><summary class="btn btn-sm"><?= $manageAll ? 'Correct' : 'Request correction' ?></summary>
+                  <form class="workforce-form" method="post" action="/?page=workforce/action" data-workforce-entry-form>
+                    <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="correction-request"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>">
+                    <div class="workforce-context-grid workforce-context-grid--time"><label class="field"><span class="label">Corrected start</span><input class="input" type="datetime-local" name="start_time" value="<?= $h($inputTime($entry['start_time'])) ?>" required></label><label class="field"><span class="label">Corrected end</span><input class="input" type="datetime-local" name="end_time" value="<?= $h($inputTime($entry['end_time'])) ?>" required></label></div>
+                    <label class="field"><span class="label">Work Activity</span><select class="input" name="work_type_id"><option value="">Unclassified</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>" <?= (int)$entry['work_type_id'] === (int)$type['id'] ? 'selected' : '' ?>><?= $h($type['name']) ?></option><?php endforeach; ?></select></label>
+                    <?php if ($manageAll): ?><div class="workforce-context-grid">
+                      <label class="field workforce-combobox" data-workforce-client-combobox><span class="label">Client</span><input class="input" type="search" value="<?= $h($entry['client_name'] ?? '') ?>" data-selected-name="<?= $h($entry['client_name'] ?? '') ?>" autocomplete="off" placeholder="Type to search clients" data-workforce-client-search aria-autocomplete="list" aria-expanded="false"><input type="hidden" name="client_id" value="<?= (int)($entry['client_id'] ?? 0) ?>" data-workforce-client><span class="workforce-combobox__results" data-workforce-client-results role="listbox" hidden></span></label>
+                      <label class="field"><span class="label">Project</span><select class="input" name="project_id" data-workforce-project><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" data-client-id="<?= (int)($project['client_id'] ?? 0) ?>" data-client-name="<?= $h($project['client_name'] ?? '') ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
+                      <label class="field"><span class="label">Job</span><select class="input" name="job_id" data-workforce-job><option value="">No Job</option><?php foreach ($jobs as $job): ?><option value="<?= (int)$job['id'] ?>" data-client-id="<?= (int)$job['client_id'] ?>" data-client-name="<?= $h($job['client_name']) ?>" data-project-id="<?= (int)($job['project_id'] ?? 0) ?>" <?= (int)$entry['job_id'] === (int)$job['id'] ? 'selected' : '' ?>><?= $h($job['job_code'] . ' · ' . $job['client_name']) ?></option><?php endforeach; ?></select></label>
+                    </div><?php endif; ?>
+                    <label class="field"><span class="label">Corrected description</span><textarea class="input" name="description" rows="2"><?= $h($entry['description']) ?></textarea></label>
+                    <label class="field"><span class="label">Why is this correction needed?</span><textarea class="input" name="reason" rows="2" maxlength="1000" required></textarea></label>
+                    <p class="muted text-sm mb-0">This does not overwrite confirmed history. An authorized reviewer approves or rejects the proposed revision.</p>
+                    <button class="btn btn-primary btn-sm" type="submit">Submit correction</button>
                   </form>
                 </details>
               <?php endif; ?>
@@ -443,5 +464,3 @@ foreach ($entries as $entry) {
     </div>
   </article>
 </section>
-
-<script src="<?= $h(asset_url('/assets/js/workforce.js')) ?>"></script>

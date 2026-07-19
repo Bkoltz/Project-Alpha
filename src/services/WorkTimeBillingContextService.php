@@ -140,6 +140,14 @@ final class WorkTimeBillingContextService
             'work_type_id' => $suppliedWorkTypeId ?? $this->nullableInt($entry['work_type_id'] ?? null),
         ];
 
+        foreach (['client_id','project_id','job_id','invoice_id'] as $field) {
+            $current = $this->nullableInt($entry[$field] ?? null);
+            $incoming = $this->nullableInt($target[$field] ?? null);
+            if ($current !== null && $incoming !== null && $current !== $incoming) {
+                throw new DomainException('The tracked time has conflicting ' . str_replace('_id', '', $field) . ' context. Confirm the move before changing its billing context.');
+            }
+        }
+
         $changed = false;
         foreach ($target as $field => $value) {
             if ($this->nullableInt($entry[$field] ?? null) !== $value) {

@@ -52,7 +52,13 @@ function nav_can(string $permission): bool {
   <?php endif; ?>
 
   <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('/assets/styles.css'), ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('/assets/settings.css'), ENT_QUOTES, 'UTF-8'); ?>">
   <script src="<?php echo htmlspecialchars(asset_url('/assets/navigation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+  <!-- Settings and Workforce use delegated, idempotent initializers. Loading
+       them with the authenticated shell keeps soft navigation identical to a
+       hard reload, even when a page fragment contains no executable scripts. -->
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/item-library.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/workforce.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
   <script src="<?php echo htmlspecialchars(asset_url('/assets/item-autocomplete.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
   <script>
     (function() {
@@ -235,8 +241,8 @@ function nav_can(string $permission): bool {
               <ul>
                 <li><a href="/?page=workforce/overview" data-page="workforce/overview">Overview</a></li>
                 <?php if (nav_can('timekeeping.self') || $navCanManageAllTime): ?><li><a href="/?page=workforce/time" data-page="workforce/time">Time</a></li><?php endif; ?>
-                <?php if ($navCanReviewTime): ?><li><a href="/?page=workforce/approvals" data-page="workforce/approvals">Approvals</a></li><?php endif; ?>
-                <?php if (nav_can('employee_pay.self') || nav_can('employee_pay.view') || nav_can('employee_pay.manage')): ?><li><a href="/?page=workforce/pay" data-page="workforce/pay">Employee Pay</a></li><?php endif; ?>
+                <?php if ($navCanReviewTime): ?><li><a href="/?page=workforce/approvals" data-page="workforce/approvals">Work Review</a></li><?php endif; ?>
+                <?php if (nav_can('employee_pay.self') || nav_can('employee_pay.view') || nav_can('employee_pay.manage')): ?><li><a href="/?page=workforce/pay" data-page="workforce/pay">Earnings &amp; Pay</a></li><?php endif; ?>
               </ul>
             </li>
             <?php endif; ?>

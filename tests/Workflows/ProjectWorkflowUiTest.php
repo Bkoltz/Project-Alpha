@@ -496,6 +496,9 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('function registerPageInitializer', (string)$navigation);
         self::assertStringContainsString('runPageCleanups();', (string)$navigation);
         self::assertStringContainsString('runPageInitializers(page, mainContent);', (string)$navigation);
+        self::assertStringContainsString('link[rel~="stylesheet"][href]', (string)$navigation);
+        self::assertStringContainsString('await ensurePageStylesheets(stylesheets);', (string)$navigation);
+        self::assertStringContainsString("link.dataset.pageStylesheet = '1'", (string)$navigation);
         self::assertStringContainsString('form[action="/?page=client/clients-create"]', (string)$clientCreate);
         self::assertStringContainsString('dataset.orgCreateReady', (string)$clientCreate);
         self::assertStringContainsString("window.ProjectAlpha.registerPage(['client/clients-create', 'clients-create']", (string)$clientCreate);
@@ -511,13 +514,19 @@ final class ProjectWorkflowUiTest extends TestCase
     {
         $appVersion = file_get_contents($this->root . '/src/utils/app_version.php');
         $header = file_get_contents($this->root . '/src/views/partials/header.php');
+        $settings = file_get_contents($this->root . '/src/views/pages/settings.php');
         $footer = file_get_contents($this->root . '/src/views/partials/footer.php');
         $payments = file_get_contents($this->root . '/src/views/pages/payments/payments-create.php');
         $projectCreate = file_get_contents($this->root . '/src/views/pages/project/projects-create.php');
 
         self::assertStringContainsString('function asset_url(string $path): string', (string)$appVersion);
         self::assertStringContainsString("filemtime(\$filePath)", (string)$appVersion);
+        self::assertStringContainsString("\$_SERVER['DOCUMENT_ROOT']", (string)$appVersion);
         self::assertStringContainsString("asset_url('/assets/styles.css')", (string)$header);
+        self::assertStringContainsString("asset_url('/assets/settings.css')", (string)$header);
+        self::assertStringContainsString("asset_url('/assets/js/item-library.js')", (string)$header);
+        self::assertStringContainsString("asset_url('/assets/js/workforce.js')", (string)$header);
+        self::assertStringNotContainsString("asset_url('/assets/settings.css')", (string)$settings);
         self::assertStringContainsString("asset_url('/assets/js/csrf-auto-link.js')", (string)$footer);
         self::assertStringContainsString("asset_url('/assets/js/payments-create-logic.js')", (string)$payments);
         self::assertStringContainsString("asset_url('/assets/js/project-form.js')", (string)$projectCreate);

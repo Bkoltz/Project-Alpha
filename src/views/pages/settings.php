@@ -46,8 +46,6 @@ if ($tab === '' && $requestedCategory !== '' && isset($settingsRegistry[$request
 $showDashboard = $tab === '' && $activeCategory === null && !$accessDenied;
 $docTabQuery = isset($_GET['doc_tab']) ? preg_replace('/[^a-z]/i', '', (string)$_GET['doc_tab']) : '';
 ?>
-<link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('/assets/settings.css'), ENT_QUOTES, 'UTF-8'); ?>">
-
 <section class="settings-page" data-settings-page>
   <header class="settings-page-header">
     <div>

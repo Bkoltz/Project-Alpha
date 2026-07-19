@@ -22,7 +22,7 @@ $syncOpsAccount=static function(?int $accountId)use($pdo,$userId):void{
 };
 $requiredPermissions=match($action){
  'save-worker-profile','save-business-unit','assign-worker-unit','assign-client-unit','save-worker-scope'=>['workforce.business_units.manage','settings.manage'],
- 'save-work-type','set-work-type-status'=>['workforce.catalog.manage','settings.manage'],
+ 'save-work-type','set-work-type-status','delete-work-type'=>['workforce.catalog.manage','settings.manage'],
  'save-pay-schedule'=>['workforce.pay_periods.manage','settings.manage'],
  'assignment-offer','assignment-approve','assignment-eligible'=>['workforce.assignments.manage'],
  'close-pay-period'=>['workforce.pay_periods.manage'],
@@ -53,22 +53,18 @@ try{
   $method=(string)($_POST['method']??'nonpayable');
   $basis=(string)($_POST['percentage_basis']??'net_line');
   $trigger=(string)($_POST['eligibility_trigger']??'completed_approved');
-  $billingTreatment=(string)($_POST['billing_treatment']??'undecided');
   $compensationCurrency=strtoupper(trim((string)($_POST['compensation_currency']??'USD')));
-  $billingCurrency=strtoupper(trim((string)($_POST['billing_currency']??$compensationCurrency)));
   $amount=($_POST['amount']??'')===''?null:(float)$_POST['amount'];
   $includedMinutes=($_POST['included_minutes']??'')===''?null:(int)$_POST['included_minutes'];
   $overageRate=($_POST['overage_rate']??'')===''?null:(float)$_POST['overage_rate'];
   $percentage=($_POST['percentage']??'')===''?null:(float)$_POST['percentage'];
-  $billingRate=($_POST['billing_rate']??'')===''?null:(float)$_POST['billing_rate'];
 
   if($name===''||$code==='')throw new DomainException('Name and code are required.');
   if(strlen($name)>190||strlen($code)>64)throw new DomainException('The Work Activity name or code is too long.');
   if(!in_array($method,['nonpayable','hourly','fixed','base_overage','percentage'],true))throw new DomainException('Invalid compensation method.');
   if(!in_array($basis,['gross_line','net_line','cash_collected'],true)||!in_array($trigger,['completed_approved','delivered','invoice_paid','manual_release'],true))throw new DomainException('Invalid compensation basis or eligibility trigger.');
-  if(!in_array($billingTreatment,['undecided','internal','fixed_price_included','hourly'],true))throw new DomainException('Invalid client billing treatment.');
-  if(!preg_match('/^[A-Z]{3}$/',$compensationCurrency)||!preg_match('/^[A-Z]{3}$/',$billingCurrency))throw new DomainException('Currencies must use a three-letter code.');
-  foreach([$amount,$overageRate,$percentage,$billingRate] as $number)if($number!==null&&$number<0)throw new DomainException('Rates and amounts cannot be negative.');
+  if(!preg_match('/^[A-Z]{3}$/',$compensationCurrency))throw new DomainException('Currency must use a three-letter code.');
+  foreach([$amount,$overageRate,$percentage] as $number)if($number!==null&&$number<0)throw new DomainException('Rates and amounts cannot be negative.');
   if($includedMinutes!==null&&$includedMinutes<0)throw new DomainException('Included minutes cannot be negative.');
   if($percentage!==null&&$percentage>100)throw new DomainException('Compensation percentage cannot exceed 100.');
   if(in_array($method,['hourly','fixed'],true)&&$amount===null)throw new DomainException('Enter the worker rate or fixed amount.');
@@ -80,7 +76,6 @@ try{
   elseif(in_array($method,['hourly','fixed'],true)){$includedMinutes=null;$overageRate=null;$percentage=null;}
   elseif($method==='base_overage'){$percentage=null;}
   elseif($method==='percentage'){$amount=null;$includedMinutes=null;$overageRate=null;}
-  if($billingTreatment!=='hourly')$billingRate=null;
 
   $pdo->beginTransaction();
   $workTypeValues=[$name,$code,$description!==''?$description:null,isset($_POST['is_active'])?1:0,$method,$amount,$includedMinutes,$overageRate,$percentage,$basis,$trigger,$compensationCurrency];
@@ -92,13 +87,25 @@ try{
    $pdo->prepare('INSERT INTO work_types (name,code,description,is_active,default_compensation_method,default_amount,default_base_minutes,default_overage_rate,default_percentage,default_percentage_basis,default_eligibility_trigger,currency,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array_merge($workTypeValues,[$userId]));
    $id=(int)$pdo->lastInsertId();
   }
-  $pdo->prepare('INSERT INTO work_type_billing_defaults (work_type_id,default_treatment,default_billing_rate,currency,created_by,updated_by) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE default_treatment=VALUES(default_treatment),default_billing_rate=VALUES(default_billing_rate),currency=VALUES(currency),updated_by=VALUES(updated_by)')->execute([$id,$billingTreatment,$billingRate,$billingCurrency,$userId,$userId]);
+  // Client pricing belongs to Services. This compatibility row intentionally has no price.
+  $pdo->prepare('INSERT INTO work_type_billing_defaults (work_type_id,default_treatment,default_billing_rate,currency,created_by,updated_by) VALUES (?,"undecided",NULL,?,?,?) ON DUPLICATE KEY UPDATE default_treatment="undecided",default_billing_rate=NULL,currency=VALUES(currency),updated_by=VALUES(updated_by)')->execute([$id,$compensationCurrency,$userId,$userId]);
   $pdo->commit();
- }elseif($action==='set-work-type-status'){
+  }elseif($action==='set-work-type-status'){
   $id=max(0,(int)($_POST['id']??0));$status=(string)($_POST['status']??'');
   if($id<=0||!in_array($status,['active','inactive'],true))throw new DomainException('Choose a valid Work Activity status.');
+  $pdo->beginTransaction();
+  $linked=$pdo->prepare('SELECT item_library_id FROM catalog_work_components WHERE work_type_id=? AND is_active=1 LIMIT 1 FOR UPDATE');$linked->execute([$id]);$linkedServiceId=(int)($linked->fetchColumn()?:0);
   $update=$pdo->prepare('UPDATE work_types SET is_active=? WHERE id=?');$update->execute([$status==='active'?1:0,$id]);
-  if($update->rowCount()===0){$exists=$pdo->prepare('SELECT 1 FROM work_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new DomainException('Work Activity not found.');}
+   if($update->rowCount()===0){$exists=$pdo->prepare('SELECT 1 FROM work_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new DomainException('Work Activity not found.');}
+  if($linkedServiceId>0)$pdo->prepare('UPDATE item_library SET is_active=? WHERE id=?')->execute([$status==='active'?1:0,$linkedServiceId]);
+  $pdo->commit();
+  }elseif($action==='delete-work-type'){
+   $id=max(0,(int)($_POST['id']??0));if($id<=0)throw new DomainException('Choose a Work Activity to delete.');
+   $pdo->beginTransaction();$exists=$pdo->prepare('SELECT name FROM work_types WHERE id=? FOR UPDATE');$exists->execute([$id]);if(!$exists->fetchColumn())throw new DomainException('Work Activity not found.');
+   foreach([['job_work_components','work_type_id'],['work_time_entries','work_type_id'],['worker_compensation_rules','work_type_id']] as [$table,$column]){$used=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$column}=? LIMIT 1");$used->execute([$id]);if($used->fetchColumn())throw new DomainException('This Work Activity has already been used. Deactivate it to preserve historical time, billing, and compensation records.');}
+   $linked=$pdo->prepare('SELECT item_library_id FROM catalog_work_components WHERE work_type_id=? AND is_active=1 LIMIT 1 FOR UPDATE');$linked->execute([$id]);$linkedServiceId=(int)($linked->fetchColumn()?:0);
+   if($linkedServiceId>0){foreach([['quote_items','item_library_id'],['contract_items','item_library_id'],['invoice_items','item_library_id'],['job_work_components','item_library_id'],['catalog_bundle_items','child_item_library_id']] as [$table,$column]){$used=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$column}=? LIMIT 1");$used->execute([$linkedServiceId]);if($used->fetchColumn())throw new DomainException('The linked Service has already been used. Deactivate the pair to preserve document and Job history.');}$pdo->prepare('DELETE FROM catalog_work_components WHERE work_type_id=?')->execute([$id]);$pdo->prepare('DELETE FROM item_library WHERE id=?')->execute([$linkedServiceId]);}
+   $pdo->prepare('DELETE FROM work_types WHERE id=?')->execute([$id]);$pdo->commit();
  }elseif($action==='save-business-unit'){
   $id=(int)($_POST['id']??0);$name=trim((string)($_POST['name']??''));$code=strtoupper(preg_replace('/[^A-Za-z0-9]+/','_',trim((string)($_POST['code']??$name))));if($name===''||$code==='')throw new DomainException('Name and code are required.');
   if($id)$pdo->prepare('UPDATE business_units SET name=?,code=?,description=?,is_active=? WHERE id=?')->execute([$name,$code,trim((string)($_POST['description']??''))?:null,isset($_POST['is_active'])?1:0,$id]);
@@ -115,7 +122,8 @@ try{
   $pdo->prepare('INSERT INTO worker_capability_scopes (worker_profile_id,capability,access_scope,allowed,granted_by) VALUES (?,?,?,1,?) ON DUPLICATE KEY UPDATE access_scope=VALUES(access_scope),allowed=1,granted_by=VALUES(granted_by)')->execute([(int)$_POST['worker_profile_id'],$capability,$scope,$userId]);
  }elseif($action==='save-pay-schedule'){
   $cadence=(string)($_POST['cadence']??'biweekly');if(!in_array($cadence,['weekly','biweekly','semimonthly','monthly','custom'],true))throw new DomainException('Invalid cadence.');
-  foreach(['workforce_pay_period_cadence'=>$cadence,'workforce_pay_period_anchor'=>trim((string)($_POST['anchor']??'')),'workforce_pay_period_custom_days'=>(string)max(1,min(366,(int)($_POST['custom_days']??14)))] as $key=>$value)$pdo->prepare('INSERT INTO app_config (organization_id,config_key,config_value) VALUES (0,?,?) ON DUPLICATE KEY UPDATE config_value=VALUES(config_value)')->execute([$key,$value]);
+  $deadlineTime=trim((string)($_POST['deadline_time']??'20:00'));if(!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d$/',$deadlineTime))throw new DomainException('Choose a valid finalization deadline.');
+  foreach(['workforce_pay_period_cadence'=>$cadence,'workforce_pay_period_anchor'=>trim((string)($_POST['anchor']??'')),'workforce_pay_period_custom_days'=>(string)max(1,min(366,(int)($_POST['custom_days']??14))),'workforce_period_deadline_time'=>$deadlineTime,'workforce_period_auto_confirm'=>!empty($_POST['auto_confirm'])?'1':'0'] as $key=>$value)$pdo->prepare('INSERT INTO app_config (organization_id,config_key,config_value) VALUES (0,?,?) ON DUPLICATE KEY UPDATE config_value=VALUES(config_value)')->execute([$key,$value]);
  }elseif($action==='assignment-offer'){
   (new JobWorkPlanningService($pdo,new CompensationRuleService($pdo)))->offer((int)$_POST['assignment_id'],(int)$_POST['worker_profile_id'],$userId);
  }elseif($action==='assignment-approve'){

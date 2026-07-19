@@ -445,15 +445,112 @@
             if (unclassifiedWarning) unclassifiedWarning.hidden = !!serviceActivity.value;
             applyWorkTypeBillingDefault();
         });
-        if (workType && workType.tagName === 'SELECT') workType.addEventListener('change', applyWorkTypeBillingDefault);
+        if (workType && workType.tagName === 'SELECT') workType.addEventListener('change', function () {
+            if (unclassifiedWarning) unclassifiedWarning.hidden = !!workType.value;
+            applyWorkTypeBillingDefault();
+        });
         if (clientSearch && client && client.value) clientSearch.dataset.selectedName = clientSearch.value;
         filterServiceActivities();
         filterOptions();
+        if (unclassifiedWarning && workType && workType.tagName === 'SELECT') {
+            unclassifiedWarning.hidden = !!workType.value;
+        }
         applyWorkTypeBillingDefault();
     }
 
-    function initWorkforceTime() {
-        const root = document.querySelector('[data-workforce-time-page]');
+    function initWorkforcePage(context) {
+        const searchRoot = context && context.root ? context.root : document;
+        const root = searchRoot.querySelector('[data-workforce-page]');
+        if (!root || root.dataset.workforcePageReady === '1') return;
+        root.dataset.workforcePageReady = '1';
+
+        const cleanup = [];
+        root.querySelectorAll('[data-workforce-tabs]').forEach(function (tabs) {
+            const buttons = Array.from(tabs.querySelectorAll('[data-workforce-tab]'));
+            const panels = Array.from(tabs.querySelectorAll('[data-workforce-tab-panel]'));
+            if (!buttons.length || !panels.length) return;
+
+            function activate(name, updateHash) {
+                const valid = buttons.some(function (button) { return button.dataset.workforceTab === name; });
+                const selected = valid ? name : buttons[0].dataset.workforceTab;
+                buttons.forEach(function (button) {
+                    const active = button.dataset.workforceTab === selected;
+                    button.classList.toggle('is-active', active);
+                    button.setAttribute('aria-selected', active ? 'true' : 'false');
+                    button.tabIndex = active ? 0 : -1;
+                });
+                panels.forEach(function (panel) {
+                    panel.hidden = panel.dataset.workforceTabPanel !== selected;
+                });
+                if (updateHash && window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', window.location.pathname + window.location.search + '#' + selected);
+                }
+            }
+
+            const click = function (event) {
+                const button = event.target.closest('[data-workforce-tab]');
+                if (!button || !tabs.contains(button)) return;
+                activate(button.dataset.workforceTab, true);
+            };
+            const keydown = function (event) {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                const current = buttons.indexOf(document.activeElement);
+                if (current < 0) return;
+                event.preventDefault();
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+                    : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+                buttons[next].focus();
+                activate(buttons[next].dataset.workforceTab, true);
+            };
+            tabs.addEventListener('click', click);
+            tabs.addEventListener('keydown', keydown);
+            cleanup.push(function () {
+                tabs.removeEventListener('click', click);
+                tabs.removeEventListener('keydown', keydown);
+            });
+            const requestedTab = new URLSearchParams(window.location.search).get('tab') || window.location.hash.slice(1);
+            const tabAliases = { billing: 'billing-context' };
+            activate(tabAliases[requestedTab] || requestedTab, false);
+        });
+
+        root.querySelectorAll('.workforce-payment-form').forEach(function (form) {
+            const statements = Array.from(form.querySelectorAll('[data-workforce-payment-statement]'));
+            const syncAllocation = function (checkbox) {
+                const allocation = checkbox.closest('label')?.querySelector('[data-workforce-payment-allocation]');
+                if (!allocation) return;
+                allocation.disabled = !checkbox.checked;
+                if (!checkbox.checked) allocation.value = '';
+            };
+            statements.forEach(function (checkbox) {
+                const change = function () {
+                    checkbox.setCustomValidity('');
+                    syncAllocation(checkbox);
+                };
+                checkbox.addEventListener('change', change);
+                cleanup.push(function () { checkbox.removeEventListener('change', change); });
+                syncAllocation(checkbox);
+            });
+            const submit = function (event) {
+                if (statements.some(function (checkbox) { return checkbox.checked; })) return;
+                event.preventDefault();
+                if (statements[0]) {
+                    statements[0].setCustomValidity('Choose at least one statement allocation.');
+                    statements[0].reportValidity();
+                }
+            };
+            form.addEventListener('submit', submit);
+            cleanup.push(function () { form.removeEventListener('submit', submit); });
+        });
+
+        return function () {
+            cleanup.forEach(function (callback) { callback(); });
+            root.removeAttribute('data-workforce-page-ready');
+        };
+    }
+
+    function initWorkforceTime(context) {
+        const searchRoot = context && context.root ? context.root : document;
+        const root = searchRoot.querySelector('[data-workforce-time-page]');
         if (!root || root.dataset.workforceReady === '1') return;
         root.dataset.workforceReady = '1';
 
@@ -488,15 +585,27 @@
 
         return function () {
             if (timer) window.clearInterval(timer);
+            root.removeAttribute('data-workforce-ready');
         };
     }
 
+    initWorkforcePage.pageInitializerId = 'workforce-page';
     initWorkforceTime.pageInitializerId = 'workforce-time';
     if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+        window.ProjectAlpha.registerPage([
+            'workforce/overview',
+            'workforce/time',
+            'workforce/approvals',
+            'workforce/pay'
+        ], initWorkforcePage);
         window.ProjectAlpha.registerPage('workforce/time', initWorkforceTime);
     } else if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initWorkforceTime, { once: true });
+        document.addEventListener('DOMContentLoaded', function () {
+            initWorkforcePage({ root: document });
+            initWorkforceTime({ root: document });
+        }, { once: true });
     } else {
-        initWorkforceTime();
+        initWorkforcePage({ root: document });
+        initWorkforceTime({ root: document });
     }
 })();
