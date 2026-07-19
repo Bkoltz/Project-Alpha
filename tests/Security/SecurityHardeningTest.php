@@ -468,8 +468,23 @@ final class SecurityHardeningTest extends TestCase
         $docker = $this->read('.github/workflows/docker-publish.yml');
         self::assertStringContainsString('exit-code: \'1\'', $docker);
         self::assertStringContainsString("severity: 'CRITICAL,HIGH'", $docker);
-        self::assertStringContainsString(':sha-${{ github.sha }}', $docker);
-        self::assertStringContainsString(':cron-sha-${{ github.sha }}', $docker);
+        self::assertStringContainsString(':sha-${{ steps.source.outputs.sha }}', $docker);
+        self::assertStringContainsString(':cron-sha-${{ steps.source.outputs.sha }}', $docker);
+        self::assertStringContainsString(':db-sha-${{ steps.source.outputs.sha }}', $docker);
+    }
+
+    public function testDockerPublishingRecoversFromApiAssistedMainMerges(): void
+    {
+        $docker = $this->read('.github/workflows/docker-publish.yml');
+
+        self::assertStringContainsString('branches: ["dev", "main"]', $docker);
+        self::assertStringContainsString('pull_request_target:', $docker);
+        self::assertStringContainsString('types: [closed]', $docker);
+        self::assertStringContainsString('workflow_dispatch:', $docker);
+        self::assertStringContainsString("github.event.pull_request.merged == true", $docker);
+        self::assertStringContainsString('github.event.pull_request.merge_commit_sha', $docker);
+        self::assertStringContainsString('cancel-in-progress: true', $docker);
+        self::assertStringContainsString('github.event_name }}" == "pull_request_target"', $docker);
     }
 
     public function testNavigationDiagnosticsDoNotTreatExternalInputAsCodeOrMarkup(): void
