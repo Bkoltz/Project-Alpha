@@ -14,22 +14,22 @@ final class UnscheduledServiceTimeWorkflowTest extends TestCase
         $this->root = dirname(__DIR__, 2);
     }
 
-    public function testTimeCaptureIsServiceFirstAndKeepsUnclassifiedAsAnException(): void
+    public function testTimeCaptureIsActivityFirstAndKeepsJobContextOptional(): void
     {
         $view = (string)file_get_contents($this->root . '/src/views/pages/workforce/time.php');
         $script = (string)file_get_contents($this->root . '/public/assets/js/workforce.js');
 
-        self::assertStringContainsString('name="service_item_id"', $view);
-        self::assertStringContainsString('name="catalog_work_component_id"', $view);
-        self::assertStringContainsString('Unclassified / no Service', $view);
+        self::assertStringContainsString('name="work_type_id"', $view);
+        self::assertStringContainsString('No Job — keep unclassified', $view);
+        self::assertStringNotContainsString('Create a new Job for this entry', $view);
         self::assertStringContainsString('data-workforce-unclassified-warning', $view);
-        self::assertStringContainsString('data-workforce-service-activity', $view);
-        self::assertStringContainsString('function filterServiceActivities()', $script);
+        self::assertStringContainsString('Workers record work only.', $view);
+        self::assertStringContainsString('data-workforce-work-type', $view);
         self::assertStringContainsString("option.dataset.workTypeId", $script);
         self::assertStringContainsString("base_overage: 'included_fixed'", $script);
     }
 
-    public function testUnscheduledServiceCreatesOrReopensARealJobWithSnapshots(): void
+    public function testServiceContextRequiresAnExistingJobAndKeepsSnapshots(): void
     {
         self::assertTrue(class_exists(UnscheduledServiceJobService::class));
         self::assertTrue(method_exists(UnscheduledServiceJobService::class, 'prepare'));
@@ -40,6 +40,7 @@ final class UnscheduledServiceTimeWorkflowTest extends TestCase
         self::assertStringContainsString('client_billing_treatment_snapshot', $source);
         self::assertStringContainsString('client_billing_rate_snapshot', $source);
         self::assertStringContainsString("status='active',completed_at=NULL", $source);
+        self::assertStringContainsString('Choose a Job before assigning client-billable Service work.', $source);
         self::assertStringContainsString("status='completed',completed_at=UTC_TIMESTAMP(6)", $source);
         self::assertStringContainsString("'fixed_price_included', 'base_overage'", $source);
         self::assertStringContainsString('$component[\'unit_price\']', $source);

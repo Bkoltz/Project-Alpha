@@ -11,6 +11,7 @@ let currentPage = getCurrentPage();
 // Cache for loaded content
 const contentCache = new Map();
 const cachedScripts = new Array();
+const loadedPageStyles = new Map();
 let navigationInitialized = false;
 const pageInitializers = new Map();
 let pageCleanupCallbacks = [];
@@ -193,23 +194,30 @@ async function loadPageContent(page) {
 
         if (newMainContent) {
             const scripts = Array.from(newMainContent.querySelectorAll('script'));
+            const stylesheetLinks = Array.from(newMainContent.querySelectorAll('link[rel~="stylesheet"][href]'));
 
-            // Debug: check the parsed response for scripts outside the main fragment.
-            if (scripts.length === 0 && doc.querySelector('script')) {
-                console.warn('WARNING: Script tags exist in the response but not in the main content!');
-            }
             const inlineScripts = scripts.map(s => ({
                 src: s.getAttribute('src') || null,
                 code: s.getAttribute('src') ? null : s.textContent,
                 type: s.getAttribute('type') || ''
             }));
+            const stylesheets = stylesheetLinks.map(link => ({
+                href: link.getAttribute('href'),
+                media: link.getAttribute('media') || '',
+                integrity: link.getAttribute('integrity') || '',
+                crossorigin: link.getAttribute('crossorigin') || '',
+                referrerpolicy: link.getAttribute('referrerpolicy') || ''
+            }));
 
-            // Remove scripts from the HTML fragment to avoid duplicate execution when inserted
+            // Page assets belong in the document shell. Stylesheet links inserted through
+            // innerHTML are not reliably applied, which left AJAX-loaded Settings pages
+            // unstyled until a hard refresh.
             scripts.forEach(s => s.remove());
+            stylesheetLinks.forEach(link => link.remove());
 
             // Cache the content
             contentCache.set(page, newMainContent.innerHTML);
-            return { html: newMainContent.innerHTML, scripts: inlineScripts };
+            return { html: newMainContent.innerHTML, scripts: inlineScripts, stylesheets };
         }
 
         // A full document must never be injected inside the authenticated shell.
@@ -219,6 +227,46 @@ async function loadPageContent(page) {
         // Fall back to full page reload
         return null;
     }
+}
+
+function loadPageStylesheet(styleData) {
+    if (!styleData || !styleData.href) return Promise.resolve();
+
+    const absoluteHref = new URL(styleData.href, window.location.href).href;
+    if (loadedPageStyles.has(absoluteHref)) {
+        return loadedPageStyles.get(absoluteHref);
+    }
+
+    const existing = Array.from(document.querySelectorAll('link[rel~="stylesheet"][href]'))
+        .find(link => new URL(link.getAttribute('href'), window.location.href).href === absoluteHref);
+    if (existing) {
+        const ready = Promise.resolve();
+        loadedPageStyles.set(absoluteHref, ready);
+        return ready;
+    }
+
+    const pending = new Promise(resolve => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = absoluteHref;
+        link.dataset.pageStylesheet = '1';
+        ['media', 'integrity', 'crossorigin', 'referrerpolicy'].forEach(attribute => {
+            if (styleData[attribute]) link.setAttribute(attribute, styleData[attribute]);
+        });
+        link.addEventListener('load', resolve, { once: true });
+        link.addEventListener('error', function () {
+            console.error('Error loading page stylesheet', absoluteHref);
+            loadedPageStyles.delete(absoluteHref);
+            resolve();
+        }, { once: true });
+        document.head.appendChild(link);
+    });
+    loadedPageStyles.set(absoluteHref, pending);
+    return pending;
+}
+
+async function ensurePageStylesheets(stylesheets) {
+    await Promise.all((stylesheets || []).map(loadPageStylesheet));
 }
 
 function dispatchPageLoaded(page) {
@@ -336,7 +384,9 @@ async function navigateToPage(page, updateHistory = true, targetHash = '') {
             // content may be an object with html and scripts
             const html = (typeof content === 'string') ? content : content.html;
             const scripts = (typeof content === 'string') ? [] : content.scripts;
+            const stylesheets = (typeof content === 'string') ? [] : content.stylesheets;
 
+            await ensurePageStylesheets(stylesheets);
             mainContent.innerHTML = html;
             initializeDocumentFilterToggles();
 
@@ -361,7 +411,14 @@ async function navigateToPage(page, updateHistory = true, targetHash = '') {
 
             // Keep the legacy event for older scripts while new page scripts use ProjectAlpha.registerPage.
             dispatchPageLoaded(page);
-            scrollToPageHash(targetHash);
+            if (targetHash) {
+                scrollToPageHash(targetHash);
+            } else {
+                // A client-side navigation should begin at the top just like a full page load.
+                // Retaining the previous page's scroll offset can make a correctly rendered
+                // Settings or Workforce view appear incomplete until it is refreshed.
+                window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+            }
         }
 
     } catch (error) {

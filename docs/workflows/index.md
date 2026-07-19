@@ -32,6 +32,7 @@ Client or Organization
 | Client enters their own contact details | Client onboarding |
 | Client needs document access without a login | Public links |
 | Reuse service pricing or connect services to worker time | Service Library and Work Activities |
+| Track time, correct pay, close periods, or export payroll | Workforce, Time, Billing, and Pay |
 
 ## Workflow Guides
 
@@ -41,4 +42,5 @@ Client or Organization
 - [Payments](payments.html)
 - [Recurring Billing](recurring-billing.html)
 - [Service Library and Work Activities](service-catalog-and-work-types.html)
+- [Workforce, Time, Billing, and Pay](workforce-time-billing-and-pay.html)
 

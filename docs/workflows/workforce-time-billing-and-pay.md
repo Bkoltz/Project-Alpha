@@ -1,0 +1,84 @@
+# Workforce, time, billing, and pay workflow
+
+Project Alpha separates the service a client receives from the work a person performs. This keeps client pricing independent from worker compensation while allowing both to use the same Job and Time Entry.
+
+## Domain model
+
+- **Project:** an optional long-running engagement that groups several Jobs, such as a sports season.
+- **Job:** one concrete unit and scope of work. A quote, contract, and invoice converted from one another keep the same Job.
+- **Service:** the client-facing description and price. Services may be fixed, hourly, or base-price-plus-overage.
+- **Work Activity:** an internal classification such as On-site Work, Editing, Mapping, Driving, or Maintenance.
+- **Assignment:** the worker-specific agreement for a Job, including the compensation method and effective rate snapshot.
+- **Time Entry:** a timer session or manual log of what the worker did.
+- **Earning Snapshot:** the immutable calculation of gross compensation created from confirmed work.
+- **Worker Statement:** a pay-period grouping of approved earnings and adjustments.
+- **Worker Payment Record:** the admin-confirmed fact that money was paid; this is separate from the statement calculation.
+- **Payroll Export:** an audited CSV containing approved gross earnings for external payroll software.
+
+## Projects, Jobs, and documents
+
+A one-off service uses a Job without a Project. Long-running engagements use a Project containing one or more Jobs. Each document family belongs to its Job:
+
+1. Create or select the Job when preparing the quote, contract, or invoice.
+2. Converting a quote to a contract or invoice preserves the Job and Project.
+3. Workers record time against the Assignment or Job.
+4. Client, Project, and Service context is inherited from the Job rather than independently rewritten on the Time Entry.
+
+Unclassified time is allowed and does not create a hidden Job. An admin must assign a real Job before that time can become client-billable.
+
+## Services and Work Activities
+
+Services and Work Activities are independent by default. This supports businesses where a client-facing service and employee labor do not have matching names, such as a bleacher rental performed through Setup, Driving, and Maintenance activities.
+
+A Service may optionally have one exclusive Work Activity link. The link is useful when the client service and internal labor represent the same work, such as Mapping or On-site Work.
+
+- Users may create a matching Activity or link an existing unlinked Activity.
+- Linked records show the counterpart on both settings pages.
+- Names, client prices, and compensation rules remain independent.
+- Unlinking allows either record to be linked again later.
+- An unused linked pair may be permanently deleted. Once either record has history, deleting the pair deactivates both records instead.
+- Packages use the links belonging to their contained Services rather than linking the package itself.
+
+## Time and automatic invoice attachment
+
+Workers select a Work Activity and may select an Assignment or Job. They do not choose client billing rates or worker compensation treatment.
+
+After time is confirmed:
+
+- If the Job has exactly one mutable draft invoice, billable time attaches to it automatically.
+- If no draft invoice exists, or more than one is available, the entry appears in **Work Review → Needs billing context**.
+- Finalized invoices are never automatic destinations.
+- An admin may move the entry while the affected billing records remain mutable. Conflicting client, Project, or Job context requires an explicit correction and is never silently overwritten.
+
+Hourly Service lines on quotes and contracts are estimates. They show estimated hours, hourly price, and an estimated total. They do not become collectible invoice charges during conversion. Confirmed time creates the actual hourly invoice lines. Fixed-price time is operational history and does not create an additional client charge.
+
+## Corrections and disputes
+
+Immutable means the historical calculation cannot be silently replaced; it does not mean mistakes cannot be corrected.
+
+1. A worker requests a correction with proposed time and a reason, or an authorized admin creates it directly.
+2. Work Review shows the original and proposed values together with separate worker-pay and client-billing effects.
+3. Approval creates a new Time Entry revision and preserves the prior revision and snapshots.
+4. Hourly and base-plus-overage impacts use the rate or rule snapshot that applied to the original work. Fixed Assignment pay does not change only because the logged duration changes.
+
+Statement handling depends on its state:
+
+- A draft statement is rebuilt.
+- An issued, unpaid, and unexported statement is voided and reissued.
+- A paid, exported, or settled statement receives a linked adjustment on the next open statement.
+
+The client decision is independent:
+
+- Draft invoices update their actual-time line.
+- For finalized invoices, an admin chooses an audited charge or credit, moves the delta to another draft invoice, or absorbs it with a reason.
+- A credit on a paid invoice becomes a client-account credit. An admin can apply it to a future invoice or record/refund the actual payment.
+
+Project Alpha records gross worker corrections but does not withdraw money. External payroll determines how a previously paid negative adjustment is legally handled.
+
+## Pay-period deadline
+
+The organization configures the pay-period deadline time in the Workforce settings. Workers who have not approved the period receive reminders four, two, and one hour before the deadline.
+
+At the deadline, Project Alpha submits and confirms completed entries, creates their snapshots, and locks worker editing. Running or incomplete entries remain in the exception queue. Later changes use the admin correction workflow.
+
+Statements calculate what is owed. Worker Payment Records separately document what was actually paid. Payroll exports contain stable statement, earning, worker, work-date, method, quantity, rate, gross-delta, currency, and correction identifiers for reconciliation.

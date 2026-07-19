@@ -3,11 +3,14 @@
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 
-$successMsg = !empty($_GET['created']) ? 'Service created.' : (!empty($_GET['updated']) ? 'Service updated.' : (!empty($_GET['deleted']) ? 'Service deactivated.' : ''));
+$successMsg = !empty($_GET['created']) ? 'Service created.' : (!empty($_GET['updated']) ? 'Service updated.' : (!empty($_GET['purged']) ? 'Unused service permanently deleted.' : (!empty($_GET['deleted']) ? 'Service deactivated.' : '')));
 $errorMsg = (string)($_GET['error'] ?? '');
 $items = $pdo->query(
-    'SELECT i.*,COUNT(c.id) work_component_count FROM item_library i
+    'SELECT i.*,COUNT(c.id) work_component_count,MAX(c.id) linked_component_id,
+            MAX(c.work_type_id) linked_work_type_id,MAX(wt.name) linked_work_type_name
+     FROM item_library i
      LEFT JOIN catalog_work_components c ON c.item_library_id=i.id AND c.is_active=1
+     LEFT JOIN work_types wt ON wt.id=c.work_type_id
      GROUP BY i.id ORDER BY i.is_active DESC,i.item_name'
 )->fetchAll(PDO::FETCH_ASSOC);
 $componentsByItem = [];
@@ -24,7 +27,13 @@ foreach ($items as &$item) {
     $item['bundle_items'] = $bundleItemsByItem[$itemId] ?? [];
 }
 unset($item);
-$workTypes = $pdo->query('SELECT id,name FROM work_types WHERE is_active=1 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+$workTypes = $pdo->query(
+    'SELECT wt.id,wt.name,c.item_library_id linked_service_id,i.item_name linked_service_name
+     FROM work_types wt
+     LEFT JOIN catalog_work_components c ON c.work_type_id=wt.id AND c.is_active=1
+     LEFT JOIN item_library i ON i.id=c.item_library_id
+     WHERE wt.is_active=1 OR c.id IS NOT NULL ORDER BY wt.name'
+)->fetchAll(PDO::FETCH_ASSOC);
 $bundleChoices = array_values(array_map(
     static fn(array $item): array => [
         'id' => (int)$item['id'],
@@ -70,12 +79,13 @@ $clientBillingLabels = [
         <tr class="<?= !$item['is_active'] ? 'is-muted' : '' ?>">
           <td><strong><?= $h($item['item_name']) ?></strong><small><?= $h($item['description']) ?></small></td>
           <td><?= $h($offeringLabel((string)$item['entry_type'])) ?></td>
-          <td>$<?= number_format((float)$item['unit_price'],2) ?> / <?= $h($billingUnitLabel((string)$item['billing_unit'])) ?></td>
-          <td><?= (int)$item['work_component_count'] ?> activit<?= (int)$item['work_component_count'] === 1 ? 'y' : 'ies' ?></td>
+          <td>$<?= number_format((float)$item['unit_price'],2) ?> / <?= $h($billingUnitLabel((string)$item['billing_unit'])) ?><?php if (($item['client_pricing_model'] ?? '') === 'base_overage'): ?><small>Includes <?= (int)$item['client_included_minutes'] ?> min, then $<?= number_format((float)$item['client_overage_rate'],2) ?>/hr</small><?php endif; ?></td>
+          <td><?php if (!empty($item['linked_work_type_id'])): ?><a href="/?page=settings&amp;tab=work-types&amp;edit_work_type=<?= (int)$item['linked_work_type_id'] ?>"><?= $h($item['linked_work_type_name']) ?></a><small>Exclusive one-to-one link</small><?php else: ?><span class="muted">Not linked</span><?php endif; ?></td>
           <td><span class="status-pill status-pill--<?= $item['is_active'] ? 'active' : 'inactive' ?>"><?= $item['is_active'] ? 'Active' : 'Inactive' ?></span></td>
           <td class="text-right">
             <button type="button" class="btn btn-sm" data-item-library-edit data-item='<?= $h(json_encode($item, JSON_UNESCAPED_SLASHES)) ?>'>Edit</button>
             <?php if ($item['is_active']): ?><form method="post" action="/?page=settings/item-library-handler" class="inline-form" onsubmit="return confirm('Deactivate this service? Existing documents and Jobs will keep their snapshots.');"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><button class="btn btn-sm btn-danger-outline">Deactivate</button></form><?php endif; ?>
+            <form method="post" action="/?page=settings/item-library-handler" class="inline-form" onsubmit="return confirm('Permanently delete this service? This is allowed only when it has never been used on a document, Job, or package.');"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="purge"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><button class="btn btn-sm btn-danger-outline">Delete permanently</button></form>
           </td>
         </tr>
       <?php endforeach; ?>
@@ -89,14 +99,14 @@ $clientBillingLabels = [
   <div class="modal-card modal-card--wide" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-card__head"><div><h2 id="modalTitle">Add service</h2><p>Define the service the client receives, then connect the Work Activities used to deliver it.</p></div><button type="button" class="btn btn-sm" data-item-library-close aria-label="Close">Close</button></div>
     <form method="post" action="/?page=settings/item-library-handler" data-catalog-form>
-      <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" id="formAction" name="action" value="create"><input type="hidden" id="formId" name="id"><input type="hidden" id="componentsJson" name="components_json" value="[]"><input type="hidden" id="bundleItemsJson" name="bundle_items_json" value="[]">
+      <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" id="formAction" name="action" value="create"><input type="hidden" id="formId" name="id"><input type="hidden" id="linkedComponentId" name="linked_component_id"><input type="hidden" id="bundleItemsJson" name="bundle_items_json" value="[]">
 
       <fieldset class="settings-card"><legend>General information</legend>
         <div class="settings-form-grid"><label class="field"><span class="label">Service name *</span><input class="input" id="itemName" name="item_name" required maxlength="255"><small>The client-facing name shown when this service is added to a quote, contract, or invoice.</small></label><label class="field"><span class="label">Service type</span><select class="input" id="entryType" name="entry_type"><option value="service">Service</option><option value="fee">Fee</option><option value="bundle">Package</option></select><small>Use Package when one price combines multiple services or fees.</small></label><label class="field field--wide"><span class="label">Client-facing description</span><textarea class="input" id="itemDescription" name="description" rows="3"></textarea></label><label class="field"><span class="label">Status</span><span class="check-row"><input type="checkbox" id="isActive" name="is_active" value="1" checked> Available for new documents</span></label></div>
       </fieldset>
 
       <fieldset class="settings-card"><legend>Client pricing</legend>
-        <div class="settings-form-grid"><label class="field"><span class="label">Unit price *</span><input class="input" type="number" id="unitPrice" name="unit_price" min="0" step="0.01" required><small>The normal client price; it can still be adjusted on an individual document.</small></label><label class="field"><span class="label">Billing unit</span><select class="input" id="billingUnit" name="billing_unit"><option value="each">Service unit</option><option value="hour">Hour</option><option value="day">Day</option><option value="mile">Mile</option><option value="project">Project</option></select><small>Service unit means one instance of the service or fee. Choose Hour for time-based services and Project for a fixed-price engagement.</small></label></div>
+        <div class="settings-form-grid"><label class="field"><span class="label">Pricing model</span><select class="input" id="pricingModel" name="client_pricing_model"><option value="fixed">Fixed service price</option><option value="hourly">Hourly</option><option value="base_overage">Base price + hourly overage</option></select><small>This controls client pricing only; worker compensation is configured separately.</small></label><label class="field"><span class="label" data-price-label>Client price *</span><input class="input" type="number" id="unitPrice" name="unit_price" min="0" step="0.01" required><small data-price-help>The normal client price; it can still be adjusted on an individual document.</small></label><label class="field" data-overage-field hidden><span class="label">Minutes included in base price</span><input class="input" type="number" id="clientIncludedMinutes" name="client_included_minutes" min="0"></label><label class="field" data-overage-field hidden><span class="label">Hourly overage rate</span><input class="input" type="number" id="clientOverageRate" name="client_overage_rate" min="0" step="0.0001"></label><label class="field"><span class="label">Billing unit</span><select class="input" id="billingUnit" name="billing_unit"><option value="each">Service unit</option><option value="hour">Hour</option><option value="day">Day</option><option value="mile">Mile</option><option value="project">Project</option></select><small>Hourly pricing always uses Hour. Other models may use the unit that best describes the service.</small></label><label class="field"><span class="label">Pricing currency</span><input class="input" id="pricingCurrency" name="pricing_currency" maxlength="3" value="USD" required></label></div>
         <p class="catalog-tax-note"><strong>Tax:</strong> Uses the document default automatically, so the client or organization&rsquo;s tax treatment controls the result.</p>
       </fieldset>
 
@@ -104,11 +114,9 @@ $clientBillingLabels = [
 
       <fieldset class="settings-card" id="bundleContents" hidden><legend>Package contents</legend><p class="muted">A package has one client-facing price. Search the Service Library and add only the services or fees that belong in it.</p><label class="field catalog-bundle-search"><span class="label">Add a service or fee</span><input class="input" type="search" placeholder="Type to search the Service Library" autocomplete="off" data-bundle-search aria-controls="bundleSearchResults" aria-expanded="false"></label><div class="catalog-bundle-results" id="bundleSearchResults" data-bundle-results role="listbox" hidden></div><div class="catalog-bundle-selected" data-bundle-selected></div><p class="muted catalog-bundle-empty" data-bundle-empty>No services or fees added yet.</p></fieldset>
 
-      <fieldset class="settings-card"><legend>Work Activities, client billing, and worker compensation</legend>
-        <p class="muted">Connect this service to the activities workers select when recording time. A service can reuse an existing Work Activity or create a matching one. Each connection keeps client billing separate from worker compensation.</p>
-        <?php if (!$workTypes): ?><div class="alert alert-info">The matching Work Activity will be created when you save, or you can add reusable activities later.</div><?php endif; ?>
-        <div id="workComponents" class="catalog-components"></div>
-        <button type="button" class="btn" data-add-work-component>+ Add Work Activity</button>
+      <fieldset class="settings-card" id="activityLinkCard"><legend>Optional Work Activity link</legend>
+        <p class="muted">Use this when the service and the internal activity represent the same work. The link is exclusive: one Service to one Work Activity. Names and rates remain independent.</p>
+        <div class="settings-form-grid"><label class="field"><span class="label">Link behavior</span><select class="input" id="activityLinkMode" name="activity_link_mode"><option value="none">No linked Work Activity</option><option value="new">Create a matching Work Activity</option><option value="existing">Link an existing unlinked Work Activity</option></select><small>Packages cannot be linked; their contained Services provide any activity links.</small></label><label class="field" data-existing-activity hidden><span class="label">Available Work Activity</span><select class="input" id="linkedWorkTypeId" name="linked_work_type_id"><option value="">Choose an activity</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>" data-linked-service-id="<?= (int)($type['linked_service_id'] ?? 0) ?>" data-linked-service-name="<?= $h($type['linked_service_name'] ?? '') ?>"><?= $h($type['name']) ?><?= !empty($type['linked_service_id']) ? ' — linked to '.$h($type['linked_service_name']) : '' ?></option><?php endforeach; ?></select><small>Activities linked to another Service must be unlinked there first.</small></label></div>
       </fieldset>
 
       <div class="modal-card__actions"><button type="button" class="btn" data-item-library-close>Cancel</button><button type="submit" class="btn btn-primary">Save service</button></div>
@@ -116,43 +124,4 @@ $clientBillingLabels = [
   </div>
 </div>
 
-<template id="workComponentTemplate">
-  <article class="catalog-component" data-work-component>
-    <input type="hidden" data-field="id"><div class="catalog-component__head"><strong data-component-number>Work Activity</strong><button type="button" class="btn btn-sm btn-danger-outline" data-remove-work-component>Remove</button></div>
-    <div class="settings-form-grid">
-      <label class="field"><span class="label">Activity name *</span><input class="input" data-field="name" required><small>The description workers recognize when selecting what they did.</small></label>
-      <label class="field"><span class="label">Reusable Work Activity *</span><select class="input" data-field="work_type_id" required><option value="new">Create a matching Work Activity</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>">Use <?= $h($type['name']) ?></option><?php endforeach; ?></select><small>Reuse an activity across multiple services instead of entering it again.</small></label>
-      <label class="field"><span class="label">Quantity</span><select class="input" data-field="quantity_behavior"><option value="per_line">Once per document line</option><option value="per_unit">For every sold unit</option><option value="fixed">Fixed quantity</option></select></label>
-      <label class="field"><span class="label">Expected minutes</span><input class="input" type="number" min="0" data-field="expected_duration_minutes"></label>
-    </div>
-    <div class="catalog-component__rules">
-      <fieldset class="catalog-component__rule"><legend>Client billing for this activity</legend>
-        <p class="muted">This determines how confirmed time contributes to client billing for this service. It never determines worker pay.</p>
-        <div class="settings-form-grid">
-          <label class="field"><span class="label">Billing treatment</span><select class="input" data-field="client_billing_treatment"><option value="hourly"><?= $h($clientBillingLabels['hourly']) ?></option><option value="fixed_price_included"><?= $h($clientBillingLabels['fixed_price_included']) ?></option><option value="base_overage"><?= $h($clientBillingLabels['base_overage']) ?></option><option value="internal"><?= $h($clientBillingLabels['internal']) ?></option></select></label>
-          <label class="field" data-client-billing-field="rate"><span class="label">Client hourly rate</span><input class="input" type="number" min="0" step="0.0001" data-field="client_billing_rate"><small>Leave blank to use the Work Activity or client/project fallback rate.</small></label>
-          <label class="field" data-client-billing-field="included"><span class="label">Minutes included in service price</span><input class="input" type="number" min="0" data-field="client_included_minutes"></label>
-          <label class="field" data-client-billing-field="overage"><span class="label">Client hourly overage rate</span><input class="input" type="number" min="0" step="0.0001" data-field="client_overage_rate"></label>
-          <label class="field" data-client-billing-field="currency"><span class="label">Billing currency</span><input class="input" maxlength="3" data-field="client_billing_currency" value="USD"></label>
-        </div>
-      </fieldset>
-      <fieldset class="catalog-component__rule"><legend>Worker compensation for this activity</legend>
-        <p class="muted">Only the fields required by the selected method are shown. Owner and worker-specific policies can still override this rule.</p>
-        <div class="settings-form-grid">
-      <label class="field"><span class="label">Compensation method</span><select class="input" data-field="compensation_method"><option value="nonpayable">Nonpayable / internal</option><option value="hourly">Hourly</option><option value="fixed">Fixed amount</option><option value="base_overage">Base + hourly overage</option><option value="percentage">Percentage</option></select></label>
-      <label class="field" data-pay-field="amount"><span class="label">Rate or base amount</span><input class="input" type="number" min="0" step="0.0001" data-field="compensation_amount"></label>
-      <label class="field" data-pay-field="included"><span class="label">Included minutes</span><input class="input" type="number" min="0" data-field="included_minutes"></label>
-      <label class="field" data-pay-field="overage"><span class="label">Hourly overage rate</span><input class="input" type="number" min="0" step="0.0001" data-field="overage_rate"></label>
-      <label class="field" data-pay-field="percentage"><span class="label">Percentage</span><input class="input" type="number" min="0" max="100" step="0.0001" data-field="percentage"></label>
-      <label class="field" data-pay-field="basis"><span class="label">Percentage basis</span><select class="input" data-field="percentage_basis"><option value="net_line">Net line after discounts</option><option value="gross_line">Gross line before discounts</option><option value="cash_collected">Eligible cash collected</option></select></label>
-      <label class="field"><span class="label">Becomes eligible when</span><select class="input" data-field="eligibility_trigger"><option value="completed_approved">Work completed and approved</option><option value="delivered">Delivered / fulfilled</option><option value="invoice_paid">Invoice paid</option><option value="manual_release">Manager releases it</option></select></label>
-      <label class="field"><span class="label">Assignment</span><span class="check-row"><input type="checkbox" data-field="assignment_required" checked> Worker must be assigned</span></label>
-        </div>
-      </fieldset>
-    </div>
-  </article>
-</template>
-
 <script type="application/json" id="bundleChoicesData"><?= json_encode($bundleChoices, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
-
-<script src="<?= $h(asset_url('/assets/js/item-library.js')) ?>" defer></script>

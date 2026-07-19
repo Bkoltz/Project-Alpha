@@ -28,6 +28,8 @@ $activeEmployees = 0;
 $runningNow = 0;
 $awaitingReview = 0;
 $pendingPay = 0.0;
+$unclassifiedTime = 0;
+$payExceptions = 0;
 $employeeRows = [];
 $personal = [
     'hours_month' => 0.0,
@@ -43,6 +45,24 @@ $assignedProjects = [];
 if ($manageWorkforce) {
     $reviewCounts = $canReviewTime ? $reviewQueue->pendingCountsByUser($userId) : [];
     $awaitingReview = array_sum($reviewCounts);
+    if ($canManageAllTime) {
+        $unclassifiedTime = (int)$pdo->query(
+            "SELECT COUNT(*) FROM work_time_entries
+             WHERE workflow_status NOT IN ('voided') AND status NOT IN ('cancelled','voided')
+               AND (work_type_id IS NULL OR (billable=1 AND job_id IS NULL))"
+        )->fetchColumn();
+    } else {
+        foreach ($reviewQueue->pendingFor($userId) as $pendingEntry) {
+            if (empty($pendingEntry['work_type_id']) || (!empty($pendingEntry['billable']) && empty($pendingEntry['job_id']))) {
+                $unclassifiedTime++;
+            }
+        }
+    }
+    if ($canManagePay) {
+        $payExceptions = (int)$pdo->query(
+            "SELECT COUNT(*) FROM worker_earnings WHERE status IN ('provisional','needs_setup','eligible')"
+        )->fetchColumn();
+    }
     $pendingPaySelect = $canManagePay
         ? "(SELECT COALESCE(SUM(a.amount),0) FROM work_pay_accruals a WHERE a.employee_user_id=u.id AND a.status='pending')"
         : '0';
@@ -116,7 +136,7 @@ if ($manageWorkforce) {
 }
 ?>
 
-<section class="workforce-page">
+<section class="workforce-page" data-workforce-page>
   <div class="workforce-head">
     <div>
       <p class="workforce-eyebrow">Workforce</p>
@@ -134,6 +154,8 @@ if ($manageWorkforce) {
       <article class="workforce-kpi"><span>Active employees</span><strong><?= number_format($activeEmployees) ?></strong><small>Enabled employee accounts</small></article>
       <article class="workforce-kpi"><span>Clocked in now</span><strong class="<?= $runningNow ? 'is-running' : '' ?>"><?= number_format($runningNow) ?></strong><small>Live timers</small></article>
       <?php if ($canReviewTime): ?><article class="workforce-kpi"><span>Awaiting approval</span><strong><?= number_format($awaitingReview) ?></strong><small>Submitted entries in your review scope</small></article><?php endif; ?>
+      <article class="workforce-kpi"><span>Missing context</span><strong><?= number_format($unclassifiedTime) ?></strong><small>Activity or billable Job needed</small></article>
+      <?php if ($canManagePay): ?><article class="workforce-kpi"><span>Pay exceptions</span><strong><?= number_format($payExceptions) ?></strong><small>Setup or approval needed</small></article><?php endif; ?>
     </div>
     <div class="workforce-overview-grid">
       <article class="card workforce-card workforce-card--table">
@@ -154,10 +176,10 @@ if ($manageWorkforce) {
       <aside class="card workforce-card">
         <div class="card-head"><h3 class="card-title">Workforce actions</h3></div>
         <div class="workforce-quick-links">
-          <?php if ($canReviewTime): ?><a class="workforce-quick-link" href="/?page=workforce/approvals">Review submitted time <span><?= number_format($awaitingReview) ?> waiting</span></a><?php endif; ?>
-          <?php if ($canManagePay): ?><a class="workforce-quick-link" href="/?page=workforce/pay">Review employee pay <span><?= $h($money($pendingPay)) ?> pending</span></a><?php endif; ?>
+          <?php if ($canReviewTime): ?><a class="workforce-quick-link" href="/?page=workforce/approvals">Open Work Review <span><?= number_format($awaitingReview) ?> waiting</span></a><?php endif; ?>
+          <?php if ($canManagePay): ?><a class="workforce-quick-link" href="/?page=workforce/pay">Open Earnings &amp; Pay <span><?= $h($money($pendingPay)) ?> pending</span></a><?php endif; ?>
           <?php if ($isAdmin): ?><a class="workforce-quick-link" href="/?page=accounts&amp;action=create">Create employee account <span>Role + ACL</span></a><?php endif; ?>
-          <?php if ($isAdmin): ?><a class="workforce-quick-link" href="/?page=settings&amp;tab=workflow">Time defaults <span>Work, Jobs &amp; Pay</span></a><?php endif; ?>
+          <?php if ($isAdmin): ?><a class="workforce-quick-link" href="/?page=settings&amp;tab=workflow">Time defaults <span>Workforce settings</span></a><?php endif; ?>
         </div>
       </aside>
     </div>

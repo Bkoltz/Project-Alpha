@@ -193,6 +193,7 @@ RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
 RUN mkdir -p /var/log/cron && \
     touch /var/log/cron/generate_recurring_invoices.log \
           /var/log/cron/send_invoice_reminders.log \
+          /var/log/cron/process_workforce_deadlines.log \
           /var/log/cron/auto_terminate_contracts.log \
           /var/log/cron/link_expiration_checker.log \
           /var/log/cron/stripe_reconciliation.log \

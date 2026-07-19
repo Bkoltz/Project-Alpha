@@ -25,8 +25,9 @@ final class UnscheduledServiceJobService
         $stmt = $this->pdo->prepare(
             "SELECT i.id service_item_id,i.item_name service_name,i.unit_price,
                     c.id catalog_work_component_id,c.work_type_id,c.name activity_name,
-                    c.client_billing_treatment,c.client_billing_rate,c.client_included_minutes,
-                    c.client_overage_rate,c.client_billing_currency
+                    CASE i.client_pricing_model WHEN 'hourly' THEN 'hourly' WHEN 'base_overage' THEN 'base_overage' ELSE 'fixed_price_included' END client_billing_treatment,
+                    CASE WHEN i.client_pricing_model='hourly' THEN i.unit_price ELSE NULL END client_billing_rate,
+                    i.client_included_minutes,i.client_overage_rate,i.pricing_currency client_billing_currency
              FROM item_library i
              JOIN catalog_work_components c ON c.item_library_id=i.id AND c.is_active=1
              WHERE i.is_active=1 AND (i.organization_id IS NULL OR i.organization_id=?)
@@ -94,8 +95,8 @@ final class UnscheduledServiceJobService
             );
             $job->execute([$userId, $jobId]);
             $job = $job->fetch(PDO::FETCH_ASSOC);
-            if (!$job || (string)$job['job_origin'] !== 'unscheduled_time' || (string)$job['status'] === 'cancelled') {
-                throw new DomainException('Choose an available unscheduled-service Job or create a new one.');
+            if (!$job || (string)$job['status'] === 'cancelled') {
+                throw new DomainException('Choose an available Job.');
             }
             if (!$manageAll && empty($job['worker_has_access'])) {
                 throw new DomainException('That service Job is not assigned to this worker.');
@@ -113,7 +114,7 @@ final class UnscheduledServiceJobService
             $this->pdo->prepare("UPDATE jobs SET status='active',completed_at=NULL WHERE id=?")
                 ->execute([$jobId]);
         } else {
-            $jobId = $this->createJob($userId, $clientId, $projectId, $organizationId, (string)$component['service_name']);
+            throw new DomainException('Choose a Job before assigning client-billable Service work. Leave the Service blank to keep the time entry unclassified for later review.');
         }
 
         [$jobComponentId, $assignmentId] = $this->materializeActivity(
@@ -164,7 +165,17 @@ final class UnscheduledServiceJobService
     private function component(int $serviceItemId, int $componentId, ?int $organizationId): array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT c.*,i.item_name service_name,i.unit_price
+            "SELECT c.*,i.item_name service_name,i.unit_price,
+                    CASE i.client_pricing_model WHEN 'hourly' THEN 'hourly' WHEN 'base_overage' THEN 'base_overage' ELSE 'fixed_price_included' END authoritative_client_billing_treatment,
+                    CASE WHEN i.client_pricing_model='hourly' THEN i.unit_price ELSE NULL END authoritative_client_billing_rate,
+                    i.client_included_minutes authoritative_client_included_minutes,
+                    i.client_overage_rate authoritative_client_overage_rate,
+                    i.pricing_currency authoritative_client_billing_currency,
+                    wt.default_compensation_method activity_compensation_method,
+                    wt.default_amount activity_compensation_amount,wt.default_base_minutes activity_included_minutes,
+                    wt.default_overage_rate activity_overage_rate,wt.default_percentage activity_percentage,
+                    wt.default_percentage_basis activity_percentage_basis,
+                    wt.default_eligibility_trigger activity_eligibility_trigger,wt.currency activity_currency
              FROM catalog_work_components c
              JOIN item_library i ON i.id=c.item_library_id
              JOIN work_types wt ON wt.id=c.work_type_id
@@ -179,57 +190,24 @@ final class UnscheduledServiceJobService
         return $component;
     }
 
-    private function createJob(
-        int $userId,
-        ?int $clientId,
-        ?int $projectId,
-        ?int $organizationId,
-        string $serviceName
-    ): int {
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            $code = 'SERVICE-' . gmdate('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
-            try {
-                $stmt = $this->pdo->prepare(
-                    "INSERT INTO jobs
-                     (client_id,organization_id,project_id,job_code,status,job_origin,notes,created_by)
-                     VALUES (?,?,?,?,'active','unscheduled_time',?,?)"
-                );
-                $stmt->execute([
-                    $clientId,
-                    $organizationId ?: null,
-                    $projectId,
-                    $code,
-                    'Created from unscheduled time for ' . $serviceName,
-                    $userId,
-                ]);
-                return (int)$this->pdo->lastInsertId();
-            } catch (\PDOException $error) {
-                if ($error->getCode() !== '23000' || $attempt === 4) {
-                    throw $error;
-                }
-            }
-        }
-        throw new DomainException('Unable to create a unique service Job.');
-    }
-
     /** @return array{0:int,1:?int} */
     private function materializeActivity(int $jobId, int $userId, array $component): array
     {
         $key = hash('sha256', 'unscheduled_time:' . $jobId . ':' . $component['id']);
-        $billingTreatment = (string)$component['client_billing_treatment'];
+        $billingTreatment = (string)($component['authoritative_client_billing_treatment'] ?? $component['client_billing_treatment']);
         $billingRateSnapshot = in_array($billingTreatment, ['fixed_price_included', 'base_overage'], true)
             ? $component['unit_price']
-            : $component['client_billing_rate'];
+            : ($component['authoritative_client_billing_rate'] ?? $component['client_billing_rate']);
         $compensationRule = [
-            'method' => $component['compensation_method'],
-            'amount' => $component['compensation_amount'],
-            'included_minutes' => $component['included_minutes'],
-            'overage_rate' => $component['overage_rate'],
-            'percentage' => $component['percentage'],
-            'percentage_basis' => $component['percentage_basis'],
-            'eligibility_trigger' => $component['eligibility_trigger'],
-            'currency' => $component['currency'],
-            'source' => 'catalog_component_default',
+            'method' => $component['activity_compensation_method'] ?? $component['compensation_method'],
+            'amount' => $component['activity_compensation_amount'] ?? $component['compensation_amount'],
+            'included_minutes' => $component['activity_included_minutes'] ?? $component['included_minutes'],
+            'overage_rate' => $component['activity_overage_rate'] ?? $component['overage_rate'],
+            'percentage' => $component['activity_percentage'] ?? $component['percentage'],
+            'percentage_basis' => $component['activity_percentage_basis'] ?? $component['percentage_basis'],
+            'eligibility_trigger' => $component['activity_eligibility_trigger'] ?? $component['eligibility_trigger'],
+            'currency' => $component['activity_currency'] ?? $component['currency'],
+            'source' => 'work_activity_default',
             'source_line_total' => (string)$component['unit_price'],
         ];
         $stmt = $this->pdo->prepare(
@@ -254,9 +232,9 @@ final class UnscheduledServiceJobService
             json_encode($compensationRule, JSON_THROW_ON_ERROR),
             $billingTreatment,
             $billingRateSnapshot,
-            $component['client_included_minutes'],
-            $component['client_overage_rate'],
-            $component['client_billing_currency'],
+            $component['authoritative_client_included_minutes'] ?? $component['client_included_minutes'],
+            $component['authoritative_client_overage_rate'] ?? $component['client_overage_rate'],
+            $component['authoritative_client_billing_currency'] ?? $component['client_billing_currency'],
             $userId,
         ]);
         $jobComponentId = (int)$this->pdo->lastInsertId();

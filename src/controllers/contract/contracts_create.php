@@ -105,7 +105,8 @@ if($deposit_type === 'percent') { $deposit_amount = max(0, min(100, $deposit_val
 elseif($deposit_type === 'fixed') { $deposit_amount = max(0, $deposit_value); }
 
 // Invoice total is the full amount - deposits are tracked via payments table
-$invoice_subtotal=$subtotal-($travelItem&&$travelItem['pricing_status']==='estimate'?(float)$travelItem['line_total']:0);
+$invoice_subtotal=$billing_mode==='hourly'?0.0:array_sum(array_column($items,'t'));
+if($travelItem&&$travelItem['pricing_status']==='standard')$invoice_subtotal+=(float)$travelItem['line_total'];
 $invoice_discount=$discount_type==='percent'?max(0,min(100,$discount_value))*$invoice_subtotal/100:($discount_type==='fixed'?min($invoice_subtotal,max(0,$discount_value)):0);
 $invoice_total=max(0,$invoice_subtotal-$invoice_discount+max(0,$tax_percent)*max(0,$invoice_subtotal-$invoice_discount)/100);
 
@@ -143,8 +144,8 @@ try{
   $pdo->prepare('UPDATE contracts SET doc_number=? WHERE id=?')->execute([$cMax + 1, $co_id]);
 
   // Save contract items
-  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
-  foreach($items as $it){$catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$it['catalog']=$catalog;$ins->execute([$co_id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);}
+  $ins=$pdo->prepare('INSERT INTO contract_items (contract_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  foreach($items as $it){$catalog=catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$it['catalog']=$catalog;$ins->execute([$co_id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$billing_mode==='hourly'?'estimate':'standard',$catalog['catalog_snapshot']]);}
   if($travelItem)$pdo->prepare('INSERT INTO contract_items (contract_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,?)')->execute([$co_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit'],$travelItem['pricing_status']]);
   mileage_save_document_rule($pdo,'contract',$co_id,$__orgId,$client_id,(int)$__creator,$travelRule);
 
@@ -157,7 +158,7 @@ try{
     $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
   }
   $ii=$pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
-  foreach($items as $it){$catalog=$it['catalog']??catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$ii->execute([$invoice_id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);}
+  foreach($items as $it){if($billing_mode==='hourly')continue;$catalog=$it['catalog']??catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);$ii->execute([$invoice_id,$catalog['item_library_id'],$it['i'],$it['d'],$it['q'],$it['p'],$it['t'],$it['u'],$catalog['catalog_snapshot']]);}
   if($travelItem&&$travelItem['pricing_status']==='standard')$pdo->prepare('INSERT INTO invoice_items (invoice_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status) VALUES (?,?,?,?,?,?,?,1,"standard")')->execute([$invoice_id,$travelItem['item'],$travelItem['description'],$travelItem['quantity'],$travelItem['unit_price'],$travelItem['line_total'],$travelItem['billing_unit']]);
   // Assign per-type doc_number for invoices
   $pdo->prepare('UPDATE invoices SET doc_number=? WHERE id=?')->execute([pa_next_invoice_doc_number($pdo, 'regular'), $invoice_id]);

@@ -3,7 +3,10 @@
 declare(strict_types=1);
 
 $userId = (int)($_SESSION['user']['id'] ?? 0);
-$isAdmin = ($_SESSION['user']['role'] ?? '') === 'admin';
+$userRole = acl_user_role($pdo, $userId);
+$isAdmin = in_array($userRole, ['admin', 'owner'], true);
+$canManagePayments = $isAdmin || user_can($pdo, $userId, 'workforce.payments.manage', 0);
+$canManagePayrollExports = $isAdmin || user_can($pdo, $userId, 'workforce.payroll_exports.manage', 0);
 $manage = $isAdmin
     || user_can($pdo, $userId, 'workforce.statements.manage', 0)
     || user_can($pdo, $userId, 'employee_pay.manage', 0);
@@ -16,6 +19,11 @@ $workerStatement = $pdo->prepare(
 $workerStatement->execute([$userId]);
 $currentWorker = $workerStatement->fetch(PDO::FETCH_ASSOC) ?: null;
 $currentWorkerId = (int)($currentWorker['id'] ?? 0);
+$tableExists = static function (string $table) use ($pdo): bool {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?');
+    $stmt->execute([$table]);
+    return (bool)$stmt->fetchColumn();
+};
 
 $earningsSql =
     "SELECT e.*,wp.display_name,wp.relationship_type,
@@ -63,6 +71,43 @@ if ($viewAll) {
     $statementStatement = $pdo->query($statementSql . ' WHERE 1=0');
 }
 $statements = $statementStatement->fetchAll(PDO::FETCH_ASSOC);
+$paymentStatementsByWorker = [];
+foreach ($statements as $statement) {
+    if (in_array((string)$statement['status'], ['issued', 'settled'], true)) {
+        $paymentStatementsByWorker[(int)$statement['worker_profile_id']][] = $statement;
+    }
+}
+
+$paymentRecords = [];
+if ($tableExists('worker_payment_records')) {
+    $paymentSql =
+        'SELECT pr.*,wp.display_name,wp.relationship_type,
+                COUNT(a.id) allocation_count,COALESCE(SUM(a.amount),0) allocated_amount
+         FROM worker_payment_records pr
+         JOIN worker_profiles wp ON wp.id=pr.worker_profile_id
+         LEFT JOIN worker_payment_allocations a ON a.worker_payment_record_id=pr.id';
+    if ($viewAll) {
+        $paymentStatement = $pdo->query($paymentSql . ' GROUP BY pr.id ORDER BY pr.payment_date DESC,pr.created_at DESC LIMIT 250');
+    } elseif ($currentWorkerId > 0) {
+        $paymentStatement = $pdo->prepare($paymentSql . ' WHERE pr.worker_profile_id=? GROUP BY pr.id ORDER BY pr.payment_date DESC,pr.created_at DESC LIMIT 250');
+        $paymentStatement->execute([$currentWorkerId]);
+    } else {
+        $paymentStatement = $pdo->query($paymentSql . ' WHERE 1=0 GROUP BY pr.id');
+    }
+    $paymentRecords = $paymentStatement->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$payrollExports = [];
+if ($canManagePayrollExports && $tableExists('payroll_exports')) {
+    $payrollExports = $pdo->query(
+        'SELECT x.*,p.period_start,p.period_end FROM payroll_exports x
+         LEFT JOIN pay_periods p ON p.id=x.pay_period_id
+         ORDER BY x.created_at DESC LIMIT 100'
+    )->fetchAll(PDO::FETCH_ASSOC);
+}
+$payPeriodsForExport = $canManagePayrollExports
+    ? $pdo->query('SELECT id,period_start,period_end,status FROM pay_periods ORDER BY period_end DESC LIMIT 50')->fetchAll(PDO::FETCH_ASSOC)
+    : [];
 
 $currentPeriod = null;
 if ($currentWorkerId > 0) {
@@ -144,12 +189,12 @@ $statusLabel = static fn(string $status): string => match ($status) {
 };
 ?>
 
-<section class="workforce-page">
+<section class="workforce-page" data-workforce-page>
   <div class="workforce-head">
     <div>
       <p class="workforce-eyebrow">Workforce</p>
-      <h2><?= $viewAll ? 'Worker earnings & statements' : 'My earnings & statements' ?></h2>
-      <p class="workforce-subtitle">Approved earnings flow into one period statement. Client billing is tracked separately and never determines worker pay.</p>
+      <h2><?= $viewAll ? 'Earnings & Pay' : 'My Earnings & Pay' ?></h2>
+      <p class="workforce-subtitle">Review gross earnings, period statements, confirmed payment records, and payroll exports. Client billing is tracked separately and never determines worker pay.</p>
     </div>
     <div class="workforce-head__actions">
       <a class="btn" href="/?page=workforce/overview">Overview</a>
@@ -182,6 +227,15 @@ $statusLabel = static fn(string $status): string => match ($status) {
     <article class="workforce-kpi"><span>Settled</span><strong style="font-size:20px"><?= $formatTotals($totals['settled']) ?></strong><small>Recorded as paid or settled</small></article>
   </div>
 
+  <div class="workforce-tabs" data-workforce-tabs>
+    <div class="workforce-tab-list" role="tablist" aria-label="Earnings and pay sections">
+      <button class="workforce-tab is-active" type="button" role="tab" aria-selected="true" data-workforce-tab="earnings">Earnings <span class="workforce-tab-count"><?= count($earnings) ?></span></button>
+      <button class="workforce-tab" type="button" role="tab" aria-selected="false" data-workforce-tab="statements">Statements <span class="workforce-tab-count"><?= count($statements) ?></span></button>
+      <button class="workforce-tab" type="button" role="tab" aria-selected="false" data-workforce-tab="payments">Payment records</button>
+      <?php if ($canManagePayrollExports): ?><button class="workforce-tab" type="button" role="tab" aria-selected="false" data-workforce-tab="exports">Payroll exports</button><?php endif; ?>
+    </div>
+
+    <div data-workforce-tab-panel="earnings" role="tabpanel">
   <article class="card workforce-card workforce-card--table">
     <div class="card-head">
       <div>
@@ -223,7 +277,9 @@ $statusLabel = static fn(string $status): string => match ($status) {
       </table>
     </div>
   </article>
+    </div>
 
+    <div data-workforce-tab-panel="statements" role="tabpanel" hidden>
   <article class="card workforce-card workforce-card--table">
     <div class="card-head">
       <div>
@@ -276,6 +332,33 @@ $statusLabel = static fn(string $status): string => match ($status) {
       </table>
     </div>
   </article>
+    </div>
+
+    <div data-workforce-tab-panel="payments" role="tabpanel" hidden>
+      <article class="card workforce-card workforce-card--table">
+        <div class="card-head"><div><h3 class="card-title">Worker Payment Records</h3><p class="muted text-sm mb-0">Admin-confirmed facts about what was actually paid. Statements and payment records remain separate.</p></div></div>
+        <?php if ($canManagePayments && $tableExists('worker_payment_records') && $paymentStatementsByWorker): ?><details class="workforce-create-panel"><summary class="btn btn-primary">Record worker payment</summary><div class="workforce-payment-forms">
+          <?php foreach ($paymentStatementsByWorker as $paymentWorkerId => $workerStatements): ?><?php $paymentWorker = $workerStatements[0]; ?><form class="workforce-form workforce-payment-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="worker-payment-record"><input type="hidden" name="worker_profile_id" value="<?= $paymentWorkerId ?>"><h4><?= $h($paymentWorker['display_name']) ?></h4><div class="workforce-context-grid"><label class="field"><span class="label">Payment date</span><input class="input" type="date" name="payment_date" value="<?= $h(date('Y-m-d')) ?>" required></label><label class="field"><span class="label">Total amount</span><input class="input" type="number" name="amount" min="0.01" step="0.01" required></label><label class="field"><span class="label">Currency</span><input class="input" name="currency" maxlength="3" value="<?= $h($paymentWorker['currency']) ?>" required></label><label class="field"><span class="label">Method</span><input class="input" name="method" maxlength="50" placeholder="ACH, check, cash…" required></label><label class="field"><span class="label">Reference <small>optional</small></span><input class="input" name="reference" maxlength="255"></label><label class="field"><span class="label">Notes <small>optional</small></span><input class="input" name="notes" maxlength="1000"></label></div><fieldset><legend>Statement allocations</legend><div class="workforce-submission-list"><?php foreach ($workerStatements as $statement): ?><label><input type="checkbox" name="statement_ids[]" value="<?= (int)$statement['id'] ?>" data-workforce-payment-statement><span><strong><?= $h($statement['period_start'] . ' – ' . $statement['period_end']) ?></strong><small><?= $h($statement['currency'] . ' ' . number_format((float)$statement['total_amount'], 2)) ?></small><input class="input input--small" type="number" name="allocation_amounts[]" min="0.01" step="0.01" placeholder="Amount" data-workforce-payment-allocation disabled required></span></label><?php endforeach; ?></div></fieldset><button class="btn btn-primary" type="submit">Confirm payment record</button></form><?php endforeach; ?>
+        </div></details><?php endif; ?>
+        <?php if ($tableExists('worker_payment_records')): ?><div class="pa-table-wrap"><table class="pa-table workforce-table"><thead><tr><?php if ($viewAll): ?><th>Worker</th><?php endif; ?><th>Payment date</th><th>Method</th><th>Reference</th><th>Amount</th><th>Allocated</th><th>Status</th></tr></thead><tbody>
+          <?php foreach ($paymentRecords as $payment): ?><tr><?php if ($viewAll): ?><td><strong><?= $h($payment['display_name']) ?></strong><small><?= $h(ucfirst((string)$payment['relationship_type'])) ?></small></td><?php endif; ?><td><?= $h($payment['payment_date']) ?></td><td><?= $h(ucwords(str_replace('_', ' ', (string)$payment['payment_method']))) ?></td><td><?= $h($payment['reference_number'] ?: '—') ?></td><td><?= $h($payment['currency'] . ' ' . number_format((float)$payment['amount'], 2)) ?></td><td><?= $h($payment['currency'] . ' ' . number_format((float)$payment['allocated_amount'], 2)) ?><small><?= (int)$payment['allocation_count'] ?> statement<?= (int)$payment['allocation_count'] === 1 ? '' : 's' ?></small></td><td><span class="status-pill status-pill--<?= $h($payment['status']) ?>"><?= $h(ucfirst((string)$payment['status'])) ?></span><?php if ($canManagePayments && (string)$payment['status'] === 'confirmed'): ?><details class="workforce-entry-edit"><summary class="btn btn-sm btn-danger">Void</summary><form class="workforce-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="worker-payment-void"><input type="hidden" name="payment_record_id" value="<?= $h($payment['id']) ?>"><label class="field"><span class="label">Why is this payment record being voided?</span><textarea class="input" name="reason" rows="3" required></textarea></label><button class="btn btn-danger" type="submit">Void payment record</button></form></details><?php endif; ?></td></tr><?php endforeach; ?>
+          <?php if (!$paymentRecords): ?><tr><td colspan="<?= ($viewAll ? 7 : 6) ?>" class="workforce-empty">No confirmed payment records yet.</td></tr><?php endif; ?>
+        </tbody></table></div><?php else: ?><p class="workforce-queue-note">Payment records become available after the workforce ledger migration is installed.</p><?php endif; ?>
+      </article>
+    </div>
+
+    <?php if ($canManagePayrollExports): ?><div data-workforce-tab-panel="exports" role="tabpanel" hidden>
+      <article class="card workforce-card">
+        <div class="card-head"><div><h3 class="card-title">Payroll Exports</h3><p class="muted text-sm mb-0">Create an audited gross-earnings file for approved payroll software.</p></div></div>
+        <?php $exportableEarnings = array_values(array_filter($earnings, static fn(array $earning): bool => in_array((string)$earning['status'], ['approved','included','settled'], true))); if ($tableExists('payroll_exports') && $exportableEarnings): ?><details class="workforce-create-panel"><summary class="btn btn-primary">Generate payroll CSV</summary><form class="workforce-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="payroll-export-generate"><div class="workforce-context-grid"><label class="field"><span class="label">Export key</span><input class="input" name="export_key" maxlength="190" value="payroll-<?= $h(gmdate('Ymd-His')) ?>" required></label><label class="field"><span class="label">Pay period <small>optional</small></span><select class="input" name="pay_period_id"><option value="">Selected earnings</option><?php foreach ($payPeriodsForExport as $period): ?><option value="<?= (int)$period['id'] ?>"><?= $h($period['period_start'] . ' – ' . $period['period_end'] . ' · ' . $period['status']) ?></option><?php endforeach; ?></select></label></div><fieldset><legend>Approved gross earnings</legend><div class="workforce-submission-list"><?php foreach ($exportableEarnings as $earning): ?><label><input type="checkbox" name="earning_ids[]" value="<?= $h($earning['id']) ?>"><span><strong><?= $h($earning['display_name']) ?> · <?= $h($earning['source_work_date']) ?></strong><small><?= $h($earningDescription($earning) . ' · ' . $earning['currency'] . ' ' . number_format((float)$earning['display_amount'], 2)) ?></small></span></label><?php endforeach; ?></div></fieldset><button class="btn btn-primary" type="submit">Generate immutable CSV</button></form></details><?php endif; ?>
+        <?php if ($tableExists('payroll_exports')): ?><div class="pa-table-wrap"><table class="pa-table workforce-table"><thead><tr><th>Created</th><th>Period</th><th>File</th><th>Rows</th><th>Gross</th><th>Status</th></tr></thead><tbody>
+          <?php foreach ($payrollExports as $export): ?><tr><td><?= $h($export['created_at']) ?></td><td><?= $export['period_start'] ? $h($export['period_start'] . ' – ' . $export['period_end']) : 'Selected earnings' ?></td><td><strong><?= $h($export['file_name']) ?></strong><small>SHA-256 <?= $h(substr((string)$export['content_sha256'], 0, 12)) ?>…</small></td><td><?= (int)$export['row_count'] ?></td><td><?= $h(($export['currency'] ?: '') . ' ' . number_format((float)$export['gross_total'], 2)) ?></td><td><span class="status-pill status-pill--<?= $h($export['status']) ?>"><?= $h(ucfirst((string)$export['status'])) ?></span><?php if ((string)$export['status'] === 'generated'): ?><details class="workforce-entry-edit"><summary class="btn btn-sm btn-danger">Void</summary><form class="workforce-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="payroll-export-void"><input type="hidden" name="export_id" value="<?= $h($export['id']) ?>"><label class="field"><span class="label">Void reason</span><textarea class="input" name="reason" rows="3" required></textarea></label><button class="btn btn-danger" type="submit">Void payroll export</button></form></details><?php endif; ?></td></tr><?php endforeach; ?>
+          <?php if (!$payrollExports): ?><tr><td colspan="6" class="workforce-empty">No payroll exports have been generated.</td></tr><?php endif; ?>
+        </tbody></table></div><?php else: ?><p class="workforce-queue-note">Payroll exports become available after the workforce ledger migration is installed.</p><?php endif; ?>
+        <p class="workforce-queue-note">Exports never mark a worker as paid; confirm the actual payment separately.</p>
+      </article>
+    </div><?php endif; ?>
+  </div>
 
   <?php if ($legacyRows): ?>
     <details class="card workforce-card workforce-card--table">

@@ -46,7 +46,8 @@ the most specific valid assignment or service-activity rule before Work Activity
 fallbacks. Missing required rates block the affected payable or billable step.
 
 See [Service Library and Work Activities](../workflows/service-catalog-and-work-types.html)
-for the complete integration and examples.
+for catalog and activity setup, and [Workforce, Time, Billing, and Pay](../workflows/workforce-time-billing-and-pay.html)
+for time corrections, billing decisions, statements, payment records, deadlines, and payroll exports.
 
 ## Security boundaries
 
@@ -60,11 +61,13 @@ expire after 15 idle minutes, and have a seven-day absolute maximum.
 
 ## Corrections and audit
 
-Approval freezes employee, project, revision, duration, rates, amount, and
-currency. Rejected entries can be edited and resubmitted. Approved corrections
-store the old revision and start a new approval cycle. Voids preserve the
-snapshot and append explicit pay and billing reversals. All module mutations
-write to PA's system audit trail.
+Confirmation snapshots worker, Job, activity, duration, rates, amount, and
+currency. Rejected draft entries can be edited and resubmitted. Confirmed work
+changes through a correction request: approval retains the original revision,
+creates a new revision, and records worker-pay and client-billing effects
+separately. Statements are versioned or receive a next-period adjustment;
+Worker Payment Records preserve the independent fact of what an administrator
+actually paid. All module mutations write to PA's system audit trail.
 
 ## Operations
 

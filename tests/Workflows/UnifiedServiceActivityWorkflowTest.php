@@ -49,7 +49,7 @@ final class UnifiedServiceActivityWorkflowTest extends TestCase
         self::assertStringContainsString('fk_payments_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL', $migration);
     }
 
-    public function testServiceLibraryCreatesOrReusesWorkActivitiesWithSeparateRules(): void
+    public function testServiceLibraryUsesExclusiveOptionalActivityLinksAndServiceOwnedPricing(): void
     {
         $view = (string)file_get_contents($this->root . '/src/views/pages/settings/item-library.php');
         $handler = (string)file_get_contents($this->root . '/src/controllers/settings/item_library_handler.php');
@@ -57,18 +57,36 @@ final class UnifiedServiceActivityWorkflowTest extends TestCase
 
         self::assertStringContainsString('<h3>Service Library</h3>', $view);
         self::assertStringContainsString('Create a matching Work Activity', $view);
-        self::assertStringContainsString('Client billing for this activity', $view);
-        self::assertStringContainsString('Worker compensation for this activity', $view);
+        self::assertStringContainsString('Optional Work Activity link', $view);
+        self::assertStringContainsString('client_pricing_model', $view);
+        self::assertStringNotContainsString('Client billing for this activity', $view);
+        self::assertStringNotContainsString('Worker compensation for this activity', $view);
         self::assertStringNotContainsString('what the client buys', strtolower($view));
 
         self::assertStringContainsString("\$requestedWorkType === 'new'", $handler);
         self::assertStringContainsString('SELECT id FROM work_types WHERE LOWER(name)=LOWER(?)', $handler);
         self::assertStringContainsString('INSERT INTO work_types', $handler);
-        self::assertStringContainsString('client_billing_treatment=?,client_billing_rate=?', $handler);
+        self::assertStringContainsString('That Work Activity is already linked to', $handler);
 
-        self::assertStringContainsString("addComponent({work_type_id:'new'", $script);
-        self::assertStringContainsString('syncClientBillingFields', $script);
-        self::assertStringContainsString('data-auto-activity-name', $script);
+        self::assertStringContainsString('syncActivityLink', $script);
+        self::assertStringContainsString('resetActivityOptions', $script);
+        self::assertStringContainsString("setValue('activityLinkMode','new')", $script);
+    }
+
+    public function testPermanentDeletionIsLimitedToUnusedCatalogRecords(): void
+    {
+        $serviceView = (string)file_get_contents($this->root . '/src/views/pages/settings/item-library.php');
+        $serviceHandler = (string)file_get_contents($this->root . '/src/controllers/settings/item_library_handler.php');
+        $activityView = (string)file_get_contents($this->root . '/src/views/pages/settings/work-types.php');
+        $activityHandler = (string)file_get_contents($this->root . '/src/controllers/settings/workforce_catalog_handler.php');
+
+        self::assertStringContainsString('Delete permanently', $serviceView);
+        self::assertStringContainsString("\$action === 'purge'", $serviceHandler);
+        self::assertStringContainsString('Deactivate it to preserve historical documents and Jobs.', $serviceHandler);
+        self::assertStringContainsString('add_work_type=1', $activityView);
+        self::assertStringContainsString('delete-work-type', $activityView);
+        self::assertStringContainsString("\$action==='delete-work-type'", $activityHandler);
+        self::assertStringContainsString('Deactivate it to preserve historical time, billing, and compensation records.', $activityHandler);
     }
 
     public function testDocumentationUsesServiceBusinessTerminology(): void
@@ -78,7 +96,7 @@ final class UnifiedServiceActivityWorkflowTest extends TestCase
 
         self::assertStringContainsString('# Service Library and Work Activities', $guide);
         self::assertStringContainsString('service a client receives', $guide);
-        self::assertStringContainsString('Service price + hourly overage', $guide);
+        self::assertStringContainsString('Base price + hourly overage', $guide);
         self::assertStringContainsString('## Services and Work Activities', $concepts);
     }
 }

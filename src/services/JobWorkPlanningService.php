@@ -328,8 +328,20 @@ final class JobWorkPlanningService
         }
         if($snapshotComponents!==null){$components=$snapshotComponents;}
         else{$stmt = $this->pdo->prepare(
-            'SELECT c.*,i.is_active item_active,i.unit_price service_unit_price FROM catalog_work_components c
+            'SELECT c.*,i.is_active item_active,i.unit_price service_unit_price,
+                    i.client_pricing_model service_pricing_model,i.client_included_minutes service_included_minutes,
+                    i.client_overage_rate service_overage_rate,i.pricing_currency service_pricing_currency,
+                    wt.default_compensation_method activity_compensation_method,
+                    wt.default_amount activity_compensation_amount,
+                    wt.default_base_minutes activity_included_minutes,
+                    wt.default_overage_rate activity_overage_rate,
+                    wt.default_percentage activity_percentage,
+                    wt.default_percentage_basis activity_percentage_basis,
+                    wt.default_eligibility_trigger activity_eligibility_trigger,
+                    wt.currency activity_currency
+             FROM catalog_work_components c
              JOIN item_library i ON i.id=c.item_library_id
+             JOIN work_types wt ON wt.id=c.work_type_id
              WHERE c.item_library_id=? AND c.is_active=1 ORDER BY c.display_order,c.id'
         );$stmt->execute([$itemLibraryId]);$components = $stmt->fetchAll(PDO::FETCH_ASSOC);}
         if (!$components) return $ids;
@@ -346,18 +358,24 @@ final class JobWorkPlanningService
                     $sourceType, (string)($documentId ?? $jobId), (string)($lineId ?? $itemLibraryId), (string)$component['id'],
                 ]));
                 $rule = [
-                    'method' => $component['compensation_method'],
-                    'amount' => $component['compensation_amount'],
-                    'included_minutes' => $component['included_minutes'],
-                    'overage_rate' => $component['overage_rate'],
-                    'percentage' => $component['percentage'],
-                    'percentage_basis' => $component['percentage_basis'],
-                    'eligibility_trigger' => $component['eligibility_trigger'],
-                    'currency' => $component['currency'],
-                    'source' => 'catalog_component_default',
+                    'method' => $component['activity_compensation_method'] ?? $component['compensation_method'],
+                    'amount' => $component['activity_compensation_amount'] ?? $component['compensation_amount'],
+                    'included_minutes' => $component['activity_included_minutes'] ?? $component['included_minutes'],
+                    'overage_rate' => $component['activity_overage_rate'] ?? $component['overage_rate'],
+                    'percentage' => $component['activity_percentage'] ?? $component['percentage'],
+                    'percentage_basis' => $component['activity_percentage_basis'] ?? $component['percentage_basis'],
+                    'eligibility_trigger' => $component['activity_eligibility_trigger'] ?? $component['eligibility_trigger'],
+                    'currency' => $component['activity_currency'] ?? $component['currency'],
+                    'source' => 'work_activity_default',
                     'source_line_total' => (string)($sourceLine['line_total'] ?? '0.00'),
                 ];
-                $clientTreatment = (string)($component['client_billing_treatment'] ?? 'fixed_price_included');
+                $clientTreatment = isset($component['service_pricing_model'])
+                    ? match ((string)$component['service_pricing_model']) {
+                        'hourly' => 'hourly',
+                        'base_overage' => 'base_overage',
+                        default => 'fixed_price_included',
+                    }
+                    : (string)($component['client_billing_treatment'] ?? 'fixed_price_included');
                 $serviceUnitPrice = $sourceLine['unit_price']
                     ?? $component['service_unit_price']
                     ?? 0;
@@ -377,9 +395,9 @@ final class JobWorkPlanningService
                     json_encode($rule, JSON_THROW_ON_ERROR),
                     $clientTreatment,
                     $clientRateSnapshot,
-                    $component['client_included_minutes'] ?? null,
-                    $component['client_overage_rate'] ?? null,
-                    $component['client_billing_currency'] ?? $component['currency'] ?? 'USD',
+                    $component['service_included_minutes'] ?? $component['client_included_minutes'] ?? null,
+                    $component['service_overage_rate'] ?? $component['client_overage_rate'] ?? null,
+                    $component['service_pricing_currency'] ?? $component['client_billing_currency'] ?? $component['currency'] ?? 'USD',
                     $actorId,
                 ]);
                 $componentId = (int)$this->pdo->lastInsertId();
@@ -389,7 +407,7 @@ final class JobWorkPlanningService
                     $check->execute([$componentId]);
                     if (!$check->fetchColumn()) {
                         $this->pdo->prepare("INSERT INTO work_assignments (job_work_component_id,status,currency) VALUES (?,'planned',?)")
-                            ->execute([$componentId, $component['currency']]);
+                            ->execute([$componentId, $rule['currency'] ?? 'USD']);
                     }
                 }
             }
