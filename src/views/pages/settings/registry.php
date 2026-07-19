@@ -251,6 +251,44 @@ function pa_settings_registry(): array
         'form_mode' => 'self',
     ];
 
+    // Present the installation as six broad, predictable destinations while
+    // preserving every legacy tab and permission check above.
+    $registry['account']['title'] = 'Account & Access';
+    $registry['account']['short_title'] = 'Account & Access';
+    $registry['account']['description'] = 'Manage your sign-in, people, roles, permissions, and access boundaries.';
+    $registry['account']['keywords'] .= ' people users accounts roles permissions access business units';
+    $registry['account']['items'] = array_merge($registry['account']['items'], $registry['people']['items']);
+
+    $registry['business']['title'] = 'Business';
+    $registry['business']['short_title'] = 'Business';
+
+    $registry['workforce'] = $registry['work'];
+    $registry['workforce']['title'] = 'Workforce';
+    $registry['workforce']['short_title'] = 'Workforce';
+    $registry['workforce']['marker'] = 'WF';
+
+    $registry['services'] = $registry['sales'];
+    $registry['services']['title'] = 'Services & Documents';
+    $registry['services']['short_title'] = 'Services & Documents';
+    $registry['services']['marker'] = 'SV';
+
+    $registry['system'] = $registry['communications'];
+    $registry['system']['title'] = 'System & Integrations';
+    $registry['system']['short_title'] = 'System & Integrations';
+    $registry['system']['marker'] = 'SI';
+    $registry['system']['description'] = 'Automation, integrations, storage, backups, diagnostics, and API access.';
+    $registry['system']['keywords'] .= ' backups restore logs diagnostics api keys';
+    $registry['system']['items'] = array_merge($registry['system']['items'], $registry['data']['items']);
+
+    $registry = [
+        'account' => $registry['account'],
+        'business' => $registry['business'],
+        'services' => $registry['services'],
+        'workforce' => $registry['workforce'],
+        'billing' => $registry['billing'],
+        'system' => $registry['system'],
+    ];
+
     return $registry;
 }
 

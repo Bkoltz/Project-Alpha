@@ -34,6 +34,10 @@ final class WorkforceCommandRegistry
             'return-entry' => ['method' => 'POST', 'policy' => 'time.review', 'csrf' => true],
             'correct' => ['method' => 'POST', 'policy' => 'time.correct', 'csrf' => true],
             'void' => ['method' => 'POST', 'policy' => 'time.void', 'csrf' => true],
+            'correction-request' => ['method' => 'POST', 'policy' => 'time.correction_request', 'csrf' => true],
+            'correction-approve' => ['method' => 'POST', 'policy' => 'corrections.manage', 'csrf' => true],
+            'correction-reject' => ['method' => 'POST', 'policy' => 'corrections.manage', 'csrf' => true],
+            'correction-billing-resolve' => ['method' => 'POST', 'policy' => 'time.billing', 'csrf' => true],
             'link-invoice' => ['method' => 'POST', 'policy' => 'time.billing', 'csrf' => true],
             'assignment-accept' => ['method' => 'POST', 'policy' => 'assignment.self', 'csrf' => true],
             'assignment-decline' => ['method' => 'POST', 'policy' => 'assignment.self', 'csrf' => true],
@@ -42,6 +46,10 @@ final class WorkforceCommandRegistry
             'earning-approve' => ['method' => 'POST', 'policy' => 'earnings.manage', 'csrf' => true],
             'pay-status' => ['method' => 'POST', 'policy' => 'earnings.legacy_manage', 'csrf' => true],
             'statement-settle' => ['method' => 'POST', 'policy' => 'statements.manage', 'csrf' => true],
+            'worker-payment-record' => ['method' => 'POST', 'policy' => 'payments.manage', 'csrf' => true],
+            'worker-payment-void' => ['method' => 'POST', 'policy' => 'payments.manage', 'csrf' => true],
+            'payroll-export-generate' => ['method' => 'POST', 'policy' => 'payroll_exports.manage', 'csrf' => true],
+            'payroll-export-void' => ['method' => 'POST', 'policy' => 'payroll_exports.manage', 'csrf' => true],
         ];
     }
 

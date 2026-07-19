@@ -145,7 +145,7 @@ try {
         if ($quoteType === 'regular') {
           // Create a private draft. Contract completion is the billing event.
           $invoiceSubtotal=0.0;
-          foreach($qitems as $it){if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;$invoiceSubtotal+=(float)$it['line_total'];}
+          foreach($qitems as $it){if(($it['pricing_status']??'standard')!=='standard')continue;$invoiceSubtotal+=(float)$it['line_total'];}
           $invoiceDiscount=0.0;
           if(($quote['discount_type']??'none')==='percent')$invoiceDiscount=max(0,min(100,(float)$quote['discount_value']))*$invoiceSubtotal/100;
           elseif(($quote['discount_type']??'none')==='fixed')$invoiceDiscount=min($invoiceSubtotal,max(0,(float)$quote['discount_value']));
@@ -162,7 +162,7 @@ try {
 
           $ii = $pdo->prepare('INSERT INTO invoice_items (invoice_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,is_travel,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
           foreach ($qitems as $it) {
-            if(!empty($it['is_travel'])&&($it['pricing_status']??'standard')!=='standard')continue;
+            if(($it['pricing_status']??'standard')!=='standard')continue;
             $ii->execute([
               $invoice_id,
               $it['item_library_id']??null,

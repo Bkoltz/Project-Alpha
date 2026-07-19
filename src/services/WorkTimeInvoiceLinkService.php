@@ -112,6 +112,12 @@ final class WorkTimeInvoiceLinkService
             if (!empty($entry['client_id']) && (int)$entry['client_id'] !== (int)$invoice['client_id']) {
                 throw new DomainException('The time entry and invoice must belong to the same client.');
             }
+            if (empty($invoice['job_id'])) {
+                throw new DomainException('Assign the invoice to a Job before adding tracked time.');
+            }
+            if (!empty($entry['job_id']) && (int)$entry['job_id'] !== (int)$invoice['job_id']) {
+                throw new DomainException('The time entry and invoice belong to different Jobs. Confirm a context move before linking them.');
+            }
 
             $rate = $this->resolveRate($invoiceId, $requestedRate, $entry);
             $durationSeconds = (int)$entry['duration_seconds'];

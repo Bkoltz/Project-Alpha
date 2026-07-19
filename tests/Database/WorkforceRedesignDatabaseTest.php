@@ -78,7 +78,13 @@ final class WorkforceRedesignDatabaseTest extends TestCase
         $time = new TimekeepingService($pdo, $audit);
         $approval = new ApprovalService($pdo, $audit, new BillingTimeConsumer($pdo));
         $periods = new PayPeriodService($pdo);
-        $workDate = new DateTimeImmutable('2026-07-15 09:00:00', new DateTimeZone('UTC'));
+        $latestPeriodEnd = $pdo->query('SELECT MAX(period_end) FROM pay_periods')->fetchColumn();
+        $workDate = $latestPeriodEnd
+            ? (new DateTimeImmutable((string)$latestPeriodEnd . ' 09:00:00', new DateTimeZone('UTC')))->modify('+30 days')
+            : new DateTimeImmutable('2036-01-15 09:00:00', new DateTimeZone('UTC'));
+        $pdo->prepare("INSERT INTO jobs (job_code,status,created_by) VALUES (?,'active',?)")
+            ->execute(['QA-WORK-' . $suffix, $workerUserId]);
+        $jobId = (int)$pdo->lastInsertId();
         $entryId = $time->saveManual($workerUserId, [
             'capture_mode' => 'duration',
             'work_date' => '2026-07-15',
@@ -86,6 +92,7 @@ final class WorkforceRedesignDatabaseTest extends TestCase
             'start_time' => $workDate->format('Y-m-d\\TH:i'),
             'end_time' => $workDate->modify('+2 hours')->format('Y-m-d\\TH:i'),
             'description' => 'Canonical Workforce verification',
+            'job_id' => $jobId,
             'billing_treatment' => 'ready',
             'entered_by_user_id' => $workerUserId,
         ]);
@@ -139,7 +146,9 @@ final class WorkforceRedesignDatabaseTest extends TestCase
             $adminId,
             'Verification approval'
         );
-        $closed = $periods->close((int)$period['id'], $adminId);
+        // This test runs against a shared isolated QA schema that may contain
+        // unrelated active worker fixtures from prior verification passes.
+        $closed = $periods->close((int)$period['id'], $adminId, true);
         self::assertTrue($closed['closed']);
         self::assertCount(1, $closed['statement_ids']);
         $statementId = (int)$closed['statement_ids'][0];

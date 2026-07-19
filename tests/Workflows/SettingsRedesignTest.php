@@ -54,9 +54,11 @@ final class SettingsRedesignTest extends TestCase
 
         self::assertArrayNotHasKey('business', $staffRegistry);
         self::assertArrayHasKey('business', $ownerRegistry);
-        self::assertArrayHasKey('workflow', $staffRegistry['work']['items']);
-        self::assertArrayNotHasKey('accounts', $staffRegistry['people']['items']);
-        self::assertArrayNotHasKey('api-keys', $staffRegistry['data']['items']);
+        self::assertCount(6, pa_settings_registry());
+        self::assertSame(['account', 'business', 'services', 'workforce', 'billing', 'system'], array_keys(pa_settings_registry()));
+        self::assertArrayHasKey('workflow', $staffRegistry['workforce']['items']);
+        self::assertArrayNotHasKey('accounts', $staffRegistry['account']['items']);
+        self::assertArrayNotHasKey('api-keys', $staffRegistry['system']['items']);
     }
 
     public function testSettingsShellUsesSharedNavigationAndExplicitSaveControls(): void
@@ -163,7 +165,7 @@ final class SettingsRedesignTest extends TestCase
             self::assertStringContainsString("\$action==='{$action}'", $controller, "Missing backend action: {$action}");
         }
         self::assertStringContainsString('user_can($pdo,$userId,$permission,0)', $controller);
-        self::assertStringContainsString("'save-work-type','set-work-type-status'=>['workforce.catalog.manage','settings.manage']", $controller);
+        self::assertStringContainsString("'save-work-type','set-work-type-status','delete-work-type'=>['workforce.catalog.manage','settings.manage']", $controller);
         self::assertStringNotContainsString("in_array((string)(\$_SESSION['user']['role']??''),['admin','owner']", $controller);
         self::assertStringNotContainsString("user_can(\$pdo,\$userId,'workforce.manage',0)", $controller);
     }
@@ -176,10 +178,10 @@ final class SettingsRedesignTest extends TestCase
         $registry = pa_settings_registry();
 
         self::assertStringContainsString('LEFT JOIN work_type_billing_defaults', $view);
-        self::assertStringContainsString('Client billing default', $view);
+        self::assertStringContainsString('client pricing belongs to the Service Library', $view);
         self::assertStringContainsString('Worker compensation default', $view);
-        self::assertStringContainsString('name="billing_treatment"', $view);
-        self::assertStringContainsString('name="billing_rate"', $view);
+        self::assertStringNotContainsString('name="billing_treatment"', $view);
+        self::assertStringNotContainsString('name="billing_rate"', $view);
         self::assertStringContainsString('name="compensation_currency"', $view);
         self::assertStringContainsString('edit_work_type=', $view);
         self::assertStringContainsString('value="set-work-type-status"', $view);
@@ -187,17 +189,18 @@ final class SettingsRedesignTest extends TestCase
         self::assertStringContainsString('settings-save-bar', $view);
 
         self::assertStringContainsString('INSERT INTO work_type_billing_defaults', $controller);
+        self::assertStringContainsString('default_treatment="undecided"', $controller);
         self::assertStringContainsString("\$action==='set-work-type-status'", $controller);
-        self::assertStringContainsString("['undecided','internal','fixed_price_included','hourly']", $controller);
-        self::assertSame('workforce.catalog.manage', $registry['work']['items']['work-types']['permission']);
+        self::assertStringNotContainsString("['undecided','internal','fixed_price_included','hourly']", $controller);
+        self::assertSame('workforce.catalog.manage', $registry['workforce']['items']['work-types']['permission']);
 
         $catalogManagerRegistry = pa_settings_visible_registry(
             $registry,
             static fn (string $permission): bool => $permission === 'workforce.catalog.manage',
             'staff'
         );
-        self::assertArrayHasKey('work-types', $catalogManagerRegistry['work']['items']);
-        self::assertArrayNotHasKey('workflow', $catalogManagerRegistry['work']['items']);
+        self::assertArrayHasKey('work-types', $catalogManagerRegistry['workforce']['items']);
+        self::assertArrayNotHasKey('workflow', $catalogManagerRegistry['workforce']['items']);
     }
 
     public function testItemLibraryIsServiceFocusedAndPackagesUseSearchSelection(): void
@@ -268,8 +271,8 @@ final class SettingsRedesignTest extends TestCase
             'staff'
         );
 
-        self::assertArrayNotHasKey('permissions', $registry['people']['items']);
-        self::assertArrayHasKey('business-units', $registry['people']['items']);
+        self::assertArrayNotHasKey('permissions', $registry['account']['items']);
+        self::assertArrayHasKey('business-units', $registry['account']['items']);
 
         $businessUnits = (string)file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/settings/business-units.php');
         self::assertStringContainsString("user_can(\$pdo,(int)(\$_SESSION['user']['id']??0),'users.manage',0)", $businessUnits);

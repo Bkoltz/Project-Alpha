@@ -18,14 +18,25 @@ function app_version(): string {
 
 function asset_url(string $path): string {
     $path = '/' . ltrim($path, '/');
-    $publicRoot = dirname(__DIR__, 2) . '/public';
-    $filePath = $publicRoot . $path;
     $version = app_version();
 
-    if (@is_file($filePath)) {
-        $mtime = @filemtime($filePath);
-        if ($mtime !== false) {
-            $version .= '-' . $mtime;
+    // Source checkouts keep assets in <project>/public, while the production
+    // container mounts that directory directly as DOCUMENT_ROOT. Check both
+    // layouts so every deployment receives a file-mtime cache buster.
+    $publicRoots = [dirname(__DIR__, 2) . '/public'];
+    $documentRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+    if ($documentRoot !== '') {
+        $publicRoots[] = $documentRoot;
+    }
+
+    foreach (array_unique($publicRoots) as $publicRoot) {
+        $filePath = rtrim($publicRoot, '/\\') . $path;
+        if (@is_file($filePath)) {
+            $mtime = @filemtime($filePath);
+            if ($mtime !== false) {
+                $version .= '-' . $mtime;
+            }
+            break;
         }
     }
 

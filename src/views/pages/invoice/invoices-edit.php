@@ -28,9 +28,82 @@ foreach ($clients as $c) {
     break;
   }
 }
+$availableTimeStmt = $pdo->prepare(
+  "SELECT t.id,t.start_time,t.duration_seconds,t.description,t.job_id,t.project_id,
+          wt.name work_type_name,j.job_code,p.name project_name,
+          COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),NULLIF(u.username,''),u.email) worker_name,
+          COALESCE(NULLIF(bt.rate,0),NULLIF(s.billing_rate,0)) billing_rate
+   FROM work_time_entries t
+   JOIN users u ON u.id=t.user_id
+   LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id
+   LEFT JOIN work_types wt ON wt.id=t.work_type_id
+   LEFT JOIN jobs j ON j.id=t.job_id
+   LEFT JOIN projects p ON p.id=t.project_id
+   JOIN work_approval_snapshots s ON s.id=(
+     SELECT s2.id FROM work_approval_snapshots s2
+     WHERE s2.time_entry_id=t.id AND s2.entry_revision<=t.revision AND s2.voided_at IS NULL
+     ORDER BY s2.entry_revision DESC LIMIT 1
+   )
+   JOIN work_billing_consumptions wbc ON wbc.approval_snapshot_id=s.id
+     AND wbc.consumption_type IN ('approved','correction')
+   JOIN time_entries bt ON bt.id=wbc.billing_time_entry_id
+   WHERE t.client_id=? AND t.status='approved' AND t.workflow_status='confirmed'
+     AND t.billable=1 AND t.end_time IS NOT NULL
+     AND COALESCE(bt.billed,0)=0 AND bt.invoice_item_id IS NULL
+     AND (t.invoice_id IS NULL OR t.invoice_id=?)
+   ORDER BY t.start_time DESC"
+);
+$availableTimeStmt->execute([(int)$inv['client_id'], $id]);
+$availableTimeEntries = $availableTimeStmt->fetchAll(PDO::FETCH_ASSOC);
+$contractEstimateLines = [];
+if (!empty($inv['contract_id'])) {
+  $estimateStmt = $pdo->prepare(
+    "SELECT item,description,quantity,unit_price,line_total,billing_unit
+     FROM contract_items WHERE contract_id=? AND pricing_status='estimate'
+     ORDER BY id"
+  );
+  $estimateStmt->execute([(int)$inv['contract_id']]);
+  $contractEstimateLines = $estimateStmt->fetchAll(PDO::FETCH_ASSOC);
+}
 ?>
 <section>
   <h2>Edit Invoice <?php echo htmlspecialchars(pa_invoice_label_from_row($inv)); ?><?php if (!empty($inv['project_code'])) echo ' (Job ' . htmlspecialchars($inv['project_code']) . ')'; ?></h2>
+  <?php if ($contractEstimateLines): ?>
+  <div style="max-width:900px;margin:0 0 18px;padding:14px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc">
+    <strong>Contract estimate — reference only</strong>
+    <p style="margin:4px 0 10px;color:#64748b;font-size:13px">These estimated hours are not collectible invoice charges. Confirmed time below creates the actual hourly lines.</p>
+    <div style="display:grid;gap:6px"><?php foreach ($contractEstimateLines as $estimateLine): ?><div style="display:flex;justify-content:space-between;gap:16px"><span><?= htmlspecialchars((string)$estimateLine['item']) ?> · <?= number_format((float)$estimateLine['quantity'],2) ?> hr × $<?= number_format((float)$estimateLine['unit_price'],2) ?></span><strong>$<?= number_format((float)$estimateLine['line_total'],2) ?> estimated</strong></div><?php endforeach; ?></div>
+  </div>
+  <?php endif; ?>
+  <div style="display:grid;gap:10px;max-width:900px;margin:0 0 18px;padding:14px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff">
+    <div>
+      <div style="font-weight:700;color:#1e3a8a">Add confirmed time to this draft</div>
+      <div style="font-size:13px;color:#475569">Confirmed, billable time for this client stays available until it is attached. Finalizing the invoice locks this workflow.</div>
+    </div>
+    <?php if (!$availableTimeEntries): ?>
+      <p style="margin:0;color:#64748b">No additional confirmed time is currently available for this client.</p>
+    <?php else: ?>
+      <div style="display:grid;gap:8px">
+        <?php foreach ($availableTimeEntries as $timeEntry): ?>
+          <form method="post" action="/?page=workforce/action" style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;background:#fff;border:1px solid #dbeafe;border-radius:8px">
+            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="action" value="link-invoice">
+            <input type="hidden" name="entry_id" value="<?php echo htmlspecialchars((string)$timeEntry['id'], ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="invoice_id" value="<?php echo $id; ?>">
+            <input type="hidden" name="return_to" value="invoice-edit">
+            <div>
+              <strong><?php echo htmlspecialchars($timeEntry['work_type_name'] ?: ($timeEntry['job_code'] ?: ($timeEntry['project_name'] ?: 'Unclassified work'))); ?></strong>
+              <small style="display:block;color:#64748b"><?php echo htmlspecialchars($timeEntry['worker_name']); ?> · <?php echo htmlspecialchars(date('M j, Y', strtotime((string)$timeEntry['start_time']))); ?> · <?php echo number_format(((int)$timeEntry['duration_seconds']) / 3600, 2); ?> h<?php if ($timeEntry['description']): ?> · <?php echo htmlspecialchars($timeEntry['description']); ?><?php endif; ?></small>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <?php if ((float)($timeEntry['billing_rate'] ?? 0) <= 0): ?><input type="number" name="billing_rate" min="0.01" step="0.01" required placeholder="Hourly rate" aria-label="Hourly billing rate" style="width:120px;padding:8px;border:1px solid #cbd5e1;border-radius:6px"><?php endif; ?>
+              <button class="btn btn-primary btn-sm" type="submit">Add time</button>
+            </div>
+          </form>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
   <form id="invEditForm" method="post" action="/?page=invoices-update" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">

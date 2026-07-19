@@ -75,5 +75,6 @@ final class InvoiceVoidWorkflowTest extends TestCase
         self::assertStringContainsString("const rest = separatorIndex >= 0 ? page.slice(separatorIndex + 1) : '';", $navigation);
         self::assertStringContainsString('navigateToPage(fullPage, true, linkUrl.hash)', $navigation);
         self::assertStringContainsString('scrollToPageHash(targetHash)', $navigation);
+        self::assertStringContainsString("window.scrollTo({ top: 0, left: 0, behavior: 'auto' });", $navigation);
     }
 }

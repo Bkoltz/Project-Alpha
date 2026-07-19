@@ -201,10 +201,10 @@ try {
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {
-        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?)');
+        $qi = $pdo->prepare('INSERT INTO quote_items (quote_id,item_library_id,item,description,quantity,unit_price,line_total,billing_unit,pricing_status,catalog_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?)');
         foreach ($items as $it) {
             $catalog = catalog_document_snapshot($pdo,(int)($it['catalog_id']??0),$it);
-            $qi->execute([$quote_id,$catalog['item_library_id'],$it['item'],$it['description'],$it['quantity'],$it['unit_price'],$it['line_total'],$it['billing_unit']??'each',$catalog['catalog_snapshot']]);
+            $qi->execute([$quote_id,$catalog['item_library_id'],$it['item'],$it['description'],$it['quantity'],$it['unit_price'],$it['line_total'],$it['billing_unit']??'each',$billing_mode==='hourly'?'estimate':'standard',$catalog['catalog_snapshot']]);
         }
     }
     if($travelItem){

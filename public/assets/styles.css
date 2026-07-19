@@ -239,24 +239,24 @@ body.nav-open{overflow:hidden}
 .status-badge.status-void{background:#fef2f2;color:#991b1b}
 
 /* Workforce uses the same surfaces, spacing, controls, and status language as PA. */
-.workforce-page{display:grid;gap:22px}
+.workforce-page{display:grid;gap:16px}
 .workforce-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
-.workforce-head h2{margin:2px 0 6px;font-size:28px;letter-spacing:-.02em}
+.workforce-head h2{margin:2px 0 5px;font-size:24px;letter-spacing:-.02em}
 .workforce-eyebrow{margin:0;color:var(--nav-accent);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 .workforce-subtitle{margin:0;max-width:720px;color:var(--muted);line-height:1.5}
 .workforce-head__actions,.workforce-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .workforce-actions form{margin:0}
 .workforce-person-switcher{max-width:520px;padding:14px 16px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 1px 3px rgba(11,18,32,.05)}
 .workforce-person-switcher .field{margin:0}
-.workforce-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.workforce-kpi{display:grid;gap:5px;padding:18px 20px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 1px 3px rgba(11,18,32,.06)}
+.workforce-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.workforce-kpi{display:grid;gap:4px;padding:14px 16px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 1px 3px rgba(11,18,32,.06)}
 .workforce-kpi span{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.workforce-kpi strong{font-size:25px;line-height:1.2}
+.workforce-kpi strong{font-size:22px;line-height:1.2}
 .workforce-kpi strong.is-running{color:#047857}
 .workforce-kpi small{color:var(--muted)}
 .workforce-grid{display:grid;gap:20px}
 .workforce-grid--two{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
-.workforce-card{display:grid;gap:14px}
+.workforce-card{display:grid;gap:11px}
 .workforce-card--table{gap:4px}
 .workforce-form{display:grid;gap:13px}
 .workforce-form .field{margin:0}
@@ -287,6 +287,8 @@ body.nav-open{overflow:hidden}
 .workforce-mode-note{margin:0;color:#334155;line-height:1.5}
 .workforce-form-section,.workforce-outcome{min-width:0;margin:0;padding:0;border:0}
 .workforce-form-section{display:grid;gap:13px;padding-top:4px}
+.workforce-form-section--primary{padding:13px;border:1px solid #dbe5ef;border-radius:10px;background:#f8fafc}
+.workforce-context-grid--activity{grid-template-columns:minmax(240px,.8fr) minmax(280px,1.2fr)}
 .workforce-form-section>legend,.workforce-outcome>legend{width:100%;margin:0 0 10px;padding:0;color:#172033;font-size:14px;font-weight:800}
 .workforce-form-section>legend small{color:var(--muted);font-weight:500}
 .workforce-search-select{display:grid;align-content:start;gap:5px}
@@ -320,7 +322,16 @@ body.nav-open{overflow:hidden}
 .workforce-entry-edit{position:relative;display:inline-block;text-align:left}
 .workforce-entry-edit>summary{list-style:none}
 .workforce-entry-edit>summary::-webkit-details-marker{display:none}
-.workforce-entry-edit[open] form{position:absolute;z-index:20;right:0;top:calc(100% + 8px);width:min(430px,80vw);padding:16px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 45px rgba(11,18,32,.18)}
+.workforce-entry-edit[open] > form,.workforce-entry-edit[open] > .workforce-review-dialog{position:fixed;z-index:80;left:50%;top:50%;right:auto;transform:translate(-50%,-50%);width:min(680px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;padding:18px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 24px 70px rgba(11,18,32,.28)}
+.workforce-review-dialog{display:grid;gap:18px}
+.workforce-review-dialog .workforce-form--danger{padding-top:16px;border-top:1px solid #fecaca}
+.workforce-create-panel{border:1px solid #dbe3ee;border-radius:10px;background:#f8fafc}
+.workforce-create-panel>summary{margin:10px;list-style:none;width:max-content}
+.workforce-create-panel>summary::-webkit-details-marker{display:none}
+.workforce-create-panel>form,.workforce-payment-forms{padding:0 14px 14px}
+.workforce-payment-forms{display:grid;gap:18px}
+.workforce-payment-form{padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff}
+.workforce-payment-form h4{margin:0}
 .workforce-combobox{position:relative}
 .workforce-combobox__results{position:absolute;z-index:40;top:calc(100% + 4px);left:0;right:0;max-height:240px;overflow:auto;padding:5px;background:#fff;border:1px solid #94a3b8;border-radius:9px;box-shadow:0 12px 28px rgba(15,23,42,.16)}
 .workforce-combobox__results[hidden]{display:none}
@@ -347,10 +358,19 @@ body.nav-open{overflow:hidden}
 .workforce-approved-item:first-of-type{border-top:0}
 .workforce-approved-item>summary{display:flex;justify-content:space-between;gap:12px;padding:14px 0;cursor:pointer}
 .workforce-approved-item__body{display:grid;gap:16px;padding:4px 0 18px}
+.workforce-tabs{display:grid;gap:12px}
+.workforce-tab-list{display:flex;gap:4px;overflow-x:auto;padding:4px;background:#eef2f7;border:1px solid #dbe3ee;border-radius:10px}
+.workforce-tab{appearance:none;border:0;border-radius:7px;background:transparent;color:#475569;cursor:pointer;font:inherit;font-size:13px;font-weight:700;min-height:36px;padding:7px 12px;white-space:nowrap}
+.workforce-tab:hover{background:rgba(255,255,255,.7);color:#172033}
+.workforce-tab.is-active{background:#fff;color:#0f4c81;box-shadow:0 1px 3px rgba(15,23,42,.12)}
+.workforce-tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:21px;margin-left:5px;padding:0 6px;border-radius:999px;background:#e2e8f0;color:#334155;font-size:11px}
+.workforce-tab.is-active .workforce-tab-count{background:#dbeafe;color:#1d4ed8}
+.workforce-tab-panel[hidden]{display:none}
+.workforce-queue-note{margin:0;padding:12px 14px;border:1px solid #dbe3ee;border-radius:9px;background:#f8fafc;color:#475569;font-size:13px;line-height:1.5}
 
 @media (max-width:900px){
   .workforce-grid--two,.workforce-overview-grid{grid-template-columns:1fr}
-  .workforce-kpis{grid-template-columns:1fr}
+  .workforce-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .workforce-outcome-grid{grid-template-columns:1fr}
 }
 @media (max-width:640px){
@@ -360,6 +380,7 @@ body.nav-open{overflow:hidden}
   .workforce-submission-list{grid-template-columns:1fr}
   .workforce-head__actions{width:100%}
   .workforce-head__actions .btn{flex:1}
+  .workforce-kpis,.workforce-context-grid--activity{grid-template-columns:1fr}
 }
 
 /* dashboard kit */

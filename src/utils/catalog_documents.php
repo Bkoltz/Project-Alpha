@@ -14,7 +14,8 @@ function catalog_document_snapshot(PDO $pdo, int $itemLibraryId, array $line): a
     }
 
     $stmt = $pdo->prepare(
-        'SELECT id,item_name,description,unit_price,entry_type,billing_unit,tax_behavior,is_active,updated_at
+        'SELECT id,item_name,description,unit_price,client_pricing_model,client_included_minutes,
+                client_overage_rate,pricing_currency,entry_type,billing_unit,tax_behavior,is_active,updated_at
          FROM item_library WHERE id=? LIMIT 1'
     );
     $stmt->execute([$itemLibraryId]);
@@ -30,11 +31,18 @@ function catalog_document_snapshot(PDO $pdo, int $itemLibraryId, array $line): a
 
     $componentsStmt = $pdo->prepare(
         'SELECT c.id,c.work_type_id,c.name,c.description,c.quantity_behavior,c.fixed_quantity,
-                c.expected_duration_minutes,c.assignment_required,c.compensation_method,
-                c.compensation_amount,c.included_minutes,c.overage_rate,c.percentage,
-                c.percentage_basis,c.eligibility_trigger,c.currency,c.display_order,c.updated_at,
+                c.expected_duration_minutes,c.assignment_required,
+                wt.default_compensation_method compensation_method,wt.default_amount compensation_amount,
+                wt.default_base_minutes included_minutes,wt.default_overage_rate overage_rate,
+                wt.default_percentage percentage,wt.default_percentage_basis percentage_basis,
+                wt.default_eligibility_trigger eligibility_trigger,wt.currency,
+                CASE i.client_pricing_model WHEN "hourly" THEN "hourly" WHEN "base_overage" THEN "base_overage" ELSE "fixed_price_included" END client_billing_treatment,
+                CASE WHEN i.client_pricing_model="hourly" THEN i.unit_price ELSE NULL END client_billing_rate,
+                i.client_included_minutes,i.client_overage_rate,i.pricing_currency client_billing_currency,
+                c.display_order,c.updated_at,
                 wt.code work_type_code,wt.name work_type_name
          FROM catalog_work_components c JOIN work_types wt ON wt.id=c.work_type_id
+         JOIN item_library i ON i.id=c.item_library_id
          WHERE c.item_library_id=? AND c.is_active=1 ORDER BY c.display_order,c.id'
     );
     $componentsStmt->execute([$itemLibraryId]);
@@ -66,13 +74,17 @@ function catalog_document_snapshot(PDO $pdo, int $itemLibraryId, array $line): a
     }
 
     $snapshot = [
-        'version' => 1,
+        'version' => 2,
         'captured_at' => gmdate('c'),
         'catalog' => [
             'id' => (int)$item['id'],
             'name' => (string)$item['item_name'],
             'description' => $item['description'],
             'unit_price' => (string)$item['unit_price'],
+            'client_pricing_model' => (string)$item['client_pricing_model'],
+            'client_included_minutes' => $item['client_included_minutes'] === null ? null : (int)$item['client_included_minutes'],
+            'client_overage_rate' => $item['client_overage_rate'] === null ? null : (string)$item['client_overage_rate'],
+            'pricing_currency' => (string)$item['pricing_currency'],
             'entry_type' => (string)$item['entry_type'],
             'billing_unit' => (string)$item['billing_unit'],
             'tax_behavior' => (string)$item['tax_behavior'],

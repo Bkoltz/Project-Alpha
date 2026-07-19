@@ -19,6 +19,7 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 | Daily 05:00 | `sync_merchant_rate.php` | Calculate the observed Stripe processing rate |
 | Daily 06:00 | `process_audit_schedules.php` | Generate and deliver scheduled audit exports |
 | Daily 08:00 | `send_invoice_reminders.php` | Send enabled due and overdue reminders |
+| Every 5 minutes | `process_workforce_deadlines.php` | Send 4/2/1-hour workforce reminders and confirm completed time at cutoff |
 
 All output is appended to `/var/www/config/logs/cron/cron.log` in the cron container.
 

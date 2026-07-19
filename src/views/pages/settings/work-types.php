@@ -4,9 +4,12 @@ $workTypes = $pdo->query(
     'SELECT wt.*,
             COALESCE(wtb.default_treatment, "undecided") AS billing_treatment,
             wtb.default_billing_rate,
-            COALESCE(wtb.currency, wt.currency, "USD") AS billing_currency
+            COALESCE(wtb.currency, wt.currency, "USD") AS billing_currency,
+            c.item_library_id linked_service_id,i.item_name linked_service_name
      FROM work_types wt
      LEFT JOIN work_type_billing_defaults wtb ON wtb.work_type_id = wt.id
+     LEFT JOIN catalog_work_components c ON c.work_type_id=wt.id AND c.is_active=1
+     LEFT JOIN item_library i ON i.id=c.item_library_id
      ORDER BY wt.is_active DESC, wt.name'
 )->fetchAll(PDO::FETCH_ASSOC);
 $h = static fn ($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -19,6 +22,7 @@ foreach ($workTypes as $workType) {
         break;
     }
 }
+$showForm = $editing !== null || isset($_GET['add_work_type']);
 
 $form = $editing ?? [
     'id' => 0,
@@ -54,12 +58,13 @@ $compensationLabels = [
 ];
 ?>
 
-<div class="settings-managed-list">
+<div class="settings-managed-list settings-managed-list--work-types">
   <div class="settings-list-header">
     <div>
       <h3>Work Activities</h3>
-      <p>A Work Activity describes what a person did. It classifies tracked time and can supply separate defaults for client billing and worker compensation.</p>
+      <p>A Work Activity describes what a person did. It classifies tracked time and can supply worker-compensation defaults; client pricing belongs to the Service Library.</p>
     </div>
+    <?php if (!$showForm): ?><a class="btn btn-primary" href="/?page=settings&amp;tab=work-types&amp;add_work_type=1">+ Add Work Activity</a><?php endif; ?>
   </div>
 
   <div class="settings-card settings-work-type-guide">
@@ -67,11 +72,12 @@ $compensationLabels = [
     <div class="settings-work-type-guide__steps">
       <article><strong>1. Client service</strong><span>Add a Service Library service, fee, or package to a quote, contract, or invoice.</span></article>
       <article><strong>2. Worker activity</strong><span>Track what a worker actually did with a Work Activity, such as 3D Modeling or 2D Mapping.</span></article>
-      <article><strong>3. Reusable connection</strong><span>A service links to one or more reusable Work Activities for time, Job planning, billing, and assignments.</span></article>
+      <article><strong>3. Optional one-to-one link</strong><span>A Service may link exclusively to one Work Activity when they represent the same work. Rental and similar Services can remain independent.</span></article>
     </div>
-    <p class="settings-work-type-guide__note"><strong>Hourly billing:</strong> manually adding an hourly service to a document uses the Service Library price. Adding confirmed tracked time to an invoice uses the linked service-activity rate after any project or client override. Fixed-price work should be marked as included so tracked time does not create a second client charge.</p>
+    <p class="settings-work-type-guide__note"><strong>Hourly billing:</strong> the linked Service supplies the client rate. This Work Activity supplies the internal classification and compensation rules. Unlinked time must be assigned to a Job before it can be billed.</p>
   </div>
 
+  <?php if ($showForm): ?>
   <form method="post"
         action="/?page=settings/workforce-catalog-handler"
         class="settings-primary-form"
@@ -103,31 +109,6 @@ $compensationLabels = [
         <label class="check-row">
           <input type="checkbox" name="is_active" value="1" <?=!empty($form['is_active']) ? 'checked' : ''?>>
           <span>Available for new time entries and assignments</span>
-        </label>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Client billing default</legend>
-      <p class="muted">This is the fallback treatment when someone records this Work Activity without a more specific Service Library rule. It does not determine what a worker earns.</p>
-      <div class="settings-form-grid">
-        <label class="field">
-          <span class="label">Default billing treatment</span>
-          <select class="input" name="billing_treatment">
-            <?php foreach ($billingLabels as $value => $label): ?>
-              <option value="<?=$h($value)?>" <?=$form['billing_treatment'] === $value ? 'selected' : ''?>><?=$h($label)?></option>
-            <?php endforeach; ?>
-          </select>
-          <small>Choose hourly only when this time should become a separate invoice charge. Choose included for work already covered by a service or package price.</small>
-        </label>
-        <label class="field">
-          <span class="label">Default client hourly rate</span>
-          <input class="input" type="number" min="0" step="0.0001" name="billing_rate" value="<?=$h($form['default_billing_rate'])?>" placeholder="Leave blank to decide later">
-          <small>Used only for hourly tracked time. A project rate overrides a client rate, which overrides this rate; the global fallback is used last.</small>
-        </label>
-        <label class="field">
-          <span class="label">Billing currency</span>
-          <input class="input" name="billing_currency" maxlength="3" value="<?=$h($form['billing_currency'])?>" required>
         </label>
       </div>
     </fieldset>
@@ -194,6 +175,7 @@ $compensationLabels = [
       </div>
     </div>
   </form>
+  <?php endif; ?>
 
   <div class="settings-card">
     <div>
@@ -205,7 +187,7 @@ $compensationLabels = [
         <thead>
           <tr>
             <th>Work Activity</th>
-            <th>Client billing default</th>
+            <th>Linked Service</th>
             <th>Worker compensation default</th>
             <th>Status</th>
             <th>Actions</th>
@@ -215,12 +197,7 @@ $compensationLabels = [
           <?php foreach ($workTypes as $type): ?>
             <tr>
               <td><strong><?=$h($type['name'])?></strong><small><?=$h($type['code'])?></small></td>
-              <td>
-                <?=$h($billingLabels[$type['billing_treatment']] ?? $type['billing_treatment'])?>
-                <?php if ($type['billing_treatment'] === 'hourly'): ?>
-                  <small><?=$type['default_billing_rate'] === null ? 'Rate decided during review' : $h($type['billing_currency']).' '.number_format((float)$type['default_billing_rate'], 2).'/hr'?></small>
-                <?php endif; ?>
-              </td>
+              <td><?php if (!empty($type['linked_service_id'])): ?><a href="/?page=settings&amp;tab=item-library&amp;edit_service=<?=(int)$type['linked_service_id']?>"><?=$h($type['linked_service_name'])?></a><small>Pricing is managed on the Service</small><?php else: ?><span class="muted">Not linked</span><?php endif; ?></td>
               <td>
                 <?=$h($compensationLabels[$type['default_compensation_method']] ?? $type['default_compensation_method'])?>
                 <small><?=$h(str_replace('_', ' ', ucfirst((string)$type['default_eligibility_trigger'])))?></small>
@@ -236,6 +213,13 @@ $compensationLabels = [
                     <input type="hidden" name="id" value="<?=(int)$type['id']?>">
                     <input type="hidden" name="status" value="<?=$type['is_active'] ? 'inactive' : 'active'?>">
                     <button class="btn btn-sm <?=$type['is_active'] ? '' : 'btn-primary'?>" type="submit"><?=$type['is_active'] ? 'Deactivate' : 'Activate'?></button>
+                  </form>
+                  <form method="post" action="/?page=settings/workforce-catalog-handler" class="inline-form" onsubmit="return confirm('Permanently delete this Work Activity? This is allowed only when it has never been used or connected to a service or Job.');">
+                    <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>">
+                    <input type="hidden" name="action" value="delete-work-type">
+                    <input type="hidden" name="return_tab" value="work-types">
+                    <input type="hidden" name="id" value="<?=(int)$type['id']?>">
+                    <button class="btn btn-sm btn-danger-outline" type="submit">Delete permanently</button>
                   </form>
                 </div>
               </td>

@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/api_response.php';
 
-const PA_REQUIRED_SCHEMA_VERSION = 47;
+const PA_REQUIRED_SCHEMA_VERSION = 53;
 
 try {
     $version = (int)$pdo->query('SELECT COALESCE(MAX(version),0) FROM schema_migrations')->fetchColumn();
@@ -31,6 +31,17 @@ try {
         'work_time_billing_allocations',
         'worker_earnings',
         'worker_earning_events',
+        'time_correction_requests',
+        'time_correction_effects',
+        'time_correction_billing_resolutions',
+        'worker_payment_records',
+        'worker_payment_allocations',
+        'payroll_exports',
+        'payroll_export_rows',
+        'client_credits',
+        'client_credit_events',
+        'catalog_link_migration_review',
+        'workforce_deadline_events',
         'passkey_credentials',
         'passkey_challenges',
     ];
