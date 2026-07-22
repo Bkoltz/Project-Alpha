@@ -45,6 +45,10 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertStringContainsString('name="access_client_secret"', $page);
         self::assertStringContainsString('name="hmac_secret"', $page);
         self::assertStringContainsString('name="application_key"', $page);
+        self::assertStringContainsString('LEFT JOIN worker_profiles wp ON wp.user_id=u.id', $page);
+        self::assertStringContainsString('wp.display_name', $page);
+        self::assertStringNotContainsString('u.display_name', $page);
+        self::assertStringContainsString('Integration settings could not be loaded.', $page);
         self::assertStringNotContainsString('Fixed by', $page);
         self::assertStringNotContainsString('name="role_key"', $page);
         self::assertStringContainsString("'role-admin'", $migration);
@@ -523,6 +527,49 @@ final class ExternalOpsIntegrationTest extends TestCase
         $state=$this->pdo->query("SELECT enabled,automatic_enabled FROM application_entitlements WHERE user_id=2 AND application_key='field_operations'")->fetch(PDO::FETCH_ASSOC);
         self::assertSame(0,(int)$state['enabled']);
         self::assertSame(0,(int)$state['automatic_enabled']);
+    }
+
+    public function testIncrementalProjectionEventsExcludeSensitiveAndUnrelatedFields(): void
+    {
+        $service = new ExternalOpsIntegrationService();
+        $service->enqueueProjectionChange($this->pdo, 'field_operations', 'project', 40, 'upsert', [
+            'id' => 40,
+            'name' => 'Safe project name',
+            'business_unit_id' => 30,
+            'public_project_token' => 'private-sharing-token',
+            'public_project_password_hash' => 'private-password-hash',
+            'invoice_net_terms_days' => 30,
+            'updated_at' => '2026-07-22T05:00:00.123456Z',
+        ]);
+        $projectPayload = $this->latestPayload();
+        self::assertSame('Safe project name', $projectPayload['projection']['data']['name']);
+        self::assertArrayNotHasKey('public_project_token', $projectPayload['projection']['data']);
+        self::assertArrayNotHasKey('public_project_password_hash', $projectPayload['projection']['data']);
+        self::assertArrayNotHasKey('invoice_net_terms_days', $projectPayload['projection']['data']);
+
+        $service->enqueueProjectionChange($this->pdo, 'field_operations', 'project_assignment', 1, 'upsert', [
+            'id' => 1,
+            'project_id' => 40,
+            'user_id' => 2,
+            'pay_rate_override' => '250.00',
+            'updated_at' => '2026-07-22T05:00:01.123456Z',
+        ]);
+        $assignmentPayload = $this->latestPayload();
+        self::assertArrayNotHasKey('pay_rate_override', $assignmentPayload['projection']['data']);
+        self::assertSame(40, $assignmentPayload['projection']['data']['project_id']);
+    }
+
+    public function testIncrementalProjectionRejectsUnknownEntityTypes(): void
+    {
+        $this->expectException(\DomainException::class);
+        (new ExternalOpsIntegrationService())->enqueueProjectionChange(
+            $this->pdo,
+            'field_operations',
+            'payment',
+            1,
+            'upsert',
+            ['amount' => '100.00']
+        );
     }
 
     /** @param list<string> $headers */
