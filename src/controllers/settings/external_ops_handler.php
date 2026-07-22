@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Services\ExternalOpsIntegrationService;
 use App\Services\ExternalOpsOutboxSender;
 use App\Services\ExternalOpsConfigService;
-use App\Services\OperationsPlanningService;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/csrf.php';
@@ -47,15 +46,6 @@ try {
         );
     } elseif ($action === 'send-now') {
         (new ExternalOpsOutboxSender())->deliverDue($pdo, $config, 50);
-    } elseif ($action === 'save-operation') {
-        (new OperationsPlanningService())->saveOperation(
-            $pdo,
-            $_POST,
-            (array)($_POST['assigned_user_ids'] ?? []),
-            $actorUserId
-        );
-    } elseif ($action === 'save-task') {
-        (new OperationsPlanningService())->saveTask($pdo, $_POST, $actorUserId);
     } else {
         throw new DomainException('Unknown integration action.');
     }

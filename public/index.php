@@ -26,6 +26,9 @@ send_security_headers();
 
 // Resolve clean module routes before falling back to PA's legacy ?page router.
 $requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/');
+if ($requestPath === '/api/v1/ops/snapshot/') {
+    $requestPath = '/api/v1/ops/snapshot';
+}
 $moduleRoutes = [
     '/health/ready' => 'health/ready',
     '/time' => 'workforce/time',
@@ -859,6 +862,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'project/project-invoice-email',
         'project/project-invoice-payment',
         'project/projects-update-status',
+        'project/project-work-handler',
         'project-notes-update',
 
         // Quotes
@@ -1143,6 +1147,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'project/projects-update') {
         require_once __DIR__ . '/../src/controllers/project/projects_update.php';
+        exit;
+    }
+    if ($page === 'project/project-work-handler') {
+        require_once __DIR__ . '/../src/controllers/project/project_work_handler.php';
         exit;
     }
     if ($page === 'project/projects-delete') {

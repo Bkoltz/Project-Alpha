@@ -24,7 +24,7 @@ final class ExternalOpsOutboxSender
         }
         foreach (['application_key', 'webhook_url', 'access_client_id', 'access_client_secret', 'hmac_secret'] as $required) {
             if (trim((string)($config[$required] ?? '')) === '') {
-                throw new RuntimeException('External operations delivery is enabled but required environment configuration is incomplete.');
+                throw new RuntimeException('External operations delivery is enabled but required integration configuration is incomplete.');
             }
         }
         if (!filter_var((string)$config['webhook_url'], FILTER_VALIDATE_URL)) {

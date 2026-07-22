@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/external_ops.php';
+require_once __DIR__ . '/../../utils/audit.php';
 
 $userId=(int)($_SESSION['user']['id']??0);$action=(string)($_POST['action']??'');$tab=(string)($_POST['return_tab']??'work-types');
 $redirect='/?page=settings&tab='.rawurlencode($tab);
@@ -108,8 +109,14 @@ try{
    $pdo->prepare('DELETE FROM work_types WHERE id=?')->execute([$id]);$pdo->commit();
  }elseif($action==='save-business-unit'){
   $id=(int)($_POST['id']??0);$name=trim((string)($_POST['name']??''));$code=strtoupper(preg_replace('/[^A-Za-z0-9]+/','_',trim((string)($_POST['code']??$name))));if($name===''||$code==='')throw new DomainException('Name and code are required.');
+  $isDefault=!empty($_POST['is_default']);
   if($id)$pdo->prepare('UPDATE business_units SET name=?,code=?,description=?,is_active=? WHERE id=?')->execute([$name,$code,trim((string)($_POST['description']??''))?:null,isset($_POST['is_active'])?1:0,$id]);
   else $pdo->prepare('INSERT INTO business_units (name,code,description,is_active,created_by) VALUES (?,?,?,?,?)')->execute([$name,$code,trim((string)($_POST['description']??''))?:null,isset($_POST['is_active'])?1:0,$userId]);
+  if(!$id)$id=(int)$pdo->lastInsertId();
+  if($isDefault){if(empty($_POST['is_active']))throw new DomainException('The default Business Unit must be active.');$pdo->prepare('INSERT INTO app_config (organization_id,config_key,config_value) VALUES (0,"default_business_unit_id",?) ON DUPLICATE KEY UPDATE config_value=VALUES(config_value)')->execute([(string)$id]);}
+  else{$defaultUnit=$pdo->query('SELECT config_value FROM app_config WHERE organization_id=0 AND config_key="default_business_unit_id" LIMIT 1')->fetchColumn();if((int)$defaultUnit===$id)$pdo->prepare('DELETE FROM app_config WHERE organization_id=0 AND config_key="default_business_unit_id"')->execute();}
+  audit_log($pdo,'business_unit.saved','business_unit',$id,['name'=>$name,'is_active'=>isset($_POST['is_active']),'is_default'=>$isDefault]);
+  $opsConfig=pa_external_ops_delivery_config($pdo);if(!empty($opsConfig['enabled'])){$unitEvent=$pdo->prepare('SELECT * FROM business_units WHERE id=?');$unitEvent->execute([$id]);(new \App\Services\ExternalOpsIntegrationService())->enqueueProjectionChange($pdo,(string)$opsConfig['application_key'],'business_unit',$id,'upsert',$unitEvent->fetch(PDO::FETCH_ASSOC)?:[]);}
   if($id){$affected=$pdo->prepare('SELECT DISTINCT wp.user_id FROM worker_business_units wbu JOIN worker_profiles wp ON wp.id=wbu.worker_profile_id WHERE wbu.business_unit_id=? AND wp.user_id IS NOT NULL');$affected->execute([$id]);foreach($affected->fetchAll(PDO::FETCH_COLUMN) as $affectedUserId)$syncOpsAccount((int)$affectedUserId);}
  }elseif($action==='assign-worker-unit'){
   $workerProfileId=(int)$_POST['worker_profile_id'];$pdo->prepare('INSERT INTO worker_business_units (worker_profile_id,business_unit_id,is_lead,assigned_by) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE is_lead=VALUES(is_lead),assigned_by=VALUES(assigned_by),assigned_at=UTC_TIMESTAMP(6),ends_at=NULL')->execute([$workerProfileId,(int)$_POST['business_unit_id'],isset($_POST['is_lead'])?1:0,$userId]);

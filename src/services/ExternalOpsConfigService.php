@@ -49,10 +49,12 @@ final class ExternalOpsConfigService
             }
         }
 
+        $applicationKey = strtolower(trim((string)($values['external_ops_application_key'] ?? '')));
+
         return [
             'enabled' => filter_var($values['external_ops_enabled'] ?? 'false', FILTER_VALIDATE_BOOLEAN),
-            'application_key' => ExternalOpsIntegrationService::APPLICATION_KEY,
-            'label' => trim((string)($values['external_ops_label'] ?? 'LTDS Operations')) ?: 'LTDS Operations',
+            'application_key' => $applicationKey,
+            'label' => trim((string)($values['external_ops_label'] ?? 'External Operations')) ?: 'External Operations',
             'webhook_url' => trim((string)($values['external_ops_webhook_url'] ?? '')),
             'access_client_id' => trim((string)($credentials['access_client_id'] ?? '')),
             'access_client_secret' => trim((string)($credentials['access_client_secret'] ?? '')),
@@ -68,14 +70,22 @@ final class ExternalOpsConfigService
     {
         $current = $this->load($pdo);
         $enabled = !empty($input['enabled']);
-        $label = trim((string)($input['label'] ?? '')) ?: 'LTDS Operations';
-        $applicationKey = ExternalOpsIntegrationService::APPLICATION_KEY;
+        $label = trim((string)($input['label'] ?? '')) ?: 'External Operations';
+        $applicationKeyInput = trim((string)($input['application_key'] ?? $current['application_key']));
+        $applicationKey = $applicationKeyInput === ''
+            ? ''
+            : ExternalOpsIntegrationService::normalizeApplicationKey($applicationKeyInput);
         $webhookUrl = trim((string)($input['webhook_url'] ?? ''));
         $timeout = max(2, min(60, (int)($input['timeout_seconds'] ?? 15)));
         $maxAttempts = max(1, min(100, (int)($input['max_attempts'] ?? 12)));
 
         if (mb_strlen($label) > 100) {
             throw new DomainException('The integration label cannot exceed 100 characters.');
+        }
+        if (!empty($current['enabled'])
+            && (string)$current['application_key'] !== ''
+            && $applicationKey !== (string)$current['application_key']) {
+            throw new DomainException('Disable the integration before changing its application key.');
         }
         if (mb_strlen($webhookUrl) > 1000) {
             throw new DomainException('The webhook URL cannot exceed 1000 characters.');
@@ -104,8 +114,8 @@ final class ExternalOpsConfigService
         if ($credentials['hmac_secret'] !== '' && strlen($credentials['hmac_secret']) < 32) {
             throw new DomainException('The webhook HMAC secret must be at least 32 characters.');
         }
-        if ($enabled && ($webhookUrl === '' || in_array('', $credentials, true))) {
-            throw new DomainException('Webhook URL, Cloudflare Access credentials, and the HMAC secret are required before enabling this integration.');
+        if ($enabled && ($applicationKey === '' || $webhookUrl === '' || in_array('', $credentials, true))) {
+            throw new DomainException('Application key, webhook URL, Cloudflare Access credentials, and the HMAC secret are required before enabling this integration.');
         }
 
         require_once __DIR__ . '/../utils/crypto.php';

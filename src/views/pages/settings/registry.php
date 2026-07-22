@@ -38,6 +38,15 @@ function pa_settings_registry(): array
             'description' => 'Business identity, branding, public access, integrations, and installation defaults.',
             'keywords' => 'business brand logo domain address timezone google email smtp integration installation',
             'items' => [
+                'business-units-divisions' => [
+                    'title' => 'Business units & divisions',
+                    'description' => 'Organize branches, regions, departments, or crews such as Green Bay and Chippewa Falls.',
+                    'tab' => 'business-units-divisions',
+                    'permission' => 'settings.manage',
+                    'roles' => ['admin', 'owner'],
+                    'keywords' => 'division branch region department crew business unit default',
+                    'form_mode' => 'self',
+                ],
                 'system' => [
                     'title' => 'Business & installation',
                     'description' => 'Business details, logo, domain, email providers, maps, and installation defaults.',
@@ -57,11 +66,11 @@ function pa_settings_registry(): array
             'keywords' => 'people users accounts roles permissions access business units',
             'items' => [
                 'business-units' => [
-                    'title' => 'People & business units',
-                    'description' => 'Define worker relationships, divisions, and scoped access boundaries.',
+                    'title' => 'Worker profiles & access',
+                    'description' => 'Manage worker relationships, documents, capabilities, accounts, and permissions.',
                     'tab' => 'business-units',
                     'permission' => 'settings.manage',
-                    'keywords' => 'workers employees contractors divisions business units scopes access',
+                    'keywords' => 'workers employees contractors documents scopes access',
                     'form_mode' => 'self',
                 ],
                 'accounts' => [

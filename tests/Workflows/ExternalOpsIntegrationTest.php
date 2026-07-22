@@ -8,6 +8,7 @@ use App\Services\ExternalOpsIntegrationService;
 use App\Services\ExternalOpsOutboxSender;
 use App\Services\ExternalOpsConfigService;
 use App\Services\OperationsPlanningService;
+use App\Services\ProjectWorkPlanningService;
 use PDO;
 use PHPUnit\Framework\TestCase;
 
@@ -24,6 +25,9 @@ final class ExternalOpsIntegrationTest extends TestCase
             self::assertStringContainsString('CREATE TABLE IF NOT EXISTS ' . $table, $baseline);
             self::assertStringContainsString('CREATE TABLE IF NOT EXISTS ' . $table, $migration);
         }
+        $planningMigration = (string)file_get_contents($root . '/database/migrations/0054_project_work_planning_and_generic_ops.sql');
+        self::assertStringContainsString('@has_projects_business_unit', $planningMigration);
+        self::assertStringContainsString('@has_entitlement_manual', $planningMigration);
 
         $config = (string)file_get_contents($root . '/src/services/ExternalOpsConfigService.php');
         $registry = (string)file_get_contents($root . '/src/views/pages/settings/registry.php');
@@ -31,6 +35,7 @@ final class ExternalOpsIntegrationTest extends TestCase
         $page = (string)file_get_contents($root . '/src/views/pages/settings/external-ops.php');
         $compose = (string)file_get_contents($root . '/docker-compose.yml');
         $envExample = (string)file_get_contents($root . '/config/.env.example');
+        $cron = (string)file_get_contents($root . '/cron/crontab');
         self::assertStringContainsString("'external_ops_enabled'", $config);
         self::assertStringContainsString("'external_ops_credentials_enc'", $config);
         self::assertStringContainsString("'title' => 'Custom integrations'", $registry);
@@ -39,20 +44,23 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertStringContainsString('csrf_validate()', $handler);
         self::assertStringContainsString('name="access_client_secret"', $page);
         self::assertStringContainsString('name="hmac_secret"', $page);
-        self::assertStringNotContainsString('name="application_key"', $page);
+        self::assertStringContainsString('name="application_key"', $page);
+        self::assertStringNotContainsString('Fixed by', $page);
         self::assertStringNotContainsString('name="role_key"', $page);
         self::assertStringContainsString("'role-admin'", $migration);
         self::assertStringContainsString("'role-admin'", $baseline);
         self::assertStringContainsString('saveAccountAccess(', $handler);
         foreach (['accounts.php', 'account-edit.php'] as $accountPage) {
             $accountForm = (string)file_get_contents($root . '/src/views/pages/auth/' . $accountPage);
-            self::assertStringContainsString('name="external_ops_enabled"', $accountForm);
-            self::assertStringContainsString('LTDS Operations access', $accountForm);
-            self::assertStringContainsString('resetExternalOpsDefault', $accountForm);
-            self::assertStringContainsString('externalOpsToggle.checked = !!selectedRoleMeta().isAdmin', $accountForm);
+            self::assertStringNotContainsString('name="external_ops_enabled"', $accountForm);
         }
         self::assertStringNotContainsString('OPS_SYNC_', $compose);
         self::assertStringNotContainsString('OPS_SYNC_', $envExample);
+        self::assertStringContainsString(
+            '* * * * * root . /etc/environment && php /var/www/src/cron/send_external_ops_outbox.php',
+            $cron
+        );
+        self::assertStringContainsString('UNIQUE KEY uq_integration_outbox_event (event_id)', $baseline);
     }
 
     public function testUiConfigurationEncryptsAndReloadsCredentials(): void
@@ -63,8 +71,8 @@ final class ExternalOpsIntegrationTest extends TestCase
             $service = new ExternalOpsConfigService();
             $saved = $service->save($this->pdo, [
                 'enabled' => '1',
-                'label' => 'LTDS Operations',
-                'application_key' => 'ltds_ops',
+                'label' => 'Field Operations',
+                'application_key' => 'Customer_Ops',
                 'webhook_url' => 'https://ops.example.test/api/provisioning/events',
                 'access_client_id' => 'access-client-id',
                 'access_client_secret' => 'access-client-secret',
@@ -74,8 +82,8 @@ final class ExternalOpsIntegrationTest extends TestCase
             ]);
 
             self::assertTrue($saved['enabled']);
-            self::assertSame('LTDS Operations', $saved['label']);
-            self::assertSame('ltds_ops', $saved['application_key']);
+            self::assertSame('Field Operations', $saved['label']);
+            self::assertSame('customer_ops', $saved['application_key']);
             self::assertSame('access-client-id', $saved['access_client_id']);
             self::assertSame('access-client-secret', $saved['access_client_secret']);
             self::assertSame(str_repeat('h', 40), $saved['hmac_secret']);
@@ -91,18 +99,47 @@ final class ExternalOpsIntegrationTest extends TestCase
 
             $retained = $service->save($this->pdo, [
                 'enabled' => '1',
-                'label' => 'LTDS Operations',
-                'application_key' => 'ltds_ops',
+                'label' => 'Field Operations',
+                'application_key' => 'customer_ops',
                 'webhook_url' => 'https://ops.example.test/api/provisioning/events',
                 'timeout_seconds' => '20',
                 'max_attempts' => '8',
             ]);
             self::assertSame('access-client-secret', $retained['access_client_secret']);
+
+            try {
+                $service->save($this->pdo, [
+                    'enabled' => '1',
+                    'label' => 'Field Operations',
+                    'application_key' => 'another_ops',
+                    'webhook_url' => 'https://ops.example.test/api/provisioning/events',
+                ]);
+                self::fail('A live integration key change should have been rejected.');
+            } catch (\DomainException $error) {
+                self::assertSame('Disable the integration before changing its application key.', $error->getMessage());
+            }
         } finally {
             if ($previousKey === false) {
                 putenv('APP_ENCRYPTION_KEY');
             } else {
                 putenv('APP_ENCRYPTION_KEY=' . $previousKey);
+            }
+        }
+    }
+
+    public function testApplicationKeysAreDeploymentSpecificAndValidated(): void
+    {
+        self::assertSame(
+            'community_ops-2',
+            ExternalOpsIntegrationService::normalizeApplicationKey(' Community_Ops-2 ')
+        );
+
+        foreach (['', 'a', 'contains spaces', 'bad/key', str_repeat('a', 65)] as $invalidKey) {
+            try {
+                ExternalOpsIntegrationService::normalizeApplicationKey($invalidKey);
+                self::fail('Invalid application key was accepted: ' . $invalidKey);
+            } catch (\DomainException $error) {
+                self::assertStringContainsString('2 to 64 characters', $error->getMessage());
             }
         }
     }
@@ -155,10 +192,14 @@ final class ExternalOpsIntegrationTest extends TestCase
             'CREATE TABLE business_units (id INTEGER PRIMARY KEY, name TEXT, is_active INTEGER)',
             'CREATE TABLE application_entitlements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, application_key TEXT, enabled INTEGER,
+                manual_enabled INTEGER DEFAULT 0, automatic_enabled INTEGER DEFAULT 0, oversight_enabled INTEGER DEFAULT 0,
                 role_key TEXT, created_by INTEGER, updated_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, application_key)
             )',
             'CREATE TABLE application_entitlement_business_units (
+                entitlement_id INTEGER, business_unit_id INTEGER, PRIMARY KEY(entitlement_id, business_unit_id)
+            )',
+            'CREATE TABLE application_entitlement_oversight_units (
                 entitlement_id INTEGER, business_unit_id INTEGER, PRIMARY KEY(entitlement_id, business_unit_id)
             )',
             'CREATE TABLE integration_outbox (
@@ -166,7 +207,8 @@ final class ExternalOpsIntegrationTest extends TestCase
                 schema_version INTEGER, payload_json TEXT, occurred_at TEXT, attempts INTEGER DEFAULT 0,
                 next_attempt_at TEXT, delivered_at TEXT, last_error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )',
-            'CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, status TEXT)',
+            'CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, status TEXT, business_unit_id INTEGER)',
+            'CREATE TABLE project_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER, assigned_at TEXT DEFAULT CURRENT_TIMESTAMP, ends_at TEXT, created_by INTEGER, UNIQUE(project_id,user_id))',
             'CREATE TABLE operations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, business_unit_id INTEGER, title TEXT,
                 status TEXT, scheduled_start_at TEXT, scheduled_end_at TEXT, location TEXT, notes TEXT,
@@ -182,6 +224,7 @@ final class ExternalOpsIntegrationTest extends TestCase
                 notes TEXT, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )',
+            'CREATE TABLE task_assignments (task_id INTEGER, user_id INTEGER, assigned_by INTEGER, assigned_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(task_id,user_id))',
         ] as $statement) {
             $this->pdo->exec($statement);
         }
@@ -200,17 +243,17 @@ final class ExternalOpsIntegrationTest extends TestCase
         $this->pdo->exec("INSERT INTO worker_business_units VALUES
             (20,30,NULL),
             (21,31,NULL)");
-        $this->pdo->exec("INSERT INTO projects VALUES (40,'Aerial Survey','active')");
+        $this->pdo->exec("INSERT INTO projects VALUES (40,'Aerial Survey','active',30)");
     }
 
     public function testEntitlementStateIsQueuedWithoutCredentialsAndOwnerMapsToOperator(): void
     {
-        $result = (new ExternalOpsIntegrationService())->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        $result = (new ExternalOpsIntegrationService())->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
 
         self::assertGreaterThan(0, $result['entitlement_id']);
         self::assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $result['event_id']);
         self::assertSame([30], array_map('intval', $this->pdo->query(
-            'SELECT business_unit_id FROM application_entitlement_business_units'
+            'SELECT business_unit_id FROM application_entitlement_oversight_units'
         )->fetchAll(PDO::FETCH_COLUMN)));
 
         $payload = json_decode((string)$this->pdo->query(
@@ -229,7 +272,7 @@ final class ExternalOpsIntegrationTest extends TestCase
     public function testDisabledUserProducesEffectiveRevocation(): void
     {
         $service = new ExternalOpsIntegrationService();
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $this->pdo->exec('UPDATE users SET is_disabled=1 WHERE id=2');
         $service->enqueueCurrentState($this->pdo, 2, 'ltds_ops', 'user.changed');
 
@@ -251,7 +294,7 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertSame('role-admin', $adminPayload['entitlement']['role_key']);
         self::assertSame([], $adminPayload['entitlement']['business_unit_ids']);
 
-        $service->saveAccountAccess($this->pdo, 3, 'ltds_ops', true, 1);
+        $service->saveAccountAccess($this->pdo, 3, 'ltds_ops', true, 1, [31]);
         $ownerPayload = json_decode((string)$this->pdo->query(
             'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
         )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
@@ -269,28 +312,34 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertFalse($uncheckedPayload['entitlement']['enabled']);
 
         $this->pdo->exec('UPDATE users SET is_disabled=1 WHERE id=2');
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $disabledPayload = json_decode((string)$this->pdo->query(
             'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
         )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
         self::assertFalse($disabledPayload['entitlement']['enabled']);
         self::assertSame([30], $disabledPayload['entitlement']['business_unit_ids']);
-        self::assertSame(1, (int)$this->pdo->query(
+        self::assertSame(0, (int)$this->pdo->query(
             "SELECT enabled FROM application_entitlements WHERE user_id=2 AND application_key='ltds_ops'"
-        )->fetchColumn(), 'PA account inactivity must not erase the explicit Ops ACL checkbox.');
+        )->fetchColumn(), 'Effective access is revoked while the PA account is inactive; the manual exception flag remains stored separately.');
     }
 
     public function testAccountFormSavePreservesManualNonAdminBusinessUnitScope(): void
     {
         $service = new ExternalOpsIntegrationService();
+        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [31]);
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
 
         $payload = json_decode((string)$this->pdo->query(
             'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
         )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('role-operator', $payload['entitlement']['role_key']);
         self::assertSame([31], $payload['entitlement']['business_unit_ids']);
+        self::assertSame([31], array_map('intval', $this->pdo->query(
+            'SELECT business_unit_id FROM application_entitlement_business_units ORDER BY business_unit_id'
+        )->fetchAll(PDO::FETCH_COLUMN)));
+        self::assertSame([31], array_map('intval', $this->pdo->query(
+            'SELECT business_unit_id FROM application_entitlement_oversight_units ORDER BY business_unit_id'
+        )->fetchAll(PDO::FETCH_COLUMN)));
     }
 
     public function testPromotionAndDemotionDeriveRoleAndPreserveFinalAclAndScope(): void
@@ -299,26 +348,26 @@ final class ExternalOpsIntegrationTest extends TestCase
         $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [31]);
 
         $this->pdo->exec("UPDATE users SET role='admin' WHERE id=2");
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [31]);
         $promoted = $this->latestPayload();
         self::assertSame('role-admin', $promoted['entitlement']['role_key']);
         self::assertSame([], $promoted['entitlement']['business_unit_ids']);
 
         $this->pdo->exec("UPDATE users SET role='employee' WHERE id=2");
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [31]);
         $demotedEnabled = $this->latestPayload();
         self::assertTrue($demotedEnabled['entitlement']['enabled']);
         self::assertSame('role-operator', $demotedEnabled['entitlement']['role_key']);
         self::assertSame([31], $demotedEnabled['entitlement']['business_unit_ids']);
 
         $this->pdo->exec("UPDATE users SET role='admin' WHERE id=2");
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [31]);
         $this->pdo->exec("UPDATE users SET role='employee' WHERE id=2");
         $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', false, 1);
         $demotedRevoked = $this->latestPayload();
         self::assertFalse($demotedRevoked['entitlement']['enabled']);
         self::assertSame('role-operator', $demotedRevoked['entitlement']['role_key']);
-        self::assertSame([31], $demotedRevoked['entitlement']['business_unit_ids']);
+        self::assertSame([], $demotedRevoked['entitlement']['business_unit_ids']);
     }
 
     public function testAdminAclCanBeDisabledWithoutAllowingRoleOverride(): void
@@ -335,7 +384,7 @@ final class ExternalOpsIntegrationTest extends TestCase
     public function testTerminatedWorkerProducesEffectiveRevocation(): void
     {
         $service = new ExternalOpsIntegrationService();
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $this->pdo->exec("UPDATE worker_profiles SET status='terminated' WHERE user_id=2");
         $service->enqueueCurrentState($this->pdo, 2, 'ltds_ops', 'user.changed');
 
@@ -348,12 +397,12 @@ final class ExternalOpsIntegrationTest extends TestCase
 
     public function testOutboxDeliveryUsesAccessAndHmacHeaders(): void
     {
-        (new ExternalOpsIntegrationService())->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        (new ExternalOpsIntegrationService())->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $captured = [];
         $config = [
             'enabled' => true,
             'application_key' => 'ltds_ops',
-            'webhook_url' => 'https://ops.example.test/api/provisioning/events',
+            'webhook_url' => 'https://ops-sync.ledgetopdroneservices.com/v1/project-alpha/events',
             'access_client_id' => 'client-id',
             'access_client_secret' => 'client-secret',
             'hmac_secret' => 'hmac-secret',
@@ -375,8 +424,11 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertSame($config['webhook_url'], $captured['url']);
         self::assertContains('CF-Access-Client-Id: client-id', $captured['headers']);
         self::assertContains('CF-Access-Client-Secret: client-secret', $captured['headers']);
+        $eventIdHeader = $this->headerValue($captured['headers'], 'X-PA-Event-ID: ');
         $timestampHeader = $this->headerValue($captured['headers'], 'X-PA-Timestamp: ');
         $signatureHeader = $this->headerValue($captured['headers'], 'X-PA-Signature: ');
+        $payload = json_decode($captured['body'], true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame($payload['event_id'], $eventIdHeader);
         self::assertSame(
             'sha256=' . hash_hmac('sha256', $timestampHeader . '.' . $captured['body'], 'hmac-secret'),
             $signatureHeader
@@ -386,7 +438,7 @@ final class ExternalOpsIntegrationTest extends TestCase
 
     public function testOutboxFailureIsRetriedWithAStoredBoundedError(): void
     {
-        (new ExternalOpsIntegrationService())->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1);
+        (new ExternalOpsIntegrationService())->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $before = gmdate('Y-m-d H:i:s.u');
         $summary = (new ExternalOpsOutboxSender())->deliverDue($this->pdo, [
             'enabled' => true,
@@ -411,6 +463,7 @@ final class ExternalOpsIntegrationTest extends TestCase
 
     public function testOperationsAndTasksRemainOwnedByProjectAlpha(): void
     {
+        $this->pdo->exec('INSERT INTO project_assignments (project_id,user_id,created_by) VALUES (40,2,1)');
         $service = new OperationsPlanningService();
         $operationId = $service->saveOperation($this->pdo, [
             'project_id' => 40,
@@ -438,6 +491,38 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertSame((string)$operationId, (string)$this->pdo->query(
             'SELECT operation_id FROM tasks WHERE id=' . $taskId
         )->fetchColumn());
+    }
+
+    public function testProjectTeamGatesMultiAssigneeWorkAndAutomaticAccess(): void
+    {
+        $team = new ProjectWorkPlanningService();
+        $team->addTeamMember($this->pdo, 40, 2, 1);
+        $team->addTeamMember($this->pdo, 40, 3, 1);
+        $integration = new ExternalOpsIntegrationService();
+        $integration->resyncAccountAccess($this->pdo, 2, 'field_operations', 1);
+        self::assertSame(1, (int)$this->pdo->query("SELECT automatic_enabled FROM application_entitlements WHERE user_id=2 AND application_key='field_operations'")->fetchColumn());
+
+        $operations = new OperationsPlanningService();
+        $operationId = $operations->saveOperation($this->pdo, ['project_id'=>40,'title'=>'Site visit','status'=>'scheduled'], [2,3], 1);
+        $taskId = $operations->saveTask($this->pdo, ['project_id'=>40,'operation_id'=>$operationId,'title'=>'Map site','status'=>'todo'], 1, [2,3]);
+        self::assertSame(2, (int)$this->pdo->query("SELECT COUNT(*) FROM task_assignments WHERE task_id={$taskId}")->fetchColumn());
+        self::assertSame(30, (int)$this->pdo->query("SELECT business_unit_id FROM tasks WHERE id={$taskId}")->fetchColumn());
+
+        $this->expectException(\DomainException::class);
+        $team->endTeamMember($this->pdo, 40, 2);
+    }
+
+    public function testEndingFinalProjectMembershipRevokesAutomaticAccess(): void
+    {
+        $team = new ProjectWorkPlanningService();
+        $team->addTeamMember($this->pdo, 40, 2, 1);
+        $integration = new ExternalOpsIntegrationService();
+        $integration->resyncAccountAccess($this->pdo, 2, 'field_operations', 1);
+        $team->endTeamMember($this->pdo, 40, 2);
+        $integration->resyncAccountAccess($this->pdo, 2, 'field_operations', 1);
+        $state=$this->pdo->query("SELECT enabled,automatic_enabled FROM application_entitlements WHERE user_id=2 AND application_key='field_operations'")->fetch(PDO::FETCH_ASSOC);
+        self::assertSame(0,(int)$state['enabled']);
+        self::assertSame(0,(int)$state['automatic_enabled']);
     }
 
     /** @param list<string> $headers */
