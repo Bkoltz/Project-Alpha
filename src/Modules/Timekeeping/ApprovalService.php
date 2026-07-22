@@ -40,15 +40,29 @@ final class ApprovalService
         return $this->finalize($ownerId, $entryId, true, false);
     }
 
-    /** Materialize snapshots for owner entries created by the pre-0045 direct-approved path. */
+    /** Materialize or repair the immutable projection for verified-owner time. */
     public function ensureOwnerProjection(int $ownerId, string $entryId): string
     {
         $existing = $this->pdo->prepare(
-            'SELECT id FROM work_approval_snapshots WHERE time_entry_id=? ORDER BY entry_revision DESC LIMIT 1'
+            "SELECT t.status,t.workflow_status,s.id snapshot_id
+             FROM work_time_entries t
+             LEFT JOIN work_approval_snapshots s ON s.id=(
+                SELECT s2.id FROM work_approval_snapshots s2
+                WHERE s2.time_entry_id=t.id AND s2.voided_at IS NULL
+                ORDER BY s2.entry_revision DESC LIMIT 1
+             )
+             WHERE t.id=? AND t.user_id=?"
         );
-        $existing->execute([$entryId]);
-        $snapshotId = (string)($existing->fetchColumn() ?: '');
-        return $snapshotId !== '' ? $snapshotId : $this->finalize($ownerId, $entryId, true, true);
+        $existing->execute([$entryId, $ownerId]);
+        $entry = $existing->fetch(PDO::FETCH_ASSOC);
+        if (!$entry) {
+            throw new DomainException('Owner time entry not found.');
+        }
+        $snapshotId = (string)($entry['snapshot_id'] ?? '');
+        if ($entry['status'] === 'approved' && $entry['workflow_status'] === 'confirmed' && $snapshotId !== '') {
+            return $snapshotId;
+        }
+        return $this->finalize($ownerId, $entryId, true, true);
     }
 
     public function canSelfConfirmOwner(int $userId): bool
@@ -147,7 +161,7 @@ final class ApprovalService
             $entry = $stmt->fetch(PDO::FETCH_ASSOC);
             $readyStatus = $entry && (
                 ($entry['status'] === 'review'
-                    && (($ownerSelfConfirmation && in_array((string)($entry['workflow_status'] ?? ''), ['draft','returned'], true))
+                    && (($ownerSelfConfirmation && in_array((string)($entry['workflow_status'] ?? ''), ['draft','returned','submitted'], true))
                         || (!$ownerSelfConfirmation && (string)($entry['workflow_status'] ?? '') === 'submitted')))
                 || ($ownerSelfConfirmation && $allowLegacyApproved
                     && $entry['status'] === 'approved' && !empty($entry['owner_self_confirmed']))

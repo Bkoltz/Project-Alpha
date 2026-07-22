@@ -20,6 +20,8 @@ final class TimekeepingDeferredWorkflowTest extends TestCase
         $controller = (string)file_get_contents($this->root . '/src/controllers/workforce/action.php');
 
         self::assertStringContainsString('public function selfConfirmOwner', $approval);
+        self::assertStringContainsString('public function ensureOwnerProjection', $approval);
+        self::assertStringContainsString("['draft','returned','submitted']", $approval);
         self::assertStringContainsString('$effectivePayable = !$ownerSelfConfirmation', $approval);
         self::assertStringContainsString('if(!$ownerSelfConfirmation&&!empty($entry[\'work_assignment_id\']))', $approval);
         self::assertStringContainsString("'time_entry.owner_self_confirmed'", $approval);
