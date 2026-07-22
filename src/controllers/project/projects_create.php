@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/project_invoice_billing.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/ScheduleService.php';
+require_once __DIR__ . '/../../utils/external_ops.php';
 
 $__orgId = request_client_org_id() ?: null;
 $__creator = (int)($_SESSION['user']['id'] ?? 0) ?: null;
@@ -25,6 +26,7 @@ if ($projectInvoiceLinkClientIds !== null && !is_array($projectInvoiceLinkClient
 $parent_id = null; // Parent projects are not supported any more
 $organization_id = (int)($_POST['organization_id'] ?? 0);
 $department_id = (int)($_POST['department_id'] ?? 0);
+$businessUnitId = (int)($_POST['business_unit_id'] ?? 0);
 $estimated_start = trim($_POST['estimated_start'] ?? '');
 $estimated_end = trim($_POST['estimated_end'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
@@ -40,6 +42,24 @@ if ($organization_id <= 0 && $__orgId !== null) {
 }
 if ($organization_id > 0) {
 	require_record_ownership($pdo, 'organizations', $organization_id);
+}
+
+if ($businessUnitId > 0) {
+	$unitStmt = $pdo->prepare('SELECT 1 FROM business_units WHERE id=? AND is_active=1');
+	$unitStmt->execute([$businessUnitId]);
+	if (!$unitStmt->fetchColumn()) {
+		header('Location: /?page=project/projects-create&error=' . urlencode('Selected business unit is unavailable.'));
+		exit;
+	}
+} else {
+	$businessUnitId = (int)($pdo->query("SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='default_business_unit_id' LIMIT 1")->fetchColumn() ?: 0);
+	if ($businessUnitId > 0) {
+		$defaultUnit=$pdo->prepare('SELECT 1 FROM business_units WHERE id=? AND is_active=1');$defaultUnit->execute([$businessUnitId]);if(!$defaultUnit->fetchColumn())$businessUnitId=0;
+	}
+	if ($businessUnitId < 1) {
+		$activeUnitIds = $pdo->query('SELECT id FROM business_units WHERE is_active=1 ORDER BY id LIMIT 2')->fetchAll(PDO::FETCH_COLUMN);
+		$businessUnitId = count($activeUnitIds) === 1 ? (int)$activeUnitIds[0] : 0;
+	}
 }
 if ($department_id > 0) {
 	$departmentStmt = $pdo->prepare('SELECT organization_id FROM organization_departments WHERE id = ? LIMIT 1');
@@ -102,7 +122,7 @@ $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'depar
 if ($hasAutoEmailColumn) {
 	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
 	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
-	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,NOW())");
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,NOW())");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -111,6 +131,7 @@ if ($hasAutoEmailColumn) {
 	if ($hasDepartmentColumn) {
 		$params[] = $department_id > 0 ? $department_id : null;
 	}
+	$params[] = $businessUnitId > 0 ? $businessUnitId : null;
 	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
@@ -124,7 +145,7 @@ if ($hasAutoEmailColumn) {
 } else {
 	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
 	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
-	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,NOW())");
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,NOW())");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -133,6 +154,7 @@ if ($hasAutoEmailColumn) {
 	if ($hasDepartmentColumn) {
 		$params[] = $department_id > 0 ? $department_id : null;
 	}
+	$params[] = $businessUnitId > 0 ? $businessUnitId : null;
 	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
@@ -160,7 +182,8 @@ project_invoice_sync_clients(
 	$projectInvoiceRecipientIds,
 	$projectInvoiceLinkClientIds
 );
-audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'department_id' => $department_id > 0 ? $department_id : null, 'created_by' => $__creator]);
+audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'department_id' => $department_id > 0 ? $department_id : null, 'business_unit_id' => $businessUnitId > 0 ? $businessUnitId : null, 'created_by' => $__creator]);
 ScheduleService::syncProject($pdo, $project_id, (string)($appConfig['timezone'] ?? 'UTC'), $__creator);
+$opsConfig=pa_external_ops_delivery_config($pdo);if(!empty($opsConfig['enabled'])){$projectEvent=$pdo->prepare('SELECT * FROM projects WHERE id=?');$projectEvent->execute([$project_id]);(new \App\Services\ExternalOpsIntegrationService())->enqueueProjectionChange($pdo,(string)$opsConfig['application_key'],'project',$project_id,'upsert',$projectEvent->fetch(PDO::FETCH_ASSOC)?:[]);}
 header('Location: /?page=project/projects-details&id=' . $project_id . '&created=1');
 exit;

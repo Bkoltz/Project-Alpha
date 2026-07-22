@@ -407,6 +407,7 @@ CREATE TABLE IF NOT EXISTS projects (
     parent_id INT NULL,
     organization_id INT NULL,
     department_id INT NULL,
+    business_unit_id INT NULL,
     created_by INT NULL,
     name VARCHAR(150) NOT NULL,
     description TEXT NULL,
@@ -433,6 +434,7 @@ CREATE TABLE IF NOT EXISTS projects (
     INDEX idx_projects_client (client_id),
     INDEX idx_projects_org (organization_id),
     INDEX idx_projects_department (department_id),
+    INDEX idx_projects_business_unit (business_unit_id, status),
     INDEX idx_projects_status (status),
     INDEX idx_projects_parent (parent_id),
     UNIQUE KEY uq_projects_public_project_token (public_project_token),
@@ -2539,6 +2541,9 @@ CREATE TABLE IF NOT EXISTS business_units (
     CONSTRAINT fk_business_unit_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+ALTER TABLE projects
+    ADD CONSTRAINT fk_projects_business_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS worker_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
@@ -3031,6 +3036,9 @@ CREATE TABLE IF NOT EXISTS application_entitlements (
     user_id INT NOT NULL,
     application_key VARCHAR(64) NOT NULL,
     enabled TINYINT(1) NOT NULL DEFAULT 0,
+    manual_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    automatic_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    oversight_enabled TINYINT(1) NOT NULL DEFAULT 0,
     role_key VARCHAR(64) NOT NULL,
     created_by INT NULL,
     updated_by INT NULL,
@@ -3038,6 +3046,7 @@ CREATE TABLE IF NOT EXISTS application_entitlements (
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     UNIQUE KEY uq_application_entitlement (user_id, application_key),
     INDEX idx_application_entitlement_app (application_key, enabled, user_id),
+    INDEX idx_application_entitlement_effective (application_key,enabled,manual_enabled,automatic_enabled,user_id),
     CONSTRAINT fk_application_entitlement_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_application_entitlement_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_application_entitlement_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
@@ -3052,6 +3061,16 @@ CREATE TABLE IF NOT EXISTS application_entitlement_business_units (
     INDEX idx_entitlement_business_unit (business_unit_id, entitlement_id),
     CONSTRAINT fk_entitlement_scope_entitlement FOREIGN KEY (entitlement_id) REFERENCES application_entitlements(id) ON DELETE CASCADE,
     CONSTRAINT fk_entitlement_scope_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS application_entitlement_oversight_units (
+    entitlement_id BIGINT UNSIGNED NOT NULL,
+    business_unit_id INT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (entitlement_id, business_unit_id),
+    INDEX idx_entitlement_oversight_unit (business_unit_id, entitlement_id),
+    CONSTRAINT fk_entitlement_oversight_entitlement FOREIGN KEY (entitlement_id) REFERENCES application_entitlements(id) ON DELETE CASCADE,
+    CONSTRAINT fk_entitlement_oversight_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS integration_outbox (
@@ -3128,6 +3147,18 @@ CREATE TABLE IF NOT EXISTS tasks (
     CONSTRAINT fk_tasks_assignee FOREIGN KEY (assignee_user_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_tasks_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT chk_tasks_status CHECK (status IN ('todo','in_progress','blocked','completed','cancelled'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS task_assignments (
+    task_id BIGINT UNSIGNED NOT NULL,
+    user_id INT NOT NULL,
+    assigned_by INT NULL,
+    assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (task_id, user_id),
+    INDEX idx_task_assignment_user (user_id, task_id),
+    CONSTRAINT fk_task_assignment_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    CONSTRAINT fk_task_assignment_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_task_assignment_actor FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Canonical Workforce workflow foundation. Legacy status, pay-accrual, and

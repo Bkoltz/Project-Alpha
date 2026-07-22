@@ -18,6 +18,16 @@ if ($activeOrgId > 0) {
     }
 }
 $isAdmin = (($_SESSION['user']['role'] ?? '') === 'admin');
+$businessUnits = $pdo->query('SELECT id,name,code FROM business_units WHERE is_active=1 ORDER BY name,id')->fetchAll(PDO::FETCH_ASSOC);
+$defaultBusinessUnitId = 0;
+try {
+    $defaultBusinessUnitId = (int)($pdo->query("SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='default_business_unit_id' LIMIT 1")->fetchColumn() ?: 0);
+} catch (Throwable $error) {
+    $defaultBusinessUnitId = 0;
+}
+if ($defaultBusinessUnitId < 1 && count($businessUnits) === 1) {
+    $defaultBusinessUnitId = (int)$businessUnits[0]['id'];
+}
 if ($isAdmin) {
     $clients = $pdo->query('SELECT id, name, email FROM clients WHERE archived = 0 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 } elseif ($activeOrgId > 0) {
@@ -188,6 +198,17 @@ if ($activeOrgId > 0) {
       <div style="font-size:12px;color:var(--muted);margin-top:4px">
         Choose a department only when this project belongs to a specific group within the organization. Leave blank for organization-level work.
       </div>
+    </label>
+
+    <label>
+      <div>Business Unit / Division</div>
+      <select name="business_unit_id" style="padding:8px;border-radius:8px;border:1px solid #ddd;width:100%">
+        <option value="">Unassigned</option>
+        <?php foreach ($businessUnits as $businessUnit): ?>
+          <option value="<?php echo (int)$businessUnit['id']; ?>" <?php echo $defaultBusinessUnitId === (int)$businessUnit['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars((string)$businessUnit['name'] . (!empty($businessUnit['code']) ? ' (' . (string)$businessUnit['code'] . ')' : '')); ?></option>
+        <?php endforeach; ?>
+      </select>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Use a unit for a branch, geographic division, department, or operating crew. Operations and Tasks inherit it.</div>
     </label>
 
      <label style="grid-column:1/2;position:relative">

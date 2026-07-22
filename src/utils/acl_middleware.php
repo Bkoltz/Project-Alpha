@@ -215,6 +215,7 @@ function page_permission_map(): array
         'project/projects-edit'         => 'projects.edit',
         'project/projects-update'         => 'projects.edit',
         'project/projects-update-status' => 'projects.edit',
+        'project/project-work-handler'    => 'projects.edit',
         'project/projects-delete'        => 'projects.delete',
         'project/project-add-document'   => 'projects.edit',
         'project/project-remove-document' => 'projects.edit',

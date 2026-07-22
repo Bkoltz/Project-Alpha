@@ -36,7 +36,7 @@ if (!$user) {
 
 $externalOpsConfig = pa_external_ops_delivery_config($pdo);
 $externalOpsAvailable = !empty($externalOpsConfig['enabled']);
-$externalOpsLabel = trim((string)($externalOpsConfig['label'] ?? 'LTDS Operations')) ?: 'LTDS Operations';
+$externalOpsLabel = trim((string)($externalOpsConfig['label'] ?? 'External Operations')) ?: 'External Operations';
 $externalOpsEntitlementExists = false;
 $externalOpsEntitlementEnabled = false;
 if ($externalOpsAvailable) {
@@ -312,14 +312,6 @@ try {
           <span>Force password change on next login</span>
         </label>
 
-        <?php $externalOpsChecked = $externalOpsEntitlementExists ? $externalOpsEntitlementEnabled : $targetRole === 'admin'; ?>
-        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-top:12px;">
-          <input type="checkbox" name="external_ops_enabled" id="external-ops-access" value="1" <?php echo $externalOpsChecked ? 'checked' : ''; ?> <?php echo $externalOpsAvailable ? '' : 'disabled'; ?>>
-          <span>
-            <span style="display:block;font-weight:600;">LTDS Operations access</span>
-            <span style="display:block;color:#6b7280;font-size:13px;"><?php echo $externalOpsAvailable ? 'The PA role determines global Admin or scoped Operator access. Owner is an Operator. You may manually change this checkbox after a role default is applied.' : 'Enable the optional LTDS Operations integration in Settings before granting access.'; ?></span>
-          </span>
-        </label>
 
         <div style="margin-top:20px;padding-top:18px;border-top:1px solid #e5e7eb;">
           <h3 style="margin:0 0 10px 0;font-size:16px;">Document Sender Info</h3>
@@ -446,7 +438,6 @@ try {
         var senderToggle = document.getElementById('document-sender-enabled');
         var senderFields = document.getElementById('document-sender-fields');
         var employeePanel = document.getElementById('employee-profile-panel');
-        var externalOpsToggle = document.getElementById('external-ops-access');
 
         function selectedRoleMeta() {
           if (!roleSelect || !window.PA_EDIT_ROLE_META) return {};
@@ -472,12 +463,6 @@ try {
               denyCb.checked = !allowed;
             }
           });
-        }
-
-        function resetExternalOpsDefault() {
-          if (externalOpsToggle && !externalOpsToggle.disabled) {
-            externalOpsToggle.checked = !!selectedRoleMeta().isAdmin;
-          }
         }
 
         function updatePermissionsForRole(applyDefaultsForRole) {
@@ -506,7 +491,6 @@ try {
         if (roleSelect) {
           roleSelect.addEventListener('change', function() {
             updatePermissionsForRole(true);
-            resetExternalOpsDefault();
           });
           updatePermissionsForRole(false);
         }

@@ -1,5 +1,6 @@
 -- Optional external operations projection and entitlement synchronization.
--- Optional LTDS Operations integration. The application contract uses ltds_ops;
+-- Optional external operations integration. The application key is configured
+-- per deployment.
 -- the column remains explicit so webhook and snapshot records are self-describing.
 
 CREATE TABLE IF NOT EXISTS application_entitlements (

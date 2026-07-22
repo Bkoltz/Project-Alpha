@@ -266,6 +266,9 @@ function migration_schema_health(PDO $pdo): void
         'payroll_exports', 'payroll_export_rows',
         'client_credits', 'client_credit_events',
         'catalog_link_migration_review', 'workforce_deadline_events',
+        'application_entitlements', 'application_entitlement_business_units',
+        'application_entitlement_oversight_units', 'integration_outbox',
+        'operations', 'operation_assignments', 'tasks', 'task_assignments',
     ];
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',
@@ -293,7 +296,7 @@ function migration_schema_health(PDO $pdo): void
     $requiredColumns = [
         'users' => ['email', 'password_hash', 'role', 'force_password_reset', 'auth_version', 'totp_reenroll_required'],
         'clients' => ['organization_id', 'created_by'],
-        'projects' => ['organization_id', 'department_id', 'created_by'],
+        'projects' => ['organization_id', 'department_id', 'business_unit_id', 'created_by'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
         'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
         'quotes' => ['organization_id', 'created_by', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision'],
@@ -323,6 +326,8 @@ function migration_schema_health(PDO $pdo): void
         'schedule_entries' => ['project_id','job_id','starts_at','timezone','source_type'],
         'worker_documents' => ['user_id','worker_profile_id','worker_name_snapshot','category','title','signed_on','expires_on','status','worker_visible','file_path','content_sha256','version_number','archived_at'],
         'worker_profiles' => ['user_id','relationship_type','relationship_review_required','relationship_review_reason','relationship_reviewed_by','relationship_reviewed_at','time_review_policy','compensation_policy','status','display_name','owner_internal_cost_rate'],
+        'application_entitlements' => ['user_id','application_key','enabled','manual_enabled','automatic_enabled','oversight_enabled','role_key'],
+        'task_assignments' => ['task_id','user_id','assigned_by','assigned_at'],
         'item_library' => ['entry_type','billing_unit','tax_behavior','fulfillment_notes','client_pricing_model','client_included_minutes','client_overage_rate','pricing_currency'],
         'quote_items' => ['item_library_id','catalog_snapshot'],
         'contract_items' => ['item_library_id','catalog_snapshot'],
