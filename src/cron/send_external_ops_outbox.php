@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Services\ExternalOpsOutboxSender;
 
+require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/external_ops.php';
 require_once __DIR__ . '/../utils/cron_state.php';

@@ -321,9 +321,33 @@
             .catch(function () { /* leave only the org-level option */ });
     }
 
+    function initProjectManagerDefaults() {
+        var manager = byId('projectManagerSelect');
+        var businessUnit = byId('projectBusinessUnitSelect');
+        var touched = byId('projectBusinessUnitTouched');
+        var suggestion = byId('projectManagerUnitSuggestion');
+        if (!manager || !businessUnit || !touched || manager.dataset.unitDefaultReady === '1') return;
+        manager.dataset.unitDefaultReady = '1';
+        businessUnit.addEventListener('change', function () {
+            touched.value = '1';
+        });
+        manager.addEventListener('change', function () {
+            var option = manager.options[manager.selectedIndex];
+            var suggestedUnit = option ? String(option.dataset.primaryBusinessUnit || '') : '';
+            var suggestedOption = Array.from(businessUnit.options).find(function (unit) { return unit.value === suggestedUnit; });
+            if (suggestion) {
+                suggestion.textContent = suggestedOption ? 'Manager primary unit: ' + suggestedOption.textContent + '.' : 'This manager has no primary Business Unit.';
+            }
+            if (touched.value !== '1' && suggestedOption) {
+                businessUnit.value = suggestedUnit;
+            }
+        });
+    }
+
     function initProjectForm() {
         initPickers();
         initOrgSearch();
+        initProjectManagerDefaults();
         var departmentSelect = byId('projectDepartmentSelect');
         if (departmentSelect && departmentSelect.dataset.clientOptionsReady !== '1') {
             departmentSelect.dataset.clientOptionsReady = '1';

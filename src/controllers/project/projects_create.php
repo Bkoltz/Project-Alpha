@@ -27,6 +27,8 @@ $parent_id = null; // Parent projects are not supported any more
 $organization_id = (int)($_POST['organization_id'] ?? 0);
 $department_id = (int)($_POST['department_id'] ?? 0);
 $businessUnitId = (int)($_POST['business_unit_id'] ?? 0);
+$businessUnitUserSelected = !empty($_POST['business_unit_user_selected']);
+$managerUserId = array_key_exists('manager_user_id', $_POST) ? (int)$_POST['manager_user_id'] : (int)$__creator;
 $estimated_start = trim($_POST['estimated_start'] ?? '');
 $estimated_end = trim($_POST['estimated_end'] ?? '');
 $notes = trim($_POST['notes'] ?? '');
@@ -36,6 +38,14 @@ $invoiceNetTermsDays = $invoiceNetTermsDays === '' ? null : max(0, (int)$invoice
 $projectInvoiceAutoEmail = !empty($_POST['project_invoice_auto_email']) ? 1 : 0;
 
 if ($name === '') { header('Location: /?page=project/projects-list&error=Name%20required'); exit; }
+
+$projectPlanning = new \App\Services\ProjectWorkPlanningService();
+try {
+	$projectPlanning->requireAvailableManager($pdo, $managerUserId);
+} catch (DomainException $error) {
+	header('Location: /?page=project/projects-create&error=' . urlencode($error->getMessage()));
+	exit;
+}
 
 if ($organization_id <= 0 && $__orgId !== null) {
 	$organization_id = (int)$__orgId;
@@ -51,8 +61,11 @@ if ($businessUnitId > 0) {
 		header('Location: /?page=project/projects-create&error=' . urlencode('Selected business unit is unavailable.'));
 		exit;
 	}
-} else {
-	$businessUnitId = (int)($pdo->query("SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='default_business_unit_id' LIMIT 1")->fetchColumn() ?: 0);
+} elseif (!$businessUnitUserSelected) {
+	$businessUnitId = $projectPlanning->primaryBusinessUnitForUser($pdo, $managerUserId);
+	if ($businessUnitId < 1) {
+		$businessUnitId = (int)($pdo->query("SELECT config_value FROM app_config WHERE organization_id=0 AND config_key='default_business_unit_id' LIMIT 1")->fetchColumn() ?: 0);
+	}
 	if ($businessUnitId > 0) {
 		$defaultUnit=$pdo->prepare('SELECT 1 FROM business_units WHERE id=? AND is_active=1');$defaultUnit->execute([$businessUnitId]);if(!$defaultUnit->fetchColumn())$businessUnitId=0;
 	}
@@ -122,7 +135,7 @@ $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'depar
 if ($hasAutoEmailColumn) {
 	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
 	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
-	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,NOW())");
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, manager_user_id, invoice_billing_period, invoice_net_terms_days, project_invoice_auto_email, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,?,NOW())");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -132,6 +145,7 @@ if ($hasAutoEmailColumn) {
 		$params[] = $department_id > 0 ? $department_id : null;
 	}
 	$params[] = $businessUnitId > 0 ? $businessUnitId : null;
+	$params[] = $managerUserId > 0 ? $managerUserId : null;
 	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
@@ -145,7 +159,7 @@ if ($hasAutoEmailColumn) {
 } else {
 	$departmentColumn = $hasDepartmentColumn ? ', department_id' : '';
 	$departmentValue = $hasDepartmentColumn ? ', ?' : '';
-	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,NOW())");
+	$ins = $pdo->prepare("INSERT INTO projects (name, client_id, organization_id{$departmentColumn}, business_unit_id, manager_user_id, invoice_billing_period, invoice_net_terms_days, estimated_start, estimated_end, notes, created_by, created_at) VALUES (?,?,?{$departmentValue},?,?,?,?,?,?,?,?,NOW())");
 	$params = [
 		$name,
 		$client_id > 0 ? $client_id : null,
@@ -155,6 +169,7 @@ if ($hasAutoEmailColumn) {
 		$params[] = $department_id > 0 ? $department_id : null;
 	}
 	$params[] = $businessUnitId > 0 ? $businessUnitId : null;
+	$params[] = $managerUserId > 0 ? $managerUserId : null;
 	$params = array_merge($params, [
 		$invoiceBillingPeriod,
 		$invoiceNetTermsDays,
@@ -167,6 +182,11 @@ if ($hasAutoEmailColumn) {
 }
 
 $project_id = (int)$pdo->lastInsertId();
+$managerAssignmentId = 0;
+$managerAssignmentChanged = false;
+if ($managerUserId > 0) {
+	$managerAssignmentId = $projectPlanning->addTeamMember($pdo, $project_id, $managerUserId, (int)$__creator, $managerAssignmentChanged);
+}
 $serviceLocationIds = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['service_location_ids'] ?? [])))));
 $defaultServiceLocationId = (int)($_POST['default_service_location_id'] ?? 0);
 if ($defaultServiceLocationId > 0 && !in_array($defaultServiceLocationId, $serviceLocationIds, true)) $serviceLocationIds[] = $defaultServiceLocationId;
@@ -182,8 +202,19 @@ project_invoice_sync_clients(
 	$projectInvoiceRecipientIds,
 	$projectInvoiceLinkClientIds
 );
-audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'department_id' => $department_id > 0 ? $department_id : null, 'business_unit_id' => $businessUnitId > 0 ? $businessUnitId : null, 'created_by' => $__creator]);
+audit_log($pdo, 'project.create', 'project', $project_id, ['client_id' => $client_id > 0 ? $client_id : null, 'organization_id' => $organization_id > 0 ? $organization_id : null, 'department_id' => $department_id > 0 ? $department_id : null, 'business_unit_id' => $businessUnitId > 0 ? $businessUnitId : null, 'manager_user_id' => $managerUserId > 0 ? $managerUserId : null, 'created_by' => $__creator]);
 ScheduleService::syncProject($pdo, $project_id, (string)($appConfig['timezone'] ?? 'UTC'), $__creator);
-$opsConfig=pa_external_ops_delivery_config($pdo);if(!empty($opsConfig['enabled'])){$projectEvent=$pdo->prepare('SELECT * FROM projects WHERE id=?');$projectEvent->execute([$project_id]);(new \App\Services\ExternalOpsIntegrationService())->enqueueProjectionChange($pdo,(string)$opsConfig['application_key'],'project',$project_id,'upsert',$projectEvent->fetch(PDO::FETCH_ASSOC)?:[]);}
+$opsConfig=pa_external_ops_delivery_config($pdo);
+if(!empty($opsConfig['enabled'])){
+	$integration = new \App\Services\ExternalOpsIntegrationService();
+	$projectEvent=$pdo->prepare('SELECT * FROM projects WHERE id=?');
+	$projectEvent->execute([$project_id]);
+	$integration->enqueueProjectionChange($pdo,(string)$opsConfig['application_key'],'project',$project_id,'upsert',$projectEvent->fetch(PDO::FETCH_ASSOC)?:[]);
+	if ($managerAssignmentId > 0 && $managerAssignmentChanged) {
+		$assignmentEvent=$pdo->prepare('SELECT *,1 active FROM project_assignments WHERE id=?');
+		$assignmentEvent->execute([$managerAssignmentId]);
+		$integration->enqueueProjectionChange($pdo,(string)$opsConfig['application_key'],'project_assignment',$managerAssignmentId,'upsert',$assignmentEvent->fetch(PDO::FETCH_ASSOC)?:[]);
+	}
+}
 header('Location: /?page=project/projects-details&id=' . $project_id . '&created=1');
 exit;

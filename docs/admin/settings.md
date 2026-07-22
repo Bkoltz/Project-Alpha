@@ -11,6 +11,10 @@ The Settings page controls the installation-wide behavior of PA.
 
 Configure business identity, application domain, logo, timezone, contact information, and outgoing email. The **Business / Organization Name** is used as the normal email sender display name unless an SMTP From Name override is set.
 
+## Business Units
+
+Use **Business > Business units & divisions** to model branches, regions, departments, or crews. Add existing PA users as Members or Heads and choose one primary Unit per user. These are organizational labels: they do not grant PA permissions, workforce review scope, or external-application access. A Project can use a Unit for operational context and default it from the selected Project Manager's primary Unit.
+
 ## Billing
 
 Configure accepted payment methods, Stripe keys, webhook secret, net terms, surcharge preferences, payment receipts, and payment import behavior.

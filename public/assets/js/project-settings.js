@@ -2,6 +2,25 @@
   'use strict';
 
   function initProjectSettingsContactManager() {
+    var manager = document.getElementById('projectManagerSelect');
+    var businessUnit = document.getElementById('projectBusinessUnitSelect');
+    var touched = document.getElementById('projectBusinessUnitTouched');
+    var suggestion = document.getElementById('projectManagerUnitSuggestion');
+    if (manager && businessUnit && touched && manager.dataset.unitDefaultReady !== '1') {
+      manager.dataset.unitDefaultReady = '1';
+      businessUnit.addEventListener('change', function () { touched.value = '1'; });
+      manager.addEventListener('change', function () {
+        var option = manager.options[manager.selectedIndex];
+        var suggestedUnit = option ? String(option.dataset.primaryBusinessUnit || '') : '';
+        var suggestedOption = Array.from(businessUnit.options).find(function (unit) { return unit.value === suggestedUnit; });
+        if (suggestion) {
+          suggestion.textContent = suggestedOption ? 'Manager primary unit: ' + suggestedOption.textContent + '. You may keep the current Project unit.' : 'This manager has no primary Business Unit.';
+        }
+        if (String(businessUnit.dataset.projectCurrentUnit || '') === '0' && touched.value !== '1' && suggestedOption) {
+          businessUnit.value = suggestedUnit;
+        }
+      });
+    }
     document.querySelectorAll('[data-project-settings-contact-manager]').forEach(function (root) {
       if (!root || root.dataset.ready === '1') return;
       root.dataset.ready = '1';
