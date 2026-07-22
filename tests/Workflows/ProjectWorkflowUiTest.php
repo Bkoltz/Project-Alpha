@@ -496,6 +496,9 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('function registerPageInitializer', (string)$navigation);
         self::assertStringContainsString('runPageCleanups();', (string)$navigation);
         self::assertStringContainsString('runPageInitializers(page, mainContent);', (string)$navigation);
+        self::assertStringContainsString('function shellAssetSignature', (string)$navigation);
+        self::assertStringContainsString('content.reloadRequired', (string)$navigation);
+        self::assertStringContainsString("urlParams.delete('page')", (string)$navigation);
         self::assertStringContainsString('link[rel~="stylesheet"][href]', (string)$navigation);
         self::assertStringContainsString('await ensurePageStylesheets(stylesheets);', (string)$navigation);
         self::assertStringContainsString("link.dataset.pageStylesheet = '1'", (string)$navigation);
@@ -524,6 +527,8 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("\$_SERVER['DOCUMENT_ROOT']", (string)$appVersion);
         self::assertStringContainsString("asset_url('/assets/styles.css')", (string)$header);
         self::assertStringContainsString("asset_url('/assets/settings.css')", (string)$header);
+        self::assertStringContainsString('meta name="project-alpha-version"', (string)$header);
+        self::assertSame(6, substr_count((string)$header, 'data-pa-shell-asset'));
         self::assertStringContainsString("asset_url('/assets/js/item-library.js')", (string)$header);
         self::assertStringContainsString("asset_url('/assets/js/workforce.js')", (string)$header);
         self::assertStringNotContainsString("asset_url('/assets/settings.css')", (string)$settings);

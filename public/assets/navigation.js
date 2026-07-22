@@ -24,7 +24,15 @@ function getCurrentPage() {
         '/approvals': 'workforce/approvals',
         '/pay': 'workforce/pay'
     };
-    return urlParams.get('page') || pathPages[window.location.pathname] || 'home';
+    const page = urlParams.get('page') || pathPages[window.location.pathname] || 'home';
+    if (!urlParams.has('page')) return page;
+
+    urlParams.delete('page');
+    urlParams.delete('_');
+    const additionalParams = Array.from(urlParams)
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .join('&');
+    return additionalParams ? `${page}&${additionalParams}` : page;
 }
 
 function normalizePageName(page) {
@@ -33,6 +41,17 @@ function normalizePageName(page) {
 
 function getMainContentRoot() {
     return document.querySelector('.main-content') || document;
+}
+
+function shellAssetSignature(doc = document) {
+    const version = doc.querySelector('meta[name="project-alpha-version"]')?.getAttribute('content') || '';
+    const assets = Array.from(doc.querySelectorAll('[data-pa-shell-asset]'))
+        .map(asset => asset.getAttribute('href') || asset.getAttribute('src') || '')
+        .filter(Boolean)
+        .map(path => {
+            try { return new URL(path, window.location.href).href; } catch (error) { return path; }
+        });
+    return JSON.stringify({ version, assets });
 }
 
 function runPageCleanups() {
@@ -179,6 +198,14 @@ async function loadPageContent(page) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const newMainContent = doc.querySelector('.main-content');
+
+        // A long-lived soft-navigation shell can survive a deployment while its
+        // Settings/Workforce CSS and JavaScript are now older than the fragment
+        // returned by the server. Reload the full document once so the shell and
+        // fragment always use the same versioned assets.
+        if (shellAssetSignature(doc) !== shellAssetSignature(document)) {
+            return { reloadRequired: true, url: buildUrlFromPageString(page) };
+        }
 
         const redirectedPage = (() => {
             try { return new URL(response.url).searchParams.get('page'); } catch (err) { return null; }
@@ -370,6 +397,11 @@ async function navigateToPage(page, updateHistory = true, targetHash = '') {
             return;
         }
 
+        if (content && content.reloadRequired) {
+            window.location.href = content.url || buildUrlFromPageString(page);
+            return;
+        }
+
         if (content === null) {
             // Fallback to full page reload using canonical builder
             const fallbackUrl = new URL(buildUrlFromPageString(page));
@@ -471,7 +503,7 @@ function updatePageTitle(page) {
         'workforce/pay': 'Employee Pay'
     };
 
-    const pageTitle = pageTitles[page] || 'Project Alpha';
+    const pageTitle = pageTitles[normalizePageName(page)] || 'Project Alpha';
     document.title = `${pageTitle} · Project Alpha`;
 }
 

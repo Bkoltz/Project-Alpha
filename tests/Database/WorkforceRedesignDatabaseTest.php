@@ -170,7 +170,11 @@ final class WorkforceRedesignDatabaseTest extends TestCase
             'billing_treatment' => 'nonbillable',
             'entered_by_user_id' => $ownerUserId,
         ]);
-        $approval->selfConfirmOwner($ownerUserId, $ownerEntryId);
+        // A verified owner can recover a pending entry selected for an invoice;
+        // older deployments could leave this state submitted before linking.
+        $pdo->prepare("UPDATE work_time_entries SET workflow_status='submitted' WHERE id=?")
+            ->execute([$ownerEntryId]);
+        $approval->ensureOwnerProjection($ownerUserId, $ownerEntryId);
         self::assertSame('confirmed', $this->value($pdo, 'SELECT workflow_status FROM work_time_entries WHERE id=?', [$ownerEntryId]));
         self::assertSame('owner_no_pay', $this->value($pdo, 'SELECT compensation_state FROM work_time_entries WHERE id=?', [$ownerEntryId]));
         self::assertSame('0', $this->value($pdo, 'SELECT COUNT(*) FROM worker_earnings WHERE work_time_entry_id=?', [$ownerEntryId]));

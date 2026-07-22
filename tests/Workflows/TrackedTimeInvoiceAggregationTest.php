@@ -43,6 +43,13 @@ final class TrackedTimeInvoiceAggregationTest extends TestCase
         self::assertStringContainsString('name="invoice_id" data-workforce-invoice', $timeView);
         self::assertStringContainsString('Add confirmed time to this draft', $invoiceEdit);
         self::assertStringContainsString("t.status='approved' AND t.workflow_status='confirmed'", $invoiceEdit);
+        self::assertStringContainsString("t.workflow_status IN ('draft','submitted','returned')", $invoiceEdit);
+        self::assertStringContainsString('Time waiting for confirmation', $invoiceEdit);
+        self::assertStringContainsString('Confirm and add', $invoiceEdit);
+        self::assertStringContainsString('name="entry_user_id"', $invoiceEdit);
+        self::assertStringContainsString('Available after confirmation', $timeView);
+        self::assertStringContainsString("!empty(\$_GET['error'])", $invoiceEdit);
+        self::assertStringContainsString('role="alert"', $invoiceEdit);
         self::assertStringContainsString('name="return_to" value="invoice-edit"', $invoiceEdit);
         self::assertStringContainsString('workforce_link_preselected_invoice', $workforceAction);
         self::assertStringContainsString("=== 'invoice-edit'", $workforceAction);

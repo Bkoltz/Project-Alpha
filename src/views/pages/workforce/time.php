@@ -369,11 +369,14 @@ foreach ($entries as $entry) {
                 || ($canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved' && !empty($entry['owner_self_confirmed']))
             );
             $canonicalBillingState = (string)($entry['billing_state'] ?? '');
+            $timeIsConfirmed = $canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved';
             $billingState = $projectionBilled
                 ? 'Invoiced'
-                : ($entryBillingLabels[$canonicalBillingState] ?? (!empty($entry['billable'])
-                    ? ((string)$entry['status'] === 'approved' ? 'Ready to invoice' : 'Available after approval')
-                    : 'Internal / undecided'));
+                : (!$timeIsConfirmed && !empty($entry['billable'])
+                    ? 'Available after confirmation'
+                    : ($entryBillingLabels[$canonicalBillingState] ?? (!empty($entry['billable'])
+                        ? 'Ready to invoice'
+                        : 'Internal / undecided')));
             $canonicalCompensationState = (string)($entry['compensation_state'] ?? '');
             $compensationState = $entryCompensationLabels[$canonicalCompensationState] ?? (!empty($entry['is_payable'])
                 ? ((string)$entry['status'] === 'approved' ? 'Eligible' : 'Awaiting approval')

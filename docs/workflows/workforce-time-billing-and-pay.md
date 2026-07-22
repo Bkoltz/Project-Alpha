@@ -50,6 +50,8 @@ After time is confirmed:
 - Finalized invoices are never automatic destinations.
 - An admin may move the entry while the affected billing records remain mutable. Conflicting client, Project, or Job context requires an explicit correction and is never silently overwritten.
 
+Selecting a draft invoice while entering time records the intended destination, but it does not create a financial line before confirmation. The draft invoice editor shows matching pending time and its current review state. A verified Owner can use **Confirm and add** for their own nonpayable owner time; employee and contractor entries remain behind the normal reviewer control. Once confirmed, the selected draft invoice is updated automatically and its totals are recalculated.
+
 Hourly Service lines on quotes and contracts are estimates. They show estimated hours, hourly price, and an estimated total. They do not become collectible invoice charges during conversion. Confirmed time creates the actual hourly invoice lines. Fixed-price time is operational history and does not create an additional client charge.
 
 ## Corrections and disputes
