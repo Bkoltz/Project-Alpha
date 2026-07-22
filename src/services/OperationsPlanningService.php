@@ -20,7 +20,6 @@ final class OperationsPlanningService
     {
         $id = max(0, (int)($input['id'] ?? 0));
         $projectId = (int)($input['project_id'] ?? 0);
-        $businessUnitId = (int)($input['business_unit_id'] ?? 0);
         $title = trim((string)($input['title'] ?? ''));
         $status = (string)($input['status'] ?? 'draft');
         $startAt = $this->dateTimeOrNull((string)($input['scheduled_start_at'] ?? ''));
@@ -44,10 +43,16 @@ final class OperationsPlanningService
             if ($ownsTransaction) {
                 $pdo->beginTransaction();
             }
-            $this->requireProjectAndUnit($pdo, $projectId, $businessUnitId);
+            $businessUnitId = $this->projectBusinessUnitId($pdo, $projectId);
             $this->requireUsers($pdo, $assignedUserIds);
+            $this->requireProjectTeamMembers($pdo, $projectId, $assignedUserIds);
 
             if ($id > 0) {
+                $existingProject = $pdo->prepare('SELECT project_id FROM operations WHERE id=?');
+                $existingProject->execute([$id]);
+                if ((int)($existingProject->fetchColumn() ?: 0) !== $projectId) {
+                    throw new DomainException('Operation does not belong to this Project.');
+                }
                 $statement = $pdo->prepare(
                     'UPDATE operations SET project_id=?,business_unit_id=?,title=?,status=?,scheduled_start_at=?,scheduled_end_at=?,location=?,notes=? WHERE id=?'
                 );
@@ -84,13 +89,15 @@ final class OperationsPlanningService
         }
     }
 
-    public function saveTask(PDO $pdo, array $input, int $actorUserId): int
+    /** @param list<int>|null $assignedUserIds */
+    public function saveTask(PDO $pdo, array $input, int $actorUserId, ?array $assignedUserIds = null): int
     {
         $id = max(0, (int)($input['id'] ?? 0));
         $operationId = (int)($input['operation_id'] ?? 0);
         $projectId = (int)($input['project_id'] ?? 0);
-        $businessUnitId = (int)($input['business_unit_id'] ?? 0);
-        $assigneeUserId = (int)($input['assignee_user_id'] ?? 0);
+        $legacyAssigneeUserId = (int)($input['assignee_user_id'] ?? 0);
+        $assignedUserIds ??= (array)($input['assigned_user_ids'] ?? ($legacyAssigneeUserId > 0 ? [$legacyAssigneeUserId] : []));
+        $assignedUserIds = array_values(array_unique(array_filter(array_map('intval', $assignedUserIds), static fn(int $value): bool => $value > 0)));
         $title = trim((string)($input['title'] ?? ''));
         $status = (string)($input['status'] ?? 'todo');
         $dueAt = $this->dateTimeOrNull((string)($input['due_at'] ?? ''));
@@ -103,8 +110,9 @@ final class OperationsPlanningService
             throw new DomainException('Invalid task status.');
         }
 
-        $this->requireProjectAndUnit($pdo, $projectId, $businessUnitId);
-        $this->requireUsers($pdo, $assigneeUserId > 0 ? [$assigneeUserId] : []);
+        $businessUnitId = $this->projectBusinessUnitId($pdo, $projectId);
+        $this->requireUsers($pdo, $assignedUserIds);
+        $this->requireProjectTeamMembers($pdo, $projectId, $assignedUserIds);
         if ($operationId > 0) {
             $operation = $pdo->prepare('SELECT project_id FROM operations WHERE id=?');
             $operation->execute([$operationId]);
@@ -114,41 +122,62 @@ final class OperationsPlanningService
             }
         }
 
-        if ($id > 0) {
-            $statement = $pdo->prepare(
-                'UPDATE tasks SET operation_id=?,project_id=?,business_unit_id=?,assignee_user_id=?,title=?,status=?,due_at=?,notes=? WHERE id=?'
-            );
-            $statement->execute([$operationId ?: null, $projectId, $businessUnitId ?: null, $assigneeUserId ?: null, $title, $status, $dueAt, $notes ?: null, $id]);
-            if ($statement->rowCount() === 0) {
-                $exists = $pdo->prepare('SELECT 1 FROM tasks WHERE id=?');
-                $exists->execute([$id]);
-                if (!$exists->fetchColumn()) {
-                    throw new DomainException('Task not found.');
+        $ownsTransaction = !$pdo->inTransaction();
+        try {
+            if ($ownsTransaction) {
+                $pdo->beginTransaction();
+            }
+            $primaryAssignee = $assignedUserIds[0] ?? null;
+            if ($id > 0) {
+                $existingProject = $pdo->prepare('SELECT project_id FROM tasks WHERE id=?');
+                $existingProject->execute([$id]);
+                if ((int)($existingProject->fetchColumn() ?: 0) !== $projectId) {
+                    throw new DomainException('Task does not belong to this Project.');
                 }
+                $statement = $pdo->prepare(
+                    'UPDATE tasks SET operation_id=?,project_id=?,business_unit_id=?,assignee_user_id=?,title=?,status=?,due_at=?,notes=? WHERE id=?'
+                );
+                $statement->execute([$operationId ?: null, $projectId, $businessUnitId ?: null, $primaryAssignee, $title, $status, $dueAt, $notes ?: null, $id]);
+                if ($statement->rowCount() === 0) {
+                    $exists = $pdo->prepare('SELECT 1 FROM tasks WHERE id=?');
+                    $exists->execute([$id]);
+                    if (!$exists->fetchColumn()) {
+                        throw new DomainException('Task not found.');
+                    }
+                }
+            } else {
+                $pdo->prepare(
+                    'INSERT INTO tasks (operation_id,project_id,business_unit_id,assignee_user_id,title,status,due_at,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?)'
+                )->execute([$operationId ?: null, $projectId, $businessUnitId ?: null, $primaryAssignee, $title, $status, $dueAt, $notes ?: null, $actorUserId ?: null]);
+                $id = (int)$pdo->lastInsertId();
+            }
+
+            $pdo->prepare('DELETE FROM task_assignments WHERE task_id=?')->execute([$id]);
+            $assignment = $pdo->prepare('INSERT INTO task_assignments (task_id,user_id,assigned_by) VALUES (?,?,?)');
+            foreach ($assignedUserIds as $userId) {
+                $assignment->execute([$id, $userId, $actorUserId ?: null]);
+            }
+            if ($ownsTransaction) {
+                $pdo->commit();
             }
             return $id;
+        } catch (Throwable $error) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
         }
-
-        $pdo->prepare(
-            'INSERT INTO tasks (operation_id,project_id,business_unit_id,assignee_user_id,title,status,due_at,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?)'
-        )->execute([$operationId ?: null, $projectId, $businessUnitId ?: null, $assigneeUserId ?: null, $title, $status, $dueAt, $notes ?: null, $actorUserId ?: null]);
-        return (int)$pdo->lastInsertId();
     }
 
-    private function requireProjectAndUnit(PDO $pdo, int $projectId, int $businessUnitId): void
+    private function projectBusinessUnitId(PDO $pdo, int $projectId): int
     {
-        $project = $pdo->prepare("SELECT 1 FROM projects WHERE id=? AND status NOT IN ('cancelled')");
+        $project = $pdo->prepare("SELECT business_unit_id FROM projects WHERE id=? AND status NOT IN ('cancelled')");
         $project->execute([$projectId]);
-        if (!$project->fetchColumn()) {
+        $value = $project->fetchColumn();
+        if ($value === false) {
             throw new DomainException('Project is unavailable.');
         }
-        if ($businessUnitId > 0) {
-            $unit = $pdo->prepare('SELECT 1 FROM business_units WHERE id=? AND is_active=1');
-            $unit->execute([$businessUnitId]);
-            if (!$unit->fetchColumn()) {
-                throw new DomainException('Business unit is unavailable.');
-            }
-        }
+        return (int)($value ?: 0);
     }
 
     /** @param list<int> $userIds */
@@ -165,6 +194,28 @@ final class OperationsPlanningService
         sort($userIds);
         if ($valid !== $userIds) {
             throw new DomainException('One or more assigned users are unavailable.');
+        }
+    }
+
+    /** @param list<int> $userIds */
+    private function requireProjectTeamMembers(PDO $pdo, int $projectId, array $userIds): void
+    {
+        if ($userIds === []) {
+            return;
+        }
+        $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+        $statement = $pdo->prepare(
+            "SELECT user_id FROM project_assignments
+             WHERE project_id=? AND user_id IN ($placeholders)
+               AND (ends_at IS NULL OR ends_at>CURRENT_TIMESTAMP)"
+        );
+        $statement->execute(array_merge([$projectId], $userIds));
+        $valid = array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+        sort($valid);
+        $expected = $userIds;
+        sort($expected);
+        if ($valid !== $expected) {
+            throw new DomainException('Assign workers to the Project Team before assigning Operations or Tasks.');
         }
     }
 

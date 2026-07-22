@@ -9,7 +9,8 @@ use DateTimeZone;
 use PDO;
 
 /**
- * Builds the least-privilege Project Alpha projection consumed by LTDS Ops.
+ * Builds the least-privilege Project Alpha projection consumed by an external
+ * operations application.
  *
  * Pagination is applied independently to every collection. A caller continues
  * while has_more is true; collections that have been exhausted return an empty
@@ -35,6 +36,7 @@ final class OpsSnapshotService
      *   operations:list<array<string,mixed>>,
      *   operation_assignments:list<array<string,mixed>>,
      *   tasks:list<array<string,mixed>>,
+     *   task_assignments:list<array<string,mixed>>,
      *   calendar_events:list<array<string,mixed>>,
      *   has_more:bool,
      *   next_page:?int
@@ -54,8 +56,9 @@ final class OpsSnapshotService
             throw new \InvalidArgumentException('Limit must be between 1 and ' . self::MAX_LIMIT . '.');
         }
 
-        $applicationKey = strtolower(trim((string)($applicationKey ?: ExternalOpsIntegrationService::APPLICATION_KEY)));
-        if (!preg_match('/^[a-z0-9][a-z0-9_-]{1,63}$/', $applicationKey)) {
+        try {
+            $applicationKey = ExternalOpsIntegrationService::normalizeApplicationKey((string)$applicationKey);
+        } catch (\DomainException $error) {
             throw new \InvalidArgumentException('Invalid external operations application key.');
         }
         $definitions = $this->definitions($applicationKey);
@@ -83,12 +86,16 @@ final class OpsSnapshotService
             );
             if ($name === 'application_entitlements') {
                 $scopeStatement = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_business_units WHERE entitlement_id=? ORDER BY business_unit_id');
+                $oversightStatement = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_oversight_units WHERE entitlement_id=? ORDER BY business_unit_id');
                 foreach ($normalizedRows as &$row) {
                     if ((string)$row['role_key'] === 'role-admin') {
                         $row['business_unit_ids'] = [];
+                        $row['oversight_business_unit_ids'] = [];
                     } else {
                         $scopeStatement->execute([(int)$row['id']]);
                         $row['business_unit_ids'] = array_map('intval', $scopeStatement->fetchAll(PDO::FETCH_COLUMN));
+                        $oversightStatement->execute([(int)$row['id']]);
+                        $row['oversight_business_unit_ids'] = array_map('intval', $oversightStatement->fetchAll(PDO::FETCH_COLUMN));
                     }
                 }
                 unset($row);
@@ -118,6 +125,7 @@ final class OpsSnapshotService
             'operations' => $result['operations'],
             'operation_assignments' => $result['operation_assignments'],
             'tasks' => $result['tasks'],
+            'task_assignments' => $result['task_assignments'],
             'calendar_events' => $result['calendar_events'],
             'has_more' => $hasMore,
             'next_page' => $hasMore ? $page + 1 : null,
@@ -169,10 +177,10 @@ final class OpsSnapshotService
                 'booleans' => [],
             ],
             'projects' => [
-                'sql' => 'SELECT id,client_id,parent_id,organization_id,department_id,created_by,name,description,status,
+                'sql' => 'SELECT id,client_id,parent_id,organization_id,department_id,business_unit_id,created_by,name,description,status,
                                  start_date,end_date,estimated_start,estimated_end,created_at,updated_at
                           FROM projects ORDER BY id',
-                'integers' => ['id', 'client_id', 'parent_id', 'organization_id', 'department_id', 'created_by'],
+                'integers' => ['id', 'client_id', 'parent_id', 'organization_id', 'department_id', 'business_unit_id', 'created_by'],
                 'booleans' => [],
             ],
             'project_assignments' => [
@@ -189,7 +197,7 @@ final class OpsSnapshotService
                 'booleans' => ['archived'],
             ],
             'application_entitlements' => [
-                'sql' => 'SELECT ae.id,ae.user_id,ae.application_key,
+                'sql' => 'SELECT ae.id,ae.user_id,ae.application_key,ae.manual_enabled,ae.automatic_enabled,ae.oversight_enabled,
                                  CASE WHEN ae.enabled=1 AND u.is_disabled=0 AND u.deleted_at IS NULL
                                            AND (wp.id IS NULL OR wp.status=\'active\') THEN 1 ELSE 0 END AS enabled,
                                  CASE WHEN u.role=\'admin\' THEN \'role-admin\' ELSE \'role-operator\' END AS role_key,
@@ -199,7 +207,7 @@ final class OpsSnapshotService
                           LEFT JOIN worker_profiles wp ON wp.user_id=u.id
                           WHERE ae.application_key=:application_key ORDER BY ae.id',
                 'integers' => ['id', 'user_id'],
-                'booleans' => ['enabled'],
+                'booleans' => ['enabled', 'manual_enabled', 'automatic_enabled', 'oversight_enabled'],
                 'parameters' => ['application_key' => $applicationKey],
             ],
             'operations' => [
@@ -220,6 +228,12 @@ final class OpsSnapshotService
                                  notes,created_by,created_at,updated_at
                           FROM tasks ORDER BY id',
                 'integers' => ['id', 'operation_id', 'project_id', 'business_unit_id', 'assignee_user_id', 'created_by'],
+                'booleans' => [],
+            ],
+            'task_assignments' => [
+                'sql' => 'SELECT task_id,user_id,assigned_by,assigned_at
+                          FROM task_assignments ORDER BY task_id,user_id',
+                'integers' => ['task_id', 'user_id', 'assigned_by'],
                 'booleans' => [],
             ],
             'calendar_events' => [

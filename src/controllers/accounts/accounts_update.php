@@ -314,11 +314,10 @@ try {
 
     $externalOpsConfig = pa_external_ops_delivery_config($pdo);
     if (!empty($externalOpsConfig['enabled'])) {
-        (new \App\Services\ExternalOpsIntegrationService())->saveAccountAccess(
+        (new \App\Services\ExternalOpsIntegrationService())->resyncAccountAccess(
             $pdo,
             $userId,
             (string)$externalOpsConfig['application_key'],
-            !empty($_POST['external_ops_enabled']),
             (int)$_SESSION['user']['id']
         );
     }

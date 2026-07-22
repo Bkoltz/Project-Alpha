@@ -14,18 +14,16 @@ use Throwable;
 final class ExternalOpsIntegrationService
 {
     public const SCHEMA_VERSION = 1;
-    public const APPLICATION_KEY = 'ltds_ops';
     public const ROLES = [
         'role-admin',
         'role-operator',
     ];
 
     /**
-     * Persist the account-form access decision using PA's account role and
-     * workforce assignments as the only sources of authorization truth.
+     * Save a deliberate access exception. Project Team membership is tracked
+     * separately as automatic access and can never be erased by this method.
      *
-     * @param list<int>|null $businessUnitIds Explicit non-admin scope, or null
-     *        to preserve an existing scope and default a new entitlement from Workforce.
+     * @param list<int>|null $businessUnitIds Read-only oversight units.
      * @return array{event_id:string,entitlement_id:int}
      */
     public function saveAccountAccess(
@@ -37,34 +35,16 @@ final class ExternalOpsIntegrationService
         ?array $businessUnitIds = null
     ): array {
         $account = $this->account($pdo, $userId);
-
-        // Only PA's exact administrator role maps to Ops administration. In
-        // particular, PA owner is a workforce relationship, not Ops admin.
         $isAdmin = $account['role'] === 'admin';
-        $roleKey = $isAdmin ? 'role-admin' : 'role-operator';
-        if ($isAdmin) {
-            // Retain a prior employee scope through a promotion. Admin
-            // payloads remain global because entitlementState omits units.
-            $businessUnitIds = $this->existingBusinessUnitIds($pdo, $userId, $applicationKey) ?? [];
-        } elseif ($businessUnitIds === null) {
-            $businessUnitIds = $this->existingBusinessUnitIds($pdo, $userId, $applicationKey)
-                ?? $this->workerBusinessUnitIds($pdo, $userId);
+        $businessUnitIds = $isAdmin ? [] : ($businessUnitIds ?? []);
+        if ($requestedAccess && !$isAdmin && $businessUnitIds === []) {
+            throw new DomainException('Choose at least one Business Unit for a read-only access exception.');
         }
-
-        return $this->persistEntitlement(
-            $pdo,
-            $userId,
-            $applicationKey,
-            $requestedAccess,
-            $roleKey,
-            $businessUnitIds,
-            $actorUserId
-        );
+        return $this->persistEntitlement($pdo, $userId, $applicationKey, $requestedAccess, $businessUnitIds, $actorUserId);
     }
 
     /**
-     * Refresh an existing ACL record after PA account or Workforce scope data
-     * changes. Accounts without an LTDS Ops ACL are intentionally ignored.
+     * Refresh effective access after account, worker, or Project Team changes.
      *
      * @return array{event_id:string,entitlement_id:int}|null
      */
@@ -74,17 +54,14 @@ final class ExternalOpsIntegrationService
         string $applicationKey,
         int $actorUserId
     ): ?array {
-        $applicationKey = $this->normalizeApplicationKey($applicationKey);
-        $statement = $pdo->prepare(
-            'SELECT enabled FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1'
-        );
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $statement = $pdo->prepare('SELECT id FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1');
         $statement->execute([$userId, $applicationKey]);
-        $enabled = $statement->fetchColumn();
-        if ($enabled === false) {
+        $existing = $statement->fetchColumn();
+        if ($existing === false && !$this->hasActiveProjectAssignment($pdo, $userId)) {
             return null;
         }
-
-        return $this->saveAccountAccess($pdo, $userId, $applicationKey, !empty($enabled), $actorUserId);
+        return $this->recomputeEntitlement($pdo, $userId, $applicationKey, $actorUserId);
     }
 
     /**
@@ -95,22 +72,14 @@ final class ExternalOpsIntegrationService
         PDO $pdo,
         int $userId,
         string $applicationKey,
-        bool $enabled,
-        string $roleKey,
+        bool $manualEnabled,
         array $businessUnitIds,
         int $actorUserId
     ): array {
         if ($userId < 1 || $actorUserId < 1) {
             throw new DomainException('A valid user and administrator are required.');
         }
-        if (!in_array($roleKey, self::ROLES, true)) {
-            throw new DomainException('Invalid external application role.');
-        }
-        if ($roleKey === 'role-owner') {
-            throw new DomainException('The protected owner role cannot be provisioned from Project Alpha.');
-        }
-
-        $applicationKey = $this->normalizeApplicationKey($applicationKey);
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
         $businessUnitIds = array_values(array_unique(array_filter(
             array_map('intval', $businessUnitIds),
             static fn(int $id): bool => $id > 0
@@ -138,22 +107,34 @@ final class ExternalOpsIntegrationService
                 }
             }
 
+            $account = $this->account($pdo, $userId);
+            $roleKey = $account['role'] === 'admin' ? 'role-admin' : 'role-operator';
+            $automaticEnabled = !empty($account['active']) && $this->hasActiveProjectAssignment($pdo, $userId);
+            $effectiveEnabled = !empty($account['active']) && ($manualEnabled || $automaticEnabled);
+            $oversightEnabled = $manualEnabled && $roleKey !== 'role-admin' && $businessUnitIds !== [];
+
             $existing = $pdo->prepare('SELECT id FROM application_entitlements WHERE user_id = ? AND application_key = ? LIMIT 1');
             $existing->execute([$userId, $applicationKey]);
             $entitlementId = (int)($existing->fetchColumn() ?: 0);
             if ($entitlementId > 0) {
-                $pdo->prepare('UPDATE application_entitlements SET enabled = ?, role_key = ?, updated_by = ? WHERE id = ?')
-                    ->execute([$enabled ? 1 : 0, $roleKey, $actorUserId, $entitlementId]);
+                $pdo->prepare('UPDATE application_entitlements SET enabled=?,manual_enabled=?,automatic_enabled=?,oversight_enabled=?,role_key=?,updated_by=? WHERE id=?')
+                    ->execute([$effectiveEnabled ? 1 : 0, $manualEnabled ? 1 : 0, $automaticEnabled ? 1 : 0, $oversightEnabled ? 1 : 0, $roleKey, $actorUserId, $entitlementId]);
             } else {
-                $pdo->prepare('INSERT INTO application_entitlements (user_id,application_key,enabled,role_key,created_by,updated_by) VALUES (?,?,?,?,?,?)')
-                    ->execute([$userId, $applicationKey, $enabled ? 1 : 0, $roleKey, $actorUserId, $actorUserId]);
+                $pdo->prepare('INSERT INTO application_entitlements (user_id,application_key,enabled,manual_enabled,automatic_enabled,oversight_enabled,role_key,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?)')
+                    ->execute([$userId, $applicationKey, $effectiveEnabled ? 1 : 0, $manualEnabled ? 1 : 0, $automaticEnabled ? 1 : 0, $oversightEnabled ? 1 : 0, $roleKey, $actorUserId, $actorUserId]);
                 $entitlementId = (int)$pdo->lastInsertId();
             }
 
+            // Keep the legacy scope projection synchronized during the
+            // compatibility window; older receivers read business_unit_ids,
+            // while newer receivers use oversight_business_unit_ids.
             $pdo->prepare('DELETE FROM application_entitlement_business_units WHERE entitlement_id = ?')->execute([$entitlementId]);
+            $pdo->prepare('DELETE FROM application_entitlement_oversight_units WHERE entitlement_id = ?')->execute([$entitlementId]);
             if ($businessUnitIds !== []) {
-                $scopeInsert = $pdo->prepare('INSERT INTO application_entitlement_business_units (entitlement_id,business_unit_id) VALUES (?,?)');
+                $legacyScopeInsert = $pdo->prepare('INSERT INTO application_entitlement_business_units (entitlement_id,business_unit_id) VALUES (?,?)');
+                $scopeInsert = $pdo->prepare('INSERT INTO application_entitlement_oversight_units (entitlement_id,business_unit_id) VALUES (?,?)');
                 foreach ($businessUnitIds as $businessUnitId) {
+                    $legacyScopeInsert->execute([$entitlementId, $businessUnitId]);
                     $scopeInsert->execute([$entitlementId, $businessUnitId]);
                 }
             }
@@ -162,7 +143,7 @@ final class ExternalOpsIntegrationService
                 $pdo,
                 $userId,
                 $applicationKey,
-                $enabled ? 'application_entitlement.changed' : 'application_entitlement.revoked'
+                $effectiveEnabled ? 'application_entitlement.changed' : 'application_entitlement.revoked'
             );
             if ($eventId === null) {
                 throw new RuntimeException('Failed to queue the entitlement change.');
@@ -180,9 +161,26 @@ final class ExternalOpsIntegrationService
         }
     }
 
+    /** @return array{event_id:string,entitlement_id:int} */
+    private function recomputeEntitlement(PDO $pdo, int $userId, string $applicationKey, int $actorUserId): array
+    {
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $statement = $pdo->prepare('SELECT manual_enabled FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1');
+        $statement->execute([$userId, $applicationKey]);
+        $manualEnabled = (bool)($statement->fetchColumn() ?: false);
+        return $this->persistEntitlement(
+            $pdo,
+            $userId,
+            $applicationKey,
+            $manualEnabled,
+            $this->existingOversightUnitIds($pdo, $userId, $applicationKey) ?? [],
+            $actorUserId
+        );
+    }
+
     public function enqueueCurrentState(PDO $pdo, int $userId, string $applicationKey, string $eventType = 'user.changed'): ?string
     {
-        $state = $this->entitlementState($pdo, $userId, $this->normalizeApplicationKey($applicationKey));
+        $state = $this->entitlementState($pdo, $userId, self::normalizeApplicationKey($applicationKey));
         if ($state === null) {
             return null;
         }
@@ -191,7 +189,7 @@ final class ExternalOpsIntegrationService
 
     public function enqueueDeprovisionBeforeDelete(PDO $pdo, int $userId, string $applicationKey): ?string
     {
-        $state = $this->entitlementState($pdo, $userId, $this->normalizeApplicationKey($applicationKey));
+        $state = $this->entitlementState($pdo, $userId, self::normalizeApplicationKey($applicationKey));
         if ($state === null) {
             return null;
         }
@@ -204,7 +202,7 @@ final class ExternalOpsIntegrationService
     private function entitlementState(PDO $pdo, int $userId, string $applicationKey): ?array
     {
         $statement = $pdo->prepare(
-            'SELECT ae.id AS entitlement_id,ae.application_key,ae.enabled,
+            'SELECT ae.id AS entitlement_id,ae.application_key,ae.enabled,ae.manual_enabled,ae.automatic_enabled,ae.oversight_enabled,
                     u.id AS user_id,u.email,u.username,u.role,u.is_disabled,u.deleted_at,wp.display_name,wp.status AS worker_status
              FROM application_entitlements ae
              JOIN users u ON u.id = ae.user_id
@@ -218,10 +216,14 @@ final class ExternalOpsIntegrationService
             return null;
         }
 
-        $scope = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_business_units WHERE entitlement_id = ? ORDER BY business_unit_id');
-        $scope->execute([(int)$row['entitlement_id']]);
+        $legacyScope = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_business_units WHERE entitlement_id = ? ORDER BY business_unit_id');
+        $legacyScope->execute([(int)$row['entitlement_id']]);
+        $oversightScope = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_oversight_units WHERE entitlement_id = ? ORDER BY business_unit_id');
+        $oversightScope->execute([(int)$row['entitlement_id']]);
         $isAdmin = (string)$row['role'] === 'admin';
-        $businessUnitIds = $isAdmin ? [] : array_map('intval', $scope->fetchAll(PDO::FETCH_COLUMN));
+        $legacyBusinessUnitIds = $isAdmin ? [] : array_map('intval', $legacyScope->fetchAll(PDO::FETCH_COLUMN));
+        $oversightBusinessUnitIds = $isAdmin ? [] : array_map('intval', $oversightScope->fetchAll(PDO::FETCH_COLUMN));
+        $businessUnitIds = array_values(array_unique(array_merge($legacyBusinessUnitIds, $oversightBusinessUnitIds)));
         $workerStatus = trim((string)($row['worker_status'] ?? ''));
         $userActive = empty($row['is_disabled'])
             && empty($row['deleted_at'])
@@ -239,8 +241,54 @@ final class ExternalOpsIntegrationService
                 'enabled' => !empty($row['enabled']) && $userActive,
                 'role_key' => $isAdmin ? 'role-admin' : 'role-operator',
                 'business_unit_ids' => $businessUnitIds,
+                'oversight_business_unit_ids' => $oversightBusinessUnitIds,
+                'manual_access' => !empty($row['manual_enabled']),
+                'automatic_access' => !empty($row['automatic_enabled']),
+                'unit_oversight' => !empty($row['oversight_enabled']),
             ],
         ];
+    }
+
+    /**
+     * Queue a least-privilege incremental projection change. The daily
+     * snapshot remains the reconciliation authority.
+     *
+     * @param array<string,mixed> $data
+     */
+    public function enqueueProjectionChange(PDO $pdo, string $applicationKey, string $entityType, string|int $entityId, string $action, array $data): string
+    {
+        if (!in_array($action, ['upsert', 'revoke'], true)) {
+            throw new DomainException('Invalid projection action.');
+        }
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $eventId = $this->uuidV4();
+        $occurredAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.u\Z');
+        $sourceUpdatedAt = $occurredAt;
+        if (!empty($data['updated_at'])) {
+            try {
+                $sourceUpdatedAt = (new DateTimeImmutable((string)$data['updated_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+            } catch (Throwable $ignored) {
+                $sourceUpdatedAt = $occurredAt;
+            }
+        }
+        $payload = [
+            'event_id' => $eventId,
+            'event_type' => 'projection.changed',
+            'occurred_at' => $occurredAt,
+            'schema_version' => self::SCHEMA_VERSION,
+            'application_key' => $applicationKey,
+            'projection' => [
+                'entity_type' => $entityType,
+                'entity_id' => (string)$entityId,
+                'action' => $action,
+                'source_updated_at' => $sourceUpdatedAt,
+                'data' => $data,
+            ],
+        ];
+        $databaseTime = (new DateTimeImmutable($occurredAt))->format('Y-m-d H:i:s.u');
+        $pdo->prepare('INSERT INTO integration_outbox (event_id,integration_key,event_type,schema_version,payload_json,occurred_at,next_attempt_at) VALUES (?,?,?,?,?,?,?)')
+            ->execute([$eventId, $applicationKey, 'projection.changed', self::SCHEMA_VERSION, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), $databaseTime, $databaseTime]);
+        return $eventId;
     }
 
     /** @param array<string,mixed> $state */
@@ -275,47 +323,39 @@ final class ExternalOpsIntegrationService
         return $eventId;
     }
 
-    private function normalizeApplicationKey(string $applicationKey): string
+    public static function normalizeApplicationKey(string $applicationKey): string
     {
         $applicationKey = strtolower(trim($applicationKey));
-        if ($applicationKey !== self::APPLICATION_KEY) {
-            throw new DomainException('LTDS Operations must use the application key ltds_ops.');
+        if (!preg_match('/^[a-z0-9][a-z0-9_-]{1,63}$/', $applicationKey)) {
+            throw new DomainException('The application key must be 2 to 64 characters using letters, numbers, underscores, or hyphens.');
         }
         return $applicationKey;
     }
 
-    /** @return array{role:string} */
+    /** @return array{role:string,active:bool} */
     private function account(PDO $pdo, int $userId): array
     {
-        $statement = $pdo->prepare('SELECT role FROM users WHERE id=? AND deleted_at IS NULL LIMIT 1');
+        $statement = $pdo->prepare('SELECT u.role,u.is_disabled,u.deleted_at,wp.status AS worker_status FROM users u LEFT JOIN worker_profiles wp ON wp.user_id=u.id WHERE u.id=? LIMIT 1');
         $statement->execute([$userId]);
         $account = $statement->fetch(PDO::FETCH_ASSOC);
         if (!is_array($account)) {
             throw new DomainException('User not found.');
         }
-        return ['role' => (string)$account['role']];
+        $workerStatus = trim((string)($account['worker_status'] ?? ''));
+        return ['role' => (string)$account['role'], 'active' => empty($account['is_disabled']) && empty($account['deleted_at']) && ($workerStatus === '' || $workerStatus === 'active')];
     }
 
-    /** @return list<int> */
-    private function workerBusinessUnitIds(PDO $pdo, int $userId): array
+    private function hasActiveProjectAssignment(PDO $pdo, int $userId): bool
     {
-        $statement = $pdo->prepare(
-            'SELECT wbu.business_unit_id
-             FROM worker_profiles wp
-             JOIN worker_business_units wbu ON wbu.worker_profile_id = wp.id
-             JOIN business_units bu ON bu.id = wbu.business_unit_id AND bu.is_active = 1
-             WHERE wp.user_id = ?
-               AND (wbu.ends_at IS NULL OR wbu.ends_at > CURRENT_TIMESTAMP)
-             ORDER BY wbu.business_unit_id'
-        );
+        $statement = $pdo->prepare('SELECT 1 FROM project_assignments WHERE user_id=? AND (ends_at IS NULL OR ends_at>CURRENT_TIMESTAMP) LIMIT 1');
         $statement->execute([$userId]);
-        return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+        return $statement->fetchColumn() !== false;
     }
 
     /** @return list<int>|null */
-    private function existingBusinessUnitIds(PDO $pdo, int $userId, string $applicationKey): ?array
+    private function existingOversightUnitIds(PDO $pdo, int $userId, string $applicationKey): ?array
     {
-        $applicationKey = $this->normalizeApplicationKey($applicationKey);
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
         $entitlement = $pdo->prepare(
             'SELECT id FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1'
         );
@@ -325,7 +365,7 @@ final class ExternalOpsIntegrationService
             return null;
         }
         $scope = $pdo->prepare(
-            'SELECT business_unit_id FROM application_entitlement_business_units
+            'SELECT business_unit_id FROM application_entitlement_oversight_units
              WHERE entitlement_id=? ORDER BY business_unit_id'
         );
         $scope->execute([$entitlementId]);

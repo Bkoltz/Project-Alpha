@@ -37,6 +37,7 @@ if(!empty($appConfig['job_project_locations_enabled'])){
 }
 
 $projectOrganizationId = (int)($project['organization_id'] ?? 0);
+$businessUnits = $pdo->query('SELECT id,name,code,is_active FROM business_units ORDER BY is_active DESC,name,id')->fetchAll(PDO::FETCH_ASSOC);
 $projectDepartments = [];
 if ($projectOrganizationId > 0) {
     $deptStmt = $pdo->prepare('
@@ -222,6 +223,16 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
             <?php endforeach; ?>
           </select>
           <small>Department selection controls department link inheritance for project invoices.</small>
+        </label>
+        <label class="project-field">
+          <span>Business Unit / Division</span>
+          <select name="business_unit_id">
+            <option value="">Unassigned</option>
+            <?php foreach ($businessUnits as $businessUnit): ?>
+              <option value="<?php echo (int)$businessUnit['id']; ?>" <?php echo (int)($project['business_unit_id'] ?? 0) === (int)$businessUnit['id'] ? 'selected' : ''; ?> <?php echo empty($businessUnit['is_active']) && (int)($project['business_unit_id'] ?? 0) !== (int)$businessUnit['id'] ? 'disabled' : ''; ?>><?php echo htmlspecialchars((string)$businessUnit['name'] . (!empty($businessUnit['code']) ? ' (' . (string)$businessUnit['code'] . ')' : '') . (empty($businessUnit['is_active']) ? ' - inactive' : '')); ?></option>
+            <?php endforeach; ?>
+          </select>
+          <small>Operations and Tasks inherit the Project's business unit automatically.</small>
         </label>
       </section>
 
