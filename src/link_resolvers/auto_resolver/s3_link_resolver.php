@@ -432,7 +432,7 @@ class S3LinkResolver
                 $this->fail(
                     'create folder link',
                     'S3/R2 storage is connected, but no public Worker/base URL is configured.',
-                    'Enter the LTDS-Ops Worker or R2 custom-domain URL used by clients. PA will append the matched folder prefix.'
+                    'Enter the external delivery Worker or R2 custom-domain URL used by clients. PA will append the matched folder prefix.'
                 );
                 return null;
             }

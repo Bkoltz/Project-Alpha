@@ -70,7 +70,20 @@ try {
         foreach (array_unique($affectedUsers) as $userId) {
             $integration->resyncAccountAccess($pdo, (int)$userId, (string)$config['application_key'], $actorUserId);
         }
-        foreach($events as [$entityType,$eventEntityId,$eventAction,$eventData]){$eventData['updated_at']=gmdate('Y-m-d\TH:i:s.u\Z');$integration->enqueueProjectionChange($pdo,(string)$config['application_key'],$entityType,$eventEntityId,$eventAction,$eventData);}
+        foreach ($events as [$entityType, $eventEntityId, $eventAction, $eventData]) {
+            if (empty($eventData['updated_at'])) {
+                $eventData['updated_at'] = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+                    ->format('Y-m-d\TH:i:s.u\Z');
+            }
+            $integration->enqueueProjectionChange(
+                $pdo,
+                (string)$config['application_key'],
+                $entityType,
+                $eventEntityId,
+                $eventAction,
+                $eventData
+            );
+        }
     }
     header('Location: ' . $redirect . '&saved=1#team-work');
 } catch (Throwable $error) {

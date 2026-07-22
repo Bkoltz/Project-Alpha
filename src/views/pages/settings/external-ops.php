@@ -12,29 +12,111 @@ $search = trim((string)($_GET['access_search'] ?? ''));
 $pageNumber = max(1, (int)($_GET['access_page'] ?? 1));
 $pageSize = 20;
 $offset = ($pageNumber - 1) * $pageSize;
-$where = 'e.application_key=? AND e.enabled=1';
-$params = [$applicationKey];
-if ($search !== '') {
-    $where .= ' AND (u.display_name LIKE ? OR u.username LIKE ? OR u.email LIKE ?)';
-    $term = '%' . $search . '%';
-    array_push($params, $term, $term, $term);
-}
-$countStmt = $pdo->prepare("SELECT COUNT(*) FROM application_entitlements e JOIN users u ON u.id=e.user_id WHERE {$where}");
-$countStmt->execute($params);
-$accessCount = (int)$countStmt->fetchColumn();
-$accessStmt = $pdo->prepare("SELECT e.*,u.display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at FROM application_entitlements e JOIN users u ON u.id=e.user_id WHERE {$where} ORDER BY COALESCE(NULLIF(u.display_name,''),NULLIF(u.username,''),u.email) LIMIT {$pageSize} OFFSET {$offset}");
-$accessStmt->execute($params);
-$accessUsers = $accessStmt->fetchAll(PDO::FETCH_ASSOC);
-$eligibleUsers = $pdo->query("SELECT id,COALESCE(NULLIF(display_name,''),NULLIF(username,''),email) name,email FROM users WHERE is_disabled=0 AND deleted_at IS NULL ORDER BY name LIMIT 250")->fetchAll(PDO::FETCH_ASSOC);
-$units = $pdo->query('SELECT id,name,is_active FROM business_units ORDER BY is_active DESC,name')->fetchAll(PDO::FETCH_ASSOC);
 $detailUserId = max(0, (int)($_GET['access_user_id'] ?? 0));
-$accessDetail = null;$projectSources=[];$manualUnits=[];
-if ($detailUserId > 0) {
-    $detailStmt=$pdo->prepare('SELECT e.*,u.display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at FROM application_entitlements e JOIN users u ON u.id=e.user_id WHERE e.application_key=? AND e.user_id=?');$detailStmt->execute([$applicationKey,$detailUserId]);$accessDetail=$detailStmt->fetch(PDO::FETCH_ASSOC)?:null;
-    $sourceStmt=$pdo->prepare('SELECT p.id,p.name,bu.name business_unit_name FROM project_assignments pa JOIN projects p ON p.id=pa.project_id LEFT JOIN business_units bu ON bu.id=p.business_unit_id WHERE pa.user_id=? AND (pa.ends_at IS NULL OR pa.ends_at>UTC_TIMESTAMP(6)) ORDER BY p.name');$sourceStmt->execute([$detailUserId]);$projectSources=$sourceStmt->fetchAll(PDO::FETCH_ASSOC);
-    $unitStmt=$pdo->prepare('SELECT bu.id,bu.name FROM application_entitlements e JOIN application_entitlement_oversight_units eu ON eu.entitlement_id=e.id JOIN business_units bu ON bu.id=eu.business_unit_id WHERE e.application_key=? AND e.user_id=? ORDER BY bu.name');$unitStmt->execute([$applicationKey,$detailUserId]);$manualUnits=$unitStmt->fetchAll(PDO::FETCH_ASSOC);
+$accessCount = 0;
+$accessUsers = [];
+$eligibleUsers = [];
+$units = [];
+$accessDetail = null;
+$projectSources = [];
+$manualUnits = [];
+$status = [];
+$directoryError = false;
+
+// The configuration form must remain available even when the optional
+// integration is disabled or its supporting schema needs attention.
+if (!empty($config['enabled'])) {
+    try {
+        $where = 'e.application_key=? AND e.enabled=1';
+        $params = [$applicationKey];
+        if ($search !== '') {
+            $where .= ' AND (wp.display_name LIKE ? OR u.username LIKE ? OR u.email LIKE ?)';
+            $term = '%' . $search . '%';
+            array_push($params, $term, $term, $term);
+        }
+
+        $countStmt = $pdo->prepare(
+            "SELECT COUNT(*)
+             FROM application_entitlements e
+             JOIN users u ON u.id=e.user_id
+             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+             WHERE {$where}"
+        );
+        $countStmt->execute($params);
+        $accessCount = (int)$countStmt->fetchColumn();
+
+        $accessStmt = $pdo->prepare(
+            "SELECT e.*,wp.display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at
+             FROM application_entitlements e
+             JOIN users u ON u.id=e.user_id
+             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+             WHERE {$where}
+             ORDER BY COALESCE(NULLIF(wp.display_name,''),NULLIF(u.username,''),u.email)
+             LIMIT {$pageSize} OFFSET {$offset}"
+        );
+        $accessStmt->execute($params);
+        $accessUsers = $accessStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $eligibleUsers = $pdo->query(
+            "SELECT u.id,COALESCE(NULLIF(wp.display_name,''),NULLIF(u.username,''),u.email) name,u.email
+             FROM users u
+             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+             WHERE u.is_disabled=0 AND u.deleted_at IS NULL
+             ORDER BY name
+             LIMIT 250"
+        )->fetchAll(PDO::FETCH_ASSOC);
+        $units = $pdo->query(
+            'SELECT id,name,is_active FROM business_units ORDER BY is_active DESC,name'
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        if ($detailUserId > 0) {
+            $detailStmt = $pdo->prepare(
+                'SELECT e.*,wp.display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at
+                 FROM application_entitlements e
+                 JOIN users u ON u.id=e.user_id
+                 LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+                 WHERE e.application_key=? AND e.user_id=?'
+            );
+            $detailStmt->execute([$applicationKey, $detailUserId]);
+            $accessDetail = $detailStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+            $sourceStmt = $pdo->prepare(
+                'SELECT p.id,p.name,bu.name business_unit_name
+                 FROM project_assignments pa
+                 JOIN projects p ON p.id=pa.project_id
+                 LEFT JOIN business_units bu ON bu.id=p.business_unit_id
+                 WHERE pa.user_id=? AND (pa.ends_at IS NULL OR pa.ends_at>UTC_TIMESTAMP(6))
+                 ORDER BY p.name'
+            );
+            $sourceStmt->execute([$detailUserId]);
+            $projectSources = $sourceStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $unitStmt = $pdo->prepare(
+                'SELECT bu.id,bu.name
+                 FROM application_entitlements e
+                 JOIN application_entitlement_oversight_units eu ON eu.entitlement_id=e.id
+                 JOIN business_units bu ON bu.id=eu.business_unit_id
+                 WHERE e.application_key=? AND e.user_id=?
+                 ORDER BY bu.name'
+            );
+            $unitStmt->execute([$applicationKey, $detailUserId]);
+            $manualUnits = $unitStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $statusStmt = $pdo->prepare(
+            'SELECT SUM(CASE WHEN delivered_at IS NULL THEN 1 ELSE 0 END) pending,
+                    SUM(CASE WHEN delivered_at IS NULL AND attempts>0 AND last_error IS NOT NULL THEN 1 ELSE 0 END) failed,
+                    MAX(delivered_at) last_delivered_at
+             FROM integration_outbox
+             WHERE integration_key=?'
+        );
+        $statusStmt->execute([$applicationKey]);
+        $status = $statusStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $error) {
+        $directoryError = true;
+        error_log('[external_ops_settings] Failed to load access directory: ' . $error->getMessage());
+    }
 }
-$statusStmt=$pdo->prepare('SELECT SUM(CASE WHEN delivered_at IS NULL THEN 1 ELSE 0 END) pending,SUM(CASE WHEN delivered_at IS NULL AND attempts>0 AND last_error IS NOT NULL THEN 1 ELSE 0 END) failed,MAX(delivered_at) last_delivered_at FROM integration_outbox WHERE integration_key=?');$statusStmt->execute([$applicationKey]);$status=$statusStmt->fetch(PDO::FETCH_ASSOC)?:[];
 ?>
 <div class="settings-alert settings-alert-warning"><strong>Optional custom integration.</strong> Project Alpha is the source of truth. The external application receives read-only, signed, assignment-driven updates plus reconciliation snapshots.</div>
 <div class="settings-card"><h3>Custom integration setup</h3><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="save-config"><div class="settings-form-grid">
@@ -45,6 +127,7 @@ $statusStmt=$pdo->prepare('SELECT SUM(CASE WHEN delivered_at IS NULL THEN 1 ELSE
 <label class="field"><span class="label">Access service-token ID</span><input class="input" type="password" name="access_client_id" autocomplete="new-password" placeholder="<?=!empty($config['access_client_id'])?'Configured — leave blank to keep':'Service-token ID'?>"></label><label class="field"><span class="label">Access service-token secret</span><input class="input" type="password" name="access_client_secret" autocomplete="new-password" placeholder="<?=!empty($config['access_client_secret'])?'Configured — leave blank to keep':'Service-token secret'?>"></label>
 <label class="field" style="grid-column:1/-1"><span class="label">HMAC secret</span><input class="input" type="password" name="hmac_secret" minlength="32" autocomplete="new-password" placeholder="<?=!empty($config['hmac_secret'])?'Configured — leave blank to keep':'Same 32+ character secret as the receiver'?>"></label><label class="field"><span class="label">Timeout seconds</span><input class="input" type="number" name="timeout_seconds" min="2" max="60" value="<?=(int)$config['timeout_seconds']?>"></label><label class="field"><span class="label">Maximum attempts</span><input class="input" type="number" name="max_attempts" min="1" max="100" value="<?=(int)$config['max_attempts']?>"></label></div><button class="btn btn-primary">Save integration</button></form></div>
 <?php if(empty($config['enabled'])):?><div class="settings-alert settings-alert-info">Enable and save the integration to manage access exceptions and delivery.</div><?php return;endif;?>
+<?php if($directoryError):?><div class="settings-alert settings-alert-danger" role="alert"><strong>Integration settings could not be loaded.</strong> Verify that all database migrations have completed, then reload this page.</div><?php return;endif;?>
 <div class="settings-card"><div class="settings-section-heading"><h3>Effective access</h3><p>Active Project Team memberships grant access automatically. Manual exceptions are for read-only Business Unit oversight; only a PA administrator can receive global access.</p></div>
 <form method="get" class="settings-form-grid"><input type="hidden" name="page" value="settings"><input type="hidden" name="tab" value="external-ops"><label class="field"><span class="label">Search access directory</span><input class="input" name="access_search" value="<?=$h($search)?>" placeholder="Name or email"></label><div><button class="btn">Search</button></div></form>
 <div class="pa-table-wrap"><table class="pa-table"><thead><tr><th>User</th><th>Access source</th><th>Effective role</th><th>Account</th><th></th></tr></thead><tbody><?php foreach($accessUsers as $user):?><tr><td><strong><?=$h($user['display_name']?:$user['username']?:$user['email'])?></strong><small><?=$h(strtolower((string)$user['email']))?></small></td><td><?=!empty($user['automatic_enabled'])?'Project Team':''?><?=!empty($user['automatic_enabled'])&&!empty($user['manual_enabled'])?' + ':''?><?=!empty($user['manual_enabled'])?'Manual exception':''?></td><td><?=$user['role']==='admin'?'Global administrator':'Operator / unit viewer'?></td><td><?=!empty($user['is_disabled'])||!empty($user['deleted_at'])?'Inactive':'Active'?></td><td><a class="btn btn-sm" href="/?page=settings&amp;tab=external-ops&amp;access_user_id=<?=(int)$user['user_id']?>">Details</a></td></tr><?php endforeach;?><?php if(!$accessUsers):?><tr><td colspan="5">No matching effective access.</td></tr><?php endif;?></tbody></table></div>
