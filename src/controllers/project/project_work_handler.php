@@ -32,19 +32,16 @@ try {
     $planning = new ProjectWorkPlanningService();
     $operations = new OperationsPlanningService();
     $integration = new ExternalOpsIntegrationService();
-    $affectedUsers = [];
     $events = [];
 
     if ($action === 'add-team-member') {
         $userId = (int)($_POST['user_id'] ?? 0);
         $entityId = $planning->addTeamMember($pdo, $projectId, $userId, $actorUserId);
-        $affectedUsers[] = $userId;
         $rowStmt=$pdo->prepare('SELECT *,1 active FROM project_assignments WHERE id=?');$rowStmt->execute([$entityId]);$events[]=['project_assignment',(string)$entityId,'upsert',$rowStmt->fetch(PDO::FETCH_ASSOC)?:[]];
         audit_log($pdo, 'project.team_member.added', 'project', $projectId, ['user_id' => $userId]);
     } elseif ($action === 'end-team-member') {
         $userId = (int)($_POST['user_id'] ?? 0);
         $planning->endTeamMember($pdo, $projectId, $userId);
-        $affectedUsers[] = $userId;
         $rowStmt=$pdo->prepare('SELECT *,0 active FROM project_assignments WHERE project_id=? AND user_id=?');$rowStmt->execute([$projectId,$userId]);$row=$rowStmt->fetch(PDO::FETCH_ASSOC)?:['project_id'=>$projectId,'user_id'=>$userId];$events[]=['project_assignment',(string)($row['id']??($projectId.':'.$userId)),'revoke',$row];
         audit_log($pdo, 'project.team_member.ended', 'project', $projectId, ['user_id' => $userId]);
     } elseif ($action === 'save-operation') {
@@ -67,9 +64,6 @@ try {
 
     $config = pa_external_ops_delivery_config($pdo);
     if (!empty($config['enabled'])) {
-        foreach (array_unique($affectedUsers) as $userId) {
-            $integration->resyncAccountAccess($pdo, (int)$userId, (string)$config['application_key'], $actorUserId);
-        }
         foreach ($events as [$entityType, $eventEntityId, $eventAction, $eventData]) {
             if (empty($eventData['updated_at'])) {
                 $eventData['updated_at'] = (new DateTimeImmutable('now', new DateTimeZone('UTC')))

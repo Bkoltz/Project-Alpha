@@ -38,6 +38,21 @@ if(!empty($appConfig['job_project_locations_enabled'])){
 
 $projectOrganizationId = (int)($project['organization_id'] ?? 0);
 $businessUnits = $pdo->query('SELECT id,name,code,is_active FROM business_units ORDER BY is_active DESC,name,id')->fetchAll(PDO::FETCH_ASSOC);
+$projectManagers = $pdo->query(
+    "SELECT u.id,
+            COALESCE(NULLIF(wp.display_name,''),NULLIF(tm.display_name,''),NULLIF(u.username,''),u.email) AS name,
+            (SELECT bum.business_unit_id FROM business_unit_memberships bum
+             JOIN business_units bu ON bu.id=bum.business_unit_id AND bu.is_active=1
+             WHERE bum.user_id=u.id AND bum.is_primary=1
+               AND (bum.ended_at IS NULL OR bum.ended_at>CURRENT_TIMESTAMP)
+             ORDER BY bum.id DESC LIMIT 1) AS primary_business_unit_id
+     FROM users u
+     LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+     LEFT JOIN team_members tm ON tm.user_id=u.id
+     WHERE u.is_disabled=0 AND u.deleted_at IS NULL
+        OR u.id=" . (int)($project['manager_user_id'] ?? 0) . "
+     ORDER BY name"
+)->fetchAll(PDO::FETCH_ASSOC);
 $projectDepartments = [];
 if ($projectOrganizationId > 0) {
     $deptStmt = $pdo->prepare('
@@ -225,13 +240,25 @@ $publicProjectHasCode = trim((string)($project['public_project_password_hash'] ?
           <small>Department selection controls department link inheritance for project invoices.</small>
         </label>
         <label class="project-field">
+          <span>Project Manager</span>
+          <select id="projectManagerSelect" name="manager_user_id">
+            <option value="">Unassigned</option>
+            <?php foreach ($projectManagers as $manager): ?>
+              <option value="<?php echo (int)$manager['id']; ?>" data-primary-business-unit="<?php echo (int)($manager['primary_business_unit_id'] ?? 0); ?>" <?php echo (int)($project['manager_user_id'] ?? 0) === (int)$manager['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars((string)$manager['name']); ?></option>
+            <?php endforeach; ?>
+          </select>
+          <small>The manager is always kept on the Project Team. Changing the manager does not remove the former manager.</small>
+          <small id="projectManagerUnitSuggestion"></small>
+        </label>
+        <label class="project-field">
           <span>Business Unit / Division</span>
-          <select name="business_unit_id">
+          <select id="projectBusinessUnitSelect" name="business_unit_id" data-project-current-unit="<?php echo (int)($project['business_unit_id'] ?? 0); ?>">
             <option value="">Unassigned</option>
             <?php foreach ($businessUnits as $businessUnit): ?>
               <option value="<?php echo (int)$businessUnit['id']; ?>" <?php echo (int)($project['business_unit_id'] ?? 0) === (int)$businessUnit['id'] ? 'selected' : ''; ?> <?php echo empty($businessUnit['is_active']) && (int)($project['business_unit_id'] ?? 0) !== (int)$businessUnit['id'] ? 'disabled' : ''; ?>><?php echo htmlspecialchars((string)$businessUnit['name'] . (!empty($businessUnit['code']) ? ' (' . (string)$businessUnit['code'] . ')' : '') . (empty($businessUnit['is_active']) ? ' - inactive' : '')); ?></option>
             <?php endforeach; ?>
           </select>
+          <input id="projectBusinessUnitTouched" type="hidden" name="business_unit_user_selected" value="0">
           <small>Operations and Tasks inherit the Project's business unit automatically.</small>
         </label>
       </section>

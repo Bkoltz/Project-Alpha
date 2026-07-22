@@ -39,11 +39,12 @@ final class OpsSnapshotApiTest extends TestCase
         self::assertSame('2026-07-16T22:00:00.000000Z', $first['generated_at']);
         self::assertTrue($first['has_more']);
         self::assertSame(2, $first['next_page']);
-        self::assertSame(1, $first['users'][0]['id']);
-        self::assertFalse($first['users'][0]['is_disabled']);
+        self::assertSame(2, $first['users'][0]['id']);
+        self::assertTrue($first['users'][0]['is_disabled']);
         self::assertArrayNotHasKey('password_hash', $first['users'][0]);
         self::assertArrayNotHasKey('auth_version', $first['users'][0]);
         self::assertArrayNotHasKey('public_project_token', $first['projects'][0]);
+        self::assertSame(1, $first['projects'][0]['manager_user_id']);
         self::assertArrayNotHasKey('pay_rate_override', $first['project_assignments'][0]);
         $serialized = json_encode($first, JSON_THROW_ON_ERROR);
         self::assertStringNotContainsString('secret', $serialized);
@@ -53,7 +54,7 @@ final class OpsSnapshotApiTest extends TestCase
         self::assertSame('field_operations', $first['application_entitlements'][0]['application_key']);
         self::assertFalse($first['application_entitlements'][0]['enabled']);
         self::assertSame('role-operator', $first['application_entitlements'][0]['role_key']);
-        self::assertSame([30], $first['application_entitlements'][0]['business_unit_ids']);
+        self::assertSame([], $first['application_entitlements'][0]['business_unit_ids']);
         self::assertSame(100, $first['operations'][0]['id']);
         self::assertSame(2, $first['operation_assignments'][0]['user_id']);
         self::assertSame(110, $first['tasks'][0]['id']);
@@ -64,8 +65,7 @@ final class OpsSnapshotApiTest extends TestCase
 
         self::assertTrue($second['has_more']);
         self::assertSame(3, $second['next_page']);
-        self::assertSame(2, $second['users'][0]['id']);
-        self::assertTrue($second['users'][0]['is_disabled']);
+        self::assertSame([], $second['users']);
         self::assertSame([], $second['business_units']);
         self::assertSame([], $second['projects']);
 
@@ -157,7 +157,7 @@ final class OpsSnapshotApiTest extends TestCase
             )',
             'CREATE TABLE projects (
                 id INTEGER PRIMARY KEY, client_id INTEGER, parent_id INTEGER, organization_id INTEGER,
-                department_id INTEGER, business_unit_id INTEGER, created_by INTEGER, name TEXT, description TEXT, status TEXT,
+                department_id INTEGER, business_unit_id INTEGER, manager_user_id INTEGER, created_by INTEGER, name TEXT, description TEXT, status TEXT,
                 start_date TEXT, end_date TEXT, estimated_start TEXT, estimated_end TEXT,
                 created_at TEXT, updated_at TEXT, public_project_token TEXT
             )',
@@ -222,7 +222,7 @@ final class OpsSnapshotApiTest extends TestCase
         $this->pdo->exec("INSERT INTO clients VALUES
             (50,'Client','client@example.test','555-0100','1 Main',NULL,'Chippewa Falls','WI','54729','US',40,'business',0,NULL,'2026-01-01','2026-07-01')");
         $this->pdo->exec("INSERT INTO projects VALUES
-            (60,50,NULL,40,NULL,30,1,'Aerial Survey','Survey description','active','2026-07-01',NULL,NULL,NULL,'2026-01-01','2026-07-01','do-not-export')");
+            (60,50,NULL,40,NULL,30,1,1,'Aerial Survey','Survey description','active','2026-07-01',NULL,NULL,NULL,'2026-01-01','2026-07-01','do-not-export')");
         $this->pdo->exec("INSERT INTO project_assignments VALUES
             (70,60,2,'2026-07-01',NULL,1,'2026-07-01','2026-07-01','100.00')");
         $this->pdo->exec("INSERT INTO service_locations VALUES

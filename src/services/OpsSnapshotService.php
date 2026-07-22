@@ -85,18 +85,9 @@ final class OpsSnapshotService
                 $rows
             );
             if ($name === 'application_entitlements') {
-                $scopeStatement = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_business_units WHERE entitlement_id=? ORDER BY business_unit_id');
-                $oversightStatement = $pdo->prepare('SELECT business_unit_id FROM application_entitlement_oversight_units WHERE entitlement_id=? ORDER BY business_unit_id');
                 foreach ($normalizedRows as &$row) {
-                    if ((string)$row['role_key'] === 'role-admin') {
-                        $row['business_unit_ids'] = [];
-                        $row['oversight_business_unit_ids'] = [];
-                    } else {
-                        $scopeStatement->execute([(int)$row['id']]);
-                        $row['business_unit_ids'] = array_map('intval', $scopeStatement->fetchAll(PDO::FETCH_COLUMN));
-                        $oversightStatement->execute([(int)$row['id']]);
-                        $row['oversight_business_unit_ids'] = array_map('intval', $oversightStatement->fetchAll(PDO::FETCH_COLUMN));
-                    }
+                    $row['business_unit_ids'] = [];
+                    $row['oversight_business_unit_ids'] = [];
                 }
                 unset($row);
             } elseif ($name === 'calendar_events') {
@@ -142,10 +133,15 @@ final class OpsSnapshotService
                 'sql' => 'SELECT u.id,u.email,u.username,u.role,u.is_disabled,u.deleted_at,u.created_at,u.updated_at,
                                  wp.id AS worker_profile_id,wp.display_name,wp.relationship_type,wp.status AS worker_status
                           FROM users u
+                          JOIN application_entitlements selected_access
+                            ON selected_access.user_id=u.id
+                           AND selected_access.application_key=:application_key
+                           AND selected_access.manual_enabled=1
                           LEFT JOIN worker_profiles wp ON wp.user_id=u.id
                           ORDER BY u.id',
                 'integers' => ['id', 'worker_profile_id'],
                 'booleans' => ['is_disabled'],
+                'parameters' => ['application_key' => $applicationKey],
             ],
             'business_units' => [
                 'sql' => 'SELECT id,name,code,description,is_active,created_by,created_at,updated_at
@@ -158,6 +154,7 @@ final class OpsSnapshotService
                                  wbu.assigned_by,wbu.assigned_at,wbu.ends_at
                           FROM worker_business_units wbu
                           JOIN worker_profiles wp ON wp.id=wbu.worker_profile_id
+                          WHERE 1=0
                           ORDER BY wbu.worker_profile_id,wbu.business_unit_id',
                 'integers' => ['worker_profile_id', 'user_id', 'business_unit_id', 'assigned_by'],
                 'booleans' => ['is_lead'],
@@ -177,10 +174,10 @@ final class OpsSnapshotService
                 'booleans' => [],
             ],
             'projects' => [
-                'sql' => 'SELECT id,client_id,parent_id,organization_id,department_id,business_unit_id,created_by,name,description,status,
+                'sql' => 'SELECT id,client_id,parent_id,organization_id,department_id,business_unit_id,manager_user_id,created_by,name,description,status,
                                  start_date,end_date,estimated_start,estimated_end,created_at,updated_at
                           FROM projects ORDER BY id',
-                'integers' => ['id', 'client_id', 'parent_id', 'organization_id', 'department_id', 'business_unit_id', 'created_by'],
+                'integers' => ['id', 'client_id', 'parent_id', 'organization_id', 'department_id', 'business_unit_id', 'manager_user_id', 'created_by'],
                 'booleans' => [],
             ],
             'project_assignments' => [
@@ -197,8 +194,8 @@ final class OpsSnapshotService
                 'booleans' => ['archived'],
             ],
             'application_entitlements' => [
-                'sql' => 'SELECT ae.id,ae.user_id,ae.application_key,ae.manual_enabled,ae.automatic_enabled,ae.oversight_enabled,
-                                 CASE WHEN ae.enabled=1 AND u.is_disabled=0 AND u.deleted_at IS NULL
+                'sql' => 'SELECT ae.id,ae.user_id,ae.application_key,ae.manual_enabled,0 AS automatic_enabled,0 AS oversight_enabled,
+                                 CASE WHEN ae.manual_enabled=1 AND u.is_disabled=0 AND u.deleted_at IS NULL
                                            AND (wp.id IS NULL OR wp.status=\'active\') THEN 1 ELSE 0 END AS enabled,
                                  CASE WHEN u.role=\'admin\' THEN \'role-admin\' ELSE \'role-operator\' END AS role_key,
                                  ae.created_at,ae.updated_at

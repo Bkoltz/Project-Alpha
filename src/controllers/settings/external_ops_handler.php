@@ -41,9 +41,11 @@ try {
             $managedUserId,
             (string)$config['application_key'],
             !empty($_POST['enabled']),
-            $actorUserId,
-            !empty($_POST['business_unit_scope_present']) ? (array)($_POST['business_unit_ids'] ?? []) : null
+            $actorUserId
         );
+        audit_log($pdo, !empty($_POST['enabled']) ? 'external_ops.access_granted' : 'external_ops.access_revoked', 'user', $managedUserId, [
+            'application_key' => (string)$config['application_key'],
+        ]);
     } elseif ($action === 'send-now') {
         (new ExternalOpsOutboxSender())->deliverDue($pdo, $config, 50);
     } else {

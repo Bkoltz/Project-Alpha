@@ -42,7 +42,7 @@ $externalOpsEntitlementEnabled = false;
 if ($externalOpsAvailable) {
     try {
         $externalOpsStatement = $pdo->prepare(
-            'SELECT enabled FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1'
+            'SELECT manual_enabled FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1'
         );
         $externalOpsStatement->execute([$userId, (string)$externalOpsConfig['application_key']]);
         $externalOpsValue = $externalOpsStatement->fetchColumn();
@@ -413,6 +413,16 @@ try {
             <?php if (!$activeProjects): ?><p style="margin:0;color:#6b7280">No active projects are available.</p><?php endif; ?>
           </div>
         </div>
+
+        <?php if ($externalOpsAvailable): ?>
+        <div class="pa-edit-card" style="margin-bottom:16px;">
+          <h3 style="margin:0 0 8px;font-size:16px;"><?php echo e($externalOpsLabel); ?> access</h3>
+          <label style="display:flex;flex-direction:row;align-items:flex-start;gap:10px;">
+            <input type="checkbox" name="external_ops_enabled" value="1" <?php echo $externalOpsEntitlementEnabled ? 'checked' : ''; ?> style="width:auto;margin-top:3px">
+            <span><strong>Allow this account to sign in to <?php echo e($externalOpsLabel); ?></strong><br><small style="color:#6b7280">This selection is retained if the PA account is temporarily disabled. Non-administrators see assigned work only.</small></span>
+          </label>
+        </div>
+        <?php endif; ?>
 
         <div class="pa-edit-actionbar">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save Changes</button>

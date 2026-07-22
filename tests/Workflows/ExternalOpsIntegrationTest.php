@@ -56,8 +56,12 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertStringContainsString('saveAccountAccess(', $handler);
         foreach (['accounts.php', 'account-edit.php'] as $accountPage) {
             $accountForm = (string)file_get_contents($root . '/src/views/pages/auth/' . $accountPage);
-            self::assertStringNotContainsString('name="external_ops_enabled"', $accountForm);
+            self::assertStringContainsString('name="external_ops_enabled"', $accountForm);
         }
+        $completionMigration = (string)file_get_contents($root . '/database/migrations/0055_business_unit_memberships_and_project_managers.sql');
+        self::assertStringContainsString('CREATE TABLE IF NOT EXISTS business_unit_memberships', $completionMigration);
+        self::assertStringContainsString('membership_role', $completionMigration);
+        self::assertStringContainsString('manager_user_id', $completionMigration);
         self::assertStringNotContainsString('OPS_SYNC_', $compose);
         self::assertStringNotContainsString('OPS_SYNC_', $envExample);
         self::assertStringContainsString(
@@ -148,6 +152,20 @@ final class ExternalOpsIntegrationTest extends TestCase
         }
     }
 
+    public function testOutboxCronBootstrapsComposerBeforeLoadingDatabaseUtilities(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $cron = (string)file_get_contents($root . '/src/cron/send_external_ops_outbox.php');
+        $autoload = "require_once dirname(__DIR__, 2) . '/vendor/autoload.php';";
+        $database = "require_once __DIR__ . '/../config/db.php';";
+
+        self::assertStringContainsString($autoload, $cron);
+        self::assertStringContainsString($database, $cron);
+        self::assertLessThan(strpos($cron, $database), strpos($cron, $autoload));
+        self::assertTrue(class_exists(ExternalOpsConfigService::class));
+        self::assertTrue(class_exists(ExternalOpsOutboxSender::class));
+    }
+
     public function testApiServicePrincipalRetainsReadScopeWithoutAnAdminSession(): void
     {
         require_once dirname(__DIR__, 2) . '/src/utils/acl.php';
@@ -211,7 +229,7 @@ final class ExternalOpsIntegrationTest extends TestCase
                 schema_version INTEGER, payload_json TEXT, occurred_at TEXT, attempts INTEGER DEFAULT 0,
                 next_attempt_at TEXT, delivered_at TEXT, last_error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )',
-            'CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, status TEXT, business_unit_id INTEGER)',
+            'CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, status TEXT, business_unit_id INTEGER, manager_user_id INTEGER)',
             'CREATE TABLE project_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER, assigned_at TEXT DEFAULT CURRENT_TIMESTAMP, ends_at TEXT, created_by INTEGER, UNIQUE(project_id,user_id))',
             'CREATE TABLE operations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, business_unit_id INTEGER, title TEXT,
@@ -247,7 +265,7 @@ final class ExternalOpsIntegrationTest extends TestCase
         $this->pdo->exec("INSERT INTO worker_business_units VALUES
             (20,30,NULL),
             (21,31,NULL)");
-        $this->pdo->exec("INSERT INTO projects VALUES (40,'Aerial Survey','active',30)");
+        $this->pdo->exec("INSERT INTO projects VALUES (40,'Aerial Survey','active',30,NULL)");
     }
 
     public function testEntitlementStateIsQueuedWithoutCredentialsAndOwnerMapsToOperator(): void
@@ -256,7 +274,7 @@ final class ExternalOpsIntegrationTest extends TestCase
 
         self::assertGreaterThan(0, $result['entitlement_id']);
         self::assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $result['event_id']);
-        self::assertSame([30], array_map('intval', $this->pdo->query(
+        self::assertSame([], array_map('intval', $this->pdo->query(
             'SELECT business_unit_id FROM application_entitlement_oversight_units'
         )->fetchAll(PDO::FETCH_COLUMN)));
 
@@ -268,7 +286,7 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertTrue($payload['user']['active']);
         self::assertTrue($payload['entitlement']['enabled']);
         self::assertSame('role-operator', $payload['entitlement']['role_key']);
-        self::assertSame([30], $payload['entitlement']['business_unit_ids']);
+        self::assertSame([], $payload['entitlement']['business_unit_ids']);
         self::assertArrayNotHasKey('password', $payload['user']);
 
     }
@@ -303,7 +321,7 @@ final class ExternalOpsIntegrationTest extends TestCase
             'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
         )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('role-operator', $ownerPayload['entitlement']['role_key']);
-        self::assertSame([31], $ownerPayload['entitlement']['business_unit_ids']);
+        self::assertSame([], $ownerPayload['entitlement']['business_unit_ids']);
     }
 
     public function testAccountAccessCheckboxAndDisabledStateProduceRevocations(): void
@@ -321,13 +339,13 @@ final class ExternalOpsIntegrationTest extends TestCase
             'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
         )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
         self::assertFalse($disabledPayload['entitlement']['enabled']);
-        self::assertSame([30], $disabledPayload['entitlement']['business_unit_ids']);
+        self::assertSame([], $disabledPayload['entitlement']['business_unit_ids']);
         self::assertSame(0, (int)$this->pdo->query(
             "SELECT enabled FROM application_entitlements WHERE user_id=2 AND application_key='ltds_ops'"
         )->fetchColumn(), 'Effective access is revoked while the PA account is inactive; the manual exception flag remains stored separately.');
     }
 
-    public function testAccountFormSavePreservesManualNonAdminBusinessUnitScope(): void
+    public function testExplicitSelectionIgnoresDeprecatedBusinessUnitScopes(): void
     {
         $service = new ExternalOpsIntegrationService();
         $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
@@ -337,11 +355,11 @@ final class ExternalOpsIntegrationTest extends TestCase
             'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
         )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('role-operator', $payload['entitlement']['role_key']);
-        self::assertSame([31], $payload['entitlement']['business_unit_ids']);
-        self::assertSame([31], array_map('intval', $this->pdo->query(
+        self::assertSame([], $payload['entitlement']['business_unit_ids']);
+        self::assertSame([], array_map('intval', $this->pdo->query(
             'SELECT business_unit_id FROM application_entitlement_business_units ORDER BY business_unit_id'
         )->fetchAll(PDO::FETCH_COLUMN)));
-        self::assertSame([31], array_map('intval', $this->pdo->query(
+        self::assertSame([], array_map('intval', $this->pdo->query(
             'SELECT business_unit_id FROM application_entitlement_oversight_units ORDER BY business_unit_id'
         )->fetchAll(PDO::FETCH_COLUMN)));
     }
@@ -362,7 +380,7 @@ final class ExternalOpsIntegrationTest extends TestCase
         $demotedEnabled = $this->latestPayload();
         self::assertTrue($demotedEnabled['entitlement']['enabled']);
         self::assertSame('role-operator', $demotedEnabled['entitlement']['role_key']);
-        self::assertSame([31], $demotedEnabled['entitlement']['business_unit_ids']);
+        self::assertSame([], $demotedEnabled['entitlement']['business_unit_ids']);
 
         $this->pdo->exec("UPDATE users SET role='admin' WHERE id=2");
         $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [31]);
@@ -497,14 +515,14 @@ final class ExternalOpsIntegrationTest extends TestCase
         )->fetchColumn());
     }
 
-    public function testProjectTeamGatesMultiAssigneeWorkAndAutomaticAccess(): void
+    public function testProjectTeamGatesMultiAssigneeWorkWithoutGrantingExternalAccess(): void
     {
         $team = new ProjectWorkPlanningService();
         $team->addTeamMember($this->pdo, 40, 2, 1);
         $team->addTeamMember($this->pdo, 40, 3, 1);
         $integration = new ExternalOpsIntegrationService();
-        $integration->resyncAccountAccess($this->pdo, 2, 'field_operations', 1);
-        self::assertSame(1, (int)$this->pdo->query("SELECT automatic_enabled FROM application_entitlements WHERE user_id=2 AND application_key='field_operations'")->fetchColumn());
+        self::assertNull($integration->resyncAccountAccess($this->pdo, 2, 'field_operations', 1));
+        self::assertSame(0, (int)$this->pdo->query("SELECT COUNT(*) FROM application_entitlements WHERE user_id=2 AND application_key='field_operations'")->fetchColumn());
 
         $operations = new OperationsPlanningService();
         $operationId = $operations->saveOperation($this->pdo, ['project_id'=>40,'title'=>'Site visit','status'=>'scheduled'], [2,3], 1);
@@ -516,16 +534,16 @@ final class ExternalOpsIntegrationTest extends TestCase
         $team->endTeamMember($this->pdo, 40, 2);
     }
 
-    public function testEndingFinalProjectMembershipRevokesAutomaticAccess(): void
+    public function testEndingFinalProjectMembershipDoesNotRevokeExplicitAccess(): void
     {
         $team = new ProjectWorkPlanningService();
         $team->addTeamMember($this->pdo, 40, 2, 1);
         $integration = new ExternalOpsIntegrationService();
-        $integration->resyncAccountAccess($this->pdo, 2, 'field_operations', 1);
+        $integration->saveAccountAccess($this->pdo, 2, 'field_operations', true, 1);
         $team->endTeamMember($this->pdo, 40, 2);
         $integration->resyncAccountAccess($this->pdo, 2, 'field_operations', 1);
         $state=$this->pdo->query("SELECT enabled,automatic_enabled FROM application_entitlements WHERE user_id=2 AND application_key='field_operations'")->fetch(PDO::FETCH_ASSOC);
-        self::assertSame(0,(int)$state['enabled']);
+        self::assertSame(1,(int)$state['enabled']);
         self::assertSame(0,(int)$state['automatic_enabled']);
     }
 

@@ -20,12 +20,17 @@ pa_project_public_link_ensure_schema($pdo);
 
 // Fetch project details
 $stmt = $pdo->prepare('
-    SELECT p.*, c.name AS client_name, o.name AS organization_name, od.name AS department_name, bu.name AS business_unit_name
+    SELECT p.*, c.name AS client_name, o.name AS organization_name, od.name AS department_name,
+           bu.name AS business_unit_name,
+           COALESCE(NULLIF(manager_wp.display_name,\'\'),NULLIF(manager_tm.display_name,\'\'),NULLIF(manager_u.username,\'\'),manager_u.email) AS manager_name
     FROM projects p
     LEFT JOIN clients c ON c.id = p.client_id
     LEFT JOIN organizations o ON o.id = p.organization_id
     LEFT JOIN organization_departments od ON od.id = p.department_id
     LEFT JOIN business_units bu ON bu.id = p.business_unit_id
+    LEFT JOIN users manager_u ON manager_u.id=p.manager_user_id
+    LEFT JOIN worker_profiles manager_wp ON manager_wp.user_id=manager_u.id
+    LEFT JOIN team_members manager_tm ON manager_tm.user_id=manager_u.id
     WHERE p.id = ?
 ');
 $stmt->execute([$projectId]);
@@ -36,25 +41,36 @@ if (!$project) {
     exit;
 }
 
-$projectTeamStmt = $pdo->prepare('SELECT pa.user_id,pa.assigned_at,pa.ends_at,u.display_name,u.username,u.email FROM project_assignments pa JOIN users u ON u.id=pa.user_id WHERE pa.project_id=? ORDER BY (pa.ends_at IS NOT NULL),COALESCE(u.display_name,u.username,u.email)');
-$projectTeamStmt->execute([$projectId]);
-$projectTeam = $projectTeamStmt->fetchAll(PDO::FETCH_ASSOC);
-$activeProjectTeam = array_values(array_filter($projectTeam, static fn(array $row): bool => empty($row['ends_at']) || strtotime((string)$row['ends_at']) > time()));
-$planningUsers = $pdo->query('SELECT id,COALESCE(NULLIF(display_name,\'\'),NULLIF(username,\'\'),email) AS name FROM users WHERE is_disabled=0 AND deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
-$projectOperationsStmt = $pdo->prepare('SELECT * FROM operations WHERE project_id=? ORDER BY scheduled_start_at IS NULL,scheduled_start_at,id');
-$projectOperationsStmt->execute([$projectId]);
-$projectOperations = $projectOperationsStmt->fetchAll(PDO::FETCH_ASSOC);
-$operationAssigneesStmt = $pdo->prepare('SELECT oa.operation_id,oa.user_id,COALESCE(NULLIF(u.display_name,\'\'),NULLIF(u.username,\'\'),u.email) AS name FROM operation_assignments oa JOIN users u ON u.id=oa.user_id JOIN operations o ON o.id=oa.operation_id WHERE o.project_id=? ORDER BY name');
-$operationAssigneesStmt->execute([$projectId]);
+$projectTeam = [];
+$activeProjectTeam = [];
+$planningUsers = [];
+$projectOperations = [];
 $operationAssignees = [];
-foreach ($operationAssigneesStmt->fetchAll(PDO::FETCH_ASSOC) as $row) $operationAssignees[(int)$row['operation_id']][] = $row;
-$projectTasksStmt = $pdo->prepare('SELECT t.*,o.title AS operation_title FROM tasks t LEFT JOIN operations o ON o.id=t.operation_id WHERE t.project_id=? ORDER BY t.due_at IS NULL,t.due_at,t.id');
-$projectTasksStmt->execute([$projectId]);
-$projectTasks = $projectTasksStmt->fetchAll(PDO::FETCH_ASSOC);
-$taskAssigneesStmt = $pdo->prepare('SELECT ta.task_id,ta.user_id,COALESCE(NULLIF(u.display_name,\'\'),NULLIF(u.username,\'\'),u.email) AS name FROM task_assignments ta JOIN users u ON u.id=ta.user_id JOIN tasks t ON t.id=ta.task_id WHERE t.project_id=? ORDER BY name');
-$taskAssigneesStmt->execute([$projectId]);
+$projectTasks = [];
 $taskAssignees = [];
-foreach ($taskAssigneesStmt->fetchAll(PDO::FETCH_ASSOC) as $row) $taskAssignees[(int)$row['task_id']][] = $row;
+$planningLoadError = '';
+try {
+    $projectTeamStmt = $pdo->prepare('SELECT pa.user_id,pa.assigned_at,pa.ends_at,u.username,u.email,COALESCE(NULLIF(wp.display_name,\'\'),NULLIF(tm.display_name,\'\'),NULLIF(u.username,\'\'),u.email) AS display_name,COALESCE(NULLIF(wp.display_name,\'\'),NULLIF(tm.display_name,\'\'),NULLIF(u.username,\'\'),u.email) AS name FROM project_assignments pa JOIN users u ON u.id=pa.user_id LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id WHERE pa.project_id=? ORDER BY (pa.ends_at IS NOT NULL),name');
+    $projectTeamStmt->execute([$projectId]);
+    $projectTeam = $projectTeamStmt->fetchAll(PDO::FETCH_ASSOC);
+    $activeProjectTeam = array_values(array_filter($projectTeam, static fn(array $row): bool => empty($row['ends_at']) || strtotime((string)$row['ends_at']) > time()));
+    $planningUsers = $pdo->query('SELECT u.id,COALESCE(NULLIF(wp.display_name,\'\'),NULLIF(tm.display_name,\'\'),NULLIF(u.username,\'\'),u.email) AS name FROM users u LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id WHERE u.is_disabled=0 AND u.deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+    $projectOperationsStmt = $pdo->prepare('SELECT * FROM operations WHERE project_id=? ORDER BY scheduled_start_at IS NULL,scheduled_start_at,id');
+    $projectOperationsStmt->execute([$projectId]);
+    $projectOperations = $projectOperationsStmt->fetchAll(PDO::FETCH_ASSOC);
+    $operationAssigneesStmt = $pdo->prepare('SELECT oa.operation_id,oa.user_id,COALESCE(NULLIF(wp.display_name,\'\'),NULLIF(tm.display_name,\'\'),NULLIF(u.username,\'\'),u.email) AS name FROM operation_assignments oa JOIN users u ON u.id=oa.user_id LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id JOIN operations o ON o.id=oa.operation_id WHERE o.project_id=? ORDER BY name');
+    $operationAssigneesStmt->execute([$projectId]);
+    foreach ($operationAssigneesStmt->fetchAll(PDO::FETCH_ASSOC) as $row) $operationAssignees[(int)$row['operation_id']][] = $row;
+    $projectTasksStmt = $pdo->prepare('SELECT t.*,o.title AS operation_title FROM tasks t LEFT JOIN operations o ON o.id=t.operation_id WHERE t.project_id=? ORDER BY t.due_at IS NULL,t.due_at,t.id');
+    $projectTasksStmt->execute([$projectId]);
+    $projectTasks = $projectTasksStmt->fetchAll(PDO::FETCH_ASSOC);
+    $taskAssigneesStmt = $pdo->prepare('SELECT ta.task_id,ta.user_id,COALESCE(NULLIF(wp.display_name,\'\'),NULLIF(tm.display_name,\'\'),NULLIF(u.username,\'\'),u.email) AS name FROM task_assignments ta JOIN users u ON u.id=ta.user_id LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id JOIN tasks t ON t.id=ta.task_id WHERE t.project_id=? ORDER BY name');
+    $taskAssigneesStmt->execute([$projectId]);
+    foreach ($taskAssigneesStmt->fetchAll(PDO::FETCH_ASSOC) as $row) $taskAssignees[(int)$row['task_id']][] = $row;
+} catch (Throwable $error) {
+    $planningLoadError = 'Team and work planning is temporarily unavailable. The rest of the Project is still available.';
+    error_log('[projects-details] planning query failed: ' . $error->getMessage());
+}
 $editOperationId=max(0,(int)($_GET['operation_id']??0));$editTaskId=max(0,(int)($_GET['task_id']??0));$editOperation=null;$editTask=null;
 foreach($projectOperations as $row)if((int)$row['id']===$editOperationId)$editOperation=$row;
 foreach($projectTasks as $row)if((int)$row['id']===$editTaskId)$editTask=$row;
@@ -480,6 +496,11 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
                         <div class="font-600"><?php echo htmlspecialchars((string)($project['business_unit_name'] ?: 'Unassigned — review needed')); ?></div>
                     </div>
 
+                    <div>
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Project Manager</div>
+                        <div class="font-600"><?php echo htmlspecialchars((string)($project['manager_name'] ?: 'Unassigned — review needed')); ?></div>
+                    </div>
+
                     <?php if ($project['estimated_start'] || $project['estimated_end']): ?>
                     <div>
                         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Timeline</div>
@@ -550,12 +571,13 @@ $renderProjectFileRow = static function (array $file, int $projectId): void {
             <?php endif; ?>
 
             <div id="team-work" class="project-panel">
-                <div class="project-section-head"><div><h2>Team &amp; Work</h2><div class="project-muted">Project Team membership controls who may be assigned and automatically grants synchronized project access.</div></div></div>
+                <div class="project-section-head"><div><h2>Team &amp; Work</h2><div class="project-muted">Project Team membership controls who may be assigned. External application access is managed separately in Custom Integrations.</div></div></div>
                 <?php if (!empty($_GET['saved'])): ?><div class="alert alert-success">Project work plan saved.</div><?php endif; ?>
                 <?php if (!empty($_GET['error'])): ?><div class="alert alert-danger"><?php echo htmlspecialchars((string)$_GET['error']); ?></div><?php endif; ?>
+                <?php if ($planningLoadError !== ''): ?><div class="alert alert-danger"><?php echo htmlspecialchars($planningLoadError); ?></div><?php endif; ?>
                 <details open><summary><strong>Team (<?php echo count($activeProjectTeam); ?> active)</strong></summary>
                     <div class="pa-table-wrap"><table class="pa-table"><thead><tr><th>Member</th><th>Status</th><?php if($canManageProjectWork):?><th></th><?php endif;?></tr></thead><tbody>
-                    <?php foreach($projectTeam as $member): $active=empty($member['ends_at'])||strtotime((string)$member['ends_at'])>time(); ?><tr><td><?php echo htmlspecialchars((string)($member['display_name']?:$member['username']?:$member['email'])); ?></td><td><?php echo $active?'Active':'Ended'; ?></td><?php if($canManageProjectWork):?><td class="text-right"><?php if($active):?><form method="post" action="/?page=project/project-work-handler" class="inline-form" onsubmit="return confirm('End this Project Team membership?');"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="end-team-member"><input type="hidden" name="project_id" value="<?php echo $projectId; ?>"><input type="hidden" name="user_id" value="<?php echo (int)$member['user_id']; ?>"><button class="btn btn-sm">End membership</button></form><?php endif;?></td><?php endif;?></tr><?php endforeach; ?>
+                    <?php foreach($projectTeam as $member): $active=empty($member['ends_at'])||strtotime((string)$member['ends_at'])>time(); $isManager=(int)$member['user_id']===(int)($project['manager_user_id']??0); ?><tr><td><?php echo htmlspecialchars((string)$member['name']); ?><?php if($isManager):?> <span class="project-pill project-pill--primary">Manager</span><?php endif;?></td><td><?php echo $active?'Active':'Ended'; ?></td><?php if($canManageProjectWork):?><td class="text-right"><?php if($active&&!$isManager):?><form method="post" action="/?page=project/project-work-handler" class="inline-form" onsubmit="return confirm('End this Project Team membership?');"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="end-team-member"><input type="hidden" name="project_id" value="<?php echo $projectId; ?>"><input type="hidden" name="user_id" value="<?php echo (int)$member['user_id']; ?>"><button class="btn btn-sm">End membership</button></form><?php endif;?></td><?php endif;?></tr><?php endforeach; ?>
                     <?php if(!$projectTeam):?><tr><td colspan="3">No team members yet.</td></tr><?php endif;?></tbody></table></div>
                     <?php if($canManageProjectWork):?><form method="post" action="/?page=project/project-work-handler" class="project-work-form"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>"><input type="hidden" name="action" value="add-team-member"><input type="hidden" name="project_id" value="<?php echo $projectId; ?>"><label class="project-field"><span>Add active PA user</span><select name="user_id" required><option value="">Search or select a user</option><?php foreach($planningUsers as $user):?><option value="<?php echo (int)$user['id']; ?>"><?php echo htmlspecialchars((string)$user['name']); ?></option><?php endforeach;?></select></label><button class="btn btn-primary">Add to Team</button></form><?php endif; ?>
                 </details>

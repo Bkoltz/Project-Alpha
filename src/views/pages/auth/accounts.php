@@ -302,6 +302,16 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
           </div>
         </div>
 
+        <?php if ($externalOpsAvailable): ?>
+        <div class="pa-create-card" style="margin-bottom:16px;">
+          <h3><?php echo htmlspecialchars($externalOpsLabel); ?> access</h3>
+          <label style="display:flex;flex-direction:row;align-items:flex-start;gap:10px;">
+            <input type="checkbox" name="external_ops_enabled" value="1" style="width:auto;margin-top:3px">
+            <span><strong>Allow this account to sign in to <?php echo htmlspecialchars($externalOpsLabel); ?></strong><br><small style="color:#6b7280">PA administrators receive global access. Other users see only Projects, Operations, and Tasks assigned to them.</small></span>
+          </label>
+        </div>
+        <?php endif; ?>
+
         <div id="permissions-panel" class="pa-create-card" style="margin-bottom:16px;">
           <h3>Permissions</h3>
           <p style="margin:0 0 16px 0;color:#6b7280;font-size:14px;">Set what this user can access. Admins always have full access — these settings apply to non-admin users only.</p>

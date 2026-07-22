@@ -408,6 +408,7 @@ CREATE TABLE IF NOT EXISTS projects (
     organization_id INT NULL,
     department_id INT NULL,
     business_unit_id INT NULL,
+    manager_user_id INT NULL,
     created_by INT NULL,
     name VARCHAR(150) NOT NULL,
     description TEXT NULL,
@@ -435,6 +436,7 @@ CREATE TABLE IF NOT EXISTS projects (
     INDEX idx_projects_org (organization_id),
     INDEX idx_projects_department (department_id),
     INDEX idx_projects_business_unit (business_unit_id, status),
+    INDEX idx_projects_manager (manager_user_id, status),
     INDEX idx_projects_status (status),
     INDEX idx_projects_parent (parent_id),
     UNIQUE KEY uq_projects_public_project_token (public_project_token),
@@ -2544,6 +2546,9 @@ CREATE TABLE IF NOT EXISTS business_units (
 ALTER TABLE projects
     ADD CONSTRAINT fk_projects_business_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE SET NULL;
 
+ALTER TABLE projects
+    ADD CONSTRAINT fk_projects_manager FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS worker_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
@@ -3061,6 +3066,25 @@ CREATE TABLE IF NOT EXISTS application_entitlement_business_units (
     INDEX idx_entitlement_business_unit (business_unit_id, entitlement_id),
     CONSTRAINT fk_entitlement_scope_entitlement FOREIGN KEY (entitlement_id) REFERENCES application_entitlements(id) ON DELETE CASCADE,
     CONSTRAINT fk_entitlement_scope_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS business_unit_memberships (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    business_unit_id INT NOT NULL,
+    user_id INT NOT NULL,
+    membership_role ENUM('member','head') NOT NULL DEFAULT 'member',
+    is_primary TINYINT(1) NOT NULL DEFAULT 0,
+    assigned_by INT NULL,
+    assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    ended_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    INDEX idx_business_unit_membership_pair (business_unit_id,user_id,ended_at),
+    INDEX idx_business_unit_membership_user (user_id,ended_at,is_primary),
+    INDEX idx_business_unit_membership_unit (business_unit_id,ended_at,membership_role),
+    CONSTRAINT fk_business_unit_membership_unit FOREIGN KEY (business_unit_id) REFERENCES business_units(id) ON DELETE CASCADE,
+    CONSTRAINT fk_business_unit_membership_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_business_unit_membership_assigner FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS application_entitlement_oversight_units (

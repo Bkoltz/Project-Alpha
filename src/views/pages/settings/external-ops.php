@@ -16,100 +16,38 @@ $detailUserId = max(0, (int)($_GET['access_user_id'] ?? 0));
 $accessCount = 0;
 $accessUsers = [];
 $eligibleUsers = [];
-$units = [];
 $accessDetail = null;
 $projectSources = [];
-$manualUnits = [];
 $status = [];
 $directoryError = false;
 
-// The configuration form must remain available even when the optional
-// integration is disabled or its supporting schema needs attention.
 if (!empty($config['enabled'])) {
     try {
-        $where = 'e.application_key=? AND e.enabled=1';
+        $where = 'e.application_key=? AND e.manual_enabled=1';
         $params = [$applicationKey];
         if ($search !== '') {
-            $where .= ' AND (wp.display_name LIKE ? OR u.username LIKE ? OR u.email LIKE ?)';
+            $where .= ' AND (wp.display_name LIKE ? OR tm.display_name LIKE ? OR u.username LIKE ? OR u.email LIKE ?)';
             $term = '%' . $search . '%';
-            array_push($params, $term, $term, $term);
+            array_push($params, $term, $term, $term, $term);
         }
-
-        $countStmt = $pdo->prepare(
-            "SELECT COUNT(*)
-             FROM application_entitlements e
-             JOIN users u ON u.id=e.user_id
-             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
-             WHERE {$where}"
-        );
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM application_entitlements e JOIN users u ON u.id=e.user_id LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id WHERE {$where}");
         $countStmt->execute($params);
         $accessCount = (int)$countStmt->fetchColumn();
-
-        $accessStmt = $pdo->prepare(
-            "SELECT e.*,wp.display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at
-             FROM application_entitlements e
-             JOIN users u ON u.id=e.user_id
-             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
-             WHERE {$where}
-             ORDER BY COALESCE(NULLIF(wp.display_name,''),NULLIF(u.username,''),u.email)
-             LIMIT {$pageSize} OFFSET {$offset}"
-        );
+        $accessStmt = $pdo->prepare("SELECT e.*,COALESCE(NULLIF(wp.display_name,''),NULLIF(tm.display_name,''),NULLIF(u.username,''),u.email) display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at FROM application_entitlements e JOIN users u ON u.id=e.user_id LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id WHERE {$where} ORDER BY display_name LIMIT {$pageSize} OFFSET {$offset}");
         $accessStmt->execute($params);
         $accessUsers = $accessStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $eligibleUsers = $pdo->query(
-            "SELECT u.id,COALESCE(NULLIF(wp.display_name,''),NULLIF(u.username,''),u.email) name,u.email
-             FROM users u
-             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
-             WHERE u.is_disabled=0 AND u.deleted_at IS NULL
-             ORDER BY name
-             LIMIT 250"
-        )->fetchAll(PDO::FETCH_ASSOC);
-        $units = $pdo->query(
-            'SELECT id,name,is_active FROM business_units ORDER BY is_active DESC,name'
-        )->fetchAll(PDO::FETCH_ASSOC);
-
+        $eligibleStmt = $pdo->prepare("SELECT u.id,COALESCE(NULLIF(wp.display_name,''),NULLIF(tm.display_name,''),NULLIF(u.username,''),u.email) name,u.email FROM users u LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id WHERE u.is_disabled=0 AND u.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM application_entitlements selected WHERE selected.application_key=? AND selected.user_id=u.id AND selected.manual_enabled=1) ORDER BY name LIMIT 250");
+        $eligibleStmt->execute([$applicationKey]);
+        $eligibleUsers = $eligibleStmt->fetchAll(PDO::FETCH_ASSOC);
         if ($detailUserId > 0) {
-            $detailStmt = $pdo->prepare(
-                'SELECT e.*,wp.display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at
-                 FROM application_entitlements e
-                 JOIN users u ON u.id=e.user_id
-                 LEFT JOIN worker_profiles wp ON wp.user_id=u.id
-                 WHERE e.application_key=? AND e.user_id=?'
-            );
+            $detailStmt = $pdo->prepare("SELECT e.*,COALESCE(NULLIF(wp.display_name,''),NULLIF(tm.display_name,''),NULLIF(u.username,''),u.email) display_name,u.username,u.email,u.role,u.is_disabled,u.deleted_at FROM application_entitlements e JOIN users u ON u.id=e.user_id LEFT JOIN worker_profiles wp ON wp.user_id=u.id LEFT JOIN team_members tm ON tm.user_id=u.id WHERE e.application_key=? AND e.user_id=?");
             $detailStmt->execute([$applicationKey, $detailUserId]);
             $accessDetail = $detailStmt->fetch(PDO::FETCH_ASSOC) ?: null;
-
-            $sourceStmt = $pdo->prepare(
-                'SELECT p.id,p.name,bu.name business_unit_name
-                 FROM project_assignments pa
-                 JOIN projects p ON p.id=pa.project_id
-                 LEFT JOIN business_units bu ON bu.id=p.business_unit_id
-                 WHERE pa.user_id=? AND (pa.ends_at IS NULL OR pa.ends_at>UTC_TIMESTAMP(6))
-                 ORDER BY p.name'
-            );
-            $sourceStmt->execute([$detailUserId]);
+            $sourceStmt = $pdo->prepare('SELECT DISTINCT p.id,p.name FROM projects p LEFT JOIN project_assignments pa ON pa.project_id=p.id AND pa.user_id=? AND (pa.ends_at IS NULL OR pa.ends_at>UTC_TIMESTAMP(6)) WHERE pa.id IS NOT NULL OR p.manager_user_id=? ORDER BY p.name');
+            $sourceStmt->execute([$detailUserId,$detailUserId]);
             $projectSources = $sourceStmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $unitStmt = $pdo->prepare(
-                'SELECT bu.id,bu.name
-                 FROM application_entitlements e
-                 JOIN application_entitlement_oversight_units eu ON eu.entitlement_id=e.id
-                 JOIN business_units bu ON bu.id=eu.business_unit_id
-                 WHERE e.application_key=? AND e.user_id=?
-                 ORDER BY bu.name'
-            );
-            $unitStmt->execute([$applicationKey, $detailUserId]);
-            $manualUnits = $unitStmt->fetchAll(PDO::FETCH_ASSOC);
         }
-
-        $statusStmt = $pdo->prepare(
-            'SELECT SUM(CASE WHEN delivered_at IS NULL THEN 1 ELSE 0 END) pending,
-                    SUM(CASE WHEN delivered_at IS NULL AND attempts>0 AND last_error IS NOT NULL THEN 1 ELSE 0 END) failed,
-                    MAX(delivered_at) last_delivered_at
-             FROM integration_outbox
-             WHERE integration_key=?'
-        );
+        $statusStmt = $pdo->prepare('SELECT SUM(CASE WHEN delivered_at IS NULL THEN 1 ELSE 0 END) pending,SUM(CASE WHEN delivered_at IS NULL AND attempts>0 AND last_error IS NOT NULL THEN 1 ELSE 0 END) failed,MAX(delivered_at) last_delivered_at FROM integration_outbox WHERE integration_key=?');
         $statusStmt->execute([$applicationKey]);
         $status = $statusStmt->fetch(PDO::FETCH_ASSOC) ?: [];
     } catch (Throwable $error) {
@@ -118,22 +56,36 @@ if (!empty($config['enabled'])) {
     }
 }
 ?>
-<div class="settings-alert settings-alert-warning"><strong>Optional custom integration.</strong> Project Alpha is the source of truth. The external application receives read-only, signed, assignment-driven updates plus reconciliation snapshots.</div>
-<div class="settings-card"><h3>Custom integration setup</h3><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="save-config"><div class="settings-form-grid">
-<label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="enabled" value="1" <?=!empty($config['enabled'])?'checked':''?>> Enable this custom integration</label>
-<label class="field"><span class="label">Display label</span><input class="input" name="label" maxlength="100" required value="<?=$h($label)?>"><small>Deployment-specific, such as Field Operations.</small></label>
-<label class="field"><span class="label">Application key</span><input class="input" name="application_key" maxlength="64" minlength="2" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,63}" required value="<?=$h($applicationKey)?>" placeholder="field_operations"><small>Must match the receiver's configured APPLICATION_KEY.</small></label>
-<label class="field" style="grid-column:1/-1"><span class="label">Signed event URL</span><input class="input" type="url" name="webhook_url" value="<?=$h($config['webhook_url'])?>" placeholder="https://operations.example.com/api/integration/events"></label>
-<label class="field"><span class="label">Access service-token ID</span><input class="input" type="password" name="access_client_id" autocomplete="new-password" placeholder="<?=!empty($config['access_client_id'])?'Configured — leave blank to keep':'Service-token ID'?>"></label><label class="field"><span class="label">Access service-token secret</span><input class="input" type="password" name="access_client_secret" autocomplete="new-password" placeholder="<?=!empty($config['access_client_secret'])?'Configured — leave blank to keep':'Service-token secret'?>"></label>
-<label class="field" style="grid-column:1/-1"><span class="label">HMAC secret</span><input class="input" type="password" name="hmac_secret" minlength="32" autocomplete="new-password" placeholder="<?=!empty($config['hmac_secret'])?'Configured — leave blank to keep':'Same 32+ character secret as the receiver'?>"></label><label class="field"><span class="label">Timeout seconds</span><input class="input" type="number" name="timeout_seconds" min="2" max="60" value="<?=(int)$config['timeout_seconds']?>"></label><label class="field"><span class="label">Maximum attempts</span><input class="input" type="number" name="max_attempts" min="1" max="100" value="<?=(int)$config['max_attempts']?>"></label></div><button class="btn btn-primary">Save integration</button></form></div>
-<?php if(empty($config['enabled'])):?><div class="settings-alert settings-alert-info">Enable and save the integration to manage access exceptions and delivery.</div><?php return;endif;?>
+<div class="settings-alert settings-alert-warning"><strong>Optional custom integration.</strong> Project Alpha remains the source of truth. The external application receives signed, read-only operational updates and reconciliation snapshots.</div>
+<div class="settings-card">
+ <h3>Custom integration setup</h3>
+ <form method="post" action="/?page=settings/external-ops-handler">
+  <input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="save-config">
+  <div class="settings-form-grid">
+   <label class="check-row" style="grid-column:1/-1"><input type="checkbox" name="enabled" value="1" <?=!empty($config['enabled'])?'checked':''?>> Enable this custom integration</label>
+   <label class="field"><span class="label">Display label</span><input class="input" name="label" maxlength="100" required value="<?=$h($label)?>"><small>Deployment-specific, such as Field Operations.</small></label>
+   <label class="field"><span class="label">Application key</span><input class="input" name="application_key" maxlength="64" minlength="2" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,63}" required value="<?=$h($applicationKey)?>" placeholder="field_operations"><small>Must match the receiver's configured APPLICATION_KEY.</small></label>
+   <label class="field" style="grid-column:1/-1"><span class="label">Signed event URL</span><input class="input" type="url" name="webhook_url" value="<?=$h($config['webhook_url'])?>" placeholder="https://operations.example.com/api/integration/events"></label>
+   <label class="field"><span class="label">Access service-token ID</span><input class="input" type="password" name="access_client_id" autocomplete="new-password" placeholder="<?=!empty($config['access_client_id'])?'Configured - leave blank to keep':'Service-token ID'?>"></label>
+   <label class="field"><span class="label">Access service-token secret</span><input class="input" type="password" name="access_client_secret" autocomplete="new-password" placeholder="<?=!empty($config['access_client_secret'])?'Configured - leave blank to keep':'Service-token secret'?>"></label>
+   <label class="field" style="grid-column:1/-1"><span class="label">HMAC secret</span><input class="input" type="password" name="hmac_secret" minlength="32" autocomplete="new-password" placeholder="<?=!empty($config['hmac_secret'])?'Configured - leave blank to keep':'Same 32+ character secret as the receiver'?>"></label>
+   <label class="field"><span class="label">Timeout seconds</span><input class="input" type="number" name="timeout_seconds" min="2" max="60" value="<?=(int)$config['timeout_seconds']?>"></label>
+   <label class="field"><span class="label">Maximum attempts</span><input class="input" type="number" name="max_attempts" min="1" max="100" value="<?=(int)$config['max_attempts']?>"></label>
+  </div><button class="btn btn-primary">Save integration</button>
+ </form>
+</div>
+<?php if(empty($config['enabled'])):?><div class="settings-alert settings-alert-info">Enable and save the integration to select users and manage delivery.</div><?php return;endif;?>
 <?php if($directoryError):?><div class="settings-alert settings-alert-danger" role="alert"><strong>Integration settings could not be loaded.</strong> Verify that all database migrations have completed, then reload this page.</div><?php return;endif;?>
-<div class="settings-card"><div class="settings-section-heading"><h3>Effective access</h3><p>Active Project Team memberships grant access automatically. Manual exceptions are for read-only Business Unit oversight; only a PA administrator can receive global access.</p></div>
-<form method="get" class="settings-form-grid"><input type="hidden" name="page" value="settings"><input type="hidden" name="tab" value="external-ops"><label class="field"><span class="label">Search access directory</span><input class="input" name="access_search" value="<?=$h($search)?>" placeholder="Name or email"></label><div><button class="btn">Search</button></div></form>
-<div class="pa-table-wrap"><table class="pa-table"><thead><tr><th>User</th><th>Access source</th><th>Effective role</th><th>Account</th><th></th></tr></thead><tbody><?php foreach($accessUsers as $user):?><tr><td><strong><?=$h($user['display_name']?:$user['username']?:$user['email'])?></strong><small><?=$h(strtolower((string)$user['email']))?></small></td><td><?=!empty($user['automatic_enabled'])?'Project Team':''?><?=!empty($user['automatic_enabled'])&&!empty($user['manual_enabled'])?' + ':''?><?=!empty($user['manual_enabled'])?'Manual exception':''?></td><td><?=$user['role']==='admin'?'Global administrator':'Operator / unit viewer'?></td><td><?=!empty($user['is_disabled'])||!empty($user['deleted_at'])?'Inactive':'Active'?></td><td><a class="btn btn-sm" href="/?page=settings&amp;tab=external-ops&amp;access_user_id=<?=(int)$user['user_id']?>">Details</a></td></tr><?php endforeach;?><?php if(!$accessUsers):?><tr><td colspan="5">No matching effective access.</td></tr><?php endif;?></tbody></table></div>
-<div style="display:flex;justify-content:space-between;margin-top:12px"><span><?=$accessCount?> users</span><span><?php if($pageNumber>1):?><a class="btn btn-sm" href="/?page=settings&amp;tab=external-ops&amp;access_page=<?=$pageNumber-1?>">Previous</a><?php endif;?> <?php if($offset+$pageSize<$accessCount):?><a class="btn btn-sm" href="/?page=settings&amp;tab=external-ops&amp;access_page=<?=$pageNumber+1?>">Next</a><?php endif;?></span></div></div>
-<details class="settings-card"><summary><strong>Add access exception</strong></summary><p>Use only when someone needs read-only oversight without being assigned to a Project Team.</p><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="save-entitlement"><input type="hidden" name="enabled" value="1"><input type="hidden" name="business_unit_scope_present" value="1"><div class="settings-form-grid"><label class="field"><span class="label">User</span><select class="input" name="user_id" required><option value="">Search or select user</option><?php foreach($eligibleUsers as $user):?><option value="<?=(int)$user['id']?>"><?=$h($user['name'].' · '.$user['email'])?></option><?php endforeach;?></select></label><fieldset class="field"><legend class="label">Read-only Business Units</legend><?php foreach($units as $unit):if(!$unit['is_active'])continue;?><label class="check-row"><input type="checkbox" name="business_unit_ids[]" value="<?=(int)$unit['id']?>"> <?=$h($unit['name'])?></label><?php endforeach;?></fieldset></div><button class="btn btn-primary">Add exception</button></form></details>
-<?php if($accessDetail):?><div class="settings-card"><h3><?=$h($accessDetail['display_name']?:$accessDetail['username']?:$accessDetail['email'])?> access details</h3><p><strong>Automatic Projects:</strong> <?=$projectSources?$h(implode(', ',array_column($projectSources,'name'))):'None'?></p><p><strong>Manual Unit oversight:</strong> <?=$manualUnits?$h(implode(', ',array_column($manualUnits,'name'))):'None'?></p><p><strong>Synchronization:</strong> <?=$accessDetail['enabled']?'Enabled':'Revoked'?> · version <?=(int)$accessDetail['version']?></p><?php if(!empty($accessDetail['manual_enabled'])):?><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="save-entitlement"><input type="hidden" name="user_id" value="<?=(int)$accessDetail['user_id']?>"><input type="hidden" name="business_unit_scope_present" value="1"><button class="btn">Remove manual exception</button></form><?php endif;?></div><?php endif;?>
+<div class="settings-card">
+ <div class="settings-section-heading"><h3>External application access</h3><p>Only users explicitly selected here or on their account receive access. PA administrators become external administrators; everyone else sees only assigned Projects, Operations, and Tasks.</p></div>
+ <form method="get" class="settings-form-grid"><input type="hidden" name="page" value="settings"><input type="hidden" name="tab" value="external-ops"><label class="field"><span class="label">Search selected users</span><input class="input" name="access_search" value="<?=$h($search)?>" placeholder="Name or email"></label><div><button class="btn">Search</button></div></form>
+ <div class="pa-table-wrap"><table class="pa-table"><thead><tr><th>User</th><th>Selection</th><th>External role</th><th>Account</th><th></th></tr></thead><tbody>
+ <?php foreach($accessUsers as $user):?><tr><td><strong><?=$h($user['display_name'])?></strong><small><?=$h(strtolower((string)$user['email']))?></small></td><td>Selected</td><td><?=$user['role']==='admin'?'Global administrator':'Assigned-work operator'?></td><td><?=!empty($user['is_disabled'])||!empty($user['deleted_at'])?'Inactive / revoked':'Active'?></td><td><a class="btn btn-sm" href="/?page=settings&amp;tab=external-ops&amp;access_user_id=<?=(int)$user['user_id']?>">Details</a></td></tr><?php endforeach;?>
+ <?php if(!$accessUsers):?><tr><td colspan="5">No selected users match this search.</td></tr><?php endif;?></tbody></table></div>
+ <div style="display:flex;justify-content:space-between;margin-top:12px"><span><?=$accessCount?> selected users</span><span><?php if($pageNumber>1):?><a class="btn btn-sm" href="/?page=settings&amp;tab=external-ops&amp;access_page=<?=$pageNumber-1?>&amp;access_search=<?=rawurlencode($search)?>">Previous</a><?php endif;?> <?php if($offset+$pageSize<$accessCount):?><a class="btn btn-sm" href="/?page=settings&amp;tab=external-ops&amp;access_page=<?=$pageNumber+1?>&amp;access_search=<?=rawurlencode($search)?>">Next</a><?php endif;?></span></div>
+</div>
+<details class="settings-card"><summary><strong>Add user access</strong></summary><p>Select a PA account to provision. Assignments determine what non-administrators can see.</p><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="save-entitlement"><input type="hidden" name="enabled" value="1"><div class="settings-form-grid"><label class="field"><span class="label">User</span><select class="input" name="user_id" required><option value="">Search or select user</option><?php foreach($eligibleUsers as $user):?><option value="<?=(int)$user['id']?>"><?=$h($user['name'].' - '.$user['email'])?></option><?php endforeach;?></select></label></div><button class="btn btn-primary">Add access</button></form></details>
+<?php if($accessDetail):?><div class="settings-card"><h3><?=$h($accessDetail['display_name'])?> access details</h3><p><strong>Assigned Projects:</strong> <?=$projectSources?$h(implode(', ',array_column($projectSources,'name'))):'None'?></p><p><strong>External role:</strong> <?=$accessDetail['role']==='admin'?'Global administrator':'Assigned-work operator'?></p><p><strong>Synchronization:</strong> <?=$accessDetail['enabled']?'Enabled':'Revoked while account is inactive'?> - version <?=(int)$accessDetail['version']?></p><?php if(!empty($accessDetail['manual_enabled'])):?><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="save-entitlement"><input type="hidden" name="user_id" value="<?=(int)$accessDetail['user_id']?>"><button class="btn">Remove access</button></form><?php endif;?></div><?php endif;?>
 <div class="settings-card"><h3>Synchronization status</h3><div class="settings-form-grid"><div><span class="label">Pending</span><strong><?=(int)($status['pending']??0)?></strong></div><div><span class="label">Retry errors</span><strong><?=(int)($status['failed']??0)?></strong></div><div><span class="label">Last delivered</span><strong><?=$h($status['last_delivered_at']??'Never')?></strong></div></div><form method="post" action="/?page=settings/external-ops-handler"><input type="hidden" name="csrf" value="<?=$h(csrf_token())?>"><input type="hidden" name="action" value="send-now"><button class="btn">Retry due events</button></form></div>
 <script>
 (function(){function initExternalAccessSearch(){document.querySelectorAll('[data-settings-content] select[name="user_id"]').forEach(function(select){if(select.dataset.searchReady)return;select.dataset.searchReady='1';var search=document.createElement('input');search.type='search';search.className='input';search.placeholder='Type a name or email to filter';search.setAttribute('aria-label','Search users');select.parentNode.insertBefore(search,select);search.addEventListener('input',function(){var term=search.value.trim().toLowerCase();Array.from(select.options).forEach(function(option,index){option.hidden=index>0&&term!==''&&!option.text.toLowerCase().includes(term);});if(select.selectedOptions[0]&&select.selectedOptions[0].hidden)select.value='';});});}initExternalAccessSearch();document.addEventListener('pageLoaded',initExternalAccessSearch);})();

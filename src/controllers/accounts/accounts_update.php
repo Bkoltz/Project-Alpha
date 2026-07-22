@@ -140,6 +140,20 @@ if ($username !== '') {
 try {
     $pdo->beginTransaction();
     assert_not_removing_final_active_admin($pdo, $userId, $role === 'admin' && !$accountDisabled);
+    if ($accountDisabled) {
+        $managedProjectStmt = $pdo->prepare("SELECT name FROM projects WHERE manager_user_id=? AND status NOT IN ('completed','cancelled') ORDER BY id LIMIT 1 FOR UPDATE");
+        $managedProjectStmt->execute([$userId]);
+        $managedProjectName = $managedProjectStmt->fetchColumn();
+        if ($managedProjectName !== false) {
+            throw new DomainException('Choose a different Project Manager for ' . (string)$managedProjectName . ' before disabling this account.');
+        }
+    }
+    $previousAssignmentStmt = $pdo->prepare('SELECT id,project_id,user_id,assigned_at,ends_at,created_by,created_at,updated_at FROM project_assignments WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6)) FOR UPDATE');
+    $previousAssignmentStmt->execute([$userId]);
+    $previousAssignments = [];
+    foreach ($previousAssignmentStmt->fetchAll(PDO::FETCH_ASSOC) as $assignment) {
+        $previousAssignments[(int)$assignment['project_id']] = $assignment;
+    }
 
     $effectiveEmployeeStatus = $accountDisabled && $employeeStatus !== 'terminated' ? 'inactive' : $employeeStatus;
     if ($role !== 'employee' || $effectiveEmployeeStatus !== 'active') {
@@ -232,7 +246,7 @@ try {
             }
         }
 
-        $pdo->prepare('UPDATE project_assignments SET ends_at=UTC_TIMESTAMP(6) WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))')->execute([$userId]);
+        $pdo->prepare('UPDATE project_assignments pa JOIN projects p ON p.id=pa.project_id SET pa.ends_at=UTC_TIMESTAMP(6) WHERE pa.user_id=? AND (pa.ends_at IS NULL OR pa.ends_at>UTC_TIMESTAMP(6)) AND (p.manager_user_id IS NULL OR p.manager_user_id<>?)')->execute([$userId,$userId]);
         $assignmentStmt = $pdo->prepare(
             'INSERT INTO project_assignments (project_id,user_id,pay_rate_override,created_by) VALUES (?,?,?,?)
              ON DUPLICATE KEY UPDATE pay_rate_override=VALUES(pay_rate_override),ends_at=NULL,created_by=VALUES(created_by)'
@@ -245,7 +259,7 @@ try {
         }
     } else {
         $pdo->prepare("UPDATE employee_profiles SET employment_status='inactive' WHERE user_id=?")->execute([$userId]);
-        $pdo->prepare('UPDATE project_assignments SET ends_at=UTC_TIMESTAMP(6) WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))')->execute([$userId]);
+        $pdo->prepare('UPDATE project_assignments pa JOIN projects p ON p.id=pa.project_id SET pa.ends_at=UTC_TIMESTAMP(6) WHERE pa.user_id=? AND (pa.ends_at IS NULL OR pa.ends_at>UTC_TIMESTAMP(6)) AND (p.manager_user_id IS NULL OR p.manager_user_id<>?)')->execute([$userId,$userId]);
     }
 
     // Keep an existing worker relationship independent from the account ACL
@@ -314,17 +328,34 @@ try {
 
     $externalOpsConfig = pa_external_ops_delivery_config($pdo);
     if (!empty($externalOpsConfig['enabled'])) {
-        (new \App\Services\ExternalOpsIntegrationService())->resyncAccountAccess(
-            $pdo,
-            $userId,
-            (string)$externalOpsConfig['application_key'],
-            (int)$_SESSION['user']['id']
-        );
+        $externalOps = new \App\Services\ExternalOpsIntegrationService();
+        $existingOps = $pdo->prepare('SELECT id FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1');
+        $existingOps->execute([$userId, (string)$externalOpsConfig['application_key']]);
+        if (!empty($_POST['external_ops_enabled']) || $existingOps->fetchColumn() !== false) {
+            $externalOps->saveAccountAccess(
+                $pdo,
+                $userId,
+                (string)$externalOpsConfig['application_key'],
+                !empty($_POST['external_ops_enabled']),
+                (int)$_SESSION['user']['id']
+            );
+        }
+        $currentAssignmentStmt = $pdo->prepare('SELECT id,project_id,user_id,assigned_at,ends_at,created_by,created_at,updated_at,1 active FROM project_assignments WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))');
+        $currentAssignmentStmt->execute([$userId]);
+        $currentAssignments = [];
+        foreach ($currentAssignmentStmt->fetchAll(PDO::FETCH_ASSOC) as $assignment) {
+            $currentAssignments[(int)$assignment['project_id']] = $assignment;
+            $externalOps->enqueueProjectionChange($pdo,(string)$externalOpsConfig['application_key'],'project_assignment',(int)$assignment['id'],'upsert',$assignment);
+        }
+        foreach (array_diff_key($previousAssignments,$currentAssignments) as $assignment) {
+            $assignment['active'] = 0;
+            $externalOps->enqueueProjectionChange($pdo,(string)$externalOpsConfig['application_key'],'project_assignment',(int)$assignment['id'],'revoke',$assignment);
+        }
     }
 
     $pdo->commit();
 
-    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds)]);
+    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds), 'external_ops_selected' => !empty($_POST['external_ops_enabled'])]);
     header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

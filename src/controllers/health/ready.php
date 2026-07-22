@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/api_response.php';
 
-const PA_REQUIRED_SCHEMA_VERSION = 53;
+const PA_REQUIRED_SCHEMA_VERSION = 55;
 
 try {
     $version = (int)$pdo->query('SELECT COALESCE(MAX(version),0) FROM schema_migrations')->fetchColumn();

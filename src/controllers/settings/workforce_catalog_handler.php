@@ -22,7 +22,7 @@ $syncOpsAccount=static function(?int $accountId)use($pdo,$userId):void{
  if(!empty($config['enabled']))(new \App\Services\ExternalOpsIntegrationService())->resyncAccountAccess($pdo,$accountId,(string)$config['application_key'],$userId);
 };
 $requiredPermissions=match($action){
- 'save-worker-profile','save-business-unit','assign-worker-unit','assign-client-unit','save-worker-scope'=>['workforce.business_units.manage','settings.manage'],
+ 'save-worker-profile','save-business-unit','save-unit-membership','end-unit-membership','assign-worker-unit','assign-client-unit','save-worker-scope'=>['workforce.business_units.manage','settings.manage'],
  'save-work-type','set-work-type-status','delete-work-type'=>['workforce.catalog.manage','settings.manage'],
  'save-pay-schedule'=>['workforce.pay_periods.manage','settings.manage'],
  'assignment-offer','assignment-approve','assignment-eligible'=>['workforce.assignments.manage'],
@@ -117,10 +117,37 @@ try{
   else{$defaultUnit=$pdo->query('SELECT config_value FROM app_config WHERE organization_id=0 AND config_key="default_business_unit_id" LIMIT 1')->fetchColumn();if((int)$defaultUnit===$id)$pdo->prepare('DELETE FROM app_config WHERE organization_id=0 AND config_key="default_business_unit_id"')->execute();}
   audit_log($pdo,'business_unit.saved','business_unit',$id,['name'=>$name,'is_active'=>isset($_POST['is_active']),'is_default'=>$isDefault]);
   $opsConfig=pa_external_ops_delivery_config($pdo);if(!empty($opsConfig['enabled'])){$unitEvent=$pdo->prepare('SELECT * FROM business_units WHERE id=?');$unitEvent->execute([$id]);(new \App\Services\ExternalOpsIntegrationService())->enqueueProjectionChange($pdo,(string)$opsConfig['application_key'],'business_unit',$id,'upsert',$unitEvent->fetch(PDO::FETCH_ASSOC)?:[]);}
-  if($id){$affected=$pdo->prepare('SELECT DISTINCT wp.user_id FROM worker_business_units wbu JOIN worker_profiles wp ON wp.id=wbu.worker_profile_id WHERE wbu.business_unit_id=? AND wp.user_id IS NOT NULL');$affected->execute([$id]);foreach($affected->fetchAll(PDO::FETCH_COLUMN) as $affectedUserId)$syncOpsAccount((int)$affectedUserId);}
+ }elseif($action==='save-unit-membership'){
+  $businessUnitId=(int)($_POST['business_unit_id']??0);$accountId=(int)($_POST['user_id']??0);$role=(string)($_POST['membership_role']??'member');$isPrimary=!empty($_POST['is_primary']);
+  if($businessUnitId<1||$accountId<1||!in_array($role,['member','head'],true))throw new DomainException('Choose an active user, Business Unit, and valid designation.');
+  $pdo->beginTransaction();
+  $unit=$pdo->prepare('SELECT name FROM business_units WHERE id=? AND is_active=1 FOR UPDATE');$unit->execute([$businessUnitId]);$unitName=$unit->fetchColumn();if(!$unitName)throw new DomainException('The selected Business Unit is not active.');
+  $account=$pdo->prepare('SELECT COALESCE(NULLIF(username,""),email) FROM users WHERE id=? AND is_disabled=0 AND deleted_at IS NULL FOR UPDATE');$account->execute([$accountId]);$accountName=$account->fetchColumn();if(!$accountName)throw new DomainException('The selected user is not active.');
+  $existing=$pdo->prepare('SELECT id FROM business_unit_memberships WHERE business_unit_id=? AND user_id=? AND (ended_at IS NULL OR ended_at>UTC_TIMESTAMP(6)) ORDER BY id DESC LIMIT 1 FOR UPDATE');$existing->execute([$businessUnitId,$accountId]);$membershipId=(int)($existing->fetchColumn()?:0);
+  if($isPrimary)$pdo->prepare('UPDATE business_unit_memberships SET is_primary=0 WHERE user_id=? AND (ended_at IS NULL OR ended_at>UTC_TIMESTAMP(6))')->execute([$accountId]);
+  if($membershipId>0){
+   $pdo->prepare('UPDATE business_unit_memberships SET membership_role=?,is_primary=?,assigned_by=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?')->execute([$role,$isPrimary?1:0,$userId,$membershipId]);
+  }else{
+   $pdo->prepare('INSERT INTO business_unit_memberships (business_unit_id,user_id,membership_role,is_primary,assigned_by) VALUES (?,?,?,?,?)')->execute([$businessUnitId,$accountId,$role,$isPrimary?1:0,$userId]);$membershipId=(int)$pdo->lastInsertId();
+  }
+  $primary=$pdo->prepare('SELECT id FROM business_unit_memberships WHERE user_id=? AND is_primary=1 AND (ended_at IS NULL OR ended_at>UTC_TIMESTAMP(6)) LIMIT 1');$primary->execute([$accountId]);
+  if(!$primary->fetchColumn())$pdo->prepare('UPDATE business_unit_memberships SET is_primary=1 WHERE id=?')->execute([$membershipId]);
+  $effectivePrimaryStmt=$pdo->prepare('SELECT is_primary FROM business_unit_memberships WHERE id=?');$effectivePrimaryStmt->execute([$membershipId]);$effectivePrimary=(bool)$effectivePrimaryStmt->fetchColumn();
+  audit_log($pdo,'business_unit.membership.saved','business_unit_membership',$membershipId,['business_unit_id'=>$businessUnitId,'user_id'=>$accountId,'designation'=>$role,'is_primary'=>$effectivePrimary]);
+  $pdo->commit();
+ }elseif($action==='end-unit-membership'){
+  $membershipId=(int)($_POST['membership_id']??0);if($membershipId<1)throw new DomainException('Choose a Business Unit membership to end.');
+  $pdo->beginTransaction();
+  $membership=$pdo->prepare('SELECT business_unit_id,user_id,membership_role,is_primary FROM business_unit_memberships WHERE id=? AND (ended_at IS NULL OR ended_at>UTC_TIMESTAMP(6)) FOR UPDATE');$membership->execute([$membershipId]);$membershipRow=$membership->fetch(PDO::FETCH_ASSOC);if(!$membershipRow)throw new DomainException('This membership is no longer active.');
+  $pdo->prepare('UPDATE business_unit_memberships SET is_primary=0,ended_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE id=?')->execute([$membershipId]);
+  if(!empty($membershipRow['is_primary'])){
+   $replacement=$pdo->prepare('SELECT id FROM business_unit_memberships WHERE user_id=? AND id<>? AND (ended_at IS NULL OR ended_at>UTC_TIMESTAMP(6)) ORDER BY assigned_at,id LIMIT 1 FOR UPDATE');$replacement->execute([(int)$membershipRow['user_id'],$membershipId]);$replacementId=(int)($replacement->fetchColumn()?:0);
+   if($replacementId>0)$pdo->prepare('UPDATE business_unit_memberships SET is_primary=1,updated_at=UTC_TIMESTAMP(6) WHERE id=?')->execute([$replacementId]);
+  }
+  audit_log($pdo,'business_unit.membership.ended','business_unit_membership',$membershipId,['business_unit_id'=>(int)$membershipRow['business_unit_id'],'user_id'=>(int)$membershipRow['user_id'],'designation'=>(string)$membershipRow['membership_role']]);
+  $pdo->commit();
  }elseif($action==='assign-worker-unit'){
   $workerProfileId=(int)$_POST['worker_profile_id'];$pdo->prepare('INSERT INTO worker_business_units (worker_profile_id,business_unit_id,is_lead,assigned_by) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE is_lead=VALUES(is_lead),assigned_by=VALUES(assigned_by),assigned_at=UTC_TIMESTAMP(6),ends_at=NULL')->execute([$workerProfileId,(int)$_POST['business_unit_id'],isset($_POST['is_lead'])?1:0,$userId]);
-  $workerAccount=$pdo->prepare('SELECT user_id FROM worker_profiles WHERE id=?');$workerAccount->execute([$workerProfileId]);$syncOpsAccount((int)($workerAccount->fetchColumn()?:0));
  }elseif($action==='assign-client-unit'){
   $pdo->prepare('INSERT INTO client_business_units (client_id,business_unit_id,assigned_by) VALUES (?,?,?) ON DUPLICATE KEY UPDATE assigned_by=VALUES(assigned_by),assigned_at=UTC_TIMESTAMP(6)')->execute([(int)$_POST['client_id'],(int)$_POST['business_unit_id'],$userId]);
  }elseif($action==='save-worker-scope'){

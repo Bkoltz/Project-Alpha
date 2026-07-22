@@ -200,16 +200,32 @@ try {
 
     $externalOpsConfig = pa_external_ops_delivery_config($pdo);
     if (!empty($externalOpsConfig['enabled'])) {
-        (new \App\Services\ExternalOpsIntegrationService())->resyncAccountAccess(
-            $pdo,
-            $newUserId,
-            (string)$externalOpsConfig['application_key'],
-            (int)$_SESSION['user']['id']
-        );
+        $externalOps = new \App\Services\ExternalOpsIntegrationService();
+        if (!empty($_POST['external_ops_enabled'])) {
+            $externalOps->saveAccountAccess(
+                $pdo,
+                $newUserId,
+                (string)$externalOpsConfig['application_key'],
+                true,
+                (int)$_SESSION['user']['id']
+            );
+        }
+        $assignmentEvents = $pdo->prepare('SELECT id,project_id,user_id,assigned_at,ends_at,created_by,created_at,updated_at,1 active FROM project_assignments WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))');
+        $assignmentEvents->execute([$newUserId]);
+        foreach ($assignmentEvents->fetchAll(PDO::FETCH_ASSOC) as $assignmentEvent) {
+            $externalOps->enqueueProjectionChange(
+                $pdo,
+                (string)$externalOpsConfig['application_key'],
+                'project_assignment',
+                (int)$assignmentEvent['id'],
+                'upsert',
+                $assignmentEvent
+            );
+        }
     }
 
     $pdo->commit();
-    audit_log($pdo, 'user.create', 'user', $newUserId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'team_member_created'=>true, 'project_assignments' => count($employeeProjectIds)]);
+    audit_log($pdo, 'user.create', 'user', $newUserId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'team_member_created'=>true, 'project_assignments' => count($employeeProjectIds), 'external_ops_selected' => !empty($_POST['external_ops_enabled'])]);
     header('Location: /?page=accounts&created=1');
 } catch (Throwable $e) {
     if($pdo->inTransaction())$pdo->rollBack();
