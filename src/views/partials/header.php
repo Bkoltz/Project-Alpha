@@ -40,6 +40,7 @@ function nav_can(string $permission): bool {
     <link rel="icon" type="image/png" href="/assets/favicon-32.png" />
   <?php endif; ?>
   <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf'] ?? ''); ?>">
+  <meta name="project-alpha-version" content="<?php echo htmlspecialchars(app_version(), ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -51,15 +52,15 @@ function nav_can(string $permission): bool {
     <link rel="preload" href="<?php echo htmlspecialchars($logo); ?>" as="image">
   <?php endif; ?>
 
-  <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('/assets/styles.css'), ENT_QUOTES, 'UTF-8'); ?>">
-  <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('/assets/settings.css'), ENT_QUOTES, 'UTF-8'); ?>">
-  <script src="<?php echo htmlspecialchars(asset_url('/assets/navigation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+  <link rel="stylesheet" data-pa-shell-asset href="<?php echo htmlspecialchars(asset_url('/assets/styles.css'), ENT_QUOTES, 'UTF-8'); ?>">
+  <link rel="stylesheet" data-pa-shell-asset href="<?php echo htmlspecialchars(asset_url('/assets/settings.css'), ENT_QUOTES, 'UTF-8'); ?>">
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/navigation.js'), ENT_QUOTES, 'UTF-8'); ?>" data-pa-shell-asset defer></script>
   <!-- Settings and Workforce use delegated, idempotent initializers. Loading
        them with the authenticated shell keeps soft navigation identical to a
        hard reload, even when a page fragment contains no executable scripts. -->
-  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/item-library.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
-  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/workforce.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
-  <script src="<?php echo htmlspecialchars(asset_url('/assets/item-autocomplete.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/item-library.js'), ENT_QUOTES, 'UTF-8'); ?>" data-pa-shell-asset defer></script>
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/js/workforce.js'), ENT_QUOTES, 'UTF-8'); ?>" data-pa-shell-asset defer></script>
+  <script src="<?php echo htmlspecialchars(asset_url('/assets/item-autocomplete.js'), ENT_QUOTES, 'UTF-8'); ?>" data-pa-shell-asset defer></script>
   <script>
     (function() {
       var timer = null;
