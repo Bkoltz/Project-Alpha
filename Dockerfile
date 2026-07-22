@@ -141,7 +141,8 @@ USER root
 # tooling) and a statically linked gosu binary. PA uses neither. Use the base
 # image's maintained coreutils chroot for the one privilege drop performed by
 # the official entrypoint, then remove those unused binaries.
-RUN microdnf remove -y mysql-shell \
+RUN microdnf upgrade -y \
+    && microdnf remove -y mysql-shell \
     && microdnf clean all \
     && sed -i 's/exec gosu mysql "\$BASH_SOURCE" "\$@"/exec chroot --userspec=mysql:mysql --groups=mysql \/ "\$BASH_SOURCE" "\$@"/' /usr/local/bin/docker-entrypoint.sh \
     && rm -f /usr/local/bin/gosu \
