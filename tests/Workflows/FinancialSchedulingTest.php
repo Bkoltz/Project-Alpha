@@ -96,6 +96,8 @@ final class FinancialSchedulingTest extends TestCase
         self::assertStringContainsString("'daily_link_resolver'", (string)$state);
         self::assertStringContainsString("['daily_link_resolver']", (string)$settings);
         self::assertStringContainsString('Nightly folder scan:', (string)$settings);
+        self::assertStringContainsString('External delivery Worker / Public Base URL', (string)$settings);
+        self::assertStringNotContainsString('LTDS-Ops Worker', (string)$settings);
     }
 
     public function testAuditAndOrganizationScriptsInitializeAfterAjaxNavigation(): void

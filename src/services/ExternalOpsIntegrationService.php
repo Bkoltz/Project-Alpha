@@ -20,6 +20,48 @@ final class ExternalOpsIntegrationService
     ];
 
     /**
+     * Incremental events use the same least-privilege boundary as the full
+     * snapshot. Keep this allowlist here so a future caller cannot expose a
+     * pay-rate override, private sharing token, password hash, or unrelated
+     * accounting field by passing a raw database row.
+     *
+     * @var array<string,list<string>>
+     */
+    private const PROJECTION_FIELDS = [
+        'business_unit' => [
+            'id', 'name', 'code', 'description', 'is_active', 'created_by',
+            'created_at', 'updated_at',
+        ],
+        'project' => [
+            'id', 'client_id', 'parent_id', 'organization_id', 'department_id',
+            'business_unit_id', 'created_by', 'name', 'description', 'status',
+            'start_date', 'end_date', 'estimated_start', 'estimated_end',
+            'created_at', 'updated_at',
+        ],
+        'project_assignment' => [
+            'id', 'project_id', 'user_id', 'assigned_at', 'ends_at',
+            'created_by', 'created_at', 'updated_at', 'active',
+        ],
+        'operation' => [
+            'id', 'project_id', 'business_unit_id', 'title', 'status',
+            'scheduled_start_at', 'scheduled_end_at', 'location', 'notes',
+            'created_by', 'created_at', 'updated_at',
+        ],
+        'operation_assignment' => [
+            'operation_id', 'user_id', 'assignment_role', 'assigned_by',
+            'assigned_at', 'updated_at',
+        ],
+        'task' => [
+            'id', 'operation_id', 'project_id', 'business_unit_id',
+            'assignee_user_id', 'title', 'status', 'due_at', 'notes',
+            'created_by', 'created_at', 'updated_at',
+        ],
+        'task_assignment' => [
+            'task_id', 'user_id', 'assigned_by', 'assigned_at', 'updated_at',
+        ],
+    ];
+
+    /**
      * Save a deliberate access exception. Project Team membership is tracked
      * separately as automatic access and can never be erased by this method.
      *
@@ -260,7 +302,11 @@ final class ExternalOpsIntegrationService
         if (!in_array($action, ['upsert', 'revoke'], true)) {
             throw new DomainException('Invalid projection action.');
         }
+        if (!isset(self::PROJECTION_FIELDS[$entityType])) {
+            throw new DomainException('Unsupported projection entity type.');
+        }
         $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $data = array_intersect_key($data, array_fill_keys(self::PROJECTION_FIELDS[$entityType], true));
         $eventId = $this->uuidV4();
         $occurredAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.u\Z');
         $sourceUpdatedAt = $occurredAt;

@@ -433,7 +433,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                         </label>
                     </div>
                     <label>
-                        <div style="margin-bottom:4px;font-weight:600">LTDS-Ops Worker / Public Base URL<?php echo $helpIcon('The Worker or R2 custom-domain URL that clients open. PA appends the matched folder prefix. You may place {prefix} in the URL as a template.'); ?></div>
+                        <div style="margin-bottom:4px;font-weight:600">External delivery Worker / Public Base URL<?php echo $helpIcon('The Worker or R2 custom-domain URL that clients open. PA appends the matched folder prefix. You may place {prefix} in the URL as a template.'); ?></div>
                         <input type="text" name="<?php echo e($provider); ?>_public_base_url"
                                value="<?php echo e($credentials['public_base_url'] ?? ''); ?>"
                                placeholder="https://files.example.com/"
