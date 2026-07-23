@@ -84,7 +84,6 @@ final class FinancialAssetsTest extends TestCase
     public function testAssetsAreExposedInFinancialHubUi(): void
     {
         $hub = $this->read('src/views/pages/financial/expenses-list.php');
-        $script = $this->read('public/assets/js/expenses-hub.js');
         $dashboard = $this->read('src/views/pages/financial/financial-dashboard.php');
         $nav = $this->read('src/views/partials/header.php');
         $overview = $this->read('src/views/pages/financial/_overview_tab.php');
@@ -94,7 +93,10 @@ final class FinancialAssetsTest extends TestCase
         self::assertStringContainsString('Assets &amp; Expenses', $hub);
         self::assertStringContainsString('financial_assets', $hub);
         self::assertStringContainsString("\$active = \$_GET['tab'] ?? 'overview';", $hub);
-        self::assertStringContainsString("params.get('tab') || 'overview'", $script);
+        self::assertStringContainsString("include __DIR__ . '/' . \$tabs[\$active]['file'];", $hub);
+        self::assertStringNotContainsString('foreach ($tabs as $id => $t): ?>' . PHP_EOL . '    <div class="expenses-hub__panel', $hub);
+        self::assertStringNotContainsString("asset_url('/assets/js/expenses-hub.js')", $hub);
+        self::assertStringContainsString('Financial hub tab', $hub);
         self::assertStringContainsString('href="/?page=financial/expenses-list" class="btn btn-primary">Assets &amp; Expenses', $dashboard);
         self::assertStringContainsString('href="/?page=financial/expenses-list" data-page="financial/expenses-list">Assets &amp; Expenses', $nav);
         self::assertStringContainsString('asset_purchase_cost', $overview);
