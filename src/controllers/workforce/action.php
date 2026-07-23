@@ -104,7 +104,6 @@ function workforce_link_preselected_invoice(
     $entry = $selected->fetch(PDO::FETCH_ASSOC);
     if (!$entry || (int)($entry['billable'] ?? 0) !== 1) return null;
     $invoiceId = (int)($entry['invoice_id'] ?? 0);
-    if ($invoiceId > 0 && (!$manageAll || !user_can($pdo, $actorId, 'invoices.edit', 0))) return null;
     if ($invoiceId <= 0 && !empty($entry['job_id'])) {
         $drafts = $pdo->prepare(
             "SELECT id FROM invoices
@@ -119,8 +118,9 @@ function workforce_link_preselected_invoice(
     if ($invoiceId <= 0) {
         return null;
     }
-    if ($manageAll && !can_access_record($pdo, 'invoices', $invoiceId, $actorId)) {
-        return 'Time was confirmed, but the selected invoice is outside your access scope.';
+    if (!user_can($pdo, $actorId, 'invoices.edit', 0)
+        || !can_access_record($pdo, 'invoices', $invoiceId, $actorId)) {
+        return 'Time was confirmed, but it was not added to the invoice because you do not have billing access.';
     }
     try {
         (new WorkTimeInvoiceLinkService($pdo))->link($actorId, $entryId, $invoiceId, null, $manageAll);
@@ -249,10 +249,9 @@ try {
         );
     }
 
-    if (in_array($action, ['approve','reject','correct','void'], true)) {
+    if (in_array($action, ['approve','reject','void'], true)) {
         $entryId = (string) ($_POST['entry_id'] ?? '');
         $approvalPolicy->assertCanReviewEntry($userId, $entryId, $action);
-        $ownerSelfCorrection = $action === 'correct' && $approvalPolicy->isOwnerSelfAction($userId, $entryId);
         $invoiceLinkWarning = null;
         if ($action === 'approve') {
             $approval->approve($userId, $entryId);
@@ -264,11 +263,6 @@ try {
             );
         } elseif ($action === 'reject') {
             $approval->reject($userId, $entryId, (string) ($_POST['reason'] ?? ''));
-        } elseif ($action === 'correct') {
-            $approval->correct($userId, $entryId, $_POST);
-            if ($ownerSelfCorrection) {
-                workforce_self_confirm_owner($approval, $userId, $entryId);
-            }
         } else {
             $approval->void($userId, $entryId, (string) ($_POST['reason'] ?? ''));
         }
@@ -310,8 +304,6 @@ try {
             'start_time' => ['start_time', 'corrected_start_time'],
             'end_time' => ['end_time', 'corrected_end_time'],
             'description' => ['description', 'corrected_description'],
-            'billable' => ['billable'],
-            'is_payable' => ['is_payable'],
         ];
         foreach ($fieldAliases as $field => $aliases) {
             foreach ($aliases as $alias) {
@@ -328,6 +320,39 @@ try {
             $userId
         );
         workforce_redirect('/?page=workforce/approvals&tab=corrections', 'success', 'Time correction submitted for review.');
+    }
+    if ($action === 'admin-correction-apply') {
+        workforce_require($pdo, $userId, 'workforce.corrections.manage');
+        $entryId = trim((string)($_POST['entry_id'] ?? ''));
+        $changes = [];
+        foreach (['client_id','project_id','invoice_id','job_id','work_type_id','work_assignment_id','start_time','end_time','description'] as $field) {
+            if (array_key_exists($field, $_POST)) {
+                $changes[$field] = $_POST[$field];
+            }
+        }
+        $reason = trim((string)($_POST['reason'] ?? ''));
+        if ($reason === '') {
+            throw new DomainException('A correction reason is required.');
+        }
+        $service = new TimeCorrectionService($pdo);
+        $ownsTransaction = !$pdo->inTransaction();
+        try {
+            if ($ownsTransaction) {
+                $pdo->beginTransaction();
+            }
+            $requestId = $service->request($entryId, $changes, $reason, $userId);
+            $service->approve($requestId, $userId, null, 'Applied directly by an authorized administrator.');
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+        } catch (Throwable $error) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
+        }
+        $correctedUserId = (int)($_POST['entry_user_id'] ?? 0);
+        workforce_redirect('/?page=workforce/time' . ($correctedUserId > 0 ? '&user=' . $correctedUserId : ''), 'success', 'The approved time was corrected and all resulting billing and pay effects were recorded.');
     }
     if ($action === 'correction-approve') {
         workforce_require($pdo, $userId, 'workforce.corrections.manage');
@@ -435,7 +460,8 @@ try {
             && (string)($_POST['return_to'] ?? '') === 'invoice-edit'
             && (int)($_POST['invoice_id'] ?? 0) > 0
                 => '/?page=invoice/invoices-edit&id=' . (int)$_POST['invoice_id'],
-        in_array($action, ['approve','reject','correct','void'], true) => '/?page=workforce/approvals',
+        in_array($action, ['approve','reject','void'], true) => '/?page=workforce/approvals',
+        $action === 'admin-correction-apply' => '/?page=workforce/time',
         str_starts_with($action, 'correction-') => '/?page=workforce/approvals&tab=corrections',
         in_array($action,['pay-status','earning-approve','statement-settle','worker-payment-record','worker-payment-void','payroll-export-generate','payroll-export-void'],true) => '/?page=workforce/pay',
         default => '/?page=workforce/time',

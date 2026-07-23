@@ -242,6 +242,60 @@ final class TimeSubmissionService
         });
     }
 
+    /**
+     * Preserve the immutable submitted revision before a worker or manager
+     * returns the live entry to draft for editing.
+     */
+    public function withdrawPendingForEdit(
+        string $submissionId,
+        string $timeEntryId,
+        int $entryRevision,
+        int $actorId,
+        bool $canManageWorker = false
+    ): void {
+        if ($submissionId === '' || $timeEntryId === '' || $entryRevision <= 0 || $actorId <= 0) {
+            throw new DomainException('Submission withdrawal data is incomplete.');
+        }
+
+        $this->transaction(function () use ($submissionId, $timeEntryId, $entryRevision, $actorId, $canManageWorker): void {
+            $lock = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+            $now = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? 'UTC_TIMESTAMP(6)' : 'CURRENT_TIMESTAMP';
+            $submission = $this->row(
+                'SELECT * FROM time_submissions WHERE id=?' . $lock,
+                [$submissionId],
+                'Time submission not found.'
+            );
+            if (!in_array((string)$submission['status'], ['submitted', 'partially_reviewed'], true)) {
+                throw new DomainException('This time submission is no longer editable.');
+            }
+
+            $entry = $this->row(
+                'SELECT user_id,workflow_status,revision,current_submission_id FROM work_time_entries WHERE id=?' . $lock,
+                [$timeEntryId],
+                'Time entry not found.'
+            );
+            if (!$canManageWorker && (int)$entry['user_id'] !== $actorId) {
+                throw new DomainException('You may withdraw only your own submitted time.');
+            }
+            if ((string)$entry['workflow_status'] !== TimeEntryWorkflow::SUBMITTED
+                || (string)$entry['current_submission_id'] !== $submissionId
+                || (int)$entry['revision'] !== $entryRevision) {
+                throw new DomainException('The submitted time entry changed before it could be withdrawn.');
+            }
+
+            $update = $this->pdo->prepare(
+                "UPDATE time_submission_entries
+                 SET decision='withdrawn',decision_reason='Withdrawn for editing',reviewed_by=?,reviewed_at={$now}
+                 WHERE submission_id=? AND time_entry_id=? AND entry_revision=? AND decision='pending'"
+            );
+            $update->execute([$actorId, $submissionId, $timeEntryId, $entryRevision]);
+            if ($update->rowCount() !== 1) {
+                throw new DomainException('This submitted revision already has a review decision.');
+            }
+            $this->refreshSubmissionStatus($submissionId, $actorId);
+        });
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function entriesForReview(string $submissionId): array
     {
@@ -261,7 +315,7 @@ final class TimeSubmissionService
             "SELECT COUNT(*) total,
                     SUM(decision='pending') pending_count,
                     SUM(decision='confirmed') confirmed_count,
-                    SUM(decision='returned') returned_count
+                    SUM(decision IN ('returned','withdrawn')) returned_count
              FROM time_submission_entries WHERE submission_id=?"
         );
         $statement->execute([$submissionId]);
@@ -271,9 +325,10 @@ final class TimeSubmissionService
         $returned = (int)($counts['returned_count'] ?? 0);
         $status = $pending > 0
             ? 'partially_reviewed'
-            : ($returned > 0 ? ($confirmed > 0 ? 'partially_reviewed' : 'returned') : 'confirmed');
+            : ($returned > 0 ? 'returned' : 'confirmed');
+        $now = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? 'UTC_TIMESTAMP(6)' : 'CURRENT_TIMESTAMP';
         $this->pdo->prepare(
-            'UPDATE time_submissions SET status=?,reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6) WHERE id=?'
+            "UPDATE time_submissions SET status=?,reviewed_by=?,reviewed_at={$now} WHERE id=?"
         )->execute([$status, $reviewerId, $submissionId]);
     }
 

@@ -3231,7 +3231,7 @@ CREATE TABLE IF NOT EXISTS time_submission_entries (
     time_entry_id CHAR(36) NOT NULL,
     entry_revision INT UNSIGNED NOT NULL,
     entry_snapshot JSON NOT NULL,
-    decision ENUM('pending','confirmed','returned','voided') NOT NULL DEFAULT 'pending',
+    decision ENUM('pending','confirmed','returned','withdrawn','voided') NOT NULL DEFAULT 'pending',
     decision_reason VARCHAR(1000) NULL,
     reviewed_by INT NULL,
     reviewed_at DATETIME(6) NULL,

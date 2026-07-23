@@ -139,13 +139,11 @@ $invoiceLabel = static function (array $entry): string {
     <?php foreach ($approved as $entry): ?>
       <details class="workforce-approved-item"><summary><span><strong><?= $h($entry['employee_name']) ?></strong> &middot; <?= $h($entry['project_name'] ?: 'No project') ?><?php if ($entry['client_name']): ?> &middot; <?= $h($entry['client_name']) ?><?php endif; ?></span><span><?= number_format(((int)$entry['duration_seconds']) / 3600, 2) ?> h</span></summary>
         <div class="workforce-approved-item__body">
-          <?php if ($approvalPolicy->canReviewRecord($userId, $entry, 'correct')): ?>
-          <form class="workforce-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="correct"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>">
-            <label class="field"><span class="label">Project</span><select class="input" name="project_id"><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
+          <?php if ($canManageCorrections && $approvalPolicy->canReviewRecord($userId, $entry, 'correct')): ?>
+          <form class="workforce-form" method="post" action="/?page=workforce/action"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="admin-correction-apply"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input type="hidden" name="entry_user_id" value="<?= (int)$entry['user_id'] ?>">
             <div class="workforce-context-grid workforce-context-grid--time"><label class="field"><span class="label">Start</span><input class="input" type="datetime-local" name="start_time" value="<?= $h($localInput($entry['start_time'])) ?>" required></label><label class="field"><span class="label">End</span><input class="input" type="datetime-local" name="end_time" value="<?= $h($localInput($entry['end_time'])) ?>" required></label></div>
             <label class="field"><span class="label">Description</span><textarea class="input" name="description" rows="2"><?= $h($entry['description']) ?></textarea></label>
-            <div class="workforce-checks"><label><input type="checkbox" name="billable" value="1" <?= $entry['billable'] ? 'checked' : '' ?>> Prepare for hourly client billing</label><label><input type="checkbox" name="is_payable" value="1" <?= $entry['is_payable'] ? 'checked' : '' ?>> Eligible for worker compensation</label></div>
-            <label class="field"><span class="label">Correction reason</span><input class="input" name="reason" required></label><button class="btn">Create correction revision</button>
+            <label class="field"><span class="label">Correction reason</span><input class="input" name="reason" required></label><button class="btn">Correct approved time</button>
           </form>
           <?php endif; ?>
           <?php if ($approvalPolicy->canReviewRecord($userId, $entry, 'void')): ?>

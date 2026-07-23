@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Services\JobWorkPlanningService;
 use App\Services\CompensationRuleService;
 use App\Services\PayPeriodService;
+use App\Modules\Timekeeping\ApprovalService;
+use App\Modules\Timekeeping\AuditRecorder;
+use App\Modules\Timekeeping\BillingTimeConsumer;
 
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/acl.php';
@@ -34,9 +37,10 @@ if(!$requiredPermissions||!array_filter($requiredPermissions,$can)){http_respons
 try{
  if($action==='save-worker-profile'){
   $id=(int)($_POST['id']??0);$display=trim((string)($_POST['display_name']??''));$relationship=strtolower(trim((string)($_POST['relationship_type']??'employee')));$accountId=(int)($_POST['user_id']??0)?:null;$status=(string)($_POST['status']??'active');$currency=strtoupper(trim((string)($_POST['currency']??'USD')));
-  $previousAccountId=null;if($id){$previousAccount=$pdo->prepare('SELECT user_id FROM worker_profiles WHERE id=?');$previousAccount->execute([$id]);$previousAccountId=(int)($previousAccount->fetchColumn()?:0)?:null;}
+  $previousAccountId=null;if($id){$previousAccount=$pdo->prepare('SELECT user_id FROM worker_profiles WHERE id=?');$previousAccount->execute([$id]);$previousProfile=$previousAccount->fetch(PDO::FETCH_ASSOC)?:[];$previousAccountId=(int)($previousProfile['user_id']??0)?:null;}
   if($display===''||!preg_match('/^[a-z0-9_-]{2,50}$/',$relationship))throw new DomainException('Enter a worker name and valid relationship type.');
   if(!in_array($status,['active','inactive','terminated'],true)||!preg_match('/^[A-Z]{3}$/',$currency))throw new DomainException('Choose a valid worker status and currency.');
+  $pdo->beginTransaction();
   if($id){
    $reviewPolicy=$relationship==='owner'?'self_confirm':'manager_review';$compensationPolicy=$relationship==='owner'?'owner_no_pay':'rules';
    $pdo->prepare('UPDATE worker_profiles SET user_id=?,relationship_type=?,relationship_review_required=0,relationship_review_reason=NULL,relationship_reviewed_by=?,relationship_reviewed_at=UTC_TIMESTAMP(6),time_review_policy=?,compensation_policy=?,status=?,display_name=?,currency=?,ended_at=CASE WHEN ?="terminated" THEN COALESCE(ended_at,CURRENT_DATE) ELSE NULL END WHERE id=?')->execute([$accountId,$relationship,$userId,$reviewPolicy,$compensationPolicy,$status,$display,$currency,$status,$id]);
@@ -45,6 +49,12 @@ try{
    $pdo->prepare('INSERT INTO worker_profiles (user_id,relationship_type,time_review_policy,compensation_policy,status,display_name,currency) VALUES (?,?,?,?,?,?,?)')->execute([$accountId,$relationship,$reviewPolicy,$compensationPolicy,$status,$display,$currency]);
   }
   $syncOpsAccount($previousAccountId);if($accountId!==$previousAccountId)$syncOpsAccount($accountId);
+  if($accountId&&$relationship==='owner'&&$status==='active'){
+   $approval=new ApprovalService($pdo,new AuditRecorder($pdo),new BillingTimeConsumer($pdo));
+   $result=$approval->reconcileVerifiedOwnerEntries($accountId);
+   if($result['failed'])@error_log('[owner-time-reconciliation] '.count($result['failed']).' entries still require review after owner verification.');
+  }
+  $pdo->commit();
  }elseif($action==='save-work-type'){
   $id=max(0,(int)($_POST['id']??0));
   $name=trim((string)($_POST['name']??''));

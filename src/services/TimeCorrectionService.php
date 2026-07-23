@@ -34,30 +34,42 @@ final class TimeCorrectionService
         if (trim($reason) === '' || $requestedBy <= 0) {
             throw new DomainException('A time correction requires a reason and authenticated requester.');
         }
-        $statement = $this->pdo->prepare('SELECT * FROM work_time_entries WHERE id=?');
-        $statement->execute([$timeEntryId]);
-        $entry = $statement->fetch(PDO::FETCH_ASSOC);
-        if (!$entry || (string)$entry['workflow_status'] !== 'confirmed' || (string)$entry['status'] !== 'approved') {
-            throw new DomainException('Use correction requests only for confirmed time. Draft time can still be edited directly.');
-        }
-        if ((int)$entry['user_id'] !== $requestedBy && !$this->canManage($requestedBy)) {
-            throw new DomainException('You may request a correction only for your own time.');
-        }
-        $proposed = $this->normalizeProposal($entry, $proposedChanges);
-        $id = Uuid::v4();
-        $this->pdo->prepare(
-            'INSERT INTO time_correction_requests
-             (id,time_entry_id,original_revision,original_snapshot,proposed_snapshot,reason,requested_by)
-             VALUES (?,?,?,?,?,?,?)'
-        )->execute([
-            $id, $timeEntryId, $entry['revision'], self::json($entry), self::json($proposed), trim($reason), $requestedBy,
-        ]);
-        $this->audit->record('time_correction.requested', 'time_correction_request', $id, $requestedBy, [], [
-            'time_entry_id' => $timeEntryId,
-            'original_revision' => (int)$entry['revision'],
-            'proposed' => $proposed,
-        ]);
-        return $id;
+        return $this->transaction(function () use ($timeEntryId, $proposedChanges, $reason, $requestedBy): string {
+            $lock = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+            $statement = $this->pdo->prepare('SELECT * FROM work_time_entries WHERE id=?' . $lock);
+            $statement->execute([$timeEntryId]);
+            $entry = $statement->fetch(PDO::FETCH_ASSOC);
+            if (!$entry || (string)$entry['workflow_status'] !== 'confirmed' || (string)$entry['status'] !== 'approved') {
+                throw new DomainException('Use correction requests only for confirmed time. Draft time can still be edited directly.');
+            }
+            if ((int)$entry['user_id'] !== $requestedBy && !$this->canManage($requestedBy)) {
+                throw new DomainException('You may request a correction only for your own time.');
+            }
+            $pending = $this->pdo->prepare(
+                "SELECT id FROM time_correction_requests
+                 WHERE time_entry_id=? AND original_revision=? AND status='pending'
+                 LIMIT 1" . $lock
+            );
+            $pending->execute([$timeEntryId, (int)$entry['revision']]);
+            if ($pending->fetchColumn()) {
+                throw new DomainException('A correction for this time revision is already awaiting review.');
+            }
+            $proposed = $this->normalizeProposal($entry, $proposedChanges);
+            $id = Uuid::v4();
+            $this->pdo->prepare(
+                'INSERT INTO time_correction_requests
+                 (id,time_entry_id,original_revision,original_snapshot,proposed_snapshot,reason,requested_by)
+                 VALUES (?,?,?,?,?,?,?)'
+            )->execute([
+                $id, $timeEntryId, $entry['revision'], self::json($entry), self::json($proposed), trim($reason), $requestedBy,
+            ]);
+            $this->audit->record('time_correction.requested', 'time_correction_request', $id, $requestedBy, [], [
+                'time_entry_id' => $timeEntryId,
+                'original_revision' => (int)$entry['revision'],
+                'proposed' => $proposed,
+            ]);
+            return $id;
+        });
     }
 
     /** @return array<string,mixed> */
@@ -82,7 +94,7 @@ final class TimeCorrectionService
             }
             $proposed = json_decode((string)$request['proposed_snapshot'], true, 512, JSON_THROW_ON_ERROR);
             $proposed = $this->normalizeProposal($entry, is_array($proposed) ? $proposed : []);
-            $proposed = $this->validateBillingContext($proposed);
+            $proposed = $this->validateBillingContext($proposed, $entry);
             $oldDuration = (int)$entry['duration_seconds'];
             $newDuration = (int)$proposed['duration_seconds'];
             $durationDelta = $newDuration - $oldDuration;
@@ -260,7 +272,8 @@ final class TimeCorrectionService
         $statement = $this->pdo->prepare(
             "SELECT a.*,i.status invoice_status,i.finalized_at FROM work_time_billing_allocations a
              LEFT JOIN invoices i ON i.id=a.invoice_id
-             WHERE a.time_entry_id=? AND a.entry_revision=? AND a.status<>'reversed' ORDER BY a.id DESC LIMIT 1 FOR UPDATE"
+             WHERE a.time_entry_id=? AND a.entry_revision<=? AND a.status<>'reversed'
+             ORDER BY a.entry_revision DESC,a.id DESC LIMIT 1 FOR UPDATE"
         );
         $statement->execute([$before['id'], $before['revision']]);
         $allocation = $statement->fetch(PDO::FETCH_ASSOC);
@@ -516,15 +529,23 @@ final class TimeCorrectionService
         )->execute([$subtotal, $tax, $total, $total, $invoiceId]);
     }
 
-    /** @param array<string,mixed> $proposal @return array<string,mixed> */
-    private function validateBillingContext(array $proposal): array
+    /** @param array<string,mixed> $proposal @param array<string,mixed> $original @return array<string,mixed> */
+    private function validateBillingContext(array $proposal, array $original): array
     {
         if (!empty($proposal['invoice_id'])) {
-            $statement = $this->pdo->prepare('SELECT client_id,project_id,job_id FROM invoices WHERE id=?');
+            $lock = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+            $statement = $this->pdo->prepare(
+                'SELECT client_id,project_id,job_id,status,finalized_at FROM invoices WHERE id=?' . $lock
+            );
             $statement->execute([$proposal['invoice_id']]);
             $invoice = $statement->fetch(PDO::FETCH_ASSOC);
             if (!$invoice) {
                 throw new DomainException('Correction invoice not found.');
+            }
+            $invoiceChanged = (int)($original['invoice_id'] ?? 0) !== (int)$proposal['invoice_id'];
+            if ($invoiceChanged
+                && ((string)$invoice['status'] !== 'draft' || $invoice['finalized_at'] !== null)) {
+                throw new DomainException('A correction can move time only to a mutable draft invoice.');
             }
             foreach (['client_id','project_id','job_id'] as $field) {
                 $fromInvoice = (int)($invoice[$field] ?? 0) ?: null;

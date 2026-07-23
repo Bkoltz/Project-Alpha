@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Timekeeping;
 
 use App\Services\CompensationRuleService;
+use App\Services\TimeSubmissionService;
 use App\Services\UnscheduledServiceJobService;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -138,7 +139,7 @@ final class TimekeepingService
             "SELECT i.id,i.client_id,i.project_id,i.job_id,i.doc_number,i.doc_number invoice_number,
                     i.invoice_type,i.status,c.name client_name,p.name project_name
              FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN projects p ON p.id=i.project_id
-             WHERE i.status='draft' AND i.finalized_at IS NULL
+             WHERE i.status='draft' AND i.finalized_at IS NULL AND i.job_id IS NOT NULL
              ORDER BY c.name,i.created_at DESC"
         )->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -488,27 +489,30 @@ final class TimekeepingService
         if (!$manageAll && (int)($settings['require_work_type'] ?? 0) === 1 && !$workTypeId) {
             throw new DomainException('A Work Type is required.');
         }
-        $billable = $this->explicitBillableFlag($input);
-        $this->assertBillableJob($billable, $context['job_id']);
         $worker = $this->workerContext($entryUserId);
-        $isPayable = $manageAll
-            ? (!empty($input['is_payable']) && $worker['compensation_state'] === 'provisional' ? 1 : 0)
-            : $worker['is_payable'];
-        $billingState = $this->billingStateForInput($input);
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare(
                 "SELECT * FROM work_time_entries
                  WHERE id=? AND user_id=?
                    AND ((workflow_status IN ('draft','returned') AND status IN ('review','rejected'))
+                        OR (workflow_status='submitted' AND status='review')
                         OR (workflow_status='confirmed' AND status='approved' AND owner_self_confirmed=1))
                  FOR UPDATE"
             );
             $stmt->execute([$entryId, $entryUserId]);
             $entry = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$entry) {
-                throw new DomainException('Only your review, rejected, or owner-confirmed time can be edited.');
+                throw new DomainException('Only draft, returned, submitted-pending, or owner-confirmed time can be edited.');
             }
+            $billable = $manageAll ? $this->explicitBillableFlag($input) : (int)$entry['billable'];
+            $this->assertBillableJob($billable, $context['job_id']);
+            $isPayable = $manageAll
+                ? (!empty($input['is_payable']) && $worker['compensation_state'] === 'provisional' ? 1 : 0)
+                : (int)$entry['is_payable'];
+            $billingState = $manageAll
+                ? $this->billingStateForInput($input)
+                : (string)$entry['billing_state'];
             $billing = $this->pdo->prepare(
                 "SELECT te.id,te.billed,te.invoice_item_id
                  FROM work_approval_snapshots s
@@ -522,9 +526,29 @@ final class TimekeepingService
             if ($billing->fetch(PDO::FETCH_ASSOC)) {
                 throw new DomainException('Billed or invoiced time cannot be edited. Adjust or unlink the invoice first.');
             }
+            if ((string)$entry['workflow_status'] === 'submitted') {
+                if (empty($entry['current_submission_id'])) {
+                    throw new DomainException('This submitted entry has no editable submission record. Return it from Work Review first.');
+                }
+                (new TimeSubmissionService($this->pdo))->withdrawPendingForEdit(
+                    (string)$entry['current_submission_id'],
+                    $entryId,
+                    (int)$entry['revision'],
+                    $actorId,
+                    $manageAll
+                );
+                $this->audit->record(
+                    'time_entry.withdrawn_for_edit',
+                    'work_time_entry',
+                    $entryId,
+                    $actorId,
+                    $entry,
+                    ['submission_id' => (string)$entry['current_submission_id']]
+                );
+            }
             $revisionReason = $entry['status'] === 'approved'
                 ? 'Owner self-confirmed revision'
-                : ($entry['status'] === 'rejected' ? 'Worker resubmission' : 'Worker time edit');
+                : ($entry['status'] === 'rejected' ? 'Worker resubmission' : ((string)$entry['workflow_status'] === 'submitted' ? 'Submitted time withdrawn for edit' : 'Worker time edit'));
             $this->pdo->prepare(
                 'INSERT INTO work_time_revisions (id,time_entry_id,revision,snapshot,reason,created_by) VALUES (?,?,?,?,?,?)'
             )->execute([Uuid::v4(), $entryId, $entry['revision'], json_encode($entry, JSON_THROW_ON_ERROR), $revisionReason, $actorId]);

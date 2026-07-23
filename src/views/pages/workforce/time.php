@@ -364,10 +364,9 @@ foreach ($entries as $entry) {
           <?php
             $projectionBilled = !empty($entry['billing_projection_billed']) || !empty($entry['billing_invoice_item_id']);
             $canonicalWorkflowState = (string)($entry['workflow_status'] ?? '');
-            $canEditEntry = !$projectionBilled && (
-                in_array($canonicalWorkflowState, ['draft','returned'], true)
-                || ($canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved' && !empty($entry['owner_self_confirmed']))
-            );
+            $canEditEntry = !$projectionBilled
+                && in_array($canonicalWorkflowState, ['draft','returned','submitted'], true);
+            $editActionLabel = $canonicalWorkflowState === 'submitted' ? 'Withdraw and edit' : 'Edit';
             $canonicalBillingState = (string)($entry['billing_state'] ?? '');
             $timeIsConfirmed = $canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved';
             $billingState = $projectionBilled
@@ -384,8 +383,9 @@ foreach ($entries as $entry) {
             $timeState = (string)($entry['workflow_status'] ?? $entry['status']);
             $availableInvoices = array_values(array_filter(
                 $invoices,
-                static fn(array $invoice): bool => empty($entry['client_id'])
-                    || (int)$invoice['client_id'] === (int)$entry['client_id']
+                static fn(array $invoice): bool => !empty($invoice['job_id'])
+                    && (empty($entry['client_id']) || (int)$invoice['client_id'] === (int)$entry['client_id'])
+                    && (empty($entry['job_id']) || (int)$invoice['job_id'] === (int)$entry['job_id'])
             ));
           ?>
           <tr>
@@ -398,14 +398,14 @@ foreach ($entries as $entry) {
             <td><?= $h($entry['description']) ?></td>
             <td class="text-right">
               <?php if ($canEditEntry): ?>
-                <details class="workforce-entry-edit"><summary class="btn btn-sm">Edit</summary>
+                <details class="workforce-entry-edit"><summary class="btn btn-sm"><?= $h($editActionLabel) ?></summary>
                   <form class="workforce-form" method="post" action="/?page=workforce/action" data-workforce-entry-form>
                     <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="edit"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>"><input type="hidden" name="work_assignment_id" value="<?= (int)($entry['work_assignment_id'] ?? 0) ?>" data-job-id="<?= (int)($entry['job_id'] ?? 0) ?>">
                     <?php if ($manageAll): ?>
                       <div class="workforce-context-grid">
                         <label class="field workforce-combobox" data-workforce-client-combobox><span class="label">Client <small>optional</small></span><input class="input" type="search" value="<?= $h($entry['client_name'] ?? '') ?>" data-selected-name="<?= $h($entry['client_name'] ?? '') ?>" autocomplete="off" placeholder="Type to search clients" data-workforce-client-search aria-autocomplete="list" aria-expanded="false"><input type="hidden" name="client_id" value="<?= (int)($entry['client_id'] ?? 0) ?>" data-workforce-client><span class="workforce-combobox__results" data-workforce-client-results role="listbox" hidden></span></label>
                         <label class="field"><span class="label">Project</span><select class="input" name="project_id" data-workforce-project><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" data-client-id="<?= (int)($project['client_id'] ?? 0) ?>" data-client-name="<?= $h($project['client_name'] ?? '') ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
-                        <label class="field"><span class="label">Draft invoice <small>optional</small></span><select class="input" name="invoice_id" data-workforce-invoice><option value="">Add to an invoice later</option><?php foreach ($invoices as $invoice): ?><option value="<?= (int)$invoice['id'] ?>" data-client-id="<?= (int)$invoice['client_id'] ?>" data-client-name="<?= $h($invoice['client_name'] ?? '') ?>" data-project-id="<?= (int)($invoice['project_id'] ?? 0) ?>" data-job-id="<?= (int)($invoice['job_id'] ?? 0) ?>" <?= (int)($entry['invoice_id'] ?? 0) === (int)$invoice['id'] ? 'selected' : '' ?>><?= $h(($invoice['client_name'] ?? '') . ' · ' . $invoiceLabel($invoice)) ?></option><?php endforeach; ?></select></label>
+                        <label class="field"><span class="label">Draft invoice <small>optional</small></span><select class="input" name="invoice_id" data-workforce-invoice><option value="">Add to an invoice later</option><?php foreach ($availableInvoices as $invoice): ?><option value="<?= (int)$invoice['id'] ?>" data-client-id="<?= (int)$invoice['client_id'] ?>" data-client-name="<?= $h($invoice['client_name'] ?? '') ?>" data-project-id="<?= (int)($invoice['project_id'] ?? 0) ?>" data-job-id="<?= (int)($invoice['job_id'] ?? 0) ?>" <?= (int)($entry['invoice_id'] ?? 0) === (int)$invoice['id'] ? 'selected' : '' ?>><?= $h(($invoice['client_name'] ?? '') . ' · ' . $invoiceLabel($invoice)) ?></option><?php endforeach; ?></select></label>
                       </div>
                     <?php else: ?>
                       <label class="field"><span class="label">Assigned project</span><select class="input" name="project_id"><option value="">No project</option><?php foreach ($projects as $project): ?><option value="<?= (int)$project['id'] ?>" <?= (int)$entry['project_id'] === (int)$project['id'] ? 'selected' : '' ?>><?= $h($project['name']) ?></option><?php endforeach; ?></select></label>
@@ -422,14 +422,15 @@ foreach ($entries as $entry) {
                         <fieldset class="workforce-outcome workforce-outcome--compensation"><legend>Worker compensation</legend><label class="workforce-outcome__choice"><input type="checkbox" name="is_payable" value="1" <?= $entry['is_payable'] ? 'checked' : '' ?>> <span>Eligible for compensation</span></label></fieldset>
                       </div>
                     <?php endif; ?>
-                    <button class="btn btn-primary btn-sm">Save changes</button>
+                    <?php if ($canonicalWorkflowState === 'submitted'): ?><p class="muted text-sm mb-0">Saving withdraws this revision from review and returns the updated entry to draft. Submit it again when it is ready.</p><?php endif; ?>
+                    <button class="btn btn-primary btn-sm"><?= $canonicalWorkflowState === 'submitted' ? 'Withdraw and save draft' : 'Save changes' ?></button>
                   </form>
                 </details>
               <?php endif; ?>
               <?php if ($canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved'): ?>
                 <details class="workforce-entry-edit"><summary class="btn btn-sm"><?= $manageAll ? 'Correct' : 'Request correction' ?></summary>
                   <form class="workforce-form" method="post" action="/?page=workforce/action" data-workforce-entry-form>
-                    <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="correction-request"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>">
+                    <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="<?= $manageAll ? 'admin-correction-apply' : 'correction-request' ?>"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><?php if ($manageAll): ?><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>"><?php endif; ?>
                     <div class="workforce-context-grid workforce-context-grid--time"><label class="field"><span class="label">Corrected start</span><input class="input" type="datetime-local" name="start_time" value="<?= $h($inputTime($entry['start_time'])) ?>" required></label><label class="field"><span class="label">Corrected end</span><input class="input" type="datetime-local" name="end_time" value="<?= $h($inputTime($entry['end_time'])) ?>" required></label></div>
                     <label class="field"><span class="label">Work Activity</span><select class="input" name="work_type_id"><option value="">Unclassified</option><?php foreach ($workTypes as $type): ?><option value="<?= (int)$type['id'] ?>" <?= (int)$entry['work_type_id'] === (int)$type['id'] ? 'selected' : '' ?>><?= $h($type['name']) ?></option><?php endforeach; ?></select></label>
                     <?php if ($manageAll): ?><div class="workforce-context-grid">
@@ -439,8 +440,8 @@ foreach ($entries as $entry) {
                     </div><?php endif; ?>
                     <label class="field"><span class="label">Corrected description</span><textarea class="input" name="description" rows="2"><?= $h($entry['description']) ?></textarea></label>
                     <label class="field"><span class="label">Why is this correction needed?</span><textarea class="input" name="reason" rows="2" maxlength="1000" required></textarea></label>
-                    <p class="muted text-sm mb-0">This does not overwrite confirmed history. An authorized reviewer approves or rejects the proposed revision.</p>
-                    <button class="btn btn-primary btn-sm" type="submit">Submit correction</button>
+                    <p class="muted text-sm mb-0"><?= $manageAll ? 'This applies an audited revision now. Existing approval, billing, and pay history stays intact; any resulting delta follows the correction ledger.' : 'This does not overwrite confirmed history. An authorized reviewer approves or rejects the proposed revision.' ?></p>
+                    <button class="btn btn-primary btn-sm" type="submit"><?= $manageAll ? 'Apply audited correction' : 'Submit correction request' ?></button>
                   </form>
                 </details>
               <?php endif; ?>

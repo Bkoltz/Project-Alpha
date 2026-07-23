@@ -4,15 +4,10 @@ on:
   push:
     branches: ["dev", "main"]
     tags: ['v*.*.*']
-  # Some API-assisted squash merges do not emit a follow-up push workflow.
-  # The closed-PR fallback still runs only after GitHub has merged into main.
-  pull_request_target:
-    branches: ["main"]
-    types: [closed]
   workflow_dispatch:
 
 concurrency:
-  group: docker-${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref || github.ref_name }}
+  group: docker-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -20,7 +15,6 @@ env:
 
 jobs:
   build-and-push:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,10 +23,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          # Never execute an unmerged PR head with package-write permission.
-          # For the fallback event, build the commit GitHub merged into main.
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || github.ref }}
 
       - name: Resolve source commit
         id: source
@@ -60,7 +50,7 @@ jobs:
             echo "tag=${version}" >> $GITHUB_OUTPUT
             echo "cron_tag=cron-${version}" >> $GITHUB_OUTPUT
             echo "db_tag=db-${version}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "pull_request_target" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
             echo "cron_tag=cron-latest" >> $GITHUB_OUTPUT
             echo "db_tag=db-latest" >> $GITHUB_OUTPUT

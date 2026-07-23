@@ -62,12 +62,32 @@ expire after 15 idle minutes, and have a seven-day absolute maximum.
 ## Corrections and audit
 
 Confirmation snapshots worker, Job, activity, duration, rates, amount, and
-currency. Rejected draft entries can be edited and resubmitted. Confirmed work
-changes through a correction request: approval retains the original revision,
-creates a new revision, and records worker-pay and client-billing effects
-separately. Statements are versioned or receive a next-period adjustment;
-Worker Payment Records preserve the independent fact of what an administrator
-actually paid. All module mutations write to PA's system audit trail.
+currency. A worker can edit their own draft or returned entry. For a submitted
+entry, the worker uses **Withdraw and edit**; this marks the submitted revision withdrawn,
+retains its review history, and returns the live entry to draft for resubmission.
+Authorized workforce managers can perform the corresponding pre-approval action
+for workers in their scope.
+
+Confirmed work is never overwritten in place. Workers use **Request correction**,
+while an authorized administrator uses **Correct approved time** and supplies a
+reason. Approval retains the original revision and immutable snapshots, creates
+a corrected revision, and records worker-pay and client-billing effects
+separately. Draft statements and invoice lines can be rebuilt from the correction;
+closed statements and finalized invoices remain locked and receive explicit
+adjustments. Worker Payment Records preserve the independent fact of what an
+administrator actually paid. All module mutations write to PA's system audit trail.
+
+Owner self-confirmation is a worker-relationship rule, not an account-role
+shortcut. Marking a Worker Profile as a verified business Owner enables automatic
+confirmation of that person's eligible completed time in open review periods.
+The PA `owner` or `admin` role alone does not bypass review. Historical entries in
+closed periods remain unchanged and require the normal audited exception process.
+
+Confirmed, billable time may be attached to a matching mutable draft invoice.
+When exactly one matching draft exists, PA can attach it automatically; otherwise
+an administrator chooses the destination. The invoice line and totals are created
+only after confirmation. Later corrections refresh a draft line, while finalized
+invoice changes use an explicit charge or credit workflow.
 
 ## Operations
 

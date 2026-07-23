@@ -131,13 +131,19 @@ final class OpsSnapshotService
         return [
             'users' => [
                 'sql' => 'SELECT u.id,u.email,u.username,u.role,u.is_disabled,u.deleted_at,u.created_at,u.updated_at,
-                                 wp.id AS worker_profile_id,wp.display_name,wp.relationship_type,wp.status AS worker_status
+                                 wp.id AS worker_profile_id,wp.display_name,wp.relationship_type,wp.status AS worker_status,
+                                 ep.employment_status
                           FROM users u
                           JOIN application_entitlements selected_access
-                            ON selected_access.user_id=u.id
+                           ON selected_access.user_id=u.id
                            AND selected_access.application_key=:application_key
+                           AND selected_access.enabled=1
                            AND selected_access.manual_enabled=1
                           LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+                          LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+                          WHERE u.is_disabled=0 AND u.deleted_at IS NULL
+                            AND (wp.id IS NULL OR wp.status=\'active\')
+                            AND (ep.user_id IS NULL OR ep.employment_status=\'active\')
                           ORDER BY u.id',
                 'integers' => ['id', 'worker_profile_id'],
                 'booleans' => ['is_disabled'],
@@ -195,13 +201,15 @@ final class OpsSnapshotService
             ],
             'application_entitlements' => [
                 'sql' => 'SELECT ae.id,ae.user_id,ae.application_key,ae.manual_enabled,0 AS automatic_enabled,0 AS oversight_enabled,
-                                 CASE WHEN ae.manual_enabled=1 AND u.is_disabled=0 AND u.deleted_at IS NULL
-                                           AND (wp.id IS NULL OR wp.status=\'active\') THEN 1 ELSE 0 END AS enabled,
+                                 CASE WHEN ae.enabled=1 AND ae.manual_enabled=1 AND u.is_disabled=0 AND u.deleted_at IS NULL
+                                           AND (wp.id IS NULL OR wp.status=\'active\')
+                                           AND (ep.user_id IS NULL OR ep.employment_status=\'active\') THEN 1 ELSE 0 END AS enabled,
                                  CASE WHEN u.role=\'admin\' THEN \'role-admin\' ELSE \'role-operator\' END AS role_key,
                                  ae.created_at,ae.updated_at
                           FROM application_entitlements ae
                           JOIN users u ON u.id=ae.user_id
                           LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+                          LEFT JOIN employee_profiles ep ON ep.user_id=u.id
                           WHERE ae.application_key=:application_key ORDER BY ae.id',
                 'integers' => ['id', 'user_id'],
                 'booleans' => ['enabled', 'manual_enabled', 'automatic_enabled', 'oversight_enabled'],

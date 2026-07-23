@@ -40,7 +40,7 @@ final class OpsSnapshotApiTest extends TestCase
         self::assertTrue($first['has_more']);
         self::assertSame(2, $first['next_page']);
         self::assertSame(2, $first['users'][0]['id']);
-        self::assertTrue($first['users'][0]['is_disabled']);
+        self::assertFalse($first['users'][0]['is_disabled']);
         self::assertArrayNotHasKey('password_hash', $first['users'][0]);
         self::assertArrayNotHasKey('auth_version', $first['users'][0]);
         self::assertArrayNotHasKey('public_project_token', $first['projects'][0]);
@@ -52,7 +52,7 @@ final class OpsSnapshotApiTest extends TestCase
         self::assertStringNotContainsString('100.00', $serialized);
         self::assertSame('01234', $first['service_locations'][0]['postal_code']);
         self::assertSame('field_operations', $first['application_entitlements'][0]['application_key']);
-        self::assertFalse($first['application_entitlements'][0]['enabled']);
+        self::assertTrue($first['application_entitlements'][0]['enabled']);
         self::assertSame('role-operator', $first['application_entitlements'][0]['role_key']);
         self::assertSame([], $first['application_entitlements'][0]['business_unit_ids']);
         self::assertSame(100, $first['operations'][0]['id']);
@@ -138,6 +138,9 @@ final class OpsSnapshotApiTest extends TestCase
             'CREATE TABLE worker_profiles (
                 id INTEGER PRIMARY KEY, user_id INTEGER, display_name TEXT, relationship_type TEXT, status TEXT
             )',
+            'CREATE TABLE employee_profiles (
+                user_id INTEGER PRIMARY KEY, employment_status TEXT
+            )',
             'CREATE TABLE business_units (
                 id INTEGER PRIMARY KEY, name TEXT, code TEXT, description TEXT, is_active INTEGER,
                 created_by INTEGER, created_at TEXT, updated_at TEXT
@@ -210,9 +213,10 @@ final class OpsSnapshotApiTest extends TestCase
     {
         $this->pdo->exec("INSERT INTO users VALUES
             (1,'beau@example.test','beau','owner',0,NULL,'2026-01-01','2026-07-01','secret',1),
-            (2,'kollins@example.test','kollins','employee',1,NULL,'2026-01-02','2026-07-02','secret',1)");
+            (2,'kollins@example.test','kollins','employee',0,NULL,'2026-01-02','2026-07-02','secret',1)");
         $this->pdo->exec("INSERT INTO worker_profiles VALUES
-            (10,1,'Beau','owner','active'),(20,2,'Kollins','employee','inactive')");
+            (10,1,'Beau','owner','active'),(20,2,'Kollins','employee','active')");
+        $this->pdo->exec("INSERT INTO employee_profiles VALUES (2,'active')");
         $this->pdo->exec("INSERT INTO business_units VALUES
             (30,'Chippewa Falls','CF','Chippewa Falls division',1,1,'2026-01-01','2026-07-01')");
         $this->pdo->exec("INSERT INTO worker_business_units VALUES

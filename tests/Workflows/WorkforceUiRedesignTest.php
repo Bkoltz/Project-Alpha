@@ -65,7 +65,7 @@ final class WorkforceUiRedesignTest extends TestCase
         $pay = (string)file_get_contents($this->root . '/src/views/pages/workforce/pay.php');
         $views = $time . $review . $pay;
         $actions = [
-            'correction-request', 'correction-approve', 'correction-reject',
+            'correction-approve', 'correction-reject',
             'correction-billing-resolve', 'worker-payment-record', 'worker-payment-void',
             'payroll-export-generate', 'payroll-export-void',
         ];
@@ -75,6 +75,12 @@ final class WorkforceUiRedesignTest extends TestCase
             self::assertStringContainsString('name="action" value="' . $action . '"', $views);
             self::assertSame('POST', WorkforceCommandRegistry::require($action)['method']);
             self::assertTrue(WorkforceCommandRegistry::require($action)['csrf']);
+        }
+        foreach (['correction-request','admin-correction-apply'] as $conditionalAction) {
+            self::assertContains($conditionalAction, WorkforceCommandRegistry::actions());
+            self::assertStringContainsString("'" . $conditionalAction . "'", $time);
+            self::assertSame('POST', WorkforceCommandRegistry::require($conditionalAction)['method']);
+            self::assertTrue(WorkforceCommandRegistry::require($conditionalAction)['csrf']);
         }
         foreach (['entry_id', 'request_id', 'decision', 'worker_profile_id', 'statement_ids[]', 'allocation_amounts[]', 'export_key', 'earning_ids[]'] as $field) {
             self::assertStringContainsString('name="' . $field . '"', $views);
