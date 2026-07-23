@@ -379,7 +379,9 @@
                     const clientMatches = !clientId || !option.dataset.clientId || option.dataset.clientId === clientId;
                     const serviceMatches = select !== job || !service || !service.value
                         || option.dataset.serviceId === service.value;
-                    const visible = clientMatches && serviceMatches;
+                    const jobMatches = select !== invoice || !job || !job.value
+                        || option.dataset.jobId === job.value;
+                    const visible = clientMatches && serviceMatches && jobMatches;
                     option.hidden = !visible;
                     option.disabled = !visible;
                     if (!visible && option.selected) select.value = '';

@@ -49,6 +49,8 @@ final class WorkforceLedgerCorrectionsTest extends TestCase
         self::assertStringContainsString("\$method === 'base_overage'", $this->corrections);
         self::assertStringContainsString('refreshDraftInvoice', $this->corrections);
         self::assertStringContainsString('proposed time context conflicts with the selected invoice', $this->corrections);
+        self::assertStringContainsString('A correction can move time only to a mutable draft invoice.', $this->corrections);
+        self::assertStringContainsString('status,finalized_at FROM invoices WHERE id=?', $this->corrections);
         self::assertStringNotContainsString('DELETE FROM work_time_entries', $this->corrections);
     }
 
@@ -121,6 +123,48 @@ final class WorkforceLedgerCorrectionsTest extends TestCase
         self::assertStringContainsString('attachReplacementToDraftInvoice', $this->corrections);
         self::assertStringContainsString("'invoice_item_id' => \$sameInvoice ? \$allocation['invoice_item_id'] : null", $this->corrections);
         self::assertStringContainsString('SET bt.billed=0,bt.invoice_id=NULL,bt.invoice_item_id=NULL', $this->corrections);
+    }
+
+    public function testCorrectionCanMoveOnlyToMutableDraftInvoice(): void
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec(
+            'CREATE TABLE invoices (
+                id INTEGER PRIMARY KEY, client_id INTEGER, project_id INTEGER, job_id INTEGER,
+                status TEXT NOT NULL, finalized_at TEXT NULL
+            )'
+        );
+        $pdo->exec('CREATE TABLE jobs (id INTEGER PRIMARY KEY, client_id INTEGER, project_id INTEGER)');
+        $pdo->exec('INSERT INTO jobs VALUES (30,10,20)');
+        $pdo->exec(
+            "INSERT INTO invoices VALUES
+             (1,10,20,30,'draft',NULL),
+             (2,10,20,30,'sent','2026-07-22 12:00:00')"
+        );
+        $method = new ReflectionMethod(App\Services\TimeCorrectionService::class, 'validateBillingContext');
+        $method->setAccessible(true);
+        $service = new App\Services\TimeCorrectionService($pdo);
+        $proposal = [
+            'invoice_id' => 1, 'client_id' => null, 'project_id' => null,
+            'job_id' => null, 'billable' => 0,
+        ];
+
+        $validated = $method->invoke($service, $proposal, ['invoice_id' => null]);
+        self::assertSame(10, $validated['client_id']);
+        self::assertSame(20, $validated['project_id']);
+        self::assertSame(30, $validated['job_id']);
+
+        $proposal['invoice_id'] = 2;
+        try {
+            $method->invoke($service, $proposal, ['invoice_id' => null]);
+            self::fail('A correction moved time to a finalized invoice.');
+        } catch (DomainException $error) {
+            self::assertStringContainsString('mutable draft invoice', $error->getMessage());
+        }
+
+        $validatedFinalizedHistory = $method->invoke($service, $proposal, ['invoice_id' => 2]);
+        self::assertSame(2, $validatedFinalizedHistory['invoice_id']);
     }
 
     public function testBaseOverageCorrectionsUseImmutableJobPricing(): void

@@ -34,27 +34,37 @@ try {
         ]);
     } elseif (empty($config['enabled'])) {
         throw new DomainException('Enable and save the custom integration before managing synchronized records.');
-    } elseif ($action === 'save-entitlement') {
+    } elseif (in_array($action, ['grant-access','revoke-access','save-entitlement'], true)) {
+        if (!user_can($pdo, $actorUserId, 'users.manage', 0)) {
+            throw new DomainException('User-management permission is required to change external operations access.');
+        }
         $managedUserId = (int)($_POST['user_id'] ?? 0);
-        (new ExternalOpsIntegrationService())->saveAccountAccess(
-            $pdo,
-            $managedUserId,
-            (string)$config['application_key'],
-            !empty($_POST['enabled']),
-            $actorUserId
-        );
-        audit_log($pdo, !empty($_POST['enabled']) ? 'external_ops.access_granted' : 'external_ops.access_revoked', 'user', $managedUserId, [
-            'application_key' => (string)$config['application_key'],
-        ]);
+        $grant = $action === 'grant-access' || ($action === 'save-entitlement' && !empty($_POST['enabled']));
+        $service = new ExternalOpsIntegrationService();
+        $result = $grant
+            ? $service->grantAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId, (string)$config['label'])
+            : $service->revokeAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId, (string)$config['label']);
+        $displayLabel = trim((string)($config['label'] ?? 'External operations')) ?: 'External operations';
+        $message = $grant
+            ? ($result['changed'] ? $displayLabel . ' access was granted.' : $displayLabel . ' access was already granted.')
+            : ($result['changed'] ? $displayLabel . ' access was revoked.' : $displayLabel . ' access was already revoked.');
     } elseif ($action === 'send-now') {
         (new ExternalOpsOutboxSender())->deliverDue($pdo, $config, 50);
     } else {
         throw new DomainException('Unknown integration action.');
     }
 
-    header('Location: /?page=settings&tab=external-ops&saved=1');
+    $returnTo = trim((string)($_POST['return_to'] ?? ''));
+    $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
+        ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&success=' . rawurlencode($message ?? 'Saved')
+        : '/?page=settings&tab=external-ops&saved=1' . (isset($message) ? '&message=' . rawurlencode($message) : '');
+    header('Location: ' . $location);
 } catch (Throwable $error) {
     error_log('[external_ops_settings] ' . $error->getMessage());
-    header('Location: /?page=settings&tab=external-ops&saved=0&error=' . rawurlencode($error->getMessage()));
+    $returnTo = trim((string)($_POST['return_to'] ?? ''));
+    $location = $returnTo === 'account-edit' && !empty($_POST['user_id'])
+        ? '/?page=account-edit&id=' . (int)$_POST['user_id'] . '&error=' . rawurlencode($error->getMessage())
+        : '/?page=settings&tab=external-ops&saved=0&error=' . rawurlencode($error->getMessage());
+    header('Location: ' . $location);
 }
 exit;

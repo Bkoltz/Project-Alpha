@@ -329,17 +329,12 @@ try {
     $externalOpsConfig = pa_external_ops_delivery_config($pdo);
     if (!empty($externalOpsConfig['enabled'])) {
         $externalOps = new \App\Services\ExternalOpsIntegrationService();
-        $existingOps = $pdo->prepare('SELECT id FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1');
-        $existingOps->execute([$userId, (string)$externalOpsConfig['application_key']]);
-        if (!empty($_POST['external_ops_enabled']) || $existingOps->fetchColumn() !== false) {
-            $externalOps->saveAccountAccess(
-                $pdo,
-                $userId,
-                (string)$externalOpsConfig['application_key'],
-                !empty($_POST['external_ops_enabled']),
-                (int)$_SESSION['user']['id']
-            );
-        }
+        $externalOps->refreshGrantedAccount(
+            $pdo,
+            $userId,
+            (string)$externalOpsConfig['application_key'],
+            (int)$_SESSION['user']['id']
+        );
         $currentAssignmentStmt = $pdo->prepare('SELECT id,project_id,user_id,assigned_at,ends_at,created_by,created_at,updated_at,1 active FROM project_assignments WHERE user_id=? AND (ends_at IS NULL OR ends_at>UTC_TIMESTAMP(6))');
         $currentAssignmentStmt->execute([$userId]);
         $currentAssignments = [];
@@ -355,7 +350,7 @@ try {
 
     $pdo->commit();
 
-    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds), 'external_ops_selected' => !empty($_POST['external_ops_enabled'])]);
+    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds)]);
     header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

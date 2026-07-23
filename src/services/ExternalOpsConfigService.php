@@ -54,7 +54,7 @@ final class ExternalOpsConfigService
         return [
             'enabled' => filter_var($values['external_ops_enabled'] ?? 'false', FILTER_VALIDATE_BOOLEAN),
             'application_key' => $applicationKey,
-            'label' => trim((string)($values['external_ops_label'] ?? 'External Operations')) ?: 'External Operations',
+            'label' => trim((string)($values['external_ops_label'] ?? 'External operations')) ?: 'External operations',
             'webhook_url' => trim((string)($values['external_ops_webhook_url'] ?? '')),
             'access_client_id' => trim((string)($credentials['access_client_id'] ?? '')),
             'access_client_secret' => trim((string)($credentials['access_client_secret'] ?? '')),
@@ -70,7 +70,7 @@ final class ExternalOpsConfigService
     {
         $current = $this->load($pdo);
         $enabled = !empty($input['enabled']);
-        $label = trim((string)($input['label'] ?? '')) ?: 'External Operations';
+        $label = trim((string)($input['label'] ?? '')) ?: 'External operations';
         $applicationKeyInput = trim((string)($input['application_key'] ?? $current['application_key']));
         $applicationKey = $applicationKeyInput === ''
             ? ''

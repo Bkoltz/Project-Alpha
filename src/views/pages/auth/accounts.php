@@ -5,7 +5,6 @@ require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/acl.php';
-require_once __DIR__ . '/../../../utils/external_ops.php';
 
 // Ensure user is logged in and is an admin
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
@@ -17,10 +16,6 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
 }
 
 $csrf = csrf_token();
-$externalOpsConfig = pa_external_ops_delivery_config($pdo);
-$externalOpsAvailable = !empty($externalOpsConfig['enabled']);
-$externalOpsLabel = trim((string)($externalOpsConfig['label'] ?? 'External Operations')) ?: 'External Operations';
-
 $activeProjects = [];
 try {
     $projectStmt = $pdo->query("SELECT id,name FROM projects WHERE status NOT IN ('completed','cancelled') ORDER BY name");
@@ -301,16 +296,6 @@ if (!isset($roleDefaults[(string)$defaultCreateRoleId]) || empty($roleDefaults[(
             <?php if (!$activeProjects): ?><p style="margin:0;color:#6b7280">No active projects are available.</p><?php endif; ?>
           </div>
         </div>
-
-        <?php if ($externalOpsAvailable): ?>
-        <div class="pa-create-card" style="margin-bottom:16px;">
-          <h3><?php echo htmlspecialchars($externalOpsLabel); ?> access</h3>
-          <label style="display:flex;flex-direction:row;align-items:flex-start;gap:10px;">
-            <input type="checkbox" name="external_ops_enabled" value="1" style="width:auto;margin-top:3px">
-            <span><strong>Allow this account to sign in to <?php echo htmlspecialchars($externalOpsLabel); ?></strong><br><small style="color:#6b7280">PA administrators receive global access. Other users see only Projects, Operations, and Tasks assigned to them.</small></span>
-          </label>
-        </div>
-        <?php endif; ?>
 
         <div id="permissions-panel" class="pa-create-card" style="margin-bottom:16px;">
           <h3>Permissions</h3>

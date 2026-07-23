@@ -61,11 +61,194 @@ final class ExternalOpsIntegrationService
         ],
     ];
 
+    /** @return array{event_id:?string,entitlement_id:int,effective_enabled:bool,changed:bool} */
+    public function grantAccountAccess(
+        PDO $pdo,
+        int $userId,
+        string $applicationKey,
+        int $actorUserId,
+        string $displayLabel = 'External operations'
+    ): array {
+        if ($userId < 1 || $actorUserId < 1) {
+            throw new DomainException('A valid user and administrator are required.');
+        }
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $ownsTransaction = !$pdo->inTransaction();
+        try {
+            if ($ownsTransaction) {
+                $pdo->beginTransaction();
+            }
+            $account = $this->accountForUpdate($pdo, $userId);
+            if (!empty($account['deleted_at'])) {
+                throw new DomainException('Deleted accounts must be restored before external operations access can be granted.');
+            }
+            if (($account['worker_status'] ?? '') === 'terminated'
+                || ($account['employment_status'] ?? '') === 'terminated') {
+                throw new DomainException('Terminated workers must be restored separately before external operations access can be granted.');
+            }
+
+            $accountReactivated = !empty($account['is_disabled'])
+                || ($account['worker_status'] ?? '') === 'inactive'
+                || ($account['employment_status'] ?? '') === 'inactive';
+            if (!empty($account['is_disabled'])) {
+                $pdo->prepare('UPDATE users SET is_disabled=0,auth_version=auth_version+1 WHERE id=?')->execute([$userId]);
+            }
+            $pdo->prepare("UPDATE worker_profiles SET status='active',ended_at=NULL WHERE user_id=? AND status='inactive'")->execute([$userId]);
+            $pdo->prepare("UPDATE employee_profiles SET employment_status='active',terminated_at=NULL WHERE user_id=? AND employment_status='inactive'")->execute([$userId]);
+            $pdo->prepare("UPDATE team_members SET is_active=1 WHERE user_id=? AND profile_source='pa'")->execute([$userId]);
+
+            $roleKey = (string)$account['role'] === 'admin' ? 'role-admin' : 'role-operator';
+            $suffix = $this->forUpdateSuffix($pdo);
+            $existing = $pdo->prepare('SELECT * FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1' . $suffix);
+            $existing->execute([$userId, $applicationKey]);
+            $entitlement = $existing->fetch(PDO::FETCH_ASSOC) ?: null;
+            $entitlementId = (int)($entitlement['id'] ?? 0);
+            $scopeCount = 0;
+            if ($entitlementId > 0) {
+                $scope = $pdo->prepare(
+                    'SELECT (SELECT COUNT(*) FROM application_entitlement_business_units WHERE entitlement_id=?)
+                          + (SELECT COUNT(*) FROM application_entitlement_oversight_units WHERE entitlement_id=?)'
+                );
+                $scope->execute([$entitlementId, $entitlementId]);
+                $scopeCount = (int)$scope->fetchColumn();
+            }
+            $changed = $accountReactivated || $entitlement === null || $scopeCount > 0
+                || (int)($entitlement['enabled'] ?? 0) !== 1
+                || (int)($entitlement['manual_enabled'] ?? 0) !== 1
+                || (int)($entitlement['automatic_enabled'] ?? 0) !== 0
+                || (int)($entitlement['oversight_enabled'] ?? 0) !== 0
+                || (string)($entitlement['role_key'] ?? '') !== $roleKey;
+
+            if ($entitlementId > 0) {
+                $pdo->prepare('UPDATE application_entitlements SET enabled=1,manual_enabled=1,automatic_enabled=0,oversight_enabled=0,role_key=?,updated_by=? WHERE id=?')
+                    ->execute([$roleKey, $actorUserId, $entitlementId]);
+            } else {
+                $pdo->prepare('INSERT INTO application_entitlements (user_id,application_key,enabled,manual_enabled,automatic_enabled,oversight_enabled,role_key,created_by,updated_by) VALUES (?,?,1,1,0,0,?,?,?)')
+                    ->execute([$userId, $applicationKey, $roleKey, $actorUserId, $actorUserId]);
+                $entitlementId = (int)$pdo->lastInsertId();
+            }
+            $this->clearScopes($pdo, $entitlementId);
+
+            $eventId = $changed
+                ? $this->enqueueCurrentState($pdo, $userId, $applicationKey, 'application_entitlement.changed')
+                : null;
+            if ($changed && $eventId === null) {
+                throw new RuntimeException('Failed to queue the external access grant.');
+            }
+            if ($changed) {
+                $this->recordAccessAudit($pdo, $actorUserId, 'external_application.access_granted', $userId, [
+                    'application_key' => $applicationKey,
+                    'display_label' => $this->normalizeDisplayLabel($displayLabel),
+                    'role_key' => $roleKey,
+                    'account_reactivated' => $accountReactivated,
+                ]);
+            }
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+            return ['event_id' => $eventId, 'entitlement_id' => $entitlementId, 'effective_enabled' => true, 'changed' => $changed];
+        } catch (Throwable $error) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    /** @return array{event_id:?string,entitlement_id:int,effective_enabled:bool,changed:bool} */
+    public function revokeAccountAccess(
+        PDO $pdo,
+        int $userId,
+        string $applicationKey,
+        int $actorUserId,
+        string $displayLabel = 'External operations'
+    ): array {
+        if ($userId < 1 || $actorUserId < 1) {
+            throw new DomainException('A valid user and administrator are required.');
+        }
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $ownsTransaction = !$pdo->inTransaction();
+        try {
+            if ($ownsTransaction) {
+                $pdo->beginTransaction();
+            }
+            $account = $this->accountForUpdate($pdo, $userId);
+            $statement = $pdo->prepare('SELECT * FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1' . $this->forUpdateSuffix($pdo));
+            $statement->execute([$userId, $applicationKey]);
+            $entitlement = $statement->fetch(PDO::FETCH_ASSOC) ?: null;
+            if ($entitlement === null) {
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
+                return ['event_id' => null, 'entitlement_id' => 0, 'effective_enabled' => false, 'changed' => false];
+            }
+            $entitlementId = (int)$entitlement['id'];
+            $changed = !empty($entitlement['enabled'])
+                || !empty($entitlement['manual_enabled'])
+                || !empty($entitlement['automatic_enabled'])
+                || !empty($entitlement['oversight_enabled']);
+            $roleKey = (string)$account['role'] === 'admin' ? 'role-admin' : 'role-operator';
+            $changed = $changed || (string)$entitlement['role_key'] !== $roleKey;
+            $pdo->prepare('UPDATE application_entitlements SET enabled=0,manual_enabled=0,automatic_enabled=0,oversight_enabled=0,role_key=?,updated_by=? WHERE id=?')
+                ->execute([$roleKey, $actorUserId, $entitlementId]);
+            $this->clearScopes($pdo, $entitlementId);
+            $eventId = $changed
+                ? $this->enqueueCurrentState($pdo, $userId, $applicationKey, 'application_entitlement.revoked')
+                : null;
+            if ($changed && $eventId === null) {
+                throw new RuntimeException('Failed to queue the external access revocation.');
+            }
+            if ($changed) {
+                $this->recordAccessAudit($pdo, $actorUserId, 'external_application.access_revoked', $userId, [
+                    'application_key' => $applicationKey,
+                    'display_label' => $this->normalizeDisplayLabel($displayLabel),
+                    'role_key' => $roleKey,
+                ]);
+            }
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+            return ['event_id' => $eventId, 'entitlement_id' => $entitlementId, 'effective_enabled' => false, 'changed' => $changed];
+        } catch (Throwable $error) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    /** @return array{event_id:?string,entitlement_id:int,effective_enabled:bool,changed:bool}|null */
+    public function refreshGrantedAccount(PDO $pdo, int $userId, string $applicationKey, int $actorUserId): ?array
+    {
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $statement = $pdo->prepare('SELECT id,enabled,manual_enabled FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1');
+        $statement->execute([$userId, $applicationKey]);
+        $entitlement = $statement->fetch(PDO::FETCH_ASSOC);
+        if (!$entitlement || empty($entitlement['enabled']) || empty($entitlement['manual_enabled'])) {
+            return null;
+        }
+        $account = $this->accountForUpdate($pdo, $userId);
+        $workerStatus = (string)($account['worker_status'] ?? '');
+        $employmentStatus = (string)($account['employment_status'] ?? '');
+        if (!empty($account['is_disabled']) || !empty($account['deleted_at'])
+            || in_array($workerStatus, ['inactive','terminated'], true)
+            || in_array($employmentStatus, ['inactive','terminated'], true)) {
+            return $this->revokeAccountAccess($pdo, $userId, $applicationKey, $actorUserId);
+        }
+        $roleKey = (string)$account['role'] === 'admin' ? 'role-admin' : 'role-operator';
+        $pdo->prepare('UPDATE application_entitlements SET role_key=?,manual_enabled=1,automatic_enabled=0,oversight_enabled=0,updated_by=? WHERE id=?')
+            ->execute([$roleKey, $actorUserId, (int)$entitlement['id']]);
+        $this->clearScopes($pdo, (int)$entitlement['id']);
+        $eventId = $this->enqueueCurrentState($pdo, $userId, $applicationKey, 'application_entitlement.changed');
+        return ['event_id' => $eventId, 'entitlement_id' => (int)$entitlement['id'], 'effective_enabled' => true, 'changed' => true];
+    }
+
     /**
-     * Save the administrator-controlled external application allowlist entry.
+     * Backward-compatible adapter. New controllers use the explicit grant and
+     * revoke methods so a checkbox can never represent partial access.
      *
      * @param list<int>|null $businessUnitIds Deprecated compatibility argument.
-     * @return array{event_id:string,entitlement_id:int}
+     * @return array{event_id:?string,entitlement_id:int,effective_enabled:bool,changed:bool}
      */
     public function saveAccountAccess(
         PDO $pdo,
@@ -75,7 +258,9 @@ final class ExternalOpsIntegrationService
         int $actorUserId,
         ?array $businessUnitIds = null
     ): array {
-        return $this->persistEntitlement($pdo, $userId, $applicationKey, $requestedAccess, [], $actorUserId);
+        return $requestedAccess
+            ? $this->grantAccountAccess($pdo, $userId, $applicationKey, $actorUserId)
+            : $this->revokeAccountAccess($pdo, $userId, $applicationKey, $actorUserId);
     }
 
     /**
@@ -96,94 +281,7 @@ final class ExternalOpsIntegrationService
         if ($existing === false) {
             return null;
         }
-        return $this->recomputeEntitlement($pdo, $userId, $applicationKey, $actorUserId);
-    }
-
-    /**
-     * @param list<int> $businessUnitIds
-     * @return array{event_id:string,entitlement_id:int}
-     */
-    private function persistEntitlement(
-        PDO $pdo,
-        int $userId,
-        string $applicationKey,
-        bool $manualEnabled,
-        array $businessUnitIds,
-        int $actorUserId
-    ): array {
-        if ($userId < 1 || $actorUserId < 1) {
-            throw new DomainException('A valid user and administrator are required.');
-        }
-        $applicationKey = self::normalizeApplicationKey($applicationKey);
-        $businessUnitIds = array_values(array_unique(array_filter(
-            array_map('intval', $businessUnitIds),
-            static fn(int $id): bool => $id > 0
-        )));
-        $ownsTransaction = !$pdo->inTransaction();
-
-        try {
-            if ($ownsTransaction) {
-                $pdo->beginTransaction();
-            }
-
-            $account = $this->account($pdo, $userId);
-            $roleKey = $account['role'] === 'admin' ? 'role-admin' : 'role-operator';
-            $automaticEnabled = false;
-            $effectiveEnabled = !empty($account['active']) && $manualEnabled;
-            $oversightEnabled = false;
-
-            $existing = $pdo->prepare('SELECT id FROM application_entitlements WHERE user_id = ? AND application_key = ? LIMIT 1');
-            $existing->execute([$userId, $applicationKey]);
-            $entitlementId = (int)($existing->fetchColumn() ?: 0);
-            if ($entitlementId > 0) {
-                $pdo->prepare('UPDATE application_entitlements SET enabled=?,manual_enabled=?,automatic_enabled=?,oversight_enabled=?,role_key=?,updated_by=? WHERE id=?')
-                    ->execute([$effectiveEnabled ? 1 : 0, $manualEnabled ? 1 : 0, $automaticEnabled ? 1 : 0, $oversightEnabled ? 1 : 0, $roleKey, $actorUserId, $entitlementId]);
-            } else {
-                $pdo->prepare('INSERT INTO application_entitlements (user_id,application_key,enabled,manual_enabled,automatic_enabled,oversight_enabled,role_key,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?)')
-                    ->execute([$userId, $applicationKey, $effectiveEnabled ? 1 : 0, $manualEnabled ? 1 : 0, $automaticEnabled ? 1 : 0, $oversightEnabled ? 1 : 0, $roleKey, $actorUserId, $actorUserId]);
-                $entitlementId = (int)$pdo->lastInsertId();
-            }
-
-            $pdo->prepare('DELETE FROM application_entitlement_business_units WHERE entitlement_id = ?')->execute([$entitlementId]);
-            $pdo->prepare('DELETE FROM application_entitlement_oversight_units WHERE entitlement_id = ?')->execute([$entitlementId]);
-
-            $eventId = $this->enqueueCurrentState(
-                $pdo,
-                $userId,
-                $applicationKey,
-                $effectiveEnabled ? 'application_entitlement.changed' : 'application_entitlement.revoked'
-            );
-            if ($eventId === null) {
-                throw new RuntimeException('Failed to queue the entitlement change.');
-            }
-
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            return ['event_id' => $eventId, 'entitlement_id' => $entitlementId];
-        } catch (Throwable $error) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $error;
-        }
-    }
-
-    /** @return array{event_id:string,entitlement_id:int} */
-    private function recomputeEntitlement(PDO $pdo, int $userId, string $applicationKey, int $actorUserId): array
-    {
-        $applicationKey = self::normalizeApplicationKey($applicationKey);
-        $statement = $pdo->prepare('SELECT manual_enabled FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1');
-        $statement->execute([$userId, $applicationKey]);
-        $manualEnabled = (bool)($statement->fetchColumn() ?: false);
-        return $this->persistEntitlement(
-            $pdo,
-            $userId,
-            $applicationKey,
-            $manualEnabled,
-            [],
-            $actorUserId
-        );
+        return $this->refreshGrantedAccount($pdo, $userId, $applicationKey, $actorUserId);
     }
 
     public function enqueueCurrentState(PDO $pdo, int $userId, string $applicationKey, string $eventType = 'user.changed'): ?string
@@ -211,10 +309,12 @@ final class ExternalOpsIntegrationService
     {
         $statement = $pdo->prepare(
             'SELECT ae.id AS entitlement_id,ae.application_key,ae.enabled,ae.manual_enabled,ae.automatic_enabled,ae.oversight_enabled,
-                    u.id AS user_id,u.email,u.username,u.role,u.is_disabled,u.deleted_at,wp.display_name,wp.status AS worker_status
+                    u.id AS user_id,u.email,u.username,u.role,u.is_disabled,u.deleted_at,wp.display_name,wp.status AS worker_status,
+                    ep.employment_status
              FROM application_entitlements ae
              JOIN users u ON u.id = ae.user_id
              LEFT JOIN worker_profiles wp ON wp.user_id = u.id
+             LEFT JOIN employee_profiles ep ON ep.user_id = u.id
              WHERE ae.user_id = ? AND ae.application_key = ?
              LIMIT 1'
         );
@@ -226,9 +326,11 @@ final class ExternalOpsIntegrationService
 
         $isAdmin = (string)$row['role'] === 'admin';
         $workerStatus = trim((string)($row['worker_status'] ?? ''));
+        $employmentStatus = trim((string)($row['employment_status'] ?? ''));
         $userActive = empty($row['is_disabled'])
             && empty($row['deleted_at'])
-            && ($workerStatus === '' || $workerStatus === 'active');
+            && ($workerStatus === '' || $workerStatus === 'active')
+            && ($employmentStatus === '' || $employmentStatus === 'active');
 
         return [
             'user' => [
@@ -239,7 +341,7 @@ final class ExternalOpsIntegrationService
             ],
             'entitlement' => [
                 'application_key' => (string)$row['application_key'],
-                'enabled' => !empty($row['enabled']) && $userActive,
+                'enabled' => !empty($row['enabled']) && !empty($row['manual_enabled']) && $userActive,
                 'role_key' => $isAdmin ? 'role-admin' : 'role-operator',
                 'business_unit_ids' => [],
                 'oversight_business_unit_ids' => [],
@@ -337,17 +439,55 @@ final class ExternalOpsIntegrationService
         return $applicationKey;
     }
 
-    /** @return array{role:string,active:bool} */
-    private function account(PDO $pdo, int $userId): array
+    /** @return array<string,mixed> */
+    private function accountForUpdate(PDO $pdo, int $userId): array
     {
-        $statement = $pdo->prepare('SELECT u.role,u.is_disabled,u.deleted_at,wp.status AS worker_status FROM users u LEFT JOIN worker_profiles wp ON wp.user_id=u.id WHERE u.id=? LIMIT 1');
+        $statement = $pdo->prepare(
+            'SELECT u.role,u.is_disabled,u.deleted_at,wp.status AS worker_status,ep.employment_status
+             FROM users u
+             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+             LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+             WHERE u.id=? LIMIT 1' . $this->forUpdateSuffix($pdo)
+        );
         $statement->execute([$userId]);
         $account = $statement->fetch(PDO::FETCH_ASSOC);
         if (!is_array($account)) {
             throw new DomainException('User not found.');
         }
-        $workerStatus = trim((string)($account['worker_status'] ?? ''));
-        return ['role' => (string)$account['role'], 'active' => empty($account['is_disabled']) && empty($account['deleted_at']) && ($workerStatus === '' || $workerStatus === 'active')];
+        return $account;
+    }
+
+    private function clearScopes(PDO $pdo, int $entitlementId): void
+    {
+        $pdo->prepare('DELETE FROM application_entitlement_business_units WHERE entitlement_id=?')->execute([$entitlementId]);
+        $pdo->prepare('DELETE FROM application_entitlement_oversight_units WHERE entitlement_id=?')->execute([$entitlementId]);
+    }
+
+    /** @param array<string,mixed> $details */
+    private function recordAccessAudit(PDO $pdo, int $actorId, string $action, int $userId, array $details): void
+    {
+        $pdo->prepare(
+            'INSERT INTO system_audit (user_id,action,entity_type,entity_id,details)
+             VALUES (?,?,?,?,?)'
+        )->execute([
+            $actorId,
+            $action,
+            'user',
+            $userId,
+            json_encode($details, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+        ]);
+        $GLOBALS['__audit_logged'] = true;
+    }
+
+    private function forUpdateSuffix(PDO $pdo): string
+    {
+        return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+    }
+
+    private function normalizeDisplayLabel(string $displayLabel): string
+    {
+        $displayLabel = trim($displayLabel);
+        return $displayLabel !== '' ? mb_substr($displayLabel, 0, 100) : 'External operations';
     }
 
     private function uuidV4(): string

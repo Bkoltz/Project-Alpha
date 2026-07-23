@@ -24,7 +24,7 @@ $stmt = $pdo->prepare('SELECT id, email, username, role, is_disabled, force_pass
     document_sender_enabled, document_sender_name, document_sender_company,
     document_sender_address_line1, document_sender_address_line2,
     document_sender_city, document_sender_state, document_sender_postal,
-    document_sender_country, document_sender_phone, document_sender_email
+    document_sender_country, document_sender_phone, document_sender_email,deleted_at
     FROM users WHERE id = ?');
 $stmt->execute([$userId]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -36,18 +36,33 @@ if (!$user) {
 
 $externalOpsConfig = pa_external_ops_delivery_config($pdo);
 $externalOpsAvailable = !empty($externalOpsConfig['enabled']);
-$externalOpsLabel = trim((string)($externalOpsConfig['label'] ?? 'External Operations')) ?: 'External Operations';
+$externalOpsLabel = trim((string)($externalOpsConfig['label'] ?? 'External operations')) ?: 'External operations';
 $externalOpsEntitlementExists = false;
 $externalOpsEntitlementEnabled = false;
+$externalOpsManualEnabled = false;
+$externalOpsWorkerStatus = '';
+$externalOpsEmploymentStatus = '';
+$externalOpsDeliveryStatus = null;
 if ($externalOpsAvailable) {
     try {
         $externalOpsStatement = $pdo->prepare(
-            'SELECT manual_enabled FROM application_entitlements WHERE user_id=? AND application_key=? LIMIT 1'
+            'SELECT ae.id entitlement_id,ae.enabled,ae.manual_enabled,wp.status worker_status,ep.employment_status
+             FROM users u
+             LEFT JOIN application_entitlements ae ON ae.user_id=u.id AND ae.application_key=?
+             LEFT JOIN worker_profiles wp ON wp.user_id=u.id
+             LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+             WHERE u.id=? LIMIT 1'
         );
-        $externalOpsStatement->execute([$userId, (string)$externalOpsConfig['application_key']]);
-        $externalOpsValue = $externalOpsStatement->fetchColumn();
-        $externalOpsEntitlementExists = $externalOpsValue !== false;
-        $externalOpsEntitlementEnabled = $externalOpsEntitlementExists && !empty($externalOpsValue);
+        $externalOpsStatement->execute([(string)$externalOpsConfig['application_key'], $userId]);
+        $externalOpsValue = $externalOpsStatement->fetch(PDO::FETCH_ASSOC);
+        $externalOpsEntitlementExists = is_array($externalOpsValue) && !empty($externalOpsValue['entitlement_id']);
+        $externalOpsEntitlementEnabled = $externalOpsEntitlementExists && !empty($externalOpsValue['enabled']);
+        $externalOpsManualEnabled = $externalOpsEntitlementExists && !empty($externalOpsValue['manual_enabled']);
+        $externalOpsWorkerStatus = (string)($externalOpsValue['worker_status'] ?? '');
+        $externalOpsEmploymentStatus = (string)($externalOpsValue['employment_status'] ?? '');
+        $delivery = $pdo->prepare("SELECT delivered_at,attempts,last_error FROM integration_outbox WHERE integration_key=? AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.user.id'))=? ORDER BY id DESC LIMIT 1");
+        $delivery->execute([(string)$externalOpsConfig['application_key'], (string)$userId]);
+        $externalOpsDeliveryStatus = $delivery->fetch(PDO::FETCH_ASSOC) ?: null;
     } catch (Throwable $error) {
         @error_log('[account-edit] external Ops entitlement load failed: ' . $error->getMessage());
     }
@@ -218,6 +233,8 @@ try {
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">Password reset successfully.</div>
   <?php elseif ($success === 'updated'): ?>
     <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4">User updated successfully.</div>
+  <?php elseif (!empty($success)): ?>
+    <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#e6fffa;color:#065f46;border:1px solid #99f6e4"><?php echo e((string)$success); ?></div>
   <?php elseif (!empty($error)): ?>
     <div class="alert alert-danger"><?php echo e($error); ?></div>
   <?php endif; ?>
@@ -259,6 +276,7 @@ try {
     @media (max-width: 720px) {
       .pa-edit-grid { grid-template-columns: 1fr; }
       .pa-edit-sender-grid { grid-template-columns: 1fr; }
+      .pa-edit-project { grid-template-columns: 1fr; }
       .pa-personnel-upload { grid-template-columns:1fr; }
       .pa-personnel-upload .pa-span-2 { grid-column:auto; }
     }
@@ -414,16 +432,6 @@ try {
           </div>
         </div>
 
-        <?php if ($externalOpsAvailable): ?>
-        <div class="pa-edit-card" style="margin-bottom:16px;">
-          <h3 style="margin:0 0 8px;font-size:16px;"><?php echo e($externalOpsLabel); ?> access</h3>
-          <label style="display:flex;flex-direction:row;align-items:flex-start;gap:10px;">
-            <input type="checkbox" name="external_ops_enabled" value="1" <?php echo $externalOpsEntitlementEnabled ? 'checked' : ''; ?> style="width:auto;margin-top:3px">
-            <span><strong>Allow this account to sign in to <?php echo e($externalOpsLabel); ?></strong><br><small style="color:#6b7280">This selection is retained if the PA account is temporarily disabled. Non-administrators see assigned work only.</small></span>
-          </label>
-        </div>
-        <?php endif; ?>
-
         <div class="pa-edit-actionbar">
           <button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save Changes</button>
         </div>
@@ -436,18 +444,50 @@ try {
       unset($permissionsEmbedInParentForm);
     ?>
     </form>
+
+    <?php if ($externalOpsAvailable):
+      $externalOpsTerminated = in_array($externalOpsWorkerStatus, ['terminated'], true) || in_array($externalOpsEmploymentStatus, ['terminated'], true);
+      $externalOpsInactive = !empty($user['is_disabled']) || $externalOpsWorkerStatus === 'inactive' || $externalOpsEmploymentStatus === 'inactive';
+      $externalOpsEffective = $externalOpsEntitlementEnabled && $externalOpsManualEnabled && !$externalOpsInactive && !$externalOpsTerminated && empty($user['deleted_at']);
+      $externalOpsRoleLabel = $user['role'] === 'admin' ? 'Global external administrator' : 'Assigned-work operator';
+      $deliveryLabel = !$externalOpsDeliveryStatus ? 'No access event has been queued' : (!empty($externalOpsDeliveryStatus['delivered_at']) ? 'Delivered ' . $externalOpsDeliveryStatus['delivered_at'] : (!empty($externalOpsDeliveryStatus['last_error']) ? 'Retrying after a delivery error' : 'Queued for delivery'));
+      $grantExternalOpsLabel = 'Grant ' . $externalOpsLabel . ' access';
+      $revokeExternalOpsLabel = 'Revoke ' . $externalOpsLabel . ' access';
+    ?>
+    <div class="pa-edit-card" style="margin:16px 0;">
+      <h3 style="margin:0 0 8px;font-size:16px;"><?php echo e($externalOpsLabel); ?> access</h3>
+      <p style="margin:0 0 6px"><strong><?php echo $externalOpsEffective ? 'Access granted' : (!empty($user['deleted_at']) ? 'Unavailable — deleted' : ($externalOpsTerminated ? 'Unavailable — terminated' : ($externalOpsInactive ? 'Account inactive — granting access will reactivate it' : 'Not granted'))); ?></strong></p>
+      <p style="margin:0 0 6px;color:#6b7280;font-size:13px">Role: <?php echo e($externalOpsRoleLabel); ?>. Project, Operation, and Task assignments separately control what this user can see.</p>
+      <p style="margin:0 0 12px;color:#6b7280;font-size:13px">Synchronization: <?php echo e($deliveryLabel); ?></p>
+      <?php if (!$externalOpsTerminated && empty($user['deleted_at']) && !$externalOpsEffective): ?>
+      <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Grant external operations access? If this PA account is inactive, it will also be reactivated. Data visibility assignments will not be changed.')">
+        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="action" value="grant-access"><input type="hidden" name="user_id" value="<?php echo $userId; ?>"><input type="hidden" name="return_to" value="account-edit">
+        <button class="btn btn-primary" type="submit"><?php echo e($grantExternalOpsLabel); ?></button>
+      </form>
+      <?php elseif ($externalOpsEffective): ?>
+      <form method="post" action="/?page=settings/external-ops-handler" onsubmit="return confirm('Revoke external operations access? The Project Alpha account will remain active.')">
+        <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="action" value="revoke-access"><input type="hidden" name="user_id" value="<?php echo $userId; ?>"><input type="hidden" name="return_to" value="account-edit">
+        <button class="btn" type="submit"><?php echo e($revokeExternalOpsLabel); ?></button>
+      </form>
+      <?php else: ?><p style="margin:0;color:#92400e">Restore this worker separately before granting external operations access.</p><?php endif; ?>
+    </div>
+    <?php endif; ?>
     <script>
       window.PA_EDIT_ROLE_DEFAULTS = <?php echo json_encode($roleDefaults, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
       window.PA_EDIT_ROLE_META = <?php echo json_encode($roleMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
 
-      document.addEventListener('DOMContentLoaded', function() {
-        var roleSelect = document.getElementById('account-role-select');
-        var panel = document.getElementById('permissions-panel-edit');
-        var grid = document.getElementById('permissions-grid-edit');
-        var adminNote = document.getElementById('admin-permissions-note-edit');
-        var senderToggle = document.getElementById('document-sender-enabled');
-        var senderFields = document.getElementById('document-sender-fields');
-        var employeePanel = document.getElementById('employee-profile-panel');
+      function initAccountEditForm(context) {
+        var root = context && context.root ? context.root : document;
+        var form = root.querySelector('#account-edit-form');
+        if (!form || form.dataset.accountEditReady === '1') return;
+        form.dataset.accountEditReady = '1';
+        var roleSelect = root.querySelector('#account-role-select');
+        var panel = root.querySelector('#permissions-panel-edit');
+        var grid = root.querySelector('#permissions-grid-edit');
+        var adminNote = root.querySelector('#admin-permissions-note-edit');
+        var senderToggle = root.querySelector('#document-sender-enabled');
+        var senderFields = root.querySelector('#document-sender-fields');
+        var employeePanel = root.querySelector('#employee-profile-panel');
 
         function selectedRoleMeta() {
           if (!roleSelect || !window.PA_EDIT_ROLE_META) return {};
@@ -465,8 +505,8 @@ try {
           var defaults = selectedRoleDefaults();
           Object.keys(defaults).forEach(function(perm) {
             var key = perm.replace(/\./g, '_');
-            var allowCb = document.querySelector('#permissions-panel-edit input[name="allow_' + key + '"]');
-            var denyCb = document.querySelector('#permissions-panel-edit input[name="deny_' + key + '"]');
+            var allowCb = root.querySelector('#permissions-panel-edit input[name="allow_' + key + '"]');
+            var denyCb = root.querySelector('#permissions-panel-edit input[name="deny_' + key + '"]');
             if (allowCb && denyCb) {
               var allowed = !!defaults[perm];
               allowCb.checked = allowed;
@@ -517,7 +557,15 @@ try {
           senderToggle.addEventListener('change', updateSenderFields);
           updateSenderFields();
         }
-      });
+      }
+      initAccountEditForm.pageInitializerId = 'account-edit-form';
+      if (window.ProjectAlpha && typeof window.ProjectAlpha.registerPage === 'function') {
+        window.ProjectAlpha.registerPage('account-edit', initAccountEditForm);
+      } else if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAccountEditForm, { once: true });
+      } else {
+        initAccountEditForm();
+      }
     </script>
 
     <div class="pa-edit-card" id="personnel-documents">

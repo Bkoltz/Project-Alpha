@@ -82,6 +82,40 @@ final class ApprovalService
             && empty($identity['relationship_review_required']);
     }
 
+    /** @return array{confirmed:int,failed:list<string>} */
+    public function reconcileVerifiedOwnerEntries(int $ownerId): array
+    {
+        if (!$this->canSelfConfirmOwner($ownerId)) {
+            throw new DomainException('Verify the owner relationship before reconciling owner time.');
+        }
+        $statement = $this->pdo->prepare(
+            "SELECT t.id
+             FROM work_time_entries t
+             JOIN pay_periods period
+               ON DATE(t.start_time) BETWEEN period.period_start AND period.period_end
+              AND period.status='open'
+             WHERE t.user_id=?
+               AND t.end_time IS NOT NULL
+               AND t.duration_seconds>0
+               AND t.status='review'
+               AND t.workflow_status IN ('draft','returned','submitted')
+             ORDER BY t.start_time,t.id"
+        );
+        $statement->execute([$ownerId]);
+        $confirmed = 0;
+        $failed = [];
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $entryId) {
+            try {
+                $this->ensureOwnerProjection($ownerId, (string)$entryId);
+                $confirmed++;
+            } catch (Throwable $error) {
+                $failed[] = (string)$entryId;
+                @error_log('[owner-time-reconciliation] ' . $entryId . ': ' . $error->getMessage());
+            }
+        }
+        return ['confirmed' => $confirmed, 'failed' => $failed];
+    }
+
     /**
      * Keep an owner entry editable if snapshot materialization fails after the
      * capture service committed it. Owner entries are excluded from ordinary

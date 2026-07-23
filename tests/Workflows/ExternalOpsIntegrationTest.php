@@ -53,11 +53,14 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertStringNotContainsString('name="role_key"', $page);
         self::assertStringContainsString("'role-admin'", $migration);
         self::assertStringContainsString("'role-admin'", $baseline);
-        self::assertStringContainsString('saveAccountAccess(', $handler);
-        foreach (['accounts.php', 'account-edit.php'] as $accountPage) {
-            $accountForm = (string)file_get_contents($root . '/src/views/pages/auth/' . $accountPage);
-            self::assertStringContainsString('name="external_ops_enabled"', $accountForm);
-        }
+        self::assertStringContainsString('grantAccountAccess(', $handler);
+        self::assertStringContainsString('revokeAccountAccess(', $handler);
+        self::assertStringContainsString("user_can(\$pdo, \$actorUserId, 'users.manage'", $handler);
+        $accountCreate = (string)file_get_contents($root . '/src/views/pages/auth/accounts.php');
+        $accountEdit = (string)file_get_contents($root . '/src/views/pages/auth/account-edit.php');
+        self::assertStringNotContainsString('name="external_ops_enabled"', $accountCreate);
+        self::assertStringNotContainsString('name="external_ops_enabled"', $accountEdit);
+        self::assertStringContainsString('Grant external operations access', $accountEdit);
         $completionMigration = (string)file_get_contents($root . '/database/migrations/0055_business_unit_memberships_and_project_managers.sql');
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS business_unit_memberships', $completionMigration);
         self::assertStringContainsString('membership_role', $completionMigration);
@@ -205,8 +208,11 @@ final class ExternalOpsIntegrationTest extends TestCase
                 id INTEGER PRIMARY KEY AUTOINCREMENT, organization_id INTEGER DEFAULT 0,
                 config_key TEXT, config_value TEXT, UNIQUE(organization_id, config_key)
             )',
-            'CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, username TEXT, role TEXT, is_disabled INTEGER, deleted_at TEXT)',
-            'CREATE TABLE worker_profiles (id INTEGER PRIMARY KEY, user_id INTEGER, display_name TEXT, status TEXT)',
+            'CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, username TEXT, role TEXT, is_disabled INTEGER, deleted_at TEXT, auth_version INTEGER DEFAULT 1)',
+            'CREATE TABLE worker_profiles (id INTEGER PRIMARY KEY, user_id INTEGER, display_name TEXT, status TEXT, ended_at TEXT)',
+            'CREATE TABLE employee_profiles (user_id INTEGER PRIMARY KEY, employment_status TEXT, terminated_at TEXT)',
+            'CREATE TABLE team_members (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,display_name TEXT,email TEXT,is_active INTEGER,profile_source TEXT)',
+            'CREATE TABLE system_audit (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,details TEXT)',
             'CREATE TABLE worker_business_units (
                 worker_profile_id INTEGER, business_unit_id INTEGER, ends_at TEXT,
                 PRIMARY KEY(worker_profile_id,business_unit_id)
@@ -251,13 +257,18 @@ final class ExternalOpsIntegrationTest extends TestCase
             $this->pdo->exec($statement);
         }
 
-        $this->pdo->exec("INSERT INTO users VALUES
+        $this->pdo->exec("INSERT INTO users (id,email,username,role,is_disabled,deleted_at) VALUES
             (1,'admin@example.test','admin','admin',0,NULL),
             (2,'OPERATOR@EXAMPLE.TEST','operator','employee',0,NULL),
             (3,'owner@example.test','owner','owner',0,NULL)");
+        $this->pdo->exec("INSERT INTO employee_profiles VALUES (2,'active',NULL)");
+        $this->pdo->exec("INSERT INTO team_members (user_id,display_name,email,is_active,profile_source) VALUES
+            (1,'Admin','admin@example.test',1,'pa'),
+            (2,'Field Operator','operator@example.test',1,'pa'),
+            (3,'Business Owner','owner@example.test',1,'pa')");
         $this->pdo->exec("INSERT INTO worker_profiles VALUES
-            (20,2,'Field Operator','active'),
-            (21,3,'Business Owner','active')");
+            (20,2,'Field Operator','active',NULL),
+            (21,3,'Business Owner','active',NULL)");
         $this->pdo->exec("INSERT INTO business_units VALUES
             (30,'North Division',1),
             (31,'South Division',1),
@@ -291,18 +302,18 @@ final class ExternalOpsIntegrationTest extends TestCase
 
     }
 
-    public function testDisabledUserProducesEffectiveRevocation(): void
+    public function testDisablingGrantedUserProducesAtomicRevocationOnRefresh(): void
     {
         $service = new ExternalOpsIntegrationService();
         $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $this->pdo->exec('UPDATE users SET is_disabled=1 WHERE id=2');
-        $service->enqueueCurrentState($this->pdo, 2, 'ltds_ops', 'user.changed');
+        $service->refreshGrantedAccount($this->pdo, 2, 'ltds_ops', 1);
 
-        $payload = json_decode((string)$this->pdo->query(
-            'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
-        )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
+        $payload = $this->latestPayload();
+        self::assertSame('application_entitlement.revoked', $payload['event_type']);
         self::assertFalse($payload['user']['active']);
         self::assertFalse($payload['entitlement']['enabled']);
+        self::assertFalse($payload['entitlement']['manual_access']);
     }
 
     public function testAccountAccessDerivesAdminAndWorkerScopesWithoutTreatingOwnerAsAdmin(): void
@@ -324,25 +335,26 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertSame([], $ownerPayload['entitlement']['business_unit_ids']);
     }
 
-    public function testAccountAccessCheckboxAndDisabledStateProduceRevocations(): void
+    public function testGrantRevokeAndInactiveGrantAreConsistent(): void
     {
         $service = new ExternalOpsIntegrationService();
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', false, 1);
-        $uncheckedPayload = json_decode((string)$this->pdo->query(
-            'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
-        )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertFalse($uncheckedPayload['entitlement']['enabled']);
-
+        $service->grantAccountAccess($this->pdo, 2, 'ltds_ops', 1);
+        $revoked = $service->revokeAccountAccess($this->pdo, 2, 'ltds_ops', 1);
+        self::assertTrue($revoked['changed']);
+        self::assertSame('application_entitlement.revoked', $this->latestPayload()['event_type']);
         $this->pdo->exec('UPDATE users SET is_disabled=1 WHERE id=2');
-        $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
-        $disabledPayload = json_decode((string)$this->pdo->query(
-            'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
-        )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertFalse($disabledPayload['entitlement']['enabled']);
-        self::assertSame([], $disabledPayload['entitlement']['business_unit_ids']);
-        self::assertSame(0, (int)$this->pdo->query(
+        $this->pdo->exec("UPDATE worker_profiles SET status='inactive' WHERE user_id=2");
+        $this->pdo->exec("UPDATE employee_profiles SET employment_status='inactive' WHERE user_id=2");
+        $granted = $service->grantAccountAccess($this->pdo, 2, 'ltds_ops', 1);
+        self::assertTrue($granted['effective_enabled']);
+        $payload = $this->latestPayload();
+        self::assertTrue($payload['user']['active']);
+        self::assertTrue($payload['entitlement']['enabled']);
+        self::assertSame(0, (int)$this->pdo->query('SELECT is_disabled FROM users WHERE id=2')->fetchColumn());
+        self::assertSame('active', $this->pdo->query('SELECT status FROM worker_profiles WHERE user_id=2')->fetchColumn());
+        self::assertSame(1, (int)$this->pdo->query(
             "SELECT enabled FROM application_entitlements WHERE user_id=2 AND application_key='ltds_ops'"
-        )->fetchColumn(), 'Effective access is revoked while the PA account is inactive; the manual exception flag remains stored separately.');
+        )->fetchColumn());
     }
 
     public function testExplicitSelectionIgnoresDeprecatedBusinessUnitScopes(): void
@@ -395,7 +407,8 @@ final class ExternalOpsIntegrationTest extends TestCase
     public function testAdminAclCanBeDisabledWithoutAllowingRoleOverride(): void
     {
         $service = new ExternalOpsIntegrationService();
-        $service->saveAccountAccess($this->pdo, 1, 'ltds_ops', false, 1, [30]);
+        $service->grantAccountAccess($this->pdo, 1, 'ltds_ops', 1);
+        $service->revokeAccountAccess($this->pdo, 1, 'ltds_ops', 1);
         $payload = $this->latestPayload();
 
         self::assertFalse($payload['entitlement']['enabled']);
@@ -408,13 +421,151 @@ final class ExternalOpsIntegrationTest extends TestCase
         $service = new ExternalOpsIntegrationService();
         $service->saveAccountAccess($this->pdo, 2, 'ltds_ops', true, 1, [30]);
         $this->pdo->exec("UPDATE worker_profiles SET status='terminated' WHERE user_id=2");
-        $service->enqueueCurrentState($this->pdo, 2, 'ltds_ops', 'user.changed');
+        $service->refreshGrantedAccount($this->pdo, 2, 'ltds_ops', 1);
 
         $payload = json_decode((string)$this->pdo->query(
             'SELECT payload_json FROM integration_outbox ORDER BY id DESC LIMIT 1'
         )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
         self::assertFalse($payload['user']['active']);
         self::assertFalse($payload['entitlement']['enabled']);
+        self::assertSame('application_entitlement.revoked', $payload['event_type']);
+    }
+
+    public function testRepeatedGrantAndRevokeAreIdempotent(): void
+    {
+        $service = new ExternalOpsIntegrationService();
+        $first = $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
+        $second = $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
+        self::assertTrue($first['changed']);
+        self::assertFalse($second['changed']);
+        self::assertNull($second['event_id']);
+        self::assertSame(1, (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn());
+
+        $firstRevoke = $service->revokeAccountAccess($this->pdo, 2, 'external_operations', 1);
+        $secondRevoke = $service->revokeAccountAccess($this->pdo, 2, 'external_operations', 1);
+        self::assertTrue($firstRevoke['changed']);
+        self::assertFalse($secondRevoke['changed']);
+        self::assertNull($secondRevoke['event_id']);
+        self::assertSame(2, (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn());
+    }
+
+    public function testEnabledRowWithoutExplicitSelectionIsNotEffectiveAccess(): void
+    {
+        $this->pdo->exec(
+            "INSERT INTO application_entitlements
+             (user_id,application_key,enabled,manual_enabled,automatic_enabled,oversight_enabled,role_key,created_by,updated_by)
+             VALUES (2,'external_operations',1,0,0,0,'role-operator',1,1)"
+        );
+        $service = new ExternalOpsIntegrationService();
+        self::assertNull($service->refreshGrantedAccount($this->pdo, 2, 'external_operations', 1));
+        $service->enqueueCurrentState($this->pdo, 2, 'external_operations', 'application_entitlement.changed');
+        $payload = $this->latestPayload();
+        self::assertFalse($payload['entitlement']['enabled']);
+        self::assertFalse($payload['entitlement']['manual_access']);
+    }
+
+    public function testWorkerProfileAndExternalRevocationRollbackTogetherWhenOutboxOrAuditFails(): void
+    {
+        $service = new ExternalOpsIntegrationService();
+        $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
+        $initialOutboxCount = (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn();
+        $initialAuditCount = (int)$this->pdo->query('SELECT COUNT(*) FROM system_audit')->fetchColumn();
+        $this->pdo->exec(
+            "CREATE TRIGGER reject_external_outbox_insert
+             BEFORE INSERT ON integration_outbox
+             BEGIN
+                 SELECT RAISE(ABORT, 'forced outbox failure');
+             END"
+        );
+
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->exec("UPDATE worker_profiles SET status='terminated',ended_at='2026-07-22' WHERE user_id=2");
+            $service->refreshGrantedAccount($this->pdo, 2, 'external_operations', 1);
+            self::fail('The forced outbox failure did not abort the worker update.');
+        } catch (\PDOException $error) {
+            self::assertStringContainsString('forced outbox failure', $error->getMessage());
+            $this->pdo->rollBack();
+        }
+
+        self::assertSame('active', $this->pdo->query(
+            'SELECT status FROM worker_profiles WHERE user_id=2'
+        )->fetchColumn());
+        self::assertNull($this->pdo->query(
+            'SELECT ended_at FROM worker_profiles WHERE user_id=2'
+        )->fetchColumn());
+        $entitlement = $this->pdo->query(
+            "SELECT enabled,manual_enabled FROM application_entitlements
+             WHERE user_id=2 AND application_key='external_operations'"
+        )->fetch(PDO::FETCH_ASSOC);
+        self::assertSame(1, (int)$entitlement['enabled']);
+        self::assertSame(1, (int)$entitlement['manual_enabled']);
+        self::assertSame($initialOutboxCount, (int)$this->pdo->query(
+            'SELECT COUNT(*) FROM integration_outbox'
+        )->fetchColumn());
+
+        $this->pdo->exec('DROP TRIGGER reject_external_outbox_insert');
+        $this->pdo->exec(
+            "CREATE TRIGGER reject_external_audit_insert
+             BEFORE INSERT ON system_audit
+             BEGIN
+                 SELECT RAISE(ABORT, 'forced audit failure');
+             END"
+        );
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->exec("UPDATE worker_profiles SET status='terminated',ended_at='2026-07-22' WHERE user_id=2");
+            $service->refreshGrantedAccount($this->pdo, 2, 'external_operations', 1);
+            self::fail('The forced audit failure did not abort the worker update.');
+        } catch (\PDOException $error) {
+            self::assertStringContainsString('forced audit failure', $error->getMessage());
+            $this->pdo->rollBack();
+        }
+        self::assertSame('active', $this->pdo->query(
+            'SELECT status FROM worker_profiles WHERE user_id=2'
+        )->fetchColumn());
+        self::assertSame(1, (int)$this->pdo->query(
+            "SELECT enabled FROM application_entitlements
+             WHERE user_id=2 AND application_key='external_operations'"
+        )->fetchColumn());
+        self::assertSame($initialOutboxCount, (int)$this->pdo->query(
+            'SELECT COUNT(*) FROM integration_outbox'
+        )->fetchColumn());
+        self::assertSame($initialAuditCount, (int)$this->pdo->query(
+            'SELECT COUNT(*) FROM system_audit'
+        )->fetchColumn());
+
+        $handler = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/src/controllers/settings/workforce_catalog_handler.php'
+        );
+        $branchStart = strpos($handler, "if(\$action==='save-worker-profile')");
+        $branchEnd = strpos($handler, "}elseif(\$action==='save-work-type')", $branchStart ?: 0);
+        self::assertNotFalse($branchStart);
+        self::assertNotFalse($branchEnd);
+        $workerProfileBranch = substr($handler, (int)$branchStart, (int)$branchEnd - (int)$branchStart);
+        self::assertStringContainsString('$pdo->beginTransaction();', $workerProfileBranch);
+        self::assertStringContainsString('$syncOpsAccount($previousAccountId)', $workerProfileBranch);
+        self::assertStringContainsString('reconcileVerifiedOwnerEntries($accountId)', $workerProfileBranch);
+        self::assertStringContainsString('$pdo->commit();', $workerProfileBranch);
+    }
+
+    public function testGrantRefusesTerminatedAndDeletedAccounts(): void
+    {
+        $service = new ExternalOpsIntegrationService();
+        $this->pdo->exec("UPDATE worker_profiles SET status='terminated' WHERE user_id=2");
+        try {
+            $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
+            self::fail('Terminated worker was granted access.');
+        } catch (\DomainException $error) {
+            self::assertStringContainsString('Terminated workers', $error->getMessage());
+        }
+        self::assertSame(0, (int)$this->pdo->query('SELECT COUNT(*) FROM application_entitlements')->fetchColumn());
+        self::assertSame(0, (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn());
+        self::assertSame(0, (int)$this->pdo->query('SELECT COUNT(*) FROM system_audit')->fetchColumn());
+        $this->pdo->exec("UPDATE worker_profiles SET status='active' WHERE user_id=2");
+        $this->pdo->exec("UPDATE users SET deleted_at='2026-01-01' WHERE id=2");
+        $this->expectException(\DomainException::class);
+        $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
     }
 
     public function testOutboxDeliveryUsesAccessAndHmacHeaders(): void

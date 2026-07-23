@@ -473,18 +473,16 @@ final class SecurityHardeningTest extends TestCase
         self::assertStringContainsString(':db-sha-${{ steps.source.outputs.sha }}', $docker);
     }
 
-    public function testDockerPublishingRecoversFromApiAssistedMainMerges(): void
+    public function testDockerPublishingUsesAuthoritativeBranchPushesWithoutDuplicateMergeTrigger(): void
     {
         $docker = $this->read('.github/workflows/docker-publish.yml');
 
         self::assertStringContainsString('branches: ["dev", "main"]', $docker);
-        self::assertStringContainsString('pull_request_target:', $docker);
-        self::assertStringContainsString('types: [closed]', $docker);
         self::assertStringContainsString('workflow_dispatch:', $docker);
-        self::assertStringContainsString("github.event.pull_request.merged == true", $docker);
-        self::assertStringContainsString('github.event.pull_request.merge_commit_sha', $docker);
+        self::assertStringContainsString('group: docker-${{ github.ref_name }}', $docker);
         self::assertStringContainsString('cancel-in-progress: true', $docker);
-        self::assertStringContainsString('github.event_name }}" == "pull_request_target"', $docker);
+        self::assertStringNotContainsString('pull_request_target:', $docker);
+        self::assertStringNotContainsString('github.event.pull_request', $docker);
         self::assertSame(3, substr_count($docker, 'cache-to: type=gha,mode=max,ignore-error=true'));
     }
 
