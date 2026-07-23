@@ -123,4 +123,16 @@ final class MileageBillingTest extends TestCase
             self::assertStringNotContainsString('reimburse',$source);
         }
     }
+
+    public function testMileageHubUsesCanonicalWorkerNamesAndStaysInsideTheHub(): void
+    {
+        $root=dirname(__DIR__,2);
+        $source=(string)file_get_contents($root.'/src/views/pages/financial/mileage-list.php');
+        self::assertStringContainsString('LEFT JOIN worker_profiles wp', $source);
+        self::assertStringNotContainsString('LEFT JOIN employee_profiles ep', $source);
+        self::assertStringContainsString('GROUP BY a.mileage_log_id', $source);
+        self::assertStringNotContainsString("GROUP BY m.id ORDER BY", $source);
+        self::assertStringContainsString('name="page" value="financial/expenses-list"', $source);
+        self::assertStringContainsString('name="tab" value="mileage"', $source);
+    }
 }

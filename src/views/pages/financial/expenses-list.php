@@ -73,8 +73,8 @@ try {
     $countStmt = $pdo->prepare('SELECT COUNT(*) FROM audit_schedules WHERE (?=0 OR organization_id=?)');
     $countStmt->execute([$orgId, $orgId]);
     $stats['audit'] = (int)$countStmt->fetchColumn();
-} catch (Throwable $ignored) {
-    // Some dev databases may be mid-migration; the tab content handles its own errors.
+} catch (Throwable $error) {
+    error_log('Financial hub summary failed: ' . $error->getMessage());
 }
 ?>
 
@@ -101,11 +101,26 @@ try {
     <?php endforeach; ?>
   </div>
 
-  <?php foreach ($tabs as $id => $t): ?>
-    <div class="expenses-hub__panel <?php echo $active === $id ? 'active' : ''; ?>" id="tab-<?php echo htmlspecialchars($id); ?>" role="tabpanel">
-      <?php ob_start(); include __DIR__ . '/' . $t['file']; echo ob_get_clean(); ?>
-    </div>
-  <?php endforeach; ?>
+  <div class="expenses-hub__panel active" id="tab-<?php echo htmlspecialchars($active); ?>" role="tabpanel">
+    <?php
+    $tabBufferLevel = ob_get_level();
+    ob_start();
+    try {
+        include __DIR__ . '/' . $tabs[$active]['file'];
+        echo ob_get_clean();
+    } catch (Throwable $error) {
+        while (ob_get_level() > $tabBufferLevel) {
+            ob_end_clean();
+        }
+        error_log(sprintf('Financial hub tab "%s" failed: %s', $active, $error->getMessage()));
+        http_response_code(500);
+        ?>
+        <div class="alert alert-danger" role="alert">
+          <strong>This financial section could not be loaded.</strong>
+          <span>Please try again. If the problem continues, an administrator can review the application log for the <?php echo htmlspecialchars($tabs[$active]['label']); ?> section.</span>
+        </div>
+        <?php
+    }
+    ?>
+  </div>
 </div>
-
-<script src="<?php echo htmlspecialchars(asset_url('/assets/js/expenses-hub.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
