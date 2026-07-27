@@ -69,7 +69,7 @@ Authorized workforce managers can perform the corresponding pre-approval action
 for workers in their scope.
 
 Confirmed work is never overwritten in place. Workers use **Request correction**,
-while an authorized administrator uses **Correct approved time** and supplies a
+while an authorized administrator uses **Edit** and supplies a
 reason. Approval retains the original revision and immutable snapshots, creates
 a corrected revision, and records worker-pay and client-billing effects
 separately. Draft statements and invoice lines can be rebuilt from the correction;
@@ -77,10 +77,12 @@ closed statements and finalized invoices remain locked and receive explicit
 adjustments. Worker Payment Records preserve the independent fact of what an
 administrator actually paid. All module mutations write to PA's system audit trail.
 
-Owner self-confirmation is a worker-relationship rule, not an account-role
-shortcut. Marking a Worker Profile as a verified business Owner enables automatic
-confirmation of that person's eligible completed time in open review periods.
-The PA `owner` or `admin` role alone does not bypass review. Historical entries in
+Verified-Owner self-confirmation is a worker-relationship rule. Marking a Worker
+Profile as a verified business Owner enables automatic confirmation as
+nonpayable owner time. Separately, built-in PA `admin` and `owner` account roles
+may self-confirm their own completed time while retaining the Worker Profile's
+employee or contractor compensation policy. Ordinary time-management and review
+permission grants do not provide this bypass. Historical entries in
 closed periods remain unchanged and require the normal audited exception process.
 
 Confirmed, billable time may be attached to a matching mutable draft invoice.

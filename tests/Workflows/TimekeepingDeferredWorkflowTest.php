@@ -27,7 +27,7 @@ final class TimekeepingDeferredWorkflowTest extends TestCase
         self::assertStringContainsString("'time_entry.owner_self_confirmed'", $approval);
         self::assertStringContainsString("'duration'", $time);
         self::assertStringContainsString("'review','draft',?,'owner_no_pay'", $time);
-        self::assertStringContainsString('workforce_self_confirm_owner($approval, $userId, $entryToSelfConfirm)', $controller);
+        self::assertStringContainsString('workforce_self_confirm_completed($approval, $userId, $entryToSelfConfirm)', $controller);
         self::assertStringContainsString('$entryToSelfConfirm = $time->saveManual', $controller);
         self::assertStringContainsString('$entryToSelfConfirm = $time->saveDuration', $controller);
     }
@@ -37,7 +37,7 @@ final class TimekeepingDeferredWorkflowTest extends TestCase
         $approval = (string)file_get_contents($this->root . '/src/Modules/Timekeeping/ApprovalService.php');
 
         self::assertStringContainsString('You cannot approve your own time entry.', $approval);
-        self::assertStringContainsString('$billingRate = $this->billingRate($entry);', $approval);
+        self::assertStringContainsString('$billingRateOverride ?? $this->billingRate($entry)', $approval);
         self::assertStringNotContainsString('A project or business billing rate is required for billable time.', $approval);
     }
 

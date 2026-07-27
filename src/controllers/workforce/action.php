@@ -15,6 +15,7 @@ use App\Services\TimeApprovalPolicy;
 use App\Services\TimeCorrectionBillingResolutionService;
 use App\Services\TimeCorrectionService;
 use App\Services\TimeSubmissionService;
+use App\Services\WorkTimeInvoiceEligibilityService;
 use App\Services\WorkTimeInvoiceLinkService;
 use App\Services\WorkerEarningService;
 use App\Services\WorkerPaymentRecordService;
@@ -93,6 +94,34 @@ function workforce_self_confirm_owner(ApprovalService $approval, int $ownerId, s
     }
 }
 
+function workforce_self_confirm_administrator(
+    ApprovalService $approval,
+    int $administratorId,
+    string $entryId
+): void {
+    try {
+        $approval->selfConfirmAdministrator($administratorId, $entryId);
+    } catch (Throwable $error) {
+        throw new DomainException(
+            'Time was saved but administrative confirmation could not be completed. It remains editable so you can try again.',
+            0,
+            $error
+        );
+    }
+}
+
+function workforce_self_confirm_completed(
+    ApprovalService $approval,
+    int $actorId,
+    string $entryId
+): void {
+    if ($approval->canSelfConfirmOwner($actorId)) {
+        workforce_self_confirm_owner($approval, $actorId, $entryId);
+        return;
+    }
+    workforce_self_confirm_administrator($approval, $actorId, $entryId);
+}
+
 function workforce_link_preselected_invoice(
     PDO $pdo,
     int $actorId,
@@ -128,6 +157,43 @@ function workforce_link_preselected_invoice(
     } catch (DomainException $error) {
         return 'Time was confirmed, but it was not added to the selected invoice: ' . $error->getMessage();
     }
+}
+
+function workforce_validate_pending_invoice_link(
+    PDO $pdo,
+    int $actorId,
+    string $entryId,
+    int $invoiceId,
+    ?string $requestedRate,
+    bool $manageAll
+): void {
+    $entryStatement = $pdo->prepare('SELECT * FROM work_time_entries WHERE id=?');
+    $entryStatement->execute([$entryId]);
+    $entry = $entryStatement->fetch(PDO::FETCH_ASSOC);
+    if (!$entry) {
+        throw new DomainException('Time entry not found.');
+    }
+    if ((int)$entry['user_id'] !== $actorId && !$manageAll) {
+        throw new DomainException('You cannot link another user\'s time entry.');
+    }
+    if ((int)($entry['billable'] ?? 0) !== 1
+        || empty($entry['end_time'])
+        || (int)($entry['duration_seconds'] ?? 0) <= 0) {
+        throw new DomainException('Only completed billable time can be added to an invoice.');
+    }
+
+    $invoiceStatement = $pdo->prepare(
+        "SELECT * FROM invoices WHERE id=? AND status='draft' AND finalized_at IS NULL"
+    );
+    $invoiceStatement->execute([$invoiceId]);
+    $invoice = $invoiceStatement->fetch(PDO::FETCH_ASSOC);
+    if (!$invoice) {
+        throw new DomainException('Choose a mutable draft invoice.');
+    }
+    WorkTimeInvoiceEligibilityService::assertCompatibleDestination($entry, $invoice);
+    $eligibility = new WorkTimeInvoiceEligibilityService($pdo);
+    $eligibility->assertUnattached($entryId);
+    $eligibility->assertResolvableBillingRate($entry, $invoiceId, $requestedRate);
 }
 
 try {
@@ -171,14 +237,28 @@ try {
             throw new DomainException('Choose an invoice.');
         }
         require_record_ownership($pdo, 'invoices', $invoiceId);
-        if ($entryUserId === $userId && $approval->canSelfConfirmOwner($userId)) {
-            $approval->ensureOwnerProjection($userId, $entryId);
+        $requestedBillingRate = isset($_POST['billing_rate']) ? (string)$_POST['billing_rate'] : null;
+        workforce_validate_pending_invoice_link(
+            $pdo,
+            $userId,
+            $entryId,
+            $invoiceId,
+            $requestedBillingRate,
+            $manageAll
+        );
+        if ($entryUserId === $userId) {
+            if ($approval->canSelfConfirmOwner($userId)) {
+                $approval->ensureOwnerProjection($userId, $entryId, $requestedBillingRate);
+            } elseif ($approval->canSelfConfirmAdministrator($userId)
+                && $approvalPolicy->canAdministrativelySelfConfirmEntry($userId, $entryId)) {
+                $approval->ensureAdministratorProjection($userId, $entryId, $requestedBillingRate);
+            }
         }
         (new WorkTimeInvoiceLinkService($pdo))->link(
             $userId,
             $entryId,
             $invoiceId,
-            isset($_POST['billing_rate']) ? (string)$_POST['billing_rate'] : null,
+            $requestedBillingRate,
             $manageAll
         );
         $returnPath = (string)($_POST['return_to'] ?? '') === 'invoice-edit'
@@ -237,8 +317,9 @@ try {
         $invoiceLinkWarning = null;
         if ($entryToSelfConfirm !== ''
             && $entryUserId === $userId
-            && $approval->canSelfConfirmOwner($userId)) {
-            workforce_self_confirm_owner($approval, $userId, $entryToSelfConfirm);
+            && ($approval->canSelfConfirmOwner($userId)
+                || $approval->canSelfConfirmAdministrator($userId))) {
+            workforce_self_confirm_completed($approval, $userId, $entryToSelfConfirm);
             $invoiceLinkWarning = workforce_link_preselected_invoice($pdo, $userId, $entryToSelfConfirm, $manageAll);
         }
         $returnPath = '/?page=workforce/time' . ($manageAll ? '&user=' . $entryUserId : '');
@@ -251,10 +332,24 @@ try {
 
     if (in_array($action, ['approve','reject','void'], true)) {
         $entryId = (string) ($_POST['entry_id'] ?? '');
-        $approvalPolicy->assertCanReviewEntry($userId, $entryId, $action);
+        $ownerSelfConfirmation = $action === 'approve'
+            && $approval->canSelfConfirmOwner($userId)
+            && $approvalPolicy->isOwnerSelfAction($userId, $entryId);
+        $administrativeSelfConfirmation = $action === 'approve'
+            && !$ownerSelfConfirmation
+            && $approvalPolicy->canAdministrativelySelfConfirmEntry($userId, $entryId);
+        if (!$ownerSelfConfirmation && !$administrativeSelfConfirmation) {
+            $approvalPolicy->assertCanReviewEntry($userId, $entryId, $action);
+        }
         $invoiceLinkWarning = null;
         if ($action === 'approve') {
-            $approval->approve($userId, $entryId);
+            if ($ownerSelfConfirmation) {
+                $approval->selfConfirmOwner($userId, $entryId);
+            } elseif ($administrativeSelfConfirmation) {
+                $approval->selfConfirmAdministrator($userId, $entryId);
+            } else {
+                $approval->approve($userId, $entryId);
+            }
             $invoiceLinkWarning = workforce_link_preselected_invoice(
                 $pdo,
                 $userId,
@@ -325,7 +420,7 @@ try {
         workforce_require($pdo, $userId, 'workforce.corrections.manage');
         $entryId = trim((string)($_POST['entry_id'] ?? ''));
         $changes = [];
-        foreach (['client_id','project_id','invoice_id','job_id','work_type_id','work_assignment_id','start_time','end_time','description'] as $field) {
+        foreach (['client_id','project_id','invoice_id','job_id','work_type_id','work_assignment_id','start_time','end_time','description','billable','is_payable'] as $field) {
             if (array_key_exists($field, $_POST)) {
                 $changes[$field] = $_POST[$field];
             }

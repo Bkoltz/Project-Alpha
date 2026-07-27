@@ -94,8 +94,6 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
     .pa-provider-note{padding:10px 12px;border:1px solid #e5e7eb;background:#f9fafb;border-radius:8px;font-size:12px;color:#4b5563;line-height:1.45}
     </style>
 
-    <h2 style="margin:0 0 8px 0">Link Resolver</h2>
-    <p style="margin:0 0 24px 0;color:var(--muted)">Connect cloud storage, create manual content links, and optionally let PA find exact organization or department folders.</p>
 
     <div class="pa-setup-card">
         <h3>Recommended setup flow</h3>
@@ -507,99 +505,4 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
     </form>
 </div>
 
-<script>
-function toggleProviderFields(provider) {
-    const checkbox = document.querySelector(`input[name="provider_enabled_${provider}"]`);
-    const fields = document.getElementById(`fields_${provider}`);
-    fields.style.display = checkbox.checked ? 'block' : 'none';
-}
-
-function testConnection(event, provider) {
-    const btn = event.currentTarget;
-    btn.disabled = true;
-    btn.textContent = 'Testing...';
-    
-    // Gather credentials for this provider
-    const formData = new FormData();
-    formData.append('provider', provider);
-    formData.append('csrf', window.csrfToken || '');  // Add CSRF token
-    const rootPathField = document.querySelector(`input[name="${provider}_root_path"]`);
-    formData.append('root_path', rootPathField ? rootPathField.value : '');
-    
-    if (provider === 'dropbox') {
-        const tokenField = document.querySelector(`input[name="${provider}_access_token"]`);
-        formData.append('access_token', tokenField ? tokenField.value : '');
-    } else if (provider === 'gdrive') {
-        formData.append('credentials', document.querySelector(`textarea[name="${provider}_credentials"]`).value);
-    } else if (provider === 's3') {
-        formData.append('access_key', document.querySelector(`input[name="${provider}_access_key"]`).value);
-        formData.append('secret_key', document.querySelector(`input[name="${provider}_secret_key"]`).value);
-        formData.append('bucket', document.querySelector(`input[name="${provider}_bucket"]`).value);
-        formData.append('region', document.querySelector(`input[name="${provider}_region"]`).value);
-        formData.append('public_base_url', document.querySelector(`input[name="${provider}_public_base_url"]`).value);
-    } else if (provider === 'r2') {
-        formData.append('account_id', document.querySelector(`input[name="${provider}_account_id"]`).value);
-        formData.append('access_key', document.querySelector(`input[name="${provider}_access_key"]`).value);
-        formData.append('secret_key', document.querySelector(`input[name="${provider}_secret_key"]`).value);
-        formData.append('bucket', document.querySelector(`input[name="${provider}_bucket"]`).value);
-        formData.append('endpoint', document.querySelector(`input[name="${provider}_endpoint"]`).value);
-        formData.append('public_base_url', document.querySelector(`input[name="${provider}_public_base_url"]`).value);
-    }
-    
-    fetch('/?page=settings/link-test-connection', {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.textContent = 'Test Connection';
-        if (data.success) {
-            alert('✅ Connection successful!');
-        } else {
-            alert('❌ Connection failed: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(err => {
-        btn.disabled = false;
-        btn.textContent = 'Test Connection';
-        alert('❌ Connection test failed: ' + err.message);
-    });
-}
-
-function runProviderScan(event, provider) {
-    const btn = event.currentTarget;
-    const originalText = btn.textContent;
-    if (!confirm('Run the ' + originalText.replace(/^Run\s+|\s+Now$/g, '') + ' resolver scan now?')) {
-        return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = 'Running...';
-
-    const formData = new FormData();
-    formData.append('provider', provider);
-    formData.append('csrf', window.csrfToken || '');
-
-    fetch('/?page=settings/link-resolver-run', {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-        if (data.success) {
-            const details = Array.isArray(data.details) && data.details.length ? '\n\n' + data.details.join('\n') : '';
-            alert('Scan complete. ' + (data.message || '') + details);
-        } else {
-            alert('Scan failed: ' + (data.message || 'Unknown error'));
-        }
-    })
-    .catch(err => {
-        btn.disabled = false;
-        btn.textContent = originalText;
-        alert('Scan failed: ' + err.message);
-    });
-}
-</script>
+<!-- toggleProviderFields / testConnection / runProviderScan are handled globally by settings-links.js (loaded from footer.php) -->

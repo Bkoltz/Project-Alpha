@@ -268,7 +268,15 @@ try {
             'voided' => 'void',
         };
         WorkforceCommandRegistry::require($command, $method);
-        $approvalPolicy->assertCanReviewEntry($userId, $entryId, $command);
+        $ownerSelfConfirmation = $decision === 'confirmed'
+            && $approval->canSelfConfirmOwner($userId)
+            && $approvalPolicy->isOwnerSelfAction($userId, $entryId);
+        $administrativeSelfConfirmation = $decision === 'confirmed'
+            && !$ownerSelfConfirmation
+            && $approvalPolicy->canAdministrativelySelfConfirmEntry($userId, $entryId);
+        if (!$ownerSelfConfirmation && !$administrativeSelfConfirmation) {
+            $approvalPolicy->assertCanReviewEntry($userId, $entryId, $command);
+        }
 
         $submissionStatement = $pdo->prepare(
             'SELECT current_submission_id,revision FROM work_time_entries WHERE id=? LIMIT 1'
@@ -277,7 +285,13 @@ try {
         $submittedEntry = $submissionStatement->fetch(PDO::FETCH_ASSOC) ?: [];
 
         if ($decision === 'confirmed') {
-            $approval->approve($userId, $entryId);
+            if ($ownerSelfConfirmation) {
+                $approval->selfConfirmOwner($userId, $entryId);
+            } elseif ($administrativeSelfConfirmation) {
+                $approval->selfConfirmAdministrator($userId, $entryId);
+            } else {
+                $approval->approve($userId, $entryId);
+            }
         } elseif ($decision === 'returned') {
             $approval->reject($userId, $entryId, $reason);
         } else {

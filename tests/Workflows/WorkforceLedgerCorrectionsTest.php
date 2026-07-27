@@ -123,6 +123,16 @@ final class WorkforceLedgerCorrectionsTest extends TestCase
         self::assertStringContainsString('attachReplacementToDraftInvoice', $this->corrections);
         self::assertStringContainsString("'invoice_item_id' => \$sameInvoice ? \$allocation['invoice_item_id'] : null", $this->corrections);
         self::assertStringContainsString('SET bt.billed=0,bt.invoice_id=NULL,bt.invoice_item_id=NULL', $this->corrections);
+        self::assertStringContainsString("\$replacementTreatment = !empty(\$after['billable']) ? 'hourly' : 'internal'", $this->corrections);
+        self::assertStringContainsString('DELETE FROM invoice_items WHERE id=? AND invoice_id=?', $this->corrections);
+    }
+
+    public function testCorrectionCanChangePayabilityWithoutRewritingPriorEarnings(): void
+    {
+        self::assertStringContainsString("\$newAmount = empty(\$after['is_payable']) ? 0.0", $this->corrections);
+        self::assertStringContainsString('WorkerEarningService($this->pdo))->record', $this->corrections);
+        self::assertStringContainsString("'new_earning' => true", $this->corrections);
+        self::assertStringContainsString("empty(\$pay['new_earning'])", $this->corrections);
     }
 
     public function testCorrectionCanMoveOnlyToMutableDraftInvoice(): void

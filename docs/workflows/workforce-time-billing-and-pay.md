@@ -50,9 +50,9 @@ After time is confirmed:
 - Finalized invoices are never automatic destinations.
 - An admin may move the entry while the affected billing records remain mutable. Conflicting client, Project, or Job context requires an explicit correction and is never silently overwritten.
 
-Selecting a draft invoice while entering time records the intended destination, but it does not create a financial line before confirmation. The draft invoice editor shows matching pending time and its current review state. A verified Owner can use **Confirm and add** for their own nonpayable owner time; employee and contractor entries remain behind the normal reviewer control. Once confirmed, the selected draft invoice is updated automatically and its totals are recalculated.
+Selecting a draft invoice while entering time records the intended destination, but it does not create a financial line before confirmation. The draft invoice editor shows matching pending time and its current review state. A verified Owner can use **Confirm and add** for their own nonpayable owner time. Built-in `admin` and `owner` account roles may also confirm their own completed time while retaining the compensation policy from their Worker Profile. Other employee and contractor entries remain behind the normal reviewer control. Once confirmed, the selected draft invoice is updated automatically and its totals are recalculated.
 
-Owner self-confirmation depends on the verified **Owner relationship** in the Worker Profile, not an `admin` or `owner` account role by itself. Verifying that relationship reconciles completed pending entries in open review periods through the normal approval service. Closed periods and finalized historical records remain unchanged and must be handled as audited exceptions.
+Verified-Owner confirmation and administrative self-confirmation have different pay semantics. The verified **Owner relationship** remains nonpayable owner time. Administrative self-confirmation is an account-role privilege and preserves ordinary employee or contractor compensation rules. Permission grants such as time-management access do not provide this self-confirmation bypass. Closed periods and finalized historical records remain unchanged and must be handled as audited exceptions.
 
 Hourly Service lines on quotes and contracts are estimates. They show estimated hours, hourly price, and an estimated total. They do not become collectible invoice charges during conversion. Confirmed time creates the actual hourly invoice lines. Fixed-price time is operational history and does not create an additional client charge.
 
@@ -64,17 +64,17 @@ Before approval, the available action follows the entry state:
 
 - Draft or returned time can be edited directly by its worker or an authorized workforce manager.
 - Submitted time can be **Withdrawn and edited**. The submitted revision and review history remain intact, while the live entry returns to draft and must be submitted again.
-- Confirmed time cannot be edited in place. Workers use **Request correction**; authorized administrators use **Correct approved time** and must provide a reason.
+- Confirmed time cannot be overwritten in place. Workers use **Request correction**; authorized administrators use **Edit**, provide a reason, and PA records the change through the correction ledger.
 - Stale revisions, a second pending correction for the same revision, and concurrent review decisions are rejected without partial updates.
 
 | Entry state | Worker action | Authorized administrator action | Audit result |
 |---|---|---|---|
 | Draft or returned | **Edit** their own entry | **Edit** an accessible entry | Previous revision is archived; the entry stays draft |
 | Submitted and awaiting review | **Withdraw and edit** their own entry | **Withdraw and edit** an accessible entry | Submitted revision is marked withdrawn; edited entry returns to draft |
-| Confirmed | **Request correction** | **Correct approved time** | Original approval remains intact; a corrected revision and deltas are recorded |
-| Included on an open statement | **Request correction** | **Correct approved time** | Original earning snapshot remains intact; open projections are rebuilt |
-| Closed or settled period | **Request correction** | **Correct approved time** | Closed statement stays locked; the adjustment moves to the next open period |
-| Attached to a finalized invoice | **Request correction** | **Correct approved time** | Finalized invoice stays locked; billing uses an explicit charge, credit, move, or absorbed exception |
+| Confirmed | **Request correction** | **Edit** with a required reason | Original approval remains intact; a corrected revision and deltas are recorded |
+| Included on an open statement | **Request correction** | **Edit** with a required reason | Original earning snapshot remains intact; open projections are rebuilt |
+| Closed or settled period | **Request correction** | **Edit** with a required reason | Closed statement stays locked; the adjustment moves to the next open period |
+| Attached to a finalized invoice | **Request correction** | **Edit** with a required reason | Finalized invoice stays locked; billing uses an explicit charge, credit, move, or absorbed exception |
 
 1. A worker requests a correction with proposed time and a reason, or an authorized admin creates it directly.
 2. Work Review shows the original and proposed values together with separate worker-pay and client-billing effects.

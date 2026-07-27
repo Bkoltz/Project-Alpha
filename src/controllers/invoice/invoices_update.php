@@ -128,8 +128,16 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 $pdo->beginTransaction();
 try {
   $serviceLocationId = document_resolve_service_location($pdo,$client_id,!empty($invoiceState['project_id'])?(int)$invoiceState['project_id']:null,!empty($invoiceState['job_id'])?(int)$invoiceState['job_id']:null,$requestedServiceLocationId);
-  $pdo->prepare('UPDATE invoices SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?, subtotal=?, total=?, due_date=?, fulfillment_date=?, custom_fields=?, service_location_id=? WHERE id=?')
-    ->execute([$client_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $due_date ?: null, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id]);
+  $pdo->prepare('UPDATE invoices
+    SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
+        subtotal=?, tax_amount=?, total=?, balance_due=GREATEST(0,?-COALESCE(amount_paid,0)),
+        due_date=?, fulfillment_date=?, custom_fields=?, service_location_id=?
+    WHERE id=?')
+    ->execute([
+      $client_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
+      $subtotal, $tax, $total, $total,
+      $due_date ?: null, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id,
+    ]);
   
   $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');
   $row->execute([$id]);
@@ -166,7 +174,15 @@ try {
     }
   }
   $nextInvoiceRevision=max(1,(int)($invoiceState['revision_number']??1))+1;
-  $pdo->prepare('UPDATE invoice_adjustments SET superseded_at=NOW() WHERE invoice_id=? AND superseded_at IS NULL')->execute([$id]);
+  // Manual extras are replaceable invoice-editor state. Tracked-time and
+  // correction adjustments are append-only audit records owned by their
+  // respective domain services and must survive an unrelated invoice edit.
+  $pdo->prepare(
+    "UPDATE invoice_adjustments
+     SET superseded_at=NOW()
+     WHERE invoice_id=? AND superseded_at IS NULL
+       AND label NOT IN ('Tracked time','Time correction','Base-plus-overage time correction')"
+  )->execute([$id]);
   $adjustmentInsert=$pdo->prepare('INSERT INTO invoice_adjustments (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,revision_number,created_by) VALUES (?,?,?,?,?,?,?,?,?)');
   foreach($extraItemsArr as $it){$adjustmentInsert->execute([$id,$it['type'],$it['i'],$it['d']?:null,$it['q'],$it['p'],$it['t'],$nextInvoiceRevision,(int)($_SESSION['user']['id']??0)?:null]);}
 
