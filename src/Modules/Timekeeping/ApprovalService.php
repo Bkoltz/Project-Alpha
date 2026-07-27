@@ -35,13 +35,66 @@ final class ApprovalService
         return $this->finalize($approverId, $entryId, false);
     }
 
-    public function selfConfirmOwner(int $ownerId, string $entryId): string
+    public function selfConfirmOwner(int $ownerId, string $entryId, ?string $billingRateOverride = null): string
     {
-        return $this->finalize($ownerId, $entryId, true, false);
+        return $this->finalize($ownerId, $entryId, true, false, false, $billingRateOverride);
+    }
+
+    /**
+     * Confirm time for an admin/owner account while retaining the worker
+     * profile's ordinary compensation policy.
+     */
+    public function selfConfirmAdministrator(
+        int $administratorId,
+        string $entryId,
+        ?string $billingRateOverride = null
+    ): string
+    {
+        $this->policy->assertCanAdministrativelySelfConfirmEntry($administratorId, $entryId);
+        return $this->finalize($administratorId, $entryId, false, false, true, $billingRateOverride);
+    }
+
+    public function canSelfConfirmAdministrator(int $userId): bool
+    {
+        return $this->policy->canAdministrativelySelfConfirm($userId);
+    }
+
+    /** Confirm a pending admin entry, or return its existing projection. */
+    public function ensureAdministratorProjection(
+        int $administratorId,
+        string $entryId,
+        ?string $billingRateOverride = null
+    ): string
+    {
+        $this->policy->assertCanAdministrativelySelfConfirmEntry($administratorId, $entryId);
+        $existing = $this->pdo->prepare(
+            "SELECT t.status,t.workflow_status,s.id snapshot_id
+             FROM work_time_entries t
+             LEFT JOIN work_approval_snapshots s ON s.id=(
+                SELECT s2.id FROM work_approval_snapshots s2
+                WHERE s2.time_entry_id=t.id AND s2.voided_at IS NULL
+                ORDER BY s2.entry_revision DESC LIMIT 1
+             )
+             WHERE t.id=? AND t.user_id=?"
+        );
+        $existing->execute([$entryId, $administratorId]);
+        $entry = $existing->fetch(PDO::FETCH_ASSOC);
+        if (!$entry) {
+            throw new DomainException('Administrative time entry not found.');
+        }
+        $snapshotId = (string)($entry['snapshot_id'] ?? '');
+        if ($entry['status'] === 'approved' && $entry['workflow_status'] === 'confirmed' && $snapshotId !== '') {
+            return $snapshotId;
+        }
+        return $this->selfConfirmAdministrator($administratorId, $entryId, $billingRateOverride);
     }
 
     /** Materialize or repair the immutable projection for verified-owner time. */
-    public function ensureOwnerProjection(int $ownerId, string $entryId): string
+    public function ensureOwnerProjection(
+        int $ownerId,
+        string $entryId,
+        ?string $billingRateOverride = null
+    ): string
     {
         $existing = $this->pdo->prepare(
             "SELECT t.status,t.workflow_status,s.id snapshot_id
@@ -62,7 +115,7 @@ final class ApprovalService
         if ($entry['status'] === 'approved' && $entry['workflow_status'] === 'confirmed' && $snapshotId !== '') {
             return $snapshotId;
         }
-        return $this->finalize($ownerId, $entryId, true, true);
+        return $this->finalize($ownerId, $entryId, true, true, false, $billingRateOverride);
     }
 
     public function canSelfConfirmOwner(int $userId): bool
@@ -164,9 +217,12 @@ final class ApprovalService
         int $approverId,
         string $entryId,
         bool $ownerSelfConfirmation,
-        bool $allowLegacyApproved = false
+        bool $allowLegacyApproved = false,
+        bool $administrativeSelfConfirmation = false,
+        ?string $billingRateOverride = null
     ): string
     {
+        $billingRateOverride = $this->normalizeBillingRateOverride($billingRateOverride);
         $settings = WorkforceSettings::load($this->pdo);
         $this->pdo->beginTransaction();
         try {
@@ -193,17 +249,18 @@ final class ApprovalService
             );
             $stmt->execute([$entryId]);
             $entry = $stmt->fetch(PDO::FETCH_ASSOC);
+            $selfConfirmation = $ownerSelfConfirmation || $administrativeSelfConfirmation;
             $readyStatus = $entry && (
                 ($entry['status'] === 'review'
-                    && (($ownerSelfConfirmation && in_array((string)($entry['workflow_status'] ?? ''), ['draft','returned','submitted'], true))
-                        || (!$ownerSelfConfirmation && (string)($entry['workflow_status'] ?? '') === 'submitted')))
+                    && (($selfConfirmation && in_array((string)($entry['workflow_status'] ?? ''), ['draft','returned','submitted'], true))
+                        || (!$selfConfirmation && (string)($entry['workflow_status'] ?? '') === 'submitted')))
                 || ($ownerSelfConfirmation && $allowLegacyApproved
                     && $entry['status'] === 'approved' && !empty($entry['owner_self_confirmed']))
             );
             if (!$readyStatus || empty($entry['end_time'])) {
                 throw new DomainException('Entry is not ready for approval.');
             }
-            if ((int)$entry['user_id'] === $approverId && !$ownerSelfConfirmation) {
+            if ((int)$entry['user_id'] === $approverId && !$selfConfirmation) {
                 throw new DomainException('You cannot approve your own time entry.');
             }
             if ($ownerSelfConfirmation) {
@@ -211,6 +268,12 @@ final class ApprovalService
                     && empty($entry['relationship_review_required']);
                 if ((int)$entry['user_id'] !== $approverId || !$isOwner) {
                     throw new DomainException('Only an owner can self-confirm their own time entry.');
+                }
+            }
+            if ($administrativeSelfConfirmation) {
+                if ((int)$entry['user_id'] !== $approverId
+                    || !in_array((string)($entry['user_role'] ?? ''), ['admin', 'owner'], true)) {
+                    throw new DomainException('Only an administrator can self-confirm their own time entry.');
                 }
             }
             $entry['default_hourly_rate'] = $settings['default_hourly_rate'];
@@ -238,7 +301,7 @@ final class ApprovalService
                 elseif($rule['method']==='percentage')throw new DomainException('Percentage compensation must be linked to a catalog assignment with an eligible client-price basis.');
                 else{$catalogPay=$rules->calculate($rule,['duration_seconds'=>(int)$entry['duration_seconds'],'quantity'=>1]);$payRate=$rule['amount'];}
             }
-            $billingRate = $this->billingRate($entry);
+            $billingRate = $billingRateOverride ?? $this->billingRate($entry);
             $snapshotId = Uuid::v4();
             $employeeName = trim((string) $entry['first_name'] . ' ' . (string) $entry['last_name']);
             if ($employeeName === '') {
@@ -369,7 +432,9 @@ final class ApprovalService
                 if((int)$pending->fetchColumn()===0){$assignment=$this->pdo->prepare("SELECT status,JSON_UNQUOTE(JSON_EXTRACT(compensation_snapshot,'$.eligibility_trigger')) trigger_name FROM work_assignments WHERE id=?");$assignment->execute([$entry['work_assignment_id']]);$assignment=$assignment->fetch(PDO::FETCH_ASSOC);if($assignment&&$assignment['status']==='completed'&&$assignment['trigger_name']==='completed_approved')(new JobWorkPlanningService($this->pdo,new CompensationRuleService($this->pdo)))->markEligible((int)$entry['work_assignment_id'],['trigger_event'=>'completed_approved'],$approverId);}
             }
             $this->audit->record(
-                $ownerSelfConfirmation ? 'time_entry.owner_self_confirmed' : 'time_entry.approved',
+                $ownerSelfConfirmation
+                    ? 'time_entry.owner_self_confirmed'
+                    : ($administrativeSelfConfirmation ? 'time_entry.administratively_self_confirmed' : 'time_entry.approved'),
                 'work_time_entry',
                 $entryId,
                 $approverId,
@@ -620,6 +685,18 @@ final class ApprovalService
             }
         }
         return $entry['default_billing_rate'] !== null ? (string)$entry['default_billing_rate'] : null;
+    }
+
+    private function normalizeBillingRateOverride(?string $rate): ?string
+    {
+        $rate = trim((string)$rate);
+        if ($rate === '') {
+            return null;
+        }
+        if (!is_numeric($rate) || !is_finite((float)$rate) || (float)$rate <= 0) {
+            throw new DomainException('Enter a positive hourly billing rate.');
+        }
+        return number_format(round((float)$rate, 4), 4, '.', '');
     }
 
     private function hasPaidAccrual(string $entryId): bool

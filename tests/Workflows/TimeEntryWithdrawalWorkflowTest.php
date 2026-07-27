@@ -169,8 +169,10 @@ final class TimeEntryWithdrawalWorkflowTest extends TestCase
         self::assertStringContainsString('a.entry_revision<=?', $corrections);
         self::assertStringNotContainsString('name="billable"', $approvals);
         self::assertStringNotContainsString('name="is_payable"', $approvals);
-        self::assertStringNotContainsString("'billable' => ['billable']", $controller);
-        self::assertStringNotContainsString("'is_payable' => ['is_payable']", $controller);
+        self::assertStringContainsString('name="billable"', $time);
+        self::assertStringContainsString('name="is_payable"', $time);
+        self::assertStringContainsString("'description','billable','is_payable'", $controller);
+        self::assertStringContainsString('Save audited edit', $time);
     }
 
     public function testInvoiceLinkingRequiresBillingAccessAndOffersOnlyMatchingJobDrafts(): void

@@ -61,16 +61,22 @@ final class TimeApprovalPolicy
             return false;
         }
 
+        $actor = $this->actor($actorId);
         $entryUserId = (int)($entry['user_id'] ?? 0);
         if ($entryUserId <= 0) {
             return false;
         }
+        if ($action === 'administrative_self_confirm') {
+            return $entryUserId === $actorId && $this->isAdministrator($actor);
+        }
         if ($entryUserId === $actorId) {
+            if ($this->isAdministrator($actor)) {
+                return in_array($action, ['approve', 'correct', 'void', 'history'], true);
+            }
             return in_array($action, ['correct', 'void', 'history'], true)
-                && $this->isOwnerIdentity($this->actor($actorId));
+                && $this->isOwnerIdentity($actor);
         }
 
-        $actor = $this->actor($actorId);
         if ($this->isAdministrator($actor)) {
             return true;
         }
@@ -117,6 +123,28 @@ final class TimeApprovalPolicy
         $stmt = $this->pdo->prepare('SELECT 1 FROM work_time_entries WHERE id=? AND user_id=? LIMIT 1');
         $stmt->execute([$entryId, $actorId]);
         return (bool)$stmt->fetchColumn();
+    }
+
+    /**
+     * Built-in account roles may confirm their own time without turning the
+     * worker into a nonpayable owner. Permission grants alone never enable
+     * this bypass.
+     */
+    public function canAdministrativelySelfConfirm(int $actorId): bool
+    {
+        return $this->isAdministrator($this->actor($actorId));
+    }
+
+    public function canAdministrativelySelfConfirmEntry(int $actorId, string $entryId): bool
+    {
+        return $this->canReviewEntry($actorId, $entryId, 'administrative_self_confirm');
+    }
+
+    public function assertCanAdministrativelySelfConfirmEntry(int $actorId, string $entryId): void
+    {
+        if (!$this->canAdministrativelySelfConfirmEntry($actorId, $entryId)) {
+            throw new DomainException('Only an administrator can self-confirm their own time entry.');
+        }
     }
 
     /** @return array<string,mixed> */

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../services/DocumentPolicy.php';
+require_once __DIR__ . '/../../../services/WorkTimeInvoiceEligibilityService.php';
 require_once __DIR__ . '/../../components/tax_lookup_control.php';
 $id = (int)($_GET['id'] ?? 0);
 require_record_ownership($pdo, 'invoices', $id);
@@ -28,59 +29,15 @@ foreach ($clients as $c) {
     break;
   }
 }
-$availableTimeStmt = $pdo->prepare(
-  "SELECT t.id,t.user_id,t.start_time,t.duration_seconds,t.description,t.job_id,t.project_id,
-          wt.name work_type_name,j.job_code,p.name project_name,
-          COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),NULLIF(u.username,''),u.email) worker_name,
-          COALESCE(NULLIF(bt.rate,0),NULLIF(s.billing_rate,0)) billing_rate
-   FROM work_time_entries t
-   JOIN users u ON u.id=t.user_id
-   LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id
-   LEFT JOIN work_types wt ON wt.id=t.work_type_id
-   LEFT JOIN jobs j ON j.id=t.job_id
-   LEFT JOIN projects p ON p.id=t.project_id
-   JOIN work_approval_snapshots s ON s.id=(
-     SELECT s2.id FROM work_approval_snapshots s2
-     WHERE s2.time_entry_id=t.id AND s2.entry_revision<=t.revision AND s2.voided_at IS NULL
-     ORDER BY s2.entry_revision DESC LIMIT 1
-   )
-   JOIN work_billing_consumptions wbc ON wbc.approval_snapshot_id=s.id
-     AND wbc.consumption_type IN ('approved','correction')
-   JOIN time_entries bt ON bt.id=wbc.billing_time_entry_id
-   WHERE t.client_id=? AND t.status='approved' AND t.workflow_status='confirmed'
-     AND t.billable=1 AND t.end_time IS NOT NULL
-     AND COALESCE(bt.billed,0)=0 AND bt.invoice_item_id IS NULL
-     AND (t.invoice_id IS NULL OR t.invoice_id=?)
-     AND (t.job_id IS NULL OR t.job_id=?)
-   ORDER BY t.start_time DESC"
-);
-$availableTimeStmt->execute([(int)$inv['client_id'], $id, (int)($inv['job_id'] ?? 0)]);
-$availableTimeEntries = $availableTimeStmt->fetchAll(PDO::FETCH_ASSOC);
-$pendingTimeStmt = $pdo->prepare(
-  "SELECT t.id,t.user_id,t.start_time,t.duration_seconds,t.description,t.job_id,t.project_id,
-          t.status,t.workflow_status,wt.name work_type_name,j.job_code,p.name project_name,
-          COALESCE(NULLIF(TRIM(CONCAT(ep.first_name,' ',ep.last_name)),''),NULLIF(u.username,''),u.email) worker_name
-   FROM work_time_entries t
-   JOIN users u ON u.id=t.user_id
-   LEFT JOIN employee_profiles ep ON ep.user_id=t.user_id
-   LEFT JOIN work_types wt ON wt.id=t.work_type_id
-   LEFT JOIN jobs j ON j.id=t.job_id
-   LEFT JOIN projects p ON p.id=t.project_id
-   WHERE t.client_id=? AND t.billable=1 AND t.end_time IS NOT NULL
-     AND t.workflow_status IN ('draft','submitted','returned')
-     AND (t.invoice_id=? OR (t.invoice_id IS NULL AND (t.job_id IS NULL OR t.job_id=?)))
-   ORDER BY t.start_time DESC"
-);
-$pendingTimeStmt->execute([(int)$inv['client_id'], $id, (int)($inv['job_id'] ?? 0)]);
-$pendingTimeEntries = $pendingTimeStmt->fetchAll(PDO::FETCH_ASSOC);
 $invoiceActorId = (int)($_SESSION['user']['id'] ?? 0);
-$invoiceActorOwnerStmt = $pdo->prepare(
-  "SELECT 1 FROM worker_profiles
-   WHERE user_id=? AND status='active' AND relationship_type='owner'
-     AND relationship_review_required=0 LIMIT 1"
-);
-$invoiceActorOwnerStmt->execute([$invoiceActorId]);
-$invoiceActorIsVerifiedOwner = (bool)$invoiceActorOwnerStmt->fetchColumn();
+$invoiceTimeEligibility = (new \App\Services\WorkTimeInvoiceEligibilityService($pdo))
+  ->forInvoice($id, $invoiceActorId);
+$availableTimeEntries = $invoiceTimeEligibility['ready'];
+$pendingTimeEntries = $invoiceTimeEligibility['pending'];
+$attachedTimeEntries = $invoiceTimeEligibility['attached'];
+$invoiceTimeBlockingReason = $invoiceTimeEligibility['blocking_reason'];
+$invoiceActorIsVerifiedOwner = $invoiceTimeEligibility['actor_is_verified_owner'];
+$invoiceActorCanAdministrativelySelfConfirm = $invoiceTimeEligibility['actor_can_administratively_self_confirm'];
 $contractEstimateLines = [];
 if (!empty($inv['contract_id'])) {
   $estimateStmt = $pdo->prepare(
@@ -111,6 +68,9 @@ if (!empty($inv['contract_id'])) {
       <div style="font-weight:700;color:#1e3a8a">Add confirmed time to this draft</div>
       <div style="font-size:13px;color:#475569">Confirmed, billable time for this client stays available until it is attached. Finalizing the invoice locks this workflow.</div>
     </div>
+    <?php if ($invoiceTimeBlockingReason): ?>
+      <p style="margin:0;color:#92400e"><?php echo htmlspecialchars($invoiceTimeBlockingReason); ?></p>
+    <?php endif; ?>
     <?php if (!$availableTimeEntries): ?>
       <p style="margin:0;color:#64748b"><?php echo $pendingTimeEntries
         ? 'No time is ready to add yet. Pending entries and their next action are shown below.'
@@ -149,7 +109,7 @@ if (!empty($inv['contract_id'])) {
             'returned' => 'Returned for changes',
             default => 'Not submitted for review',
           };
-          $canConfirmAndAdd = $invoiceActorIsVerifiedOwner && (int)$timeEntry['user_id'] === $invoiceActorId;
+          $canConfirmAndAdd = (bool)($timeEntry['can_confirm_and_add'] ?? false);
         ?>
           <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px">
             <div>
@@ -164,7 +124,10 @@ if (!empty($inv['contract_id'])) {
                 <input type="hidden" name="entry_user_id" value="<?php echo (int)$timeEntry['user_id']; ?>">
                 <input type="hidden" name="invoice_id" value="<?php echo $id; ?>">
                 <input type="hidden" name="return_to" value="invoice-edit">
-                <button class="btn btn-primary btn-sm" type="submit">Confirm and add</button>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="number" name="billing_rate" min="0.01" step="0.01" placeholder="Optional hourly rate" aria-label="Optional hourly billing rate" style="width:140px;padding:8px;border:1px solid #d97706;border-radius:6px">
+                  <button class="btn btn-primary btn-sm" type="submit">Confirm and add</button>
+                </div>
               </form>
             <?php elseif ((string)$timeEntry['workflow_status'] === 'submitted' && (int)$timeEntry['user_id'] !== $invoiceActorId): ?>
               <a class="btn btn-sm" href="/?page=workforce/approvals">Review time</a>
@@ -175,7 +138,7 @@ if (!empty($inv['contract_id'])) {
             <?php endif; ?>
           </div>
         <?php endforeach; ?>
-        <?php if (!$invoiceActorIsVerifiedOwner && array_filter($pendingTimeEntries, static fn(array $entry): bool => (int)$entry['user_id'] === $invoiceActorId)): ?>
+        <?php if (!$invoiceActorCanAdministrativelySelfConfirm && !$invoiceActorIsVerifiedOwner && array_filter($pendingTimeEntries, static fn(array $entry): bool => (int)$entry['user_id'] === $invoiceActorId)): ?>
           <p style="margin:0;color:#92400e;font-size:13px">Your own submitted time needs another reviewer. If this account represents the business owner, confirm its <a href="/?page=settings&amp;tab=business-units">Owner relationship</a> to use self-confirmation and nonpayable owner time.</p>
         <?php endif; ?>
       </div>

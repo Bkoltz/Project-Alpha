@@ -34,8 +34,9 @@ if (!in_array($invoiceAction, ['save', 'draft', 'finalize_send'], true)) {
     $invoiceAction = 'save';
 }
 $finalizeAndSend = $invoiceAction === 'finalize_send';
+$dueDateWasProvided = trim((string)($_POST['due_date'] ?? '')) !== '';
 $due_date = $_POST['due_date'] ?? null;
-if (!$due_date || trim($due_date) === '') {
+if (!$dueDateWasProvided) {
     $due_date = project_invoice_due_date($pdo, $project_id, $appConfig);
 }
 
@@ -105,6 +106,7 @@ $total = max(0.0, $subtotal - $discount_amount + $tax_amount);
 $customFields = extractCustomFieldValues($_POST);
 $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
+$derivedJob = null;
 $pdo->beginTransaction();
 try {
     $selectedTimeEntryIds = array_values(array_unique(array_merge(...array_map(
@@ -146,6 +148,96 @@ try {
     }
     if ($selectedTimeEntryIds) {
         $placeholders = implode(',', array_fill(0, count($selectedTimeEntryIds), '?'));
+        $timeContext = $pdo->prepare(
+            "SELECT te.id billing_time_entry_id,te.client_id billing_client_id,te.project_id billing_project_id,
+                    wt.id work_time_entry_id,wt.client_id work_client_id,wt.project_id work_project_id,wt.job_id,
+                    j.client_id job_client_id,j.project_id job_project_id,j.job_code
+             FROM time_entries te
+             LEFT JOIN work_billing_consumptions c
+               ON c.billing_time_entry_id=te.id AND c.consumption_type IN ('approved','correction')
+             LEFT JOIN work_approval_snapshots s ON s.id=c.approval_snapshot_id
+             LEFT JOIN work_time_entries wt ON wt.id=s.time_entry_id
+             LEFT JOIN jobs j ON j.id=wt.job_id
+             WHERE te.id IN ($placeholders)
+             FOR UPDATE"
+        );
+        $timeContext->execute($selectedTimeEntryIds);
+        $contextRows = $timeContext->fetchAll(PDO::FETCH_ASSOC);
+        $canonicalJobIds = [];
+        $contextProjectIds = [];
+        foreach ($contextRows as $contextRow) {
+            foreach (['billing_client_id','work_client_id','job_client_id'] as $clientKey) {
+                $contextClientId = (int)($contextRow[$clientKey] ?? 0);
+                if ($contextClientId > 0 && $contextClientId !== $client_id) {
+                    throw new DomainException(
+                        'The selected tracked time belongs to a different client. Choose time for only this invoice client.'
+                    );
+                }
+            }
+            foreach (['billing_project_id','work_project_id','job_project_id'] as $projectKey) {
+                $contextProjectId = (int)($contextRow[$projectKey] ?? 0);
+                if ($contextProjectId > 0) {
+                    $contextProjectIds[$contextProjectId] = true;
+                }
+            }
+            $contextJobId = (int)($contextRow['job_id'] ?? 0);
+            if ($contextJobId > 0) {
+                $canonicalJobIds[$contextJobId] = true;
+                $derivedJob ??= [
+                    'id' => $contextJobId,
+                    'client_id' => (int)($contextRow['job_client_id'] ?? 0),
+                    'project_id' => (int)($contextRow['job_project_id'] ?? 0),
+                    'job_code' => (string)($contextRow['job_code'] ?? ''),
+                ];
+            }
+        }
+        if (count($canonicalJobIds) > 1) {
+            throw new DomainException(
+                'The selected tracked time spans multiple Jobs. Create a separate invoice for each Job.'
+            );
+        }
+        if (count($contextProjectIds) > 1) {
+            throw new DomainException(
+                'The selected tracked time spans multiple Projects. Create a separate invoice for each Project.'
+            );
+        }
+        $derivedProjectId = $contextProjectIds ? (int)array_key_first($contextProjectIds) : 0;
+        if ($project_id && $derivedProjectId > 0 && $project_id !== $derivedProjectId) {
+            throw new DomainException(
+                'The selected tracked time does not belong to the chosen Project. Choose the matching Project or remove that time.'
+            );
+        }
+        if (!$project_id && $derivedProjectId > 0) {
+            $project_id = $derivedProjectId;
+        }
+        if ($derivedJob !== null) {
+            if ($derivedJob['client_id'] !== $client_id || $derivedJob['job_code'] === '') {
+                throw new DomainException('The Job for the selected tracked time is unavailable for this invoice client.');
+            }
+            if ($project_id && $derivedJob['project_id'] <= 0) {
+                throw new DomainException(
+                    'The selected tracked time belongs to a Job that is not assigned to the chosen Project. Assign the Job first or remove the Project.'
+                );
+            }
+            if ($project_id && $derivedJob['project_id'] !== $project_id) {
+                throw new DomainException(
+                    'The selected tracked time belongs to a different Job or Project. Create the invoice from one matching Job.'
+                );
+            }
+        }
+        if ($project_id && !pa_project_is_active_for_client(
+            $pdo,
+            $project_id,
+            $client_id,
+            (int)($_SESSION['user']['id'] ?? 0)
+        )) {
+            throw new DomainException('The Project derived from tracked time is not available for this client.');
+        }
+        $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
+        if (!$dueDateWasProvided) {
+            $due_date = project_invoice_due_date($pdo, $project_id, $appConfig);
+        }
+
         $groups = $pdo->prepare(
             "SELECT DISTINCT approval_snapshot_id FROM work_billing_consumptions
              WHERE billing_time_entry_id IN ($placeholders)"
@@ -188,15 +280,29 @@ try {
             throw new RuntimeException('Client travel quantity or rate no longer matches the selected charges.');
         }
     }
-    $stmt = $pdo->prepare('INSERT INTO invoices (client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, custom_fields, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, 'draft', $due_date ?: null, $customFieldsJson, $__orgId, $__creator]);
+    $stmt = $pdo->prepare(
+        'INSERT INTO invoices
+         (client_id,project_id,billing_mode,discount_type,discount_value,tax_percent,
+          subtotal,tax_amount,total,balance_due,status,due_date,custom_fields,organization_id,created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    );
+    $stmt->execute([
+        $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
+        $subtotal, $tax_amount, $total, $total, 'draft', $due_date ?: null,
+        $customFieldsJson, $__orgId, $__creator,
+    ]);
     $invoice_id = (int)$pdo->lastInsertId();
     if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
         $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
     }
     // Assign a new Project ID and doc_number
-    $projectCode = project_next_code($pdo, $client_id);
-    $jobId = JobAssignmentService::ensureForCode($pdo, $client_id, $projectCode, $project_id ?: null, $__creator);
+    if (!empty($derivedJob)) {
+        $projectCode = (string)$derivedJob['job_code'];
+        $jobId = (int)$derivedJob['id'];
+    } else {
+        $projectCode = project_next_code($pdo, $client_id);
+        $jobId = JobAssignmentService::ensureForCode($pdo, $client_id, $projectCode, $project_id ?: null, $__creator);
+    }
     $serviceLocationId = document_resolve_service_location($pdo,$client_id,$project_id,$jobId,$requestedServiceLocationId);
     $pdo->prepare('UPDATE invoices SET project_code=?,job_id=?,service_location_id=? WHERE id=?')->execute([$projectCode, $jobId, $serviceLocationId, $invoice_id]);
     $notes = trim((string)($_POST['project_notes'] ?? ''));
@@ -258,7 +364,11 @@ try {
     $pdo->commit();
 } catch (Throwable $e) {
     $pdo->rollBack();
-    header('Location: /?page=invoice/invoices-create&error=Failed%20to%20create%20invoice');
+    $message = $e instanceof DomainException
+        ? $e->getMessage()
+        : 'Failed to create invoice.';
+    @error_log('[invoices_create] ' . $e->getMessage());
+    header('Location: /?page=invoice/invoices-create&error=' . urlencode($message));
     exit;
 }
 

@@ -28,6 +28,9 @@ final class TrackedTimeInvoiceAggregationTest extends TestCase
         $invoiceEdit = (string)file_get_contents(
             $this->root . '/src/views/pages/invoice/invoices-edit.php'
         );
+        $eligibility = (string)file_get_contents(
+            $this->root . '/src/services/WorkTimeInvoiceEligibilityService.php'
+        );
         $workforceAction = (string)file_get_contents(
             $this->root . '/src/controllers/workforce/action.php'
         );
@@ -36,14 +39,18 @@ final class TrackedTimeInvoiceAggregationTest extends TestCase
         self::assertStringNotContainsString("WHERE i.billing_mode='hourly'", $timekeeping);
         self::assertStringContainsString('i.doc_number invoice_number', $timekeeping);
         self::assertStringContainsString("WHERE id=? AND status='draft' AND finalized_at IS NULL", $linker);
-        self::assertStringContainsString('The time entry and invoice must belong to the same client.', $linker);
+        self::assertStringContainsString('assertCompatibleDestination', $linker);
+        self::assertStringContainsString('assertUnattached', $linker);
+        self::assertStringContainsString('The time entry and invoice must belong to the same client.', $eligibility);
         self::assertStringContainsString('DocumentPolicy::assertMutable', $linker);
         self::assertStringContainsString('$availableInvoices = array_values(array_filter(', $timeView);
         self::assertStringContainsString('foreach ($availableInvoices as $invoice)', $timeView);
         self::assertStringContainsString('name="invoice_id" data-workforce-invoice', $timeView);
         self::assertStringContainsString('Add confirmed time to this draft', $invoiceEdit);
-        self::assertStringContainsString("t.status='approved' AND t.workflow_status='confirmed'", $invoiceEdit);
-        self::assertStringContainsString("t.workflow_status IN ('draft','submitted','returned')", $invoiceEdit);
+        self::assertStringContainsString('new \App\Services\WorkTimeInvoiceEligibilityService', $invoiceEdit);
+        self::assertStringContainsString("t.status='approved' AND t.workflow_status='confirmed'", $eligibility);
+        self::assertStringContainsString("t.workflow_status IN ('draft','submitted','returned')", $eligibility);
+        self::assertStringContainsString('hasNoAttachedProjectionSql', $eligibility);
         self::assertStringContainsString('Time waiting for confirmation', $invoiceEdit);
         self::assertStringContainsString('Confirm and add', $invoiceEdit);
         self::assertStringContainsString('name="entry_user_id"', $invoiceEdit);
