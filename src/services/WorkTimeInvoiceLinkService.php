@@ -99,6 +99,7 @@ final class WorkTimeInvoiceLinkService
                 || !empty($entry['billing_projection_invoice_item_id'])) {
                 throw new DomainException('This time entry is already attached to an invoice.');
             }
+            (new WorkTimeInvoiceEligibilityService($this->pdo))->assertUnattached($entryId);
 
             $invoiceStmt = $this->pdo->prepare(
                 "SELECT * FROM invoices WHERE id=? AND status='draft' AND finalized_at IS NULL FOR UPDATE"
@@ -109,15 +110,7 @@ final class WorkTimeInvoiceLinkService
                 throw new DomainException('Choose a mutable draft invoice.');
             }
             \DocumentPolicy::assertMutable($this->pdo, 'invoice', $invoiceId, 'monetary_adjustment');
-            if (!empty($entry['client_id']) && (int)$entry['client_id'] !== (int)$invoice['client_id']) {
-                throw new DomainException('The time entry and invoice must belong to the same client.');
-            }
-            if (empty($invoice['job_id'])) {
-                throw new DomainException('Assign the invoice to a Job before adding tracked time.');
-            }
-            if (!empty($entry['job_id']) && (int)$entry['job_id'] !== (int)$invoice['job_id']) {
-                throw new DomainException('The time entry and invoice belong to different Jobs. Confirm a context move before linking them.');
-            }
+            WorkTimeInvoiceEligibilityService::assertCompatibleDestination($entry, $invoice);
 
             $rate = $this->resolveRate($invoiceId, $requestedRate, $entry);
             $durationSeconds = (int)$entry['duration_seconds'];

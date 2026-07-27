@@ -65,7 +65,7 @@ final class TimeApprovalAccessWorkflowTest extends TestCase
         self::assertFalse($policy->canReviewEntry(8101, 'own'));
         self::assertTrue($policy->canReviewEntry(8101, 'same'));
         self::assertFalse($policy->canReviewEntry(8101, 'other'));
-        self::assertFalse($policy->canReviewEntry(8105, 'admin-own', 'correct'), 'Administrator ACL is not an owner relationship.');
+        self::assertTrue($policy->canReviewEntry(8105, 'admin-own', 'correct'), 'Administrators may correct their own confirmed time.');
         self::assertSame(['same'], array_column($queue->pendingFor(8101), 'id'));
         self::assertSame(count($queue->pendingFor(8101)), $queue->pendingCountFor(8101));
         self::assertSame([8102 => 1], $queue->pendingCountsByUser(8101));

@@ -20,8 +20,8 @@ if ($googleCallbackBase === '') {
 }
 $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-oauth&action=callback';
 ?>
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Domain &amp; Public Access</legend>
+<fieldset>
+  <legend>Domain &amp; Public Access</legend>
   
   <label style="display:block;margin-bottom:12px">
     <div style="margin-bottom:4px;font-weight:500">Application Domain <span style="color:#666;font-weight:normal">(Optional)</span></div>
@@ -44,8 +44,8 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
   <?php endif; ?>
 </fieldset>
 
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Brand</legend>
+<fieldset>
+  <legend>Brand</legend>
   <label>
     <div>Brand Name</div>
     <input type="text" name="brand_name" value="<?php echo htmlspecialchars(($appConfig['brand_name'] ?? 'Project Alpha')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -69,8 +69,8 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
   </div>
 </fieldset>
 
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Business Info</legend>
+<fieldset>
+  <legend>Business Info</legend>
   <label>
     <div>Business / Organization Name</div>
     <input name="from_company" value="<?php echo htmlspecialchars($appConfig['from_company'] ?? ($appConfig['brand_name'] ?? '')); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
@@ -112,8 +112,8 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
   </div>
 </fieldset>
 
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Timezone</legend>
+<fieldset>
+  <legend>Timezone</legend>
   <?php $tzCurrent = $appConfig['timezone'] ?? date_default_timezone_get();
   $zones = function_exists('timezone_identifiers_list') ? timezone_identifiers_list() : []; ?>
   <label>
@@ -125,8 +125,8 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
     </select>
   </label>
 </fieldset>
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Google Address &amp; Route Configuration</legend>
+<fieldset>
+  <legend>Google Address &amp; Route Configuration</legend>
   <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Installation administrators configure a browser key restricted by HTTP referrer and a server key restricted to the Routes API. Enable the workflow separately.</p>
   <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
     <label><div>Places browser key</div><input type="password" name="google_maps_browser_key" value="<?php echo htmlspecialchars((string)($appConfig['google_maps_browser_key'] ?? '')); ?>" autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd"></label>
@@ -139,8 +139,8 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
 <?php elseif (!empty($_GET['email_err'])): ?>
   <div style="margin:10px 0;padding:10px 12px;border-radius:8px;background:#fff1f2;color:#881337;border:1px solid #fca5a5">Test email failed: <?php echo htmlspecialchars($_GET['email_err']); ?></div>
 <?php endif; ?>
-<fieldset style="border:1px solid #eee;border-radius:8px;padding:12px">
-  <legend style="padding:0 6px;color:var(--muted)">Outgoing Email</legend>
+<fieldset>
+  <legend>Outgoing Email</legend>
   <p style="margin:0 0 12px;color:var(--muted)">Configure SMTP, Google, or both. Exactly one provider is active; Project Alpha never silently switches providers.</p>
   <?php if (!empty($_GET['email_connected'])): ?>
     <div style="margin-bottom:12px;padding:10px;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:8px">Google Gmail connected and activated.</div>

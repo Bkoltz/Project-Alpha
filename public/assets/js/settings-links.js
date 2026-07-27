@@ -37,6 +37,17 @@
         var input = document.querySelector('input[name="' + provider + '_' + field + '"]');
         formData.append(field, input ? input.value : '');
       });
+      var s3PublicBase = document.querySelector('input[name="' + provider + '_public_base_url"]');
+      formData.append('public_base_url', s3PublicBase ? s3PublicBase.value : '');
+    } else if (provider === 'r2') {
+      ['account_id', 'access_key', 'secret_key', 'bucket'].forEach(function (field) {
+        var input = document.querySelector('input[name="' + provider + '_' + field + '"]');
+        formData.append(field, input ? input.value : '');
+      });
+      var r2Endpoint = document.querySelector('input[name="' + provider + '_endpoint"]');
+      formData.append('endpoint', r2Endpoint ? r2Endpoint.value : '');
+      var r2PublicBase = document.querySelector('input[name="' + provider + '_public_base_url"]');
+      formData.append('public_base_url', r2PublicBase ? r2PublicBase.value : '');
     }
 
     fetch('/?page=settings/link-test-connection', { method: 'POST', body: formData })

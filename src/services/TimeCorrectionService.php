@@ -113,9 +113,9 @@ final class TimeCorrectionService
                 $entry['id'], $entry['revision'],
             ]);
 
-            $pay = $this->compensationImpact((string)$entry['id'], $newDuration, $manualWorkerDelta);
+            $pay = $this->compensationImpact($entry, $proposed, $actorId, $manualWorkerDelta);
             $statementEffect = ['action' => 'none', 'adjustment_id' => null, 'original_statement_id' => null, 'replacement_statement_id' => null];
-            if ($pay['earning_id'] !== null && abs((float)$pay['delta']) >= 0.005) {
+            if ($pay['earning_id'] !== null && empty($pay['new_earning']) && abs((float)$pay['delta']) >= 0.005) {
                 $statementEffect = (new WorkerStatementCorrectionService($this->pdo))->applyDelta(
                     $pay['earning_id'], $pay['delta'], (string)$request['reason'], $actorId, $nextOpenPayPeriodId
                 );
@@ -210,24 +210,101 @@ final class TimeCorrectionService
         return $proposal;
     }
 
-    /** @return array{earning_id:?string,delta:string,currency:string,method:?string,requires_review:bool} */
-    private function compensationImpact(string $entryId, int $newDuration, ?string $manualWorkerDelta): array
+    /**
+     * @param array<string,mixed> $before
+     * @param array<string,mixed> $after
+     * @return array{earning_id:?string,delta:string,currency:string,method:?string,requires_review:bool,new_earning:bool}
+     */
+    private function compensationImpact(
+        array $before,
+        array $after,
+        int $actorId,
+        ?string $manualWorkerDelta
+    ): array
     {
         $statement = $this->pdo->prepare(
             "SELECT * FROM worker_earnings WHERE work_time_entry_id=? AND status<>'voided'
              ORDER BY source_revision DESC,created_at DESC LIMIT 1 FOR UPDATE"
         );
-        $statement->execute([$entryId]);
+        $statement->execute([(string)$before['id']]);
         $earning = $statement->fetch(PDO::FETCH_ASSOC);
         if (!$earning) {
-            return ['earning_id' => null, 'delta' => '0.00', 'currency' => 'USD', 'method' => null, 'requires_review' => false];
+            if (empty($after['is_payable'])) {
+                return [
+                    'earning_id' => null,
+                    'delta' => '0.00',
+                    'currency' => 'USD',
+                    'method' => null,
+                    'requires_review' => false,
+                    'new_earning' => false,
+                ];
+            }
+            if (!empty($after['work_assignment_id'])) {
+                throw new DomainException('Assigned-work compensation is controlled by its assignment and cannot be enabled from a time correction.');
+            }
+            $profile = $this->pdo->prepare(
+                "SELECT wp.id,wp.relationship_type,wp.compensation_policy,
+                        COALESCE(wp.relationship_review_required,0) relationship_review_required,
+                        jwc.catalog_work_component_id
+                 FROM work_time_entries t
+                 JOIN worker_profiles wp ON wp.user_id=t.user_id AND wp.status='active'
+                 LEFT JOIN work_assignments wa ON wa.id=t.work_assignment_id
+                 LEFT JOIN job_work_components jwc ON jwc.id=wa.job_work_component_id
+                 WHERE t.id=? LIMIT 1"
+            );
+            $profile->execute([(string)$before['id']]);
+            $worker = $profile->fetch(PDO::FETCH_ASSOC);
+            if (!$worker
+                || (string)$worker['relationship_type'] === 'owner'
+                || (string)$worker['compensation_policy'] !== 'rules'
+                || !empty($worker['relationship_review_required'])
+                || empty($after['work_type_id'])) {
+                throw new DomainException('Configure an eligible worker compensation policy and Work Activity before enabling pay.');
+            }
+            $rule = (new CompensationRuleService($this->pdo))->resolve(
+                (int)$worker['id'],
+                (int)$after['work_type_id'],
+                !empty($worker['catalog_work_component_id']) ? (int)$worker['catalog_work_component_id'] : null
+            );
+            if ((string)$rule['method'] === 'nonpayable'
+                || (string)$rule['eligibility_trigger'] !== 'completed_approved'
+                || (string)$rule['method'] === 'percentage') {
+                throw new DomainException('The selected Work Activity does not have an immediately payable compensation rule.');
+            }
+            $calculation = (new CompensationRuleService($this->pdo))->calculate($rule, [
+                'duration_seconds' => (int)$after['duration_seconds'],
+                'quantity' => 1,
+            ]);
+            $record = (new WorkerEarningService($this->pdo))->record(
+                'time_entry',
+                (string)$before['id'],
+                (int)$before['revision'] + 1,
+                (int)$worker['id'],
+                (string)$calculation['method'],
+                number_format(((int)$after['duration_seconds']) / 3600, 4, '.', ''),
+                (string)$rule['amount'],
+                (string)$calculation['amount'],
+                (string)$calculation['currency'],
+                $calculation,
+                $actorId,
+                'eligible',
+                (string)$before['id']
+            );
+            return [
+                'earning_id' => (string)$record['id'],
+                'delta' => number_format((float)$calculation['amount'], 2, '.', ''),
+                'currency' => (string)$calculation['currency'],
+                'method' => (string)$calculation['method'],
+                'requires_review' => false,
+                'new_earning' => true,
+            ];
         }
         $method = (string)$earning['method'];
-        $newAmount = (float)$earning['amount'];
+        $newAmount = empty($after['is_payable']) ? 0.0 : (float)$earning['amount'];
         $requiresReview = false;
-        if ($method === 'hourly' && $earning['rate'] !== null) {
-            $newAmount = round(($newDuration / 3600) * (float)$earning['rate'], 2);
-        } elseif ($method === 'base_overage') {
+        if (!empty($after['is_payable']) && $method === 'hourly' && $earning['rate'] !== null) {
+            $newAmount = round(((int)$after['duration_seconds'] / 3600) * (float)$earning['rate'], 2);
+        } elseif (!empty($after['is_payable']) && $method === 'base_overage') {
             $snapshot = json_decode((string)$earning['calculation_snapshot'], true);
             $rule = is_array($snapshot) ? ($snapshot['rule_snapshot'] ?? $snapshot['calculation']['rule_snapshot'] ?? []) : [];
             $baseAmount = (float)($rule['amount'] ?? $earning['rate'] ?? 0);
@@ -245,9 +322,9 @@ final class TimeCorrectionService
                 $requiresReview = true;
             } else {
                 $includedSeconds = $includedMinutes * 60 * $quantity;
-                $newAmount = round(($baseAmount * $quantity) + (max(0, $newDuration - $includedSeconds) / 3600 * $overageRate), 2);
+                $newAmount = round(($baseAmount * $quantity) + (max(0, (int)$after['duration_seconds'] - $includedSeconds) / 3600 * $overageRate), 2);
             }
-        } elseif (!in_array($method, ['fixed'], true)) {
+        } elseif (!empty($after['is_payable']) && !in_array($method, ['fixed'], true)) {
             if ($manualWorkerDelta === null || !is_numeric($manualWorkerDelta)) {
                 throw new DomainException('This compensation method requires an explicit manual worker pay delta.');
             }
@@ -263,6 +340,7 @@ final class TimeCorrectionService
             'currency' => (string)$earning['currency'],
             'method' => $method,
             'requires_review' => $requiresReview,
+            'new_earning' => false,
         ];
     }
 
@@ -291,10 +369,17 @@ final class TimeCorrectionService
             $allocationService->reverse((int)$allocation['id'], $actorId, 'Approved time correction');
             $sourceInvoiceId = (int)($allocation['invoice_id'] ?? 0);
             $targetInvoiceId = (int)($after['invoice_id'] ?? 0);
-            $sameInvoice = $sourceInvoiceId > 0 && $sourceInvoiceId === $targetInvoiceId;
+            $replacementTreatment = !empty($after['billable']) ? 'hourly' : 'internal';
+            $replacementRate = $replacementTreatment === 'hourly' && $allocation['rate'] !== null
+                ? (string)$allocation['rate']
+                : null;
+            $sameInvoice = $replacementTreatment === 'hourly'
+                && $replacementRate !== null
+                && $sourceInvoiceId > 0
+                && $sourceInvoiceId === $targetInvoiceId;
             $replacement = $allocationService->allocate(
-                (string)$before['id'], (int)$before['revision'] + 1, (string)$allocation['treatment'],
-                (int)$after['duration_seconds'], $allocation['rate'] === null ? null : (string)$allocation['rate'],
+                (string)$before['id'], (int)$before['revision'] + 1, $replacementTreatment,
+                (int)$after['duration_seconds'], $replacementRate,
                 (string)$allocation['currency'], $actorId,
                 [
                     'client_id' => $after['client_id'], 'project_id' => $after['project_id'], 'job_id' => $after['job_id'],
@@ -311,10 +396,10 @@ final class TimeCorrectionService
                 } else {
                     $this->detachBillingProjection((string)$before['id'], $sourceInvoiceId, (int)$allocation['invoice_item_id']);
                     $this->refreshDraftInvoice($sourceInvoiceId, (int)$allocation['invoice_item_id']);
-                    if ($targetInvoiceId > 0) {
+                    if ($targetInvoiceId > 0 && $replacementTreatment === 'hourly' && $replacementRate !== null) {
                         $this->attachReplacementToDraftInvoice(
                             (string)$before['id'], (int)$replacement['id'], $targetInvoiceId,
-                            (int)$after['duration_seconds'], (float)$allocation['rate']
+                            (int)$after['duration_seconds'], (float)$replacementRate
                         );
                     }
                 }
@@ -361,7 +446,9 @@ final class TimeCorrectionService
                 );
                 return [
                     'old' => $calculate($otherSeconds + (int)$before['duration_seconds']),
-                    'new' => $calculate($otherSeconds + (int)$after['duration_seconds']),
+                    'new' => empty($after['billable'])
+                        ? 0.0
+                        : $calculate($otherSeconds + (int)$after['duration_seconds']),
                     'model' => 'base_overage',
                 ];
             }
@@ -371,12 +458,18 @@ final class TimeCorrectionService
                 'old' => $allocation['amount'] === null
                     ? round(((int)$before['duration_seconds'] / 3600) * (float)$allocation['rate'], 2)
                     : (float)$allocation['amount'],
-                'new' => round(((int)$after['duration_seconds'] / 3600) * (float)$allocation['rate'], 2),
+                'new' => empty($after['billable'])
+                    ? 0.0
+                    : round(((int)$after['duration_seconds'] / 3600) * (float)$allocation['rate'], 2),
                 'model' => 'hourly',
             ];
         }
         $amount = $allocation['amount'] === null ? null : (float)$allocation['amount'];
-        return ['old' => $amount, 'new' => $amount, 'model' => (string)$allocation['treatment']];
+        return [
+            'old' => $amount,
+            'new' => empty($after['billable']) ? 0.0 : $amount,
+            'model' => (string)$allocation['treatment'],
+        ];
     }
 
     private function detachBillingProjection(string $entryId, int $invoiceId, int $invoiceItemId): void
@@ -510,8 +603,13 @@ final class TimeCorrectionService
         $seconds = (int)$secondsStatement->fetchColumn();
         $quantity = round($seconds / 3600, 2);
         $lineTotal = round(($seconds / 3600) * (float)$rate, 2);
-        $this->pdo->prepare('UPDATE invoice_items SET quantity=?,hours=?,line_total=? WHERE id=?')
-            ->execute([$quantity, $quantity, $lineTotal, $invoiceItemId]);
+        if ($seconds <= 0) {
+            $this->pdo->prepare('DELETE FROM invoice_items WHERE id=? AND invoice_id=?')
+                ->execute([$invoiceItemId, $invoiceId]);
+        } else {
+            $this->pdo->prepare('UPDATE invoice_items SET quantity=?,hours=?,line_total=? WHERE id=?')
+                ->execute([$quantity, $quantity, $lineTotal, $invoiceItemId]);
+        }
         $subtotalStatement = $this->pdo->prepare(
             "SELECT COALESCE(SUM(line_total),0) FROM invoice_items WHERE invoice_id=? AND COALESCE(pricing_status,'standard')='standard'"
         );

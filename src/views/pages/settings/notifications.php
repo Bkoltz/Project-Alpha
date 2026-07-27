@@ -2,16 +2,12 @@
 // src/views/pages/settings/notifications.php
 ?>
 
-<div style="max-width:900px" data-settings-notifications>
-  <h2 style="margin:0 0 8px 0">Notifications & Automation</h2>
-  <p style="margin:0 0 24px 0;color:var(--muted)">Configure automated emails, reminders, and system tasks</p>
-
   <!-- ============================================================================ -->
   <!-- SYSTEM AUTOMATION -->
   <!-- ============================================================================ -->
-  
-  <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px;margin-bottom:20px">
-    <legend style="padding:0 8px;font-weight:600">System Automation</legend>
+
+  <fieldset data-settings-notifications><!-- data-settings-notifications required by settings-notifications.js -->
+    <legend>System Automation</legend>
     
     <!-- Recurring Invoice Generation -->
     <div style="margin-bottom:20px">
@@ -92,9 +88,9 @@
   <!-- ============================================================================ -->
   <!-- EMAIL NOTIFICATIONS -->
   <!-- ============================================================================ -->
-  
-  <fieldset style="border:1px solid #eee;border-radius:8px;padding:16px">
-    <legend style="padding:0 8px;font-weight:600">Email Notifications</legend>
+
+  <fieldset>
+    <legend>Email Notifications</legend>
 
     <div style="margin-bottom:16px">
       <h3 style="margin:0 0 12px 0;font-size:15px">Payment Receipts</h3>
@@ -255,6 +251,5 @@
       </label>
     </div>
   </fieldset>
-</div>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/settings-notifications.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
