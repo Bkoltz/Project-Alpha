@@ -17,7 +17,7 @@ $params = [];
 
 if (!empty($_GET['type'])) {
     $type = trim((string)$_GET['type']);
-    if (in_array($type, ['due_7', 'overdue_weekly'], true)) {
+    if (in_array($type, ['on_generate', 'on_demand_generate', 'on_finalize', 'due_7', 'overdue_weekly'], true)) {
         $where[] = 'n.notification_type = ?';
         $params[] = $type;
     }
@@ -32,7 +32,7 @@ if (!empty($_GET['invoice_id'])) {
 if (!empty($_GET['date_from'])) {
     $df = trim((string)$_GET['date_from']);
     if (strtotime($df) !== false) {
-        $where[] = 'DATE(n.sent_at) >= ?';
+        $where[] = 'DATE(COALESCE(n.sent_at,n.created_at)) >= ?';
         $params[] = date('Y-m-d', strtotime($df));
     }
 }
@@ -40,7 +40,7 @@ if (!empty($_GET['date_from'])) {
 if (!empty($_GET['date_to'])) {
     $dt = trim((string)$_GET['date_to']);
     if (strtotime($dt) !== false) {
-        $where[] = 'DATE(n.sent_at) <= ?';
+        $where[] = 'DATE(COALESCE(n.sent_at,n.created_at)) <= ?';
         $params[] = date('Y-m-d', strtotime($dt));
     }
 }
@@ -56,14 +56,14 @@ $totalPages = (int)ceil($totalCount / $perPage);
 
 // Fetch notifications with invoice details
 $sql = "
-    SELECT n.id, n.invoice_id, n.notification_type, n.sent_at, 
+    SELECT n.id, n.invoice_id, n.notification_type, n.delivery_status, n.attempt_count, n.next_attempt_at, n.last_error, n.email_to, n.sent_at, n.created_at,
            i.doc_number, i.invoice_type, i.total, i.status, i.due_date,
            c.name AS client_name, c.email AS client_email
     FROM invoice_notifications n
     JOIN invoices i ON i.id = n.invoice_id
     JOIN clients c ON c.id = i.client_id
     $whereClause
-    ORDER BY n.sent_at DESC
+    ORDER BY COALESCE(n.sent_at,n.created_at) DESC
     LIMIT ? OFFSET ?
 ";
 $stmt = $pdo->prepare($sql);

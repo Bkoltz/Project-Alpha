@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../../utils/invoice_content_links.php';
 require_once __DIR__ . '/../../../utils/payment_methods.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
 require_once __DIR__ . '/../../../services/StripeService.php';
+require_once __DIR__ . '/../../../utils/invoice_due_dates.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'invoices', $id);
@@ -62,6 +63,9 @@ if ($invoiceCollectionMode === '') {
 }
 
 if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? '')); }
+$paymentTermsSummary = invoice_payment_terms_text($inv, $appConfig);
+$showInvoiceDueDate = !array_key_exists('invoice_show_due_date', $appConfig) || !empty($appConfig['invoice_show_due_date']);
+$showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empty($appConfig['invoice_show_terms']);
 ?>
 <section>
   <?php if (strtolower((string)($inv['status'] ?? '')) === 'void'): ?>
@@ -421,9 +425,20 @@ if ($termsText === '') { $termsText = trim((string)($appConfig['terms'] ?? ''));
     </tr>
   </table>
 
+  <?php if (($showInvoiceDueDate && $paymentTermsSummary !== '') || ($showInvoiceTerms && $termsText !== '')): ?>
+  <div style="margin:12px 0;padding:12px 14px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc">
+    <?php if ($showInvoiceDueDate && $paymentTermsSummary !== ''): ?>
+      <div style="font-weight:700;color:#0f172a">Payment terms: <?php echo htmlspecialchars($paymentTermsSummary); ?></div>
+    <?php endif; ?>
+    <?php if ($showInvoiceTerms && $termsText !== ''): ?>
+      <div style="margin-top:6px;color:#334155;white-space:pre-wrap"><?php echo htmlspecialchars($termsText); ?></div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
   <?php if (!empty($projectNotes)): ?>
   <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
           <div style="font-weight:600;margin-bottom:6px">Job Notes</div>
+
     <pre style="white-space:pre-wrap;margin:0"><?php echo htmlspecialchars($projectNotes); ?></pre>
   </div>
   <?php endif; ?>

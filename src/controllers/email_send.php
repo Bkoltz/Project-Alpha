@@ -12,9 +12,8 @@ require_once __DIR__ . '/../utils/invoice_content_links.php';
 require_once __DIR__ . '/../utils/payment_methods.php';
 require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/../services/DocumentRevisionService.php';
-
-// Determine if Dompdf is available
-$dompdfAvailable = is_file(__DIR__ . '/../../vendor/autoload.php');
+require_once __DIR__ . '/../utils/invoice_notifications.php';
+require_once __DIR__ . '/../utils/document_pdf.php';
 
 $type = $_POST['type'] ?? '';
 $id = (int)($_POST['id'] ?? 0);
@@ -27,6 +26,7 @@ if (!in_array($type, ['quote','contract','invoice'], true) || $id <= 0) {
 
 $ownershipTable = ['quote' => 'quotes', 'contract' => 'contracts', 'invoice' => 'invoices'][$type];
 require_record_ownership($pdo, $ownershipTable, $id);
+$publicLinkId = 0;
 
 $invoiceLabel = '';
 try {
@@ -47,7 +47,7 @@ try {
     $subject = 'Contract C-' . $docnum . ' for ' . $clientName;
     $baseView = '/?page=contract-print&id='.$id;
   } else { // invoice
-    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, i.revision_number, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
+    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, i.revision_number, i.due_date, i.payment_terms_days, i.due_date_source, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
@@ -106,6 +106,9 @@ try {
   $clientName = trim((string)($row['name'] ?? ''));
   $firstName = $clientName !== '' ? preg_split('/\s+/', $clientName)[0] : 'there';
 
+  $includePublicLink = !empty($appConfig['public_links_in_email']);
+  $absoluteUrl = '';
+  if ($includePublicLink) {
   // Create/ensure public link table exists
   try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS public_links (
@@ -139,38 +142,29 @@ try {
   if ($days <= 0) { $days = 14; }
   $expireWhenPaid = $type === 'invoice';
   $exp = $expireWhenPaid ? null : date('Y-m-d H:i:s', time() + ($days * 24 * 60 * 60));
-  if(in_array($type,['quote','contract'],true)){
-    $existingLink=$pdo->prepare('SELECT token FROM public_links WHERE document_type=? AND document_id=? AND revoked=0 AND (expires_at IS NULL OR expires_at>NOW()) ORDER BY id DESC LIMIT 1');$existingLink->execute([$type,$id]);$token=(string)($existingLink->fetchColumn()?:'');
+  if (in_array($type, ['quote','contract'], true)) {
+    $existingLink = $pdo->prepare('SELECT token FROM public_links WHERE document_type=? AND document_id=? AND revoked=0 AND (expires_at IS NULL OR expires_at>NOW()) ORDER BY id DESC LIMIT 1');
+    $existingLink->execute([$type, $id]);
+    $token = (string)($existingLink->fetchColumn() ?: '');
   }
-  if($token===''){
-    $token = bin2hex(random_bytes(16));
+  if ($token === '') {
+    $token = bin2hex(random_bytes(32));
     $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, redirect, expires_at, expire_when_paid) VALUES (?,?,?,?,?,?)');
     $ins->execute([$type, $id, $token, null, $exp, $expireWhenPaid ? 1 : 0]);
+    $publicLinkId = (int)$pdo->lastInsertId();
   }
 
-  // Build absolute URL to public view
-  // Use configured app_host first (user's domain), fall back to HTTP_HOST (internal IP)
-  $host = '';
-  if (!empty($appConfig['app_host'])) { $host = (string)$appConfig['app_host']; }
-  if ($host === '') { $host = $_SERVER['HTTP_HOST'] ?? ''; }
-  if ($host === '') { $host = 'localhost'; }
-  // Detect scheme: check HTTPS, then X-Forwarded-Proto (Cloudflare proxy), then app_host prefix
-  $scheme = 'http';
-  if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') { $scheme = 'https'; }
-  elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos($_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') === 0) { $scheme = 'https'; }
-  elseif (!empty($appConfig['app_host']) && (strpos((string)$appConfig['app_host'], 'https://') === 0 || strpos((string)$appConfig['app_host'], 'http://') === 0)) {
-    // app_host includes scheme — extract it and strip from host
-    $parsedHost = parse_url((string)$appConfig['app_host']);
-    if (isset($parsedHost['scheme'])) { $scheme = $parsedHost['scheme']; }
-    if (isset($parsedHost['host'])) { $host = $parsedHost['host']; if (!empty($parsedHost['port'])) { $host .= ':' . $parsedHost['port']; } }
-  }
+  // Public links always use the validated configured instance origin.
   $publicUrl = '/?page=public-doc&token=' . rawurlencode($token);
-  $absoluteUrl = $scheme . '://' . $host . $publicUrl;
+  $absoluteUrl = invoice_notification_public_base($appConfig) . $publicUrl;
+  }
 
   // Compose body
+  $invoiceTerms = $type === 'invoice' ? invoice_payment_terms_text($row, $appConfig) : '';
   $body = '<p>Hello '.htmlspecialchars($firstName).',</p>' .
-    '<p>Please find your document attached and available at the link below:</p>' .
-    '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>';
+    '<p>Please find your document attached.</p>' .
+    ($invoiceTerms !== '' ? '<p>Payment terms: '.htmlspecialchars($invoiceTerms).'</p>' : '') .
+    ($absoluteUrl !== '' ? '<p><a href="'.htmlspecialchars($absoluteUrl).'">View Document</a></p>' : '');
 
   // Add online card payment button for invoices if Stripe is configured
   if ($type === 'invoice') {
@@ -181,7 +175,7 @@ try {
     }
 
     require_once __DIR__ . '/../services/StripeService.php';
-    if (pa_payment_methods_has($appConfig, 'stripe') && StripeService::isConfigured($appConfig)) {
+    if ($absoluteUrl !== '' && pa_payment_methods_has($appConfig, 'stripe') && StripeService::isConfigured($appConfig)) {
       // Check if invoice is payable
       try {
         $invSt = $pdo->prepare('SELECT status, total, amount_paid FROM invoices WHERE id = ?');
@@ -191,7 +185,7 @@ try {
           $invStatus = strtolower($invRow['status'] ?? '');
           $amountDue = (float)($invRow['total'] ?? 0) - (float)($invRow['amount_paid'] ?? 0);
           if (in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true) && $amountDue > 0) {
-            $payUrl = $scheme . '://' . $host . '/?page=stripe-checkout&token=' . rawurlencode($token);
+            $payUrl = invoice_notification_public_base($appConfig) . '/?page=stripe-checkout&token=' . rawurlencode($token);
             $body .= '<div style="margin:24px 0;padding:20px;background:#f0f7ff;border:1px solid #93c5fd;border-radius:8px;text-align:center">';
             $body .= '<p style="margin:0 0 12px;color:#1e40af;font-weight:600;font-size:16px">Ready to pay? Use our secure online card payment option:</p>';
             $body .= '<a href="'.htmlspecialchars($payUrl).'" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">Pay by Card</a>';
@@ -211,82 +205,25 @@ try {
     }
   }
 
-  $expiryCopy = $expireWhenPaid
-    ? 'This invoice link remains active until the invoice is paid in full or manually revoked.'
-    : 'This link will expire in ' . htmlspecialchars((string)$days) . ' day' . ($days===1?'':'s') . '.';
-  $body .= '<p>' . $expiryCopy . ' Do not share this link with untrusted parties!</p>' .
-    '<p>Thank you.</p>';
-
-  // Optionally render PDF attachment using Dompdf
-  $attachments = [];
-  if ($dompdfAvailable) {
-    $autoload = __DIR__ . '/../../vendor/autoload.php';
-    if (is_file($autoload)) {
-      require_once $autoload;
-      if (!class_exists('Dompdf\\Cpdf')) {
-        $cpdf = __DIR__ . '/../../vendor/dompdf/dompdf/lib/Cpdf.php';
-        if (is_file($cpdf)) { require_once $cpdf; }
-      }
-      try {
-        $viewFile = null;
-  if ($type === 'quote') { $viewFile = __DIR__ . '/../views/pages/quote/quote-details.php'; }
-  elseif ($type === 'contract') { $viewFile = __DIR__ . '/../views/pages/contract/contract-details.php'; }
-  else { $viewFile = __DIR__ . '/../views/pages/invoice/invoice-details.php'; }
-        if (is_file($viewFile)) {
-          ob_start();
-          if (!defined('PDF_MODE')) define('PDF_MODE', true);
-          $_GET['id'] = (string)$id;
-          require $viewFile;
-          $content = ob_get_clean();
-
-          $brand = htmlspecialchars($appConfig['brand_name'] ?? 'Project Alpha');
-          $html = "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Document - {$brand}</title>\n<style>\n  @page { margin: 72px 54px 72px 54px; }\n  body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 12px; color: #111; }\n</style>\n</head><body>" . $content . "</body></html>";
-
-          $options = new Dompdf\Options();
-          $options->set('isRemoteEnabled', true);
-          $options->set('isHtml5ParserEnabled', true);
-          $projectRoot = realpath(__DIR__ . '/..' . '/..');
-          if ($projectRoot) { $options->set('chroot', $projectRoot); }
-          $dompdf = new Dompdf\Dompdf($options);
-          if ($projectRoot) {
-            $publicDir = realpath($projectRoot . DIRECTORY_SEPARATOR . 'public');
-            if ($publicDir) { $dompdf->setBasePath($publicDir); } else { $dompdf->setBasePath($projectRoot); }
-          }
-          $dompdf->setProtocol('file://');
-          $dompdf->loadHtml($html, 'UTF-8');
-          $dompdf->setPaper('letter', 'portrait');
-          $dompdf->render();
-          // Add header (date + page X of Y) and footer: powered-by text on every page
-          try {
-            $canvas = $dompdf->getCanvas();
-            $font = $dompdf->getFontMetrics()->getFont('Helvetica', 'normal');
-            // Header: date at top-left, page X of Y at top-right
-            $w = $canvas->get_width();
-            $dateStr = date('m/d/Y');
-            $canvas->page_text(54, 22, $dateStr, $font, 10, [0,0,0]);
-            $pageText = 'Page {PAGE_NUM} of {PAGE_COUNT}';
-            $canvas->page_text($w - 140, 22, $pageText, $font, 10, [0,0,0]);
-            // Footer
-            $h = $canvas->get_height();
-            $canvas->page_text(54, $h - 30, 'Powered by Project Alpha', $font, 10, [0,0,0]);
-          } catch (Throwable $bt) {
-            // ignore canvas failures and continue sending without header/footer
-          }
-          $pdfBinary = $dompdf->output();
-          $filename = $type === 'quote'
-            ? 'quote_Q-' . ($docnum ?: $id) . '.pdf'
-            : ($type === 'contract'
-              ? 'contract_C-' . ($docnum ?: $id) . '.pdf'
-              : 'invoice_' . $invoiceLabel . '.pdf');
-          $attachments[] = ['filename'=>$filename, 'content'=>$pdfBinary, 'mime'=>'application/pdf'];
-        }
-      } catch (Throwable $e) {
-        // If PDF fails, continue sending without attachment
-        app_log('email', 'pdf attach failed', ['type'=>$type, 'id'=>$id, 'ex'=>$e->getMessage()]);
-      }
-    }
+  if ($absoluteUrl !== '') {
+    $expiryCopy = $expireWhenPaid
+      ? 'This invoice link remains active until the invoice is paid in full or manually revoked.'
+      : 'This link will expire in ' . htmlspecialchars((string)$days) . ' day' . ($days===1?'':'s') . '.';
+    $body .= '<p>' . $expiryCopy . ' Do not share this link with untrusted parties!</p>';
   }
+  $body .= '<p>Thank you.</p>';
 
+  // Render before sending so a missing or oversized PDF cannot be reported as delivered.
+  try {
+    $attachment = document_pdf_attachment($pdo, $appConfig, $type, $id, $docnum);
+    if ($type === 'invoice') {
+      $attachment['filename'] = 'invoice_' . $invoiceLabel . '.pdf';
+    }
+    $attachments = [$attachment];
+  } catch (Throwable $pdfError) {
+    app_log('email', 'pdf attach failed', ['type'=>$type, 'id'=>$id, 'ex'=>$pdfError->getMessage()]);
+    throw new RuntimeException('PDF generation failed; document email was not sent.', 0, $pdfError);
+  }
   $revision = max(1, (int)($row['revision_number'] ?? 1));
   [$sent, $err, $deliveryLogId] = EmailService::sendEmail($to, $subject, $body, [
     'attachments' => $attachments,
@@ -295,6 +232,9 @@ try {
     'document_revision' => $revision,
     'message_key' => implode(':', ['document', $type, $id, $revision, strtolower((string)$to)]),
   ]);
+  if ($publicLinkId > 0 && (!$sent || $err === 'Already sent')) {
+    $pdo->prepare('UPDATE public_links SET revoked=1 WHERE id=?')->execute([$publicLinkId]);
+  }
 
   $toUrl = $redirectTo ?: $baseView;
   $join = (strpos($toUrl,'?')!==false)?'&':'?';
@@ -328,6 +268,9 @@ try {
   header('Location: ' . $toUrl . $join . ($sent ? 'emailed=1' : ('email_err=' . urlencode($err))));
   exit;
 } catch (Throwable $e) {
+  if ($publicLinkId > 0) {
+    try { $pdo->prepare('UPDATE public_links SET revoked=1 WHERE id=?')->execute([$publicLinkId]); } catch (Throwable $ignored) {}
+  }
   app_log('email', 'email exception', ['type'=>$type, 'id'=>$id, 'ex'=>$e->getMessage()]);
   $toUrl = $redirectTo ?: '/?page=home';
   $join = (strpos($toUrl,'?')!==false)?'&':'?';

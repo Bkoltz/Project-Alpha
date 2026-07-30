@@ -3,6 +3,9 @@
 require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/public_links.php';
 require_once __DIR__ . '/invoice_content_links.php';
+require_once __DIR__ . '/invoice_notifications.php';
+require_once __DIR__ . '/document_pdf.php';
+require_once __DIR__ . '/project_invoice_notifications.php';
 
 function project_invoice_table_has_column(PDO $pdo, string $table, string $column): bool
 {
@@ -166,22 +169,8 @@ function project_invoice_create_public_link(PDO $pdo, int $projectInvoiceId, arr
 
 function project_invoice_base_url(array $appConfig): string
 {
-    $host = trim((string)($appConfig['app_host'] ?? ''));
-    if ($host !== '' && preg_match('#^https?://#i', $host)) {
-        return rtrim($host, '/');
-    }
-    if ($host === '') {
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    }
-    $scheme = 'http';
-    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-        $scheme = 'https';
-    } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos((string)$_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') === 0) {
-        $scheme = 'https';
-    }
-    return $scheme . '://' . rtrim($host, '/');
+    return invoice_notification_public_base($appConfig);
 }
-
 function project_invoice_refresh_status(PDO $pdo, int $projectInvoiceId): void
 {
     $stmt = $pdo->prepare('
@@ -371,87 +360,42 @@ function project_invoice_create_for_period(PDO $pdo, int $projectId, string $per
 
 function project_invoice_send_email(PDO $pdo, int $projectInvoiceId, array $appConfig, ?array $clientIds = null, bool $allowResend = false): int
 {
-    $stmt = $pdo->prepare('
-        SELECT pi.*, p.name AS project_name
-        FROM project_invoices pi
-        JOIN projects p ON p.id = pi.project_id
-        WHERE pi.id = ?
-    ');
+    $stmt = $pdo->prepare('SELECT status,finalized_at FROM project_invoices WHERE id=?');
     $stmt->execute([$projectInvoiceId]);
     $projectInvoice = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$projectInvoice || ($projectInvoice['status'] ?? '') === 'void') {
         return 0;
     }
     if (($projectInvoice['status'] ?? '') === 'draft' || empty($projectInvoice['finalized_at'])) {
-        $pdo->prepare('UPDATE project_invoices SET status="unpaid", finalized_at=COALESCE(finalized_at,NOW()), finalization_source=COALESCE(finalization_source,"manual_email") WHERE id=? AND status="draft"')
-            ->execute([$projectInvoiceId]);
-        $projectInvoice['status'] = 'unpaid';
-        $projectInvoice['finalized_at'] = date('Y-m-d H:i:s');
+        $pdo->prepare(
+            'UPDATE project_invoices
+             SET status="unpaid",finalized_at=COALESCE(finalized_at,NOW()),
+                 finalization_source=COALESCE(finalization_source,"manual_email")
+             WHERE id=? AND status="draft"'
+        )->execute([$projectInvoiceId]);
     }
 
     $recipients = project_invoice_client_recipients($pdo, $projectInvoiceId, $clientIds);
-    if (!$recipients) {
-        return 0;
-    }
-
-    $pendingRecipients = [];
-    $exists = $pdo->prepare('SELECT id FROM project_invoice_notifications WHERE project_invoice_id=? AND notification_type="on_generate" AND email_to=? LIMIT 1');
+    $notificationType = $allowResend ? 'manual' : 'on_generate';
     foreach ($recipients as $recipient) {
-        $to = trim((string)($recipient['email'] ?? ''));
-        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-            continue;
-        }
-        if (!$allowResend) {
-            $exists->execute([$projectInvoiceId, $to]);
-            if ($exists->fetchColumn()) {
-                continue;
-            }
-        }
-        $pendingRecipients[] = $recipient;
+        $email = trim((string)($recipient['email'] ?? ''));
+        $status = filter_var($email, FILTER_VALIDATE_EMAIL) ? 'pending' : 'suppressed';
+        $error = $status === 'suppressed' ? 'Missing or invalid project invoice recipient email.' : null;
+        $deliveryKey = $allowResend
+            ? 'manual:' . date('YmdHis') . ':' . bin2hex(random_bytes(4))
+            : 'generated';
+        project_invoice_notification_enqueue(
+            $pdo, $projectInvoiceId, $notificationType, $deliveryKey, $email, $status, $error
+        );
     }
-    if (!$pendingRecipients) {
-        return 0;
+    $stats = project_invoice_notification_process($pdo, $appConfig, null, null, 100, $projectInvoiceId);
+    if ($stats['sent'] > 0) {
+        $pdo->prepare(
+            'UPDATE project_invoices SET status=IF(status="draft","sent",status),sent_at=COALESCE(sent_at,NOW()) WHERE id=?'
+        )->execute([$projectInvoiceId]);
     }
-
-    $token = project_invoice_create_public_link($pdo, $projectInvoiceId, $appConfig);
-    $url = project_invoice_base_url($appConfig) . '/?page=public-doc&token=' . rawurlencode($token);
-    $docNumber = $projectInvoice['doc_number'] ?: $projectInvoiceId;
-    $subject = 'Project Invoice PI-' . $docNumber . ' for ' . ($projectInvoice['project_name'] ?? 'Project');
-    $body = '<p>Hello,</p>'
-        . '<p>Your project invoice for <strong>' . htmlspecialchars((string)$projectInvoice['project_name']) . '</strong> is ready.</p>'
-        . '<p><strong>Total due:</strong> $' . number_format((float)$projectInvoice['balance_due'], 2) . '</p>'
-        . '<p><strong>Billing period:</strong> ' . htmlspecialchars(date('M j, Y', strtotime($projectInvoice['billing_period_start']))) . ' - ' . htmlspecialchars(date('M j, Y', strtotime($projectInvoice['billing_period_end']))) . '</p>'
-        . '<p><a href="' . htmlspecialchars($url) . '">View project invoice</a></p>';
-    $invoiceLinks = invoice_content_links_for_project_invoice(
-        $pdo,
-        $projectInvoiceId,
-        $appConfig,
-        array_map(static fn($row) => (int)$row['id'], $pendingRecipients)
-    );
-    $body .= invoice_content_links_html($invoiceLinks);
-
-    $sent = 0;
-    foreach ($pendingRecipients as $recipient) {
-        $to = trim((string)($recipient['email'] ?? ''));
-        [$ok, $err] = EmailService::sendEmail($to, $subject, $body);
-        if ($ok) {
-            $notificationType = $allowResend ? 'manual' : 'on_generate';
-            $pdo->prepare('INSERT IGNORE INTO project_invoice_notifications (project_invoice_id, notification_type, email_to, sent_at) VALUES (?, ?, ?, NOW())')
-                ->execute([$projectInvoiceId, $notificationType, $to]);
-            $sent++;
-        } else {
-            @error_log('[project_invoice_billing] email failed for project_invoice_id=' . $projectInvoiceId . ': ' . $err);
-        }
-    }
-
-    if ($sent > 0) {
-        $pdo->prepare('UPDATE project_invoices SET status = IF(status="draft","sent",status), sent_at = COALESCE(sent_at, NOW()) WHERE id=?')
-            ->execute([$projectInvoiceId]);
-    }
-
-    return $sent;
+    return $stats['sent'];
 }
-
 function project_invoice_allocate_payment(PDO $pdo, int $projectInvoiceId, float $amount, string $method, string $reference = '', string $notes = '', ?int $projectPaymentId = null): bool
 {
     if ($amount <= 0) {
