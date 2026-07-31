@@ -16,8 +16,8 @@ CRON_LOG=/var/www/config/logs/cron/cron.log
 # Workforce deadline reminders and automatic confirmation - every 5 minutes
 */5 * * * * root . /etc/environment && php /var/www/src/cron/process_workforce_deadlines.php >> $CRON_LOG 2>&1
 
-# Rotate system and cron logs above 10 MB - daily at 1:15 AM
-15 1 * * * root . /etc/environment && php /var/www/src/cron/rotate_logs.php >> $CRON_LOG 2>&1
+# Rotate repository-owned system and cron logs at the 10 MiB threshold.
+* * * * * www-data . /etc/environment && php /var/www/src/cron/rotate_logs.php >> $CRON_LOG 2>&1
 
 # Generate recurring invoices - daily at 2:00 AM
 0 2 * * * root . /etc/environment && php /var/www/src/cron/generate_recurring_invoices.php >> $CRON_LOG 2>&1

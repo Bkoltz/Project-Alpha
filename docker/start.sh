@@ -98,16 +98,41 @@ JSON
     chmod 664 "${CONFIG_DIR}/settings.json" || true
   fi
 
-  # Ensure dedicated log directories exist with correct permissions
-  for log_subdir in logs/system logs/cron; do
-    full_dir="${CONFIG_DIR}/${log_subdir}"
-    if [ ! -d "$full_dir" ]; then
-      echo "Creating ${full_dir}..."
-      mkdir -p "$full_dir" || true
+  # Establish persistent log paths without following administrator-writable
+  # volume symlinks while privileged. All file operations run as www-data.
+  LOG_ROOT="${CONFIG_DIR}/logs"
+  if [ -L "$LOG_ROOT" ] || { [ -e "$LOG_ROOT" ] && [ ! -d "$LOG_ROOT" ]; }; then
+    echo "ERROR: ${LOG_ROOT} must be a real directory, not a symlink or special file."
+    exit 1
+  fi
+  if [ ! -d "$LOG_ROOT" ]; then
+    mkdir "$LOG_ROOT"
+  fi
+  chown -h www-data:www-data "$LOG_ROOT"
+  runuser -u www-data -- chmod 775 "$LOG_ROOT"
+
+  for log_subdir in system cron; do
+    full_dir="${LOG_ROOT}/${log_subdir}"
+    if [ -L "$full_dir" ] || { [ -e "$full_dir" ] && [ ! -d "$full_dir" ]; }; then
+      echo "ERROR: ${full_dir} must be a real directory, not a symlink or special file."
+      exit 1
     fi
-    chown -R www-data:www-data "$full_dir" 2>/dev/null || true
-    chmod 775 "$full_dir" 2>/dev/null || true
+    if [ ! -d "$full_dir" ]; then
+      runuser -u www-data -- mkdir "$full_dir"
+    fi
+    chown -h www-data:www-data "$full_dir"
+    runuser -u www-data -- chmod 775 "$full_dir"
   done
+
+  ERROR_LOG="${LOG_ROOT}/system/error_log.txt"
+  if [ -L "$ERROR_LOG" ] || { [ -e "$ERROR_LOG" ] && [ ! -f "$ERROR_LOG" ]; }; then
+    echo "ERROR: ${ERROR_LOG} must be a regular file, not a symlink or special file."
+    exit 1
+  fi
+  if ! runuser -u www-data -- php /var/www/src/cron/prepare_log_file.php "$ERROR_LOG"; then
+    echo "ERROR: ${ERROR_LOG} could not be safely prepared for www-data."
+    exit 1
+  fi
 
   if [ ! -d "${CONFIG_DIR}/uploads" ]; then
     mkdir -p "${CONFIG_DIR}/uploads" || true

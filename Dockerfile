@@ -87,6 +87,7 @@ COPY ./database/migrations/ /var/www/database/migrations/
 COPY --from=vendor /app/vendor /var/www/vendor
 
 # Set recommended permissions (adjust as needed)
+RUN mkdir -p /var/www/config/logs/system && touch /var/www/config/logs/system/error_log.txt && chown -R www-data:www-data /var/www/config && chmod 775 /var/www/config/logs/system && chmod 660 /var/www/config/logs/system/error_log.txt
 RUN chown -R www-data:www-data /var/www/html /var/www/src /var/www/bin /var/www/vendor \
     && chmod -R 755 /var/www/html /var/www/src /var/www/bin /var/www/vendor
 
@@ -95,11 +96,6 @@ RUN chown -R www-data:www-data /var/www/html /var/www/src /var/www/bin /var/www/
 # Stamp the build version into the image. The env var can still be overridden at
 # runtime; the fallback file makes the version survive in either case.
 RUN echo "$APP_VERSION" > /var/www/APP_VERSION
-
-# Create log file
-RUN mkdir -p /var/log && \
-    touch /var/log/error_log.txt && \
-    chmod 666 /var/log/error_log.txt
 
 # Entry script
 WORKDIR /var/www
@@ -127,11 +123,12 @@ COPY ./cron/ /var/www/cron/
 COPY ./docker/ /var/www/docker/
 COPY ./docker-compose.yml /var/www/docker-compose.yml
 COPY ./Dockerfile /var/www/Dockerfile
+COPY ./php.ini /var/www/php.ini
 COPY ./.github/ /var/www/.github/
 COPY ./SECURITY.md /var/www/SECURITY.md
 RUN mkdir -p /var/www/config
 COPY ./config/.env.example /var/www/config/.env.example
-RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/docs /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/docker-compose.yml /var/www/Dockerfile /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
+RUN chown -R www-data:www-data /var/www/vendor /var/www/tests /var/www/docs /var/www/database /var/www/public /var/www/cron /var/www/docker /var/www/docker-compose.yml /var/www/Dockerfile /var/www/php.ini /var/www/.github /var/www/config /var/www/phpunit.xml /var/www/composer.json /var/www/composer.lock /var/www/SECURITY.md
 
 # ---------- Stage 3: Encrypted MySQL runtime ----------
 FROM mysql:8.4 AS db
@@ -190,16 +187,6 @@ RUN echo "$APP_VERSION" > /var/www/APP_VERSION \
     && chmod -R 755 /var/www \
     && sed -i 's/\r$//' /usr/local/bin/migrate.sh /usr/local/bin/enable-mysql-encryption.sh \
     && chmod +x /usr/local/bin/migrate.sh /usr/local/bin/enable-mysql-encryption.sh
-
-RUN mkdir -p /var/log/cron && \
-    touch /var/log/cron/generate_recurring_invoices.log \
-          /var/log/cron/send_invoice_reminders.log \
-          /var/log/cron/process_workforce_deadlines.log \
-          /var/log/cron/auto_terminate_contracts.log \
-          /var/log/cron/link_expiration_checker.log \
-          /var/log/cron/stripe_reconciliation.log \
-          /var/log/cron/sync_merchant_rate.log && \
-    chmod 666 /var/log/cron/*.log
 
 COPY cron/crontab /etc/cron.d/project-alpha
 RUN sed -i 's/\r$//' /etc/cron.d/project-alpha && chmod 0644 /etc/cron.d/project-alpha
