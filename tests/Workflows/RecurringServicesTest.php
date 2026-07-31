@@ -74,6 +74,7 @@ final class RecurringServicesTest extends TestCase
         $config = [
             'net_terms_days' => 14,
             'invoice_auto_email_on_generate' => 1,
+            'public_links_in_email' => 1,
             'app_host' => 'https://example.invalid',
             '_email_sender' => static function (string $to, string $subject, string $body, array $context) use (&$deliveries): array {
                 $deliveries[] = compact('to', 'subject', 'body', 'context');

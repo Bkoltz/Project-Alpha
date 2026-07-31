@@ -6,8 +6,8 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 
 <div class="container content-wrapper">
     <div class="page-header">
-        <h1>Invoice Reminders Log</h1>
-        <p class="text-muted">View all sent invoice reminder notifications</p>
+        <h1>Invoice Delivery Log</h1>
+        <p class="text-muted">View generated-invoice emails, reminders, retries, suppressions, and delivery errors</p>
     </div>
 
     <!-- Filter Form -->
@@ -23,6 +23,9 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
                     <label for="type" class="form-label me-2">Type:</label>
                     <select name="type" id="type" class="form-control form-control-sm">
                         <option value="">All Types</option>
+                        <option value="on_generate">Generated recurring invoice</option>
+                        <option value="on_demand_generate">Generated on-demand invoice</option>
+                        <option value="on_finalize">Finalized invoice</option>
                         <option value="due_7" <?php echo ($_GET['type'] ?? '') === 'due_7' ? 'selected' : ''; ?>>
                             Due in 7 Days
                         </option>
@@ -58,7 +61,7 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 
     <!-- Results Summary -->
     <div class="alert alert-info">
-        <strong><?php echo $totalCount; ?></strong> reminder(s) found
+        <strong><?php echo $totalCount; ?></strong> delivery action(s) found
         <?php if ($totalCount > $perPage): ?>
             (showing <?php echo ($offset + 1); ?> - <?php echo min($offset + $perPage, $totalCount); ?>)
         <?php endif; ?>
@@ -79,8 +82,9 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
                         <th>Amount</th>
                         <th>Due Date</th>
                         <th>Status</th>
-                        <th>Reminder Type</th>
-                        <th>Sent At</th>
+                        <th>Delivery Type</th>
+                        <th>Delivery Status</th>
+                        <th>Sent / Next Attempt</th>
                         <th>Client Email</th>
                     </tr>
                 </thead>
@@ -119,21 +123,20 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
                                     <?php echo ucfirst($n['status']); ?>
                                 </span>
                             </td>
+                            <td><?php echo htmlspecialchars(str_replace('_', ' ', ucfirst($n['notification_type']))); ?></td>
                             <td>
-                                <span class="badge bg-<?php 
-                                    echo $n['notification_type'] === 'due_7' ? 'info' : 'warning';
-                                ?>">
-                                    <?php echo $n['notification_type'] === 'due_7' ? 'Due in 7 Days' : 'Overdue Weekly'; ?>
+                                <span class="badge bg-<?php echo match($n['delivery_status']) { 'sent'=>'success', 'retry'=>'danger', 'suppressed'=>'secondary', 'processing'=>'warning', default=>'info' }; ?>">
+                                    <?php echo htmlspecialchars(ucfirst($n['delivery_status'])); ?>
                                 </span>
+                                <?php if ((int)$n['attempt_count'] > 0): ?><small>attempt <?php echo (int)$n['attempt_count']; ?></small><?php endif; ?>
+                                <?php if (!empty($n['last_error'])): ?><div class="text-danger small"><?php echo htmlspecialchars($n['last_error']); ?></div><?php endif; ?>
                             </td>
                             <td>
-                                <?php 
-                                    $sentTime = new DateTime($n['sent_at']);
-                                    echo $sentTime->format('M d, Y H:i');
-                                ?>
+                                <?php $eventTime = $n['sent_at'] ?: $n['next_attempt_at']; ?>
+                                <?php echo $eventTime ? (new DateTime($eventTime))->format('M d, Y H:i') : '&mdash;'; ?>
                             </td>
                             <td>
-                                <code class="text-muted"><?php echo htmlspecialchars($n['client_email']); ?></code>
+                                <code class="text-muted"><?php echo htmlspecialchars($n['email_to'] ?: $n['client_email']); ?></code>
                             </td>
                         </tr>
                     <?php endforeach; ?>

@@ -34,7 +34,7 @@ $stmt->execute([$id]);
 $pi = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$pi) { http_response_code(404); echo 'Project invoice not found'; return; }
 
-if (!defined('PUBLIC_VIEW')) {
+if (!defined('PUBLIC_VIEW') && !defined('PDF_MODE')) {
     require_record_ownership($pdo, 'projects', (int)$pi['project_id']);
 }
 

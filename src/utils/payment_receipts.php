@@ -57,8 +57,10 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
         return $receipt ?: null;
     }
 
-    $base = invoice_public_base_url($appConfig);
-    $url = $base . '/?page=payment-receipt&token=' . rawurlencode((string)$receipt['public_token']);
+    $url = '';
+    if (!empty($appConfig['public_links_in_email'])) {
+        $url = invoice_public_base_url($appConfig) . '/?page=payment-receipt&token=' . rawurlencode((string)$receipt['public_token']);
+    }
     $invoiceLabel = !empty($payment['invoice_id']) ? ' for invoice ' . pa_invoice_label_from_row($payment) : '';
     $serviceLabel = empty($payment['invoice_id']) && !empty($payment['job_code'])
         ? ' for service job ' . (string)$payment['job_code']
@@ -67,7 +69,8 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
     $body = '<p>Hello ' . htmlspecialchars((string)($payment['client_name'] ?: 'there')) . ',</p>'
         . '<p>We received your payment of <strong>$' . number_format((float)$payment['amount'], 2) . '</strong>'
         . htmlspecialchars($invoiceLabel . $serviceLabel) . '.</p>'
-        . '<p><a href="' . htmlspecialchars($url) . '">View and print your Project Alpha receipt</a></p>';
+        . '<p>Receipt number: <strong>' . htmlspecialchars((string)$receipt['receipt_number']) . '</strong></p>'
+        . ($url !== '' ? '<p><a href="' . htmlspecialchars($url) . '">View and print your Project Alpha receipt</a></p>' : '');
 
     [$ok, $error] = EmailService::sendEmail((string)$receipt['email_to'], $subject, $body);
     if ($ok) {

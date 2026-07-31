@@ -5,6 +5,7 @@ require_once __DIR__ . '/../services/StripeService.php';
 require_once __DIR__ . '/public_links.php';
 require_once __DIR__ . '/invoice_content_links.php';
 require_once __DIR__ . '/invoice_numbers.php';
+require_once __DIR__ . '/invoice_notifications.php';
 
 function invoice_is_collectible_status(string $status): bool
 {
@@ -19,18 +20,17 @@ function invoice_is_draft(array $invoice): bool
 function invoice_public_base_url(array $appConfig): string
 {
     $configured = trim((string)($appConfig['app_host'] ?? ''));
-    if ($configured !== '') {
-        return rtrim(preg_match('#^https?://#i', $configured) ? $configured : 'https://' . $configured, '/');
+    if ($configured === '') {
+        throw new RuntimeException('Public application URL is not configured.');
     }
-
-    $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
-    if ($host === '') {
-        return 'http://localhost';
+    $url = preg_match('#^https?://#i', $configured) ? $configured : 'https://' . $configured;
+    $parts = parse_url($url);
+    if (!$parts || !in_array(strtolower((string)($parts['scheme'] ?? '')), ['http', 'https'], true)
+        || empty($parts['host']) || !empty($parts['user']) || !empty($parts['pass'])) {
+        throw new RuntimeException('Public application URL is invalid.');
     }
-    $scheme = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') ? 'https' : 'http';
-    return $scheme . '://' . $host;
+    return rtrim($url, '/');
 }
-
 function invoice_table_has_column(PDO $pdo, string $table, string $column): bool
 {
     static $cache = [];
@@ -415,105 +415,30 @@ function invoice_finalize(PDO $pdo, int $invoiceId, array $appConfig, string $so
  */
 function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, string $notificationType = 'on_finalize'): bool
 {
-    $stmt = $pdo->prepare(
-        'SELECT i.id,i.doc_number,i.invoice_type,i.total,i.due_date,i.status,i.finalized_at,i.collection_mode,c.email,c.name
-         FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?'
-    );
-    $stmt->execute([$invoiceId]);
-    $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+    $invoice = invoice_notification_invoice($pdo, $invoiceId);
     if (!$invoice || !invoice_is_collectible_status((string)$invoice['status'])
-        || empty($invoice['finalized_at'])
-        || ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+        || empty($invoice['finalized_at']) || ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
         return false;
     }
 
-    $to = trim((string)($invoice['email'] ?? ''));
-    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
-        return false;
-    }
-    if (invoice_missing_content_links_behavior($appConfig) === 'block'
-        && invoice_should_prompt_for_missing_content_links($pdo, 'invoice', $invoiceId, $appConfig)) {
-        return false;
-    }
-
-    $claim = $pdo->prepare(
-        'INSERT IGNORE INTO invoice_notifications
-         (invoice_id,notification_type,sent_at,email_to,email_subject,email_body)
-         VALUES (?,?,NULL,?,NULL,NULL)'
+    $email = trim((string)($invoice['email'] ?? ''));
+    $status = filter_var($email, FILTER_VALIDATE_EMAIL) ? 'pending' : 'suppressed';
+    $error = $status === 'suppressed' ? 'Missing or invalid client email.' : null;
+    $deliveryKey = $notificationType === 'on_generate' ? 'generated' : 'finalized';
+    invoice_notification_enqueue(
+        $pdo, $invoiceId, $notificationType, $deliveryKey, $email, $status, $error
     );
-    $claim->execute([$invoiceId, $notificationType, $to]);
-    if ($claim->rowCount() === 0) {
-        $existingClaim = $pdo->prepare('SELECT sent_at,created_at FROM invoice_notifications WHERE invoice_id=? AND notification_type=? LIMIT 1');
-        $existingClaim->execute([$invoiceId, $notificationType]);
-        $claimRow = $existingClaim->fetch(PDO::FETCH_ASSOC) ?: [];
-        if (!empty($claimRow['sent_at'])) {
-            return true;
-        }
-        if (empty($claimRow['created_at']) || strtotime((string)$claimRow['created_at']) > time() - 300) {
-            return true;
-        }
-        $pdo->prepare('DELETE FROM invoice_notifications WHERE invoice_id=? AND notification_type=? AND sent_at IS NULL')
-            ->execute([$invoiceId, $notificationType]);
-        $claim->execute([$invoiceId, $notificationType, $to]);
-        if ($claim->rowCount() === 0) {
-            return true;
-        }
+    $stats = invoice_notification_process($pdo, $appConfig, null, null, 10, $invoiceId);
+    if ($stats['sent'] > 0) {
+        return true;
     }
-
-    $token = bin2hex(random_bytes(32));
-    try {
-        $pdo->exec('ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL');
-    } catch (Throwable $e) {
-    }
-    try {
-        $pdo->exec('ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0');
-    } catch (Throwable $e) {
-    }
-    $pdo->prepare(
-        'INSERT INTO public_links (document_type,document_id,token,expires_at,expire_when_paid,revoked,created_at)
-         VALUES ("invoice",?,?,NULL,1,0,NOW())'
-    )->execute([$invoiceId, $token]);
-
-    $base = invoice_public_base_url($appConfig);
-    $url = $base . '/?page=public-doc&token=' . rawurlencode($token);
-    $invoiceLabel = pa_invoice_label_from_row($invoice);
-    $name = trim((string)($invoice['name'] ?? ''));
-    $firstName = $name !== '' ? preg_split('/\s+/', $name)[0] : 'there';
-    $subject = 'Invoice ' . $invoiceLabel . ' is ready';
-    $body = '<p>Hello ' . htmlspecialchars($firstName) . ',</p>'
-        . '<p>Invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> is ready for <strong>$'
-        . number_format((float)$invoice['total'], 2) . '</strong>.</p>'
-        . (!empty($invoice['due_date']) ? '<p>Due date: ' . htmlspecialchars((string)$invoice['due_date']) . '</p>' : '')
-        . '<p><a href="' . htmlspecialchars($url) . '">View and pay this invoice</a></p>';
-    $contentLinksHtml = invoice_content_links_html(invoice_content_links_for_invoice($pdo, $invoiceId, $appConfig));
-    if ($contentLinksHtml !== '') {
-        $body .= $contentLinksHtml;
-    }
-
-    $emailSender = $appConfig['_email_sender'] ?? null;
-    if (is_callable($emailSender)) {
-        $delivery = $emailSender($to, $subject, $body, ['invoice_id' => $invoiceId, 'notification_type' => $notificationType]);
-        [$ok, $error] = is_array($delivery) ? $delivery : [(bool)$delivery, ''];
-    } else {
-        [$ok, $error] = EmailService::sendEmail($to, $subject, $body);
-    }
-    if (!$ok) {
-        $pdo->prepare('DELETE FROM invoice_notifications WHERE invoice_id=? AND notification_type=? AND sent_at IS NULL')
-            ->execute([$invoiceId, $notificationType]);
-        $pdo->prepare('UPDATE public_links SET revoked=1 WHERE document_type="invoice" AND document_id=? AND token=?')
-            ->execute([$invoiceId, $token]);
-        @error_log('[invoice_lifecycle] Invoice delivery failed for ' . $invoiceId . ': ' . $error);
-        return false;
-    }
-
-    $pdo->prepare(
-        'UPDATE invoice_notifications SET sent_at=NOW(),email_to=?,email_subject=?,email_body=?
-         WHERE invoice_id=? AND notification_type=?'
-    )->execute([$to, $subject, $body, $invoiceId, $notificationType]);
-    $pdo->prepare('UPDATE invoices SET sent_at=COALESCE(sent_at,NOW()) WHERE id=?')->execute([$invoiceId]);
-    return true;
+    $check = $pdo->prepare(
+        'SELECT delivery_status FROM invoice_notifications
+         WHERE invoice_id=? AND notification_type=? AND delivery_key=? AND recipient_key=? LIMIT 1'
+    );
+    $check->execute([$invoiceId, $notificationType, $deliveryKey, invoice_notification_recipient_key($email)]);
+    return $check->fetchColumn() === 'sent';
 }
-
 function invoice_reopen_draft(PDO $pdo, int $invoiceId): void
 {
     $pdo->beginTransaction();

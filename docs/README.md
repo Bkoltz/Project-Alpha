@@ -17,4 +17,6 @@ This folder is organized for GitHub Pages:
 | `reference/` | Focused reference pages |
 | `archive/` | Historical plans, audits, implementation notes, and older runbooks |
 
+For invoice automation rollout, migrations 0058/0059, staging validation, observability, and incident backfill, see the [Invoice Automation Staging Runbook](INVOICE_AUTOMATION_STAGING_RUNBOOK.md).
+
 The site uses Jekyll, so do not add `.nojekyll` unless the publishing strategy changes.

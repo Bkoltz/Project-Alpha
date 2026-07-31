@@ -1,16 +1,11 @@
 <?php
-// src/cron/send_invoice_reminders.php
-// Standalone cron job to send automated invoice reminders (due-7 and weekly-overdue)
-// Can be run independently or alongside generate_recurring_invoices.php
-// Usage: php /var/www/src/cron/send_invoice_reminders.php
+// Schedule and deliver durable invoice reminders for every direct invoice type.
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../utils/mailer.php';
-require_once __DIR__ . '/../utils/crypto.php';
 require_once __DIR__ . '/../utils/cron_state.php';
-require_once __DIR__ . '/../utils/email_identity.php';
-require_once __DIR__ . '/../services/EmailService.php';
+require_once __DIR__ . '/../utils/invoice_notifications.php';
+require_once __DIR__ . '/../utils/project_invoice_notifications.php';
 
 $logPrefix = '[send_invoice_reminders]';
 $jobName = 'send_invoice_reminders';
@@ -20,227 +15,33 @@ if (empty($appConfig['cron_enabled'])) {
     cron_state_mark_success($pdo, $jobName, 'Cron disabled');
     exit(0);
 }
-
-// Check if either reminder is enabled
-$due7Enabled = !empty($appConfig['invoice_auto_send_due_7days']);
-$overdueEnabled = !empty($appConfig['invoice_auto_send_overdue_weekly']);
-
-if (!$due7Enabled && !$overdueEnabled) {
-    @error_log("$logPrefix Both reminder types are disabled. Exiting.");
+if (empty($appConfig['invoice_auto_send_due_7days'])
+    && empty($appConfig['invoice_auto_send_overdue_weekly'])) {
+    @error_log("$logPrefix Reminder settings are disabled. Skipping.");
     cron_state_mark_success($pdo, $jobName, 'Reminder settings disabled');
     exit(0);
 }
 
-@error_log("$logPrefix Starting invoice reminder run at " . date('Y-m-d H:i:s'));
-
 try {
-    $lastRun = cron_state_last_run($pdo, $jobName);
-    $dueWindowStart = $lastRun
-        ? date('Y-m-d', strtotime($lastRun . ' +7 days'))
-        : date('Y-m-d', strtotime('+7 days'));
-    $dueWindowEnd = date('Y-m-d', strtotime('+7 days'));
-    if ($dueWindowStart > $dueWindowEnd) {
-        $dueWindowStart = $dueWindowEnd;
-    }
-
-    // Build SMTP config from app settings
-    $smtpPass = '';
-    if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
-        $encVal = $appConfig['smtp_password_enc'];
-        if (strpos($encVal, 'plain::') === 0) {
-            $smtpPass = substr($encVal, 7);
-        } else {
-            $pt = crypto_decrypt($encVal);
-            if (is_string($pt)) { $smtpPass = $pt; }
-        }
-    }
-    $mailCfg = [
-        'host' => (string)($appConfig['smtp_host'] ?? ''),
-        'port' => (int)($appConfig['smtp_port'] ?? 587),
-        'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-        'username' => (string)($appConfig['smtp_username'] ?? ''),
-        'password' => $smtpPass,
-    ];
-    $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-    $fromName = pa_email_sender_name($appConfig);
-
-    if ($fromEmail === 'no-reply@localhost' && empty($appConfig['smtp_host'])) {
-        @error_log("$logPrefix Warning: No SMTP configured and from_email not set. Reminders may fail to send.");
-    }
-
-    // Helper: create a public link for invoice viewing (short-lived)
-    $createPublicLink = function(int $invoiceId) use ($pdo, $appConfig) {
-        $token = bin2hex(random_bytes(32));
-        $days = (int)($appConfig['documents_valid_days'] ?? 14);
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
-        $ins = $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())');
-        $ins->execute(['invoice', $invoiceId, $token, $expiresAt]);
-        return $token;
-    };
-
-    $remindersSent = 0;
-    $remindersSkipped = 0;
-    $errors = 0;
-
-    // 1) 7-day due reminders (sent once per invoice)
-    if ($due7Enabled) {
-        $stmt = $pdo->prepare("
-            SELECT i.id, i.doc_number, i.invoice_type, i.total, i.due_date, c.email, c.name
-            FROM invoices i 
-            JOIN clients c ON c.id = i.client_id 
-            WHERE i.due_date BETWEEN ? AND ? AND i.status IN ('unpaid', 'partial')
-              AND i.finalized_at IS NOT NULL AND i.collection_mode = 'direct'
-        ");
-        $stmt->execute([$dueWindowStart, $dueWindowEnd]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($rows as $inv) {
-            $iid = (int)$inv['id'];
-            
-            // Check if already sent
-            $chk = $pdo->prepare('SELECT COUNT(*) FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
-            $chk->execute([$iid, 'due_7']);
-            if ((int)$chk->fetchColumn() > 0) {
-                $remindersSkipped++;
-                continue;
-            }
-
-            $to = (string)$inv['email'];
-            if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-                $remindersSkipped++;
-                continue;
-            }
-
-            try {
-                // Create public link
-                $token = $createPublicLink($iid);
-                $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
-                if ($baseUrl === '') $baseUrl = 'http://localhost';
-                $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
-
-                // Build email
-                $invoiceLabel = pa_invoice_label_from_row($inv + ['id' => $iid]);
-                $subject = sprintf('Invoice %s due %s', $invoiceLabel, date('M j, Y', strtotime($inv['due_date'])));
-                $body = '<p>Dear ' . htmlspecialchars($inv['name'] ?? 'Valued Client') . ',</p>';
-                $body .= '<p>This is a friendly reminder that invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> ';
-                $body .= 'for <strong>$' . number_format((float)$inv['total'], 2) . '</strong> is due on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
-                $body .= '<p><a href="' . htmlspecialchars($link) . '">View and pay invoice</a></p>';
-                $body .= '<p>If you have already paid, please disregard this message. Thank you!</p>';
-
-                // Send
-                [$ok, $err] = EmailService::sendEmail($to, $subject, $body, ['document_type'=>'invoice','document_id'=>$iid,'message_key'=>'invoice:'.$iid.':due_7']);
-                
-                if ($ok) {
-                    $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
-                    $insn->execute([$iid, 'due_7']);
-                    $remindersSent++;
-                    @error_log("$logPrefix Sent due-7 reminder for invoice {$invoiceLabel} to {$to}");
-                } else {
-                    $errors++;
-                    @error_log("$logPrefix Failed to send due-7 reminder for invoice {$iid}: {$err}");
-                }
-            } catch (Throwable $e) {
-                $errors++;
-                @error_log("$logPrefix Exception sending due-7 reminder for invoice {$iid}: " . $e->getMessage());
-            }
-        }
-    }
-
-    // 2) Weekly overdue reminders (at most once per 7 days per invoice)
-    if ($overdueEnabled) {
-        $todayDate = date('Y-m-d');
-        $stmt = $pdo->prepare("
-            SELECT i.id, i.doc_number, i.invoice_type, i.total, i.due_date, c.email, c.name
-            FROM invoices i 
-            JOIN clients c ON c.id = i.client_id 
-            WHERE i.due_date < ? AND i.status IN ('unpaid', 'partial')
-              AND i.finalized_at IS NOT NULL AND i.collection_mode = 'direct'
-        ");
-        $stmt->execute([$todayDate]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($rows as $inv) {
-            $iid = (int)$inv['id'];
-            
-            // Check last sent timestamp
-            $chk = $pdo->prepare('SELECT MAX(sent_at) AS last_sent FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
-            $chk->execute([$iid, 'overdue_weekly']);
-            $last = $chk->fetchColumn();
-            
-            $shouldSend = false;
-            if ($last === null || $last === false) {
-                $shouldSend = true;
-            } else {
-                $lastTs = strtotime($last);
-                if ($lastTs === false || $lastTs <= strtotime('-7 days')) {
-                    $shouldSend = true;
-                }
-            }
-
-            if (!$shouldSend) {
-                $remindersSkipped++;
-                continue;
-            }
-
-            $to = (string)$inv['email'];
-            if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-                $remindersSkipped++;
-                continue;
-            }
-
-            try {
-                // Create public link
-                $token = $createPublicLink($iid);
-                $baseUrl = rtrim(($appConfig['app_host'] ?? ''), '/');
-                if ($baseUrl === '') $baseUrl = 'http://localhost';
-                $link = $baseUrl . '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
-
-                // Build email
-                $invoiceLabel = pa_invoice_label_from_row($inv + ['id' => $iid]);
-                $subject = sprintf('Action Required: Overdue invoice %s', $invoiceLabel);
-                $body = '<p>Dear ' . htmlspecialchars($inv['name'] ?? 'Valued Client') . ',</p>';
-                $body .= '<p>We noticed that invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> ';
-                $body .= 'for <strong>$' . number_format((float)$inv['total'], 2) . '</strong> became overdue on <strong>' . htmlspecialchars($inv['due_date']) . '</strong>.</p>';
-                $body .= '<p>Please review and pay the invoice at your earliest convenience: <a href="' . htmlspecialchars($link) . '">View invoice</a></p>';
-                $body .= '<p>If payment has already been sent, thank you and please disregard this message.</p>';
-
-                // Send
-                [$ok, $err] = EmailService::sendEmail($to, $subject, $body, ['document_type'=>'invoice','document_id'=>$iid,'message_key'=>'invoice:'.$iid.':overdue_weekly:'.date('o-W')]);
-                
-                if ($ok) {
-                    $insn = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?, ?, NOW())');
-                    $insn->execute([$iid, 'overdue_weekly']);
-                    $remindersSent++;
-                    @error_log("$logPrefix Sent overdue-weekly reminder for invoice {$invoiceLabel} to {$to}");
-                } else {
-                    $errors++;
-                    @error_log("$logPrefix Failed to send overdue-weekly reminder for invoice {$iid}: {$err}");
-                }
-            } catch (Throwable $e) {
-                $errors++;
-                @error_log("$logPrefix Exception sending overdue-weekly reminder for invoice {$iid}: " . $e->getMessage());
-            }
-        }
-    }
-
-    @error_log("$logPrefix Completed: {$remindersSent} reminders sent, {$remindersSkipped} skipped, {$errors} errors");
-    cron_state_mark_success($pdo, $jobName, "{$remindersSent} sent; {$remindersSkipped} skipped; {$errors} errors");
-
-    // Update last run timestamp in settings
-    $configMount = '/var/www/config';
-    $projectConfig = __DIR__ . '/../../config';
-    $configDir = is_dir($configMount) ? $configMount : $projectConfig;
-    $settingsFile = $configDir . '/settings.json';
-
-    if (is_readable($settingsFile) && is_writable($settingsFile)) {
-        $settings = json_decode(file_get_contents($settingsFile), true) ?: [];
-        $settings['reminders_last_run'] = date('Y-m-d H:i:s');
-        @file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    }
-
-} catch (Throwable $e) {
-    @error_log("$logPrefix Fatal error: " . $e->getMessage());
-    cron_state_mark_failure($pdo, $jobName, $e);
+    $today = new DateTimeImmutable('today', invoice_notification_timezone($appConfig));
+    @error_log("$logPrefix Starting reminder run for " . $today->format('Y-m-d'));
+    $scheduled = invoice_notification_schedule_reminders($pdo, $appConfig, $today);
+    $projectScheduled = project_invoice_notification_schedule_reminders($pdo, $appConfig, $today);
+    $delivered = invoice_notification_process($pdo, $appConfig);
+    $projectDelivered = project_invoice_notification_process($pdo, $appConfig);
+    $result = sprintf(
+        '%d queued; %d sent; %d retrying; %d suppressed (%d invalid-recipient candidates)',
+        $scheduled['queued'] + $projectScheduled['queued'],
+        $delivered['sent'] + $projectDelivered['sent'],
+        $delivered['retry'] + $projectDelivered['retry'],
+        $delivered['suppressed'] + $projectDelivered['suppressed'],
+        $scheduled['suppressed'] + $projectScheduled['suppressed']
+    );
+    @error_log("$logPrefix Completed: $result");
+    cron_state_mark_success($pdo, $jobName, $result);
+} catch (Throwable $error) {
+    @error_log("$logPrefix Fatal error: " . $error->getMessage());
+    cron_state_mark_failure($pdo, $jobName, $error);
     exit(1);
 }
 

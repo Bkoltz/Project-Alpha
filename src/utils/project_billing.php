@@ -1,12 +1,28 @@
 <?php
 // src/utils/project_billing.php
 
+function project_invoice_terms_days(PDO $pdo, ?int $projectId, array $appConfig): int
+{
+    $netTermsDays = max(0, (int)($appConfig['net_terms_days'] ?? 30));
+    if (!$projectId) {
+        return $netTermsDays;
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT invoice_net_terms_days FROM projects WHERE id = ?');
+        $stmt->execute([$projectId]);
+        $value = $stmt->fetchColumn();
+        if ($value !== false && $value !== null && $value !== '') {
+            return max(0, (int)$value);
+        }
+    } catch (Throwable $e) {
+        error_log('[project_billing] net terms lookup failed: ' . $e->getMessage());
+    }
+    return $netTermsDays;
+}
+
 function project_invoice_due_date(PDO $pdo, ?int $projectId, array $appConfig, ?string $baseDate = null): string
 {
-    $netTermsDays = (int)($appConfig['net_terms_days'] ?? 30);
-    if ($netTermsDays < 0) {
-        $netTermsDays = 0;
-    }
+    $netTermsDays = project_invoice_terms_days($pdo, $projectId, $appConfig);
     $monthlyBilling = false;
 
     if ($projectId) {
