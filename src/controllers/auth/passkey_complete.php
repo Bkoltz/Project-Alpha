@@ -38,7 +38,7 @@ try {
     session_regenerate_id(true);
     unset($_SESSION['2fa_pending']);
     $_SESSION['user'] = $sessionUser;
-    $_SESSION['authn'] = ['method' => 'passkey', 'authenticated_at' => time()];
+    App\Security\SessionPolicy::completeAuthentication('passkey');
     password_reset_revoke_for_user($pdo, $userId);
     audit_log($pdo, 'auth.passkey_login_success', 'user', $userId, ['ip' => get_client_ip()], $userId);
 

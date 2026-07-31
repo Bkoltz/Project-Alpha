@@ -2,11 +2,10 @@
 // src/utils/security_headers.php
 // Sends a consistent set of security response headers.
 
+require_once __DIR__ . '/request_security.php';
+
 function send_security_headers(): void {
-    $isHttps =
-        (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
-        || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false);
+    $isHttps = request_is_https();
 
     // Prevent cross-site clickjacking while allowing PA to embed its own PDF previews.
     header('X-Frame-Options: SAMEORIGIN');

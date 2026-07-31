@@ -9,6 +9,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/link_provider_config.php';
+require_once __DIR__ . '/../../utils/request_security.php';
 
 // Require authenticated user
 if (!isset($_SESSION['user'])) {
@@ -22,30 +23,11 @@ $userId = (int)$_SESSION['user']['id'];
 // CSRF check
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 
-function dropbox_oauth_is_secure_request(): bool
-{
-    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
-        || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
-        || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
-}
-
-function dropbox_oauth_state_cookie_options(int $expires): array
-{
-    return [
-        'expires' => $expires,
-        'path' => '/',
-        'domain' => '',
-        'secure' => dropbox_oauth_is_secure_request(),
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ];
-}
 
 function dropbox_oauth_redirect_uri(?string $configuredHost = null): string
 {
     $host = trim((string)($configuredHost ?? ''));
-    $scheme = dropbox_oauth_is_secure_request() ? 'https' : 'http';
+    $scheme = request_is_https() ? 'https' : 'http';
     if ($host !== '') {
         if (preg_match('#^https?://#i', $host)) {
             $parts = parse_url($host);
@@ -84,18 +66,25 @@ try {
 } catch (Throwable $e) {}
 
 if ($action === 'start') {
-    // Start OAuth flow
+    // Start OAuth flow from an authenticated, CSRF-protected form submission.
+    $csrf = (string)($_POST['csrf'] ?? '');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST'
+        || $csrf === ''
+        || !hash_equals(csrf_token(), $csrf)) {
+        http_response_code(405);
+        header('Allow: POST');
+        exit('Invalid Dropbox connection request.');
+    }
     if (empty($dropboxAppKey)) {
         header('Location: /?page=settings&tab=links&error=' . urlencode('Dropbox App Key not configured. Please add it in the settings.'));
         exit;
     }
 
-    session_regenerate_id(false);
-    
-    // Generate state token for CSRF protection
+    App\Security\SessionPolicy::rotateAuthenticatedId();
+
+    // State stays bound to this authenticated session and expires after ten minutes.
     $state = bin2hex(random_bytes(32));
-    $_SESSION['dropbox_oauth_state'] = $state;
-    setcookie('pa_dropbox_oauth_state', $state, dropbox_oauth_state_cookie_options(time() + 600));
+    $_SESSION['dropbox_oauth'] = ['state' => $state, 'created_at' => time()];
     
     // Build authorization URL
     $redirectUri = dropbox_oauth_redirect_uri(is_string($dropboxRedirectHost) ? $dropboxRedirectHost : null);
@@ -122,16 +111,15 @@ if ($action === 'callback') {
     $code = $_GET['code'] ?? '';
     $state = $_GET['state'] ?? '';
     
-    // Verify state
-    $hadSessionState = isset($_SESSION['dropbox_oauth_state']);
-    $hadCookieState = isset($_COOKIE['pa_dropbox_oauth_state']);
-    $expectedState = (string)($_SESSION['dropbox_oauth_state'] ?? ($_COOKIE['pa_dropbox_oauth_state'] ?? ''));
-    unset($_SESSION['dropbox_oauth_state']);
-    setcookie('pa_dropbox_oauth_state', '', dropbox_oauth_state_cookie_options(time() - 3600));
-    if (empty($state) || $expectedState === '' || !hash_equals($expectedState, $state)) {
+    // Verify single-use, session-bound state and its ten-minute lifetime.
+    $pending = $_SESSION['dropbox_oauth'] ?? null;
+    unset($_SESSION['dropbox_oauth']);
+    $expectedState = is_array($pending) ? (string)($pending['state'] ?? '') : '';
+    $stateAge = is_array($pending) ? time() - (int)($pending['created_at'] ?? 0) : PHP_INT_MAX;
+    if (empty($state) || $expectedState === '' || $stateAge < 0 || $stateAge > 600 || !hash_equals($expectedState, $state)) {
         app_log('dropbox_oauth', 'Invalid OAuth state', [
-            'has_session_state' => $hadSessionState,
-            'has_cookie_state' => $hadCookieState,
+            'has_session_state' => is_array($pending),
+            'state_age' => $stateAge,
         ]);
         header('Location: /?page=settings&tab=links&error=' . urlencode('Invalid OAuth state'));
         exit;
@@ -224,6 +212,14 @@ if ($action === 'callback') {
 }
 
 if ($action === 'disconnect') {
+    $submitted = (string)($_POST['csrf'] ?? '');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST'
+        || $submitted === ''
+        || !hash_equals(csrf_token(), $submitted)) {
+        http_response_code(405);
+        header('Allow: POST');
+        exit('Invalid Dropbox disconnect request.');
+    }
     // Disconnect Dropbox OAuth
     try {
         // Revoke the token with Dropbox first

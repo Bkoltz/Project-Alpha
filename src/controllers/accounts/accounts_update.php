@@ -139,6 +139,65 @@ if ($username !== '') {
 // Update user
 try {
     $pdo->beginTransaction();
+    $lockedAccountStmt = $pdo->prepare('SELECT email,username,role,is_disabled,force_password_reset,auth_version FROM users WHERE id=? FOR UPDATE');
+    $lockedAccountStmt->execute([$userId]);
+    $previousAccount = $lockedAccountStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$previousAccount) {
+        throw new DomainException('User not found');
+    }
+
+    $permissionSnapshot = static function (PDO $pdo, int $targetUserId, string $targetRole, ?array $posted = null): array {
+        if ($targetRole === 'admin') {
+            return ['*' => true];
+        }
+        $catalog = permission_catalog_flat();
+        if ($posted !== null) {
+            $snapshot = [];
+            foreach ($catalog as $permission => $_group) {
+                $allowKey = 'allow_' . str_replace('.', '_', $permission);
+                $snapshot[$permission] = !empty($posted[$allowKey]);
+            }
+            ksort($snapshot);
+            return $snapshot;
+        }
+        $rules = [];
+        $targetRoleId = role_id_by_name($pdo, $targetRole, null);
+        if ($targetRoleId !== null) {
+            $rolePermissions = $pdo->prepare('SELECT permission,allowed FROM role_permissions WHERE role_id=?');
+            $rolePermissions->execute([$targetRoleId]);
+            foreach ($rolePermissions->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $rules[(string)$row['permission']] = (bool)$row['allowed'];
+            }
+        }
+        $overrides = $pdo->prepare('SELECT permission,allowed FROM user_permissions_overrides WHERE user_id=? AND organization_id IS NULL');
+        $overrides->execute([$targetUserId]);
+        foreach ($overrides->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $rules[(string)$row['permission']] = (bool)$row['allowed'];
+        }
+        $snapshot = [];
+        foreach ($catalog as $permission => $_group) {
+            $module = explode('.', $permission, 2)[0];
+            $snapshot[$permission] = $rules[$permission] ?? $rules[$module . '.*'] ?? false;
+        }
+        ksort($snapshot);
+        return $snapshot;
+    };
+    $permissionsBefore = $permissionSnapshot($pdo, $userId, (string)$previousAccount['role']);
+    $permissionsAfter = !empty($_POST['save_account_permissions'])
+        ? $permissionSnapshot($pdo, $userId, $role, $_POST)
+        : $permissionSnapshot($pdo, $userId, $role);
+    $securitySensitiveChange = App\Security\AccountSessionPolicy::requiresGlobalRevocation(
+        $previousAccount,
+        [
+            'email' => $email,
+            'username' => $username,
+            'role' => $role,
+            'is_disabled' => $accountDisabled ? 1 : 0,
+            'force_password_reset' => $forceReset ? 1 : 0,
+        ],
+        $permissionsBefore !== $permissionsAfter
+    );
+
     assert_not_removing_final_active_admin($pdo, $userId, $role === 'admin' && !$accountDisabled);
     if ($accountDisabled) {
         $managedProjectStmt = $pdo->prepare("SELECT name FROM projects WHERE manager_user_id=? AND status NOT IN ('completed','cancelled') ORDER BY id LIMIT 1 FOR UPDATE");
@@ -181,7 +240,7 @@ try {
         document_sender_country = ?,
         document_sender_phone = ?,
         document_sender_email = ?,
-        auth_version = auth_version + 1
+        auth_version = auth_version + ?
         WHERE id = ?');
     $stmt->execute([
         $email,
@@ -200,6 +259,7 @@ try {
         $documentSenderCountry !== '' ? $documentSenderCountry : null,
         $documentSenderPhone !== '' ? $documentSenderPhone : null,
         $documentSenderEmail !== '' ? $documentSenderEmail : null,
+        $securitySensitiveChange ? 1 : 0,
         $userId
     ]);
 
@@ -348,10 +408,19 @@ try {
         }
     }
 
+    if ($securitySensitiveChange) {
+        App\Security\SessionRevocation::revokeUserSessions($pdo, $userId);
+    }
     $pdo->commit();
 
-    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds)]);
-    header('Location: /?page=account-edit&id=' . $userId . '&success=updated');
+    audit_log($pdo, 'user.update', 'user', $userId, ['email' => $email, 'role' => $role, 'acl_role' => $roleName, 'role_id' => $roleId, 'is_disabled' => $accountDisabled ? 1 : 0, 'document_sender_enabled' => $documentSenderEnabled ? 1 : 0, 'project_assignments' => count($employeeProjectIds), 'sessions_revoked' => $securitySensitiveChange]);
+    if ($securitySensitiveChange && $userId === (int)$_SESSION['user']['id']) {
+        $_SESSION = [];
+        session_destroy();
+        header('Location: /?page=login&error=' . urlencode('Your account security settings changed. Please sign in again.'));
+        exit;
+    }
+    header('Location: /?page=account-edit&id=' . $userId . '&success=updated' . ($securitySensitiveChange ? '&sessions_revoked=1' : ''));
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
