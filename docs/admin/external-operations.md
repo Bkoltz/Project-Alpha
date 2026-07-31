@@ -46,7 +46,26 @@ A selected user whose exact PA role is `admin` becomes a **Global external admin
 
 ## Configure a deployment
 
+API-key pull synchronization and signed outbound delivery are separate features.
+An existing API key (including one with `ops.sync.read`) does not configure or
+enable the outbound outbox sender. The pull snapshot remains available when
+outbound delivery is disabled or paused, provided its normal API key and stable
+application key requirements are met.
+
 Open **Settings > System & Integrations > Custom integrations**. Configure a deployment-specific display label, signed-event URL, Cloudflare Access service-token credentials, and HMAC secret. Set a stable application key such as `external_operations`; use the same `APPLICATION_KEY` in the provisioning receiver and snapshot importer. No application key or display label is fixed by Project Alpha. The open-source display-name fallback is **External operations**; a deployment may replace it with its own product name.
+
+Outbound delivery is ready only when the administrator has requested it and all
+five delivery values are available: application key, signed event URL, Access
+service-token ID, Access service-token secret, and HMAC secret. The encrypted
+credential payload must also be readable with the deployment's persisted
+application encryption key. Timeout and maximum-attempt settings are bounded
+but are not readiness predicates. Keep outbound delivery disabled until the
+receiver contract is deployed. If an older or partial configuration has the
+enable flag set but is incomplete, Project Alpha pauses outbound delivery while
+continuing to record authoritative events for later retry. It shows the missing
+non-secret setting categories without altering stored values, access
+administration, or API-key pull sync. A full snapshot remains the reconciliation
+authority after any historical capture gap.
 
 Use a dedicated Project Alpha API key with only the stable `ops.sync.read` scope. The UI describes this as external operations synchronization, but the scope identifier remains stable for compatibility.
 

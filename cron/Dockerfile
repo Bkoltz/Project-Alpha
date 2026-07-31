@@ -45,17 +45,6 @@ COPY --from=vendor /app/vendor /var/www/vendor
 # Set proper permissions
 RUN chown -R root:root /var/www && chmod -R 755 /var/www
 
-# Create log directory and files for each cron job
-RUN mkdir -p /var/log/cron && \
-    touch /var/log/cron/generate_recurring_invoices.log \
-          /var/log/cron/send_invoice_reminders.log \
-          /var/log/cron/process_workforce_deadlines.log \
-          /var/log/cron/auto_terminate_contracts.log \
-          /var/log/cron/link_expiration_checker.log \
-          /var/log/cron/stripe_reconciliation.log \
-          /var/log/cron/sync_merchant_rate.log && \
-    chmod 666 /var/log/cron/*.log
-
 # Install crontab into /etc/cron.d/ (requires user field in each entry)
 COPY crontab /etc/cron.d/project-alpha
 RUN sed -i 's/\r$//' /etc/cron.d/project-alpha && chmod 0644 /etc/cron.d/project-alpha

@@ -22,10 +22,11 @@ final class ExternalOpsOutboxSender
         if (empty($config['enabled'])) {
             return ['processed' => 0, 'delivered' => 0, 'failed' => 0];
         }
-        foreach (['application_key', 'webhook_url', 'access_client_id', 'access_client_secret', 'hmac_secret'] as $required) {
-            if (trim((string)($config[$required] ?? '')) === '') {
-                throw new RuntimeException('External operations delivery is enabled but required integration configuration is incomplete.');
-            }
+        $issues = ExternalOpsConfigService::deliveryIssues($config);
+        if ($issues !== []) {
+            throw new RuntimeException(
+                'External operations outbound delivery is paused. Complete: ' . implode(', ', $issues) . '.'
+            );
         }
         if (!filter_var((string)$config['webhook_url'], FILTER_VALIDATE_URL)) {
             throw new RuntimeException('External operations webhook URL is invalid.');
