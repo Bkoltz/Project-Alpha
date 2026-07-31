@@ -15,7 +15,8 @@ if ($googleCallbackBase !== '' && !preg_match('#^https?://#i', $googleCallbackBa
   $googleCallbackBase = 'https://' . $googleCallbackBase;
 }
 if ($googleCallbackBase === '') {
-  $googleCallbackScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https' ? 'https' : 'http';
+  require_once __DIR__ . '/../../../utils/request_security.php';
+  $googleCallbackScheme = request_is_https() ? 'https' : 'http';
   $googleCallbackBase = $googleCallbackScheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
 }
 $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-oauth&action=callback';
@@ -168,7 +169,7 @@ $googleEmailCallback = rtrim($googleCallbackBase, '/') . '/?page=settings/gmail-
     <strong>Sign in with Google to send email</strong>
     <p style="margin:4px 0 10px;color:var(--muted);font-size:13px">Once the installation is configured, the normal experience is one click: sign in to the business Google account, approve sending email, and return to Project Alpha automatically. This affects outgoing email only—not PA login.</p>
     <?php if ($googleEmailSetupReady): ?>
-      <a class="btn btn-primary" href="/?page=settings/gmail-oauth&amp;action=connect&amp;csrf=<?php echo rawurlencode(csrf_token()); ?>">Sign in with Google</a>
+      <button class="btn btn-primary" type="submit" formmethod="post" formaction="/?page=settings/gmail-oauth&amp;action=connect">Sign in with Google</button>
     <?php else: ?>
       <button class="btn" type="button" disabled title="Complete the one-time installation setup below">Sign in with Google</button>
       <span style="margin-left:8px;color:#92400e;font-size:12px">One-time installation setup required</span>

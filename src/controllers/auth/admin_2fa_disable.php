@@ -31,9 +31,17 @@ if ($userId <= 0) {
 try {
     $pdo->beginTransaction();
     $pdo->prepare('DELETE FROM user_2fa WHERE user_id = ?')->execute([$userId]);
+    $pdo->prepare('DELETE FROM trusted_devices WHERE user_id = ?')->execute([$userId]);
     $pdo->prepare('UPDATE users SET auth_version = auth_version + 1 WHERE id = ?')->execute([$userId]);
     audit_log($pdo, 'auth.totp_admin_reset', 'user', $userId, [], $actorId);
     $pdo->commit();
+    App\Security\SessionRevocation::revokeUserSessions($pdo, $userId);
+    if ($userId === $actorId) {
+        $_SESSION = [];
+        session_destroy();
+        header('Location: /?page=login&error=' . urlencode('Two-factor authentication reset. Please sign in again.'));
+        exit;
+    }
     header('Location: /?page=account-edit&id=' . $userId . '&success=2fa_disabled');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) { $pdo->rollBack(); }

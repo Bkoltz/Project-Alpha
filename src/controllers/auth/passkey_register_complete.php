@@ -28,7 +28,8 @@ try {
         is_array($data['credential'] ?? null) ? $data['credential'] : [],
         get_client_ip()
     );
-    $_SESSION['authn'] = ['method' => 'passkey_registration', 'authenticated_at' => time()];
+    App\Security\SessionPolicy::rotateAuthenticatedId();
+    $_SESSION['authn']['reauthenticated_at'] = time();
     audit_log($pdo, 'auth.passkey_registered', 'passkey', (int)$result['id'], ['name' => $result['name']], $userId);
     passkey_json(true, 'passkey_registered', 'Passkey added.', 201, $result);
 } catch (PasskeyException $e) {

@@ -51,17 +51,23 @@ if ($uid > 0) {
 }
 
 try {
+  $pdo->beginTransaction();
   $hash = password_hash($new, PASSWORD_DEFAULT);
   $st = $pdo->prepare('UPDATE users SET password_hash=?, force_password_reset=0, auth_version=auth_version+1 WHERE id=? AND auth_version=? AND is_disabled=0 AND deleted_at IS NULL');
   $st->execute([$hash, $uid, $expectedAuthVersion]);
   if ($st->rowCount() !== 1) {
     throw new RuntimeException('Reset authorization was revoked.');
   }
+  password_reset_revoke_for_user($pdo, $uid);
+  $pdo->prepare('DELETE FROM trusted_devices WHERE user_id=?')->execute([$uid]);
   audit_log($pdo, 'user.password_reset_via_token', 'user', $uid, [], $uid);
+  $pdo->commit();
+  App\Security\SessionRevocation::revokeUserSessions($pdo, $uid);
   unset($_SESSION['reset_user_id'], $_SESSION['reset_auth_version'], $_SESSION['reset_verified_at']);
   header('Location: /?page=login&pwd_reset=1');
   exit;
 } catch (Throwable $e) {
+  if ($pdo->inTransaction()) { $pdo->rollBack(); }
   header('Location: /?page=reset-new&email=' . urlencode($email) . '&error=' . urlencode('Could not update password'));
   exit;
 }

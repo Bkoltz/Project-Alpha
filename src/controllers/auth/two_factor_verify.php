@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../utils/logger.php';
 require_once __DIR__ . '/../../utils/two_factor_auth.php';
 require_once __DIR__ . '/../../utils/client_ip.php';
 require_once __DIR__ . '/../../utils/password_reset_tokens.php';
+require_once __DIR__ . '/../../utils/request_security.php';
 
 use App\Utils\TwoFactorAuth;
 
@@ -36,15 +37,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $action = $_POST['action'] ?? '';
 $code = trim($_POST['code'] ?? '');
 
-/**
- * Detect whether the connection is HTTPS, including reverse-proxy headers.
- */
-function is_cookie_secure(): bool {
-    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https')
-        || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
-        || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
-}
 
 /**
  * Create or update a trusted device token
@@ -59,7 +51,7 @@ function set_trusted_device(PDO $pdo, int $userId, string $ip): void {
         'expires' => strtotime('+30 days'),
         'path' => '/',
         'domain' => '',
-        'secure' => is_cookie_secure(),
+        'secure' => request_is_https(),
         'httponly' => true,
         'samesite' => 'Strict',
     ];
@@ -91,13 +83,10 @@ try {
     $twofa = $st->fetch(PDO::FETCH_ASSOC);
     
     if (!$twofa) {
-        // 2FA not enabled, clear pending state and proceed
-        $pendingUser = $_SESSION['2fa_pending']['user_data'] ?? null;
+        // The factor changed while this login was pending. Restart rather than
+        // promoting a partially authenticated session.
         unset($_SESSION['2fa_pending']);
-        if ($pendingUser) {
-            $_SESSION['user'] = $pendingUser;
-        }
-        header('Location: /');
+        header('Location: /?page=login&error=' . urlencode('Authentication changed. Please sign in again.'));
         exit;
     }
     
@@ -131,7 +120,7 @@ try {
             // Complete login
             session_regenerate_id(true);
             $_SESSION['user'] = $_SESSION['2fa_pending']['user_data'];
-            $_SESSION['authn'] = ['method' => 'password_totp', 'authenticated_at' => time()];
+            App\Security\SessionPolicy::completeAuthentication('password_totp');
             unset($_SESSION['2fa_pending']);
             password_reset_revoke_for_user($pdo, $userId);
             

@@ -31,6 +31,13 @@ try {
     $pdo->prepare('UPDATE users SET auth_version=auth_version+1 WHERE id=?')->execute([$userId]);
     audit_log($pdo, 'auth.passkeys_admin_reset', 'user', $userId, ['revoked_count' => $revoked], $actorId);
     $pdo->commit();
+    App\Security\SessionRevocation::revokeUserSessions($pdo, $userId);
+    if ($userId === $actorId) {
+        $_SESSION = [];
+        session_destroy();
+        header('Location: /?page=login&error=' . urlencode('Passkeys reset. Please sign in again.'));
+        exit;
+    }
     header('Location: /?page=account-edit&id=' . $userId . '&success=passkeys_reset');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) { $pdo->rollBack(); }

@@ -55,7 +55,7 @@ $h = static fn(mixed $value): string => htmlspecialchars((string)$value, ENT_QUO
 
         <div class="login-divider"><span>or</span></div>
         <a href="/?page=login" class="login-passkey two-factor-option">Use a passkey instead</a>
-        <a href="/?page=logout" class="two-factor-cancel">Cancel and log out</a>
+        <form method="post" action="/?page=logout"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars((string)($_SESSION['csrf'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><button type="submit" class="two-factor-cancel" style="border:0;background:none;cursor:pointer">Cancel and log out</button></form>
         <p class="login-footnote">Protected access to <?php echo $h($brandName); ?></p>
       </div>
     </section>
