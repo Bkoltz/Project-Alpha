@@ -45,7 +45,10 @@ try {
         }
     }
 
-    if (in_array((string)$row['document_type'], ['invoice', 'project_invoice'], true) && empty($row['expire_when_paid'])) {
+    // Do not convert the intentional dated paid-receipt window back into an
+    // expire-on-payment link. Only legacy links with neither setting migrate.
+    if (in_array((string)$row['document_type'], ['invoice', 'project_invoice'], true)
+        && empty($row['expire_when_paid']) && empty($row['expires_at'])) {
         try {
             $pdo->exec("ALTER TABLE public_links ADD COLUMN expire_when_paid TINYINT(1) NOT NULL DEFAULT 0");
         } catch (Throwable $e) {
@@ -90,7 +93,9 @@ try {
     }
 
     if ($type === 'invoice') {
-        $eligibility = $pdo->prepare('SELECT status, finalized_at, collection_mode FROM invoices WHERE id=?');
+        $eligibility = $pdo->prepare('SELECT status, finalized_at, collection_mode, recipient_presentation_mode, paid_at,
+                                            invoice_type,contract_id,project_id,job_id,service_location_id
+                                     FROM invoices WHERE id=?');
         $eligibility->execute([$id]);
         $invoice = $eligibility->fetch(PDO::FETCH_ASSOC);
         if (!$invoice) {
@@ -100,7 +105,13 @@ try {
         if ($collectionMode === '') {
             $collectionMode = 'direct';
         }
+        $isPaidGeneralReceipt = pa_general_recipient_public_receipt_window_open($invoice);
+        if (pa_invoice_is_general_recipient($invoice)
+            && !pa_general_recipient_invoice_is_eligible($invoice)) {
+            throw new Exception('Invoice is not public');
+        }
         if (!in_array((string)$invoice['status'], ['sent','unpaid','partial','overdue'], true)
+            && !$isPaidGeneralReceipt
             || empty($invoice['finalized_at']) || $collectionMode !== 'direct') {
             throw new Exception('Invoice is not public');
         }

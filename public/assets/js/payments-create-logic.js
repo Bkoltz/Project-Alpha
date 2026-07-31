@@ -37,6 +37,7 @@ function update() {
     if (!opt) return;
     var r = opt.getAttribute('data-remaining');
     if (r) { amt.value = r; }
+    updateReceiptAvailability();
 }
 if (sel && amt) {
     sel.addEventListener('change', update);
@@ -184,6 +185,14 @@ function effectiveManualClientEmail() {
 function updateReceiptAvailability() {
     if (!sendReceiptInput) return;
     if (selectedScope() !== 'manual') {
+        var invoiceOption = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+        var isGeneralRecipient = !!invoiceOption && invoiceOption.getAttribute('data-general-recipient') === '1';
+        if (isGeneralRecipient) {
+            sendReceiptInput.checked = false;
+            sendReceiptInput.disabled = true;
+            if (sendReceiptHelp) sendReceiptHelp.textContent = 'The original public invoice link becomes the receipt for seven days after payment; no separate receipt email is sent.';
+            return;
+        }
         sendReceiptInput.disabled = false;
         if (sendReceiptHelp) sendReceiptHelp.textContent = 'A receipt can be emailed to the invoice client.';
         return;

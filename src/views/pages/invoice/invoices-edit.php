@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/document_fields.php';
 require_once __DIR__ . '/../../../utils/acl.php';
+require_once __DIR__ . '/../../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../../services/DocumentPolicy.php';
 require_once __DIR__ . '/../../../services/WorkTimeInvoiceEligibilityService.php';
 require_once __DIR__ . '/../../components/tax_lookup_control.php';
@@ -18,6 +19,7 @@ if (!$inv) {
   return;
 }
 try{$inv=DocumentPolicy::assertMutable($pdo,'invoice',$id,'monetary_adjustment');}catch(DocumentLockedException $locked){http_response_code(409);echo '<div class="alert alert-warning">'.htmlspecialchars($locked->getMessage()).' <a href="/?page=invoice/invoice-details&id='.$id.'">Return to invoice</a></div>';return;}
+$isGeneralRecipientInvoice = pa_invoice_is_general_recipient($inv);
 $items = $pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll(PDO::FETCH_ASSOC);
@@ -30,14 +32,22 @@ foreach ($clients as $c) {
   }
 }
 $invoiceActorId = (int)($_SESSION['user']['id'] ?? 0);
-$invoiceTimeEligibility = (new \App\Services\WorkTimeInvoiceEligibilityService($pdo))
-  ->forInvoice($id, $invoiceActorId);
-$availableTimeEntries = $invoiceTimeEligibility['ready'];
-$pendingTimeEntries = $invoiceTimeEligibility['pending'];
-$attachedTimeEntries = $invoiceTimeEligibility['attached'];
-$invoiceTimeBlockingReason = $invoiceTimeEligibility['blocking_reason'];
-$invoiceActorIsVerifiedOwner = $invoiceTimeEligibility['actor_is_verified_owner'];
-$invoiceActorCanAdministrativelySelfConfirm = $invoiceTimeEligibility['actor_can_administratively_self_confirm'];
+$availableTimeEntries = [];
+$pendingTimeEntries = [];
+$attachedTimeEntries = [];
+$invoiceTimeBlockingReason = null;
+$invoiceActorIsVerifiedOwner = false;
+$invoiceActorCanAdministrativelySelfConfirm = false;
+if (!$isGeneralRecipientInvoice) {
+  $invoiceTimeEligibility = (new \App\Services\WorkTimeInvoiceEligibilityService($pdo))
+    ->forInvoice($id, $invoiceActorId);
+  $availableTimeEntries = $invoiceTimeEligibility['ready'];
+  $pendingTimeEntries = $invoiceTimeEligibility['pending'];
+  $attachedTimeEntries = $invoiceTimeEligibility['attached'];
+  $invoiceTimeBlockingReason = $invoiceTimeEligibility['blocking_reason'];
+  $invoiceActorIsVerifiedOwner = $invoiceTimeEligibility['actor_is_verified_owner'];
+  $invoiceActorCanAdministrativelySelfConfirm = $invoiceTimeEligibility['actor_can_administratively_self_confirm'];
+}
 $contractEstimateLines = [];
 if (!empty($inv['contract_id'])) {
   $estimateStmt = $pdo->prepare(
@@ -56,6 +66,9 @@ if (!empty($inv['contract_id'])) {
   <?php elseif (!empty($_GET['error'])): ?>
     <div class="alert alert-danger" role="alert"><?php echo htmlspecialchars((string)$_GET['error']); ?></div>
   <?php endif; ?>
+  <?php if ($isGeneralRecipientInvoice): ?>
+    <div class="alert alert-info" role="status">This public invoice is presented as <strong>General Recipient</strong>. Its internal accounting client remains private and cannot be reassigned here.</div>
+  <?php endif; ?>
   <?php if ($contractEstimateLines): ?>
   <div style="max-width:900px;margin:0 0 18px;padding:14px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc">
     <strong>Contract estimate — reference only</strong>
@@ -63,6 +76,7 @@ if (!empty($inv['contract_id'])) {
     <div style="display:grid;gap:6px"><?php foreach ($contractEstimateLines as $estimateLine): ?><div style="display:flex;justify-content:space-between;gap:16px"><span><?= htmlspecialchars((string)$estimateLine['item']) ?> · <?= number_format((float)$estimateLine['quantity'],2) ?> hr × $<?= number_format((float)$estimateLine['unit_price'],2) ?></span><strong>$<?= number_format((float)$estimateLine['line_total'],2) ?> estimated</strong></div><?php endforeach; ?></div>
   </div>
   <?php endif; ?>
+  <?php if (!$isGeneralRecipientInvoice): ?>
   <div style="display:grid;gap:10px;max-width:900px;margin:0 0 18px;padding:14px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff">
     <div>
       <div style="font-weight:700;color:#1e3a8a">Add confirmed time to this draft</div>
@@ -144,13 +158,14 @@ if (!empty($inv['contract_id'])) {
       </div>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
   <form id="invEditForm" method="post" action="/?page=invoices-update" style="display:grid;gap:16px;max-width:900px">
     <input type="hidden" name="csrf" value="<?php echo csrf_token(); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$inv['id']; ?>">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label style="position:relative">
-        <div>Client</div>
-        <input id="clientInputInv" type="text" value="<?php echo htmlspecialchars($clientName); ?>" placeholder="Type client name..." autocomplete="off" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <div><?php echo $isGeneralRecipientInvoice ? 'Internal accounting client' : 'Client'; ?></div>
+        <input id="clientInputInv" type="text" value="<?php echo htmlspecialchars($clientName); ?>" placeholder="Type client name..." autocomplete="off" <?php echo $isGeneralRecipientInvoice ? 'readonly' : ''; ?> style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
         <input id="clientIdInv" type="hidden" name="client_id" value="<?php echo (int)$inv['client_id']; ?>">
         <div id="clientSuggestInv" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
@@ -230,7 +245,9 @@ if (!empty($inv['contract_id'])) {
       </div>
     <?php endif; ?>
 
-    <?php $documentServiceLocationId = (int)($inv['service_location_id'] ?? 0); require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
+    <?php if (!$isGeneralRecipientInvoice): ?>
+      <?php $documentServiceLocationId = (int)($inv['service_location_id'] ?? 0); require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
+    <?php endif; ?>
 
     <div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff">
       <div style="font-weight:600;margin-bottom:8px">Billing Mode</div>

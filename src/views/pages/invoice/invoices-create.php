@@ -23,6 +23,7 @@ if ($selectedProjectId > 0) {
 ?>
 <section>
   <h2>Create Invoice</h2>
+  <p style="margin:-4px 0 16px;color:#6b7280">Create a normal client invoice, or a one-off general-recipient invoice with a private internal accounting client.</p>
   <div id="taxExemptBannerInv" style="display:none;margin:12px 0;padding:12px 16px;border-radius:8px;background:#fef3c7;border:1px solid #fbbf24;color:#78350f">
     <strong>ℹ️ Tax Exempt Organization:</strong> The selected client's organization has a tax-exempt form on file. You can still choose whether to charge taxes.
   </div>
@@ -31,6 +32,15 @@ if ($selectedProjectId > 0) {
     <?php if ($selectedProject): ?>
       <input type="hidden" name="return_to_project" value="<?php echo (int)$selectedProject['id']; ?>">
     <?php endif; ?>
+    <div style="padding:14px 16px;border:1px solid #dbeafe;border-radius:10px;background:#f8fbff">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="checkbox" id="generalRecipientInvoice" name="recipient_presentation_mode" value="general" style="margin-top:3px">
+        <span>
+          <strong>General-recipient invoice</strong>
+          <span style="display:block;margin-top:3px;color:#4b5563;font-size:13px">Keep the selected client only for internal accounting. Shared PDF and public payment link will not show their name, organization, address, phone, or email. This is a one-off direct invoice: no project, tracked time, mileage, service location, automatic email, reminders, or portal exposure.</span>
+        </span>
+      </label>
+    </div>
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr">
       <label style="position:relative">
         <div>Client</div>
@@ -59,7 +69,9 @@ if ($selectedProjectId > 0) {
       </label>
     </div>
 
-    <?php $documentServiceLocationId = 0; require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
+    <div id="generalRecipientServiceLocation">
+      <?php $documentServiceLocationId = 0; require __DIR__ . '/../../components/document_service_location_fields.php'; ?>
+    </div>
 
     <div id="customFieldsContainerInv">
     <?php
@@ -127,7 +139,8 @@ if ($selectedProjectId > 0) {
 
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button type="submit" name="invoice_action" value="save" class="btn">Save Invoice</button>
-      <button type="submit" name="invoice_action" value="finalize_send" class="btn btn-primary">Save &amp; Send</button>
+      <button type="submit" name="invoice_action" value="finalize" class="btn btn-primary" id="finalizeGeneralRecipientInvoice" style="display:none">Finalize &amp; Create Link</button>
+      <button type="submit" name="invoice_action" id="finalizeAndSendInvoice" style="" value="finalize_send" class="btn btn-primary">Save &amp; Send</button>
     </div>
   </form>
 </section>
@@ -190,3 +203,43 @@ if ($selectedProjectId > 0) {
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/invoices-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const toggle = document.getElementById('generalRecipientInvoice');
+  const project = document.getElementById('projectSectionInv');
+  const location = document.getElementById('generalRecipientServiceLocation');
+  const tracked = document.getElementById('btnAddFromTrackedTime');
+  const mileage = document.getElementById('btnAddFromMileage');
+  const send = document.getElementById('finalizeAndSendInvoice');
+  const finalize = document.getElementById('finalizeGeneralRecipientInvoice');
+  function sync() {
+    const general = !!toggle.checked;
+    if (general) {
+      const projectSelect = document.getElementById('projectSelectInv');
+      const serviceLocation = document.querySelector('[name="service_location_id"]');
+      if (projectSelect) projectSelect.value = '';
+      if (serviceLocation) serviceLocation.value = '';
+      document.querySelectorAll('input[name^="time_entry_ids["], input[name^="mileage_allocation_ids["]').forEach(function (input) {
+        input.remove();
+      });
+    }
+    if (project) {
+      project.style.display = general ? 'none' : 'none';
+      if (!general) {
+        // The normal client picker owns whether project choices exist. Reloading
+        // here restores that decision when a user turns general mode back off.
+        const clientId = document.getElementById('clientIdInv');
+        if (clientId && clientId.value && typeof loadProjectsForClientInv === 'function') {
+          loadProjectsForClientInv(clientId.value);
+        }
+      }
+    }
+    if (location) location.style.display = general ? 'none' : '';
+    if (tracked) tracked.disabled = general;
+    if (mileage) mileage.disabled = general;
+    if (send) send.style.display = general ? 'none' : '';
+    if (finalize) finalize.style.display = general ? '' : 'none';
+  }
+  toggle.addEventListener('change', sync); sync();
+});
+</script>

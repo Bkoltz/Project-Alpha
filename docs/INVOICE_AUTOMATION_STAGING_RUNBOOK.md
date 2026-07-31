@@ -133,7 +133,7 @@ docker compose -f docker-compose.staging.yml run --rm migrate \
   php /var/www/src/migrations/run_migrations.php --dry-run --verbose
 ```
 
-The sequence must contain 59 migrations and report session migration `0057` before invoice migrations `0058` and `0059`. Resolve any checksum, sequence, backup, or schema error instead of bypassing the migrator.
+For a release that includes general-recipient invoices, the sequence must contain 60 migrations and report session migration `0057`, invoice automation migrations `0058` and `0059`, then `0060_general_recipient_invoices.sql`. Resolve any checksum, sequence, backup, or schema error instead of bypassing the migrator.
 
 Apply through the normal one-shot service:
 

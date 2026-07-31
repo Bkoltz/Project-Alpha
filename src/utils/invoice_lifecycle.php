@@ -6,6 +6,7 @@ require_once __DIR__ . '/public_links.php';
 require_once __DIR__ . '/invoice_content_links.php';
 require_once __DIR__ . '/invoice_numbers.php';
 require_once __DIR__ . '/invoice_notifications.php';
+require_once __DIR__ . '/general_recipient_invoices.php';
 
 function invoice_is_collectible_status(string $status): bool
 {
@@ -410,6 +411,65 @@ function invoice_finalize(PDO $pdo, int $invoiceId, array $appConfig, string $so
 }
 
 /**
+ * Finalize a general-recipient invoice and create its manual public link as a
+ * single database operation. This never queues email because there is no
+ * externally safe recipient for this presentation mode.
+ *
+ * @return array{invoice:array<string,mixed>,token:string,existing:bool}
+ */
+function invoice_finalize_and_create_general_recipient_link(
+    PDO $pdo,
+    int $invoiceId,
+    array $appConfig,
+    ?int $userId = null
+): array {
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+        $invoice = invoice_finalize($pdo, $invoiceId, $appConfig, 'general_recipient_manual_link', $userId);
+        if (!pa_general_recipient_invoice_is_eligible($invoice)
+            || !invoice_is_collectible_status((string)($invoice['status'] ?? ''))
+            || empty($invoice['finalized_at'])) {
+            throw new RuntimeException('Only a finalized one-off general-recipient invoice can create this public link.');
+        }
+
+        $existing = $pdo->prepare(
+            'SELECT token FROM public_links
+             WHERE document_type="invoice" AND document_id=? AND revoked=0
+               AND expire_when_paid=1 AND expires_at IS NULL
+             ORDER BY id DESC LIMIT 1 FOR UPDATE'
+        );
+        $existing->execute([$invoiceId]);
+        $token = (string)($existing->fetchColumn() ?: '');
+        $wasExisting = $token !== '';
+        if (!$wasExisting) {
+            // invoice_finalize() holds the invoice row FOR UPDATE for this
+            // outer transaction, serializing concurrent link creation. The
+            // token's unique key remains a separate entropy collision guard.
+            $token = bin2hex(random_bytes(32));
+            $insert = $pdo->prepare(
+                'INSERT INTO public_links (document_type,document_id,token,expires_at,expire_when_paid,revoked,redirect)
+                 VALUES ("invoice",?,?,NULL,1,0,NULL)'
+            );
+            $insert->execute([$invoiceId, $token]);
+        }
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+        return ['invoice' => $invoice, 'token' => $token, 'existing' => $wasExisting];
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
  * Deliver a finalized invoice once. This intentionally creates only a normal
  * one-time payment link; it never saves or reuses a payment method.
  */
@@ -418,6 +478,12 @@ function invoice_send_finalized(PDO $pdo, int $invoiceId, array $appConfig, stri
     $invoice = invoice_notification_invoice($pdo, $invoiceId);
     if (!$invoice || !invoice_is_collectible_status((string)$invoice['status'])
         || empty($invoice['finalized_at']) || ($invoice['collection_mode'] ?? 'direct') !== 'direct') {
+        return false;
+    }
+
+    // General-recipient invoices have no externally safe recipient. They may only
+    // be shared through a deliberately created public link, never queued for email.
+    if (pa_invoice_is_general_recipient($invoice)) {
         return false;
     }
 

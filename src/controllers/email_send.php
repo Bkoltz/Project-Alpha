@@ -14,6 +14,7 @@ require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../utils/invoice_notifications.php';
 require_once __DIR__ . '/../utils/document_pdf.php';
+require_once __DIR__ . '/../utils/general_recipient_invoices.php';
 
 $type = $_POST['type'] ?? '';
 $id = (int)($_POST['id'] ?? 0);
@@ -47,7 +48,7 @@ try {
     $subject = 'Contract C-' . $docnum . ' for ' . $clientName;
     $baseView = '/?page=contract-print&id='.$id;
   } else { // invoice
-    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, i.revision_number, i.due_date, i.payment_terms_days, i.due_date_source, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
+    $st = $pdo->prepare('SELECT i.id, i.doc_number, i.invoice_type, i.project_code, i.status, i.revision_number, i.due_date, i.payment_terms_days, i.due_date_source, i.recipient_presentation_mode, c.email, c.name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     $docnum = (string)($row['doc_number'] ?? $row['id'] ?? '');
@@ -57,6 +58,11 @@ try {
     $baseView = '/?page=invoice-print&id='.$id;
   }
 
+  if ($type === 'invoice' && $row && pa_invoice_is_general_recipient($row)) {
+    $toUrl = $redirectTo ?: $baseView;
+    header('Location: '.$toUrl.(strpos($toUrl,'?')!==false?'&':'?').'email_err=' . urlencode('General-recipient invoices are shared manually by public link and cannot be emailed.'));
+    exit;
+  }
   if (!$row || empty($row['email'])) {
     $toUrl = $redirectTo ?: $baseView;
     app_log('email', 'missing client email', ['type'=>$type, 'id'=>$id]);
