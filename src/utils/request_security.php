@@ -5,6 +5,32 @@ declare(strict_types=1);
 require_once __DIR__ . '/client_ip.php';
 
 /**
+ * Forwarded protocol headers affect cookie and redirect security decisions, so
+ * they require an explicitly configured immediate proxy. The broader
+ * client-IP helper intentionally accepts private networks for legacy address
+ * discovery; that permissive fallback is not appropriate for HTTPS trust.
+ */
+function request_is_explicitly_trusted_proxy(string $ip): bool
+{
+    if ($ip === '') {
+        return false;
+    }
+
+    $configured = trim((string)(getenv('TRUSTED_PROXIES') ?: ''));
+    if ($configured === '') {
+        return false;
+    }
+
+    foreach (preg_split('/[,\s]+/', $configured, -1, PREG_SPLIT_NO_EMPTY) as $trusted) {
+        if (ip_in_cidr($ip, $trusted)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Determine whether the browser-facing request is HTTPS.
  *
  * Forwarding headers are accepted only from the configured/trusted immediate
@@ -22,7 +48,7 @@ function request_is_https(?array $server = null): bool
     }
 
     $remoteAddress = trim((string)($server['REMOTE_ADDR'] ?? ''));
-    if (!is_trusted_proxy($remoteAddress)) {
+    if (!request_is_explicitly_trusted_proxy($remoteAddress)) {
         return false;
     }
 

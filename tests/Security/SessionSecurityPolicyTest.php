@@ -70,16 +70,30 @@ final class SessionSecurityPolicyTest extends TestCase
 
     public function testHttpsDetectionTrustsOnlyDirectTlsOrTrustedExactProxyValues(): void
     {
-        self::assertTrue(request_is_https(['HTTPS' => 'on', 'REMOTE_ADDR' => '203.0.113.5']));
-        self::assertFalse(request_is_https(['REMOTE_ADDR' => '203.0.113.5', 'HTTP_X_FORWARDED_PROTO' => 'https']));
-        self::assertTrue(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https']));
-        self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https,http']));
-        self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_FORWARDED' => 'for=198.51.100.7;proto=https, for=10.0.0.4;proto=https']));
-        self::assertTrue(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_FORWARDED' => 'for=198.51.100.7;proto=https, for=10.0.0.4;proto=https', 'HTTP_X_FORWARDED_PROTO' => 'https']));
-        self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https.evil']));
-        self::assertTrue(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_CF_VISITOR' => '{"scheme":"https"}']));
-        self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_CF_VISITOR' => '{"note":"https"}']));
-        self::assertTrue(request_is_https(['REMOTE_ADDR' => '::1', 'HTTP_FORWARDED' => 'for=192.0.2.1;proto=https']));
+        $originalTrustedProxies = getenv('TRUSTED_PROXIES');
+        try {
+            putenv('TRUSTED_PROXIES');
+            self::assertTrue(request_is_https(['HTTPS' => 'on', 'REMOTE_ADDR' => '203.0.113.5']));
+            self::assertFalse(request_is_https(['REMOTE_ADDR' => '203.0.113.5', 'HTTP_X_FORWARDED_PROTO' => 'https']));
+            self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https']));
+
+            putenv('TRUSTED_PROXIES=10.0.0.0/24,::1');
+            self::assertTrue(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https']));
+            self::assertFalse(request_is_https(['REMOTE_ADDR' => '172.20.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https']));
+            self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https,http']));
+            self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_FORWARDED' => 'for=198.51.100.7;proto=https, for=10.0.0.4;proto=https']));
+            self::assertTrue(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_FORWARDED' => 'for=198.51.100.7;proto=https, for=10.0.0.4;proto=https', 'HTTP_X_FORWARDED_PROTO' => 'https']));
+            self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_PROTO' => 'https.evil']));
+            self::assertTrue(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_CF_VISITOR' => '{"scheme":"https"}']));
+            self::assertFalse(request_is_https(['REMOTE_ADDR' => '10.0.0.5', 'HTTP_CF_VISITOR' => '{"note":"https"}']));
+            self::assertTrue(request_is_https(['REMOTE_ADDR' => '::1', 'HTTP_FORWARDED' => 'for=192.0.2.1;proto=https']));
+        } finally {
+            if ($originalTrustedProxies === false) {
+                putenv('TRUSTED_PROXIES');
+            } else {
+                putenv('TRUSTED_PROXIES=' . $originalTrustedProxies);
+            }
+        }
     }
 
     public function testFrontControllerAndOauthUseCrossSiteSafeSessionContract(): void
