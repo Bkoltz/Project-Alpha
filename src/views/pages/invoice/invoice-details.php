@@ -451,16 +451,6 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
     </tr>
   </table>
 
-  <?php if (($showInvoiceDueDate && $paymentTermsSummary !== '') || ($showInvoiceTerms && $termsText !== '')): ?>
-  <div style="margin:12px 0;padding:12px 14px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc">
-    <?php if ($showInvoiceDueDate && $paymentTermsSummary !== ''): ?>
-      <div style="font-weight:700;color:#0f172a">Payment terms: <?php echo htmlspecialchars($paymentTermsSummary); ?></div>
-    <?php endif; ?>
-    <?php if ($showInvoiceTerms && $termsText !== ''): ?>
-      <div style="margin-top:6px;color:#334155;white-space:pre-wrap"><?php echo htmlspecialchars($termsText); ?></div>
-    <?php endif; ?>
-  </div>
-  <?php endif; ?>
   <?php if (!empty($projectNotes)): ?>
   <div style="margin:12px 0;padding:10px;border:1px solid #eee;border-radius:8px;background:#f8fafc">
           <div style="font-weight:600;margin-bottom:6px">Job Notes</div>
@@ -570,6 +560,16 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
       echo $invoiceContentLinksHtml;
     }
   ?>
+  <?php endif; ?>
+  <?php if (($showInvoiceDueDate && $paymentTermsSummary !== '') || ($showInvoiceTerms && $termsText !== '')): ?>
+  <div style="margin:12px 0;padding:12px 14px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc">
+    <?php if ($showInvoiceDueDate && $paymentTermsSummary !== ''): ?>
+      <div style="font-weight:700;color:#0f172a">Payment terms: <?php echo htmlspecialchars($paymentTermsSummary); ?></div>
+    <?php endif; ?>
+    <?php if ($showInvoiceTerms && $termsText !== ''): ?>
+      <div style="margin-top:6px;color:#334155;white-space:pre-wrap"><?php echo htmlspecialchars($termsText); ?></div>
+    <?php endif; ?>
+  </div>
   <?php endif; ?>
 </section>
 
