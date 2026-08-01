@@ -16,8 +16,9 @@ $linkExpireWhenPaid = isset($row['expire_when_paid']) && (int)$row['expire_when_
 $expirationText = '';
 
 if ($linkExpireWhenPaid) {
-    // Only show "valid until paid" if explicitly set
-    $expirationText = 'This link is valid until the invoice is paid in full.';
+    $expirationText = !empty($isGeneralRecipientPublicInvoice)
+        ? 'After payment, this link remains available as a receipt for seven days.'
+        : 'This link is valid until the invoice is paid in full.';
 } elseif ($linkExpiresAt !== null) {
     // Date-based expiration
     $expTime = strtotime($linkExpiresAt);

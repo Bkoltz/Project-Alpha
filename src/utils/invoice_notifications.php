@@ -5,6 +5,7 @@ require_once __DIR__ . '/invoice_content_links.php';
 require_once __DIR__ . '/invoice_due_dates.php';
 require_once __DIR__ . '/invoice_numbers.php';
 require_once __DIR__ . '/document_pdf.php';
+require_once __DIR__ . '/general_recipient_invoices.php';
 
 function invoice_notification_timezone(array $appConfig): DateTimeZone
 {
@@ -75,7 +76,7 @@ function invoice_notification_enqueue_generated(PDO $pdo, int $invoiceId, array 
         return false;
     }
     $invoice = invoice_notification_invoice($pdo, $invoiceId);
-    if (!$invoice || ($invoice['invoice_type'] ?? '') !== 'long_term'
+    if (!$invoice || pa_invoice_is_general_recipient($invoice) || ($invoice['invoice_type'] ?? '') !== 'long_term'
         || ($invoice['finalization_source'] ?? '') !== 'recurring_schedule') {
         return false;
     }
@@ -102,11 +103,12 @@ function invoice_notification_schedule_reminders(
     $today = $today ?: new DateTimeImmutable('today', invoice_notification_timezone($appConfig));
     $stats = ['queued' => 0, 'suppressed' => 0];
     $stmt = $pdo->prepare(
-        'SELECT i.id,i.due_date,c.email
+        'SELECT i.id,i.due_date,c.email,i.recipient_presentation_mode
          FROM invoices i JOIN clients c ON c.id=i.client_id
          WHERE i.status IN ("unpaid","partial","sent","overdue")
            AND i.finalized_at IS NOT NULL AND i.collection_mode="direct"
-           AND i.due_date IS NOT NULL'
+           AND i.due_date IS NOT NULL
+           AND COALESCE(i.recipient_presentation_mode, "named") <> "general"'
     );
     $stmt->execute();
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -192,7 +194,7 @@ function invoice_notification_process(
         $stats['claimed']++;
 
         $rowStmt = $pdo->prepare(
-            'SELECT n.*,i.doc_number,i.invoice_type,i.status AS invoice_status,i.finalized_at,
+            'SELECT n.*,i.doc_number,i.invoice_type,i.recipient_presentation_mode,i.status AS invoice_status,i.finalized_at,
                     i.collection_mode,i.total,i.amount_paid,i.due_date,i.payment_terms_days,i.due_date_source,
                     c.email AS current_email,c.name AS client_name
              FROM invoice_notifications n
@@ -209,7 +211,9 @@ function invoice_notification_process(
         $currentEmail = trim((string)$row['current_email']);
         $balance = max(0.0, (float)$row['total'] - (float)$row['amount_paid']);
         $reason = null;
-        if (!in_array($status, ['sent', 'unpaid', 'partial', 'overdue'], true)
+        if (pa_invoice_is_general_recipient($row)) {
+            $reason = 'General-recipient invoices are shared manually and cannot be emailed.';
+        } elseif (!in_array($status, ['sent', 'unpaid', 'partial', 'overdue'], true)
             || empty($row['finalized_at']) || ($row['collection_mode'] ?? 'direct') !== 'direct' || $balance <= 0.005) {
             $reason = 'Invoice is no longer eligible for client delivery.';
         } elseif (!filter_var($currentEmail, FILTER_VALIDATE_EMAIL)

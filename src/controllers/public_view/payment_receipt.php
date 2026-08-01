@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/rate_limiter.php';
+require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 
 if (!rate_limit_check($pdo, 'payment_receipt', 20, 60)) {
     http_response_code(429);
@@ -20,7 +21,8 @@ if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
 $stmt = $pdo->prepare(
     'SELECT r.*,p.payment_date,p.payment_method,p.reference_number,p.status AS payment_status,
             p.refunded_amount,p.disputed_amount,p.reversed_at,p.reversal_reason,p.job_id,
-            i.doc_number,i.invoice_type,j.job_code,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS client_email
+            i.doc_number,i.invoice_type,i.recipient_presentation_mode,j.job_code,
+            COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS client_email
      FROM payment_receipts r
      JOIN payments p ON p.id=r.payment_id
      LEFT JOIN clients c ON c.id=p.client_id
@@ -32,6 +34,13 @@ $stmt = $pdo->prepare(
 $stmt->execute([$token]);
 $receipt = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$receipt) {
+    http_response_code(404);
+    echo 'Receipt not found.';
+    exit;
+}
+if (pa_invoice_is_general_recipient($receipt)) {
+    // Defense in depth for any receipt row created before the presentation
+    // mode was enforced. The invoice's own paid link is the safe receipt.
     http_response_code(404);
     echo 'Receipt not found.';
     exit;

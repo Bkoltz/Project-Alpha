@@ -338,7 +338,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('display:flex;gap:8px;flex-wrap:wrap;padding-top:8px', (string)$view);
         self::assertStringNotContainsString('Save Draft</button>', (string)$view);
         self::assertStringContainsString("\$invoiceAction = (string)(\$_POST['invoice_action'] ?? 'save');", (string)$controller);
-        self::assertStringContainsString("['save', 'draft', 'finalize_send']", (string)$controller);
+        self::assertStringContainsString("['save', 'draft', 'finalize', 'finalize_send']", (string)$controller);
         self::assertStringContainsString('$finalizeAndSend = $invoiceAction === \'finalize_send\';', (string)$controller);
         self::assertStringContainsString('client_id = ? OR client_id IS NULL OR client_id = 0', (string)$controller);
         self::assertStringContainsString('CASE WHEN client_id IS NULL OR client_id = 0 THEN ? ELSE client_id END', (string)$controller);

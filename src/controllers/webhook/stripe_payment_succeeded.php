@@ -152,8 +152,8 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         $total = (float)$invoice['total'];
         $status = ($paid >= $total) ? 'paid' : 'partial';
         
-        $pdo->prepare('UPDATE invoices SET status=?,amount_paid=?,balance_due=GREATEST(total-?,0),stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE id=?')
-            ->execute([$status, $paid, $paid, $invoiceId]);
+        $pdo->prepare('UPDATE invoices SET status=?,amount_paid=?,balance_due=GREATEST(total-?,0),paid_at=CASE WHEN ?="paid" THEN COALESCE(paid_at,NOW()) ELSE NULL END,stripe_session_id=NULL,stripe_checkout_expires_at=NULL WHERE id=?')
+            ->execute([$status, $paid, $paid, $status, $invoiceId]);
         
         // If paid, revoke public links and complete only a one-time contract.
         if ($status === 'paid') {

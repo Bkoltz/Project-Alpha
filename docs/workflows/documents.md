@@ -41,6 +41,12 @@ Contract active -> Generate invoice when needed
 
 Clients can use public document links to approve or deny quotes, upload signed contracts, view invoices, and pay balances. Completed outcomes remain visible briefly as status pages so clients can see that a document was approved, denied, signed, uploaded, or paid.
 
+## General-Recipient Invoices
+
+Use **General-recipient invoice** for a one-off invoice whose shared document must not identify the internal accounting client. The client remains attached inside PA for bookkeeping, but the public page and PDF show **General Recipient** and omit the client's name, organization, address, phone, email, and configured client or organization content links.
+
+General-recipient invoices are direct, regular invoices only. They cannot use a project, contract, service location, tracked time, mileage, automatic email, reminders, or portal delivery. Finalize the invoice to create its manual public link. If Stripe is configured, that invoice-specific link can collect its outstanding balance.
+
 ## Document Status Visibility
 
 Document detail pages show the current public-link state so PA users can tell whether a client link is accessible, redirected, or unavailable.

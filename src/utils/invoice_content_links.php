@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/general_recipient_invoices.php';
+
 // Compatibility entrypoint used by project invoice billing code. The canonical
 // invoice-link policy lives in invoice_links.php.
 require_once __DIR__ . '/invoice_links.php';
@@ -29,6 +31,13 @@ function invoice_content_links_table_has_column(PDO $pdo, string $table, string 
 /** @return list<array{id:int,title:?string,url:string,link_type:string,entity_type:string,entity_id:int,source_label:string}> */
 function invoice_content_links_for_invoice(PDO $pdo, int $invoiceId, array $appConfig = []): array
 {
+    $mode = $pdo->prepare('SELECT recipient_presentation_mode FROM invoices WHERE id=? LIMIT 1');
+    $mode->execute([$invoiceId]);
+    if (pa_invoice_is_general_recipient([
+        'recipient_presentation_mode' => $mode->fetchColumn() ?: 'named',
+    ])) {
+        return [];
+    }
     return pa_invoice_links_for_invoice($pdo, $invoiceId);
 }
 

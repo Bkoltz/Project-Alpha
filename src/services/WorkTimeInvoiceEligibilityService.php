@@ -29,6 +29,9 @@ final class WorkTimeInvoiceEligibilityService
      */
     public static function assertCompatibleDestination(array $entry, array $invoice): void
     {
+        if (strtolower(trim((string)($invoice['recipient_presentation_mode'] ?? 'named'))) === 'general') {
+            throw new DomainException('General-recipient invoices cannot include tracked time.');
+        }
         if (!empty($entry['client_id'])
             && (int)$entry['client_id'] !== (int)($invoice['client_id'] ?? 0)) {
             throw new DomainException('The time entry and invoice must belong to the same client.');

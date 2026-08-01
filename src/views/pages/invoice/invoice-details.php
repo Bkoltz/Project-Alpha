@@ -12,6 +12,7 @@ require_once __DIR__ . '/../../../utils/payment_methods.php';
 require_once __DIR__ . '/../../../utils/public_links.php';
 require_once __DIR__ . '/../../../services/StripeService.php';
 require_once __DIR__ . '/../../../utils/invoice_due_dates.php';
+require_once __DIR__ . '/../../../utils/general_recipient_invoices.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'invoices', $id);
@@ -20,6 +21,18 @@ $st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.ema
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
+$isGeneralRecipientInvoice = pa_invoice_is_general_recipient($inv);
+$generalRecipientToken = null;
+if (!defined('PUBLIC_VIEW') && !defined('PDF_MODE')) {
+    $generalRecipientFlash = $_SESSION['flash_general_recipient_link'] ?? null;
+    unset($_SESSION['flash_general_recipient_link']);
+    if ($isGeneralRecipientInvoice
+        && is_array($generalRecipientFlash)
+        && (int)($generalRecipientFlash['invoice_id'] ?? 0) === $id
+        && preg_match('/^[a-f0-9]{64}$/', (string)($generalRecipientFlash['token'] ?? ''))) {
+        $generalRecipientToken = (string)$generalRecipientFlash['token'];
+    }
+}
 $items = $pdo->prepare('SELECT item, description, quantity, unit_price, line_total, billing_unit, is_extra_charge FROM invoice_items WHERE invoice_id=?');
 $items->execute([$id]);
 $items = $items->fetchAll();
@@ -104,13 +117,13 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
     <?php if((int)($inv['last_sent_revision']??0)>0&&(int)($inv['revision_number']??1)>(int)$inv['last_sent_revision']): ?><span class="alert alert-warning" style="padding:6px 9px">Revised <?php echo htmlspecialchars((string)($inv['revision_updated_at']??'')); ?> · Resend required</span><?php endif; ?>
     <?php if((float)($inv['credit_due']??0)>0.005): ?><span class="alert alert-warning" style="padding:6px 9px">Credit due: $<?php echo number_format((float)$inv['credit_due'],2); ?>. Collection is disabled; use the audited credit/refund workflow.</span><?php endif; ?>
     <?php if (strtolower((string)$inv['status']) === 'draft'): ?>
-      <form method="post" action="/?page=invoice/invoice-finalize" style="display:inline" onsubmit="return confirm('Finalize this invoice and email it to the client?');">
+      <form method="post" action="/?page=invoice/invoice-finalize" style="display:inline" onsubmit="return confirm(<?php echo $isGeneralRecipientInvoice ? '\'Finalize this invoice and create its manual public link?\'' : '\'Finalize this invoice and email it to the client?\''; ?>);">
         <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
         <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
-        <button type="submit" class="btn btn-sm btn-success">Finalize &amp; Send</button>
+        <button type="submit" class="btn btn-sm btn-success"><?php echo $isGeneralRecipientInvoice ? 'Finalize &amp; Create Link' : 'Finalize &amp; Send'; ?></button>
       </form>
     <?php endif; ?>
-    <?php if (!empty($inv['status']) && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && $invoiceCollectionMode === 'direct'): ?>
+    <?php if (!$isGeneralRecipientInvoice && !empty($inv['status']) && in_array(strtolower((string)$inv['status']), ['sent','unpaid','partial','overdue'], true) && $invoiceCollectionMode === 'direct'): ?>
     <form method="post" action="/?page=invoice/email-send" style="display:inline">
       <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <input type="hidden" name="type" value="invoice">
@@ -200,6 +213,19 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
   <?php endif; ?>
   <?php if (!empty($_GET['emailed'])): ?>
     <div class="no-print" style="padding:8px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">Invoice emailed.</div>
+  <?php endif; ?>
+  <?php if ($generalRecipientToken !== null): ?>
+    <?php
+      try {
+        $generalRecipientUrl = invoice_public_base_url($appConfig) . '/?page=public-doc&token=' . rawurlencode($generalRecipientToken);
+      } catch (Throwable $e) {
+        $generalRecipientUrl = '/?page=public-doc&token=' . rawurlencode($generalRecipientToken);
+      }
+    ?>
+    <div class="no-print" style="padding:10px 12px;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:8px;font-size:14px">
+      <strong>Invoice finalized. Manual public link created:</strong>
+      <a href="<?php echo htmlspecialchars($generalRecipientUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($generalRecipientUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></a>
+    </div>
   <?php endif; ?>
   <?php if (!empty($_GET['email_err'])): ?>
     <div class="no-print" style="padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;margin-bottom:8px;font-size:14px">Email error: <?php echo htmlspecialchars((string)$_GET['email_err']); ?></div>
@@ -399,11 +425,11 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
       <td style="vertical-align:top;width:50%;padding-left:12px">
         <div class="font-600">To</div>
         <?php 
-          $toLines = [];
-          if (!empty($inv['client_name'])) { $toLines[] = (string)$inv['client_name']; }
-          if (!empty($inv['client_org'])) { $toLines[] = (string)$inv['client_org']; }
-          if (!empty($inv['address_line1'])) { $toLines[] = (string)$inv['address_line1']; }
-          if (!empty($inv['address_line2'])) { $toLines[] = (string)$inv['address_line2']; }
+          $toLines = $isGeneralRecipientInvoice ? ['General Recipient'] : [];
+          if (!$isGeneralRecipientInvoice && !empty($inv['client_name'])) { $toLines[] = (string)$inv['client_name']; }
+          if (!$isGeneralRecipientInvoice && !empty($inv['client_org'])) { $toLines[] = (string)$inv['client_org']; }
+          if (!$isGeneralRecipientInvoice && !empty($inv['address_line1'])) { $toLines[] = (string)$inv['address_line1']; }
+          if (!$isGeneralRecipientInvoice && !empty($inv['address_line2'])) { $toLines[] = (string)$inv['address_line2']; }
           $c = trim((string)($inv['city'] ?? ''));
           $s = trim((string)($inv['state'] ?? ''));
           $p = trim((string)($inv['postal_code'] ?? ''));
@@ -412,10 +438,10 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
           if ($s !== '') { $parts2[] = $s; }
           if ($p !== '') { $parts2[] = $p; }
           $cityStatePostal = implode(', ', $parts2);
-          if ($cityStatePostal !== '') { $toLines[] = $cityStatePostal; }
+          if (!$isGeneralRecipientInvoice && $cityStatePostal !== '') { $toLines[] = $cityStatePostal; }
         ?>
         <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
-        <?php if (!empty($inv['client_phone']) || !empty($inv['client_email'])): ?>
+        <?php if (!$isGeneralRecipientInvoice && (!empty($inv['client_phone']) || !empty($inv['client_email']))): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
             <?php if (!empty($inv['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($inv['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
             <?php if (!empty($inv['client_email'])): ?><div><?php echo htmlspecialchars($inv['client_email']); ?></div><?php endif; ?>
@@ -537,12 +563,14 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
     </tr>
   </table>
 
+  <?php if (!$isGeneralRecipientInvoice): ?>
   <?php
     $invoiceContentLinksHtml = invoice_content_links_html(invoice_content_links_for_invoice($pdo, $id, $appConfig));
     if ($invoiceContentLinksHtml !== '') {
       echo $invoiceContentLinksHtml;
     }
   ?>
+  <?php endif; ?>
 </section>
 
 <?php
@@ -631,7 +659,7 @@ function generatePublicLink() {
       document.getElementById('revokeBtn').style.display = 'block';
       
       if (data.expire_when_paid) {
-        document.getElementById('linkExpiry').textContent = 'Expires when invoice is paid in full';
+        document.getElementById('linkExpiry').textContent = <?php echo json_encode($isGeneralRecipientInvoice ? 'Remains available as a receipt for seven days after payment' : 'Expires when invoice is paid in full'); ?>;
       } else {
         document.getElementById('linkExpiry').textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days remaining)';
       }
@@ -705,7 +733,7 @@ function createPublicLink() {
       }
       
       if (data.expire_when_paid) {
-        expiryEl.textContent = 'Expires when invoice is paid in full';
+        expiryEl.textContent = <?php echo json_encode($isGeneralRecipientInvoice ? 'Remains available as a receipt for seven days after payment' : 'Expires when invoice is paid in full'); ?>;
       } else {
         expiryEl.textContent = 'Expires: ' + data.expires_at + ' (' + data.expires_in_days + ' days)';
       }

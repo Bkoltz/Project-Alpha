@@ -14,7 +14,8 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
 
     $stmt = $pdo->prepare(
         'SELECT p.id,p.invoice_id,p.job_id,p.processor_transaction_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
-                i.doc_number,i.invoice_type,j.job_code,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
+                i.doc_number,i.invoice_type,i.recipient_presentation_mode,j.job_code,
+                COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
          FROM payments p
          LEFT JOIN invoices i ON i.id=p.invoice_id
          LEFT JOIN jobs j ON j.id=p.job_id
@@ -28,6 +29,13 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
         return null;
     }
     if (empty($payment['invoice_id']) && !empty($payment['processor_transaction_id'])) {
+        return null;
+    }
+
+    // The invoice's paid public link is the only external receipt for a
+    // general-recipient invoice. Creating this separate receipt would copy the
+    // private accounting client's identity and could email it automatically.
+    if (pa_invoice_is_general_recipient($payment)) {
         return null;
     }
 

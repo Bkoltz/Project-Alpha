@@ -226,6 +226,20 @@ final class InvoiceContentLinksTest extends TestCase
         $this->assertContains('https://example.invalid/standalone-' . $suffix, $urls, 'Standalone clients without an organization should still pull client links.');
     }
 
+    public function testGeneralRecipientInvoiceSuppressesPrivateClientAndOrganizationLinks(): void
+    {
+        $suffix = bin2hex(random_bytes(5));
+        $orgId = $this->insertOrganization('Private General Org ' . $suffix);
+        $clientId = $this->insertClient('Private General Client ' . $suffix, $orgId, 'private-general-' . $suffix . '@example.invalid');
+        $invoiceId = $this->insertInvoice($clientId);
+        $this->pdo->prepare('UPDATE invoices SET recipient_presentation_mode="general" WHERE id=?')
+            ->execute([$invoiceId]);
+        $this->insertLink('client', $clientId, 'Private client folder', 'https://example.invalid/private-client-' . $suffix, 'manual_dropbox', 'entity_only');
+        $this->insertLink('organization', $orgId, 'Private organization folder', 'https://example.invalid/private-org-' . $suffix, 'manual_dropbox', 'entity_only');
+
+        self::assertSame([], invoice_content_links_for_invoice($this->pdo, $invoiceId));
+    }
+
     public function testMissingContentLinksWarningIsEnforcedBeforeEmailSend(): void
     {
         $emailSend = file_get_contents(dirname(__DIR__, 2) . '/src/controllers/email_send.php');

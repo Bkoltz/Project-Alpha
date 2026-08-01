@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../utils/public_links.php';
+require_once __DIR__ . '/../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../services/DocumentRevisionService.php';
 
 header('Content-Type: application/json');
@@ -70,7 +71,8 @@ try {
     $extra = in_array($type, ['quote','contract'], true)
         ? ', revision_number, last_sent_revision'
         : ($type === 'invoice'
-        ? ', finalized_at, collection_mode, revision_number, last_sent_revision'
+        ? ', finalized_at, collection_mode, revision_number, last_sent_revision, recipient_presentation_mode,
+             invoice_type, contract_id, project_id, job_id, service_location_id'
         : ($type === 'project_invoice' ? ', finalized_at, project_id' : ''));
     $stmt = $pdo->prepare("SELECT id, status{$extra} FROM {$table} WHERE id = ?");
     $stmt->execute([$id]);
@@ -110,6 +112,29 @@ try {
         echo json_encode(['success' => false, 'error' => 'Cannot create link for a ' . $status . ' ' . $type]);
         exit;
     }
+    if ($type === 'invoice' && pa_invoice_is_general_recipient($doc)) {
+        if (!pa_general_recipient_invoice_is_eligible($doc)) {
+            echo json_encode(['success' => false, 'error' => 'This general-recipient invoice is not eligible for public sharing.']);
+            exit;
+        }
+        $link = invoice_finalize_and_create_general_recipient_link(
+            $pdo,
+            $id,
+            $appConfig,
+            (int)($_SESSION['user']['id'] ?? 0) ?: null
+        );
+        $publicUrl = public_link_absolute_url($appConfig, (string)$link['token']);
+        echo json_encode([
+            'success' => true,
+            'url' => $publicUrl,
+            'token' => $link['token'],
+            'expires_at' => 'Seven days after payment',
+            'expires_in_days' => null,
+            'expire_when_paid' => true,
+            'existing' => $link['existing'],
+        ]);
+        exit;
+    }
     // Ensure public_links table exists with proper columns
     try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS public_links (
@@ -145,6 +170,7 @@ try {
                     UPDATE public_links
                     SET expire_when_paid = 1, expires_at = NULL
                     WHERE document_type = ? AND document_id = ? AND revoked = 0
+                      AND expires_at IS NULL
                 ');
                 $upgrade->execute([$type, $id]);
             } catch (Throwable $e) { /* older schemas are handled by the query fallback */ }

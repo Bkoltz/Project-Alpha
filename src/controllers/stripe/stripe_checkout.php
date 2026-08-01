@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../services/StripeService.php';
 require_once __DIR__ . '/../../utils/StripeFeeCalculator.php';
 require_once __DIR__ . '/../../utils/payment_methods.php';
+require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 
 header('Content-Type: text/html; charset=UTF-8');
 
@@ -46,7 +47,7 @@ try {
         }
         try {
             $pdo->exec("ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL");
-            $up = $pdo->prepare('UPDATE public_links SET expire_when_paid=1, expires_at=NULL WHERE token=? AND revoked=0 AND document_type IN ("invoice","project_invoice")');
+            $up = $pdo->prepare('UPDATE public_links SET expire_when_paid=1, expires_at=NULL WHERE token=? AND revoked=0 AND expires_at IS NULL AND document_type IN ("invoice","project_invoice")');
             $up->execute([$token]);
             $linkRow['expire_when_paid'] = 1;
             $linkRow['expires_at'] = null;
@@ -113,6 +114,10 @@ try {
     }
     if ($documentType === 'invoice' && $collectionMode !== 'direct') {
         throw new Exception('This invoice is collected through its project billing statement.');
+    }
+    if ($documentType === 'invoice' && pa_invoice_is_general_recipient($invoice)
+        && !pa_general_recipient_invoice_is_eligible($invoice)) {
+        throw new Exception('This general-recipient invoice is not eligible for public payment.');
     }
     
     // Calculate amount due from payments table for accuracy
