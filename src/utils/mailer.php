@@ -27,6 +27,9 @@ use PHPMailer\PHPMailer\Exception as PHPMailerException;
  * @param string $fromEmail Envelope/from email
  * @param string $fromName From name
  * @param string|null $envelopeFrom Optional envelope sender override
+ * @param bool $isHtml Whether the supplied body is HTML
+ * @param string $messageId Optional stable RFC 5322 Message-ID
+ * @param int $timeoutSeconds SMTP connect and command timeout
  * @return array [bool ok, string error]
  */
 function mailer_send(
@@ -37,7 +40,10 @@ function mailer_send(
     string $fromEmail,
     string $fromName = '',
     ?string $envelopeFrom = null,
-    array $attachments = [] // each: ['filename'=>string,'content'=>string,'mime'=>string]
+    array $attachments = [], // each: ['filename'=>string,'content'=>string,'mime'=>string]
+    bool $isHtml = true,
+    string $messageId = '',
+    int $timeoutSeconds = 300
 ): array
 {
     if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
@@ -61,6 +67,8 @@ function mailer_send(
                 $mail->SMTPSecure = false; // no encryption
             }
             $mail->SMTPAuth = !empty($cfg['username']);
+            $mail->Timeout = max(5, min(300, $timeoutSeconds));
+            $mail->Timelimit = $mail->Timeout;
             if ($mail->SMTPAuth) {
                 $mail->Username = (string)($cfg['username'] ?? '');
                 $mail->Password = (string)($cfg['password'] ?? '');
@@ -76,10 +84,15 @@ function mailer_send(
         }
 
         // Content
-        $mail->isHTML(true);
+        $mail->isHTML($isHtml);
         $mail->Subject = $subject;
         $mail->Body = $html;
-        $mail->AltBody = strip_tags(str_replace(['<br>','<br/>','<br />'], "\n", $html));
+        if ($messageId !== '' && preg_match('/^<[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+>$/', $messageId)) {
+            $mail->MessageID = $messageId;
+        }
+        if ($isHtml) {
+            $mail->AltBody = strip_tags(str_replace(['<br>','<br/>','<br />'], "\n", $html));
+        }
 
         // Attachments
         foreach ($attachments as $att) {

@@ -20,5 +20,8 @@
         <testsuite name="Accounts">
             <directory>tests/Accounts</directory>
         </testsuite>
+        <testsuite name="Notifications">
+            <directory>tests/Notifications</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

@@ -25,8 +25,15 @@ send_security_headers();
 
 // Resolve clean module routes before falling back to PA's legacy ?page router.
 $requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/');
+$syncContractV2Enabled = filter_var(
+    getenv('APP_SYNC_CONTRACT_V2_ENABLED') !== false ? getenv('APP_SYNC_CONTRACT_V2_ENABLED') : 'false',
+    FILTER_VALIDATE_BOOLEAN
+);
 if ($requestPath === '/api/v1/ops/snapshot/') {
     $requestPath = '/api/v1/ops/snapshot';
+}
+if ($requestPath === '/api/v2/ops/snapshot/') {
+    $requestPath = '/api/v2/ops/snapshot';
 }
 $moduleRoutes = [
     '/health/ready' => 'health/ready',
@@ -42,6 +49,9 @@ $moduleRoutes = [
     '/api/v1/catalog' => 'api/catalog-v1',
     '/api/v1/ops/snapshot' => 'api-ops-snapshot',
 ];
+if ($syncContractV2Enabled) {
+    $moduleRoutes['/api/v2/ops/snapshot'] = 'api-ops-snapshot-v2';
+}
 if ($requestPath === '/api/v1/ops/snapshot') {
     // The legacy front controller reserves `page` for routing, while this
     // versioned endpoint exposes `page` as its public pagination parameter.
@@ -88,6 +98,13 @@ $pageAliases = [
     'public_redirect' => 'public-redirect',
 ];
 $page = $pageAliases[$page] ?? $page;
+
+if ($page === 'api-ops-snapshot-v2' && !$syncContractV2Enabled) {
+    header('Content-Type: application/json; charset=UTF-8');
+    http_response_code(404);
+    echo json_encode(['error' => 'Not found']);
+    exit;
+}
 
 // The former PA time tracker and every PA<->AL connection endpoint are retired,
 // not compatibility-shimmed. Existing billing rows remain readable elsewhere.
@@ -239,7 +256,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
     $apiKey = api_require_key([$requiredApiScope]);
 
     // Map API endpoints
-    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients', 'api-ops-snapshot'];
+    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients', 'api-ops-snapshot', 'api-ops-snapshot-v2'];
     if (in_array($page, $dashboardPages, true)) {
         $map = [
             'api-dashboard-summary'   => __DIR__ . '/../src/controllers/api/dashboard_summary.php',
@@ -249,6 +266,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
             'api-projects'              => __DIR__ . '/../src/controllers/api/projects_list.php',
             'api-clients'               => __DIR__ . '/../src/controllers/api/clients_list.php',
             'api-ops-snapshot'           => __DIR__ . '/../src/controllers/api/ops_snapshot.php',
+            'api-ops-snapshot-v2'        => __DIR__ . '/../src/controllers/api/ops_snapshot_v2.php',
         ];
         require_once $map[$page];
         exit;
@@ -823,6 +841,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // User accounts / auth management
         'auth/account-edit',
         'account-update',
+        'account-notification-prefs',
         'account-revoke-device',
         'account/delete',
         'accounts-create',
@@ -1373,6 +1392,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'account-update') {
         require_once __DIR__ . '/../src/controllers/auth/account_update.php';
+        exit;
+    }
+    if ($page === 'account-notification-prefs') {
+        require_once __DIR__ . '/../src/controllers/auth/account_notification_prefs.php';
         exit;
     }
     if ($page === 'account-revoke-device') {

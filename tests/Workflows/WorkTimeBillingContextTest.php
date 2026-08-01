@@ -37,6 +37,8 @@ final class WorkTimeBillingContextTest extends TestCase
         self::assertStringContainsString('work_time_revisions', $source);
         self::assertStringContainsString('time_entry.billing_context_linked', $source);
         self::assertStringContainsString('revision=revision+1', $source);
+        self::assertStringContainsString('AND entry_revision=?', $source);
+        self::assertStringContainsString("status IN ('ready','rate_needed')", $source);
         self::assertStringNotContainsString('UPDATE work_approval_snapshots', $source);
         self::assertStringNotContainsString('DELETE FROM work_approval_snapshots', $source);
     }

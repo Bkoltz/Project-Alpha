@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__, 2) . '/src/utils/acl.php';
+
 use App\Services\WorkTimeInvoiceEligibilityService;
 use PHPUnit\Framework\TestCase;
 
@@ -61,6 +63,28 @@ final class InvoiceTimeEligibilityServiceTest extends TestCase
         self::assertTrue($verifiedOwnerResult['actor_is_verified_owner']);
         self::assertTrue($verifiedOwnerEntry['can_confirm_and_add']);
         self::assertSame('verified_owner', $verifiedOwnerEntry['confirmation_mode']);
+    }
+
+    public function testExplicitTimeManagerCanConfirmOwnTimeButOrdinaryStaffCannot(): void
+    {
+        $this->pdo->exec(
+            "INSERT INTO app_config (organization_id,config_key,config_value)
+             VALUES (0,'workforce_allow_non_admin_time_management','1')"
+        );
+        $this->pdo->exec(
+            "INSERT INTO user_permissions_overrides (user_id,organization_id,permission,allowed)
+             VALUES (5,NULL,'timekeeping.manage',1)"
+        );
+        $this->insertEntry('pending-manager', 5, 7, null, 20, 'review', 'submitted');
+        $this->insertEntry('pending-staff', 3, 7, null, 20, 'review', 'submitted');
+
+        $managerResult = (new WorkTimeInvoiceEligibilityService($this->pdo))->forInvoice(10, 5);
+        self::assertTrue($managerResult['actor_can_administratively_self_confirm']);
+        self::assertTrue($this->entryById($managerResult['pending'], 'pending-manager')['can_confirm_and_add']);
+
+        $staffResult = (new WorkTimeInvoiceEligibilityService($this->pdo))->forInvoice(10, 3);
+        self::assertFalse($staffResult['actor_can_administratively_self_confirm']);
+        self::assertFalse($this->entryById($staffResult['pending'], 'pending-staff')['can_confirm_and_add']);
     }
 
     public function testInvoiceWithoutJobExplainsWhyNoTimeCanBeAdded(): void
@@ -130,6 +154,13 @@ final class InvoiceTimeEligibilityServiceTest extends TestCase
             'CREATE TABLE worker_profiles (
                 user_id INTEGER, status TEXT, relationship_type TEXT, relationship_review_required INTEGER
             )',
+            'CREATE TABLE app_config (
+                organization_id INTEGER, config_key TEXT, config_value TEXT,
+                PRIMARY KEY (organization_id, config_key)
+            )',
+            'CREATE TABLE user_permissions_overrides (
+                user_id INTEGER, organization_id INTEGER NULL, permission TEXT, allowed INTEGER
+            )',
             'CREATE TABLE invoices (
                 id INTEGER PRIMARY KEY, client_id INTEGER, job_id INTEGER, status TEXT, finalized_at TEXT
             )',
@@ -176,6 +207,10 @@ final class InvoiceTimeEligibilityServiceTest extends TestCase
              (2,'member',NULL,0,'member','member@example.test'),
              (3,'staff',NULL,0,'staff','staff@example.test'),
              (4,'owner',NULL,0,'owner','owner@example.test')"
+        );
+        $this->pdo->exec(
+            "INSERT INTO users (id,role,deleted_at,is_disabled,username,email)
+             VALUES (5,'staff',NULL,0,'manager','manager@example.test')"
         );
         $this->pdo->exec(
             "INSERT INTO worker_profiles (user_id,status,relationship_type,relationship_review_required)
