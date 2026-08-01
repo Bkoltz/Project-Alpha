@@ -56,10 +56,14 @@ final class EmailProviderManager
             $messageKey = 'msg-' . bin2hex(random_bytes(16));
         }
         $message->messageId ??= '<' . hash('sha256', $messageKey) . '@project-alpha.local>';
-        $deliveryId = $this->reserveDelivery($messageKey, (int)$connection['id'], $message, $context);
-        if ($deliveryId === null) {
+        $reservation = $this->reserveDelivery($messageKey, (int)$connection['id'], $message, $context);
+        if ($reservation['status'] === 'sent') {
             return new SendResult(true, 'Already sent');
         }
+        if ($reservation['status'] === 'in_progress') {
+            return new SendResult(false, 'Delivery is already in progress');
+        }
+        $deliveryId = $reservation['id'];
 
         if ((string)$connection['provider'] === 'gmail') {
             $provider = new GmailEmailProvider($credentials, function (array $updated, int $expiresAt) use ($connection): void {
@@ -175,7 +179,8 @@ final class EmailProviderManager
         return is_array($decoded) ? $decoded : null;
     }
 
-    private function reserveDelivery(string $messageKey, int $connectionId, EmailMessage $message, array $context): ?int
+    /** @return array{status:'reserved'|'sent'|'in_progress',id:?int} */
+    private function reserveDelivery(string $messageKey, int $connectionId, EmailMessage $message, array $context): array
     {
         $documentType = (string)($context['document_type'] ?? 'other');
         $allowedTypes = ['quote','contract','invoice','project_invoice','onboarding','notification','other'];
@@ -192,7 +197,7 @@ final class EmailProviderManager
                 $messageKey, $connectionId, $documentType, $context['document_id'] ?? null,
                 $context['document_revision'] ?? null, $message->to, $message->subject,
             ]);
-            return (int)$this->pdo->lastInsertId();
+            return ['status' => 'reserved', 'id' => (int)$this->pdo->lastInsertId()];
         } catch (PDOException $error) {
             if ((string)$error->getCode() !== '23000') {
                 throw $error;
@@ -202,12 +207,15 @@ final class EmailProviderManager
             $existing = $statement->fetch(PDO::FETCH_ASSOC);
             $pendingIsFresh = ($existing['status'] ?? '') === 'pending'
                 && strtotime((string)($existing['updated_at'] ?? '')) > time() - 600;
-            if (($existing['status'] ?? '') === 'sent' || $pendingIsFresh) {
-                return null;
+            if (($existing['status'] ?? '') === 'sent') {
+                return ['status' => 'sent', 'id' => (int)$existing['id']];
+            }
+            if ($pendingIsFresh) {
+                return ['status' => 'in_progress', 'id' => (int)$existing['id']];
             }
             $this->pdo->prepare('UPDATE email_delivery_log SET status="pending",error_message=NULL,updated_at=NOW() WHERE id=?')
                 ->execute([(int)$existing['id']]);
-            return (int)$existing['id'];
+            return ['status' => 'reserved', 'id' => (int)$existing['id']];
         }
     }
 

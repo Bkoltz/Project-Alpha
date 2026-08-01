@@ -22,7 +22,7 @@ ENV_FILE="/etc/environment"
 : > "$ENV_FILE"
 while IFS='=' read -r name value; do
   case "$name" in
-    MYSQL_*|DB_*|APP_*|STRIPE_*|SMTP_*|BACKUP_*)
+    MYSQL_*|DB_*|APP_*|STRIPE_*|SMTP_*|BACKUP_*|NOTIFICATION_RELAY_*)
       printf 'export %s=%q\n' "$name" "$value" >> "$ENV_FILE"
       ;;
   esac

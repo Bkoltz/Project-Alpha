@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "recipients": {
+    "operations": "operations@example.invalid"
+  },
+  "templates": {
+    "event-summary": {
+      "subject": "Service event {{reference}}",
+      "html": "<p>A transactional service event was reported.</p><p><strong>Reference:</strong> {{reference}}</p><p><strong>Summary:</strong> {{summary}}</p>",
+      "required_variables": ["reference", "summary"],
+      "optional_variables": []
+    }
+  },
+  "actions": {
+    "service.event": {
+      "templates": ["event-summary"],
+      "recipients": ["operations"]
+    }
+  },
+  "limits": {
+    "per_key_per_minute": 30,
+    "per_key_recipient_per_hour": 10,
+    "max_active_per_key": 100,
+    "worker_batch_size": 25,
+    "lease_seconds": 300,
+    "retry_delays_seconds": [60, 300, 900, 3600],
+    "payload_retention_days": 30,
+    "event_retention_days": 365
+  }
+}

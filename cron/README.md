@@ -8,6 +8,7 @@ On container startup, the entrypoint runs a scheduled backup catch-up check and 
 
 | Local schedule | Script | Purpose |
 |---|---|---|
+| Every minute | `process_notification_relay.php` | Process the disabled-by-default internal notification relay queue |
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
 | Daily 02:15 | `generate_recurring_expenses.php` | Generate due recurring expenses once per scheduled occurrence |
 | Daily 02:30 | `purge_mileage_tracking_points.php` | Delete finalized GPS route points after 90 days and discarded points immediately |
@@ -62,6 +63,7 @@ The container schedule always starts with the service. Individual scripts also h
 - invoice due and overdue reminder toggles
 - invoice email-on-generation toggle
 - Stripe and SMTP configuration
+- internal notification relay enablement and policy (disabled by default)
 
 Database backups are infrastructure protection and do not depend on the automatic-invoice `cron_enabled` setting.
 

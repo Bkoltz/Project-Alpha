@@ -13,6 +13,9 @@ CRON_LOG=/var/www/config/logs/cron/cron.log
 # Deliver optional external-operations entitlement events with safe retries.
 * * * * * root . /etc/environment && php /var/www/src/cron/send_external_ops_outbox.php >> $CRON_LOG 2>&1
 
+# Process the disabled-by-default internal notification relay queue.
+* * * * * root . /etc/environment && php /var/www/src/cron/process_notification_relay.php >> $CRON_LOG 2>&1
+
 # Workforce deadline reminders and automatic confirmation - every 5 minutes
 */5 * * * * root . /etc/environment && php /var/www/src/cron/process_workforce_deadlines.php >> $CRON_LOG 2>&1
 

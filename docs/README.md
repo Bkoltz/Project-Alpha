@@ -9,6 +9,22 @@ The published documentation site starts at [Project Alpha Documentation](./).
 
 This folder is organized for GitHub Pages:
 
+Important operator references:
+
+| Document | Audience | Purpose |
+|---|---|---|
+| [Project README](https://github.com/ledgetoptechnologies/Project-Alpha/blob/main/README.md) | Everyone | Product overview, quick start, architecture, and project status |
+| [GitHub Pages Setup](GITHUB_PAGES_SETUP.md) | Maintainers | Publishing source, custom domain, Cloudflare DNS, and HTTPS checklist |
+| [Document Workflow](DOCUMENT_WORKFLOW.md) | Operators and contributors | Quote, contract, invoice, payment, and public-link behavior |
+| [TrueNAS Scale Deployment](truenas-scale-deployment.md) | Operators | Production and staging deployment guidance |
+| [Stripe Webhook Setup](stripe-webhook-setup.md) | Operators | Stripe events, endpoint configuration, and verification |
+| [Recurring Invoices](RECURRING_INVOICES_SETUP.md) | Operators | Long-term contract scheduling and invoice generation |
+| [Migration Safety](MIGRATION_SAFETY.md) | Operators and developers | Safe schema updates, backups, and recovery |
+| [Internal Notification Relay](NOTIFICATION_RELAY.md) | Operators and integrators | Disabled-by-default transactional notification relay setup and security controls |
+| [Backup and Recovery](BACKUP_RECOVERY.md) | Operators | Database/full backups, encryption, restore testing, and key custody |
+| [Security Policy](SECURITY.md) | Everyone | Private vulnerability reporting |
+| [Developer and Agent Guidance](AGENTS.md) | Contributors and coding agents | Repository conventions, commands, and high-risk areas |
+
 | Folder | Purpose |
 |---|---|
 | `getting-started/` | First-time orientation and setup path |

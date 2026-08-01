@@ -272,6 +272,8 @@ function migration_schema_health(PDO $pdo): void
         'operations', 'operation_assignments', 'tasks', 'task_assignments',
         'portal_principals', 'portal_principal_clients', 'portal_identity_bindings',
         'portal_organization_entitlements', 'portal_project_entitlements',
+        'notification_relay_queue', 'notification_relay_events',
+        'notification_relay_rate_buckets', 'notification_relay_key_state',
     ];
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',
@@ -310,6 +312,8 @@ function migration_schema_health(PDO $pdo): void
         'invoices' => ['organization_id', 'created_by', 'collection_mode', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision', 'credit_due', 'credit_applied'],
         'api_keys' => ['name', 'key_prefix', 'key_hash', 'scopes', 'allowed_ips', 'created_at', 'last_used_at', 'revoked_at'],
         'api_usage' => ['api_key_id', 'used_at'],
+        'notification_relay_queue' => ['api_key_id', 'action_name', 'template_name', 'recipient_alias', 'variables_json', 'idempotency_hash', 'payload_hash', 'status', 'attempt_count', 'next_attempt_at', 'lock_token'],
+        'notification_relay_events' => ['queue_id', 'queue_reference', 'api_key_id', 'event_type', 'status', 'attempt_count', 'error_code'],
         'client_onboarding_invitations' => ['organization_id', 'invited_email', 'token_hash', 'status'],
         'client_onboarding_submissions' => ['invitation_id', 'proposed_data', 'status'],
         'team_members' => ['user_id','display_name','email','is_active','profile_source','last_synced_at'],

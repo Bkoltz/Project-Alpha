@@ -103,6 +103,7 @@ class EmailService {
      *   - envelope_from: override envelope sender
      *   - attachments: array of ['filename','content','mime']
      *   - is_html:     whether body is HTML (default true)
+     *   - message_id: optional stable RFC 5322 Message-ID
      *
      * @param string $to
      * @param string $subject
@@ -123,6 +124,7 @@ class EmailService {
         $envelope   = trim((string)($options['envelope_from'] ?? ($cfg['username'] ?: $fromEmail)));
         $attachments = is_array($options['attachments'] ?? null) ? $options['attachments'] : [];
         $isHtml     = (bool)($options['is_html'] ?? true);
+        $messageId = trim((string)($options['message_id'] ?? ''));
         $body       = self::applyAutomatedNotice($body, $isHtml, $appConfig);
 
         if (!$pdo instanceof PDO) {
@@ -131,7 +133,16 @@ class EmailService {
         require_once __DIR__ . '/EmailProviderManager.php';
         try {
             $manager = new EmailProviderManager($pdo, $appConfig);
-            $message = new EmailMessage($to, $subject, $body, $fromEmail, $fromName, $attachments, $isHtml);
+            $message = new EmailMessage(
+                $to,
+                $subject,
+                $body,
+                $fromEmail,
+                $fromName,
+                $attachments,
+                $isHtml,
+                $messageId !== '' ? $messageId : null
+            );
             $result = $manager->send($message, $options);
             return [$result->success, $result->message, $result->deliveryLogId];
         } catch (Throwable $error) {
