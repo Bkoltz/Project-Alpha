@@ -31,6 +31,9 @@ $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $due_date = $_POST['due_date'] ?? null;
+$normalizedDueDate = $due_date && trim((string)$due_date) !== '' ? trim((string)$due_date) : null;
+$storedDueDate = $invoiceState['due_date'] ?: null;
+$dueDateSource = $normalizedDueDate === $storedDueDate ? (string)($invoiceState['due_date_source'] ?? 'manual') : 'manual';
 $fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
 if ($id<=0 || $client_id<=0) { header('Location: /?page=invoice/invoices-list&error=Invalid'); exit; }
 
@@ -131,12 +134,12 @@ try {
   $pdo->prepare('UPDATE invoices
     SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
         subtotal=?, tax_amount=?, total=?, balance_due=GREATEST(0,?-COALESCE(amount_paid,0)),
-        due_date=?, fulfillment_date=?, custom_fields=?, service_location_id=?
+        due_date=?, due_date_source=?, fulfillment_date=?, custom_fields=?, service_location_id=?
     WHERE id=?')
     ->execute([
       $client_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
       $subtotal, $tax, $total, $total,
-      $due_date ?: null, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id,
+      $normalizedDueDate, $dueDateSource, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id,
     ]);
   
   $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');

@@ -2,14 +2,11 @@
 // src/controllers/contract/on_demand_invoice_generate.php
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
-                require_once __DIR__ . '/../../utils/mailer.php';
-                require_once __DIR__ . '/../../utils/crypto.php';
-                require_once __DIR__ . '/../../utils/email_identity.php';
 require_once __DIR__ . '/../../utils/project_billing.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../../utils/invoice_notifications.php';
 require_once __DIR__ . '/../../utils/acl.php';
-require_once __DIR__ . '/../../services/EmailService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
 @error_log('[on_demand_invoice_generate] POST received', 0);
@@ -82,13 +79,14 @@ try {
     // Create invoice
     $projectMonthlyBilling = project_uses_monthly_invoice_billing($pdo, $projectId);
     $dueDate = project_invoice_due_date($pdo, $projectId, $appConfig);
+    $paymentTermsDays = project_invoice_terms_days($pdo, $projectId, $appConfig);
     
     $insertInvoice = $pdo->prepare('
         INSERT INTO invoices (
             contract_id, client_id, project_id, project_code, invoice_type, billing_mode,
             discount_type, discount_value, tax_percent, 
-            subtotal, total, status, due_date, created_at, organization_id, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            subtotal, total, balance_due, status, due_date, payment_terms_days, due_date_source, created_at, organization_id, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "terms", ?, ?, ?)
     ');
     
     $insertInvoice->execute([
@@ -103,8 +101,10 @@ try {
         $contract['tax_percent'],
         $subtotal,
         $total,
+        $total,
         'draft',
         $dueDate,
+        $paymentTermsDays,
         date('Y-m-d H:i:s'),
         $contractOrgId,
         $contractCreator
@@ -161,7 +161,7 @@ try {
     
     $pdo->commit();
     
-    @error_log("[on_demand_invoice_generate] Generated invoice ODI-$docNumber for contract ODC-{$contract['doc_number']} (\${$total})");
+    @error_log("[on_demand_invoice_generate] Generated invoice " . pa_invoice_label($docNumber, 'on_demand') . " for contract ODC-{$contract['doc_number']} (\${$total})");
 
     // Generate-only remains private. The send choice finalizes first; monthly
     // project children are collected later through the project statement.
@@ -169,73 +169,24 @@ try {
         invoice_finalize($pdo, $invoiceId, $appConfig, 'on_demand_send', $contractCreator);
     }
     if ($sendEmail && !$projectMonthlyBilling) {
-        try {
-            $clientStmt = $pdo->prepare('SELECT email, name FROM clients WHERE id = ?');
-            $clientStmt->execute([$clientId]);
-            $client = $clientStmt->fetch(PDO::FETCH_ASSOC);
-            $to = (string)($client['email'] ?? '');
-
-            if ($to !== '') {
-                // Build SMTP config from app settings (same pattern as generate_recurring_invoices.php)
-                $smtpPass = '';
-                if (!empty($appConfig['smtp_password_enc']) && is_string($appConfig['smtp_password_enc'])) {
-                    $encVal = $appConfig['smtp_password_enc'];
-                    if (strpos($encVal, 'plain::') === 0) {
-                        $smtpPass = substr($encVal, 7);
-                    } else {
-                        $pt = crypto_decrypt($encVal);
-                        if (is_string($pt)) { $smtpPass = $pt; }
-                    }
-                }
-                $mailCfg = [
-                    'host' => (string)($appConfig['smtp_host'] ?? ''),
-                    'port' => (int)($appConfig['smtp_port'] ?? 587),
-                    'secure' => strtolower((string)($appConfig['smtp_secure'] ?? 'tls')),
-                    'username' => (string)($appConfig['smtp_username'] ?? ''),
-                    'password' => $smtpPass,
-                ];
-                $fromEmail = (string)($appConfig['from_email'] ?? 'no-reply@localhost');
-                $fromName = pa_email_sender_name($appConfig);
-
-                // Duplicate prevention: skip if an on_generate notification already exists
-                $dupStmt = $pdo->prepare('SELECT 1 FROM invoice_notifications WHERE invoice_id = ? AND notification_type = ?');
-                $dupStmt->execute([$invoiceId, 'on_generate']);
-                if (!$dupStmt->fetch()) {
-                    $token = bin2hex(random_bytes(32));
-                    $days = (int)($appConfig['documents_valid_days'] ?? 14);
-                    $expiresAt = date('Y-m-d H:i:s', strtotime('+' . max(0, $days) . ' days'));
-                    $pdo->prepare('INSERT INTO public_links (document_type, document_id, token, expires_at, revoked, created_at) VALUES (?,?,?,?,0,NOW())')
-                        ->execute(['invoice', $invoiceId, $token, $expiresAt]);
-                    $link = '/?page=public-doc&type=invoice&token=' . rawurlencode($token);
-                    $host = rtrim(($appConfig['app_host'] ?? ''), '/');
-                    if ($host !== '') { $link = $host . $link; }
-
-                    $invoiceLabel = pa_invoice_label($docNumber, 'on_demand');
-                    $subject = sprintf('Invoice %s has been generated', $invoiceLabel);
-                    $body = '<p>Dear ' . htmlspecialchars($client['name'] ?? '') . ',</p>';
-                    $body .= '<p>A new invoice <strong>' . htmlspecialchars($invoiceLabel) . '</strong> for <strong>$' . number_format($total, 2) . '</strong> has been generated';
-                    if (!empty($dueDate)) {
-                        $body .= ', due on <strong>' . htmlspecialchars($dueDate) . '</strong>';
-                    }
-                    $body .= '.</p>';
-                    $body .= '<p>You can view and pay the invoice here: <a href="' . htmlspecialchars($link) . '">' . htmlspecialchars($link) . '</a></p>';
-                    $body .= '<p>Thank you for your business!</p>';
-
-                    [$ok, $err] = EmailService::sendEmail($to, $subject, $body, ['document_type'=>'invoice','document_id'=>$invoiceId,'message_key'=>'invoice:'.$invoiceId.':on_generate']);
-                    if ($ok) {
-                        $insNotif = $pdo->prepare('INSERT IGNORE INTO invoice_notifications (invoice_id, notification_type, sent_at) VALUES (?,?,NOW())');
-                        $insNotif->execute([$invoiceId, 'on_generate']);
-                        @error_log("[on_demand_invoice_generate] Sent on-generate email for invoice " . $invoiceLabel);
-                    } else {
-                        @error_log("[on_demand_invoice_generate] Failed to send on-generate email for invoice " . $invoiceLabel . ": $err");
-                    }
-                }
-            }
-        } catch (Throwable $e) {
-            @error_log('[on_demand_invoice_generate] Auto-email exception: ' . $e->getMessage());
-        }
+        $clientStmt = $pdo->prepare('SELECT email FROM clients WHERE id = ?');
+        $clientStmt->execute([$clientId]);
+        $to = trim((string)$clientStmt->fetchColumn());
+        $deliveryStatus = filter_var($to, FILTER_VALIDATE_EMAIL) ? 'pending' : 'suppressed';
+        $deliveryError = $deliveryStatus === 'suppressed' ? 'Missing or invalid client email.' : null;
+        invoice_notification_enqueue(
+            $pdo,
+            $invoiceId,
+            'on_demand_generate',
+            'generated',
+            $to,
+            $deliveryStatus,
+            $deliveryError
+        );
+        // Try immediately for interactive feedback. A transport/PDF failure stays
+        // durable and is retried by the normal invoice delivery worker.
+        invoice_notification_process($pdo, $appConfig, null, null, 10, $invoiceId);
     }
-
     $redirect = '/?page=contract/on-demand-invoices-list&contract_id=' . $contract_id . '&invoice_generated=1';
     if ($sendEmail) {
         $redirect .= '&email_requested=1';

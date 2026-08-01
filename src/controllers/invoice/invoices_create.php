@@ -36,8 +36,12 @@ if (!in_array($invoiceAction, ['save', 'draft', 'finalize_send'], true)) {
 $finalizeAndSend = $invoiceAction === 'finalize_send';
 $dueDateWasProvided = trim((string)($_POST['due_date'] ?? '')) !== '';
 $due_date = $_POST['due_date'] ?? null;
+$dueDateSource = $dueDateWasProvided ? 'manual' : 'terms';
+$paymentTermsDays = null;
 if (!$dueDateWasProvided) {
-    $due_date = project_invoice_due_date($pdo, $project_id, $appConfig);
+    $paymentTermsDays = project_invoice_terms_days($pdo, $project_id, $appConfig);
+    $documentDate = date('Y-m-d');
+    $due_date = project_invoice_due_date($pdo, $project_id, $appConfig, $documentDate);
 }
 
 $item = $_POST['item'] ?? [];
@@ -235,7 +239,9 @@ try {
         }
         $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
         if (!$dueDateWasProvided) {
-            $due_date = project_invoice_due_date($pdo, $project_id, $appConfig);
+            $paymentTermsDays = project_invoice_terms_days($pdo, $project_id, $appConfig);
+            $documentDate = date('Y-m-d');
+            $due_date = project_invoice_due_date($pdo, $project_id, $appConfig, $documentDate);
         }
 
         $groups = $pdo->prepare(
@@ -283,13 +289,14 @@ try {
     $stmt = $pdo->prepare(
         'INSERT INTO invoices
          (client_id,project_id,billing_mode,discount_type,discount_value,tax_percent,
-          subtotal,tax_amount,total,balance_due,status,due_date,custom_fields,organization_id,created_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+          subtotal,tax_amount,total,balance_due,status,due_date,payment_terms_days,due_date_source,
+          custom_fields,organization_id,created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
     $stmt->execute([
         $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
         $subtotal, $tax_amount, $total, $total, 'draft', $due_date ?: null,
-        $customFieldsJson, $__orgId, $__creator,
+        $paymentTermsDays, $dueDateSource, $customFieldsJson, $__orgId, $__creator,
     ]);
     $invoice_id = (int)$pdo->lastInsertId();
     if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {

@@ -232,6 +232,7 @@ final class InvoiceContentLinksTest extends TestCase
         $projectEmail = file_get_contents(dirname(__DIR__, 2) . '/src/controllers/project/project_invoice_email.php');
         $finalize = file_get_contents(dirname(__DIR__, 2) . '/src/controllers/invoice/invoice_finalize.php');
         $lifecycle = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_lifecycle.php');
+        $delivery = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_notifications.php');
         $invoiceDetails = file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/invoice/invoice-details.php');
         $projectInvoiceDetails = file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/project/project-invoice-details.php');
         $contentLinks = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_content_links.php');
@@ -246,8 +247,8 @@ final class InvoiceContentLinksTest extends TestCase
         self::assertStringContainsString('invoice_should_prompt_for_missing_content_links', (string)$projectEmail);
         self::assertStringContainsString('content_link_warning=1&email_panel=1', (string)$projectEmail);
         self::assertStringContainsString('invoice_should_prompt_for_missing_content_links', (string)$finalize);
-        self::assertStringContainsString('invoice_missing_content_links_behavior($appConfig) === \'block\'', (string)$lifecycle);
-        self::assertStringContainsString('invoice_content_links_html(invoice_content_links_for_invoice', (string)$lifecycle);
+        self::assertStringContainsString('invoice_missing_content_links_behavior($appConfig) === \'block\'', (string)$lifecycle . (string)$delivery);
+        self::assertStringContainsString('invoice_content_links_html(invoice_content_links_for_invoice', (string)$lifecycle . (string)$delivery);
         self::assertStringContainsString('Finalize & Send Anyway', (string)$invoiceDetails);
         self::assertStringContainsString('No invoice content links found.', (string)$projectInvoiceDetails);
     }

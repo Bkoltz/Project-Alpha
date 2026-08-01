@@ -4,6 +4,8 @@ require_once __DIR__ . '/invoice_numbers.php';
 // Idempotent helper for generating a single long-term recurring invoice.
 require_once __DIR__ . '/recurring_services.php';
 require_once __DIR__ . '/invoice_lifecycle.php';
+require_once __DIR__ . '/project_billing.php';
+require_once __DIR__ . '/invoice_notifications.php';
 
 function recurring_invoice_send_on_generate_if_enabled(PDO $pdo, ?int $invoiceId, array $appConfig): bool
 {
@@ -11,7 +13,19 @@ function recurring_invoice_send_on_generate_if_enabled(PDO $pdo, ?int $invoiceId
         return false;
     }
 
-    return invoice_send_finalized($pdo, $invoiceId, $appConfig, 'on_generate');
+    $configuredSender = $appConfig['_email_sender'] ?? null;
+    $sender = is_callable($configuredSender) ? $configuredSender : null;
+    $stats = invoice_notification_process($pdo, $appConfig, $sender, null, 10, $invoiceId);
+    if ($stats['sent'] > 0) {
+        return true;
+    }
+    $sent = $pdo->prepare(
+        'SELECT 1 FROM invoice_notifications
+         WHERE invoice_id=? AND notification_type="on_generate"
+           AND delivery_status="sent" AND sent_at IS NOT NULL LIMIT 1'
+    );
+    $sent->execute([$invoiceId]);
+    return $sent->fetchColumn() !== false;
 }
 
 function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig): ?int {
@@ -124,14 +138,16 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
         }
 
         // Create invoice
-        $dueDate = date('Y-m-d', strtotime('+' . ($appConfig['net_terms_days'] ?? 30) . ' days'));
+        $documentDate = $today;
+        $paymentTermsDays = project_invoice_terms_days($pdo, $projectId, $appConfig);
+        $dueDate = project_invoice_due_date($pdo, $projectId, $appConfig, $documentDate);
 
         $insertInvoice = $pdo->prepare('
             INSERT INTO invoices (
-                contract_id, quote_id, client_id, project_id, job_id, service_location_id, project_code, organization_id, created_by, invoice_type,
+                contract_id, quote_id, client_id, project_id, job_id, service_location_id, project_code, organization_id, created_by, invoice_type, document_date,
                 discount_type, discount_value, tax_percent,
-                subtotal, total, balance_due, status, due_date, finalized_at, finalization_source, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), "recurring_schedule", NOW())
+                subtotal, total, amount_paid, balance_due, status, due_date, payment_terms_days, due_date_source, finalized_at, finalization_source, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, "terms", NOW(), "recurring_schedule", NOW())
         ');
 
         $insertInvoice->execute([
@@ -145,6 +161,7 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             $organizationId,
             $createdBy,
             'long_term',
+            $documentDate,
             $discountType,
             $discountValue,
             $contract['tax_percent'],
@@ -152,7 +169,8 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             $total,
             $total,
             'unpaid',
-            $dueDate
+            $dueDate,
+            $paymentTermsDays
         ]);
 
         $invoiceId = (int)$pdo->lastInsertId();
@@ -247,6 +265,8 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             $pdo->prepare('UPDATE contracts SET last_invoice_date=?,total_invoiced=?,invoices_generated=? WHERE id=? AND contract_type="long_term"')
                 ->execute([$today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
 
+            // Commit the durable delivery action with the invoice and service schedule.
+            invoice_notification_enqueue_generated($pdo, $invoiceId, $appConfig);
             $pdo->commit();
             @error_log("$logPrefix Generated recurring-service invoice " . pa_invoice_label($docNumber, 'long_term') . " for contract LTC-{$contract['doc_number']} (\${$total})");
             return $invoiceId;
@@ -275,6 +295,9 @@ function generate_recurring_invoice(PDO $pdo, array $contract, array $appConfig)
             $pdo->prepare('UPDATE contracts SET status=?, next_invoice_date=NULL, last_invoice_date=?, total_invoiced=?, invoices_generated=?, completed_at=COALESCE(completed_at,NOW()) WHERE id=? AND contract_type="long_term"')
                 ->execute(['completed', $today, $newTotalInvoiced, $newInvoicesGenerated, $contractId]);
         }
+
+        // The outbox row is committed atomically with the invoice and contract schedule.
+        invoice_notification_enqueue_generated($pdo, $invoiceId, $appConfig);
 
         $pdo->commit();
 

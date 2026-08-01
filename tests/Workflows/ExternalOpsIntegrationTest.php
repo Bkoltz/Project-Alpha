@@ -578,7 +578,7 @@ final class ExternalOpsIntegrationTest extends TestCase
             'webhook_url' => 'https://ops-sync.ledgetopdroneservices.com/v1/project-alpha/events',
             'access_client_id' => 'client-id',
             'access_client_secret' => 'client-secret',
-            'hmac_secret' => 'hmac-secret',
+            'hmac_secret' => str_repeat('h', 32),
             'timeout_seconds' => 5,
             'max_attempts' => 3,
         ];
@@ -603,7 +603,7 @@ final class ExternalOpsIntegrationTest extends TestCase
         $payload = json_decode($captured['body'], true, 512, JSON_THROW_ON_ERROR);
         self::assertSame($payload['event_id'], $eventIdHeader);
         self::assertSame(
-            'sha256=' . hash_hmac('sha256', $timestampHeader . '.' . $captured['body'], 'hmac-secret'),
+            'sha256=' . hash_hmac('sha256', $timestampHeader . '.' . $captured['body'], str_repeat('h', 32)),
             $signatureHeader
         );
         self::assertNotFalse($this->pdo->query('SELECT delivered_at FROM integration_outbox')->fetchColumn());
@@ -619,7 +619,7 @@ final class ExternalOpsIntegrationTest extends TestCase
             'webhook_url' => 'https://ops.example.test/api/provisioning/events',
             'access_client_id' => 'client-id',
             'access_client_secret' => 'client-secret',
-            'hmac_secret' => 'hmac-secret',
+            'hmac_secret' => str_repeat('h', 32),
             'timeout_seconds' => 5,
             'max_attempts' => 3,
         ], 1, static fn(): array => ['status' => 503, 'body' => "temporary\nerror"]);

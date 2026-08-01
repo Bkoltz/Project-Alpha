@@ -122,10 +122,10 @@ final class UnifiedAlphaLedgerModuleTest extends TestCase
         $front = (string) file_get_contents($this->root . '/public/index.php');
         $handler = (string) file_get_contents($this->root . '/src/Security/DatabaseSessionHandler.php');
         $policy = (string) file_get_contents($this->root . '/src/utils/two_factor_policy.php');
-        self::assertStringContainsString("'samesite' => 'Strict'", $front);
-        self::assertStringContainsString('$sessionTimeout = 15 * 60', $front);
+        self::assertStringContainsString("'samesite' => 'Lax'", $front);
+        self::assertStringContainsString('SessionPolicy::IDLE_SECONDS', $front);
         self::assertStringContainsString("hash('sha256', \$id)", $handler);
-        self::assertStringContainsString('604800', $handler);
+        self::assertStringContainsString('SessionPolicy::ABSOLUTE_SECONDS', $handler);
         self::assertStringContainsString('approvals.review', $policy);
     }
 }

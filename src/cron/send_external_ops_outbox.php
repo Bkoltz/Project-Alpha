@@ -12,8 +12,16 @@ require_once __DIR__ . '/../utils/cron_state.php';
 $jobName = 'external_ops_outbox';
 $config = pa_external_ops_delivery_config($pdo);
 
-if (empty($config['enabled'])) {
+if (empty($config['configured_enabled'])) {
     cron_state_mark_success($pdo, $jobName, 'External operations integration disabled');
+    exit(0);
+}
+if (empty($config['delivery_ready'])) {
+    cron_state_mark_success(
+        $pdo,
+        $jobName,
+        'Outbound delivery paused: complete the external operations delivery settings'
+    );
     exit(0);
 }
 

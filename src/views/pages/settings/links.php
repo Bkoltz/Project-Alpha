@@ -299,9 +299,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                                         <?php endif; ?>
                                     </div>
                                 </div>
-                                <a href="/?page=settings/dropbox-oauth&action=disconnect" 
-                                   style="padding:6px 12px;border-radius:6px;border:1px solid #dc2626;background:#fff;color:#dc2626;font-size:13px;text-decoration:none"
-                                   onclick="return confirm('Disconnect Dropbox? This will revoke the token.');">Disconnect</a>
+                                <button type="submit" formmethod="post" formaction="/?page=settings/dropbox-oauth&amp;action=disconnect" style="padding:6px 12px;border-radius:6px;border:1px solid #dc2626;background:#fff;color:#dc2626;font-size:13px;cursor:pointer" onclick="return confirm('Disconnect Dropbox? This will revoke the token.');">Disconnect</button>
                             </div>
                         <?php else: ?>
                             <!-- OAuth Disconnected State -->
@@ -312,8 +310,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
                                     <div style="font-size:12px;color:#6b7280"><?php echo $dropboxCanConnect ? 'Connect via OAuth for a secure, permanent connection.' : 'Enter and save the Dropbox app key and secret first.'; ?></div>
                                 </div>
                                 <?php if ($dropboxCanConnect): ?>
-                                    <a href="/?page=settings/dropbox-oauth&action=start"
-                                       style="padding:8px 16px;border-radius:6px;border:0;background:#2563eb;color:#fff;font-size:13px;text-decoration:none;font-weight:600">Connect Dropbox</a>
+                                    <button type="submit" formmethod="post" formaction="/?page=settings/dropbox-oauth&amp;action=start" style="padding:8px 16px;border-radius:6px;border:0;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Connect Dropbox</button>
                                 <?php else: ?>
                                     <span style="padding:8px 16px;border-radius:6px;border:1px solid #d1d5db;background:#f3f4f6;color:#6b7280;font-size:13px;font-weight:600">Save credentials first</span>
                                 <?php endif; ?>

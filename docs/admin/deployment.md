@@ -17,6 +17,41 @@ Project Alpha is commonly deployed with Docker Compose or as a TrueNAS Scale Cus
 | `cron` | Scheduled jobs, reminders, backups, and reconciliation |
 | `migrate` | One-shot database initialization and migration validation |
 
+## Log storage and rotation
+
+Repository-owned logs use the shared config volume. Normal web/PHP errors are
+written to `/var/www/config/logs/system/error_log.txt`; scheduled command output
+is written to `/var/www/config/logs/cron/cron.log`. These are the authoritative
+paths. Legacy `/var/log` placeholders are not used.
+
+The cron service is the single rotation owner. Its repository schedule runs the
+sweep as the unprivileged web user once per minute. Container startup establishes
+the writable paths but never races a second sweep. On upgrade, a readable regular
+active log that is not writable by the application user is copied to a private
+sibling, durability- and content-verified, then atomically adopted without a
+privileged pathname metadata change. Startup fails closed if a configured active
+log or log directory is a symlink or special file.
+
+Active `.log` and `.txt` files rotate when they reach the 10 MiB threshold.
+Rotation renames the active inode and recreates the original path with its
+existing owner, group, and mode; it never uses copy/truncate.
+Already-running repository writers safely finish in the renamed archive; PHP
+engine messages reopen the configured path per write and web Monolog handlers
+close at request completion. Archives are compressed only after 24 hours without
+a write and, on Linux, after no process visible to the rotation container still
+has the archive inode open. Compression is streamed to a private temporary file,
+durability-synced where supported, and decoded/hash-verified before atomic
+publication and source removal. Five compressed size generations are retained
+per stream. Completed date-named logs are compressed after the same quiet period
+and retain 30 generations.
+
+The threshold bounds the active file at each sweep; a single record or output
+written between minute sweeps can temporarily exceed it. PHP also suppresses
+only consecutive identical engine errors from the same source file and line.
+Distinct messages and the same message from another source remain visible.
+Compressed archives are operational files on the config volume and are not
+exposed by the Settings log viewer.
+
 ## Basic Docker Flow
 
 ```bash

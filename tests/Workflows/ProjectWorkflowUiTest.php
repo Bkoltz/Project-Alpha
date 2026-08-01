@@ -441,7 +441,8 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString('signed_addendum', (string)$recurringServiceSave);
         self::assertStringContainsString('Recurring Services &amp; Amendments', (string)$ltDetails);
         self::assertStringContainsString('long-term-recurring-service-save', (string)$router);
-        self::assertStringContainsString('recurring_invoice_send_on_generate_if_enabled($pdo, $invoiceId, $appConfig)', (string)$recurringCron);
+        self::assertStringContainsString('invoice_notification_process($pdo, $appConfig)', (string)$recurringCron);
+        self::assertStringContainsString('invoice_notification_enqueue_generated($pdo, $invoiceId, $appConfig)', (string)$recurringBilling);
     }
 
     public function testInvoiceAndContractNumbersArePerDocumentType(): void
@@ -476,12 +477,13 @@ final class ProjectWorkflowUiTest extends TestCase
         $onDemand = (string)file_get_contents($this->root . '/src/views/pages/invoice/on-demand-invoices-list.php');
         $onDemandGenerator = (string)file_get_contents($this->root . '/src/controllers/contract/on_demand_invoice_generate.php');
         $delivery = (string)file_get_contents($this->root . '/src/utils/invoice_lifecycle.php');
+        $notificationDelivery = (string)file_get_contents($this->root . '/src/utils/invoice_notifications.php');
         self::assertStringContainsString('pa_invoice_label_from_row($inv)', $details);
         self::assertStringContainsString("'long_term'", $history);
         self::assertStringContainsString("'on_demand'", $onDemand);
         self::assertStringContainsString("pa_invoice_label(\$docNumber, 'on_demand')", $onDemandGenerator);
-        self::assertStringContainsString('pa_invoice_label_from_row($invoice)', $delivery);
-        self::assertStringNotContainsString('Invoice I-', $delivery);
+        self::assertStringContainsString('pa_invoice_label', $delivery . $notificationDelivery);
+        self::assertStringNotContainsString('Invoice I-', $delivery . $notificationDelivery);
     }
 
     public function testCreatePageScriptsInitializeAfterAjaxNavigation(): void

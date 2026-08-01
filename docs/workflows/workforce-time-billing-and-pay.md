@@ -54,6 +54,8 @@ Selecting a draft invoice while entering time records the intended destination, 
 
 Verified-Owner confirmation and administrative self-confirmation have different pay semantics. The verified **Owner relationship** remains nonpayable owner time. Administrative self-confirmation is an account-role privilege and preserves ordinary employee or contractor compensation rules. Permission grants such as time-management access do not provide this self-confirmation bypass. Closed periods and finalized historical records remain unchanged and must be handled as audited exceptions.
 
+Owner self-confirmation depends on the verified **Owner relationship** in the Worker Profile, not an `admin` or `owner` account role by itself. Verifying that relationship reconciles completed pending entries in open review periods through the normal approval service. Closed periods and finalized historical records remain unchanged and must be handled as audited exceptions.
+
 Hourly Service lines on quotes and contracts are estimates. They show estimated hours, hourly price, and an estimated total. They do not become collectible invoice charges during conversion. Confirmed time creates the actual hourly invoice lines. Fixed-price time is operational history and does not create an additional client charge.
 
 ## Corrections and disputes
