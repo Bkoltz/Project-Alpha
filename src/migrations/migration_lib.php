@@ -270,6 +270,8 @@ function migration_schema_health(PDO $pdo): void
         'application_entitlements', 'application_entitlement_business_units',
         'application_entitlement_oversight_units', 'integration_outbox',
         'operations', 'operation_assignments', 'tasks', 'task_assignments',
+        'portal_principals', 'portal_principal_clients', 'portal_identity_bindings',
+        'portal_organization_entitlements', 'portal_project_entitlements',
     ];
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',
@@ -296,8 +298,11 @@ function migration_schema_health(PDO $pdo): void
 
     $requiredColumns = [
         'users' => ['email', 'password_hash', 'role', 'force_password_reset', 'auth_version', 'totp_reenroll_required'],
-        'clients' => ['organization_id', 'created_by'],
-        'projects' => ['organization_id', 'department_id', 'business_unit_id', 'manager_user_id', 'created_by'],
+        'organizations' => ['public_id'],
+        'clients' => ['public_id', 'organization_id', 'created_by'],
+        'projects' => ['public_id', 'organization_id', 'department_id', 'business_unit_id', 'manager_user_id', 'created_by'],
+        'portal_principals' => ['public_id', 'enabled', 'authorization_version', 'revoked_at'],
+        'portal_identity_bindings' => ['portal_principal_id', 'issuer', 'subject_hash', 'enabled', 'revoked_at'],
         'project_clients' => ['client_id', 'send_project_invoices', 'can_view_invoice_links'],
         'entity_links' => ['include_on_invoices', 'resolver_mode', 'visibility_scope'],
         'quotes' => ['organization_id', 'created_by', 'job_id', 'service_location_id', 'revision_number', 'last_sent_revision'],

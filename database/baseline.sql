@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS user_notification_preferences (
 -- ORGANIZATIONS
 CREATE TABLE IF NOT EXISTS organizations (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT (LOWER(HEX(RANDOM_BYTES(16)))),
     name VARCHAR(150) NOT NULL,
     notes TEXT NULL,
     address_line1 VARCHAR(255) NULL,
@@ -141,7 +142,8 @@ CREATE TABLE IF NOT EXISTS organizations (
     link_strategy ENUM('department_links_only','overall_folder','shared_folder') NOT NULL DEFAULT 'overall_folder',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_organizations_name (name)
+    UNIQUE KEY uq_organizations_name (name),
+    UNIQUE KEY uq_organizations_public_id (public_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ROLES
@@ -330,6 +332,7 @@ CREATE TABLE IF NOT EXISTS webhooks (
 -- CLIENTS
 CREATE TABLE IF NOT EXISTS clients (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT (LOWER(HEX(RANDOM_BYTES(16)))),
     name VARCHAR(150) NOT NULL,
     email VARCHAR(255) NULL,
     phone VARCHAR(50) NULL,
@@ -359,6 +362,7 @@ CREATE TABLE IF NOT EXISTS clients (
     INDEX idx_clients_stripe_customer (stripe_customer_id),
     INDEX idx_clients_archived (archived),
     INDEX idx_clients_deleted (deleted_at),
+    UNIQUE KEY uq_clients_public_id (public_id),
     CONSTRAINT fk_clients_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -412,6 +416,7 @@ CREATE TABLE IF NOT EXISTS client_onboarding_submissions (
 -- PROJECTS
 CREATE TABLE IF NOT EXISTS projects (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT (LOWER(HEX(RANDOM_BYTES(16)))),
     client_id INT NULL,
     parent_id INT NULL,
     organization_id INT NULL,
@@ -449,9 +454,105 @@ CREATE TABLE IF NOT EXISTS projects (
     INDEX idx_projects_status (status),
     INDEX idx_projects_parent (parent_id),
     UNIQUE KEY uq_projects_public_project_token (public_project_token),
+    UNIQUE KEY uq_projects_public_id (public_id),
     CONSTRAINT fk_projects_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_projects_parent FOREIGN KEY (parent_id) REFERENCES projects(id) ON DELETE SET NULL,
     CONSTRAINT fk_projects_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- CLIENT PORTAL FOUNDATION (disabled by default; no public route is installed)
+CREATE TABLE IF NOT EXISTS portal_principals (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT (LOWER(HEX(RANDOM_BYTES(16)))),
+    enabled TINYINT(1) NOT NULL DEFAULT 0,
+    authorization_version INT UNSIGNED NOT NULL DEFAULT 1,
+    activated_at DATETIME NULL,
+    revoked_at DATETIME NULL,
+    created_by INT NULL,
+    updated_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_portal_principals_public_id (public_id),
+    KEY idx_portal_principals_state (enabled, revoked_at),
+    CONSTRAINT fk_portal_principals_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_portal_principals_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS portal_principal_clients (
+    portal_principal_id BIGINT UNSIGNED NOT NULL,
+    client_id INT NOT NULL,
+    created_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (portal_principal_id, client_id),
+    KEY idx_portal_principal_clients_client (client_id),
+    CONSTRAINT fk_portal_principal_clients_principal FOREIGN KEY (portal_principal_id) REFERENCES portal_principals(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portal_principal_clients_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portal_principal_clients_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS portal_identity_bindings (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    portal_principal_id BIGINT UNSIGNED NOT NULL,
+    issuer VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    subject_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 0,
+    bound_at DATETIME NULL,
+    revoked_at DATETIME NULL,
+    created_by INT NULL,
+    updated_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_portal_identity_issuer_subject (issuer, subject_hash),
+    KEY idx_portal_identity_principal_state (portal_principal_id, enabled, revoked_at),
+    CONSTRAINT fk_portal_identity_principal FOREIGN KEY (portal_principal_id) REFERENCES portal_principals(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portal_identity_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_portal_identity_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS portal_organization_entitlements (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    portal_principal_id BIGINT UNSIGNED NOT NULL,
+    organization_id INT NOT NULL,
+    capability VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 0,
+    starts_at DATETIME NULL,
+    expires_at DATETIME NULL,
+    revoked_at DATETIME NULL,
+    created_by INT NULL,
+    updated_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_portal_org_entitlement (portal_principal_id, organization_id, capability),
+    KEY idx_portal_org_entitlement_lookup (organization_id, capability, enabled, revoked_at),
+    CONSTRAINT fk_portal_org_entitlement_principal FOREIGN KEY (portal_principal_id) REFERENCES portal_principals(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portal_org_entitlement_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portal_org_entitlement_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_portal_org_entitlement_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS portal_project_entitlements (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    portal_principal_id BIGINT UNSIGNED NOT NULL,
+    project_id INT NOT NULL,
+    capability VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 0,
+    starts_at DATETIME NULL,
+    expires_at DATETIME NULL,
+    revoked_at DATETIME NULL,
+    created_by INT NULL,
+    updated_by INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_portal_project_entitlement (portal_principal_id, project_id, capability),
+    KEY idx_portal_project_entitlement_lookup (project_id, capability, enabled, revoked_at),
+    CONSTRAINT fk_portal_project_entitlement_principal FOREIGN KEY (portal_principal_id) REFERENCES portal_principals(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portal_project_entitlement_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portal_project_entitlement_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_portal_project_entitlement_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ORGANIZATION DEPARTMENTS
@@ -3703,6 +3804,7 @@ INSERT INTO app_config (config_key, config_value) VALUES
     ('notify_invoice_paid_long_term', '1'),
     ('notify_invoice_paid_project', '1'),
     ('notify_client_onboarding_submit', '1'),
+    ('client_portal_enabled', '0'),
     ('workforce_allow_non_admin_time_management', '0'),
     ('workforce_allow_non_admin_time_approval', '0'),
     ('default_mileage_rate', '0.670'),
