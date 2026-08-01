@@ -271,9 +271,11 @@ final class ApprovalService
                 }
             }
             if ($administrativeSelfConfirmation) {
+                $isAdminRole = in_array((string)($entry['user_role'] ?? ''), ['admin', 'owner'], true);
+                $isTimeManager = !$isAdminRole && WorkforceSettings::canManageAllTime($this->pdo, $approverId);
                 if ((int)$entry['user_id'] !== $approverId
-                    || !in_array((string)($entry['user_role'] ?? ''), ['admin', 'owner'], true)) {
-                    throw new DomainException('Only an administrator can self-confirm their own time entry.');
+                    || (!$isAdminRole && !$isTimeManager)) {
+                    throw new DomainException('Only an administrator or time manager can self-confirm their own time entry.');
                 }
             }
             $entry['default_hourly_rate'] = $settings['default_hourly_rate'];

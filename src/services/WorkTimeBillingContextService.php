@@ -203,6 +203,37 @@ final class WorkTimeBillingContextService
             throw new RuntimeException('The Workforce time entry changed while it was being linked.');
         }
 
+        // When the entry is being linked to an invoice, sync any ready billing
+        // allocation to 'invoiced' so the eligibility service can find it via
+        // the allocation path as well as the billing-projection path.
+        if ($target['invoice_id'] !== null) {
+            $billingItemStmt = $this->pdo->prepare(
+                'SELECT te.invoice_item_id
+                 FROM work_billing_consumptions c
+                 JOIN work_approval_snapshots s ON s.id=c.approval_snapshot_id
+                 JOIN time_entries te ON te.id=c.billing_time_entry_id
+                 WHERE s.time_entry_id=? AND c.consumption_type IN (\'approved\',\'correction\')
+                   AND te.billed=1 AND te.invoice_id=? AND te.invoice_item_id IS NOT NULL
+                 ORDER BY te.id DESC LIMIT 1'
+            );
+            $billingItemStmt->execute([$workEntryId, $target['invoice_id']]);
+            $linkedInvoiceItemId = (int)($billingItemStmt->fetchColumn() ?: 0);
+            if ($linkedInvoiceItemId > 0) {
+                $this->pdo->prepare(
+                    "UPDATE work_time_billing_allocations
+                     SET status='invoiced', invoice_id=?, invoice_item_id=?
+                     WHERE time_entry_id=? AND treatment='hourly'
+                       AND status IN ('ready','rate_needed')
+                       AND (invoice_id IS NULL OR invoice_id=?)"
+                )->execute([
+                    $target['invoice_id'],
+                    $linkedInvoiceItemId,
+                    $workEntryId,
+                    $target['invoice_id'],
+                ]);
+            }
+        }
+
         $after = $entry;
         foreach ($target as $field => $value) {
             $after[$field] = $value;

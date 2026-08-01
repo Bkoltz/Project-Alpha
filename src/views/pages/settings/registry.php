@@ -11,25 +11,12 @@ function pa_settings_registry(): array
 {
     $registry = [
         'account' => [
-            'title' => 'My Account & Security',
-            'short_title' => 'Account & Security',
-            'marker' => 'AS',
-            'description' => 'Manage your profile, password, sign-in methods, and trusted devices.',
-            'keywords' => 'profile password security two factor 2fa totp passkey trusted devices sessions',
-            'items' => [
-                'profile' => [
-                    'title' => 'Profile & password',
-                    'description' => 'Update your password and review your account details.',
-                    'href' => '/?page=account',
-                    'keywords' => 'profile account password email',
-                ],
-                'security' => [
-                    'title' => 'Sign-in security',
-                    'description' => 'Manage authenticator verification, passkeys, and trusted devices.',
-                    'href' => '/?page=account#security',
-                    'keywords' => 'totp authenticator two factor 2fa passkey trusted devices',
-                ],
-            ],
+            'title' => 'People & Access',
+            'short_title' => 'People & Access',
+            'marker' => 'PA',
+            'description' => 'User accounts, roles, permissions, worker profiles, and access boundaries.',
+            'keywords' => 'people users accounts roles permissions access business units workers',
+            'items' => [],
         ],
         'business' => [
             'title' => 'Business Profile & Branding',
@@ -262,11 +249,11 @@ function pa_settings_registry(): array
 
     // Present the installation as six broad, predictable destinations while
     // preserving every legacy tab and permission check above.
-    $registry['account']['title'] = 'Account & Access';
-    $registry['account']['short_title'] = 'Account & Access';
-    $registry['account']['description'] = 'Manage your sign-in, people, roles, permissions, and access boundaries.';
-    $registry['account']['keywords'] .= ' people users accounts roles permissions access business units';
-    $registry['account']['items'] = array_merge($registry['account']['items'], $registry['people']['items']);
+    $registry['account']['title'] = 'People & Access';
+    $registry['account']['short_title'] = 'People & Access';
+    $registry['account']['description'] = 'User accounts, roles, permissions, worker profiles, and access boundaries.';
+    $registry['account']['keywords'] .= ' ' . (string)($registry['people']['keywords'] ?? '');
+    $registry['account']['items'] = $registry['people']['items'];
 
     $registry['business']['title'] = 'Business';
     $registry['business']['short_title'] = 'Business';
