@@ -53,12 +53,18 @@ final class WorkforceSettings
             'workforce_allow_non_admin_time_approval',
         ];
         $placeholders = implode(',', array_fill(0, count($keys), '?'));
-        $stmt = $pdo->prepare(
-            "SELECT config_key,config_value FROM app_config
-             WHERE organization_id=0 AND config_key IN ($placeholders)"
-        );
-        $stmt->execute($keys);
-        $config = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        $config = [];
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT config_key,config_value FROM app_config
+                 WHERE organization_id=0 AND config_key IN ($placeholders)"
+            );
+            $stmt->execute($keys);
+            $config = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        } catch (Throwable) {
+            // Lightweight callers and first-run checks may not have app_config
+            // yet. The fail-closed defaults above keep non-admin management off.
+        }
 
         $businessName = trim((string)($config['from_company'] ?? ''));
         if ($businessName === '') {

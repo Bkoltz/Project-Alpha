@@ -262,10 +262,10 @@ function pa_settings_registry(): array
 
     // Present the installation as six broad, predictable destinations while
     // preserving every legacy tab and permission check above.
-    $registry['account']['title'] = 'Account & Access';
-    $registry['account']['short_title'] = 'Account & Access';
-    $registry['account']['description'] = 'Manage your sign-in, people, roles, permissions, and access boundaries.';
-    $registry['account']['keywords'] .= ' people users accounts roles permissions access business units';
+    $registry['account']['title'] = 'People & Access';
+    $registry['account']['short_title'] = 'People & Access';
+    $registry['account']['description'] = 'User accounts, roles, permissions, worker profiles, and access boundaries.';
+    $registry['account']['keywords'] .= ' ' . (string)($registry['people']['keywords'] ?? '');
     $registry['account']['items'] = array_merge($registry['account']['items'], $registry['people']['items']);
 
     $registry['business']['title'] = 'Business';

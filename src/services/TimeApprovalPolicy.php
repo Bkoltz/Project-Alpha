@@ -67,7 +67,9 @@ final class TimeApprovalPolicy
             return false;
         }
         if ($action === 'administrative_self_confirm') {
-            return $entryUserId === $actorId && $this->isAdministrator($actor);
+            return $entryUserId === $actorId
+                && ($this->isAdministrator($actor)
+                    || WorkforceSettings::canManageAllTime($this->pdo, $actorId));
         }
         if ($entryUserId === $actorId) {
             if ($this->isAdministrator($actor)) {
@@ -127,17 +129,28 @@ final class TimeApprovalPolicy
 
     /**
      * Built-in account roles may confirm their own time without turning the
-     * worker into a nonpayable owner. Permission grants alone never enable
-     * this bypass.
+     * worker into a nonpayable owner. Users who reach time management through
+     * the explicit permission path (allow_non_admin_time_management + the
+     * timekeeping.manage capability) are treated equivalently so that their
+     * own entries behave consistently with how they manage others' time.
      */
     public function canAdministrativelySelfConfirm(int $actorId): bool
     {
-        return $this->isAdministrator($this->actor($actorId));
+        return $this->isAdministrator($this->actor($actorId))
+            || WorkforceSettings::canManageAllTime($this->pdo, $actorId);
     }
 
     public function canAdministrativelySelfConfirmEntry(int $actorId, string $entryId): bool
     {
-        return $this->canReviewEntry($actorId, $entryId, 'administrative_self_confirm');
+        // Administrative self-confirmation is distinct from queue review. Bypass
+        // canAccessQueue so time managers without approvals.review can still
+        // confirm their own entries.
+        if (!$this->canAdministrativelySelfConfirm($actorId)) {
+            return false;
+        }
+        $stmt = $this->pdo->prepare('SELECT 1 FROM work_time_entries WHERE id=? AND user_id=? LIMIT 1');
+        $stmt->execute([$entryId, $actorId]);
+        return (bool)$stmt->fetchColumn();
     }
 
     public function assertCanAdministrativelySelfConfirmEntry(int $actorId, string $entryId): void

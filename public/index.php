@@ -823,6 +823,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // User accounts / auth management
         'auth/account-edit',
         'account-update',
+        'account-notification-prefs',
         'account-revoke-device',
         'account/delete',
         'accounts-create',
@@ -1373,6 +1374,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($page === 'account-update') {
         require_once __DIR__ . '/../src/controllers/auth/account_update.php';
+        exit;
+    }
+    if ($page === 'account-notification-prefs') {
+        require_once __DIR__ . '/../src/controllers/auth/account_notification_prefs.php';
         exit;
     }
     if ($page === 'account-revoke-device') {
