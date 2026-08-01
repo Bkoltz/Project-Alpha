@@ -270,6 +270,8 @@ function migration_schema_health(PDO $pdo): void
         'application_entitlements', 'application_entitlement_business_units',
         'application_entitlement_oversight_units', 'integration_outbox',
         'operations', 'operation_assignments', 'tasks', 'task_assignments',
+        'sync_source_identity', 'sync_resource_state', 'sync_event_log',
+        'sync_snapshot_sessions',
     ];
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',

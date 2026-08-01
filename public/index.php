@@ -29,6 +29,9 @@ $requestPath = (string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PH
 if ($requestPath === '/api/v1/ops/snapshot/') {
     $requestPath = '/api/v1/ops/snapshot';
 }
+if ($requestPath === '/api/v2/ops/snapshot/') {
+    $requestPath = '/api/v2/ops/snapshot';
+}
 $moduleRoutes = [
     '/health/ready' => 'health/ready',
     '/time' => 'workforce/time',
@@ -42,6 +45,7 @@ $moduleRoutes = [
     '/api/v1/workforce' => 'api/workforce-v1',
     '/api/v1/catalog' => 'api/catalog-v1',
     '/api/v1/ops/snapshot' => 'api-ops-snapshot',
+    '/api/v2/ops/snapshot' => 'api-ops-snapshot-v2',
 ];
 if ($requestPath === '/api/v1/ops/snapshot') {
     // The legacy front controller reserves `page` for routing, while this
@@ -240,7 +244,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
     $apiKey = api_require_key([$requiredApiScope]);
 
     // Map API endpoints
-    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients', 'api-ops-snapshot'];
+    $dashboardPages = ['api-dashboard-summary', 'api-financial-summary', 'api-invoices', 'api-quotes', 'api-projects', 'api-clients', 'api-ops-snapshot', 'api-ops-snapshot-v2'];
     if (in_array($page, $dashboardPages, true)) {
         $map = [
             'api-dashboard-summary'   => __DIR__ . '/../src/controllers/api/dashboard_summary.php',
@@ -250,6 +254,7 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
             'api-projects'              => __DIR__ . '/../src/controllers/api/projects_list.php',
             'api-clients'               => __DIR__ . '/../src/controllers/api/clients_list.php',
             'api-ops-snapshot'           => __DIR__ . '/../src/controllers/api/ops_snapshot.php',
+            'api-ops-snapshot-v2'        => __DIR__ . '/../src/controllers/api/ops_snapshot_v2.php',
         ];
         require_once $map[$page];
         exit;
