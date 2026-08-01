@@ -86,7 +86,10 @@ final class GeneralRecipientInvoiceTest extends TestCase
         self::assertStringContainsString('expire_when_paid=1 AND expires_at IS NULL', $lifecycle);
         self::assertStringContainsString('invoice_finalize_and_create_general_recipient_link($pdo, $invoice_id', $create);
         self::assertStringContainsString('invoice_finalize_and_create_general_recipient_link($pdo, $id', $finalize);
-        self::assertStringContainsString("invoice_finalize_and_create_general_recipient_link(\n            \$pdo,\n            \$id,", $publicLinkCreate);
+        self::assertMatchesRegularExpression(
+            '/invoice_finalize_and_create_general_recipient_link\(\R\s*\$pdo,\R\s*\$id,/',
+            $publicLinkCreate
+        );
         self::assertStringNotContainsString('invoice_send_finalized($pdo, $id', substr($finalize, 0, strpos($finalize, '} else {') ?: 0));
     }
 
