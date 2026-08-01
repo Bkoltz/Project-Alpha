@@ -94,3 +94,7 @@ The integration status card reports queued deliveries, retry errors, and the las
 The daily snapshot is reconciliation and recovery, not a replacement for the
 event path. Account email, display name, PA role, active state, and explicit-access
 changes refresh or revoke the entitlement projection through the same outbox.
+
+## Sync Contract v2 foundation
+
+The provider-neutral v2 bootstrap foundation is implemented in parallel at `GET /api/v2/ops/snapshot` for API keys with `ops.sync.read`, but it returns 404 unless `APP_SYNC_CONTRACT_V2_ENABLED=true`. It does not change the v1 route or its event delivery. See [Sync Contract v2](../reference/sync-contract-v2.html) for its identity, cursor, resource-version, fixture, and production-gate rules. Keep the foundation disabled until all covered mutations use the documented atomic event contract and the remaining production gates pass.

@@ -274,6 +274,8 @@ function migration_schema_health(PDO $pdo): void
         'portal_organization_entitlements', 'portal_project_entitlements',
         'notification_relay_queue', 'notification_relay_events',
         'notification_relay_rate_buckets', 'notification_relay_key_state',
+        'sync_source_identity', 'sync_resource_state', 'sync_event_log',
+        'sync_snapshot_sessions',
     ];
     $deadTables = [
         'contract_notes', 'quote_history', 'contract_history', 'invoice_history',
@@ -314,6 +316,10 @@ function migration_schema_health(PDO $pdo): void
         'api_usage' => ['api_key_id', 'used_at'],
         'notification_relay_queue' => ['api_key_id', 'action_name', 'template_name', 'recipient_alias', 'variables_json', 'idempotency_hash', 'payload_hash', 'status', 'attempt_count', 'next_attempt_at', 'lock_token'],
         'notification_relay_events' => ['queue_id', 'queue_reference', 'api_key_id', 'event_type', 'status', 'attempt_count', 'error_code'],
+        'sync_source_identity' => ['singleton', 'source_instance_id'],
+        'sync_resource_state' => ['resource_type', 'resource_id', 'resource_version', 'content_sha256', 'present'],
+        'sync_event_log' => ['sequence', 'event_id', 'source_instance_id', 'resource_type', 'resource_id', 'resource_version', 'action', 'payload'],
+        'sync_snapshot_sessions' => ['snapshot_id', 'source_instance_id', 'api_key_id', 'high_water_sequence', 'generated_at', 'expires_at'],
         'client_onboarding_invitations' => ['organization_id', 'invited_email', 'token_hash', 'status'],
         'client_onboarding_submissions' => ['invitation_id', 'proposed_data', 'status'],
         'team_members' => ['user_id','display_name','email','is_active','profile_source','last_synced_at'],

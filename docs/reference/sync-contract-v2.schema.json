@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-alpha.tech/schemas/sync-contract-v2.schema.json",
+  "title": "Project Alpha Sync Contract v2",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/snapshot"
+    },
+    {
+      "$ref": "#/$defs/event"
+    }
+  ],
+  "$defs": {
+    "decimalString": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "version"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "organization",
+            "client",
+            "project",
+            "service_location",
+            "job"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 191
+        },
+        "version": {
+          "$ref": "#/$defs/decimalString"
+        }
+      }
+    },
+    "snapshotItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resource",
+        "data"
+      ],
+      "properties": {
+        "resource": {
+          "$ref": "#/$defs/resource"
+        },
+        "data": {
+          "type": "object"
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "source_instance_id",
+        "snapshot",
+        "items",
+        "next_cursor"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "2.0"
+        },
+        "source_instance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "snapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "generated_at",
+            "expires_at",
+            "high_water_sequence"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "high_water_sequence": {
+              "$ref": "#/$defs/decimalString"
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/snapshotItem"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request_id": {
+          "type": "string"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "source_instance_id",
+        "sequence",
+        "event_id",
+        "occurred_at",
+        "resource",
+        "action",
+        "data"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "2.0"
+        },
+        "source_instance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "resource": {
+          "$ref": "#/$defs/resource"
+        },
+        "action": {
+          "enum": [
+            "upsert",
+            "delete"
+          ]
+        },
+        "data": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

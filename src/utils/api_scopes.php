@@ -36,7 +36,7 @@ function api_scope_catalog(): array
         'ops.sync.read' => [
             'label' => 'External operations synchronization',
             'description' => 'Read the least-privilege workforce, client, Project, and service-location snapshot used by a configured external operations application.',
-            'endpoints' => ['api-ops-snapshot'],
+            'endpoints' => ['api-ops-snapshot', 'api-ops-snapshot-v2'],
         ],
         'notifications.enqueue' => [
             'label' => 'Internal notification relay',

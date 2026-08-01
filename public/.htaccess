@@ -7,6 +7,7 @@
     # External Operations snapshot API. Route the clean public path through
     # PA's front controller while preserving its public pagination query.
     RewriteRule ^api/v1/ops/snapshot/?$ index.php [QSA,L]
+    RewriteRule ^api/v2/ops/snapshot/?$ index.php [QSA,L]
 
     # Container readiness must enter PA's front controller so schema health is
     # checked before Apache reports the application as available.
