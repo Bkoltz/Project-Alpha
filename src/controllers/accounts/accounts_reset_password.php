@@ -42,6 +42,13 @@ try {
     
     audit_log($pdo, 'user.password_reset_by_admin', 'user', $userId);
     $pdo->commit();
+    App\Security\SessionRevocation::revokeUserSessions($pdo, $userId);
+    if ($userId === (int)$_SESSION['user']['id']) {
+        $_SESSION = [];
+        session_destroy();
+        header('Location: /?page=login&error=' . urlencode('Password reset. Please sign in again.'));
+        exit;
+    }
     header('Location: /?page=account-edit&id=' . $userId . '&success=pwd_reset');
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) { $pdo->rollBack(); }

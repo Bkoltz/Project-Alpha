@@ -1,21 +1,20 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/config/db.php';
+require_once __DIR__ . '/../src/utils/request_security.php';
 // Secure session cookies and start session
-$isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
-    || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
-    || (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower((string)$_SERVER['HTTP_X_SCHEME']) === 'https');
+$isSecure = request_is_https();
+ini_set('session.use_strict_mode', '1');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
     'domain' => '',
     'secure' => $isSecure,
     'httponly' => true,
-    'samesite' => 'Strict',
+    'samesite' => 'Lax',
 ]);
 if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_set_save_handler(new App\Security\DatabaseSessionHandler($pdo, 900, 7 * 24 * 60 * 60), true);
+    session_set_save_handler(new App\Security\DatabaseSessionHandler($pdo), true);
     session_start();
 }
 ob_start();
@@ -269,9 +268,16 @@ if ($apiEnabled && substr($page, 0, 4) === 'api-' && !str_starts_with($page, 'ap
 
 // Handle logout early
 if ($page === 'logout') {
-    // Start session if not already started
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
+    // SameSite=Lax sends cookies on cross-site top-level GETs, so logout must
+    // remain a same-origin, CSRF-protected mutation.
+    $logoutToken = (string)($_POST['csrf'] ?? '');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST'
+        || empty($_SESSION['csrf'])
+        || !hash_equals((string)$_SESSION['csrf'], $logoutToken)) {
+        http_response_code(405);
+        header('Allow: POST');
+        header('Content-Type: text/plain; charset=UTF-8');
+        exit('Logout requires a same-origin POST request.');
     }
     
     // Audit the logout before clearing session
@@ -387,7 +393,7 @@ if ($authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, 
                     $activeOrgId = 0;
                 }
             }
-            session_regenerate_id(true);
+            App\Security\SessionPolicy::rotateAuthenticatedId();
             $_SESSION['user'] = [
                 'id' => (int)$bypassUser['id'],
                 'email' => (string)$bypassUser['email'],
@@ -396,7 +402,7 @@ if ($authDisabled && empty($_SESSION['user']) && !in_array($page, $publicPages, 
                 'active_org_id' => $activeOrgId,
                 'auth_bypass' => true,
             ];
-            $_SESSION['last_activity'] = time();
+            App\Security\SessionPolicy::completeAuthentication('development_bypass');
             if (empty($_SESSION['auth_bypass_logged'])) {
                 error_log('[security] Development auth bypass signed in user id ' . (int)$bypassUser['id']);
                 $_SESSION['auth_bypass_logged'] = 1;
@@ -446,7 +452,7 @@ if (!empty($_SESSION['user'])) {
         exit;
     }
 
-    $sessionTimeout = 15 * 60;
+    $sessionTimeout = App\Security\SessionPolicy::IDLE_SECONDS;
     if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $sessionTimeout) {
         $_SESSION = [];
         session_destroy();
@@ -457,8 +463,8 @@ if (!empty($_SESSION['user'])) {
         header('Location: /?page=login&error=' . urlencode('Session expired. Please log in again.'));
         exit;
     }
-    // Passive status polling must not keep an otherwise inactive session alive.
-    if ($page !== 'session-status') {
+    // Only explicitly classified user activity refreshes the idle deadline.
+    if (App\Security\SessionPolicy::isIntentionalActivity($page, $_GET)) {
         $_SESSION['last_activity'] = time();
     }
 }
@@ -593,7 +599,7 @@ if ($page === 'settings/dropbox-oauth') {
     require_once __DIR__ . '/../src/controllers/settings/dropbox_oauth.php';
     exit;
 }
-if ($page === 'settings/gmail-oauth' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+if ($page === 'settings/gmail-oauth') {
     require_once __DIR__ . '/../src/controllers/settings/gmail_oauth.php';
     exit;
 }

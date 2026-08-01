@@ -1,6 +1,6 @@
 # Recurring Invoices
 
-Long-term contracts generate invoices from their stored billing schedule. The dedicated cron service runs the generator daily at 02:00 UTC.
+Long-term contracts generate invoices from their stored billing schedule. The dedicated cron service runs the generator daily at 02:00 in the configured Project Alpha timezone.
 
 ## Prerequisites
 

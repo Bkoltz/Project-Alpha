@@ -6,12 +6,14 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../utils/acl.php';
 require_once __DIR__ . '/../services/DocumentPolicy.php';
 require_once __DIR__ . '/../services/DocumentRevisionService.php';
+require_once __DIR__ . '/../utils/invoice_due_dates.php';
 
 // CSRF is already verified by the router (index.php)
 // No need to verify again here
 
 $type = $_POST['type'] ?? '';
 $id = (int)($_POST['id'] ?? 0);
+$requestedDate = trim((string)($_POST['document_date'] ?? date('Y-m-d')));
 
 if ($id <= 0 || !in_array($type, ['quote', 'contract', 'invoice', 'long_term_contract', 'on_demand_contract'])) {
     header('Location: /?page=dashboard&error=Invalid%20document%20type%20or%20ID');
@@ -42,8 +44,7 @@ try {
             break;
 
         case 'invoice':
-            $pdo->prepare("UPDATE invoices SET document_date=CURRENT_TIMESTAMP, document_date_updated_at=CURRENT_TIMESTAMP WHERE id=?")
-                ->execute([$id]);
+            invoice_update_document_date($pdo, $id, $requestedDate);
             $redirectPage = 'invoice/invoice-details';
             break;
 

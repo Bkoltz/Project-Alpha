@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../utils/document_fields.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/acl_middleware.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
 require_once __DIR__ . '/../../services/DocumentPolicy.php';
@@ -21,6 +22,7 @@ $invoiceState = $statusStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $invoiceStatus = strtolower((string)($invoiceState['status'] ?? ''));
 $isDraft = $invoiceStatus === 'draft';
 try { $invoiceState=DocumentPolicy::assertMutable($pdo,'invoice',$id,'monetary_adjustment'); } catch(DocumentLockedException $locked){http_response_code(409);header('Content-Type: application/json');echo json_encode(['success'=>false,'code'=>'document_locked','message'=>$locked->getMessage(),'request_id'=>bin2hex(random_bytes(8))]);exit;}
+$isGeneralRecipientInvoice = pa_invoice_is_general_recipient($invoiceState);
 $client_id = (int)($_POST['client_id'] ?? 0);
 $requestedServiceLocationId = !empty($_POST['service_location_id']) ? (int)$_POST['service_location_id'] : null;
 if (!empty($invoiceState['job_id']) && $client_id !== (int)$invoiceState['client_id']) {
@@ -31,8 +33,19 @@ $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $due_date = $_POST['due_date'] ?? null;
+$normalizedDueDate = $due_date && trim((string)$due_date) !== '' ? trim((string)$due_date) : null;
+$storedDueDate = $invoiceState['due_date'] ?: null;
+$dueDateSource = $normalizedDueDate === $storedDueDate ? (string)($invoiceState['due_date_source'] ?? 'manual') : 'manual';
 $fulfillment_date = !empty($_POST['fulfillment_date']) ? $_POST['fulfillment_date'] : null;
 if ($id<=0 || $client_id<=0) { header('Location: /?page=invoice/invoices-list&error=Invalid'); exit; }
+if ($isGeneralRecipientInvoice) {
+  $changesPrivateRelationship = $client_id !== (int)($invoiceState['client_id'] ?? 0)
+    || $requestedServiceLocationId !== null;
+  if ($changesPrivateRelationship || !pa_general_recipient_invoice_is_eligible($invoiceState)) {
+    header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . rawurlencode('General-recipient invoices cannot be assigned to a client relationship, service location, project, contract, or Job.'));
+    exit;
+  }
+}
 
 // Detect whether the DB has the is_extra_charge column (migration may not have been applied)
 $hasExtraChargeCol = false;
@@ -127,16 +140,18 @@ $customFieldsJson = !empty($customFieldValues) ? json_encode($customFieldValues)
 
 $pdo->beginTransaction();
 try {
-  $serviceLocationId = document_resolve_service_location($pdo,$client_id,!empty($invoiceState['project_id'])?(int)$invoiceState['project_id']:null,!empty($invoiceState['job_id'])?(int)$invoiceState['job_id']:null,$requestedServiceLocationId);
+  $serviceLocationId = $isGeneralRecipientInvoice
+    ? null
+    : document_resolve_service_location($pdo,$client_id,!empty($invoiceState['project_id'])?(int)$invoiceState['project_id']:null,!empty($invoiceState['job_id'])?(int)$invoiceState['job_id']:null,$requestedServiceLocationId);
   $pdo->prepare('UPDATE invoices
     SET client_id=?, billing_mode=?, discount_type=?, discount_value=?, tax_percent=?,
         subtotal=?, tax_amount=?, total=?, balance_due=GREATEST(0,?-COALESCE(amount_paid,0)),
-        due_date=?, fulfillment_date=?, custom_fields=?, service_location_id=?
+        due_date=?, due_date_source=?, fulfillment_date=?, custom_fields=?, service_location_id=?
     WHERE id=?')
     ->execute([
       $client_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
       $subtotal, $tax, $total, $total,
-      $due_date ?: null, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id,
+      $normalizedDueDate, $dueDateSource, $fulfillment_date, $customFieldsJson, $serviceLocationId, $id,
     ]);
   
   $row = $pdo->prepare('SELECT project_code FROM invoices WHERE id=?');
@@ -186,18 +201,20 @@ try {
   $adjustmentInsert=$pdo->prepare('INSERT INTO invoice_adjustments (invoice_id,adjustment_type,label,description,quantity,unit_price,amount,revision_number,created_by) VALUES (?,?,?,?,?,?,?,?,?)');
   foreach($extraItemsArr as $it){$adjustmentInsert->execute([$id,$it['type'],$it['i'],$it['d']?:null,$it['q'],$it['p'],$it['t'],$nextInvoiceRevision,(int)($_SESSION['user']['id']??0)?:null]);}
 
-  $syncTimeEntries = $pdo->prepare('
-    UPDATE time_entries te
-    LEFT JOIN invoice_items ii ON ii.id = te.invoice_item_id
-    SET te.client_id = ?, te.invoice_id = ?
-    WHERE te.invoice_id = ? OR ii.invoice_id = ?
-  ');
-  $syncTimeEntries->execute([$client_id, $id, $id, $id]);
+  if (!$isGeneralRecipientInvoice) {
+    $syncTimeEntries = $pdo->prepare('
+      UPDATE time_entries te
+      LEFT JOIN invoice_items ii ON ii.id = te.invoice_item_id
+      SET te.client_id = ?, te.invoice_id = ?
+      WHERE te.invoice_id = ? OR ii.invoice_id = ?
+    ');
+    $syncTimeEntries->execute([$client_id, $id, $id, $id]);
 
-  (new WorkTimeBillingContextService($pdo))->synchronizeInvoice(
-    $id,
-    (int)($_SESSION['user']['id'] ?? 0)
-  );
+    (new WorkTimeBillingContextService($pdo))->synchronizeInvoice(
+      $id,
+      (int)($_SESSION['user']['id'] ?? 0)
+    );
+  }
 
   if (!empty($invoiceState['finalized_at']) || invoice_effective_paid_total($pdo,$id)>0.005) {
     invoice_refresh_payment_totals($pdo, $id, false);

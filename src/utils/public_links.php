@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 const PA_PUBLIC_LINK_TERMINAL_STATUS_DAYS = 7;
+require_once __DIR__ . '/general_recipient_invoices.php';
 
 function pa_public_link_ensure_schema(PDO $pdo): void
 {
@@ -113,6 +114,39 @@ function pa_public_link_terminalize(
     }
     $redirect = pa_public_link_redirect_path($type, $reason);
     try {
+        // A paid general-recipient invoice remains an active, non-payable receipt
+        // for seven days. It must not redirect to a generic terminal page because
+        // the caller deliberately needs the PDF/receipt after paying.
+        if ($type === 'invoice' && $reason === 'paid') {
+            $invoiceStmt = $pdo->prepare('SELECT recipient_presentation_mode,status,paid_at FROM invoices WHERE id=? LIMIT 1');
+            $invoiceStmt->execute([$id]);
+            $invoice = $invoiceStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            if (pa_invoice_is_general_recipient($invoice)) {
+                if (!pa_general_recipient_public_receipt_window_open($invoice)) {
+                    $expired = $pdo->prepare(
+                        'UPDATE public_links
+                         SET revoked=1, redirect=NULL, expire_when_paid=0, expires_at=NOW()
+                         WHERE document_type="invoice" AND document_id=?'
+                    );
+                    $expired->execute([$id]);
+                    return $reason;
+                }
+                $receipt = $pdo->prepare(
+                    'UPDATE public_links
+                     SET revoked=0, redirect=NULL, expire_when_paid=0,
+                         expires_at=DATE_ADD(COALESCE(?, NOW()), INTERVAL ' . PA_PUBLIC_LINK_TERMINAL_STATUS_DAYS . ' DAY)
+                     WHERE document_type="invoice" AND document_id=?
+                       AND revoked=0'
+                );
+                // invoices.paid_at controls the grace period, not the time a
+                // public page happens to be opened. Re-applying this exact
+                // timestamp also corrects a stale first-payment expiry after
+                // a refund followed by a later repayment without extending
+                // the window on duplicate events or ordinary views.
+                $receipt->execute([$invoice['paid_at'] ?? null, $id]);
+                return $reason;
+            }
+        }
         $revokedClause = $refreshPreviouslyTerminalLinks ? '' : ' AND revoked = 0';
         $stmt = $pdo->prepare(
             'UPDATE public_links
@@ -169,6 +203,15 @@ function pa_public_link_status(PDO $pdo, string $type, int $id): array
             return $fallback;
         }
 
+        $isGeneralRecipientInvoice = false;
+        if ($type === 'invoice') {
+            $invoiceMode = $pdo->prepare('SELECT recipient_presentation_mode FROM invoices WHERE id=?');
+            $invoiceMode->execute([$id]);
+            $isGeneralRecipientInvoice = pa_invoice_is_general_recipient([
+                'recipient_presentation_mode' => $invoiceMode->fetchColumn() ?: 'named',
+            ]);
+        }
+
         $expiresAt = trim((string)($link['expires_at'] ?? ''));
         $expiresTs = $expiresAt !== '' ? strtotime($expiresAt) : false;
         $isExpired = $expiresTs !== false && $expiresTs <= time();
@@ -179,7 +222,9 @@ function pa_public_link_status(PDO $pdo, string $type, int $id): array
                 'state' => 'accessible',
                 'label' => 'Accessible',
                 'detail' => !empty($link['expire_when_paid'])
-                    ? 'Client can open this link until the invoice is paid in full.'
+                    ? ($isGeneralRecipientInvoice
+                        ? 'Recipient can pay through this link; after payment it remains a receipt for seven days.'
+                        : 'Client can open this link until the invoice is paid in full.')
                     : ($expiresAt !== '' ? 'Client can open this link until ' . date('M j, Y g:i A', strtotime($expiresAt)) . '.' : 'Client can open this link.'),
                 'color' => '#065f46',
                 'background' => '#ecfdf5',

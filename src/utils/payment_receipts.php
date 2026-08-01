@@ -14,7 +14,8 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
 
     $stmt = $pdo->prepare(
         'SELECT p.id,p.invoice_id,p.job_id,p.processor_transaction_id,p.amount,p.payment_date,p.payment_method,p.reference_number,
-                i.doc_number,i.invoice_type,j.job_code,COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
+                i.doc_number,i.invoice_type,i.recipient_presentation_mode,j.job_code,
+                COALESCE(c.name,ppt.payer_name) AS client_name,COALESCE(c.email,ppt.payer_email) AS email
          FROM payments p
          LEFT JOIN invoices i ON i.id=p.invoice_id
          LEFT JOIN jobs j ON j.id=p.job_id
@@ -28,6 +29,13 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
         return null;
     }
     if (empty($payment['invoice_id']) && !empty($payment['processor_transaction_id'])) {
+        return null;
+    }
+
+    // The invoice's paid public link is the only external receipt for a
+    // general-recipient invoice. Creating this separate receipt would copy the
+    // private accounting client's identity and could email it automatically.
+    if (pa_invoice_is_general_recipient($payment)) {
         return null;
     }
 
@@ -57,8 +65,10 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
         return $receipt ?: null;
     }
 
-    $base = invoice_public_base_url($appConfig);
-    $url = $base . '/?page=payment-receipt&token=' . rawurlencode((string)$receipt['public_token']);
+    $url = '';
+    if (!empty($appConfig['public_links_in_email'])) {
+        $url = invoice_public_base_url($appConfig) . '/?page=payment-receipt&token=' . rawurlencode((string)$receipt['public_token']);
+    }
     $invoiceLabel = !empty($payment['invoice_id']) ? ' for invoice ' . pa_invoice_label_from_row($payment) : '';
     $serviceLabel = empty($payment['invoice_id']) && !empty($payment['job_code'])
         ? ' for service job ' . (string)$payment['job_code']
@@ -67,7 +77,8 @@ function payment_receipt_issue(PDO $pdo, int $paymentId, array $appConfig, bool 
     $body = '<p>Hello ' . htmlspecialchars((string)($payment['client_name'] ?: 'there')) . ',</p>'
         . '<p>We received your payment of <strong>$' . number_format((float)$payment['amount'], 2) . '</strong>'
         . htmlspecialchars($invoiceLabel . $serviceLabel) . '.</p>'
-        . '<p><a href="' . htmlspecialchars($url) . '">View and print your Project Alpha receipt</a></p>';
+        . '<p>Receipt number: <strong>' . htmlspecialchars((string)$receipt['receipt_number']) . '</strong></p>'
+        . ($url !== '' ? '<p><a href="' . htmlspecialchars($url) . '">View and print your Project Alpha receipt</a></p>' : '');
 
     [$ok, $error] = EmailService::sendEmail((string)$receipt['email_to'], $subject, $body);
     if ($ok) {

@@ -316,7 +316,7 @@ function migration_schema_health(PDO $pdo): void
         'work_approval_snapshots' => ['time_entry_id','entry_revision','pay_rate','billing_rate','pay_amount','currency'],
         'work_pay_accruals' => ['approval_snapshot_id','employee_user_id','amount','currency','status'],
         'work_billing_consumptions' => ['approval_snapshot_id','billing_time_entry_id','consumption_type'],
-        'app_sessions' => ['session_hash','user_id','payload','last_activity_at','absolute_expires_at'],
+        'app_sessions' => ['session_hash','user_id','payload','last_activity_at','absolute_expires_at','revoked_at'],
         'background_jobs' => ['queue_name','job_type','payload','state','available_at'],
         'email_provider_connections' => ['provider','credentials_enc','status','token_expires_at'],
         'addresses' => ['address_line1','city','postal_code','google_place_id','source'],

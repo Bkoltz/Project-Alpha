@@ -4,6 +4,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../utils/password_policy.php';
+require_once __DIR__ . '/../../utils/password_reset_tokens.php';
 
 if (empty($_SESSION['user'])) {
   header('Location: /?page=login');
@@ -46,12 +47,16 @@ try {
   $newHash = password_hash($new, PASSWORD_DEFAULT);
   $up = $pdo->prepare('UPDATE users SET password_hash=?, force_password_reset=0, auth_version=auth_version+1 WHERE id=?');
   $up->execute([$newHash, $uid]);
+  password_reset_revoke_for_user($pdo, $uid);
+  $pdo->prepare('DELETE FROM trusted_devices WHERE user_id=?')->execute([$uid]);
   $version = $pdo->prepare('SELECT auth_version, totp_reenroll_required FROM users WHERE id=?');
   $version->execute([$uid]);
   $recoveryState = $version->fetch(PDO::FETCH_ASSOC) ?: [];
   audit_log($pdo, 'user.password_changed', 'user', $uid);
   $pdo->commit();
   $_SESSION['user']['auth_version'] = (int)($recoveryState['auth_version'] ?? 0);
+  App\Security\SessionRevocation::revokeUserSessions($pdo, $uid, session_id());
+  App\Security\SessionPolicy::rotateAuthenticatedId();
   if ((int)($recoveryState['totp_reenroll_required'] ?? 0) === 1) {
     header('Location: /?page=2fa-setup&required=1&recovery=1');
     exit;

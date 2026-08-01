@@ -226,12 +226,27 @@ final class InvoiceContentLinksTest extends TestCase
         $this->assertContains('https://example.invalid/standalone-' . $suffix, $urls, 'Standalone clients without an organization should still pull client links.');
     }
 
+    public function testGeneralRecipientInvoiceSuppressesPrivateClientAndOrganizationLinks(): void
+    {
+        $suffix = bin2hex(random_bytes(5));
+        $orgId = $this->insertOrganization('Private General Org ' . $suffix);
+        $clientId = $this->insertClient('Private General Client ' . $suffix, $orgId, 'private-general-' . $suffix . '@example.invalid');
+        $invoiceId = $this->insertInvoice($clientId);
+        $this->pdo->prepare('UPDATE invoices SET recipient_presentation_mode="general" WHERE id=?')
+            ->execute([$invoiceId]);
+        $this->insertLink('client', $clientId, 'Private client folder', 'https://example.invalid/private-client-' . $suffix, 'manual_dropbox', 'entity_only');
+        $this->insertLink('organization', $orgId, 'Private organization folder', 'https://example.invalid/private-org-' . $suffix, 'manual_dropbox', 'entity_only');
+
+        self::assertSame([], invoice_content_links_for_invoice($this->pdo, $invoiceId));
+    }
+
     public function testMissingContentLinksWarningIsEnforcedBeforeEmailSend(): void
     {
         $emailSend = file_get_contents(dirname(__DIR__, 2) . '/src/controllers/email_send.php');
         $projectEmail = file_get_contents(dirname(__DIR__, 2) . '/src/controllers/project/project_invoice_email.php');
         $finalize = file_get_contents(dirname(__DIR__, 2) . '/src/controllers/invoice/invoice_finalize.php');
         $lifecycle = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_lifecycle.php');
+        $delivery = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_notifications.php');
         $invoiceDetails = file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/invoice/invoice-details.php');
         $projectInvoiceDetails = file_get_contents(dirname(__DIR__, 2) . '/src/views/pages/project/project-invoice-details.php');
         $contentLinks = file_get_contents(dirname(__DIR__, 2) . '/src/utils/invoice_content_links.php');
@@ -246,8 +261,8 @@ final class InvoiceContentLinksTest extends TestCase
         self::assertStringContainsString('invoice_should_prompt_for_missing_content_links', (string)$projectEmail);
         self::assertStringContainsString('content_link_warning=1&email_panel=1', (string)$projectEmail);
         self::assertStringContainsString('invoice_should_prompt_for_missing_content_links', (string)$finalize);
-        self::assertStringContainsString('invoice_missing_content_links_behavior($appConfig) === \'block\'', (string)$lifecycle);
-        self::assertStringContainsString('invoice_content_links_html(invoice_content_links_for_invoice', (string)$lifecycle);
+        self::assertStringContainsString('invoice_missing_content_links_behavior($appConfig) === \'block\'', (string)$lifecycle . (string)$delivery);
+        self::assertStringContainsString('invoice_content_links_html(invoice_content_links_for_invoice', (string)$lifecycle . (string)$delivery);
         self::assertStringContainsString('Finalize & Send Anyway', (string)$invoiceDetails);
         self::assertStringContainsString('No invoice content links found.', (string)$projectInvoiceDetails);
     }

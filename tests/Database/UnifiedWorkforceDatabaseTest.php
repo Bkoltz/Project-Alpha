@@ -81,7 +81,7 @@ final class UnifiedWorkforceDatabaseTest extends TestCase
             $pdo->prepare('UPDATE app_sessions SET last_activity_at=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 901 SECOND) WHERE session_hash=?')
                 ->execute([hash('sha256', "verification-{$suffix}")]);
             self::assertSame('', $sessions->read("verification-{$suffix}"));
-            self::assertSame('0', (string) $this->value($pdo, 'SELECT COUNT(*) FROM app_sessions WHERE session_hash=?', [hash('sha256', "verification-{$suffix}")]));
+            self::assertSame('1', (string) $this->value($pdo, 'SELECT COUNT(*) FROM app_sessions WHERE session_hash=? AND revoked_at IS NOT NULL AND payload=""', [hash('sha256', "verification-{$suffix}")]));
 
             $time = new TimekeepingService($pdo, new AuditRecorder($pdo));
             $approval = new ApprovalService($pdo, new AuditRecorder($pdo), new BillingTimeConsumer($pdo));

@@ -226,7 +226,7 @@ if ($action === 'login') {
         // on success (no 2FA), regenerate session and optionally clear attempts
         session_regenerate_id(true);
         $_SESSION['user'] = $userSession;
-        $_SESSION['authn'] = ['method' => $trustedDevice ? 'password_trusted_device' : 'password', 'authenticated_at' => time()];
+        App\Security\SessionPolicy::completeAuthentication($trustedDevice ? 'password_trusted_device' : 'password');
         password_reset_revoke_for_user($pdo, (int)$u['id']);
         // Clear old login attempts on success
         try {

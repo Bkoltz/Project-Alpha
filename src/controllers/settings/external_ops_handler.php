@@ -32,8 +32,8 @@ try {
             'application_key' => (string)$config['application_key'],
             'webhook_host' => (string)(parse_url((string)$config['webhook_url'], PHP_URL_HOST) ?: ''),
         ]);
-    } elseif (empty($config['enabled'])) {
-        throw new DomainException('Enable and save the custom integration before managing synchronized records.');
+    } elseif (empty($config['configured_enabled'])) {
+        throw new DomainException('Enable and save outbound delivery before managing synchronized records.');
     } elseif (in_array($action, ['grant-access','revoke-access','save-entitlement'], true)) {
         if (!user_can($pdo, $actorUserId, 'users.manage', 0)) {
             throw new DomainException('User-management permission is required to change external operations access.');
@@ -49,6 +49,9 @@ try {
             ? ($result['changed'] ? $displayLabel . ' access was granted.' : $displayLabel . ' access was already granted.')
             : ($result['changed'] ? $displayLabel . ' access was revoked.' : $displayLabel . ' access was already revoked.');
     } elseif ($action === 'send-now') {
+        if (empty($config['delivery_ready'])) {
+            throw new DomainException('Outbound delivery is paused. Complete the required delivery settings or disable it until the receiver is ready.');
+        }
         (new ExternalOpsOutboxSender())->deliverDue($pdo, $config, 50);
     } else {
         throw new DomainException('Unknown integration action.');

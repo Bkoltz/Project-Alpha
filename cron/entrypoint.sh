@@ -29,23 +29,38 @@ while IFS='=' read -r name value; do
 done < <(printenv)
 
 # ── Create log directory if it doesn't exist ──
-LOG_DIR="/var/www/config/logs/cron"
+LOG_ROOT="/var/www/config/logs"
+if [ -L "$LOG_ROOT" ] || { [ -e "$LOG_ROOT" ] && [ ! -d "$LOG_ROOT" ]; }; then
+    echo "[cron-entrypoint] ERROR: $LOG_ROOT must be a real directory."
+    exit 1
+fi
+if [ ! -d "$LOG_ROOT" ]; then
+    mkdir "$LOG_ROOT"
+fi
+chown -h www-data:www-data "$LOG_ROOT"
+runuser -u www-data -- chmod 775 "$LOG_ROOT"
+
+LOG_DIR="$LOG_ROOT/cron"
+if [ -L "$LOG_DIR" ] || { [ -e "$LOG_DIR" ] && [ ! -d "$LOG_DIR" ]; }; then
+    echo "[cron-entrypoint] ERROR: $LOG_DIR must be a real directory."
+    exit 1
+fi
 if [ ! -d "$LOG_DIR" ]; then
-    mkdir -p "$LOG_DIR"
+    runuser -u www-data -- mkdir "$LOG_DIR"
     echo "[cron-entrypoint] Created log directory: $LOG_DIR"
 fi
+chown -h www-data:www-data "$LOG_DIR"
+runuser -u www-data -- chmod 775 "$LOG_DIR"
 
-# Ensure log directory is writable
-chmod 775 "$LOG_DIR"
-
-# Create symlink for legacy cron log directory if needed
-LEGACY_LOG_DIR="/var/log/cron"
-if [ ! -d "$LEGACY_LOG_DIR" ]; then
-    mkdir -p "$LEGACY_LOG_DIR"
+CRON_LOG="$LOG_DIR/cron.log"
+if [ -L "$CRON_LOG" ] || { [ -e "$CRON_LOG" ] && [ ! -f "$CRON_LOG" ]; }; then
+    echo "[cron-entrypoint] ERROR: $CRON_LOG must be a regular file."
+    exit 1
 fi
-
-# Set up log redirection: cron job output goes to both legacy location and unified log
-# This is handled in the crontab by redirecting output to the log file
+if ! runuser -u www-data -- php /var/www/src/cron/prepare_log_file.php "$CRON_LOG"; then
+    echo "[cron-entrypoint] ERROR: $CRON_LOG could not be safely prepared for www-data."
+    exit 1
+fi
 
 # ── Wait for the database to become available ──
 DB_HOST="${DB_HOST:-db}"

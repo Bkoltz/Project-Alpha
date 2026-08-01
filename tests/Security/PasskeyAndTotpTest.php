@@ -163,7 +163,7 @@ final class PasskeyAndTotpTest extends TestCase
         $controller = $this->read('src/controllers/auth/passkey_complete.php');
 
         self::assertStringContainsString("unset(\$_SESSION['2fa_pending'])", $controller);
-        self::assertStringContainsString("\$_SESSION['authn'] = ['method' => 'passkey'", $controller);
+        self::assertStringContainsString("SessionPolicy::completeAuthentication('passkey')", $controller);
         self::assertStringNotContainsString("page=2fa-verify", $controller);
     }
 

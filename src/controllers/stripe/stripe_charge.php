@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../utils/InvoiceSurcharge.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/payment_methods.php';
+require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 
 $invoiceId = (int)($_POST['invoice_id'] ?? $_GET['invoice_id'] ?? 0);
 $returnUrl = $_POST['return_url'] ?? $_GET['return_url'] ?? '';
@@ -78,13 +79,16 @@ try {
     
     $docNumber = $invoice['doc_number'] ?? $invoiceId;
     $invoiceLabel = pa_invoice_label_from_row($invoice + ['id' => $invoiceId]);
+    $checkoutRecipient = pa_invoice_is_general_recipient($invoice)
+        ? 'General Recipient'
+        : (string)$invoice['client_name'];
 
     // Calculate surcharge if applicable
     $surchargeInfo = InvoiceSurcharge::getInfo($amountDue, $appConfig);
     $surchargeAmount = $surchargeInfo['has_surcharge'] ? ($surchargeInfo['client_pays'] ?? 0) : 0;
     $chargeDescription = $surchargeInfo['has_surcharge'] 
-        ? "Invoice {$invoiceLabel} - {$invoice['client_name']} (includes $" . number_format($surchargeAmount, 2) . " processing fee)"
-        : "Invoice {$invoiceLabel} - {$invoice['client_name']}";
+        ? "Invoice {$invoiceLabel} - {$checkoutRecipient} (includes $" . number_format($surchargeAmount, 2) . " processing fee)"
+        : "Invoice {$invoiceLabel} - {$checkoutRecipient}";
     
     // Build URLs
     $host = $_SERVER['HTTP_HOST'] ?? '';
@@ -107,7 +111,7 @@ try {
     }
     
     $brandName = $appConfig['brand_name'] ?? 'Project Alpha';
-    $description = "Invoice {$invoiceLabel} - {$invoice['client_name']}";
+    $description = "Invoice {$invoiceLabel} - {$checkoutRecipient}";
     
     $session = $stripe->createCheckoutSessionWithSurcharge(
         $amountDue,

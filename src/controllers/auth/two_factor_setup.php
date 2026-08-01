@@ -20,16 +20,19 @@ if (!isset($_SESSION['user'])) {
 }
 
 $userId = (int)$_SESSION['user']['id'];
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST');
+    exit('Two-factor setup actions require POST.');
+}
+$action = $_POST['action'] ?? '';
 
-// CSRF check
+// Every setup mutation is protected by the form-specific CSRF token.
 require_once __DIR__ . '/../../utils/csrf_sf.php';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $submitted = $_POST['_token'] ?? '';
-    if (!csrf_sf_is_valid('2fa_setup', is_string($submitted) ? $submitted : '')) {
-        header('Location: /?page=2fa-setup&error=' . urlencode('Invalid request (CSRF)'));
-        exit;
-    }
+$submitted = $_POST['_token'] ?? '';
+if (!csrf_sf_is_valid('2fa_setup', is_string($submitted) ? $submitted : '')) {
+    header('Location: /?page=2fa-setup&error=' . urlencode('Invalid request (CSRF)'));
+    exit;
 }
 
 try {
@@ -83,7 +86,9 @@ try {
             }
             $pdo->prepare('UPDATE users SET totp_reenroll_required = 0 WHERE id = ?')->execute([$userId]);
             $pdo->commit();
-            
+            App\Security\SessionPolicy::rotateAuthenticatedId();
+            $_SESSION['authn']['reauthenticated_at'] = time();
+
             app_log('2fa', '2FA enabled', ['user_id' => $userId]);
             
             header('Location: /?page=2fa-setup&success=enabled');
@@ -124,6 +129,8 @@ try {
             $version->execute([$userId]);
             $_SESSION['user']['auth_version'] = (int)$version->fetchColumn();
             $pdo->commit();
+            App\Security\SessionRevocation::revokeUserSessions($pdo, $userId, session_id());
+            App\Security\SessionPolicy::rotateAuthenticatedId();
             app_log('2fa', '2FA disabled', ['user_id' => $userId]);
         }
         

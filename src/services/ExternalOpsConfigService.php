@@ -50,9 +50,29 @@ final class ExternalOpsConfigService
         }
 
         $applicationKey = strtolower(trim((string)($values['external_ops_application_key'] ?? '')));
+        $configuredEnabled = filter_var(
+            $values['external_ops_enabled'] ?? 'false',
+            FILTER_VALIDATE_BOOLEAN
+        );
+        $deliveryIssues = self::deliveryIssues([
+            'application_key' => $applicationKey,
+            'webhook_url' => trim((string)($values['external_ops_webhook_url'] ?? '')),
+            'access_client_id' => trim((string)($credentials['access_client_id'] ?? '')),
+            'access_client_secret' => trim((string)($credentials['access_client_secret'] ?? '')),
+            'hmac_secret' => trim((string)($credentials['hmac_secret'] ?? '')),
+            'credentials_unreadable' => $credentialsUnreadable,
+        ]);
+        $configurationComplete = $deliveryIssues === [];
+        $deliveryReady = $configuredEnabled && $configurationComplete;
 
         return [
-            'enabled' => filter_var($values['external_ops_enabled'] ?? 'false', FILTER_VALIDATE_BOOLEAN),
+            // Preserve administrator intent separately from the effective runtime state.
+            'configured_enabled' => $configuredEnabled,
+            // Keep the established enabled contract for event capture and entitlement access.
+            'enabled' => $configuredEnabled,
+            'configuration_complete' => $configurationComplete,
+            'delivery_ready' => $deliveryReady,
+            'delivery_issues' => $deliveryIssues,
             'application_key' => $applicationKey,
             'label' => trim((string)($values['external_ops_label'] ?? 'External operations')) ?: 'External operations',
             'webhook_url' => trim((string)($values['external_ops_webhook_url'] ?? '')),
@@ -82,7 +102,7 @@ final class ExternalOpsConfigService
         if (mb_strlen($label) > 100) {
             throw new DomainException('The integration label cannot exceed 100 characters.');
         }
-        if (!empty($current['enabled'])
+        if (!empty($current['configured_enabled'])
             && (string)$current['application_key'] !== ''
             && $applicationKey !== (string)$current['application_key']) {
             throw new DomainException('Disable the integration before changing its application key.');
@@ -161,4 +181,58 @@ final class ExternalOpsConfigService
         return $this->load($pdo);
     }
 
+    /**
+     * Return only non-secret setting categories that block outbound delivery.
+     *
+     * @param array<string,mixed> $config
+     * @return list<string>
+     */
+    public static function deliveryIssues(array $config): array
+    {
+        $issues = [];
+        $applicationKey = trim((string)($config['application_key'] ?? ''));
+        if ($applicationKey === '') {
+            $issues[] = 'application key';
+        } elseif (!preg_match('/^[a-z0-9][a-z0-9_-]{1,63}$/', $applicationKey)) {
+            $issues[] = 'valid application key';
+        }
+        $webhookUrl = trim((string)($config['webhook_url'] ?? ''));
+        if ($webhookUrl === '') {
+            $issues[] = 'signed event URL';
+        } else {
+            $parts = parse_url($webhookUrl);
+            $scheme = strtolower((string)($parts['scheme'] ?? ''));
+            $host = strtolower((string)($parts['host'] ?? ''));
+            $localHost = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+            if (!filter_var($webhookUrl, FILTER_VALIDATE_URL) || ($scheme !== 'https' && !$localHost)) {
+                $issues[] = 'valid signed event URL';
+            }
+        }
+        if (!empty($config['credentials_unreadable'])) {
+            $issues[] = 'stored delivery credentials cannot be decrypted';
+            return $issues;
+        }
+        foreach ([
+            'access_client_id' => 'access service-token ID',
+            'access_client_secret' => 'access service-token secret',
+            'hmac_secret' => 'HMAC secret',
+        ] as $field => $label) {
+            if (trim((string)($config[$field] ?? '')) === '') {
+                $issues[] = $label;
+            }
+        }
+        if (!in_array('access service-token ID', $issues, true)
+            && mb_strlen((string)$config['access_client_id']) > 500) {
+            $issues[] = 'valid access service-token ID';
+        }
+        if (!in_array('access service-token secret', $issues, true)
+            && mb_strlen((string)$config['access_client_secret']) > 1000) {
+            $issues[] = 'valid access service-token secret';
+        }
+        $hmacLength = strlen((string)($config['hmac_secret'] ?? ''));
+        if (!in_array('HMAC secret', $issues, true) && ($hmacLength < 32 || $hmacLength > 1000)) {
+            $issues[] = 'valid HMAC secret';
+        }
+        return $issues;
+    }
 }

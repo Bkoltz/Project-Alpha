@@ -16,7 +16,8 @@ try {
 }
 
 $invoices = $pdo->query("
-  SELECT i.id, i.total, COALESCE(p.paid,0) AS paid, i.status, c.name client
+  SELECT i.id, i.total, COALESCE(p.paid,0) AS paid, i.status,
+         i.recipient_presentation_mode, c.name client
   FROM invoices i
   JOIN clients c ON c.id=i.client_id
   LEFT JOIN (
@@ -73,7 +74,7 @@ if ($pref > 0) {
         <select required name="invoice_id" id="invoiceSelect" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
           <option value="">Select invoice...</option>
           <?php foreach ($invoices as $i): $remain = max(0, (float)$i['total'] - (float)$i['paid']); ?>
-            <option value="<?php echo (int)$i['id']; ?>" data-remaining="<?php echo number_format($remain,2,'.',''); ?>" <?php echo $pref===(int)$i['id']?'selected':''; ?>>
+            <option value="<?php echo (int)$i['id']; ?>" data-remaining="<?php echo number_format($remain,2,'.',''); ?>" data-general-recipient="<?php echo ($i['recipient_presentation_mode'] ?? 'named') === 'general' ? '1' : '0'; ?>" <?php echo $pref===(int)$i['id']?'selected':''; ?>>
               #<?php echo (int)$i['id']; ?> - <?php echo htmlspecialchars($i['client']); ?> - $<?php echo number_format((float)$i['total'],2); ?> (<?php echo htmlspecialchars($i['status']); ?>)
             </option>
           <?php endforeach; ?>

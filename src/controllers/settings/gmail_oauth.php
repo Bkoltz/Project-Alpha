@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/crypto.php';
 require_once __DIR__ . '/../../utils/csrf.php';
+require_once __DIR__ . '/../../utils/request_security.php';
 require_once __DIR__ . '/../../services/EmailService.php';
 require_once __DIR__ . '/../../services/EmailProviderManager.php';
 
@@ -19,7 +20,7 @@ function gmail_oauth_redirect_uri(array $appConfig): string
         $host = 'https://' . $host;
     }
     if ($host === '') {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https' ? 'https' : 'http';
+        $scheme = request_is_https() ? 'https' : 'http';
         $host = $scheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
     }
     return rtrim($host, '/') . '/?page=settings/gmail-oauth&action=callback';
@@ -60,11 +61,15 @@ if ($clientId === '' || !is_string($clientSecret) || $clientSecret === '') {
 }
 
 if ($action === 'connect') {
-    $csrf = (string)($_GET['csrf'] ?? '');
-    if ($csrf === '' || !hash_equals(csrf_token(), $csrf)) {
-        header('Location: ' . $return . '&email_err=' . rawurlencode('Invalid Google connection request.'));
-        exit;
+    $csrf = (string)($_POST['csrf'] ?? '');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST'
+        || $csrf === ''
+        || !hash_equals(csrf_token(), $csrf)) {
+        http_response_code(405);
+        header('Allow: POST');
+        exit('Invalid Google connection request.');
     }
+    App\Security\SessionPolicy::rotateAuthenticatedId();
     $state = bin2hex(random_bytes(24));
     $verifier = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
     $_SESSION['gmail_oauth'] = ['state' => $state, 'verifier' => $verifier, 'created_at' => time()];

@@ -61,32 +61,7 @@ function nav_can(string $permission): bool {
   <script src="<?php echo htmlspecialchars(asset_url('/assets/js/item-library.js'), ENT_QUOTES, 'UTF-8'); ?>" data-pa-shell-asset defer></script>
   <script src="<?php echo htmlspecialchars(asset_url('/assets/js/workforce.js'), ENT_QUOTES, 'UTF-8'); ?>" data-pa-shell-asset defer></script>
   <script src="<?php echo htmlspecialchars(asset_url('/assets/item-autocomplete.js'), ENT_QUOTES, 'UTF-8'); ?>" data-pa-shell-asset defer></script>
-  <script>
-    (function() {
-      var timer = null;
-      function scheduleRefresh() {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(function() {
-          if (document.visibilityState === 'visible' && !isFormDirty()) {
-            location.reload();
-          } else {
-            scheduleRefresh();
-          }
-        }, 300000);
-      }
-      function isFormDirty() {
-        var inputs = document.querySelectorAll('input, textarea, select');
-        for (var i = 0; i < inputs.length; i++) {
-          if (inputs[i].type === 'hidden' || inputs[i].type === 'submit') continue;
-          if (inputs[i].value !== inputs[i].defaultValue) return true;
-        }
-        return false;
-      }
-      scheduleRefresh();
-      document.addEventListener('click', scheduleRefresh);
-      document.addEventListener('keypress', scheduleRefresh);
-    })();
-  </script>
+
 </head>
 
 <body>
@@ -274,7 +249,7 @@ function nav_can(string $permission): bool {
           <?php else: ?>
             <a class="settings" href="/?page=account" data-page="account" style="margin-top:8px;display:block">My Account</a>
           <?php endif; ?>
-          <a class="settings" href="/?page=logout" data-skip-nav style="margin-top:8px;display:block">Logout</a>
+          <form method="post" action="/?page=logout" data-skip-nav style="margin-top:8px"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars((string)($_SESSION['csrf'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><button class="settings" type="submit" style="display:block;width:100%;text-align:left;border:0;background:none;cursor:pointer">Logout</button></form>
         </div>
       </div>
     </aside>
