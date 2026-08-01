@@ -9,6 +9,9 @@ CRON_LOG=/var/www/config/logs/cron/cron.log
 
 # Times are interpreted in the PA system timezone applied by entrypoint.sh.
 
+# Process the disabled-by-default internal notification relay queue.
+* * * * * root . /etc/environment && php /var/www/src/cron/process_notification_relay.php >> $CRON_LOG 2>&1
+
 # Rotate system and cron logs above 10 MB - daily at 1:15 AM
 15 1 * * * root . /etc/environment && php /var/www/src/cron/rotate_logs.php >> $CRON_LOG 2>&1
 

@@ -108,6 +108,10 @@ class EmailService {
      *   - envelope_from: override envelope sender
      *   - attachments: array of ['filename','content','mime']
      *   - is_html:     whether body is HTML (default true)
+     *   - require_configured_provider: fail if SMTP is not configured; never use PHP mail()
+     *   - allow_transport_fallback: allow the legacy minimal SMTP retry after PHPMailer fails
+     *   - message_id: optional stable RFC 5322 Message-ID
+     *   - transport_timeout_seconds: PHPMailer connect/command timeout (default 300)
      *
      * @param string $to
      * @param string $subject
@@ -128,6 +132,10 @@ class EmailService {
         $envelope   = trim((string)($options['envelope_from'] ?? ($cfg['username'] ?: $fromEmail)));
         $attachments = is_array($options['attachments'] ?? null) ? $options['attachments'] : [];
         $isHtml     = (bool)($options['is_html'] ?? true);
+        $requireConfiguredProvider = (bool)($options['require_configured_provider'] ?? false);
+        $allowTransportFallback = (bool)($options['allow_transport_fallback'] ?? true);
+        $messageId = trim((string)($options['message_id'] ?? ''));
+        $transportTimeout = max(5, min(300, (int)($options['transport_timeout_seconds'] ?? 300)));
         $body       = self::applyAutomatedNotice($body, $isHtml, $appConfig);
 
         $sent = false;
@@ -140,8 +148,20 @@ class EmailService {
             }
 
             // PHPMailer (supports attachments)
-            [$ok, $msg] = mailer_send($cfg, $to, $subject, $body, $fromEmail, $fromName, $envelope, $attachments);
-            if (!$ok) {
+            [$ok, $msg] = mailer_send(
+                $cfg,
+                $to,
+                $subject,
+                $body,
+                $fromEmail,
+                $fromName,
+                $envelope,
+                $attachments,
+                $isHtml,
+                $messageId,
+                $transportTimeout
+            );
+            if (!$ok && $allowTransportFallback) {
                 // Fallback minimal SMTP without attachments
                 [$ok2, $msg2] = smtp_send($cfg, $to, $subject, $body, $fromEmail, $fromName, $envelope);
                 $ok = $ok2;
@@ -149,9 +169,11 @@ class EmailService {
             }
             $sent = $ok;
             $err  = $ok ? '' : ($msg ?: 'SMTP send failed');
+        } elseif ($requireConfiguredProvider) {
+            return [false, 'Configured email provider is unavailable'];
         }
 
-        if (!$sent) {
+        if (!$sent && !$requireConfiguredProvider) {
             // Fallback: PHP mail()
             $contentType = $isHtml ? 'text/html' : 'text/plain';
             $headers = "MIME-Version: 1.0\r\n" .

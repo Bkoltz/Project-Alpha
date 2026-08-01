@@ -8,6 +8,7 @@ On container startup, the entrypoint also runs `stripe_reconciliation.php --star
 
 | Local schedule | Script | Purpose |
 |---|---|---|
+| Every minute | `process_notification_relay.php` | Process the disabled-by-default internal notification relay queue |
 | Daily 02:00 | `generate_recurring_invoices.php` | Generate due long-term invoices and catch up missed periods |
 | Hourly at :30 | `backup_database.php --scheduled` | Creates rotating backups when the configured local backup hour matches |
 | Daily 03:00 | `auto_terminate_contracts.php` | Complete contracts whose configured end date has passed |
@@ -55,6 +56,7 @@ The container schedule always starts with the service. Individual scripts also h
 - invoice due and overdue reminder toggles
 - invoice email-on-generation toggle
 - Stripe and SMTP configuration
+- internal notification relay enablement and policy (disabled by default)
 
 ## Troubleshooting
 

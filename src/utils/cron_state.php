@@ -75,6 +75,9 @@ function cron_state_ensure_schema(PDO $pdo): void {
             'stripe_reconciliation',
             'sync_merchant_rate',
         ];
+        if (filter_var(getenv('NOTIFICATION_RELAY_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN)) {
+            $jobs[] = 'process_notification_relay';
+        }
         $seed = $pdo->prepare('
             INSERT INTO cron_job_runs (job_name, last_run, status)
             SELECT ?, NULL, "success"

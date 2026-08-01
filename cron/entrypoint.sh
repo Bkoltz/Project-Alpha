@@ -19,7 +19,7 @@ fi
 # Cron does NOT inherit the container's env vars, so we dump them
 # to /etc/environment which each cron job sources before running.
 printenv | awk -F= '
-  /^(MYSQL_|DB_|APP_|STRIPE_|SMTP_|BACKUP_)/ {
+  /^(MYSQL_|DB_|APP_|STRIPE_|SMTP_|BACKUP_|NOTIFICATION_RELAY_)/ {
     value = substr($0, index($0, "=") + 1)
     gsub(/"/, "\\\"", value)
     print $1 "=\"" value "\""
