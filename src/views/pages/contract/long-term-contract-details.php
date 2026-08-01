@@ -570,15 +570,13 @@ $isOngoing = empty($contract['end_date']);
         <td colspan="3" style="padding:12px;font-weight:700;font-size:15px;color:#065f46">Amount Per Invoice</td>
         <td style="padding:12px;font-weight:700;font-size:16px;color:#065f46;text-align:right">$<?php echo number_format($invoiceAmount,2); ?></td>
       </tr>
-      <tr><td colspan="4" style="border-top:1px solid #eee"></td></tr>
-      <tr>
-        <td colspan="4" style="padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
-          <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.'); ?>
-        </td>
-      </tr>
     </tbody>
   </table>
 
+
+  <div style="margin-top:24px;padding:12px 10px;color:#374151;font-size:13px;line-height:1.4">
+    <?php echo htmlspecialchars($appConfig['signature_agreement'] ?? 'By signing below, I acknowledge that this is a multi-page contract and that I have read and agree to the recurring billing terms and conditions.'); ?>
+  </div>
   <!-- Signature block -->
   <table style="width:100%;border-collapse:collapse;margin-top:20px">
     <?php foreach ($signatures as $sig): ?>
@@ -594,7 +592,6 @@ $isOngoing = empty($contract['end_date']);
     </tr>
     <?php endforeach; ?>
   </table>
-
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
   <?php if ($termsText !== ''): ?>
@@ -608,6 +605,7 @@ $isOngoing = empty($contract['end_date']);
       <li>Work product ownership and usage rights per agreement.</li>
     </ul>
   <?php endif; ?>
+
 </section>
 <style>
   .no-print{display:flex}
