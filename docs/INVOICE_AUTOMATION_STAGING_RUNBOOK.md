@@ -135,6 +135,8 @@ docker compose -f docker-compose.staging.yml run --rm migrate \
 
 For a release that includes general-recipient invoices, the sequence must contain 60 migrations and report session migration `0057`, invoice automation migrations `0058` and `0059`, then `0060_general_recipient_invoices.sql`. Resolve any checksum, sequence, backup, or schema error instead of bypassing the migrator.
 
+For the combined pending-work promotion, the sequence must contain 64 migrations. After `0060`, verify `0061_user_notification_preferences.sql`, `0062_client_portal_foundation.sql`, `0063_notification_relay.sql`, and `0064_sync_contract_v2_foundation.sql` in that order. The client portal, notification relay, and Sync Contract v2 foundations remain disabled unless their separate security and production gates are intentionally configured; applying their tables does not authorize enabling their routes or sending email.
+
 Apply through the normal one-shot service:
 
 ```bash
