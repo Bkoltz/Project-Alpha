@@ -1,9 +1,10 @@
 <?php
 // src/utils/api_auth.php
-if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+if (!defined('PA_STATELESS_API_NO_SESSION') && session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/api_keys_schema.php';
 require_once __DIR__ . '/api_scopes.php';
+require_once __DIR__ . '/api_ip_allowlist.php';
 
 function api_json_error(int $code, string $msg): void {
     header('Content-Type: application/json');
@@ -28,7 +29,10 @@ function api_get_client_ip(): string {
     return get_client_ip();
 }
 
-function api_require_key(array $requiredScopes = []) {
+function api_require_key(
+    array $requiredScopes = [],
+    bool $allowFullScope = true
+) {
     global $pdo;
     $token = api_get_token();
     if (!$token) api_json_error(401, 'Missing API key');
@@ -41,14 +45,14 @@ function api_require_key(array $requiredScopes = []) {
         if (!$row) api_json_error(401, 'Invalid API key');
         // Optional IP allowlist
         $ip = get_client_ip();
-        if (!empty($row['allowed_ips'])) {
-            $ips = array_filter(array_map('trim', preg_split('/[\s,]+/', (string)$row['allowed_ips'])));
-            if ($ips && !in_array($ip, $ips, true)) api_json_error(403, 'IP not allowed');
+        if (trim((string)($row['allowed_ips'] ?? '')) !== '') {
+            $ips = api_parse_exact_ip_allowlist($row['allowed_ips']);
+            if ($ips === [] || !api_ip_matches_exact_allowlist($ip, $ips)) api_json_error(403, 'IP not allowed');
         }
         // Scope check (simple CSV/JSON list in column)
         if ($requiredScopes) {
             foreach ($requiredScopes as $need) {
-                if (!api_key_has_scope($row['scopes'] ?? '', (string)$need)) {
+                if (!api_key_has_scope($row['scopes'] ?? '', (string)$need, $allowFullScope)) {
                     api_json_error(403, 'Insufficient API scope: ' . (string)$need);
                 }
             }

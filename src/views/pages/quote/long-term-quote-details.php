@@ -367,20 +367,6 @@ $isOngoing = empty($quote['end_date']);
     </tbody>
   </table>
 
-  <!-- Signature block -->
-  <table style="width:100%;border-collapse:collapse;margin-top:50px">
-    <tr>
-      <td style="width:60%;vertical-align:bottom;padding-right:24px">
-        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
-        <div style="margin-top:4px;color:#4b5563">Client Signature</div>
-      </td>
-      <td style="width:40%;vertical-align:bottom">
-        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
-        <div style="margin-top:4px;color:#4b5563">Date</div>
-      </td>
-    </tr>
-  </table>
-
   <?php if (!isset($appConfig['quotes_show_terms']) || (int)$appConfig['quotes_show_terms'] === 1): ?>
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
@@ -396,6 +382,20 @@ $isOngoing = empty($quote['end_date']);
     </ul>
   <?php endif; ?>
   <?php endif; ?>
+  <!-- Signature block -->
+  <table style="width:100%;border-collapse:collapse;margin-top:50px">
+    <tr>
+      <td style="width:60%;vertical-align:bottom;padding-right:24px">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Client Signature</div>
+      </td>
+      <td style="width:40%;vertical-align:bottom">
+        <div style="border-top:1px solid #111;width:100%;padding-top:4px"></div>
+        <div style="margin-top:4px;color:#4b5563">Date</div>
+      </td>
+    </tr>
+  </table>
+
 </section>
 <style>
   .no-print{display:flex}

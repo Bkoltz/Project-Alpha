@@ -257,7 +257,8 @@ final class WorkTimeInvoiceEligibilityService
 
         return [
             'role' => $role,
-            'administrative' => in_array($role, ['admin', 'owner'], true),
+            'administrative' => in_array($role, ['admin', 'owner'], true)
+                || WorkforceSettings::canManageAllTime($this->pdo, $actorId),
             'verified_owner' => (bool)$ownerStmt->fetchColumn(),
         ];
     }

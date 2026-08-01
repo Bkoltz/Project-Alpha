@@ -17,7 +17,7 @@ $settingsRegistry = pa_settings_visible_registry($allSettingsRegistry, $settings
 $requestedTab = isset($_GET['tab']) ? preg_replace('/[^a-z0-9\-]/i', '', (string)$_GET['tab']) : '';
 $requestedCategory = isset($_GET['category']) ? preg_replace('/[^a-z0-9\-]/i', '', (string)$_GET['category']) : '';
 
-// Legacy Settings → Account links now land in the account/security category.
+// Legacy Settings → Account links now land in the People & Access category.
 if ($requestedTab === 'account') {
   $requestedTab = '';
   $requestedCategory = 'account';

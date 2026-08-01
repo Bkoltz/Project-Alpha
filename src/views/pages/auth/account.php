@@ -12,6 +12,21 @@ $uid = (int)($_SESSION['user']['id'] ?? 0);
 $myEmail = $_SESSION['user']['email'] ?? '';
 $myRole = $_SESSION['user']['role'] ?? 'user';
 
+// Load current notification preferences (default opted in when no row exists)
+$notifPrefs = ['notify_processor_invoice_paid' => 1];
+try {
+    $npStmt = $pdo->prepare(
+        'SELECT notify_processor_invoice_paid FROM user_notification_preferences WHERE user_id=? LIMIT 1'
+    );
+    $npStmt->execute([$uid]);
+    $npRow = $npStmt->fetch(PDO::FETCH_ASSOC);
+    if ($npRow !== false) {
+        $notifPrefs['notify_processor_invoice_paid'] = (int)$npRow['notify_processor_invoice_paid'];
+    }
+} catch (Throwable $npErr) {
+    // Table may not exist until migration runs; fall back to default.
+}
+
 // Get 2FA status
 $twofaEnabled = false;
 try {
@@ -51,7 +66,13 @@ try {
   </div>
 
   <?php if ($myRole === 'admin'): ?>
-    <div class="alert alert-info">Use this page to manage your own password and two-factor authentication. Use Accounts to manage other users.</div>
+    <div class="alert alert-info">Use this page to manage your own password, two-factor authentication, and notification preferences. Use Accounts to manage other users.</div>
+  <?php endif; ?>
+
+  <?php if (!empty($_GET['notif_saved'])): ?>
+    <div class="alert alert-success">Notification preferences saved.</div>
+  <?php elseif (!empty($_GET['notif_error'])): ?>
+    <div class="alert alert-danger"><?php echo htmlspecialchars((string)$_GET['notif_error']); ?></div>
   <?php endif; ?>
 
   <?php if (!empty($_GET['pwd']) && $_GET['pwd']==='1'): ?>
@@ -130,6 +151,32 @@ try {
         <h3 style="margin-top:0">Account Info</h3>
         <p style="margin:4px 0;color:#6b7280;font-size:14px;">Email: <strong style="color:#111;"><?php echo htmlspecialchars($myEmail); ?></strong></p>
         <p style="margin:4px 0;color:#6b7280;font-size:14px;">Role: <strong style="color:#111;"><?php echo htmlspecialchars(ucfirst($myRole)); ?></strong></p>
+      </div>
+
+      <div id="notifications" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;scroll-margin-top:24px;">
+        <h3 style="margin-top:0">Notification Preferences</h3>
+        <?php
+          $isAdminOrOwner = in_array($myRole, ['admin', 'owner'], true);
+          $scopeNote = $isAdminOrOwner
+            ? 'As an admin/owner you receive notifications for <strong>all</strong> invoices.'
+            : 'You receive notifications only for <strong>invoices you created</strong>.';
+        ?>
+        <p style="margin:0 0 12px;color:#6b7280;font-size:13px;"><?php echo $scopeNote; ?> Manual payments are never included.</p>
+        <form method="post" action="/?page=account-notification-prefs" style="display:grid;gap:12px;">
+          <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+            <input type="checkbox" name="notify_processor_invoice_paid" value="1"
+                   <?php echo $notifPrefs['notify_processor_invoice_paid'] ? 'checked' : ''; ?>
+                   style="margin-top:3px;width:16px;height:16px;flex-shrink:0;">
+            <div>
+              <div style="font-weight:600;">Processor payment received</div>
+              <div style="font-size:13px;color:#6b7280;">Email me when a client pays <?php echo $isAdminOrOwner ? 'any invoice' : 'an invoice I created'; ?> via Stripe or another automatic payment processor.</div>
+            </div>
+          </label>
+          <div>
+            <button type="submit" style="padding:8px 14px;border-radius:8px;border:0;background:var(--nav-accent);color:#fff;font-weight:600;cursor:pointer;">Save preferences</button>
+          </div>
+        </form>
       </div>
 
       <?php if (!empty($devices)): ?>

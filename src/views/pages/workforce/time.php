@@ -398,7 +398,13 @@ foreach ($entries as $entry) {
             <td><?= $h($entry['description']) ?></td>
             <td class="text-right">
               <?php if ($canEditEntry): ?>
-                <details class="workforce-entry-edit"><summary class="btn btn-sm"><?= $h($editActionLabel) ?></summary>
+                <details class="workforce-entry-edit">
+                  <summary class="btn btn-sm"><?= $h($editActionLabel) ?></summary>
+                  <?php if ($canonicalWorkflowState === 'submitted'): ?>
+                  <div class="alert" style="margin:10px 0 6px;padding:10px 12px;border:1px solid #fde68a;background:#fffbeb;border-radius:8px;font-size:13px">
+                    <strong>Withdraw &amp; edit:</strong> Saving pulls this entry out of the review queue and returns it to draft. Make your changes, then re-submit it for review when it&rsquo;s ready.
+                  </div>
+                  <?php endif; ?>
                   <form class="workforce-form" method="post" action="/?page=workforce/action" data-workforce-entry-form>
                     <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="edit"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>"><input type="hidden" name="work_assignment_id" value="<?= (int)($entry['work_assignment_id'] ?? 0) ?>" data-job-id="<?= (int)($entry['job_id'] ?? 0) ?>">
                     <?php if ($manageAll): ?>
@@ -422,13 +428,18 @@ foreach ($entries as $entry) {
                         <fieldset class="workforce-outcome workforce-outcome--compensation"><legend>Worker compensation</legend><input type="hidden" name="is_payable" value="0"><label class="workforce-outcome__choice"><input type="checkbox" name="is_payable" value="1" <?= $entry['is_payable'] ? 'checked' : '' ?>> <span>Eligible for compensation</span></label></fieldset>
                       </div>
                     <?php endif; ?>
-                    <?php if ($canonicalWorkflowState === 'submitted'): ?><p class="muted text-sm mb-0">Saving withdraws this revision from review and returns the updated entry to draft. Submit it again when it is ready.</p><?php endif; ?>
                     <button class="btn btn-primary btn-sm"><?= $canonicalWorkflowState === 'submitted' ? 'Withdraw and save draft' : 'Save changes' ?></button>
                   </form>
                 </details>
               <?php endif; ?>
               <?php if ($canonicalWorkflowState === 'confirmed' && (string)$entry['status'] === 'approved'): ?>
-                <details class="workforce-entry-edit"><summary class="btn btn-sm"><?= $manageAll ? 'Edit' : 'Request correction' ?></summary>
+                <details class="workforce-entry-edit">
+                  <summary class="btn btn-sm"><?= $manageAll ? 'Edit confirmed time' : 'Request correction' ?></summary>
+                  <?php if ($manageAll): ?>
+                  <div class="alert" style="margin:10px 0 6px;padding:10px 12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;font-size:13px">
+                    <strong>Audited edit:</strong> Confirmed time is immutable. This creates a new audited revision &mdash; existing approval, billing, and pay history is preserved. A reason is required for the audit trail.
+                  </div>
+                  <?php endif; ?>
                   <form class="workforce-form" method="post" action="/?page=workforce/action" data-workforce-entry-form>
                     <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="action" value="<?= $manageAll ? 'admin-correction-apply' : 'correction-request' ?>"><input type="hidden" name="entry_id" value="<?= $h($entry['id']) ?>"><?php if ($manageAll): ?><input type="hidden" name="entry_user_id" value="<?= $selectedUserId ?>"><?php endif; ?>
                     <div class="workforce-context-grid workforce-context-grid--time"><label class="field"><span class="label">Corrected start</span><input class="input" type="datetime-local" name="start_time" value="<?= $h($inputTime($entry['start_time'])) ?>" required></label><label class="field"><span class="label">Corrected end</span><input class="input" type="datetime-local" name="end_time" value="<?= $h($inputTime($entry['end_time'])) ?>" required></label></div>
@@ -451,8 +462,8 @@ foreach ($entries as $entry) {
                       <fieldset class="workforce-outcome workforce-outcome--compensation"><legend>Worker compensation</legend><input type="hidden" name="is_payable" value="0"><label class="workforce-outcome__choice"><input type="checkbox" name="is_payable" value="1" <?= !empty($entry['is_payable']) ? 'checked' : '' ?>> <span>Eligible for compensation</span></label></fieldset>
                     </div><?php endif; ?>
                     <label class="field"><span class="label">Corrected description</span><textarea class="input" name="description" rows="2"><?= $h($entry['description']) ?></textarea></label>
-                    <label class="field"><span class="label">Why is this correction needed?</span><textarea class="input" name="reason" rows="2" maxlength="1000" required></textarea></label>
-                    <p class="muted text-sm mb-0"><?= $manageAll ? 'Saving creates an audited revision. Existing approval, billing, invoice, and pay history stays intact; resulting differences follow the correction ledger.' : 'This does not overwrite confirmed history. An authorized reviewer approves or rejects the proposed revision.' ?></p>
+                    <label class="field"><span class="label">Reason for correction <small>required for audit trail</small></span><textarea class="input" name="reason" rows="2" maxlength="1000" required placeholder="e.g. Wrong end time recorded, correcting from 3:30 PM to 4:00 PM"></textarea></label>
+                    <?php if (!$manageAll): ?><p class="muted text-sm mb-0">This does not overwrite confirmed history. An authorized reviewer approves or rejects the proposed revision.</p><?php endif; ?>
                     <button class="btn btn-primary btn-sm" type="submit"><?= $manageAll ? 'Save audited edit' : 'Submit correction request' ?></button>
                   </form>
                 </details>

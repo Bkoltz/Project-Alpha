@@ -576,7 +576,6 @@ if ($termsText === '') {
     </tr>
   </table>
   <?php endforeach; ?>
-
   <div style="page-break-after:always"></div>
   <h3>Terms and Conditions</h3>
   <?php if ($termsText !== ''): ?>
@@ -589,6 +588,7 @@ if ($termsText === '') {
       <li>Work product ownership and usage rights per agreement.</li>
     </ul>
   <?php endif; ?>
+
 
 </section>
 <style>

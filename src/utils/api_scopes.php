@@ -36,7 +36,13 @@ function api_scope_catalog(): array
         'ops.sync.read' => [
             'label' => 'External operations synchronization',
             'description' => 'Read the least-privilege workforce, client, Project, and service-location snapshot used by a configured external operations application.',
-            'endpoints' => ['api-ops-snapshot'],
+            'endpoints' => ['api-ops-snapshot', 'api-ops-snapshot-v2'],
+        ],
+        'notifications.enqueue' => [
+            'label' => 'Internal notification relay',
+            'description' => 'Enqueue allowlisted transactional notifications. Requires an IP-restricted dedicated key; full-access keys do not inherit this scope.',
+            // Served only by an operator-configured private listener; never by public/index.php.
+            'endpoints' => [],
         ],
     ];
 }
@@ -107,10 +113,10 @@ function api_scopes_to_storage(array $scopes): string
     return $normalized ? implode(',', $normalized) : '';
 }
 
-function api_key_has_scope($storedScopes, string $requiredScope): bool
+function api_key_has_scope($storedScopes, string $requiredScope, bool $allowFull = true): bool
 {
     $scopes = api_normalize_scopes($storedScopes);
-    if (in_array('full', $scopes, true)) {
+    if ($allowFull && in_array('full', $scopes, true)) {
         return true;
     }
     return in_array(strtolower($requiredScope), $scopes, true);
