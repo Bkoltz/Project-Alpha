@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/acl.php';
 require_once __DIR__ . '/../../utils/invoice_lifecycle.php';
+require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../utils/invoice_content_links.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
@@ -13,9 +14,13 @@ if ($id <= 0) {
     exit;
 }
 require_record_ownership($pdo, 'invoices', $id);
+$invoiceStmt = $pdo->prepare('SELECT recipient_presentation_mode FROM invoices WHERE id=? LIMIT 1');
+$invoiceStmt->execute([$id]);
+$invoice = $invoiceStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$isGeneralRecipientInvoice = pa_invoice_is_general_recipient($invoice);
 
 try {
-    if (invoice_should_prompt_for_missing_content_links($pdo, 'invoice', $id, $appConfig)) {
+    if (!$isGeneralRecipientInvoice && invoice_should_prompt_for_missing_content_links($pdo, 'invoice', $id, $appConfig)) {
         $missingLinkBehavior = invoice_missing_content_links_behavior($appConfig);
         if ($missingLinkBehavior === 'block') {
             header('Location: /?page=invoice/invoice-details&id=' . $id . '&email_err=' . urlencode(invoice_missing_content_links_message()));
@@ -27,10 +32,16 @@ try {
         }
     }
     $userId = (int)($_SESSION['user']['id'] ?? 0) ?: null;
-    invoice_finalize($pdo, $id, $appConfig, 'manual_finalize', $userId);
-    $sent = invoice_send_finalized($pdo, $id, $appConfig, 'manual_finalize_' . date('YmdHis'));
-    audit_log($pdo, 'invoice.finalize', 'invoice', $id, ['sent' => $sent, 'user_id' => $userId]);
-    $message = $sent ? '&finalized=1&emailed=1' : '&finalized=1&email_err=' . urlencode('Invoice finalized, but email was not sent.');
+    if ($isGeneralRecipientInvoice) {
+        $link = invoice_finalize_and_create_general_recipient_link($pdo, $id, $appConfig, $userId);
+        audit_log($pdo, 'invoice.finalize_with_manual_link', 'invoice', $id, ['user_id' => $userId, 'existing_link' => $link['existing']]);
+        $message = '&finalized=1&general_public_link=' . rawurlencode($link['token']);
+    } else {
+        invoice_finalize($pdo, $id, $appConfig, 'manual_finalize', $userId);
+        $sent = invoice_send_finalized($pdo, $id, $appConfig, 'manual_finalize_' . date('YmdHis'));
+        audit_log($pdo, 'invoice.finalize', 'invoice', $id, ['sent' => $sent, 'user_id' => $userId]);
+        $message = $sent ? '&finalized=1&emailed=1' : '&finalized=1&email_err=' . urlencode('Invoice finalized, but email was not sent.');
+    }
     header('Location: /?page=invoice/invoice-details&id=' . $id . $message);
 } catch (Throwable $e) {
     header('Location: /?page=invoice/invoice-details&id=' . $id . '&error=' . urlencode($e->getMessage()));

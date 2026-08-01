@@ -46,7 +46,7 @@ try {
         }
         try {
             $pdo->exec("ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL");
-            $up = $pdo->prepare('UPDATE public_links SET expire_when_paid=1, expires_at=NULL WHERE token=? AND revoked=0 AND document_type IN ("invoice","project_invoice")');
+            $up = $pdo->prepare('UPDATE public_links SET expire_when_paid=1, expires_at=NULL WHERE token=? AND revoked=0 AND expires_at IS NULL AND document_type IN ("invoice","project_invoice")');
             $up->execute([$token]);
             $linkRow['expire_when_paid'] = 1;
             $linkRow['expires_at'] = null;

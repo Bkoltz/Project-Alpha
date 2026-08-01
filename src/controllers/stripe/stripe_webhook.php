@@ -259,7 +259,7 @@ function handleCheckoutSessionCompleted($pdo, $session) {
             $status = 'paid';
         }
         
-        $pdo->prepare('UPDATE invoices SET status = ?, amount_paid = ? WHERE id = ?')->execute([$status, $paid, $invoiceId]);
+        $pdo->prepare('UPDATE invoices SET status = ?, amount_paid = ?, paid_at=CASE WHEN ?="paid" THEN COALESCE(paid_at,NOW()) ELSE NULL END WHERE id = ?')->execute([$status, $paid, $status, $invoiceId]);
         
         // Revoke public links if fully paid
         if ($status === 'paid') {
@@ -344,7 +344,7 @@ function handlePaymentIntentSucceeded($pdo, $paymentIntent) {
         $status = ($paid >= $total) ? 'paid' : 'partial';
         
         try {
-            $pdo->prepare('UPDATE invoices SET status = ?, amount_paid = ? WHERE id = ?')->execute([$status, $paid, $invoiceId]);
+            $pdo->prepare('UPDATE invoices SET status = ?, amount_paid = ?, paid_at=CASE WHEN ?="paid" THEN COALESCE(paid_at,NOW()) ELSE NULL END WHERE id = ?')->execute([$status, $paid, $status, $invoiceId]);
         } catch (Throwable $e) {
             $pdo->prepare('UPDATE invoices SET status = ? WHERE id = ?')->execute([$status, $invoiceId]);
         }

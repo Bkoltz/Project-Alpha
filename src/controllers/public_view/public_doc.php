@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../utils/csrf.php';
 require_once __DIR__ . '/../../utils/csrf_sf.php';
 require_once __DIR__ . '/../../utils/public_links.php';
+require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 
 $token = isset($_GET['token']) ? (string)$_GET['token'] : '';
 if ($token === '') {
@@ -55,7 +56,11 @@ try {
     }
   }
 
-  if (in_array((string)$row['document_type'], ['invoice', 'project_invoice'], true) && empty($row['expire_when_paid'])) {
+  // Legacy invoice links without any expiry may be upgraded to expire on
+  // payment. Never rewrite a dated receipt link: general-recipient paid
+  // invoices deliberately retain their seven-day receipt window.
+  if (in_array((string)$row['document_type'], ['invoice', 'project_invoice'], true)
+      && empty($row['expire_when_paid']) && empty($row['expires_at'])) {
     try {
       $pdo->exec("ALTER TABLE public_links MODIFY COLUMN expires_at DATETIME NULL");
       $up = $pdo->prepare('UPDATE public_links SET expire_when_paid=1, expires_at=NULL WHERE token=? AND revoked=0 AND document_type IN ("invoice","project_invoice")');
@@ -110,14 +115,15 @@ try {
 
   // For invoice links, ensure invoice remains in public-viewable states
   if ($type === 'invoice') {
-    $vs = $pdo->prepare('SELECT status, finalized_at, collection_mode FROM invoices WHERE id=? LIMIT 1');
+    $vs = $pdo->prepare('SELECT status, finalized_at, collection_mode, recipient_presentation_mode, paid_at FROM invoices WHERE id=? LIMIT 1');
     $vs->execute([$rid]);
     $publicInvoice = $vs->fetch(PDO::FETCH_ASSOC);
     $invStatus = strtolower((string)($publicInvoice['status'] ?? ''));
     if ($invStatus === '') {
       throw new Exception('invoice_not_found:' . $rid);
     }
-    if (!in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true)) {
+    $isPaidGeneralReceipt = pa_general_recipient_public_receipt_window_open($publicInvoice);
+    if (!in_array($invStatus, ['sent', 'unpaid', 'partial', 'overdue'], true) && !$isPaidGeneralReceipt) {
       throw new Exception('invoice_status_blocked:' . $invStatus);
     }
     $collectionMode = trim((string)($publicInvoice['collection_mode'] ?? ''));

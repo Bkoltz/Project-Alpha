@@ -145,6 +145,7 @@ try {
                     UPDATE public_links
                     SET expire_when_paid = 1, expires_at = NULL
                     WHERE document_type = ? AND document_id = ? AND revoked = 0
+                      AND expires_at IS NULL
                 ');
                 $upgrade->execute([$type, $id]);
             } catch (Throwable $e) { /* older schemas are handled by the query fallback */ }

@@ -12,6 +12,7 @@ require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
+require_once __DIR__ . '/../../utils/general_recipient_invoices.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 require_once __DIR__ . '/../../services/WorkTimeBillingContextService.php';
@@ -30,10 +31,14 @@ $discount_value = (float)($_POST['discount_value'] ?? 0);
 $tax_percent = (float)($_POST['tax_percent'] ?? 0);
 $billing_mode = ($_POST['billing_mode'] ?? 'fixed') === 'hourly' ? 'hourly' : 'fixed';
 $invoiceAction = (string)($_POST['invoice_action'] ?? 'save');
-if (!in_array($invoiceAction, ['save', 'draft', 'finalize_send'], true)) {
+if (!in_array($invoiceAction, ['save', 'draft', 'finalize', 'finalize_send'], true)) {
     $invoiceAction = 'save';
 }
 $finalizeAndSend = $invoiceAction === 'finalize_send';
+$finalizeOnly = $invoiceAction === 'finalize';
+$recipientPresentationMode = ($_POST['recipient_presentation_mode'] ?? '') === PA_GENERAL_RECIPIENT_MODE
+    ? PA_GENERAL_RECIPIENT_MODE
+    : 'named';
 $dueDateWasProvided = trim((string)($_POST['due_date'] ?? '')) !== '';
 $due_date = $_POST['due_date'] ?? null;
 $dueDateSource = $dueDateWasProvided ? 'manual' : 'terms';
@@ -57,6 +62,18 @@ $mileageAllocationIdsByRow = $_POST['mileage_allocation_ids'] ?? [];
 if ($client_id <= 0 || empty($item)) {
     header('Location: /?page=invoice/invoices-create&error=Invalid%20input');
     exit;
+}
+if ($recipientPresentationMode === PA_GENERAL_RECIPIENT_MODE) {
+    // This is intentionally not a client-less invoice: the selected client remains
+    // the internal accounting owner, but no recipient data may leave the system.
+    if ($project_id || $requestedServiceLocationId || !empty($timeEntryIdsByRow) || !empty($legacyTimeEntryIds) || !empty($mileageAllocationIdsByRow)) {
+        header('Location: /?page=invoice/invoices-create&error=' . urlencode('General-recipient invoices must be one-off direct invoices without project, tracked-time, mileage, or service-location links.'));
+        exit;
+    }
+    if ($finalizeAndSend) {
+        header('Location: /?page=invoice/invoices-create&error=' . urlencode('General-recipient invoices cannot be emailed automatically. Finalize it, then create its manual public link.'));
+        exit;
+    }
 }
 if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_id, (int)($_SESSION['user']['id'] ?? 0))) {
     header('Location: /?page=invoice/invoices-create&error=' . urlencode('Select an active or not-started project for this client or organization.'));
@@ -288,32 +305,37 @@ try {
     }
     $stmt = $pdo->prepare(
         'INSERT INTO invoices
-         (client_id,project_id,billing_mode,discount_type,discount_value,tax_percent,
+         (client_id,recipient_presentation_mode,project_id,billing_mode,discount_type,discount_value,tax_percent,
           subtotal,tax_amount,total,balance_due,status,due_date,payment_terms_days,due_date_source,
           custom_fields,organization_id,created_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
     $stmt->execute([
-        $client_id, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
+        $client_id, $recipientPresentationMode, $project_id, $billing_mode, $discount_type, $discount_value, $tax_percent,
         $subtotal, $tax_amount, $total, $total, 'draft', $due_date ?: null,
         $paymentTermsDays, $dueDateSource, $customFieldsJson, $__orgId, $__creator,
     ]);
     $invoice_id = (int)$pdo->lastInsertId();
-    if ($project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
+    if ($recipientPresentationMode !== PA_GENERAL_RECIPIENT_MODE && $project_id && project_uses_monthly_invoice_billing($pdo, $project_id)) {
         $pdo->prepare('UPDATE invoices SET collection_mode="project_aggregate" WHERE id=?')->execute([$invoice_id]);
     }
     // Assign a new Project ID and doc_number
-    if (!empty($derivedJob)) {
+    if ($recipientPresentationMode === PA_GENERAL_RECIPIENT_MODE) {
+        $projectCode = '';
+        $jobId = null;
+    } elseif (!empty($derivedJob)) {
         $projectCode = (string)$derivedJob['job_code'];
         $jobId = (int)$derivedJob['id'];
     } else {
         $projectCode = project_next_code($pdo, $client_id);
         $jobId = JobAssignmentService::ensureForCode($pdo, $client_id, $projectCode, $project_id ?: null, $__creator);
     }
-    $serviceLocationId = document_resolve_service_location($pdo,$client_id,$project_id,$jobId,$requestedServiceLocationId);
+    $serviceLocationId = $recipientPresentationMode === PA_GENERAL_RECIPIENT_MODE
+        ? null
+        : document_resolve_service_location($pdo,$client_id,$project_id,$jobId,$requestedServiceLocationId);
     $pdo->prepare('UPDATE invoices SET project_code=?,job_id=?,service_location_id=? WHERE id=?')->execute([$projectCode, $jobId, $serviceLocationId, $invoice_id]);
     $notes = trim((string)($_POST['project_notes'] ?? ''));
-    if ($notes !== '') {
+    if ($notes !== '' && $recipientPresentationMode !== PA_GENERAL_RECIPIENT_MODE) {
       $up = $pdo->prepare('INSERT INTO project_meta (project_code, client_id, notes) VALUES (?,?,?) ON DUPLICATE KEY UPDATE client_id=VALUES(client_id), notes=VALUES(notes)');
       $up->execute([$projectCode, $client_id, $notes]);
     }
@@ -361,11 +383,11 @@ try {
     );
     
     // Add to project_documents if project_id is set
-    if ($project_id) {
+    if ($project_id && $recipientPresentationMode !== PA_GENERAL_RECIPIENT_MODE) {
         $pdo->prepare('INSERT INTO project_documents (project_id, document_type, document_id) VALUES (?, "invoice", ?)')->execute([$project_id, $invoice_id]);
     }
     
-    audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator]);
+    audit_log($pdo, 'invoice.create', 'invoice', $invoice_id, ['client_id' => $client_id, 'organization_id' => $__orgId, 'created_by' => $__creator, 'recipient_presentation_mode' => $recipientPresentationMode]);
     DocumentRevisionService::snapshotAndSave($pdo,'invoice',$invoice_id,$__creator,false);
     
     $pdo->commit();
@@ -379,10 +401,17 @@ try {
     exit;
 }
 
-if ($finalizeAndSend) {
+if ($finalizeAndSend || $finalizeOnly) {
     try {
+        if ($recipientPresentationMode === PA_GENERAL_RECIPIENT_MODE && $finalizeOnly) {
+            $link = invoice_finalize_and_create_general_recipient_link($pdo, $invoice_id, $appConfig, $__creator);
+            header('Location: /?page=invoice/invoice-details&id=' . $invoice_id . '&general_public_link=' . rawurlencode($link['token']) . '&finalized=1');
+            exit;
+        }
         invoice_finalize($pdo, $invoice_id, $appConfig, 'manual_create', $__creator);
-        invoice_send_finalized($pdo, $invoice_id, $appConfig);
+        if ($finalizeAndSend) {
+            invoice_send_finalized($pdo, $invoice_id, $appConfig);
+        }
     } catch (Throwable $e) {
         @error_log('[invoices_create] Finalization or delivery failed: ' . $e->getMessage());
         header('Location: /?page=invoice/invoice-details&id=' . $invoice_id . '&error=' . urlencode('Invoice saved, but finalization or email failed.'));
