@@ -223,6 +223,7 @@ class ItemAutocomplete {
     // Auto-fill price if field is provided
     if (this.priceField) {
       this.priceField.value = parseFloat(item.unit_price).toFixed(2);
+      this.priceField.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     // When an hourly item is selected, mark the row as hour-based.
