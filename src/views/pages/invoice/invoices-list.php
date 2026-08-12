@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../../utils/invoice_numbers.php';
 require_once __DIR__ . '/../../../utils/twig.php';
 require_once __DIR__ . '/../../../utils/acl.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
+require_once __DIR__ . '/../../../utils/invoice_lifecycle.php';
 require_once __DIR__ . '/../../../config/app.php';
 $netDays = (int)($appConfig['net_terms_days'] ?? 30);
 if ($netDays < 0) $netDays = 0;
@@ -49,12 +50,10 @@ if ($statusFilter === 'paid') {
 } elseif ($statusFilter === 'unpaid') {
   $where[] = "i.status IN ('unpaid','partial')";
 } elseif ($statusFilter === 'overdue') {
-  // overdue = not paid AND (due_date < today OR (due_date IS NULL AND created_at < (today - netDays)))
-  $where[] = "i.status IN ('unpaid','partial') AND (
-    (i.due_date IS NOT NULL AND i.due_date < CURDATE()) OR
-    (i.due_date IS NULL AND i.created_at < ?)
-  )";
-  $params[] = date('Y-m-d', strtotime('-'.$netDays.' days'));
+  // Drafts are never receivables. A row is overdue only after issue and an
+  // explicit due date has passed; never infer it from a draft's creation date.
+  $where[] = "i.status IN ('sent','unpaid','partial','overdue')
+    AND i.due_date IS NOT NULL AND i.due_date < CURDATE()";
 } elseif ($statusFilter === 'void') {
   $where[] = "i.status='void'";
 }
@@ -195,17 +194,11 @@ $clients = $pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archi
             $rowStyle = 'background:#ecfdf5;';
           } elseif ($status === 'void') {
             $rowStyle = 'background:#f3f4f6;'; // gray for void
-          } else {
-            $today = strtotime('today');
-            $due = isset($r['due_date']) && $r['due_date'] ? strtotime($r['due_date']) : null;
-            if ($due === null) {
-              // NET terms from settings
-              $due = strtotime('+'.$netDays.' days', strtotime($r['created_at']));
-            }
-            if ($due < $today) {
+          } elseif (invoice_is_collectible_status((string)$status)) {
+            if (invoice_is_past_due($r)) {
               $rowStyle = 'background:#fef2f2;'; // red overdue
             } else {
-              $rowStyle = 'background:#fffbeb;'; // yellow within net
+              $rowStyle = 'background:#fffbeb;'; // issued, not yet overdue
             }
           }
           ?>
