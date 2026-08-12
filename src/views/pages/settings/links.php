@@ -107,7 +107,7 @@ $dropboxCallbackUri = rtrim($dropboxCallbackBase, '/') . '/?page=settings/dropbo
     </div>
 
     <!-- Stats Banner -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:24px">
         <div style="padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px">
             <div style="font-size:24px;font-weight:700;color:#0369a1"><?php echo $linkStats['total_links']; ?></div>
             <div style="font-size:13px;color:#075985">Total Links</div>
