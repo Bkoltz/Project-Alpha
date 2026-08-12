@@ -13,6 +13,32 @@ function invoice_is_collectible_status(string $status): bool
     return in_array(strtolower($status), ['sent', 'unpaid', 'partial', 'overdue'], true);
 }
 
+/**
+ * A draft is work in progress, not a receivable.  Only an issued collectible
+ * invoice with an explicit due date in the past may be presented as overdue.
+ *
+ * @param array{status?:mixed,due_date?:mixed} $invoice
+ */
+function invoice_is_past_due(array $invoice, ?DateTimeImmutable $today = null): bool
+{
+    if (!invoice_is_collectible_status((string)($invoice['status'] ?? ''))) {
+        return false;
+    }
+
+    $dueDate = trim((string)($invoice['due_date'] ?? ''));
+    if ($dueDate === '') {
+        return false;
+    }
+
+    $due = DateTimeImmutable::createFromFormat('!Y-m-d', substr($dueDate, 0, 10));
+    if ($due === false || $due->format('Y-m-d') !== substr($dueDate, 0, 10)) {
+        return false;
+    }
+
+    $today ??= new DateTimeImmutable('today');
+    return $due < $today->setTime(0, 0, 0);
+}
+
 function invoice_is_draft(array $invoice): bool
 {
     return strtolower((string)($invoice['status'] ?? '')) === 'draft';
