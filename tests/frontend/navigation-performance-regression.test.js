@@ -104,3 +104,40 @@ test('full-navigation links are not converted into duplicate soft requests', () 
   assert.equal(prevented, 0);
   assert.equal(navigated, 0);
 });
+
+test('parameterized routes leave exactly one sidebar destination active', () => {
+  function navLink(page) {
+    const classes = new Set();
+    const attributes = new Map();
+    return {
+      dataset: { page },
+      classList: {
+        toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
+        contains(name) { return classes.has(name); },
+      },
+      setAttribute(name, value) { attributes.set(name, value); },
+      removeAttribute(name) { attributes.delete(name); },
+      attributes,
+    };
+  }
+
+  const links = [navLink('home'), navLink('settings'), navLink('account'), navLink('accounts')];
+  const context = vm.createContext({
+    normalizePageName(page) { return String(page).split('&')[0]; },
+    document: {
+      querySelectorAll(selector) {
+        assert.equal(selector, '.side-nav [data-page]');
+        return links;
+      },
+    },
+  });
+  vm.runInContext(extractFunction(navigation, 'updateActiveNavigation'), context);
+
+  context.updateActiveNavigation('settings&tab=external-ops');
+  assert.deepEqual(links.map(link => link.classList.contains('active')), [false, true, false, false]);
+  assert.equal(links[1].attributes.get('aria-current'), 'page');
+
+  context.updateActiveNavigation('home');
+  assert.deepEqual(links.map(link => link.classList.contains('active')), [true, false, false, false]);
+  assert.equal(links[1].attributes.has('aria-current'), false);
+});

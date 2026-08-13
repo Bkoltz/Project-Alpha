@@ -557,6 +557,10 @@ final class ProjectWorkflowUiTest extends TestCase
         ] as $selector) {
             self::assertStringContainsString($selector, $styles);
         }
+        self::assertStringContainsString('.nav-footer-form{margin:0;width:100%}', $styles);
+        self::assertStringContainsString('-webkit-appearance:none;', $styles);
+        self::assertStringContainsString('appearance:none;', $styles);
+        self::assertStringNotContainsString('style="margin-top:8px;display:block"', $header);
     }
 
     public function testFormsDocsRemainSeparateFromProjectDocuments(): void

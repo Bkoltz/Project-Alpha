@@ -85,11 +85,11 @@ ul{margin:0;padding:0;list-style:none}
 
 /* nav footer (contact) */
 .nav-footer{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:12px}
-.nav-footer-form{margin:0}
+.nav-footer-form{margin:0;width:100%}
 .nav-footer .settings{
   display:block;
   width:100%;
-  margin-top:6px;
+  margin:0;
   border:0;
   border-radius:8px;
   background:rgba(255,255,255,0.06);
@@ -99,6 +99,9 @@ ul{margin:0;padding:0;list-style:none}
   font-size:14px;
   font-weight:600;
   text-align:left;
+  text-decoration:none;
+  -webkit-appearance:none;
+  appearance:none;
   cursor:pointer;
   transition:background .12s, transform .08s, box-shadow .12s;
 }
