@@ -1672,6 +1672,20 @@ if ($page === '2fa-setup') {
 //Load header
 require_once __DIR__ . '/../src/views/partials/header.php';
 
+// The database session handler serializes requests for one authenticated
+// browser session. Common auth/activity mutations are complete at this point,
+// so ordinary read-only views should not retain that lock while running their
+// page queries and rendering HTML. One-time flash consumers deliberately keep
+// the session open via SessionPolicy::canReleaseBeforeViewRendering().
+if (App\Security\SessionPolicy::canReleaseBeforeViewRendering(
+    (string)($_SERVER['REQUEST_METHOD'] ?? 'GET'),
+    $page,
+    $_SESSION
+) && session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+    define('PA_SESSION_READ_ONLY', true);
+}
+
 //Load page content
 $view = resolve_view_path($page);
 require $view;

@@ -54,7 +54,7 @@ try {
 
 // Make CSRF token available to JavaScript
 $csrfToken = session_status() === PHP_SESSION_ACTIVE ? ($_SESSION['csrf'] ?? '') : '';
-if (session_status() !== PHP_SESSION_ACTIVE) {
+if (session_status() !== PHP_SESSION_ACTIVE && !defined('PA_SESSION_READ_ONLY')) {
     session_start();
 }
 if (empty($_SESSION['csrf'])) {

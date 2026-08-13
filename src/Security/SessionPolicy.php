@@ -52,6 +52,45 @@ final class SessionPolicy
         return true;
     }
 
+    /**
+     * Ordinary GET views only read the authenticated session after the shared
+     * shell has rendered. Persist common activity/security updates and release
+     * the per-session database lock before the potentially expensive page view.
+     *
+     * Views that deliberately consume one-time session state keep the lock so
+     * their mutation is persisted at request shutdown.
+     *
+     * @param array<string,mixed> $session
+     */
+    public static function canReleaseBeforeViewRendering(string $method, string $page, array $session): bool
+    {
+        if (strtoupper($method) !== 'GET' || empty($session['user']['id'])) {
+            return false;
+        }
+        if (empty($session['csrf']) || !is_string($session['csrf'])) {
+            return false;
+        }
+        if ($page === 'account' || $page === 'account-edit' || $page === 'accounts'
+            || $page === 'passkeys' || str_starts_with($page, 'account/')) {
+            return false;
+        }
+
+        foreach ([
+            'flash_api_key',
+            'flash_backup',
+            'flash_general_recipient_link',
+            'flash_quote_approve',
+            'client_onboarding_link',
+            'tax_import_summary',
+        ] as $deferredWriteKey) {
+            if (array_key_exists($deferredWriteKey, $session)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** Preserve the authentication anchor and invalidate the old identifier. */
     public static function rotateAuthenticatedId(): bool
     {
