@@ -55,7 +55,10 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertStringContainsString("'role-admin'", $baseline);
         self::assertStringContainsString('grantAccountAccess(', $handler);
         self::assertStringContainsString('revokeAccountAccess(', $handler);
+        self::assertStringContainsString("'resend-access'", $handler);
+        self::assertStringContainsString('resyncAccountAccess(', $handler);
         self::assertStringContainsString("user_can(\$pdo, \$actorUserId, 'users.manage'", $handler);
+        self::assertStringContainsString('Resend <?=$h($grantAccessLabel)?> access', $page);
         $accountCreate = (string)file_get_contents($root . '/src/views/pages/auth/accounts.php');
         $accountEdit = (string)file_get_contents($root . '/src/views/pages/auth/account-edit.php');
         self::assertStringNotContainsString('name="external_ops_enabled"', $accountCreate);
@@ -447,6 +450,23 @@ final class ExternalOpsIntegrationTest extends TestCase
         self::assertFalse($secondRevoke['changed']);
         self::assertNull($secondRevoke['event_id']);
         self::assertSame(2, (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn());
+    }
+
+    public function testResendQueuesTheCurrentStateForAnAlreadyGrantedActiveAccount(): void
+    {
+        $service = new ExternalOpsIntegrationService();
+        $service->grantAccountAccess($this->pdo, 2, 'external_operations', 1);
+        $result = $service->resyncAccountAccess($this->pdo, 2, 'external_operations', 1);
+
+        self::assertNotNull($result);
+        self::assertNotSame('', $result['event_id']);
+        self::assertSame(2, (int)$this->pdo->query('SELECT COUNT(*) FROM integration_outbox')->fetchColumn());
+
+        $payload = $this->latestPayload();
+        self::assertSame('application_entitlement.changed', $payload['event_type']);
+        self::assertTrue($payload['user']['active']);
+        self::assertTrue($payload['entitlement']['enabled']);
+        self::assertTrue($payload['entitlement']['manual_access']);
     }
 
     public function testEnabledRowWithoutExplicitSelectionIsNotEffectiveAccess(): void
