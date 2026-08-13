@@ -540,6 +540,25 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringNotContainsString('<script src="/assets/js/payments-create-logic.js"', (string)$payments);
     }
 
+    public function testSidebarFooterControlsShareInteractionStyles(): void
+    {
+        $header = (string)file_get_contents($this->root . '/src/views/partials/header.php');
+        $styles = (string)file_get_contents($this->root . '/public/assets/styles.css');
+
+        self::assertStringContainsString('class="nav-footer-form" method="post" action="/?page=logout"', $header);
+        self::assertStringContainsString('<button class="settings" type="submit">Logout</button>', $header);
+        self::assertStringNotContainsString('class="settings" type="submit" style=', $header);
+        foreach ([
+            '.nav-footer .settings{',
+            '.nav-footer .settings:hover',
+            '.nav-footer .settings:active',
+            '.nav-footer .settings:focus-visible',
+            '.nav-footer .settings.active',
+        ] as $selector) {
+            self::assertStringContainsString($selector, $styles);
+        }
+    }
+
     public function testFormsDocsRemainSeparateFromProjectDocuments(): void
     {
         $formsList = file_get_contents($this->root . '/src/views/pages/financial/forms-list.php');

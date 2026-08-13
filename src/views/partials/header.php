@@ -249,7 +249,7 @@ function nav_can(string $permission): bool {
           <?php else: ?>
             <a class="settings" href="/?page=account" data-page="account" style="margin-top:8px;display:block">My Account</a>
           <?php endif; ?>
-          <form method="post" action="/?page=logout" data-skip-nav style="margin-top:8px"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars((string)($_SESSION['csrf'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><button class="settings" type="submit" style="display:block;width:100%;text-align:left;border:0;background:none;cursor:pointer">Logout</button></form>
+          <form class="nav-footer-form" method="post" action="/?page=logout" data-skip-nav><input type="hidden" name="csrf" value="<?php echo htmlspecialchars((string)($_SESSION['csrf'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><button class="settings" type="submit">Logout</button></form>
         </div>
       </div>
     </aside>

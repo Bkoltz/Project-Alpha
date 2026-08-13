@@ -284,6 +284,35 @@ final class ExternalOpsIntegrationService
         return $this->refreshGrantedAccount($pdo, $userId, $applicationKey, $actorUserId);
     }
 
+    /**
+     * Requeue an active explicit entitlement without changing its stored state.
+     *
+     * @return array{event_id:string,entitlement_id:int}|null
+     */
+    public function resendAccountAccess(
+        PDO $pdo,
+        int $userId,
+        string $applicationKey,
+        int $actorUserId
+    ): ?array {
+        if ($userId < 1 || $actorUserId < 1) {
+            throw new DomainException('A valid user and administrator are required.');
+        }
+        $applicationKey = self::normalizeApplicationKey($applicationKey);
+        $state = $this->entitlementState($pdo, $userId, $applicationKey);
+        if ($state === null
+            || empty($state['user']['active'])
+            || empty($state['entitlement']['enabled'])
+            || empty($state['entitlement']['manual_access'])) {
+            return null;
+        }
+
+        return [
+            'event_id' => $this->enqueueState($pdo, $state, 'application_entitlement.changed'),
+            'entitlement_id' => (int)$state['entitlement_id'],
+        ];
+    }
+
     public function enqueueCurrentState(PDO $pdo, int $userId, string $applicationKey, string $eventType = 'user.changed'): ?string
     {
         $state = $this->entitlementState($pdo, $userId, self::normalizeApplicationKey($applicationKey));
@@ -333,6 +362,7 @@ final class ExternalOpsIntegrationService
             && ($employmentStatus === '' || $employmentStatus === 'active');
 
         return [
+            'entitlement_id' => (int)$row['entitlement_id'],
             'user' => [
                 'id' => (int)$row['user_id'],
                 'email' => strtolower(trim((string)$row['email'])),

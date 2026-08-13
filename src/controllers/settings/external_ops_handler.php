@@ -42,7 +42,7 @@ try {
         $service = new ExternalOpsIntegrationService();
         $displayLabel = trim((string)($config['label'] ?? 'External operations')) ?: 'External operations';
         if ($action === 'resend-access') {
-            $result = $service->resyncAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId);
+            $result = $service->resendAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId);
             if ($result === null || empty($result['event_id'])) {
                 throw new DomainException('Only an active account with granted external operations access can be resent.');
             }
