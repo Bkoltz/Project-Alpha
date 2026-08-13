@@ -34,20 +34,32 @@ try {
         ]);
     } elseif (empty($config['configured_enabled'])) {
         throw new DomainException('Enable and save outbound delivery before managing synchronized records.');
-    } elseif (in_array($action, ['grant-access','revoke-access','save-entitlement'], true)) {
+    } elseif (in_array($action, ['grant-access','revoke-access','save-entitlement','resend-access'], true)) {
         if (!user_can($pdo, $actorUserId, 'users.manage', 0)) {
             throw new DomainException('User-management permission is required to change external operations access.');
         }
         $managedUserId = (int)($_POST['user_id'] ?? 0);
-        $grant = $action === 'grant-access' || ($action === 'save-entitlement' && !empty($_POST['enabled']));
         $service = new ExternalOpsIntegrationService();
-        $result = $grant
-            ? $service->grantAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId, (string)$config['label'])
-            : $service->revokeAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId, (string)$config['label']);
         $displayLabel = trim((string)($config['label'] ?? 'External operations')) ?: 'External operations';
-        $message = $grant
-            ? ($result['changed'] ? $displayLabel . ' access was granted.' : $displayLabel . ' access was already granted.')
-            : ($result['changed'] ? $displayLabel . ' access was revoked.' : $displayLabel . ' access was already revoked.');
+        if ($action === 'resend-access') {
+            $result = $service->resyncAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId);
+            if ($result === null || empty($result['event_id'])) {
+                throw new DomainException('Only an active account with granted external operations access can be resent.');
+            }
+            audit_log($pdo, 'external_application.access_resent', 'user', $managedUserId, [
+                'application_key' => (string)$config['application_key'],
+                'event_id' => (string)$result['event_id'],
+            ]);
+            $message = $displayLabel . ' access was queued for resend.';
+        } else {
+            $grant = $action === 'grant-access' || ($action === 'save-entitlement' && !empty($_POST['enabled']));
+            $result = $grant
+                ? $service->grantAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId, (string)$config['label'])
+                : $service->revokeAccountAccess($pdo, $managedUserId, (string)$config['application_key'], $actorUserId, (string)$config['label']);
+            $message = $grant
+                ? ($result['changed'] ? $displayLabel . ' access was granted.' : $displayLabel . ' access was already granted.')
+                : ($result['changed'] ? $displayLabel . ' access was revoked.' : $displayLabel . ' access was already revoked.');
+        }
     } elseif ($action === 'send-now') {
         if (empty($config['delivery_ready'])) {
             throw new DomainException('Outbound delivery is paused. Complete the required delivery settings or disable it until the receiver is ready.');
