@@ -13,11 +13,12 @@ require_once __DIR__ . '/../../../utils/public_links.php';
 require_once __DIR__ . '/../../../services/StripeService.php';
 require_once __DIR__ . '/../../../utils/invoice_due_dates.php';
 require_once __DIR__ . '/../../../utils/general_recipient_invoices.php';
+require_once __DIR__ . '/../../../utils/document_recipient.php';
 $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'invoices', $id);
 }
-$st = $pdo->prepare('SELECT i.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE i.id=?');
+$st = $pdo->prepare('SELECT i.*, c.name client_name, c.email client_email, c.phone client_phone, c.address_line1 client_address_line1, c.address_line2 client_address_line2, c.city client_city, c.state client_state, c.postal_code client_postal_code, c.country client_country, o.name organization_name, o.address_line1 organization_address_line1, o.address_line2 organization_address_line2, o.city organization_city, o.state organization_state, o.postal_code organization_postal_code, o.country organization_country FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN organizations o ON o.id=COALESCE(i.organization_id,c.organization_id) WHERE i.id=?');
 $st->execute([$id]);
 $inv = $st->fetch(PDO::FETCH_ASSOC);
 if(!$inv){ echo '<p>Invoice not found</p>'; return; }
@@ -424,27 +425,12 @@ $showInvoiceTerms = !array_key_exists('invoice_show_terms', $appConfig) || !empt
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
         <div class="font-600">To</div>
-        <?php 
-          $toLines = $isGeneralRecipientInvoice ? ['General Recipient'] : [];
-          if (!$isGeneralRecipientInvoice && !empty($inv['client_name'])) { $toLines[] = (string)$inv['client_name']; }
-          if (!$isGeneralRecipientInvoice && !empty($inv['client_org'])) { $toLines[] = (string)$inv['client_org']; }
-          if (!$isGeneralRecipientInvoice && !empty($inv['address_line1'])) { $toLines[] = (string)$inv['address_line1']; }
-          if (!$isGeneralRecipientInvoice && !empty($inv['address_line2'])) { $toLines[] = (string)$inv['address_line2']; }
-          $c = trim((string)($inv['city'] ?? ''));
-          $s = trim((string)($inv['state'] ?? ''));
-          $p = trim((string)($inv['postal_code'] ?? ''));
-          $parts2 = [];
-          if ($c !== '') { $parts2[] = $c; }
-          if ($s !== '') { $parts2[] = $s; }
-          if ($p !== '') { $parts2[] = $p; }
-          $cityStatePostal = implode(', ', $parts2);
-          if (!$isGeneralRecipientInvoice && $cityStatePostal !== '') { $toLines[] = $cityStatePostal; }
-        ?>
-        <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
-        <?php if (!$isGeneralRecipientInvoice && (!empty($inv['client_phone']) || !empty($inv['client_email']))): ?>
+        <?php $recipient = pa_document_recipient($inv, $isGeneralRecipientInvoice); ?>
+        <div><?php foreach ($recipient['lines'] as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
+        <?php if ($recipient['phone'] !== null || $recipient['email'] !== null): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if (!empty($inv['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($inv['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
-            <?php if (!empty($inv['client_email'])): ?><div><?php echo htmlspecialchars($inv['client_email']); ?></div><?php endif; ?>
+            <?php if ($recipient['phone'] !== null): ?><div><?php echo htmlspecialchars(format_phone($recipient['phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
+            <?php if ($recipient['email'] !== null): ?><div><?php echo htmlspecialchars($recipient['email']); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
       </td>

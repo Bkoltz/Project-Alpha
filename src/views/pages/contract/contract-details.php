@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/contract-print.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/document_recipient.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
 require_once __DIR__ . '/../../../utils/format.php';
@@ -12,7 +13,7 @@ $id = (int)($_GET['id'] ?? 0);
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'contracts', $id);
 }
-$c = $pdo->prepare('SELECT co.*, cl.name client_name, o.name AS client_org, cl.email client_email, cl.phone client_phone, cl.address_line1, cl.address_line2, cl.city, cl.state, cl.postal_code, cl.country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=cl.organization_id WHERE co.id=?');
+$c = $pdo->prepare('SELECT co.*, cl.name client_name, cl.email client_email, cl.phone client_phone, cl.address_line1 client_address_line1, cl.address_line2 client_address_line2, cl.city client_city, cl.state client_state, cl.postal_code client_postal_code, cl.country client_country, o.name organization_name, o.address_line1 organization_address_line1, o.address_line2 organization_address_line2, o.city organization_city, o.state organization_state, o.postal_code organization_postal_code, o.country organization_country FROM contracts co JOIN clients cl ON cl.id=co.client_id LEFT JOIN organizations o ON o.id=COALESCE(co.organization_id,cl.organization_id) WHERE co.id=?');
 $c->execute([$id]);
 $contract = $c->fetch(PDO::FETCH_ASSOC);
 if (!$contract) {
@@ -383,45 +384,14 @@ if ($termsText === '') {
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
         <div class="font-600">To</div>
-        <?php
-        $toLines = [];
-        if (!empty($contract['client_name'])) {
-          $toLines[] = (string)$contract['client_name'];
-        }
-        if (!empty($contract['client_org'])) {
-          $toLines[] = (string)$contract['client_org'];
-        }
-        if (!empty($contract['address_line1'])) {
-          $toLines[] = (string)$contract['address_line1'];
-        }
-        if (!empty($contract['address_line2'])) {
-          $toLines[] = (string)$contract['address_line2'];
-        }
-        $c = trim((string)($contract['city'] ?? ''));
-        $s = trim((string)($contract['state'] ?? ''));
-        $p = trim((string)($contract['postal_code'] ?? ''));
-        $parts2 = [];
-        if ($c !== '') {
-          $parts2[] = $c;
-        }
-        if ($s !== '') {
-          $parts2[] = $s;
-        }
-        if ($p !== '') {
-          $parts2[] = $p;
-        }
-        $cityStatePostal = implode(', ', $parts2);
-        if ($cityStatePostal !== '') {
-          $toLines[] = $cityStatePostal;
-        }
-        ?>
-        <div><?php foreach ($toLines as $ln) {
+        <?php $recipient = pa_document_recipient($contract); ?>
+        <div><?php foreach ($recipient['lines'] as $ln) {
                 echo '<div>' . htmlspecialchars($ln) . '</div>';
               } ?></div>
-        <?php if (!empty($contract['client_phone']) || !empty($contract['client_email'])): ?>
+        <?php if ($recipient['phone'] !== null || $recipient['email'] !== null): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if (!empty($contract['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($contract['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
-            <?php if (!empty($contract['client_email'])): ?><div><?php echo htmlspecialchars($contract['client_email']); ?></div><?php endif; ?>
+            <?php if ($recipient['phone'] !== null): ?><div><?php echo htmlspecialchars(format_phone($recipient['phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
+            <?php if ($recipient['email'] !== null): ?><div><?php echo htmlspecialchars($recipient['email']); ?></div><?php endif; ?>
           </div>
         <?php endif; ?>
       </td>

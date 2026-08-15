@@ -213,7 +213,7 @@ final class ProjectWorkflowUiTest extends TestCase
         self::assertStringContainsString("\$org['state'] ?: (\$appConfig['primary_state'] ?? '')", (string)$orgEdit);
         foreach ([$quoteDetail, $longQuoteDetail, $contractDetail, $longContractDetail, $invoiceDetail] as $documentView) {
             self::assertStringContainsString('address_line2', (string)$documentView);
-            self::assertStringContainsString('$toLines[] = (string)', (string)$documentView);
+            self::assertStringContainsString('pa_document_recipient(', (string)$documentView);
         }
         self::assertStringContainsString('organization_address_line2', (string)$projectInvoiceDetail);
         self::assertStringContainsString('$orgLines[] = (string)$pi[\'organization_address_line2\'];', (string)$projectInvoiceDetail);

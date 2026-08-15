@@ -58,7 +58,7 @@ final class GeneralRecipientInvoiceTest extends TestCase
         $wrapper = (string)file_get_contents($root . '/src/views/public/doc-wrapper.php');
         $pdf = (string)file_get_contents($root . '/src/views/pages/invoice/invoice-details.php');
 
-        self::assertStringContainsString('(client_id,recipient_presentation_mode,project_id', $create);
+        self::assertMatchesRegularExpression('/\(client_id,recipient_presentation_mode,(?:show_contact_on_document,)?project_id/', $create);
         self::assertStringContainsString('General-recipient invoices must be one-off direct invoices', $create);
         self::assertStringContainsString('General-recipient invoices cannot be emailed automatically', $create);
         self::assertStringContainsString('pa_invoice_is_general_recipient($invoice)', $lifecycle);
@@ -68,7 +68,7 @@ final class GeneralRecipientInvoiceTest extends TestCase
         self::assertStringContainsString('A paid general-recipient invoice remains an active, non-payable receipt', $links);
         self::assertStringContainsString('after payment it remains a receipt for seven days', $links);
         self::assertStringContainsString('After payment, this link remains available as a receipt for seven days.', $wrapper);
-        self::assertStringContainsString("['General Recipient']", $pdf);
+        self::assertStringContainsString('pa_document_recipient($inv, $isGeneralRecipientInvoice)', $pdf);
     }
 
     public function testFinalizeAndLinkFlowIsAtomicAndIdempotent(): void

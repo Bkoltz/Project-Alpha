@@ -1,6 +1,7 @@
 <?php
 // src/views/pages/quote/quote-details.php
 require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../utils/document_recipient.php';
 require_once __DIR__ . '/../../../config/app.php';
 require_once __DIR__ . '/../../../utils/format.php';
 require_once __DIR__ . '/../../../utils/csrf.php';
@@ -12,7 +13,7 @@ require_once __DIR__ . '/../../../utils/acl.php';
 if (!defined('PDF_MODE') && !defined('PUBLIC_VIEW')) {
     require_record_ownership($pdo, 'quotes', $id);
 }
-$stmt = $pdo->prepare('SELECT q.*, c.name client_name, o.name AS client_org, c.email client_email, c.phone client_phone, c.address_line1, c.address_line2, c.city, c.state, c.postal_code, c.country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=c.organization_id WHERE q.id=?');
+$stmt = $pdo->prepare('SELECT q.*, c.name client_name, c.email client_email, c.phone client_phone, c.address_line1 client_address_line1, c.address_line2 client_address_line2, c.city client_city, c.state client_state, c.postal_code client_postal_code, c.country client_country, o.name organization_name, o.address_line1 organization_address_line1, o.address_line2 organization_address_line2, o.city organization_city, o.state organization_state, o.postal_code organization_postal_code, o.country organization_country FROM quotes q JOIN clients c ON c.id=q.client_id LEFT JOIN organizations o ON o.id=COALESCE(q.organization_id,c.organization_id) WHERE q.id=?');
 $stmt->execute([$id]);
 $quote = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$quote){ echo '<p>Quote not found</p>'; return; }
@@ -338,27 +339,12 @@ $isPdf = defined('PDF_MODE');
       </td>
       <td style="vertical-align:top;width:50%;padding-left:12px">
         <div class="font-600">To</div>
-        <?php 
-          $toLines = [];
-          if (!empty($quote['client_name'])) { $toLines[] = (string)$quote['client_name']; }
-          if (!empty($quote['client_org'])) { $toLines[] = (string)$quote['client_org']; }
-          if (!empty($quote['address_line1'])) { $toLines[] = (string)$quote['address_line1']; }
-          if (!empty($quote['address_line2'])) { $toLines[] = (string)$quote['address_line2']; }
-          $c = trim((string)($quote['city'] ?? ''));
-          $s = trim((string)($quote['state'] ?? ''));
-          $p = trim((string)($quote['postal_code'] ?? ''));
-          $parts2 = [];
-          if ($c !== '') { $parts2[] = $c; }
-          if ($s !== '') { $parts2[] = $s; }
-          if ($p !== '') { $parts2[] = $p; }
-          $cityStatePostal = implode(', ', $parts2);
-          if ($cityStatePostal !== '') { $toLines[] = $cityStatePostal; }
-        ?>
-        <div><?php foreach ($toLines as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
-        <?php if (!empty($quote['client_phone']) || !empty($quote['client_email'])): ?>
+        <?php $recipient = pa_document_recipient($quote); ?>
+        <div><?php foreach ($recipient['lines'] as $ln) { echo '<div>'.htmlspecialchars($ln).'</div>'; } ?></div>
+        <?php if ($recipient['phone'] !== null || $recipient['email'] !== null): ?>
           <div style="margin-top:6px;color:#4b5563;font-size:13px">
-            <?php if (!empty($quote['client_phone'])): ?><div><?php echo htmlspecialchars(format_phone($quote['client_phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
-            <?php if (!empty($quote['client_email'])): ?><div><?php echo htmlspecialchars($quote['client_email']); ?></div><?php endif; ?>
+            <?php if ($recipient['phone'] !== null): ?><div><?php echo htmlspecialchars(format_phone($recipient['phone']), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?></div><?php endif; ?>
+            <?php if ($recipient['email'] !== null): ?><div><?php echo htmlspecialchars($recipient['email']); ?></div><?php endif; ?>
           </div>
 <?php endif; ?>
       </td>

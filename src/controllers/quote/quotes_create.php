@@ -89,6 +89,7 @@ if ($project_id && !pa_project_is_active_for_client($pdo, $project_id, $client_i
     exit;
 }
 $__orgId = resolve_client_context_org_id($pdo, $client_id, $project_id, $__orgId);
+$showContactOnDocument = $__orgId && !empty($_POST['show_contact_on_document']) ? 1 : 0;
 
 // Items are required for regular quotes, on-demand itemized quotes, and long-term fixed totals.
 // Items are optional for long-term per-invoice pricing and on-demand flat pricing.
@@ -174,8 +175,8 @@ $customFieldsJson = !empty($customFields) ? json_encode($customFields) : null;
 
 $pdo->beginTransaction();
 try {
-    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute([$client_id, $project_id, null, null, 'draft', $quote_type, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $__creator, date("Y-m-d H:i:s")]);
+    $stmt = $pdo->prepare('INSERT INTO quotes (client_id, project_id, doc_number, project_code, status, quote_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, deposit_type, deposit_amount, fulfillment_date, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, scope, custom_fields, organization_id, show_contact_on_document, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute([$client_id, $project_id, null, null, 'draft', $quote_type, $billing_mode, $discount_type, $discount_value, $tax_percent, $subtotal, $total, $deposit_type, $deposit_value, $fulfillment_date, $start_date, $end_date, $billing_interval_count, $billing_interval_unit, $pricing_type, $price_per_invoice, $scope, $customFieldsJson, $__orgId, $showContactOnDocument, $__creator, date("Y-m-d H:i:s")]);
     $quote_id = (int)$pdo->lastInsertId();
 
     // Assign a new Project ID for this quote

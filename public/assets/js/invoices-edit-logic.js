@@ -121,10 +121,16 @@ function initInvoiceEdit() {
       .then(r => r.json())
       .then(list => {
         if (!Array.isArray(list) || list.length === 0) { sugI.style.display = 'none'; sugI.innerHTML = ''; return; }
-        sugI.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+        sugI.innerHTML = list.map((x, index) => `<div data-client-index="${index}" style="padding:8px 10px;cursor:pointer"><strong>${escapeInvoiceEditRecipient(x.name)}</strong>${x.org_name ? `<small style="display:block;color:#6b7280">${escapeInvoiceEditRecipient(x.org_name)}</small>` : ''}</div>`).join('');
         Array.from(sugI.children).forEach(el => {
           el.addEventListener('click', function () {
-            ciI.value = this.dataset.name; cidI.value = this.dataset.id; sugI.style.display = 'none';
+            var client = list[Number(this.dataset.clientIndex)];
+            if (!client) return;
+            ciI.value = client.name; cidI.value = client.id;
+            cidI.dataset.organizationId = client.organization_id || '';
+            cidI.dataset.organizationName = client.org_name || '';
+            cidI.dispatchEvent(new Event('change', { bubbles: true }));
+            sugI.style.display = 'none';
           });
         });
         sugI.style.display = 'block';
@@ -147,6 +153,12 @@ function initInvoiceEdit() {
     var elem = document.getElementById(id);
     if (elem) elem.addEventListener('input', recalcInv);
   });
+}
+
+function escapeInvoiceEditRecipient(value) {
+  var element = document.createElement('div');
+  element.textContent = value == null ? '' : String(value);
+  return element.innerHTML;
 }
 initInvoiceEdit.pageInitializerId = 'invoice-edit';
 

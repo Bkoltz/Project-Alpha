@@ -73,7 +73,7 @@ try {
   if (in_array($quoteType, ['long_term', 'on_demand'], true)) {
     // For LT/OD quotes, only create contract if auto-create is enabled
     if ($autoCreateContract) {
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, billing_start_mode, scope, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, contract_type, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, start_date, end_date, billing_interval_count, billing_interval_unit, pricing_type, price_per_invoice, billing_start_mode, scope, organization_id, show_contact_on_document, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
           ->execute([
             $id,
             (int)$quote['client_id'],
@@ -99,6 +99,7 @@ try {
             $quoteType === 'long_term' ? 'on_upload' : null,
             $quote['scope'] ?? null,
             $quoteOrgId,
+            (int)($quote['show_contact_on_document'] ?? 0),
             $quoteCreator
           ]);
       $contract_id = (int)$pdo->lastInsertId();
@@ -123,8 +124,8 @@ try {
   } else {
     // Regular quote: create contract and/or invoice based on settings
     if ($autoCreateContract) {
-      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$id, (int)$quote['client_id'], $projectId, 'draft', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $depositType, $contractDepositAmount, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+      $pdo->prepare('INSERT INTO contracts (quote_id, client_id, project_id, status, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, project_code, deposit_type, deposit_amount, deposit_paid, fulfillment_date, organization_id, show_contact_on_document, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$id, (int)$quote['client_id'], $projectId, 'draft', $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $quote['subtotal'], $quote['total'], $projectCode, $depositType, $contractDepositAmount, 0, $quote['fulfillment_date'] ?? null, $quoteOrgId, (int)($quote['show_contact_on_document'] ?? 0), $quoteCreator]);
       $contract_id = (int)$pdo->lastInsertId();
       $pdo->prepare('UPDATE contracts SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $contract_id]);
 
@@ -142,8 +143,8 @@ try {
       $invoiceSubtotal=0.0;foreach($qitems as $it){if(($it['pricing_status']??'standard')!=='standard')continue;$invoiceSubtotal+=(float)$it['line_total'];}
       $invoiceDiscount=($quote['discount_type']??'none')==='percent'?max(0,min(100,(float)$quote['discount_value']))*$invoiceSubtotal/100:(($quote['discount_type']??'none')==='fixed'?min($invoiceSubtotal,max(0,(float)$quote['discount_value'])):0);
       $invoiceTotal=max(0,$invoiceSubtotal-$invoiceDiscount+max(0,(float)$quote['tax_percent'])*max(0,$invoiceSubtotal-$invoiceDiscount)/100);
-      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, $quoteCreator]);
+      $pdo->prepare('INSERT INTO invoices (contract_id, quote_id, client_id, project_id, billing_mode, discount_type, discount_value, tax_percent, subtotal, total, status, due_date, project_code, fulfillment_date, organization_id, show_contact_on_document, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$contract_id ?? null, $id, (int)$quote['client_id'], $projectId, $billingMode, $quote['discount_type'], $quote['discount_value'], $quote['tax_percent'], $invoiceSubtotal, $invoiceTotal, 'draft', null, $projectCode, $quote['fulfillment_date'] ?? null, $quoteOrgId, (int)($quote['show_contact_on_document'] ?? 0), $quoteCreator]);
       $invoice_id = (int)$pdo->lastInsertId();
       $pdo->prepare('UPDATE invoices SET job_id=?,service_location_id=? WHERE id=?')->execute([$jobId, $serviceLocationId, $invoice_id]);
       if ($projectId && project_uses_monthly_invoice_billing($pdo, $projectId)) {

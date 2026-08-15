@@ -33,12 +33,18 @@ if ($selectedProjectId > 0) {
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr">
 
       <!-- Client input -->
-      <label style="grid-column:1/2;position:relative">
+      <div data-document-recipient-picker style="grid-column:1/2">
+      <label style="position:relative;display:block">
         <div>Client</div>
-        <input id="clientInput" type="text" placeholder="Type client name..." autocomplete="off" value="<?php echo htmlspecialchars((string)($selectedProject['client_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
-        <input id="clientId" type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>">
+        <input id="clientInput" data-document-client-search type="text" placeholder="Type client name..." autocomplete="off" value="<?php echo htmlspecialchars((string)($selectedProject['client_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd">
+        <input id="clientId" data-document-client-id type="hidden" name="client_id" value="<?php echo (int)($selectedProject['client_id'] ?? 0) ?: ''; ?>" data-organization-id="<?php echo (int)($selectedProject['organization_id'] ?? 0) ?: ''; ?>" data-organization-name="<?php echo htmlspecialchars((string)($selectedProject['organization_name'] ?? ''), ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); ?>">
         <div id="clientSuggest" style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid #eee;border-radius:8px;display:none;max-height:200px;overflow:auto"></div>
       </label>
+      <label data-document-contact-option hidden style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:13px">
+        <input data-document-contact-checkbox type="checkbox" name="show_contact_on_document" value="1">
+        <span>Include contact on document <small data-document-organization-name style="display:block;color:var(--muted)"></small></span>
+      </label>
+      </div>
 
       <div style="grid-column:2/3">
         <?php echo render_tax_lookup_control('taxPercent', 'tax_percent', 0.0); ?>
@@ -340,5 +346,6 @@ if ($selectedProjectId > 0) {
 </section>
 
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/quotes-create-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
+<script src="<?php echo htmlspecialchars(asset_url('/assets/js/document-recipient-presentation.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/tax-lookup-control.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 <script src="<?php echo htmlspecialchars(asset_url('/assets/js/client-selection-dropdown-logic.js'), ENT_QUOTES, 'UTF-8'); ?>" defer></script>

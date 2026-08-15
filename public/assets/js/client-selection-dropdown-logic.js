@@ -33,13 +33,19 @@ function initClientDropdown() {
                     return;
                 }
 
-                sug.innerHTML = list.map(x => `<div data-id="${x.id}" data-name="${x.name}" data-taxexempt="${x.tax_exempt_file || ''}" style="padding:8px 10px;cursor:pointer">${x.name}</div>`).join('');
+                sug.innerHTML = list.map(function (x, index) {
+                    return `<div data-client-index="${index}" style="padding:8px 10px;cursor:pointer"><strong>${escapeClientDropdownValue(x.name)}</strong>${x.org_name ? `<small style="display:block;color:#6b7280">${escapeClientDropdownValue(x.org_name)}</small>` : ''}</div>`;
+                }).join('');
 
                 Array.from(sug.children).forEach(el => {
                     el.addEventListener('click', function (e) {
                         e.stopPropagation();
-                        ci.value = this.dataset.name;
-                        cid.value = this.dataset.id;
+                        var client = list[Number(this.dataset.clientIndex)];
+                        if (!client) return;
+                        ci.value = client.name;
+                        cid.value = client.id;
+                        cid.dataset.organizationId = client.organization_id || '';
+                        cid.dataset.organizationName = client.org_name || '';
                         cid.dispatchEvent(new Event('change', { bubbles: true }));
 
                         // Dispatch change event for other listeners
@@ -73,6 +79,11 @@ function initClientDropdown() {
         };
         document.addEventListener('click', document._clientOutsideClickHandler);
     }
+}
+function escapeClientDropdownValue(value) {
+    var element = document.createElement('div');
+    element.textContent = value == null ? '' : String(value);
+    return element.innerHTML;
 }
 initClientDropdown.pageInitializerId = 'client-selection-dropdown';
 
