@@ -18,7 +18,7 @@ $max_price = isset($_GET['max_price']) ? (float)$_GET['max_price'] : null;
 
 $where=['ltc.contract_type="long_term"'];$p=[];
 if($client_id>0){$where[]='ltc.client_id=?';$p[]=$client_id;}
-elseif($client_name!==''){ $where[]='c.name LIKE ?'; $p[]='%'.$client_name.'%'; }
+elseif($client_name!==''){ $where[]='(c.name LIKE ? OR o.name LIKE ?)'; $p[]='%'.$client_name.'%'; $p[]='%'.$client_name.'%'; }
 if($status!==''){ $where[]='ltc.status=?'; $p[] = $status; }
 if($start!==''){$where[]='ltc.created_at>=?';$p[]=$start.' 00:00:00';}
 if($end!==''){$where[]='ltc.created_at<=?';$p[]=$end.' 23:59:59';}
@@ -39,10 +39,11 @@ if(!in_array($per,[50,100],true)) $per=50;
 $pageN = max(1, (int)($_GET['p'] ?? 1));
 $offset = ($pageN - 1) * $per;
 
-$sqlCount = 'SELECT COUNT(*) FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id'.($where?' WHERE '.implode(' AND ',$where):'');
+$documentJoins = ' LEFT JOIN clients c ON c.id=ltc.client_id LEFT JOIN organizations o ON o.id=COALESCE(ltc.organization_id,c.organization_id)';
+$sqlCount = 'SELECT COUNT(*) FROM contracts ltc'.$documentJoins.($where?' WHERE '.implode(' AND ',$where):'');
 $stc=$pdo->prepare($sqlCount);$stc->execute($p);$total=(int)$stc->fetchColumn();
 
-$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.invoices_generated, ltc.signed_at, ltc.signed_pdf_path, c.name client, c.id AS client_id, (SELECT i.id FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_id, (SELECT i.sent_at FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_sent_at, (SELECT COUNT(*) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status<>\"ended\") AS recurring_service_count, (SELECT COALESCE(SUM(rs.amount),0) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status IN (\"active\",\"paused\") AND rs.approval_status=\"approved\" AND rs.next_invoice_date=ltc.next_invoice_date) AS next_service_amount FROM contracts ltc LEFT JOIN clients c ON c.id=ltc.client_id";
+$sql="SELECT ltc.id, ltc.doc_number, ltc.project_code, ltc.status, ltc.total, ltc.deposit_type, ltc.deposit_amount, ltc.deposit_paid, ltc.start_date, ltc.end_date, ltc.billing_interval_count, ltc.billing_interval_unit, ltc.pricing_type, ltc.price_per_invoice, ltc.total_invoiced, ltc.next_invoice_date, ltc.last_invoice_date, ltc.invoices_generated, ltc.signed_at, ltc.signed_pdf_path, c.name client, c.id AS client_id, o.name organization_name, (SELECT i.id FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_id, (SELECT i.sent_at FROM invoices i WHERE i.contract_id=ltc.id AND i.invoice_type=\"long_term\" ORDER BY i.created_at DESC, i.id DESC LIMIT 1) AS latest_invoice_sent_at, (SELECT COUNT(*) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status<>\"ended\") AS recurring_service_count, (SELECT COALESCE(SUM(rs.amount),0) FROM contract_recurring_services rs WHERE rs.contract_id=ltc.id AND rs.status IN (\"active\",\"paused\") AND rs.approval_status=\"approved\" AND rs.next_invoice_date=ltc.next_invoice_date) AS next_service_amount FROM contracts ltc{$documentJoins}";
 if($where){$sql.=' WHERE '.implode(' AND ',$where);} 
 $sql.=" ORDER BY ltc.created_at DESC LIMIT $per OFFSET $offset";
 $st=$pdo->prepare($sql);$st->execute($p);$rows=$st->fetchAll();
@@ -145,7 +146,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
         <tr style="text-align:left;border-bottom:1px solid #eee">
           <th style="padding:10px">No.</th>
           <th style="padding:10px">Project</th>
-          <th style="padding:10px">Client</th>
+          <th style="padding:10px">Customer</th>
+          <th style="padding:10px">Contact</th>
           <th style="padding:10px">Status</th>
           <th style="padding:10px">Billing</th>
           <th style="padding:10px">Amount</th>
@@ -179,7 +181,8 @@ $clients=$pdo->query('SELECT id,name FROM clients '.($hasArchived?'WHERE archive
           <tr style="border-top:1px solid #f3f4f6;<?php echo $rowStyle; ?>">
             <td style="padding:10px"><a href="/?page=contract/long-term-contract-details&id=<?php echo (int)$r['id']; ?>" style="text-decoration:none;color:inherit">LTC-<?php echo (int)($r['doc_number'] ?? $r['id']); ?></a></td>
             <td style="padding:10px"><?php echo htmlspecialchars($r['project_code'] ?? ''); ?></td>
-            <td style="padding:10px"><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a></td>
+            <td style="padding:10px"><?php echo htmlspecialchars($r['organization_name'] ?: $r['client']); ?></td>
+            <td style="padding:10px"><?php if (!empty($r['organization_name'])): ?><a href="/?page=client/clients-list&selected_client_id=<?php echo (int)$r['client_id']; ?>"><?php echo htmlspecialchars($r['client']); ?></a><?php endif; ?></td>
             <td style="padding:10px;text-transform:capitalize"><?php echo htmlspecialchars($r['status']); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($billingText); ?></td>
             <td style="padding:10px"><?php echo htmlspecialchars($amountText); ?></td>

@@ -26,8 +26,14 @@ final class DocumentListRecipientPresentationTest extends TestCase
     {
         return [
             ['src/views/pages/invoice/invoices-list.php', 'i'],
+            ['src/views/pages/invoice/on-demand-invoices-list.php', 'i'],
+            ['src/views/pages/contract/on-demand-invoices-list.php', 'i'],
             ['src/views/pages/quote/quotes-list.php', 'q'],
+            ['src/views/pages/quote/long-term-quotes-list.php', 'q'],
+            ['src/views/pages/quote/on-demand-quotes-list.php', 'q'],
             ['src/views/pages/contract/contracts-list.php', 'co'],
+            ['src/views/pages/contract/long-term-contracts-list.php', 'ltc'],
+            ['src/views/pages/contract/on-demand-contracts-list.php', 'odc'],
         ];
     }
 }
