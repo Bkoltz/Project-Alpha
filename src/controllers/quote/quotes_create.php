@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../utils/project_selection.php';
 require_once __DIR__ . '/../../utils/mileage.php';
 require_once __DIR__ . '/../../utils/document_locations.php';
 require_once __DIR__ . '/../../utils/catalog_documents.php';
+require_once __DIR__ . '/../../utils/quote_numbers.php';
 require_once __DIR__ . '/../../services/JobAssignmentService.php';
 require_once __DIR__ . '/../../services/DocumentRevisionService.php';
 
@@ -193,12 +194,8 @@ try {
     }
 
     // Assign per-type doc_number for quotes (separate sequences for regular, long-term, and on-demand)
-    $qMaxStmt = $pdo->prepare('SELECT COALESCE(MAX(doc_number),0) FROM quotes WHERE quote_type = ?');
-    $qMaxStmt->execute([$quote_type]);
-    $qMax = (int)$qMaxStmt->fetchColumn();
-
     $stmt = $pdo->prepare('UPDATE quotes SET doc_number=? WHERE id=?');
-    $stmt->execute([$qMax + 1, $quote_id]);
+    $stmt->execute([pa_next_quote_doc_number($pdo, $quote_type), $quote_id]);
 
     // Only insert items if we have them (not needed for per_invoice or on_demand long-term quotes)
     if (!empty($items)) {

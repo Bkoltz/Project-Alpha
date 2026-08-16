@@ -106,6 +106,7 @@ function page_permission_map(): array
         'quote/on-demand-quotes-list' => 'quotes.view',
         'quote/quotes-create' => 'quotes.create',
         'quote/quotes-edit'   => 'quotes.edit',
+        'quote/quotes-edit-public' => 'quotes.edit',
         'quote/quotes-update' => 'quotes.edit',
         'quote/quote-details' => 'quotes.view',
         'quote/quote-pdf'     => 'quotes.view',

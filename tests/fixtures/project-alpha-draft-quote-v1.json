@@ -1,0 +1,122 @@
+{
+  "contract": "ltds-project-alpha-draft-quote-v1",
+  "endpoint": "/api/v2/integrations/ltds/draft-quotes",
+  "scope": "portal.quote-draft.create",
+  "schemaVersion": 1,
+  "editorPathContract": "/quotes/{encodeURIComponent(draftQuote.publicId)}/edit",
+  "valid": {
+    "request": {
+      "schemaVersion": 1,
+      "source": "ltds-operations",
+      "request": {
+        "publicId": "request-public-a",
+        "revision": 4,
+        "title": "North site mapping",
+        "scopeSummary": "Capture the reviewed area.",
+        "deliverablesSummary": "Orthomosaic and stills"
+      },
+      "authorization": {
+        "organizationPublicId": "org-public-a",
+        "clientPublicId": "client-public-a",
+        "projectPublicId": "project-public-a"
+      },
+      "services": [
+        {
+          "publicId": "svc-ortho",
+          "catalogVersion": "catalog-7",
+          "answers": { "resolution": "standard" }
+        }
+      ],
+      "workArea": {
+        "revision": 2,
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "squareMeters": 8093.713,
+        "acres": 2
+      },
+      "attachments": [
+        {
+          "name": "authorization.pdf",
+          "contentType": "application/pdf",
+          "sizeBytes": 2048,
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    },
+    "response": {
+      "receiptId": "receipt-public-a",
+      "draftQuote": {
+        "publicId": "quote-public-a",
+        "documentNumber": "Q-DRAFT-7",
+        "status": "draft",
+        "version": 1,
+        "editorPath": "/quotes/quote-public-a/edit"
+      }
+    }
+  },
+  "invalidRequests": [
+    {
+      "name": "numeric-client-legacy-id",
+      "request": {
+        "schemaVersion": 1,
+        "source": "ltds-operations",
+        "request": { "publicId": "request-public-a", "revision": 4, "title": "North site mapping", "scopeSummary": "Capture the reviewed area.", "deliverablesSummary": null },
+        "authorization": { "organizationPublicId": null, "clientPublicId": "42", "projectPublicId": null },
+        "services": [{ "publicId": "svc-ortho", "catalogVersion": "catalog-7", "answers": {} }],
+        "workArea": { "revision": 0, "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "squareMeters": null, "acres": null },
+        "attachments": []
+      }
+    },
+    {
+      "name": "extra-browser-price",
+      "request": {
+        "schemaVersion": 1,
+        "source": "ltds-operations",
+        "request": { "publicId": "request-public-a", "revision": 4, "title": "North site mapping", "scopeSummary": "Capture the reviewed area.", "deliverablesSummary": null },
+        "authorization": { "organizationPublicId": null, "clientPublicId": "client-public-a", "projectPublicId": null },
+        "services": [{ "publicId": "svc-ortho", "catalogVersion": "catalog-7", "answers": {} }],
+        "workArea": { "revision": 0, "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "squareMeters": null, "acres": null },
+        "attachments": [],
+        "priceMinor": 1
+      }
+    },
+    {
+      "name": "mismatched-area-nullability",
+      "request": {
+        "schemaVersion": 1,
+        "source": "ltds-operations",
+        "request": { "publicId": "request-public-a", "revision": 4, "title": "North site mapping", "scopeSummary": "Capture the reviewed area.", "deliverablesSummary": null },
+        "authorization": { "organizationPublicId": null, "clientPublicId": "client-public-a", "projectPublicId": null },
+        "services": [{ "publicId": "svc-ortho", "catalogVersion": "catalog-7", "answers": {} }],
+        "workArea": { "revision": 0, "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "squareMeters": 100, "acres": null },
+        "attachments": []
+      }
+    }
+  ],
+  "invalidResponses": [
+    {
+      "name": "non-draft-status",
+      "response": { "receiptId": "receipt-public-a", "draftQuote": { "publicId": "quote-public-a", "documentNumber": null, "status": "approved", "version": 1, "editorPath": "/quotes/quote-public-a/edit" } }
+    },
+    {
+      "name": "cross-origin-editor-url",
+      "response": { "receiptId": "receipt-public-a", "draftQuote": { "publicId": "quote-public-a", "documentNumber": null, "status": "draft", "version": 1, "editorPath": "https://evil.example/quotes/quote-public-a" } }
+    },
+    {
+      "name": "numeric-editor-route",
+      "response": { "receiptId": "receipt-public-a", "draftQuote": { "publicId": "quote-public-a", "documentNumber": null, "status": "draft", "version": 1, "editorPath": "/?page=quote/quotes-edit&id=42" } }
+    },
+    {
+      "name": "editor-route-for-different-public-id",
+      "response": { "receiptId": "receipt-public-a", "draftQuote": { "publicId": "quote-public-a", "documentNumber": null, "status": "draft", "version": 1, "editorPath": "/quotes/quote-public-b/edit" } }
+    },
+    {
+      "name": "extra-response-field",
+      "response": { "receiptId": "receipt-public-a", "draftQuote": { "publicId": "quote-public-a", "documentNumber": null, "status": "draft", "version": 1, "editorPath": "/quotes/quote-public-a/edit", "totalMinor": 1 } }
+    }
+  ],
+  "errorResponses": [
+    { "status": 409, "body": { "code": "IDEMPOTENCY_CONFLICT" } },
+    { "status": 409, "body": { "code": "STALE_CATALOG" } },
+    { "status": 403, "body": { "code": "SCOPE_DENIED" } }
+  ]
+}

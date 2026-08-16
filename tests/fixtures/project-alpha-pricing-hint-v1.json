@@ -1,0 +1,118 @@
+{
+  "contract": "ltds-project-alpha-pricing-hint-v1",
+  "request": {
+    "schemaVersion": 1,
+    "source": "ltds-client-portal",
+    "scope": "portal.pricing.preview",
+    "authorizationContext": {
+      "workspaceRoot": {
+        "type": "organization",
+        "publicId": "pa-org-acme"
+      },
+      "projectPublicId": "pa-project-north-site"
+    },
+    "coverageSquareMetres": "889000.000000",
+    "services": [
+      {
+        "publicId": "svc-mapping",
+        "sourceVersion": "v7"
+      }
+    ]
+  },
+  "response": {
+    "schemaVersion": 1,
+    "catalogVersion": "catalog-v19",
+    "coverageSquareMetres": "889000.000000",
+    "displayMode": "starting_at",
+    "currency": "USD",
+    "startingAt": "1500.00",
+    "typicalMinimum": null,
+    "typicalMaximum": null,
+    "reasonUnavailable": null,
+    "disclaimer": "Planning guidance only. Final quote after staff review.",
+    "validUntil": "2026-08-13T12:10:00.000Z"
+  },
+  "invalidRequests": [
+    {
+      "name": "numeric-workspace-root",
+      "request": {
+        "schemaVersion": 1,
+        "source": "ltds-client-portal",
+        "scope": "portal.pricing.preview",
+        "authorizationContext": { "workspaceRoot": { "type": "organization", "publicId": "42" }, "projectPublicId": "pa-project-north-site" },
+        "coverageSquareMetres": "889000.000000",
+        "services": [{ "publicId": "svc-mapping", "sourceVersion": "v7" }]
+      }
+    },
+    {
+      "name": "browser-acreage-not-accepted",
+      "request": {
+        "schemaVersion": 1,
+        "source": "ltds-client-portal",
+        "scope": "portal.pricing.preview",
+        "authorizationContext": { "workspaceRoot": { "type": "organization", "publicId": "pa-org-acme" }, "projectPublicId": "pa-project-north-site" },
+        "coverageSquareMetres": "889000.000000",
+        "coverageAcres": "219.677",
+        "services": [{ "publicId": "svc-mapping", "sourceVersion": "v7" }]
+      }
+    }
+  ],
+  "invalidResponses": [
+    {
+      "name": "exact-price-mode",
+      "response": {
+        "schemaVersion": 1,
+        "catalogVersion": "catalog-v19",
+        "coverageSquareMetres": "889000.000000",
+        "displayMode": "exact",
+        "currency": "USD",
+        "startingAt": "1500.00",
+        "typicalMinimum": null,
+        "typicalMaximum": null,
+        "reasonUnavailable": null,
+        "disclaimer": "Planning guidance only. Final quote after staff review.",
+        "validUntil": "2026-08-13T12:10:00.000Z"
+      }
+    },
+    {
+      "name": "private-formula-field",
+      "response": {
+        "schemaVersion": 1,
+        "catalogVersion": "catalog-v19",
+        "coverageSquareMetres": "889000.000000",
+        "displayMode": "starting_at",
+        "currency": "USD",
+        "startingAt": "1500.00",
+        "typicalMinimum": null,
+        "typicalMaximum": null,
+        "reasonUnavailable": null,
+        "disclaimer": "Planning guidance only. Final quote after staff review.",
+        "validUntil": "2026-08-13T12:10:00.000Z",
+        "formula": "internal"
+      }
+    },
+    {
+      "name": "guaranteed-wording",
+      "response": {
+        "schemaVersion": 1,
+        "catalogVersion": "catalog-v19",
+        "coverageSquareMetres": "889000.000000",
+        "displayMode": "starting_at",
+        "currency": "USD",
+        "startingAt": "1500.00",
+        "typicalMinimum": null,
+        "typicalMaximum": null,
+        "reasonUnavailable": null,
+        "disclaimer": "Guaranteed quote.",
+        "validUntil": "2026-08-13T12:10:00.000Z"
+      }
+    }
+  ],
+  "authorizationRules": {
+    "workspaceRootTypes": ["organization", "standalone_client"],
+    "identifiersAreOpaquePublicIds": true,
+    "numericLegacyIdsAllowed": false,
+    "projectContextRequired": true,
+    "browserSuppliedContextAllowed": false
+  }
+}
