@@ -11,7 +11,7 @@ if ($id <= 0) {
 }
 
 try {
-  $projection=new App\Services\PortalProjectionMutationService();$before=$projection->clientScopes($pdo,$id);portal_projection_mutate($pdo,$before,static function()use($pdo,$id):void{$pdo->prepare('DELETE FROM clients WHERE id=?')->execute([$id]);},static fn():array=>[]);
+  $projection=new App\Services\PortalProjectionMutationService();portal_projection_mutate($pdo,static fn():array=>$projection->lockedClientScopes($pdo,$id),static function()use($pdo,$id):void{$pdo->prepare('DELETE FROM clients WHERE id=?')->execute([$id]);},static fn():array=>[]);
   header('Location: /?page=client/clients-list&deleted=1');
   exit;
 } catch (Throwable $e) {

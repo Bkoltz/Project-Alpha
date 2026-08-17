@@ -18,8 +18,9 @@ if (!$client) {
   exit;
 }
 
-$projection=new App\Services\PortalProjectionMutationService();$beforeScopes=$projection->clientScopes($pdo,$id);$pdo->beginTransaction();
+$projection=new App\Services\PortalProjectionMutationService();$pdo->beginTransaction();
 try {
+  $beforeScopes=$projection->lockedClientScopes($pdo,$id);
   // 1) Archive client basic row
   $insC = $pdo->prepare('INSERT INTO archived_clients (client_id,name,email,phone,organization_id,notes,address_line1,address_line2,city,state,postal_code,country,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
   $insC->execute([

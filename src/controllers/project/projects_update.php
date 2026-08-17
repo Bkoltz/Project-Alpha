@@ -144,9 +144,9 @@ if ($publicProjectRequirePassword && $publicProjectPassword === '' && trim((stri
 $hasAutoEmailColumn = project_invoice_table_has_column($pdo, 'projects', 'project_invoice_auto_email');
 $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'department_id');
 $portalProjection = new \App\Services\PortalProjectionMutationService();
-$portalBeforeScopes = $portalProjection->projectScopes($pdo, $id);
 $pdo->beginTransaction();
 try {
+$portalBeforeScopes = $portalProjection->lockedProjectScopes($pdo, $id);
 if ($hasAutoEmailColumn) {
 	$departmentSet = $hasDepartmentColumn ? 'department_id=?,' : '';
 	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} business_unit_id=?, manager_user_id=?, invoice_billing_period=?, invoice_net_terms_days=?, project_invoice_auto_email=?, estimated_start=?, estimated_end=?, notes=?, source_version=?, updated_at=NOW() WHERE id=?");

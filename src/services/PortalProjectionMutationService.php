@@ -30,7 +30,11 @@ final class PortalProjectionMutationService
     /** @return list<array{root_type:string,root_public_id:string}> */
     public function clientScopes(PDO$pdo,int$id):array{$s=$pdo->prepare('SELECT c.public_id,c.organization_id,o.public_id organization_public_id FROM clients c LEFT JOIN organizations o ON o.id=c.organization_id WHERE c.id=?');$s->execute([$id]);$row=$s->fetch(PDO::FETCH_ASSOC);if(!$row)return[];return!empty($row['organization_id'])&&$row['organization_public_id']?[['root_type'=>'organization','root_public_id'=>(string)$row['organization_public_id']]]:[['root_type'=>'standalone_client','root_public_id'=>(string)$row['public_id']]];}
     /** @return list<array{root_type:string,root_public_id:string}> */
+    public function lockedClientScopes(PDO$pdo,int$id):array{$this->lockAuthoritativeRow($pdo,'clients',$id);return$this->clientScopes($pdo,$id);}
+    /** @return list<array{root_type:string,root_public_id:string}> */
     public function projectScopes(PDO$pdo,int$id):array{$s=$pdo->prepare('SELECT o.public_id organization_public_id,c.public_id client_public_id,c.organization_id client_organization_id FROM projects p LEFT JOIN organizations o ON o.id=p.organization_id LEFT JOIN clients c ON c.id=p.client_id WHERE p.id=?');$s->execute([$id]);$row=$s->fetch(PDO::FETCH_ASSOC);if(!$row)return[];if($row['organization_public_id'])return[['root_type'=>'organization','root_public_id'=>(string)$row['organization_public_id']]];if($row['client_public_id']&&!$row['client_organization_id'])return[['root_type'=>'standalone_client','root_public_id'=>(string)$row['client_public_id']]];return[];}
+    /** @return list<array{root_type:string,root_public_id:string}> */
+    public function lockedProjectScopes(PDO$pdo,int$id):array{$this->lockAuthoritativeRow($pdo,'projects',$id);return$this->projectScopes($pdo,$id);}
 
     /**
      * Reconcile only the supplied roots. Successful outbox writes commit with
@@ -123,6 +127,7 @@ final class PortalProjectionMutationService
     /** @param list<array{root_type:string,root_public_id:string}> $scopes @return list<array{root_type:string,root_public_id:string}> */
     private function uniqueScopes(array$scopes):array{$out=[];foreach($scopes as$scope){$type=(string)($scope['root_type']??'');$id=(string)($scope['root_public_id']??'');if(!in_array($type,['organization','standalone_client'],true)||$id==='')continue;$out[$type.'|'.$id]=['root_type'=>$type,'root_public_id'=>$id];}ksort($out);return array_values($out);}
     private function all(PDO$pdo,string$sql,array$params):array{$s=$pdo->prepare($sql);$s->execute($params);return$s->fetchAll(PDO::FETCH_ASSOC);}
+    private function lockAuthoritativeRow(PDO$pdo,string$table,int$id):void{if(!$pdo->inTransaction())throw new \LogicException('portal-projection-authoritative-lock-requires-transaction');$suffix=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite'?'':' FOR UPDATE';$s=$pdo->prepare("SELECT id FROM {$table} WHERE id=?{$suffix}");$s->execute([$id]);}
 
     private static function uuid():string{$hex=bin2hex(random_bytes(16));return substr($hex,0,8).'-'.substr($hex,8,4).'-4'.substr($hex,13,3).'-'.dechex((hexdec($hex[16])&3)|8).substr($hex,17,3).'-'.substr($hex,20);}
 }

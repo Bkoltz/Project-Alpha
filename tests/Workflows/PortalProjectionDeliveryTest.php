@@ -105,6 +105,89 @@ final class PortalProjectionDeliveryTest extends TestCase
         }
     }
 
+    public function testSameKeyIdCannotReplaceSecretWithOrWithoutPendingRows(): void
+    {
+        foreach ([false, true] as $withPendingRow) {
+            $pdo = $this->deliveryDatabase();
+            if ($withPendingRow) {
+                $this->insertDelivery($pdo, 1, 'delivery-pending', '{}');
+            }
+            try {
+                (new PortalProjectionDeliveryConfigService())->saveProfile($pdo, 1, [
+                    'delivery_enabled'=>1,
+                    'delivery_key_id'=>'key-current',
+                    'delivery_secret'=>str_repeat('s', 32),
+                ], 9);
+                self::fail('Expected same-key signing secret replacement denial.');
+            } catch (DomainException $error) {
+                self::assertSame('Changing the signing secret requires a new signing key ID.', $error->getMessage());
+            }
+            $profile = $pdo->query('SELECT * FROM portal_integration_profiles WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+            self::assertSame(str_repeat('c', 32), (new PortalProjectionDeliveryConfigService())->credentials($profile)['currentSecret']);
+        }
+    }
+
+    public function testSameKeyIdAcceptsBlankOrIdenticalSecretWithoutMutation(): void
+    {
+        foreach (['', str_repeat('c', 32)] as $submittedSecret) {
+            $pdo = $this->deliveryDatabase();
+            $this->insertDelivery($pdo, 1, 'delivery-pending', '{}');
+            (new PortalProjectionDeliveryConfigService())->saveProfile($pdo, 1, [
+                'delivery_enabled'=>1,
+                'delivery_key_id'=>'key-current',
+                'delivery_secret'=>$submittedSecret,
+            ], 9);
+            $profile = $pdo->query('SELECT * FROM portal_integration_profiles WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+            $credentials = (new PortalProjectionDeliveryConfigService())->credentials($profile);
+            self::assertSame('key-current', $profile['delivery_key_id']);
+            self::assertSame(str_repeat('c', 32), $credentials['currentSecret']);
+            self::assertSame(str_repeat('p', 32), $credentials['previousSecret']);
+        }
+    }
+
+    public function testDistinctKeyRotationPreservesPreviousKeyOverlap(): void
+    {
+        $pdo = $this->deliveryDatabase();
+        (new PortalProjectionDeliveryConfigService())->saveProfile($pdo, 1, [
+            'delivery_enabled'=>1,
+            'delivery_key_id'=>'key-next',
+            'delivery_secret'=>str_repeat('n', 32),
+            'delivery_overlap_hours'=>24,
+        ], 9);
+        $profile = $pdo->query('SELECT * FROM portal_integration_profiles WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        $credentials = (new PortalProjectionDeliveryConfigService())->credentials($profile);
+        self::assertSame('key-next', $profile['delivery_key_id']);
+        self::assertSame('key-current', $profile['delivery_previous_key_id']);
+        self::assertSame(str_repeat('n', 32), $credentials['currentSecret']);
+        self::assertSame(str_repeat('c', 32), $credentials['previousSecret']);
+        $overlapUntil = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', (string)$profile['delivery_previous_valid_until'], new \DateTimeZone('UTC'));
+        self::assertInstanceOf(\DateTimeImmutable::class, $overlapUntil);
+        self::assertGreaterThan(time() + 23 * 3600, $overlapUntil->getTimestamp());
+    }
+
+    public function testPendingRevocationAlsoBlocksDistinctKeyRotation(): void
+    {
+        $pdo = $this->deliveryDatabase();
+        $this->insertDelivery($pdo, 1, 'revocation-pending', '{"event":{"action":"tombstone"}}', true);
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('pending projection records');
+        (new PortalProjectionDeliveryConfigService())->saveProfile($pdo, 1, [
+            'delivery_enabled'=>1,
+            'delivery_key_id'=>'key-next',
+            'delivery_secret'=>str_repeat('n', 32),
+        ], 9);
+    }
+
+    public function testOperatorUiExplainsImmutableKeySecretAndSurfacesDomainError(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $view = (string)file_get_contents($root . '/src/views/pages/settings/external-ops.php');
+        $handler = (string)file_get_contents($root . '/src/controllers/settings/external_ops_handler.php');
+        self::assertStringContainsString('Signing secrets are immutable for a key ID.', $view);
+        self::assertStringContainsString('rotation requires both a distinct new key ID and a new secret.', $view);
+        self::assertStringContainsString('$error instanceof DomainException?$error->getMessage()', $handler);
+    }
+
     public function testRevocationWaitsForLiveClaimThenSupersedesExpiredNormalRow(): void
     {
         $pdo = $this->deliveryDatabase();
@@ -185,6 +268,56 @@ final class PortalProjectionDeliveryTest extends TestCase
             foreach($iterator as$fileInfo){if(!$fileInfo->isFile()||$fileInfo->getExtension()!=='php')continue;$source=(string)file_get_contents($fileInfo->getPathname());$table='(?:clients|organizations|projects|organization_departments|organization_department_contacts)(?![A-Za-z0-9_])';$creates=preg_match('/INSERT\s+INTO\s+`?'.$table.'`?/i',$source)===1;$restores=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?(?:archived\s*=\s*0|deleted_at\s*=\s*NULL)/i',$source)===1;$updates=preg_match('/UPDATE\s+`?'.$table.'`?\s+SET[\s\S]{0,300}?\b(?:name|organization_id|department_id|client_id|status|archived|deleted_at|is_primary|role)\s*=/i',$source)===1;$deletes=preg_match('/DELETE\s+FROM\s+`?'.$table.'`?/i',$source)===1;if(!$creates&&!$restores&&!$updates&&!$deletes)continue;$file=str_replace('\\','/',substr($fileInfo->getPathname(),strlen($root)+1));$authoritativeMutationPaths[]=$file;if($creates||$restores){$authoritativeCreatePaths[]=$file;self::assertStringContainsString('source_version',$source,$file);}self::assertStringContainsString('PortalProjectionMutationService',$source,$file);self::assertTrue(str_contains($source,'beginTransaction')||str_contains($source,'portal_projection_mutate'),$file);self::assertTrue(str_contains($source,'afterMutation')||str_contains($source,'queueProject')||str_contains($source,'portal_projection_mutate'),$file);}
         }
         sort($authoritativeMutationPaths);sort($authoritativeCreatePaths);self::assertGreaterThanOrEqual(8,count($authoritativeCreatePaths));self::assertGreaterThan(count($authoritativeCreatePaths),count($authoritativeMutationPaths));self::assertSame($authoritativeMutationPaths,array_values(array_unique($authoritativeMutationPaths)));
+    }
+
+    public function testEveryClientAndProjectOldScopeCaptureUsesTransactionScopedRowLock(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $lockedPaths = [];
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root . '/src/controllers', \FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $fileInfo) {
+            if (!$fileInfo->isFile() || $fileInfo->getExtension() !== 'php') {
+                continue;
+            }
+            $source = (string)file_get_contents($fileInfo->getPathname());
+            self::assertDoesNotMatchRegularExpression(
+                '/(?:before|Before)[A-Za-z]*\s*=\s*[^;\r\n]*(?<!locked)(?:clientScopes|projectScopes)\s*\(/i',
+                $source,
+                $fileInfo->getPathname()
+            );
+            if (preg_match('/locked(?:Client|Project)Scopes\s*\(/', $source) !== 1) {
+                continue;
+            }
+            $path = str_replace('\\', '/', substr($fileInfo->getPathname(), strlen($root) + 1));
+            $lockedPaths[] = $path;
+            $lockPosition = min(array_filter([
+                strpos($source, 'lockedClientScopes') ?: PHP_INT_MAX,
+                strpos($source, 'lockedProjectScopes') ?: PHP_INT_MAX,
+            ]));
+            $transactionPosition = strpos($source, 'beginTransaction');
+            $deferredByHelper = preg_match('/portal_projection_mutate\([\s\S]{0,300}?static fn\(\):array=>[^;\r\n]*locked(?:Client|Project)Scopes\s*\(/', $source) === 1;
+            self::assertTrue($deferredByHelper || ($transactionPosition !== false && $transactionPosition < $lockPosition), $path);
+        }
+        sort($lockedPaths);
+        self::assertGreaterThanOrEqual(7, count($lockedPaths));
+    }
+
+    public function testPortalMutationDefersOldScopeReadUntilTransactionStarts(): void
+    {
+        require_once dirname(__DIR__, 2) . '/src/utils/portal_projection_hooks.php';
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec("CREATE TABLE app_config(organization_id INTEGER,config_key TEXT,config_value TEXT); INSERT INTO app_config VALUES(0,'portal_authoritative_hooks_enabled','0')");
+        $order = [];
+        $result = portal_projection_mutate(
+            $pdo,
+            function () use ($pdo, &$order): array { self::assertTrue($pdo->inTransaction()); $order[] = 'locked-before'; return []; },
+            function () use ($pdo, &$order): string { self::assertTrue($pdo->inTransaction()); $order[] = 'mutation'; return 'ok'; },
+            function () use ($pdo, &$order): array { self::assertTrue($pdo->inTransaction()); $order[] = 'after'; return []; }
+        );
+        self::assertSame('ok', $result);
+        self::assertSame(['locked-before', 'mutation', 'after'], $order);
+        self::assertFalse($pdo->inTransaction());
     }
 
     public function testIpv4EmbeddedIpv6CannotBypassPublicDestinationFilter(): void

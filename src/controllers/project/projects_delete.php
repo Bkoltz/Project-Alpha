@@ -37,9 +37,9 @@ function project_delete_upload_tree(string $dir, string $root): void
 }
 
 $portalProjection = new \App\Services\PortalProjectionMutationService();
-$portalBeforeScopes = $portalProjection->projectScopes($pdo, $id);
 $pdo->beginTransaction();
 try {
+    $portalBeforeScopes = $portalProjection->lockedProjectScopes($pdo, $id);
     // Delete mappings first
     $pdo->prepare('DELETE FROM project_documents WHERE project_id=?')->execute([$id]);
     // Delete project
