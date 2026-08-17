@@ -285,7 +285,7 @@ final class PortalProjectionDeliveryTest extends TestCase
                 $source,
                 $fileInfo->getPathname()
             );
-            if (preg_match('/locked(?:Client|Project)Scopes\s*\(/', $source) !== 1) {
+            if (preg_match('/locked(?:Client|Project)Scopes(?:ForIds)?\s*\(/', $source) !== 1) {
                 continue;
             }
             $path = str_replace('\\', '/', substr($fileInfo->getPathname(), strlen($root) + 1));
@@ -295,7 +295,7 @@ final class PortalProjectionDeliveryTest extends TestCase
                 strpos($source, 'lockedProjectScopes') ?: PHP_INT_MAX,
             ]));
             $transactionPosition = strpos($source, 'beginTransaction');
-            $deferredByHelper = preg_match('/portal_projection_mutate\([\s\S]{0,300}?static fn\(\):array=>[^;\r\n]*locked(?:Client|Project)Scopes\s*\(/', $source) === 1;
+            $deferredByHelper = preg_match('/portal_projection_mutate\([\s\S]{0,300}?static fn\(\):array=>[^;\r\n]*locked(?:Client|Project)Scopes(?:ForIds)?\s*\(/', $source) === 1;
             self::assertTrue($deferredByHelper || ($transactionPosition !== false && $transactionPosition < $lockPosition), $path);
         }
         sort($lockedPaths);
@@ -318,6 +318,19 @@ final class PortalProjectionDeliveryTest extends TestCase
         self::assertSame('ok', $result);
         self::assertSame(['locked-before', 'mutation', 'after'], $order);
         self::assertFalse($pdo->inTransaction());
+    }
+
+    public function testMySqlScopeConcurrencyFixtureRefusesNonDisposableDatabases(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $test = (string)file_get_contents($root . '/tests/Integration/PortalProjectionScopeLockMySqlTest.php');
+        $runner = (string)file_get_contents($root . '/tools/run-portal-scope-mysql-integration.ps1');
+        self::assertStringContainsString("PORTAL_SCOPE_MYSQL_ALLOW_DESTRUCTIVE') !== 'isolated-disposable-only'", $test);
+        self::assertStringContainsString("preg_match('/^portal_scope_test_[0-9]+$/D'", $test);
+        self::assertStringContainsString("query('SELECT DATABASE()')", $test);
+        self::assertStringContainsString('hash_equals($expectedDatabase, $actualDatabase)', $test);
+        self::assertStringContainsString('$databaseName = "portal_scope_test_$PID"', $runner);
+        self::assertStringContainsString("PORTAL_SCOPE_MYSQL_ALLOW_DESTRUCTIVE = 'isolated-disposable-only'", $runner);
     }
 
     public function testIpv4EmbeddedIpv6CannotBypassPublicDestinationFilter(): void

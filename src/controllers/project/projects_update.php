@@ -146,7 +146,13 @@ $hasDepartmentColumn = project_invoice_table_has_column($pdo, 'projects', 'depar
 $portalProjection = new \App\Services\PortalProjectionMutationService();
 $pdo->beginTransaction();
 try {
-$portalBeforeScopes = $portalProjection->lockedProjectScopes($pdo, $id);
+$portalBeforeScopes = $portalProjection->lockedProjectScopes(
+	$pdo,
+	$id,
+	$client_id > 0 ? $client_id : null,
+	$organization_id > 0 ? $organization_id : null,
+	$department_id > 0 ? $department_id : null
+);
 if ($hasAutoEmailColumn) {
 	$departmentSet = $hasDepartmentColumn ? 'department_id=?,' : '';
 	$stmt = $pdo->prepare("UPDATE projects SET name=?, client_id=?, organization_id=?, {$departmentSet} business_unit_id=?, manager_user_id=?, invoice_billing_period=?, invoice_net_terms_days=?, project_invoice_auto_email=?, estimated_start=?, estimated_end=?, notes=?, source_version=?, updated_at=NOW() WHERE id=?");

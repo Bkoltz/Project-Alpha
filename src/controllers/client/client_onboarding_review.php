@@ -50,9 +50,15 @@ try {
     $portalBeforeScopes = [];
     $portalClientIds = array_values(array_unique(array_filter([$clientId, $matchClientId])));
     sort($portalClientIds, SORT_NUMERIC);
-    foreach ($portalClientIds as $portalClientId) {
-        $portalBeforeScopes = array_merge($portalBeforeScopes, $projection->lockedClientScopes($pdo, (int)$portalClientId));
-    }
+    $portalTargetOrganizationIds = array_values(array_unique(array_filter([
+        (int)($submission['target_organization_id'] ?? 0),
+        $matchOrganizationId,
+    ])));
+    $portalBeforeScopes = $projection->lockedClientScopesForIds(
+        $pdo,
+        $portalClientIds,
+        $portalTargetOrganizationIds
+    );
     if ($decision === 'approve') {
         $emailValue = client_onboarding_submitted_email($data, $submission);
         if ($emailValue !== '' && !filter_var($emailValue, FILTER_VALIDATE_EMAIL)) {

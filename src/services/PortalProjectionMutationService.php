@@ -29,12 +29,127 @@ final class PortalProjectionMutationService
     public function organizationScopes(PDO$pdo,int$id):array{$s=$pdo->prepare('SELECT public_id FROM organizations WHERE id=?');$s->execute([$id]);$public=(string)($s->fetchColumn()?:'');return$public!==''?[['root_type'=>'organization','root_public_id'=>$public]]:[];}
     /** @return list<array{root_type:string,root_public_id:string}> */
     public function clientScopes(PDO$pdo,int$id):array{$s=$pdo->prepare('SELECT c.public_id,c.organization_id,o.public_id organization_public_id FROM clients c LEFT JOIN organizations o ON o.id=c.organization_id WHERE c.id=?');$s->execute([$id]);$row=$s->fetch(PDO::FETCH_ASSOC);if(!$row)return[];return!empty($row['organization_id'])&&$row['organization_public_id']?[['root_type'=>'organization','root_public_id'=>(string)$row['organization_public_id']]]:[['root_type'=>'standalone_client','root_public_id'=>(string)$row['public_id']]];}
-    /** @return list<array{root_type:string,root_public_id:string}> */
-    public function lockedClientScopes(PDO$pdo,int$id):array{$this->lockAuthoritativeRow($pdo,'clients',$id);return$this->clientScopes($pdo,$id);}
+    /**
+     * Capture client roots using current locking reads. Projects and department
+     * assignments are locked first because their effective workspace changes
+     * when a client is reparented. All callers use the same dependency order.
+     *
+     * @return list<array{root_type:string,root_public_id:string}>
+     */
+    public function lockedClientScopes(PDO $pdo, int $id, ?int $targetOrganizationId = null): array
+    {
+        return $this->lockedClientScopesForIds(
+            $pdo,
+            [$id],
+            $targetOrganizationId === null ? [] : [$targetOrganizationId]
+        );
+    }
+
+    /**
+     * Batch variant for workflows such as onboarding that can mutate either of
+     * several clients. Locking all dependent projects before any client avoids
+     * the project-B/client-A inversion possible with repeated single calls.
+     *
+     * @param list<int> $ids
+     * @param list<int> $targetOrganizationIds
+     * @return list<array{root_type:string,root_public_id:string}>
+     */
+    public function lockedClientScopesForIds(PDO $pdo, array $ids, array $targetOrganizationIds = []): array
+    {
+        $this->requireTransaction($pdo);
+        $ids = $this->positiveSortedIds($ids);
+        if ($ids === []) return [];
+
+        $this->lockRows(
+            $pdo,
+            'SELECT id FROM projects WHERE client_id IN (%s) ORDER BY id',
+            $ids
+        );
+        $this->lockRows(
+            $pdo,
+            'SELECT department_id,client_id FROM organization_department_contacts WHERE client_id IN (%s) ORDER BY department_id,client_id',
+            $ids
+        );
+        $clients = $this->lockRows(
+            $pdo,
+            'SELECT id,public_id,organization_id FROM clients WHERE id IN (%s) ORDER BY id',
+            $ids
+        );
+
+        $organizationIds = $this->positiveSortedIds(array_merge(
+            $targetOrganizationIds,
+            array_column($clients, 'organization_id')
+        ));
+        $organizations = $this->lockEntitiesById($pdo, 'organizations', $organizationIds);
+        $organizationPublicIds = [];
+        foreach ($organizations as $organization) {
+            $organizationPublicIds[(int)$organization['id']] = (string)$organization['public_id'];
+        }
+
+        $scopes = [];
+        foreach ($clients as $client) {
+            $organizationId = (int)($client['organization_id'] ?? 0);
+            if ($organizationId > 0 && isset($organizationPublicIds[$organizationId])) {
+                $scopes[] = ['root_type'=>'organization','root_public_id'=>$organizationPublicIds[$organizationId]];
+            } else {
+                $scopes[] = ['root_type'=>'standalone_client','root_public_id'=>(string)$client['public_id']];
+            }
+        }
+        return $this->uniqueScopes($scopes);
+    }
     /** @return list<array{root_type:string,root_public_id:string}> */
     public function projectScopes(PDO$pdo,int$id):array{$s=$pdo->prepare('SELECT o.public_id organization_public_id,c.public_id client_public_id,c.organization_id client_organization_id FROM projects p LEFT JOIN organizations o ON o.id=p.organization_id LEFT JOIN clients c ON c.id=p.client_id WHERE p.id=?');$s->execute([$id]);$row=$s->fetch(PDO::FETCH_ASSOC);if(!$row)return[];if($row['organization_public_id'])return[['root_type'=>'organization','root_public_id'=>(string)$row['organization_public_id']]];if($row['client_public_id']&&!$row['client_organization_id'])return[['root_type'=>'standalone_client','root_public_id'=>(string)$row['client_public_id']]];return[];}
-    /** @return list<array{root_type:string,root_public_id:string}> */
-    public function lockedProjectScopes(PDO$pdo,int$id):array{$this->lockAuthoritativeRow($pdo,'projects',$id);return$this->projectScopes($pdo,$id);}
+    /**
+     * Capture a project's current root and lock both its current and intended
+     * parents. The optional targets let update handlers close the window in
+     * which a destination client could be reparented concurrently.
+     *
+     * @return list<array{root_type:string,root_public_id:string}>
+     */
+    public function lockedProjectScopes(
+        PDO $pdo,
+        int $id,
+        ?int $targetClientId = null,
+        ?int $targetOrganizationId = null,
+        ?int $targetDepartmentId = null
+    ): array {
+        $this->requireTransaction($pdo);
+        $projects = $this->lockRows(
+            $pdo,
+            'SELECT id,public_id,organization_id,department_id,client_id FROM projects WHERE id IN (%s) ORDER BY id',
+            [$id]
+        );
+        if ($projects === []) return [];
+        $project = $projects[0];
+
+        $clientIds = $this->positiveSortedIds([$project['client_id'] ?? null, $targetClientId]);
+        $clients = $this->lockEntitiesById($pdo, 'clients', $clientIds, 'id,public_id,organization_id');
+        $clientsById = [];
+        foreach ($clients as $client) $clientsById[(int)$client['id']] = $client;
+
+        $departmentIds = $this->positiveSortedIds([$project['department_id'] ?? null, $targetDepartmentId]);
+        $departments = $this->lockEntitiesById($pdo, 'organization_departments', $departmentIds, 'id,organization_id');
+
+        $organizationIds = [$project['organization_id'] ?? null, $targetOrganizationId];
+        foreach ($clients as $client) $organizationIds[] = $client['organization_id'] ?? null;
+        foreach ($departments as $department) $organizationIds[] = $department['organization_id'] ?? null;
+        $organizations = $this->lockEntitiesById($pdo, 'organizations', $this->positiveSortedIds($organizationIds));
+        $organizationPublicIds = [];
+        foreach ($organizations as $organization) {
+            $organizationPublicIds[(int)$organization['id']] = (string)$organization['public_id'];
+        }
+
+        $organizationId = (int)($project['organization_id'] ?? 0);
+        if ($organizationId > 0 && isset($organizationPublicIds[$organizationId])) {
+            return [['root_type'=>'organization','root_public_id'=>$organizationPublicIds[$organizationId]]];
+        }
+        $clientId = (int)($project['client_id'] ?? 0);
+        $client = $clientsById[$clientId] ?? null;
+        if ($client && empty($client['organization_id'])) {
+            return [['root_type'=>'standalone_client','root_public_id'=>(string)$client['public_id']]];
+        }
+        return [];
+    }
 
     /**
      * Reconcile only the supplied roots. Successful outbox writes commit with
@@ -127,7 +242,43 @@ final class PortalProjectionMutationService
     /** @param list<array{root_type:string,root_public_id:string}> $scopes @return list<array{root_type:string,root_public_id:string}> */
     private function uniqueScopes(array$scopes):array{$out=[];foreach($scopes as$scope){$type=(string)($scope['root_type']??'');$id=(string)($scope['root_public_id']??'');if(!in_array($type,['organization','standalone_client'],true)||$id==='')continue;$out[$type.'|'.$id]=['root_type'=>$type,'root_public_id'=>$id];}ksort($out);return array_values($out);}
     private function all(PDO$pdo,string$sql,array$params):array{$s=$pdo->prepare($sql);$s->execute($params);return$s->fetchAll(PDO::FETCH_ASSOC);}
-    private function lockAuthoritativeRow(PDO$pdo,string$table,int$id):void{if(!$pdo->inTransaction())throw new \LogicException('portal-projection-authoritative-lock-requires-transaction');$suffix=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='sqlite'?'':' FOR UPDATE';$s=$pdo->prepare("SELECT id FROM {$table} WHERE id=?{$suffix}");$s->execute([$id]);}
+    private function requireTransaction(PDO $pdo): void
+    {
+        if (!$pdo->inTransaction()) throw new \LogicException('portal-projection-authoritative-lock-requires-transaction');
+    }
+
+    /** @param array<int,mixed> $ids @return list<int> */
+    private function positiveSortedIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn(int $id): bool => $id > 0)));
+        sort($ids, SORT_NUMERIC);
+        return $ids;
+    }
+
+    /** @param list<int> $ids @return list<array<string,mixed>> */
+    private function lockEntitiesById(PDO $pdo, string $table, array $ids, string $columns = 'id,public_id'): array
+    {
+        if ($ids === []) return [];
+        if (!in_array($table, ['clients','organizations','organization_departments'], true)) {
+            throw new \LogicException('portal-projection-invalid-lock-table');
+        }
+        return $this->lockRows($pdo, "SELECT {$columns} FROM {$table} WHERE id IN (%s) ORDER BY id", $ids);
+    }
+
+    /**
+     * @param list<int> $ids
+     * @return list<array<string,mixed>>
+     */
+    private function lockRows(PDO $pdo, string $sqlTemplate, array $ids): array
+    {
+        $this->requireTransaction($pdo);
+        if ($ids === []) return [];
+        $marks = implode(',', array_fill(0, count($ids), '?'));
+        $suffix = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? '' : ' FOR UPDATE';
+        $statement = $pdo->prepare(sprintf($sqlTemplate, $marks) . $suffix);
+        $statement->execute($ids);
+        return $statement->fetchAll(PDO::FETCH_ASSOC);
+    }
 
     private static function uuid():string{$hex=bin2hex(random_bytes(16));return substr($hex,0,8).'-'.substr($hex,8,4).'-4'.substr($hex,13,3).'-'.dechex((hexdec($hex[16])&3)|8).substr($hex,17,3).'-'.substr($hex,20);}
 }

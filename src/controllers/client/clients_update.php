@@ -26,7 +26,7 @@ if ($id <= 0 || $name === '') {
 }
 
 $portalProjection=new App\Services\PortalProjectionMutationService();
-portal_projection_mutate($pdo,static fn():array=>$portalProjection->lockedClientScopes($pdo,$id),static function()use($pdo,$name,$email,$phone,$organization_id,$notes,$address_line1,$address_line2,$city,$state,$postal,$country,$id):void{$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization_id=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal_code=?, country=?,source_version=? WHERE id=?');
+portal_projection_mutate($pdo,static fn():array=>$portalProjection->lockedClientScopes($pdo,$id,$organization_id>0?$organization_id:null),static function()use($pdo,$name,$email,$phone,$organization_id,$notes,$address_line1,$address_line2,$city,$state,$postal,$country,$id):void{$st = $pdo->prepare('UPDATE clients SET name=?, email=?, phone=?, organization_id=?, notes=?, address_line1=?, address_line2=?, city=?, state=?, postal_code=?, country=?,source_version=? WHERE id=?');
 $st->execute([
   $name,
   $email ?: null,
