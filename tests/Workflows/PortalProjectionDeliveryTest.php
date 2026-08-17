@@ -325,12 +325,17 @@ final class PortalProjectionDeliveryTest extends TestCase
         $root = dirname(__DIR__, 2);
         $test = (string)file_get_contents($root . '/tests/Integration/PortalProjectionScopeLockMySqlTest.php');
         $runner = (string)file_get_contents($root . '/tools/run-portal-scope-mysql-integration.ps1');
+        $dockerfile = (string)file_get_contents($root . '/Dockerfile');
+        $testStage = strstr($dockerfile, 'FROM web AS test');
         self::assertStringContainsString("PORTAL_SCOPE_MYSQL_ALLOW_DESTRUCTIVE') !== 'isolated-disposable-only'", $test);
         self::assertStringContainsString("preg_match('/^portal_scope_test_[0-9]+$/D'", $test);
         self::assertStringContainsString("query('SELECT DATABASE()')", $test);
         self::assertStringContainsString('hash_equals($expectedDatabase, $actualDatabase)', $test);
         self::assertStringContainsString('$databaseName = "portal_scope_test_$PID"', $runner);
         self::assertStringContainsString("PORTAL_SCOPE_MYSQL_ALLOW_DESTRUCTIVE = 'isolated-disposable-only'", $runner);
+        self::assertIsString($testStage);
+        self::assertStringNotContainsString('COPY ./tools/', substr($dockerfile, 0, strpos($dockerfile, 'FROM web AS test')));
+        self::assertStringContainsString('COPY ./tools/ /var/www/tools/', $testStage);
     }
 
     public function testIpv4EmbeddedIpv6CannotBypassPublicDestinationFilter(): void
