@@ -164,10 +164,11 @@ final class PortalProjectionMutationService
         try{$pdo->exec('SAVEPOINT '.$savepoint);$this->reconcileRelations($pdo,$scopes);foreach($scopes as$scope)$this->reconcileWorkspace($pdo,$scope);$pdo->exec('RELEASE SAVEPOINT '.$savepoint);return true;}catch(Throwable$error){try{$pdo->exec('ROLLBACK TO SAVEPOINT '.$savepoint);$pdo->exec('RELEASE SAVEPOINT '.$savepoint);}catch(Throwable){}@error_log('[portal_projection_hook] reconciliation deferred code='.substr(hash('sha256',get_class($error).':'.$error->getMessage()),0,12));return false;}
     }
 
-    public function queueCatalog(PDO $pdo):void
+    /** @return list<array<string,mixed>> */
+    public function queueCatalog(PDO $pdo,?int $onlyProfileId=null):array
     {
-        $payload=(new PortalIntegrationService())->catalog($pdo);$profileIds=$pdo->query('SELECT id FROM portal_integration_profiles WHERE enabled=1 AND catalog_projection_enabled=1 AND catalog_route IS NOT NULL ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
-        foreach($profileIds as$profileId){$profile=PortalProjectionService::lockProfileContract($pdo,(int)$profileId);if(empty($profile['enabled'])||empty($profile['catalog_projection_enabled'])||empty($profile['catalog_route']))continue;$deliveryId=self::uuid();$document=['applicationKey'=>(string)$profile['application_key'],'deliveryId'=>$deliveryId]+$payload;$pdo->prepare("INSERT INTO portal_projection_outbox (integration_profile_id,delivery_id,workspace_public_id,schema_version,source_sequence,delivery_kind,route_type,destination_url,signing_key_id,payload_json) VALUES (?,?,?,?,?,'catalog.snapshot','catalog',?,?,?)")->execute([(int)$profile['id'],$deliveryId,'catalog',(int)$payload['schemaVersion'],(int)$payload['sourceSequence'],(string)$profile['catalog_route'],$profile['delivery_key_id']??null,json_encode($document,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);}
+        if(!$pdo->inTransaction())throw new \DomainException('catalog-transaction-required');$sql='SELECT id FROM portal_integration_profiles WHERE enabled=1 AND catalog_projection_enabled=1 AND catalog_route IS NOT NULL';$params=[];if($onlyProfileId!==null){$sql.=' AND id=?';$params[]=$onlyProfileId;}$sql.=' ORDER BY id';$statement=$pdo->prepare($sql);$statement->execute($params);$profileIds=$statement->fetchAll(PDO::FETCH_COLUMN);$summaries=[];$projection=new PortalProjectionService();
+        foreach($profileIds as$profileId)$summaries[]=$projection->queueCatalogSnapshot($pdo,['id'=>(int)$profileId]);return$summaries;
     }
 
     private function queueWorkspaces(PDO $pdo,array $workspaceIds):void

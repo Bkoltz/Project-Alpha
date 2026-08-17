@@ -7,6 +7,7 @@ use App\Services\ExternalOpsOutboxSender;
 use App\Services\ExternalOpsConfigService;
 use App\Services\PortalAuthorityService;
 use App\Services\PortalProjectionService;
+use App\Services\PortalProjectionMutationService;
 use App\Services\PortalProjectionDeliveryConfigService;
 use App\Services\PortalProjectionOutboxSender;
 
@@ -67,6 +68,8 @@ try {
     } elseif ($action === 'queue-portal-snapshot') {
         $profileId=(int)($_POST['profile_id']??0);$profileStmt=$pdo->prepare('SELECT * FROM portal_integration_profiles WHERE id=? AND enabled=1 AND portal_projection_enabled=1');$profileStmt->execute([$profileId]);$profile=$profileStmt->fetch(PDO::FETCH_ASSOC);if(!$profile)throw new DomainException('Enable portal projection before queuing a snapshot.');
         $pdo->beginTransaction();try{$summary=(new PortalProjectionService())->queueWorkspaceSnapshot($pdo,$profile,(string)($_POST['workspace_public_id']??''));audit_log($pdo,'portal.snapshot.queued','portal_workspace',null,$summary);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}$message='Complete portal snapshot queued.';
+    } elseif ($action === 'queue-catalog-snapshot') {
+        $profileId=(int)($_POST['profile_id']??0);$pdo->beginTransaction();try{$summaries=(new PortalProjectionMutationService())->queueCatalog($pdo,$profileId);if($summaries===[])throw new DomainException('Enable catalog projection and configure its receiver route before queuing a snapshot.');audit_log($pdo,'portal.catalog_snapshot.queued','portal_integration_profile',$profileId,$summaries[0]);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}$message='Complete Service Library snapshot queued.';
     } elseif (empty($config['configured_enabled'])) {
         throw new DomainException('Enable and save outbound delivery before managing synchronized records.');
     } elseif (in_array($action, ['grant-access','revoke-access','save-entitlement','resend-access'], true)) {

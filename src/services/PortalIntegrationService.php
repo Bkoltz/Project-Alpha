@@ -153,7 +153,7 @@ final class PortalIntegrationService
         }
     }
 
-    /** @return array{schemaVersion:int,sourceGeneration:string,sourceSequence:int,items:list<array<string,mixed>>} */
+    /** @return array{schemaVersion:int,sourceGeneration:string,items:list<array<string,mixed>>} */
     public function catalog(PDO $pdo): array
     {
         $rows = $pdo->query("SELECT portal_public_id,portal_source_version,item_name,portal_summary,portal_category,portal_display_order,portal_geometry_requirement,portal_questions_json FROM item_library WHERE portal_requestable=1 AND is_active=1 AND entry_type='service' ORDER BY portal_display_order,portal_public_id")->fetchAll(PDO::FETCH_ASSOC);
@@ -171,7 +171,7 @@ final class PortalIntegrationService
             $items[] = $item;
         }
         $fingerprint = hash('sha256', json_encode($items, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-        return ['schemaVersion' => 2, 'sourceGeneration' => 'catalog-' . substr($fingerprint, 0, 24), 'sourceSequence' => 1, 'items' => $items];
+        return ['schemaVersion' => 2, 'sourceGeneration' => 'catalog-' . substr($fingerprint, 0, 24), 'items' => $items];
     }
 
     /** @param list<array<string,mixed>> $requested @return list<array<string,mixed>> */

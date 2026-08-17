@@ -68,6 +68,28 @@ final class PortalProjectionService
         return ['sourceGeneration'=>$generation,'sourceSequence'=>$sequence,'snapshotHash'=>$snapshotHash,'pageCount'=>count($pages),'recordCount'=>count($records)];
     }
 
+    /** Queue a complete, bounded Service Library generation. Caller owns the transaction. */
+    public function queueCatalogSnapshot(PDO $pdo,array $profile):array
+    {
+        $profileId=(int)($profile['id']??0);if($profileId<1)throw new DomainException('portal-profile-disabled');
+        $profile=self::lockProfileContract($pdo,$profileId);if(empty($profile['enabled'])||empty($profile['catalog_projection_enabled'])||empty($profile['catalog_route']))throw new DomainException('catalog-profile-disabled');
+        $catalog=(new PortalIntegrationService())->catalog($pdo);$items=$catalog['items'];if(count($items)>500)throw new DomainException('catalog-item-limit');
+        $generation='catalog-'.self::uuid();$sequence=$this->nextSequence($pdo,$profileId,'catalog',$generation);$pages=array_chunk($items,50);if($pages===[])$pages=[[]];
+        $snapshotHash=hash('sha256',self::canonicalJson(['items'=>$items]));$now=self::now();$pageCount=count($pages);$itemCount=count($items);
+        foreach($pages as$index=>$pageItems){$payload=[
+            'schemaVersion'=>2,'applicationKey'=>(string)$profile['application_key'],'deliveryId'=>self::uuid(),'occurredAt'=>$now,
+            'sourceGeneration'=>$generation,'sourceSequence'=>$sequence,'kind'=>'snapshot.page','snapshotHash'=>$snapshotHash,
+            'pageNumber'=>$index+1,'pageCount'=>$pageCount,'itemCount'=>$itemCount,'items'=>$pageItems,
+        ];PortalIntegrationContract::validateCatalogDelivery($payload);$this->enqueue($pdo,$profile,'catalog',2,$sequence,'snapshot.page','catalog',$payload);}
+        $activation=[
+            'schemaVersion'=>2,'applicationKey'=>(string)$profile['application_key'],'deliveryId'=>self::uuid(),'occurredAt'=>$now,
+            'sourceGeneration'=>$generation,'sourceSequence'=>$sequence,'kind'=>'snapshot.activate','snapshotHash'=>$snapshotHash,
+            'pageCount'=>$pageCount,'itemCount'=>$itemCount,
+        ];PortalIntegrationContract::validateCatalogDelivery($activation);$this->enqueue($pdo,$profile,'catalog',2,$sequence,'snapshot.activate','catalog',$activation);
+        $pdo->prepare('UPDATE portal_projection_state SET last_snapshot_hash=? WHERE integration_profile_id=? AND workspace_public_id=?')->execute([$snapshotHash,$profileId,'catalog']);
+        return['sourceGeneration'=>$generation,'sourceSequence'=>$sequence,'snapshotHash'=>$snapshotHash,'pageCount'=>$pageCount,'itemCount'=>$itemCount];
+    }
+
     /** Queue one ordered incremental delivery after a complete generation exists. */
     public function queueEvent(PDO $pdo, array $profile, string $workspacePublicId, array $event, bool $isRevocation=false): array
     {

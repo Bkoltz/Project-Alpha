@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Services\JobWorkPlanningService;
 use App\Services\CompensationRuleService;
 use App\Services\PayPeriodService;
+use App\Services\PortalProjectionMutationService;
 use App\Modules\Timekeeping\ApprovalService;
 use App\Modules\Timekeeping\AuditRecorder;
 use App\Modules\Timekeeping\BillingTimeConsumer;
@@ -108,14 +109,14 @@ try{
   $linked=$pdo->prepare('SELECT item_library_id FROM catalog_work_components WHERE work_type_id=? AND is_active=1 LIMIT 1 FOR UPDATE');$linked->execute([$id]);$linkedServiceId=(int)($linked->fetchColumn()?:0);
   $update=$pdo->prepare('UPDATE work_types SET is_active=? WHERE id=?');$update->execute([$status==='active'?1:0,$id]);
    if($update->rowCount()===0){$exists=$pdo->prepare('SELECT 1 FROM work_types WHERE id=?');$exists->execute([$id]);if(!$exists->fetchColumn())throw new DomainException('Work Activity not found.');}
-  if($linkedServiceId>0)$pdo->prepare('UPDATE item_library SET is_active=? WHERE id=?')->execute([$status==='active'?1:0,$linkedServiceId]);
+  if($linkedServiceId>0){$pdo->prepare('UPDATE item_library SET is_active=? WHERE id=?')->execute([$status==='active'?1:0,$linkedServiceId]);(new PortalProjectionMutationService())->queueCatalog($pdo);}
   $pdo->commit();
   }elseif($action==='delete-work-type'){
    $id=max(0,(int)($_POST['id']??0));if($id<=0)throw new DomainException('Choose a Work Activity to delete.');
    $pdo->beginTransaction();$exists=$pdo->prepare('SELECT name FROM work_types WHERE id=? FOR UPDATE');$exists->execute([$id]);if(!$exists->fetchColumn())throw new DomainException('Work Activity not found.');
    foreach([['job_work_components','work_type_id'],['work_time_entries','work_type_id'],['worker_compensation_rules','work_type_id']] as [$table,$column]){$used=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$column}=? LIMIT 1");$used->execute([$id]);if($used->fetchColumn())throw new DomainException('This Work Activity has already been used. Deactivate it to preserve historical time, billing, and compensation records.');}
    $linked=$pdo->prepare('SELECT item_library_id FROM catalog_work_components WHERE work_type_id=? AND is_active=1 LIMIT 1 FOR UPDATE');$linked->execute([$id]);$linkedServiceId=(int)($linked->fetchColumn()?:0);
-   if($linkedServiceId>0){foreach([['quote_items','item_library_id'],['contract_items','item_library_id'],['invoice_items','item_library_id'],['job_work_components','item_library_id'],['catalog_bundle_items','child_item_library_id']] as [$table,$column]){$used=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$column}=? LIMIT 1");$used->execute([$linkedServiceId]);if($used->fetchColumn())throw new DomainException('The linked Service has already been used. Deactivate the pair to preserve document and Job history.');}$pdo->prepare('DELETE FROM catalog_work_components WHERE work_type_id=?')->execute([$id]);$pdo->prepare('DELETE FROM item_library WHERE id=?')->execute([$linkedServiceId]);}
+   if($linkedServiceId>0){foreach([['quote_items','item_library_id'],['contract_items','item_library_id'],['invoice_items','item_library_id'],['job_work_components','item_library_id'],['catalog_bundle_items','child_item_library_id']] as [$table,$column]){$used=$pdo->prepare("SELECT 1 FROM {$table} WHERE {$column}=? LIMIT 1");$used->execute([$linkedServiceId]);if($used->fetchColumn())throw new DomainException('The linked Service has already been used. Deactivate the pair to preserve document and Job history.');}$pdo->prepare('DELETE FROM catalog_work_components WHERE work_type_id=?')->execute([$id]);$pdo->prepare('DELETE FROM item_library WHERE id=?')->execute([$linkedServiceId]);(new PortalProjectionMutationService())->queueCatalog($pdo);}
    $pdo->prepare('DELETE FROM work_types WHERE id=?')->execute([$id]);$pdo->commit();
  }elseif($action==='save-business-unit'){
   $id=(int)($_POST['id']??0);$name=trim((string)($_POST['name']??''));$code=strtoupper(preg_replace('/[^A-Za-z0-9]+/','_',trim((string)($_POST['code']??$name))));if($name===''||$code==='')throw new DomainException('Name and code are required.');

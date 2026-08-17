@@ -8,9 +8,9 @@ Project Alpha remains the authoritative source for organizations, departments, c
 2. Create a dedicated API key with exactly one capability: `portal.pricing.preview` or `portal.quote-draft.create`. A `full` or multi-scope key is rejected.
 3. Create a generic profile in Settings → Custom integrations. Leave every capability disabled.
 4. Configure distinct pricing/draft source identifiers and HTTPS receiver routes. Outbound HMAC and optional receiver-authorization values are encrypted with `APP_ENCRYPTION_KEY`; they are never displayed again or written to logs.
-5. Verify the five byte-exact fixtures in `tests/fixtures` and the compatibility test.
+5. Verify the five payload fixtures plus the byte-pinned `portal-integration-wire-v1.json` transport fixture in `tests/fixtures` and the compatibility test.
 6. Create a workspace (which links only the selected profile), verify the profile/workspace allowlist, then create a portal principal and explicit manager entitlement. Contacts and public links do not create authority.
-7. Enable only the required profile capabilities. For projections, enable the profile delivery switch, then the installation-wide mutation and outbound gates. These three controls are independent and default off.
+7. Preflight receiver authentication and the exact application key while its inbox remains disabled. After a separately approved receiver window is open, enable only the required profile capabilities, the profile delivery switch, scoped authoritative hooks, and finally outbound delivery. Queue the portal and Service Library snapshots from Projection recovery, run delivery, and verify every page and activation before enabling consumer reads.
 
 Feature gates are exact-string opt-ins: `APP_PORTAL_PRICING_PREVIEW_ENABLED=true` and `APP_PORTAL_DRAFT_QUOTES_ENABLED=true`. Migration-created application flags also default to `0` for portal v2, relations v3, catalog v2, pricing preview, and draft quotes.
 
@@ -36,7 +36,7 @@ Pricing is planning guidance only. Fixed `each`/`project` services use exact min
 
 ## Projection and recovery
 
-Portal snapshot pages are capped at 100 records, 100 pages, and 2,000 records. All pages in a generation share the same source sequence/hash/counts; `snapshot.activate` follows every page. Relations/lifecycles require schema v3 and an explicit profile flag. Project `completed_at` is set on the first completed transition, retained across repeated completed updates, and cleared only by a later reopen.
+Portal snapshot pages are capped at 100 records, 100 pages, and 2,000 records. Service Library pages are capped at 50 items, 100 pages, and 500 total items. All pages in a generation share the same monotonic per-profile source sequence, unique generation ID, hash, and counts; `snapshot.activate` follows every page. Relations/lifecycles require schema v3 and an explicit profile flag. Project `completed_at` is set on the first completed transition, retained across repeated completed updates, and cleared only by a later reopen.
 
 Source versions are deterministic hashes of client-visible content. Renames, reparenting, deactivation, lifecycle changes, and Service Library question changes therefore cannot reuse a prior source version. Complete snapshots are the recovery mechanism after a gap or interrupted generation. Receiver activation must be atomic and must not expose partial pages.
 
@@ -50,7 +50,7 @@ Queued revocations are durable control-plane records, not evidence of network de
 
 Profile key/route changes and every projection outbox enqueue serialize on the same `portal_integration_profiles` row lock inside their transaction. This prevents a concurrent producer from inserting an old-contract delivery between the pending-outbox check and a contract rotation. Producers that wait behind a disable reload the locked profile and fail closed instead of publishing with stale flags or routes.
 
-Ordinary organization, department, client/contact, project create/update/reparent/status/delete, onboarding-merge, and department-contact assignment paths call the scoped mutation reconciler inside the authoritative database transaction. Reparent and delete paths lock the authoritative client/project row before reading the old scope, then reconcile that locked old scope with the actual post-mutation scope; multi-row paths acquire locks in numeric ID order. The reconciler operates only on those organization/standalone-client roots, persists relation upserts/tombstones, and fans out only through active profile/workspace allowlist rows. A projection fault rolls back to its savepoint, records only a short diagnostic hash, and allows the core PA mutation to commit; queue a complete snapshot to reconcile that explicit workspace afterward. No global reconciliation or implicit profile fanout is performed.
+Ordinary organization, department, client/contact, project create/update/reparent/status/delete, onboarding-merge, and department-contact assignment paths call the scoped mutation reconciler inside the authoritative database transaction. Service Library edits and linked Work Activity activation/deletion queue a complete bounded catalog generation in that same transaction. Reparent and delete paths lock the authoritative client/project row before reading the old scope, then reconcile that locked old scope with the actual post-mutation scope; multi-row paths acquire locks in numeric ID order. The reconciler operates only on those organization/standalone-client roots, persists relation upserts/tombstones, and fans out only through active profile/workspace allowlist rows. A projection fault rolls back to its savepoint, records only a short diagnostic hash, and allows the core PA mutation to commit; queue a complete snapshot to reconcile that explicit workspace afterward. No global reconciliation or implicit profile fanout is performed.
 
 ## Signed projection delivery
 
@@ -75,7 +75,7 @@ Manual run:
 php /var/www/src/cron/send_portal_projection_outbox.php
 ```
 
-Enable in Settings → Custom integrations in this order: save HTTPS routes and a 32+ character signing secret, enable profile delivery, enable scoped authoritative hooks, enable outbound delivery, queue a complete snapshot, run delivery, and verify activation at the receiver. To disable, first queue/verify revocations, then turn off profile delivery and the global outbound gate.
+Enable in Settings → Custom integrations only after the receiver inbox and Access/service-token path have passed a separately approved preflight. A disabled inbox commonly returns 404 and an Access mismatch commonly returns 403; both are intentionally non-retryable and will dead-letter the row. During the approved window: open the receiver inbox, save HTTPS routes and a 32+ character signing secret, enable profile delivery, enable scoped authoritative hooks, enable outbound delivery, queue both complete snapshots, run delivery, and verify activation. To disable portal authority, save the profile with portal projection disabled while delivery and the receiver remain open, drain and verify its queued revocations, then turn off profile delivery/global outbound and finally close the receiver inbox. Catalog shutdown does not remove the receiver's last known-good published generation.
 
 ## Abuse controls and retention
 

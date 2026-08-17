@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS portal_v2_entitlements (
     CONSTRAINT fk_portal_v2_entitlement_principal FOREIGN KEY (portal_principal_id) REFERENCES portal_principals(id) ON DELETE CASCADE,
     CONSTRAINT fk_portal_v2_entitlement_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_portal_v2_entitlement_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
-    CONSTRAINT chk_portal_v2_entitlement_capability CHECK (capability IN ('workspace.view','directory.read','request.create','delivery.view','member.manage','share.create'))
+    CONSTRAINT chk_portal_v2_entitlement_capability CHECK (capability IN ('workspace.view','directory.read','request.create','delivery.view','member.manage','delegated_share.create'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS portal_v2_workspaces (
@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS portal_projection_outbox (
     workspace_public_id VARCHAR(191) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     schema_version SMALLINT UNSIGNED NOT NULL,
     source_sequence BIGINT UNSIGNED NOT NULL,
-    delivery_kind ENUM('snapshot.page','snapshot.activate','event','catalog.snapshot') NOT NULL,
+    delivery_kind ENUM('snapshot.page','snapshot.activate','event') NOT NULL,
     route_type ENUM('portal','catalog') NOT NULL,
     payload_json JSON NOT NULL,
     attempts INT UNSIGNED NOT NULL DEFAULT 0,

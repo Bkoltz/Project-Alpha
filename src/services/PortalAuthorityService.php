@@ -10,7 +10,7 @@ use Throwable;
 
 final class PortalAuthorityService
 {
-    public const MANAGER_CAPABILITIES=['workspace.view','directory.read','request.create','delivery.view','member.manage','share.create'];
+    public const MANAGER_CAPABILITIES=['workspace.view','directory.read','request.create','delivery.view','member.manage','delegated_share.create'];
 
     /** @param array<string,mixed> $input */
     public function saveProfile(PDO $pdo,array $input,int $actorId):int
@@ -69,7 +69,7 @@ final class PortalAuthorityService
         if(!in_array($scopeType,['workspace','organization','department','project'],true))throw new DomainException('Manager scope is invalid.');
         $this->profileRequired($pdo,$profileId);(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspaceId);$this->assertScopeInWorkspace($pdo,$workspaceId,$scopeType,$scopePublicId);$this->principalRequired($pdo,$principalId);
         $owns=!$pdo->inTransaction();try{if($owns)$pdo->beginTransaction();
-            if($replacePrincipalId&&$replacePrincipalId!==$principalId)$pdo->prepare("UPDATE portal_v2_entitlements SET active=0,source_version=?,updated_by=? WHERE portal_principal_id=? AND scope_type=? AND scope_public_id=? AND capability IN ('workspace.view','directory.read','request.create','delivery.view','member.manage','share.create')")->execute([self::version(),$actorId,$replacePrincipalId,$scopeType,$scopePublicId]);
+            if($replacePrincipalId&&$replacePrincipalId!==$principalId)$pdo->prepare("UPDATE portal_v2_entitlements SET active=0,source_version=?,updated_by=? WHERE portal_principal_id=? AND scope_type=? AND scope_public_id=? AND capability IN ('workspace.view','directory.read','request.create','delivery.view','member.manage','delegated_share.create')")->execute([self::version(),$actorId,$replacePrincipalId,$scopeType,$scopePublicId]);
             foreach(self::MANAGER_CAPABILITIES as $capability){$existing=$pdo->prepare('SELECT id FROM portal_v2_entitlements WHERE portal_principal_id=? AND scope_type=? AND scope_public_id=? AND capability=?');$existing->execute([$principalId,$scopeType,$scopePublicId,$capability]);$id=$existing->fetchColumn();if($id)$pdo->prepare('UPDATE portal_v2_entitlements SET effect=\'allow\',active=1,source_version=?,valid_from=CURRENT_TIMESTAMP,expires_at=NULL,updated_by=? WHERE id=?')->execute([self::version(),$actorId,$id]);else$pdo->prepare('INSERT INTO portal_v2_entitlements (portal_principal_id,capability,effect,scope_type,scope_public_id,source_version,active,valid_from,created_by,updated_by) VALUES (?,?,\'allow\',?,?,?,1,CURRENT_TIMESTAMP,?,?)')->execute([$principalId,$capability,$scopeType,$scopePublicId,self::version(),$actorId,$actorId]);}
             $this->audit($pdo,$profileId,null,'portal.manager.appointed',$scopeType,$scopePublicId,['principal_id'=>$principalId,'replaced_principal_id'=>$replacePrincipalId,'actor_id'=>$actorId]);
             $this->queueEveryEnabledProfile($pdo,$workspaceId);
@@ -79,7 +79,7 @@ final class PortalAuthorityService
 
     public function offboardManager(PDO $pdo,int $profileId,string $workspaceId,int $principalId,string $scopeType,string $scopePublicId,int $actorId):void
     {
-        $this->profileRequired($pdo,$profileId);(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspaceId);$this->assertScopeInWorkspace($pdo,$workspaceId,$scopeType,$scopePublicId);$owns=!$pdo->inTransaction();try{if($owns)$pdo->beginTransaction();$pdo->prepare("UPDATE portal_v2_entitlements SET active=0,source_version=?,updated_by=? WHERE portal_principal_id=? AND scope_type=? AND scope_public_id=? AND capability IN ('workspace.view','directory.read','request.create','delivery.view','member.manage','share.create')")->execute([self::version(),$actorId,$principalId,$scopeType,$scopePublicId]);$this->audit($pdo,$profileId,null,'portal.manager.offboarded',$scopeType,$scopePublicId,['principal_id'=>$principalId,'actor_id'=>$actorId]);$this->queueEveryEnabledProfile($pdo,$workspaceId);if($owns)$pdo->commit();}catch(Throwable$e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
+        $this->profileRequired($pdo,$profileId);(new PortalWorkspaceAuthorizationService())->requireWorkspace($pdo,$profileId,$workspaceId);$this->assertScopeInWorkspace($pdo,$workspaceId,$scopeType,$scopePublicId);$owns=!$pdo->inTransaction();try{if($owns)$pdo->beginTransaction();$pdo->prepare("UPDATE portal_v2_entitlements SET active=0,source_version=?,updated_by=? WHERE portal_principal_id=? AND scope_type=? AND scope_public_id=? AND capability IN ('workspace.view','directory.read','request.create','delivery.view','member.manage','delegated_share.create')")->execute([self::version(),$actorId,$principalId,$scopeType,$scopePublicId]);$this->audit($pdo,$profileId,null,'portal.manager.offboarded',$scopeType,$scopePublicId,['principal_id'=>$principalId,'actor_id'=>$actorId]);$this->queueEveryEnabledProfile($pdo,$workspaceId);if($owns)$pdo->commit();}catch(Throwable$e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
     }
 
     private function assertScopeInWorkspace(PDO $pdo,string $workspaceId,string $scopeType,string $scopeId):void

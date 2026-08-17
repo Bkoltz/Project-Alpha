@@ -31,6 +31,7 @@ final class PortalV2CompatibilityTest extends TestCase
             'project-alpha-catalog-v2.json'=>'9626ee5147ac9cd2198e6bca58eee9bb464c2105861c679a16745e1d9bf022fe',
             'project-alpha-pricing-hint-v1.json'=>'6354ad8fb2439e4463202290516a05198ec03cf0a966fbfb4bd83fcf18449d6b',
             'project-alpha-draft-quote-v1.json'=>'fc47be82960b11ab6cb705e2dcaa11f76f39ef9c5c3199ff6861e8a787034f90',
+            'portal-integration-wire-v1.json'=>'063c993d8d1a20d7860517342e132efcf65a00b98b251b89ebf979333979d88a',
         ];
         foreach ($hashes as $file=>$expected) self::assertSame($expected,hash_file('sha256',$this->fixtures.$file),$file);
     }
@@ -55,6 +56,27 @@ final class PortalV2CompatibilityTest extends TestCase
         self::assertArrayNotHasKey('HTTP_X_LTDS_SIGNATURE',$server);
         $draftPath='/api/v2/integrations/example/draft-quotes';$draftId='command-one';$draftInput=$timestamp."\nPOST\n".$draftPath."\n".$draftId."\n".$digest;$draftServer=$server;unset($draftServer['HTTP_X_PORTAL_INTEGRATION_SCOPE']);$draftServer['HTTP_IDEMPOTENCY_KEY']=$draftId;$draftServer['HTTP_X_PORTAL_INTEGRATION_SIGNATURE']='sha256='.hash_hmac('sha256',$draftInput,$secret);PortalIntegrationContract::verifySignedRequest('example',PortalIntegrationContract::DRAFT_SCOPE,$draftPath,$body,$draftServer,$secret);
         $draftServer['HTTP_X_PORTAL_INTEGRATION_TIMESTAMP']='2020-01-01T00:00:00.000Z';$this->assertDomain(static fn()=>PortalIntegrationContract::verifySignedRequest('example',PortalIntegrationContract::DRAFT_SCOPE,$draftPath,$body,$draftServer,$secret));
+    }
+
+    public function testNeutralGoldenWireCorpusPinsEveryCanonicalRequest():void
+    {
+        $fixture=$this->json('portal-integration-wire-v1.json');$secret=(string)$fixture['testSecret'];
+        foreach(['portalProjection','catalogProjection']as$name){$case=$fixture['cases'][$name];self::assertSame($case['bodySha256'],hash('sha256',$case['body']));$canonical=$case['timestamp']."\nPOST\n".$case['path']."\n".$case['keyId']."\n".$case['deliveryId']."\n".$case['body'];self::assertSame(str_replace('\\n',"\n",$case['canonical']),$canonical);self::assertSame($case['signature'],'sha256='.hash_hmac('sha256',$canonical,$secret));$delivery=json_decode($case['body'],true,32,JSON_THROW_ON_ERROR);if($name==='portalProjection')PortalIntegrationContract::validatePortalDelivery($delivery,false);else PortalIntegrationContract::validateCatalogDelivery($delivery);}
+        foreach(['pricing'=>PortalIntegrationContract::PRICING_SCOPE,'draft'=>PortalIntegrationContract::DRAFT_SCOPE]as$name=>$scope){$case=$fixture['cases'][$name];self::assertSame($case['bodySha256'],hash('sha256',$case['body']));$canonical=$case['timestamp']."\nPOST\n".$case['path']."\n".$case['scopeOrIdempotencyKey']."\n".$case['bodySha256'];self::assertSame(str_replace('\\n',"\n",$case['canonical']),$canonical);self::assertSame($case['signature'],'sha256='.hash_hmac('sha256',$canonical,$secret));$timestamp=gmdate('Y-m-d\TH:i:s.000\Z');$liveCanonical=$timestamp."\nPOST\n".$case['path']."\n".$case['scopeOrIdempotencyKey']."\n".$case['bodySha256'];$server=['HTTP_X_PORTAL_INTEGRATION_APPLICATION_KEY'=>$case['applicationKey'],'HTTP_X_PORTAL_INTEGRATION_TIMESTAMP'=>$timestamp,'HTTP_X_PORTAL_INTEGRATION_BODY_SHA256'=>$case['bodySha256'],'HTTP_X_PORTAL_INTEGRATION_SIGNATURE'=>'sha256='.hash_hmac('sha256',$liveCanonical,$secret)];if($name==='pricing')$server['HTTP_X_PORTAL_INTEGRATION_SCOPE']=$scope;else$server['HTTP_IDEMPOTENCY_KEY']=$case['scopeOrIdempotencyKey'];PortalIntegrationContract::verifySignedRequest($case['applicationKey'],$scope,$case['path'],$case['body'],$server,$secret);}
+        $rotation=$fixture['rotationOverlap'];$portal=$fixture['cases']['portalProjection'];$previousCanonical=$portal['timestamp']."\nPOST\n".$portal['path']."\n".$rotation['previousKeyId']."\n".$portal['deliveryId']."\n".$portal['body'];self::assertSame(str_replace('\\n',"\n",$rotation['previousCanonical']),$previousCanonical);self::assertSame($rotation['previousSignature'],'sha256='.hash_hmac('sha256',$previousCanonical,$rotation['previousTestSecret']));self::assertNotSame($rotation['currentKeyId'],$rotation['previousKeyId']);self::assertNotContains($rotation['unknownKeyId'],[$rotation['currentKeyId'],$rotation['previousKeyId']]);
+        self::assertSame(['X-Portal-Integration-Application-Key','X-Portal-Integration-Timestamp','X-Portal-Integration-Body-SHA256','X-Portal-Integration-Key-Id','X-Portal-Integration-Delivery-Id','X-Portal-Integration-Signature'],$fixture['projectionHeaders']);
+    }
+
+    public function testCatalogSnapshotsAreBoundedAndMonotonicPerProfile():void
+    {
+        if(!in_array('sqlite',PDO::getAvailableDrivers(),true))self::markTestSkipped('pdo_sqlite unavailable');$pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+        $pdo->exec("CREATE TABLE portal_integration_profiles(id INTEGER PRIMARY KEY,application_key TEXT,enabled INTEGER,catalog_projection_enabled INTEGER,catalog_route TEXT,delivery_key_id TEXT);CREATE TABLE portal_projection_state(integration_profile_id INTEGER,workspace_public_id TEXT,source_generation TEXT,source_sequence INTEGER,last_snapshot_hash TEXT,PRIMARY KEY(integration_profile_id,workspace_public_id));CREATE TABLE portal_projection_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT,integration_profile_id INTEGER,delivery_id TEXT,workspace_public_id TEXT,schema_version INTEGER,source_sequence INTEGER,delivery_kind TEXT,route_type TEXT,is_revocation INTEGER DEFAULT 0,destination_url TEXT,signing_key_id TEXT,payload_json TEXT);CREATE TABLE item_library(portal_public_id TEXT,portal_source_version TEXT,item_name TEXT,portal_summary TEXT,portal_category TEXT,portal_display_order INTEGER,portal_geometry_requirement TEXT,portal_questions_json TEXT,portal_requestable INTEGER,is_active INTEGER,entry_type TEXT);INSERT INTO portal_integration_profiles VALUES(1,'generic_catalog',1,1,'https://receiver.example/api/internal/project-alpha/catalog-v2','catalog-v1')");
+        $service=new \App\Services\PortalProjectionMutationService();$pdo->beginTransaction();$first=$service->queueCatalog($pdo,1);$pdo->commit();$pdo->beginTransaction();$second=$service->queueCatalog($pdo,1);$pdo->commit();self::assertSame(1,$first[0]['sourceSequence']);self::assertSame(2,$second[0]['sourceSequence']);self::assertNotSame($first[0]['sourceGeneration'],$second[0]['sourceGeneration']);self::assertSame(['snapshot.page','snapshot.activate','snapshot.page','snapshot.activate'],$pdo->query('SELECT delivery_kind FROM portal_projection_outbox ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));foreach($pdo->query('SELECT payload_json FROM portal_projection_outbox')->fetchAll(PDO::FETCH_COLUMN)as$json)PortalIntegrationContract::validateCatalogDelivery(json_decode((string)$json,true,32,JSON_THROW_ON_ERROR));
+    }
+
+    public function testAlternateServiceLibraryMutationsQueueCatalogRecovery():void
+    {
+        $source=(string)file_get_contents(dirname(__DIR__,2).'/src/controllers/settings/workforce_catalog_handler.php');self::assertSame(2,substr_count($source,'(new PortalProjectionMutationService())->queueCatalog($pdo)'));
     }
 
     public function testContentSourceVersionsChangeForEveryProjectedMutation(): void
@@ -175,8 +197,8 @@ final class PortalV2CompatibilityTest extends TestCase
         self::assertStringContainsString("if(!\$pdo->inTransaction())throw new DomainException('portal-outbox-transaction-required')",$projection);
         self::assertGreaterThanOrEqual(4,substr_count($projection,'lockProfileContract('));
         self::assertStringContainsString('PortalProjectionService::lockProfileContract($pdo,$id)',$authority);
-        self::assertStringContainsString('PortalProjectionService::lockProfileContract($pdo,(int)$profileId)',$mutations);
-        self::assertStringContainsString("empty(\$profile['catalog_projection_enabled'])",$mutations);
+        self::assertStringContainsString("\$projection->queueCatalogSnapshot(\$pdo,['id'=>(int)\$profileId])",$mutations);
+        self::assertStringContainsString("empty(\$profile['catalog_projection_enabled'])",$projection);
     }
 
     public function testOutboxProducerRequiresTransactionAndReloadsLockedProfileState():void
